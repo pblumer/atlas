@@ -604,33 +604,33 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-0230)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Authoring subset", tObject())}},
 		{"GET", "/api/v1/infomodel/models", s.infomodel.HandleList, apiOp{
-			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
+			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=, and pass it empty to list the library models no application owns", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Information models", tArray())}},
 		{"POST", "/api/v1/infomodel/models", s.infomodel.HandleCreate, apiOp{
-			summary: "Start an empty information model for a process application", tag: "Information model", role: RoleModeler,
+			summary: "Start an empty information model. With an applicationId it belongs to that process application and inherits its sharing scope; without one it is a library model, which every application on the server resolves against (ADR-draft-shared-information-models)", tag: "Information model", role: RoleModeler,
 			req: jsonBody("New information model", schemaObj(map[string]any{
 				"applicationId": tString(), "name": tString(), "documentation": tString(),
-			}, "applicationId", "name")),
+			}, "name")),
 			resp: jsonBody("Information model", tObject()), status: http.StatusCreated}},
 		{"POST", "/api/v1/infomodel/import", s.infomodel.HandleImport, apiOp{
 			summary: "Import a UML class diagram as a new information model: Atlas's own JSON, or the XMI 2.5.1 a UML tool exports. It goes through the same subset the canvas writes through, so anything outside it is dropped with a note naming the element; dryRun reports what an import would do and stores nothing (ADR-0232)", tag: "Information model", role: RoleModeler,
 			req: jsonBody("Document to import", schemaObj(map[string]any{
 				"applicationId": tString(), "name": tString(), "documentation": tString(),
 				"format": tString(), "document": tString(), "dryRun": tBool(),
-			}, "applicationId", "document")),
+			}, "document")),
 			resp: jsonBody("Import result: the notes, the validation verdict, and either the preview or the stored model", tObject()), status: http.StatusCreated}},
 		{"GET", "/api/v1/infomodel/models/{id}", s.infomodel.HandleGet, apiOp{
 			summary: "Read one information model whole — its classes, their attributes and business keys, its associations, and the validation verdict on all of it", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Information model", tObject())}},
 		{"PUT", "/api/v1/infomodel/models/{id}", s.infomodel.HandleUpdate, apiOp{
-			summary: "Replace an information model's content. The whole document is sent; a model that does not validate is refused with its findings, and a stale revision is refused as a conflict", tag: "Information model", role: RoleModeler,
+			summary: "Replace an information model's content. The whole document is sent; a model that does not validate is refused with its findings, a stale revision is refused as a conflict, and a class or data store name that a library model and an application model would both define is refused — a name resolves to one thing", tag: "Information model", role: RoleModeler,
 			req: jsonBody("Information model content", schemaObj(map[string]any{
 				"name": tString(), "documentation": tString(), "classes": tArray(),
 				"associations": tArray(), "stores": tArray(), "revision": tInteger(),
 			})),
 			resp: jsonBody("Information model", tObject())}},
 		{"DELETE", "/api/v1/infomodel/models/{id}", s.infomodel.HandleDelete, apiOp{
-			summary: "Delete an information model", tag: "Information model", role: RoleModeler,
+			summary: "Delete an information model. Deleting a library model — one no application owns — requires an administrator, because every application on the server resolves against it", tag: "Information model", role: RoleModeler,
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/infomodel/models/{id}/schema", s.infomodel.HandleSchema, apiOp{
 			summary: "Project one class (?class=Order) to a JSON Schema — the derived, read-only contract a value of that class is checked against, together with what the projection could not carry", tag: "Information model", role: RoleModeler,

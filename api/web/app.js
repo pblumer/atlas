@@ -7535,24 +7535,52 @@ async function viewInfoModels() {
 
   const byApplication = new Map(applications.map((app) => [app.id, app]));
   const writable = applications.filter((app) => !app.protected && roleRank(app.myRole) >= 2);
+  // A model with no application is a library model: every application on the server
+  // resolves against it (ADR-draft-shared-information-models). It has no application
+  // scope to inherit, so the rule is the area's own role — a modeler may author one,
+  // and only an administrator may delete one, because deleting reaches diagrams its
+  // author never saw.
+  const isLibrary = (m) => !m.applicationId;
+  const canAuthorLibrary = mayUse("modeler");
   const canEdit = (m) => {
+    if (isLibrary(m)) return canAuthorLibrary;
     const app = byApplication.get(m.applicationId);
     return !!app && !app.protected && roleRank(app.myRole) >= 2;
   };
+  const canDelete = (m) => (isLibrary(m) ? mayUse("admin") : canEdit(m));
+
+  // Where a new model can go: every application this person may write, and — because
+  // the library belongs to nobody — the library itself. The library's id is the empty
+  // string, which is not a sentinel but the same statement the stored field makes: no
+  // application. Nothing standing for "none" is ever sent.
+  const TARGET_HINT = "A model in an application is shared by every process in it. A library model belongs to " +
+    "no application and every application resolves against it — which is how one Customer, with one business " +
+    "key, means the same customer everywhere. A class name may be defined in one place or the other, not both.";
+  const targets = [
+    ...(canAuthorLibrary ? [{ id: "", name: "Library — every application", library: true }] : []),
+    ...writable.map((app) => ({ id: app.id, name: app.name })),
+  ];
+  const optionsFor = (list) => list.map((t) => ({ value: t.id, label: t.name, library: !!t.library }));
+  const canCreate = targets.length > 0;
 
   const row = (m) => {
     const app = byApplication.get(m.applicationId);
     const actions = [];
-    if (canEdit(m)) actions.push(
-      { label: "Rename", icon: "✎", act: "rename-im", data: { id: m.id } },
-      { sep: true },
+    if (canEdit(m)) actions.push({ label: "Rename", icon: "✎", act: "rename-im", data: { id: m.id } });
+    if (canDelete(m)) actions.push(
+      ...(actions.length ? [{ sep: true }] : []),
       { label: "Delete", icon: "🗑", act: "delete-im", data: { id: m.id }, danger: true },
     );
-    return `<tr data-name="${esc(`${m.name} ${app ? app.name : ""}`.toLowerCase())}">
+    // Which application, or the statement that the answer is "every one of them".
+    const where = isLibrary(m)
+      ? `<span class="mi-icon">🌐</span><span title="No application owns this model, so every application resolves against it">Library</span>`
+      : app ? `<span class="mi-icon">📦</span>${esc(app.name)}`
+        : `<span class="muted">Missing application</span>`;
+    return `<tr data-name="${esc(`${m.name} ${isLibrary(m) ? "library" : app ? app.name : ""}`.toLowerCase())}">
       <td><div class="artifact-name"><span class="chip">UML</span>
         <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
-      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td>${where}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>
       <td class="muted">r${m.revision}</td>
@@ -7566,15 +7594,16 @@ async function viewInfoModels() {
       <div>
         <h1>Information model</h1>
         <p class="muted" style="margin:0">What the data in your processes <i>is</i> — classes, their attributes and
-          their business keys — as a UML class diagram shared across every process in an application.</p>
+          their business keys — as a UML class diagram shared across every process in an application, or across
+          every application when it is a library model.</p>
       </div>
-      ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
+      ${canCreate ? `<div style="display:flex; gap:8px; align-items:center">
         <button class="btn ghost" data-act="import-im"
           title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
         <button class="btn" data-act="new-im">Create new</button>
       </div>` : ""}
     </div>
-    ${applications.length ? "" : `<div class="card empty" style="margin-top:16px">
+    ${applications.length || canAuthorLibrary ? "" : `<div class="card empty" style="margin-top:16px">
       <h2>Create an application first</h2>
       <p>An information model belongs to a Process Application and inherits its sharing permissions — which is
          what lets the processes in that application share one vocabulary for their data.</p>
@@ -7582,8 +7611,8 @@ async function viewInfoModels() {
     </div>`}
     <div class="card" style="padding:0; margin-top:16px">
       <table data-dt-key="info-models">
-        <thead><tr><th>Model</th><th>Application</th><th>Classes</th><th>Associations</th><th>Revision</th><th>Last changed</th><th></th></tr></thead>
-        <tbody>${models.map(row).join("") || `<tr><td colspan="7" class="empty">${writable.length
+        <thead><tr><th>Model</th><th>Belongs to</th><th>Classes</th><th>Associations</th><th>Revision</th><th>Last changed</th><th></th></tr></thead>
+        <tbody>${models.map(row).join("") || `<tr><td colspan="7" class="empty">${canCreate
           ? "No information model yet. Create one, then draw the business objects your processes move — an Order, a Customer, a Claim."
           : "No information model is visible to you."}</td></tr>`}</tbody>
       </table>
@@ -7603,23 +7632,23 @@ async function viewInfoModels() {
   const root = document.getElementById("im-root");
   root.addEventListener("click", async (e) => {
     if (e.target.closest('[data-act="import-im"]')) {
-      if (!writable.length) return;
+      if (!canCreate) return;
       // The file is chosen first, while the click's user activation is still live: a
       // browser refuses to open a file picker from a task that no longer counts as a
       // gesture, and putting a dialog in front of it costs exactly that.
       const file = await pickFile(".json,.xml,.xmi,.uml,application/json,application/xml,text/xml");
       if (!file) return;
-      let target = writable[0];
-      if (writable.length > 1) {
+      let target = targets[0];
+      if (targets.length > 1) {
         const picked = await openPickModal({
           title: "Import an information model",
-          label: "Application",
-          options: writable.map((a) => ({ value: a.id, label: a.name })),
-          hint: "The imported model belongs to this application and is shared by every process in it.",
+          label: "Belongs to",
+          options: optionsFor(targets),
+          hint: TARGET_HINT,
           okLabel: "Continue",
         });
         if (!picked) return;
-        target = writable.find((a) => a.id === picked.option.value);
+        target = targets.find((t) => t.id === picked.option.value);
       }
       if (!target) return;
       await runImport({
@@ -7629,18 +7658,22 @@ async function viewInfoModels() {
       return;
     }
     const btn = e.target.closest('[data-act="new-im"]');
-    if (!btn || !writable.length) return;
+    if (!btn || !canCreate) return;
     const picked = await openPickModal({
       title: "New information model",
-      label: "Application",
-      options: writable.map((app) => ({ value: app.id, label: app.name })),
+      label: "Belongs to",
+      options: optionsFor(targets),
       nameLabel: "Model name",
-      nameFor: (app) => `${app.label} data`,
-      hint: "The model belongs to this application and is shared by every process in it.",
+      nameFor: (t) => (t.library ? "Shared vocabulary" : `${t.label} data`),
+      hint: TARGET_HINT,
     });
     if (!picked) return;
+    const body = { name: picked.name };
+    // The library is the absence of an application, so it is sent as one: no field,
+    // rather than a field with a value that stands for "none".
+    if (!picked.option.library) body.applicationId = picked.option.value;
     try {
-      const created = await api("POST", "/api/v1/infomodel/models", { applicationId: picked.option.value, name: picked.name });
+      const created = await api("POST", "/api/v1/infomodel/models", body);
       toast(`${picked.name} created`, "ok");
       location.hash = `#/data/m/${encodeURIComponent(created.id)}`;
     } catch (err) { toast(err.message, "err"); }

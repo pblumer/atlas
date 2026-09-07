@@ -47,6 +47,8 @@ func TestServiceDeleteAccessRules(t *testing.T) {
 	fx.access["app-1"] = ApplicationAccess{Exists: true, CanView: true, CanEdit: true, Protected: true}
 	del(id, http.StatusForbidden)
 	fx.access["app-1"] = ApplicationAccess{Exists: true, CanView: true, CanEdit: true}
+	del(id, http.StatusForbidden) // an editor who may not delete is refused, and told which right is missing
+	fx.access["app-1"] = ApplicationAccess{Exists: true, CanView: true, CanEdit: true, CanDelete: true}
 	del(id, http.StatusNoContent)
 }
 
@@ -273,6 +275,12 @@ func TestServiceStoreFailures(t *testing.T) {
 		fx.service.loop.Do(func() { _, err = fx.service.VocabularyOnLoop("app-1") })
 		if err == nil {
 			t.Error("VocabularyOnLoop on a missing store: want an error")
+		}
+		// The clash check reads every model, so it fails the same way rather than
+		// reporting "no clash" for a store it could not read.
+		fx.service.loop.Do(func() { _, err = fx.service.nameClashOnLoop(orderModel()) })
+		if err == nil {
+			t.Error("nameClashOnLoop on a missing store: want an error")
 		}
 	})
 }

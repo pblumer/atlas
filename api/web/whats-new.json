@@ -2,6 +2,44 @@
   "generatedAt": "2026-08-26",
   "entries": [
     {
+      "id": "an-information-model-can-now-belong-to-no-application-and-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An information model can now belong to no application, and then belongs to all of them.",
+        "de": "An information model can now belong to no application, and then belongs to all of them."
+      },
+      "summary": {
+        "en": "An information model belonged to one process application, so two applications that both handle a customer each needed their own Customer — typed twice, drifting apart, with nothing saying they are the same customer. A model can now belong to no application at all, and then every application resolves against it: the attributes are written once and read everywhere. Existing models are untouched. A class name may be defined in the shared model or in an application's own, not both, and deleting a shared model asks for an administrator.",
+        "de": "Ein Informationsmodell gehörte genau einer Prozessanwendung. Zwei Anwendungen, die beide mit Kunden arbeiten, brauchten deshalb je ein eigenes Customer — zweimal erfasst, mit der Zeit auseinanderlaufend, und nirgends stand, dass derselbe Kunde gemeint ist. Ein Modell kann jetzt zu gar keiner Anwendung gehören; dann lösen alle Anwendungen dagegen auf: Die Attribute werden einmal erfasst und überall gelesen. Bestehende Modelle bleiben unverändert. Ein Klassenname darf entweder im geteilten Modell oder im Modell einer Anwendung stehen, nicht in beiden. Das Löschen eines geteilten Modells setzt Administratorrechte voraus."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "UML"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data › Information model and choose Create new.",
+          "In \"Belongs to\", pick \"Library — every application\" instead of an application.",
+          "Draw the classes every application shares — a Customer, an Address — and give each one its business key.",
+          "Open any application's processes: a data object typed Customer now resolves against this model, with no copy anywhere.",
+          "If a class name is already used by an application's own model, the save is refused and says which model defines it."
+        ],
+        "de": [
+          "Unter Daten › Informationsmodell auf «Create new» gehen.",
+          "Bei «Belongs to» statt einer Anwendung «Library — every application» wählen.",
+          "Die Klassen zeichnen, die alle Anwendungen teilen — etwa Customer oder Address — und je einen Geschäftsschlüssel vergeben.",
+          "In den Prozessen einer beliebigen Anwendung löst ein Datenobjekt vom Typ Customer nun gegen dieses Modell auf, ohne Kopie.",
+          "Ist ein Klassenname bereits im eigenen Modell einer Anwendung vergeben, wird das Speichern abgewiesen und nennt das Modell, das ihn definiert."
+        ]
+      }
+    },
+    {
       "id": "forms-written-by-the-ai-worker",
       "version": "Unreleased",
       "date": null,
@@ -345,48 +383,6 @@
       "tags": [
         "Handbook"
       ]
-    },
-    {
-      "id": "an-element-s-documentation-is-markdown-now-and-the-people-wh",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Documentation you wrote in the model now reads as you wrote it",
-        "de": "Dokumentation aus dem Modell wird jetzt so gelesen, wie sie geschrieben ist"
-      },
-      "summary": {
-        "en": "The documentation field on an element understands Markdown: headings, bullet and numbered lists, quotes, code, bold and italic, links. Where it used to arrive as a wall of asterisks and hyphens, a work instruction now reaches the person doing the work as the checklist it was written as — in the Tasks app, in the instance replay and in the Panorama properties panel. Text written before this is untouched: a line break is still a line break, and a variable name is still a variable name.",
-        "de": "Das Dokumentationsfeld eines Elements versteht Markdown: Überschriften, Aufzählungen, nummerierte Listen, Zitate, Code, fett und kursiv, Links. Wo vorher eine Wand aus Sternchen und Bindestrichen ankam, erreicht eine Arbeitsanweisung die bearbeitende Person jetzt als die Prüfliste, als die sie geschrieben wurde — in der Tasks-App, im Instanz-Replay und im Panorama-Eigenschaftenpanel. Vorher geschriebener Text bleibt unangetastet: Ein Zeilenumbruch bleibt ein Zeilenumbruch, ein Variablenname bleibt ein Variablenname."
-      },
-      "link": {
-        "label": "ADR-0250",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0250-documentation-is-markdown.md"
-      },
-      "tags": [
-        "Tasks",
-        "Operations",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a user task.",
-          "In the Details panel, write the instruction in the Documentation field — a heading with ##, a checklist with -, an important word in **bold**.",
-          "Deploy and start the process, then open the task in the Tasks app: the instruction stands above the form, rendered."
-        ],
-        "de": [
-          "Öffnen Sie einen Prozess im Modeler und wählen Sie eine User-Task aus.",
-          "Schreiben Sie die Anweisung im Details-Panel ins Feld Documentation — eine Überschrift mit ##, eine Prüfliste mit -, ein wichtiges Wort in **fett**.",
-          "Deployen und starten Sie den Prozess und öffnen Sie die Aufgabe in der Tasks-App: Die Anweisung steht gerendert über dem Formular."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Tasks",
-          "de": "Aufgaben öffnen"
-        },
-        "route": "#/tasks"
-      }
     }
   ]
 }

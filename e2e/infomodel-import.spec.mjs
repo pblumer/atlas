@@ -60,11 +60,22 @@ async function chooseFile(page, name = "sales.xmi") {
   await chooser.setFiles({ name, mimeType: "application/xml", buffer: Buffer.from(XMI) });
 }
 
+// Who the model belongs to is always asked now, because the library is a target
+// beside the applications (ADR-draft-shared-information-models) — so there is a
+// choice to make even where there is one application.
+async function chooseTarget(page, value) {
+  const picker = page.locator(".modal-ov select#pick-opt");
+  await expect(picker).toBeVisible();
+  await picker.selectOption(value);
+  await page.locator(".modal-ov [data-ok]").click();
+}
+
 test("the button opens a file dialog, and the file produces a report before anything is stored", async ({ page }) => {
   const imports = [];
   stubAPI(page, [app("app-1", "Sales")], imports);
   await openData(page);
   await chooseFile(page);
+  await chooseTarget(page, "app-1");
 
   const report = page.locator("#im-import-report");
   await expect(report).toBeVisible();
@@ -87,6 +98,7 @@ test("confirming stores the model, with the name the reader left in the field", 
   stubAPI(page, [app("app-1", "Sales")], imports);
   await openData(page);
   await chooseFile(page);
+  await chooseTarget(page, "app-1");
 
   await page.locator("#im-import-name").fill("Sales vocabulary");
   await page.locator("#im-import-report [data-import]").click();
@@ -104,6 +116,7 @@ test("cancelling stores nothing", async ({ page }) => {
   stubAPI(page, [app("app-1", "Sales")], imports);
   await openData(page);
   await chooseFile(page);
+  await chooseTarget(page, "app-1");
 
   await page.locator("#im-import-report [data-close]").click();
   await expect(page.locator("#im-import-report")).toHaveCount(0);
@@ -111,9 +124,8 @@ test("cancelling stores nothing", async ({ page }) => {
   expect(imports[0].dryRun).toBe(true);
 });
 
-// With one application there is nothing to ask; with several the reader is asked which
-// one owns the model — in the dialog, never by counting a list (pickmodal.js).
-test("several applications are offered as a choice before the preview is asked for", async ({ page }) => {
+// Who owns the model is asked in the dialog, never by counting a list (pickmodal.js).
+test("the applications are offered as a choice before the preview is asked for", async ({ page }) => {
   const imports = [];
   stubAPI(page, [app("app-1", "Sales"), app("app-2", "Logistics")], imports);
   await openData(page);
@@ -128,4 +140,23 @@ test("several applications are offered as a choice before the preview is asked f
   await expect(page.locator("#im-import-report")).toBeVisible();
   expect(imports).toHaveLength(1);
   expect(imports[0].applicationId).toBe("app-2");
+});
+
+// Importing into the library: a model drawn in a UML tool for the whole business
+// rather than for one application. The absence of an application is sent as an
+// absence, not as a value standing for one.
+test("a document can be imported into the library, and carries no application at all", async ({ page }) => {
+  const imports = [];
+  stubAPI(page, [app("app-1", "Sales")], imports);
+  await openData(page);
+  await chooseFile(page);
+  await chooseTarget(page, ""); // the library is the option with no id
+
+  await expect(page.locator("#im-import-report")).toBeVisible();
+  expect(imports).toHaveLength(1);
+  expect("applicationId" in imports[0]).toBe(false);
+
+  await page.locator("#im-import-report [data-import]").click();
+  await expect.poll(() => imports.length).toBe(2);
+  expect("applicationId" in imports[1]).toBe(false);
 });

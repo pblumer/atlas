@@ -63,11 +63,10 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSONLimit(w, r, &payload, maxImportBytes) {
 		return
 	}
+	// An empty applicationId imports into the library, which every application
+	// resolves against (ADR-draft-shared-information-models) — the case a model drawn
+	// in a UML tool for the whole business, rather than for one application, is.
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)
-	if payload.ApplicationID == "" {
-		httpapi.Error(w, http.StatusBadRequest, "applicationId is required")
-		return
-	}
 	if strings.TrimSpace(payload.Document) == "" {
 		httpapi.Error(w, http.StatusBadRequest, "document is required: send the model as JSON, or as UML XMI")
 		return
@@ -107,6 +106,16 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 		// offering a preview to somebody who could never store it is an invitation to
 		// do work that will be refused.
 		if refusal = writeRefusal(access, true); refusal != nil {
+			return
+		}
+		// A name already defined on the other side of the library boundary is refused
+		// exactly as it is on a save from the canvas — and refused for a dry run too,
+		// because a preview that reports "fine" for a document the import will refuse
+		// is worse than no preview.
+		if refusal, err = s.nameClashOnLoop(model); err != nil {
+			opErr = err
+			return
+		} else if refusal != nil {
 			return
 		}
 		if payload.DryRun {

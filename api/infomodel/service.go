@@ -26,16 +26,28 @@ var (
 // ApplicationAccess is the caller's resolved access to the process application that
 // owns a model. Like Panorama, this area reuses the application scope (ADR-0071/
 // 0128) rather than inventing a second ACL.
+//
+// A *library* model owns no application (ADR-draft-shared-information-models), so
+// there is no scope to reuse and the resolver answers for the library itself: the
+// route's own role. CanDelete is what that made necessary — for an application it is
+// simply CanEdit, but a library model is resolved against by every application on the
+// server, so deleting one reaches diagrams its author never saw and is narrower than
+// creating one.
 type ApplicationAccess struct {
 	Exists    bool
 	CanView   bool
 	CanEdit   bool
+	CanDelete bool
 	Protected bool
 }
 
 // AccessResolver resolves application ownership on the API run loop. It is invoked
 // only from a loop turn, so it may read the server's application store directly; it
 // must not call Loop.Do recursively.
+//
+// An empty applicationID asks about the library rather than about an application,
+// and an implementation must answer it rather than reporting that no application by
+// that id exists.
 type AccessResolver func(r *http.Request, applicationID string) (ApplicationAccess, error)
 
 // IDGenerator mints an opaque model or element id off the run loop.
@@ -84,11 +96,9 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &payload) {
 		return
 	}
+	// An empty applicationId is not a missing field: it asks for a library model,
+	// which every application resolves against.
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)
-	if payload.ApplicationID == "" {
-		httpapi.Error(w, http.StatusBadRequest, "applicationId is required")
-		return
-	}
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "name is required")
@@ -126,6 +136,9 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			opErr = errIDCollision
 			return
 		}
+		// A model created here is empty, so it defines no name and can clash with
+		// nothing across the library boundary: that check lives on the write that puts
+		// content into it.
 		opErr = s.store.Save(model)
 	})
 	if refusal != nil {
@@ -285,6 +298,14 @@ func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			invalid = &res
 			return
 		}
+		// A name that would mean two things across the library boundary is refused
+		// here rather than at deploy, so a deploy never has to.
+		if refusal, err = s.nameClashOnLoop(next); err != nil {
+			opErr = err
+			return
+		} else if refusal != nil {
+			return
+		}
 		next.Revision = model.Revision + 1
 		next.UpdatedAt = s.now().Unix()
 		next.UpdatedBy = requestActor(r)
@@ -405,7 +426,7 @@ func (s *Service) HandleDelete(w http.ResponseWriter, r *http.Request) {
 			opErr = err
 			return
 		}
-		if refusal = writeRefusal(access, false); refusal != nil {
+		if refusal = deleteRefusal(access, model); refusal != nil {
 			return
 		}
 		opErr = s.store.Delete(model.ID)
@@ -442,31 +463,117 @@ func (s *Service) HandleSchema(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, projection)
 }
 
-// VocabularyOnLoop is what an application's information models say, flattened for
-// resolution — what a deploy and the Problems panel resolve `itemSubjectRef`
-// against. It runs inside an existing loop turn, so callers must already hold one.
+// VocabularyOnLoop is what an application can resolve `itemSubjectRef` against,
+// flattened — what a deploy and the Problems panel use. It runs inside an existing
+// loop turn, so callers must already hold one.
 //
-// An application with no model yields an *unmodeled* vocabulary rather than an
-// empty one, and the difference is deliberate: the checks that need a vocabulary
-// say nothing at all against it, so an instance that has not started modeling does
-// not get a warning on every data object it has.
+// It is the application's own models *and* the library models, the ones no
+// application owns (ADR-draft-shared-information-models): a Customer typed once
+// answers for every application, which is the whole point of a library. A caller
+// with no application at all still gets the library, because a process that belongs
+// to no application is not a process the shared vocabulary should be hidden from.
+//
+// Nothing at all modeled yields an *unmodeled* vocabulary rather than an empty one,
+// and the difference is deliberate: the checks that need a vocabulary say nothing at
+// all against it, so an instance that has not started modeling does not get a warning
+// on every data object it has.
 func (s *Service) VocabularyOnLoop(applicationID string) (*Vocabulary, error) {
-	if strings.TrimSpace(applicationID) == "" {
-		return NewVocabulary(nil), nil
-	}
-	models, err := s.store.ForApplication(applicationID)
+	all, err := s.store.LoadAll()
 	if err != nil {
 		return nil, err
 	}
-	// The store lists newest first; NewVocabulary lets a later entry win a name
-	// clash, so reverse to make the newest model the one that wins.
+	applicationID = strings.TrimSpace(applicationID)
+	var library, own []Model
+	for _, m := range all {
+		switch {
+		case m.IsLibrary():
+			library = append(library, m)
+		case applicationID != "" && m.ApplicationID == applicationID:
+			own = append(own, m)
+		}
+	}
+	// Two orderings, for two different reasons. Within a group the store lists newest
+	// first and NewVocabulary lets a later entry win, so each is reversed to make its
+	// newest model the one that wins. Between the groups the application's own come
+	// last, so that if a name ever were defined on both sides the application's would
+	// win — it cannot be, because nameClashOnLoop refuses the write that would do it,
+	// but data written before that rule must still resolve to something definite
+	// rather than to whichever model happened to be saved last.
+	reverse(library)
+	reverse(own)
+	return NewVocabulary(append(library, own...)), nil
+}
+
+func reverse(models []Model) {
 	for i, j := 0, len(models)-1; i < j; i, j = i+1, j-1 {
 		models[i], models[j] = models[j], models[i]
 	}
-	return NewVocabulary(models), nil
 }
 
 const notFound = "no such information model"
+
+// nameClashOnLoop refuses a write that would make one name mean two things.
+//
+// A class name resolves to exactly one class, and a library model is resolved
+// against by every application (ADR-draft-shared-information-models) — so a name
+// defined both in the library and in an application model is not a merge to settle
+// but a question nobody can answer from the model. Letting one side win would be
+// easy to implement and impossible to read: a modeler looking at Customer in their
+// own model would have no way to tell, from anything on screen, whether that is the
+// definition their process actually resolves to.
+//
+// So it is refused, in both directions and at the point of writing. That is what
+// keeps ADR-0230 §3 intact: a deploy still never fails on the vocabulary, because
+// the state it would have had to refuse cannot be reached. Two *applications*
+// defining the same name are untouched — they are separate vocabularies and always
+// were, which is why the comparison only ever crosses the library boundary.
+//
+// It runs inside a loop turn, like every other read of the store here (I3).
+func (s *Service) nameClashOnLoop(m Model) (*operationRefusal, error) {
+	all, err := s.store.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	mine := map[string]string{} // name -> what it is, for the message
+	for _, c := range m.Classes {
+		mine[c.Name] = "class"
+	}
+	for _, st := range m.Stores {
+		mine[st.Name] = "data store"
+	}
+	for _, other := range all {
+		if other.ID == m.ID || other.IsLibrary() == m.IsLibrary() {
+			continue
+		}
+		for _, c := range other.Classes {
+			if kind, ok := mine[c.Name]; ok {
+				return clashRefusal(kind, c.Name, m, other), nil
+			}
+		}
+		for _, st := range other.Stores {
+			if kind, ok := mine[st.Name]; ok {
+				return clashRefusal(kind, st.Name, m, other), nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// clashRefusal says which name, where the other definition lives, and what to do —
+// a refusal that only says "conflict" is not one a modeler can act on.
+func clashRefusal(kind, name string, m, other Model) *operationRefusal {
+	side := "an application's information model"
+	if other.IsLibrary() {
+		side = "a library information model"
+	}
+	remedy := "Rename one of them, or drop this one and resolve against the shared definition."
+	if m.IsLibrary() {
+		remedy = "Rename one of them, or remove it from the application's model so the shared definition is the one that resolves."
+	}
+	return &operationRefusal{status: http.StatusConflict, message: fmt.Sprintf(
+		"the %s %q is already defined by %s, %q. A name resolves to one thing, and both of these are in scope for the same processes. %s",
+		kind, name, side, other.Name, remedy)}
+}
 
 func (s *Service) readModel(r *http.Request, id string) (Model, *operationRefusal, error) {
 	var model Model
@@ -497,6 +604,23 @@ func (s *Service) readModel(r *http.Request, id string) (Model, *operationRefusa
 type operationRefusal struct {
 	status  int
 	message string
+}
+
+// deleteRefusal is writeRefusal plus the one right a library model separates out.
+// For an application the two are the same, so nothing about an application's models
+// changes here.
+func deleteRefusal(access ApplicationAccess, m Model) *operationRefusal {
+	if refusal := writeRefusal(access, false); refusal != nil {
+		return refusal
+	}
+	if !access.CanDelete {
+		if m.IsLibrary() {
+			return &operationRefusal{status: http.StatusForbidden,
+				message: "deleting a library information model requires an administrator: every application on this server resolves against it"}
+		}
+		return &operationRefusal{status: http.StatusForbidden, message: "insufficient access to this application"}
+	}
+	return nil
 }
 
 func writeRefusal(access ApplicationAccess, creating bool) *operationRefusal {

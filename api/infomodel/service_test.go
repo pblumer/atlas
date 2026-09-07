@@ -44,10 +44,14 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { close(quit); wg.Wait() })
 
 	fx := &fixture{store: store, access: map[string]ApplicationAccess{
-		"app-1":     {Exists: true, CanView: true, CanEdit: true},
+		"app-1":     {Exists: true, CanView: true, CanEdit: true, CanDelete: true},
+		"app-2":     {Exists: true, CanView: true, CanEdit: true, CanDelete: true},
 		"hidden":    {Exists: true},
 		"viewer":    {Exists: true, CanView: true},
-		"protected": {Exists: true, CanView: true, CanEdit: true, Protected: true},
+		"protected": {Exists: true, CanView: true, CanEdit: true, CanDelete: true, Protected: true},
+		// The library, which no application owns: every modeler may author it, and
+		// only an administrator may delete one (ADR-draft-shared-information-models).
+		"": {Exists: true, CanView: true, CanEdit: true},
 	}}
 	fx.service = New(loop, store,
 		func(_ *http.Request, applicationID string) (ApplicationAccess, error) {
@@ -318,8 +322,6 @@ func TestServiceRejectsMalformedRequests(t *testing.T) {
 		bytes.NewReader([]byte("{")), http.StatusBadRequest)
 	requestJSON(t, fx.service.HandleCreate, http.MethodPost, "/api/v1/infomodel/models",
 		map[string]any{"applicationId": "app-1"}, http.StatusBadRequest)
-	requestJSON(t, fx.service.HandleCreate, http.MethodPost, "/api/v1/infomodel/models",
-		map[string]any{"name": "X"}, http.StatusBadRequest)
 
 	fx.create(t, "app-1", "Sales")
 	empty := ""
@@ -549,5 +551,208 @@ func TestServiceReadsAnUnstatedStoreModeAsRead(t *testing.T) {
 	}
 	if !got.Validation.Valid {
 		t.Errorf("a store with no stated mode came back with findings: %v", got.Validation.Findings)
+	}
+}
+
+// --- library models -------------------------------------------------------
+//
+// A model that no application owns is resolved against by every application
+// (ADR-draft-shared-information-models). That is the whole feature: a Customer typed
+// once, with one business key, meaning the same customer in three applications
+// instead of being drawn three times and drifting apart.
+
+// createLibrary starts a model that belongs to no application.
+func (fx *fixture) createLibrary(t *testing.T, name string) Summary {
+	t.Helper()
+	rec := requestJSON(t, fx.service.HandleCreate, http.MethodPost, "/api/v1/infomodel/models",
+		map[string]any{"name": name}, http.StatusCreated)
+	var out Summary
+	decodeResponse(t, rec, &out)
+	return out
+}
+
+// oneClass is the smallest model that defines a name, which is all the clash rule
+// and the vocabulary union are about.
+func oneClass(name string) map[string]any {
+	return map[string]any{"classes": []map[string]any{{
+		"name": name, "stereotype": StereotypeBusinessObject, "identity": []string{"nr"},
+		"attributes": []map[string]any{{"name": "nr", "type": TypeString, "multiplicity": MultOne}},
+	}}}
+}
+
+func TestLibraryModelBelongsToNoApplication(t *testing.T) {
+	fx := newFixture(t)
+	created := fx.createLibrary(t, "Shared vocabulary")
+	if created.ApplicationID != "" {
+		t.Fatalf("applicationId = %q, want empty: a library model owns no application", created.ApplicationID)
+	}
+	// The field is omitted rather than sent empty, so a client cannot read a blank
+	// application as an application that was not found.
+	rec := request(t, fx.service.HandleList, http.MethodGet, "/api/v1/infomodel/models", nil, http.StatusOK)
+	if strings.Contains(rec.Body.String(), `"applicationId"`) {
+		t.Errorf("the listing carries an empty applicationId: %s", rec.Body.String())
+	}
+
+	body := oneClass("Customer")
+	body["revision"] = 1
+	fx.putModel(t, created.ID, body, http.StatusOK)
+}
+
+// TestLibraryResolvesForEveryApplication is the payoff: a class nobody's application
+// owns still answers itemSubjectRef, in every application and in none.
+func TestLibraryResolvesForEveryApplication(t *testing.T) {
+	fx := newFixture(t)
+	lib := fx.createLibrary(t, "Shared vocabulary")
+	body := oneClass("Customer")
+	body["revision"] = 1
+	fx.putModel(t, lib.ID, body, http.StatusOK)
+
+	for _, app := range []string{"app-1", "app-2", ""} {
+		vocab, err := fx.service.VocabularyOnLoop(app)
+		if err != nil {
+			t.Fatalf("VocabularyOnLoop(%q): %v", app, err)
+		}
+		if _, ok := vocab.Class("Customer"); !ok {
+			t.Errorf("application %q does not resolve Customer against the library", app)
+		}
+	}
+}
+
+// An application's own model still wins where both define a name. It cannot happen
+// through the API — the write is refused — but data written before the rule must
+// still resolve to something defined rather than to whichever was saved last.
+func TestVocabularyPrefersTheApplicationsOwnDefinition(t *testing.T) {
+	fx := newFixture(t)
+	lib := Model{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Library", Revision: 1, UpdatedAt: 20,
+		Classes: []Class{{ID: "c1", Name: "Customer", Stereotype: StereotypeBusinessObject,
+			Attributes: []Attribute{{Name: "fromLibrary", Type: TypeString, Multiplicity: MultOne}}}}}
+	own := Model{ID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ApplicationID: "app-1", Name: "Own", Revision: 1, UpdatedAt: 10,
+		Classes: []Class{{ID: "c2", Name: "Customer", Stereotype: StereotypeBusinessObject,
+			Attributes: []Attribute{{Name: "fromApplication", Type: TypeString, Multiplicity: MultOne}}}}}
+	for _, m := range []Model{lib, own} {
+		if err := fx.store.Save(m); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+	vocab, err := fx.service.VocabularyOnLoop("app-1")
+	if err != nil {
+		t.Fatalf("VocabularyOnLoop: %v", err)
+	}
+	got, ok := vocab.Class("Customer")
+	if !ok || len(got.Attributes) != 1 || got.Attributes[0].Name != "fromApplication" {
+		t.Errorf("Customer resolved to %#v, want the application's own definition", got)
+	}
+}
+
+// TestNameClashIsRefused covers the rule in both directions and for both name
+// spaces, and pins that two applications sharing a name are left alone.
+func TestNameClashIsRefused(t *testing.T) {
+	fx := newFixture(t)
+	lib := fx.createLibrary(t, "Shared vocabulary")
+	libBody := oneClass("Customer")
+	libBody["revision"] = 1
+	fx.putModel(t, lib.ID, libBody, http.StatusOK)
+
+	// An application model may not redefine a name the library already defines.
+	own := fx.create(t, "app-1", "Sales")
+	clash := oneClass("Customer")
+	clash["revision"] = 1
+	rec := fx.putModel(t, own.ID, clash, http.StatusConflict)
+	if !strings.Contains(rec.Body.String(), "Customer") || !strings.Contains(rec.Body.String(), "Shared vocabulary") {
+		t.Errorf("the refusal names neither the class nor the model that defines it: %s", rec.Body.String())
+	}
+
+	// A different name in the same application is fine.
+	fine := oneClass("Order")
+	fine["revision"] = 1
+	fx.putModel(t, own.ID, fine, http.StatusOK)
+
+	// And another application may define Order too: two applications are separate
+	// vocabularies, and always were.
+	other := fx.create(t, "app-2", "Service")
+	same := oneClass("Order")
+	same["revision"] = 1
+	fx.putModel(t, other.ID, same, http.StatusOK)
+}
+
+func TestLibraryCannotTakeANameAnApplicationHas(t *testing.T) {
+	fx := newFixture(t)
+	own := fx.create(t, "app-1", "Sales")
+	body := oneClass("Order")
+	body["revision"] = 1
+	fx.putModel(t, own.ID, body, http.StatusOK)
+
+	lib := fx.createLibrary(t, "Shared vocabulary")
+	clash := oneClass("Order")
+	clash["revision"] = 1
+	rec := fx.putModel(t, lib.ID, clash, http.StatusConflict)
+	if !strings.Contains(rec.Body.String(), "Sales") {
+		t.Errorf("the refusal does not say where the other definition lives: %s", rec.Body.String())
+	}
+}
+
+// A data store's name resolves the same way a class name does, so it is subject to
+// the same rule.
+func TestStoreNameClashIsRefused(t *testing.T) {
+	fx := newFixture(t)
+	own := fx.create(t, "app-1", "Sales")
+	body := oneClass("Order")
+	body["stores"] = []map[string]any{{"name": "Orders", "class": "Order", "mode": StoreModeRead}}
+	body["revision"] = 1
+	fx.putModel(t, own.ID, body, http.StatusOK)
+
+	lib := fx.createLibrary(t, "Shared vocabulary")
+	clash := oneClass("Customer")
+	clash["stores"] = []map[string]any{{"name": "Orders", "class": "Customer", "mode": StoreModeRead}}
+	clash["revision"] = 1
+	rec := fx.putModel(t, lib.ID, clash, http.StatusConflict)
+	if !strings.Contains(rec.Body.String(), "data store") {
+		t.Errorf("the refusal does not say what kind of name clashed: %s", rec.Body.String())
+	}
+}
+
+// Deleting a library model is an administrator's act, because it reaches every
+// application on the server. Editing one is not.
+func TestDeletingALibraryModelNeedsMoreThanEditing(t *testing.T) {
+	fx := newFixture(t)
+	lib := fx.createLibrary(t, "Shared vocabulary")
+
+	del := func(status int) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/infomodel/models/"+lib.ID, nil)
+		req.SetPathValue("id", lib.ID)
+		return invoke(t, fx.service.HandleDelete, req, status)
+	}
+	rec := del(http.StatusForbidden)
+	if !strings.Contains(rec.Body.String(), "administrator") {
+		t.Errorf("the refusal does not say what is missing: %s", rec.Body.String())
+	}
+	fx.access[""] = ApplicationAccess{Exists: true, CanView: true, CanEdit: true, CanDelete: true}
+	del(http.StatusNoContent)
+}
+
+// Two library models are one vocabulary, and the newest wins a name clash between
+// them — the same rule that has always held inside one application. The clash rule
+// crosses the library boundary and does not police the library against itself.
+func TestTwoLibraryModelsResolveNewestFirst(t *testing.T) {
+	fx := newFixture(t)
+	older := Model{ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "Older", Revision: 1, UpdatedAt: 10,
+		Classes: []Class{{ID: "c1", Name: "Customer", Stereotype: StereotypeBusinessObject,
+			Attributes: []Attribute{{Name: "fromOlder", Type: TypeString, Multiplicity: MultOne}}}}}
+	newer := Model{ID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Name: "Newer", Revision: 1, UpdatedAt: 20,
+		Classes: []Class{{ID: "c2", Name: "Customer", Stereotype: StereotypeBusinessObject,
+			Attributes: []Attribute{{Name: "fromNewer", Type: TypeString, Multiplicity: MultOne}}}}}
+	for _, m := range []Model{older, newer} {
+		if err := fx.store.Save(m); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+	}
+	vocab, err := fx.service.VocabularyOnLoop("app-1")
+	if err != nil {
+		t.Fatalf("VocabularyOnLoop: %v", err)
+	}
+	got, ok := vocab.Class("Customer")
+	if !ok || len(got.Attributes) != 1 || got.Attributes[0].Name != "fromNewer" {
+		t.Errorf("Customer resolved to %#v, want the newer library model's definition", got)
 	}
 }

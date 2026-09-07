@@ -851,3 +851,23 @@ test.describe("selecting several at once", () => {
     expect(page.__errors).toEqual([]);
   });
 });
+
+// A model no application owns says so on the bar. Editing one is a wider act than
+// editing an application's own model — every application on the server resolves
+// against it — and nothing else on this screen distinguishes the two
+// (ADR-draft-shared-information-models).
+test.describe("a library model states its scope", () => {
+  test("the bar says Library when no application owns the model", async ({ page }) => {
+    await page.evaluate(() => { window.__library = true; });
+    await page.evaluate(() => window.__mount());
+    await expect(page.locator("#im-scope")).toHaveText("Library");
+    await expect(page.locator("#im-scope")).toHaveAttribute("title", /every application/);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("an application's own model says nothing, because it is the ordinary case", async ({ page }) => {
+    await expect(page.locator(".uml-class").first()).toBeVisible();
+    await expect(page.locator("#im-scope")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+});

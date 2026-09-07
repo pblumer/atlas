@@ -1,8 +1,6 @@
 package infomodel
 
 import (
-	"fmt"
-
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/api/token"
 )
@@ -32,19 +30,4 @@ func NewStore(dir string) (*Store, error) {
 		return nil, err
 	}
 	return &Store{store}, nil
-}
-
-// ForApplication returns one application's models, newest first.
-func (s *Store) ForApplication(applicationID string) ([]Model, error) {
-	all, err := s.LoadAll()
-	if err != nil {
-		return nil, fmt.Errorf("infomodelstore: list application: %w", err)
-	}
-	out := make([]Model, 0)
-	for _, m := range all {
-		if m.ApplicationID == applicationID {
-			out = append(out, m)
-		}
-	}
-	return out, nil
 }

@@ -6,9 +6,12 @@
 // `itemSubjectRef` → `<itemDefinition structureRef="…">` — deliberately opaque,
 // pointing "into some other schema language". So two processes that both handle an
 // order have two unrelated strings named `order`, and nothing anywhere says they
-// mean the same thing. This package is the other schema language: an
-// application-owned document of classes, their attributes, and the associations
-// between them, against which `itemSubjectRef` resolves.
+// mean the same thing. This package is the other schema language: a document of
+// classes, their attributes, and the associations between them, against which
+// `itemSubjectRef` resolves. A document belongs to one process application, or to
+// none — and one that belongs to none is a *library* every application resolves
+// against, which is how two applications say Customer and mean the same customer
+// (ADR-draft-shared-information-models).
 //
 // It models *concepts, not storage.* An entity-relationship diagram's whole
 // vocabulary — entities, columns, foreign keys — is persistence, and drawing one
@@ -16,14 +19,20 @@
 // store's question (ADR-0036), settled per store; this is about what a datum *is*.
 package infomodel
 
-// Model is one application-owned information model. Unlike a Panorama document —
-// whose canonical form is the standard's own interchange XML — this one is stored
-// in its native shape and *projected* to its notations: a UML class diagram to
-// read, and a JSON Schema to validate against. A projection is derived, never
-// authored, and states what it dropped.
+// Model is one information model. Unlike a Panorama document — whose canonical form
+// is the standard's own interchange XML — this one is stored in its native shape and
+// *projected* to its notations: a UML class diagram to read, and a JSON Schema to
+// validate against. A projection is derived, never authored, and states what it
+// dropped.
 type Model struct {
-	ID            string `json:"id"`
-	ApplicationID string `json:"applicationId"`
+	ID string `json:"id"`
+	// ApplicationID is the process application that owns this model and whose sharing
+	// scope it inherits — or empty, which is a statement rather than a missing field:
+	// a model that no application owns is a *library* model, and every application on
+	// the server resolves against it (ADR-draft-shared-information-models). That is
+	// what lets one Customer, with one business key, mean the same thing in three
+	// applications instead of being typed out three times and drifting apart.
+	ApplicationID string `json:"applicationId,omitempty"`
 	Name          string `json:"name"`
 	Documentation string `json:"documentation,omitempty"`
 	// Revision guards a concurrent overwrite: a write states the revision it read,
@@ -43,6 +52,10 @@ type Model struct {
 	UpdatedAt int64       `json:"updatedAt"`
 	UpdatedBy string      `json:"updatedBy,omitempty"`
 }
+
+// IsLibrary reports whether this model belongs to no application, and is therefore
+// resolved against by every one of them.
+func (m Model) IsLibrary() bool { return m.ApplicationID == "" }
 
 // Class is one business object type — the thing a BPMN data object's
 // `itemSubjectRef` names.
@@ -134,7 +147,7 @@ type DataStore struct {
 // the classes and associations a canvas needs.
 type Summary struct {
 	ID            string `json:"id"`
-	ApplicationID string `json:"applicationId"`
+	ApplicationID string `json:"applicationId,omitempty"`
 	Name          string `json:"name"`
 	Documentation string `json:"documentation,omitempty"`
 	Revision      int64  `json:"revision"`

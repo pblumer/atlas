@@ -107,7 +107,11 @@
       window.__saved = null;
       const api = async (method, url, body) => {
         if (method === "GET" && /\/infomodel\/subset$/.test(url)) return SUBSET;
-        if (method === "GET" && /\/infomodel\/models\/[^/]+$/.test(url)) return structuredClone(MODEL);
+        if (method === "GET" && /\/infomodel\/models\/[^/]+$/.test(url)) {
+          const doc = structuredClone(MODEL);
+          if (window.__library) delete doc.applicationId;
+          return doc;
+        }
         if (method === "GET" && /\/schema\?/.test(url)) {
           return {
             class: "Order",
@@ -137,6 +141,9 @@
         return {};
       };
 
+      // A library model is the same document without an application: the harness can
+      // serve one so the editor's own statement about scope is exercised.
+      window.__library = false;
       window.__mount = () => mountClassDiagram(view, { api, toast, id: "m1" });
       window.__ready = true;
     </script>

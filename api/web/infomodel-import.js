@@ -20,8 +20,15 @@
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// runImport reads one file into one application and resolves to the stored model's
-// summary, or to null if the document could not be read or the reader cancelled.
+// The library is the absence of an application, and it is sent as one: no field at
+// all, rather than a field carrying a value that stands for "none". The caller marks
+// its library target with `library: true`, because an id that means "no id" is the
+// kind of sentinel that eventually reaches a server.
+const targetOf = (app) => (app && app.library ? {} : { applicationId: app.id });
+
+// runImport reads one file into one application — or into the library, which no
+// application owns — and resolves to the stored model's summary, or to null if the
+// document could not be read or the reader cancelled.
 //
 // Every collaborator it needs is passed in — the API caller, the toast, where to go
 // afterwards — so the flow can be driven by a test without booting the Console.
@@ -37,7 +44,7 @@ export async function runImport({ app, file, api, toast, navigate }) {
   let preview;
   try {
     preview = await api("POST", "/api/v1/infomodel/import",
-      { applicationId: app.id, document: text, dryRun: true });
+      { ...targetOf(app), document: text, dryRun: true });
   } catch (e) {
     toast("Import failed: " + e.message, "err");
     return null;
@@ -111,7 +118,7 @@ export function showImportReport({ app, api, toast, navigate, text, fileName, fa
       const name = (ov.querySelector("#im-import-name").value || "").trim();
       try {
         const created = await api("POST", "/api/v1/infomodel/import",
-          { applicationId: app.id, document: text, name });
+          { ...targetOf(app), document: text, name });
         finish(created.model || null);
         const dropped = (created.notes || []).filter((n) => n.level === "dropped").length;
         toast(dropped

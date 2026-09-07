@@ -116,7 +116,6 @@ func TestImportRefusals(t *testing.T) {
 		body   map[string]any
 		status int
 	}{
-		{"no application", map[string]any{"document": salesXMI}, http.StatusBadRequest},
 		{"no document", map[string]any{"applicationId": "app-1"}, http.StatusBadRequest},
 		{"blank document", importBody("app-1", "   "), http.StatusBadRequest},
 		{"unreadable document", importBody("app-1", "Order: id, total"), http.StatusBadRequest},

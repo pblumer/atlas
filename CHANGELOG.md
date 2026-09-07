@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An information model can now belong to no application, and then belongs to all of them.**
+  A model was owned by one process application, which solves inside an application
+  exactly the problem BPMN has across processes — and reproduces it one level up. Two
+  applications that both handle a customer ended up with two unrelated `Customer`
+  classes, each with its own attributes and its own business key, and nothing anywhere
+  saying they are the same customer. The identity that makes `Order#ORD-1` the same
+  order in three processes stopped at the application boundary.
+
+  Leaving the application off now means something: the model is a **library** model,
+  and every application on the server resolves against it. An attribute is typed once
+  and read everywhere. Nothing about existing models changes — every one of them
+  carries an application, so every one of them keeps its owner, its permissions and
+  its resolution exactly as before, with no migration.
+
+  Two rules come with it. A class or data store name may be defined by a library model
+  or by an application model, **not both**: the write that would make one name mean two
+  things is refused, naming the class and the model on the other side, because a
+  precedence rule would silently change what a diagram means and nothing on screen
+  would say so. And deleting a library model asks for an administrator, while editing
+  one asks only for a modeler — deleting reaches diagrams its author never saw, where
+  editing shows up in the Problems panel of everything it touches.
+
+  See [ADR-draft-shared-information-models](docs/adr/draft-shared-information-models.md).
+
 - **Forms written by the AI Worker.** The form editor has a **✨ Generate** button.
   Describe what the form should ask for — in your own words, in your own language —
   and, if you like, point it at the process the form belongs to and the step it is

@@ -1297,14 +1297,31 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.runLoop,
 		infomodelStore,
 		func(r *http.Request, applicationID string) (infomodel.ApplicationAccess, error) {
+			// No application id asks about the *library* — the models no application
+			// owns, which every application resolves against
+			// (ADR-draft-shared-information-models). There is no application scope to
+			// reuse there, so the answer is the route's own role: every route in this
+			// area already requires a modeler, and deleting is narrowed to an
+			// administrator because a library model is in scope for every application
+			// on the server.
+			if applicationID == "" {
+				principal := httpapi.PrincipalFrom(r.Context())
+				if !s.authEnabled {
+					return infomodel.ApplicationAccess{Exists: true, CanView: true, CanEdit: true, CanDelete: true}, nil
+				}
+				may := principal != nil && (principal.HasRole(RoleAdmin) || principal.HasRole(RoleModeler))
+				admin := principal != nil && principal.HasRole(RoleAdmin)
+				return infomodel.ApplicationAccess{Exists: true, CanView: may, CanEdit: may, CanDelete: admin}, nil
+			}
 			app, ok, err := s.projects.Get(applicationID)
 			if err != nil || !ok {
 				return infomodel.ApplicationAccess{Exists: ok}, err
 			}
 			role := app.effectiveRole(httpapi.PrincipalFrom(r.Context()), s.authEnabled)
+			edit := scopeRank(role) >= scopeRank(ScopeRoleEditor)
 			return infomodel.ApplicationAccess{
 				Exists: true, CanView: scopeRank(role) >= scopeRank(ScopeRoleViewer),
-				CanEdit: scopeRank(role) >= scopeRank(ScopeRoleEditor), Protected: app.Protected,
+				CanEdit: edit, CanDelete: edit, Protected: app.Protected,
 			}, nil
 		},
 		token.New,

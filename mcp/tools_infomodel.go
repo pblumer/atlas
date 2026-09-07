@@ -57,7 +57,8 @@ func infomodelTools() []Tool {
 			Name: "atlas_list_information_models",
 			Description: "List the information models — the UML class-diagram documents that give a BPMN " +
 				"data object's itemSubjectRef a type to resolve against. Each row carries its id, owning " +
-				"application, and how many classes and associations it holds. Filter by applicationId.",
+				"application (or none, for a library model every application resolves against), and how " +
+				"many classes and associations it holds. Filter by applicationId.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -89,28 +90,31 @@ func infomodelTools() []Tool {
 		},
 		{
 			Name: "atlas_create_information_model",
-			Description: "Start an empty information model for a process application. It inherits the " +
-				"application's sharing scope, which is what lets every process in that application share " +
-				"one vocabulary for its data. Fill it with atlas_save_information_model.",
+			Description: "Start an empty information model. With an applicationId it belongs to that " +
+				"process application and inherits its sharing scope, which is what lets every process in " +
+				"that application share one vocabulary. WITHOUT one it is a LIBRARY model: no application " +
+				"owns it and every application on the server resolves against it, which is how a Customer " +
+				"is typed once and means the same customer everywhere. A class or data store name may not " +
+				"be defined by both a library model and an application model — the write is refused, " +
+				"because a name resolves to one thing. Fill it with atlas_save_information_model.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"applicationId": stringProp("The process application that owns the model."),
+					"applicationId": stringProp("Optional: the process application that owns the model. Omit it for a library model every application resolves against."),
 					"name":          stringProp("A name for the model, e.g. \"Sales data\"."),
 					"documentation": stringProp("Optional: what part of the business these classes describe."),
 				},
-				"required": []any{"applicationId", "name"},
+				"required": []any{"name"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
-				appID, err := argString(args, "applicationId")
-				if err != nil {
-					return "", err
-				}
 				name, err := argString(args, "name")
 				if err != nil {
 					return "", err
 				}
-				payload := map[string]any{"applicationId": appID, "name": name}
+				payload := map[string]any{"name": name}
+				if appID := optString(args, "applicationId"); appID != "" {
+					payload["applicationId"] = appID
+				}
 				if d := optString(args, "documentation"); d != "" {
 					payload["documentation"] = d
 				}
@@ -120,7 +124,9 @@ func infomodelTools() []Tool {
 		},
 		{
 			Name: "atlas_import_information_model",
-			Description: "Import a UML class diagram as a NEW information model of an application. Two " +
+			Description: "Import a UML class diagram as a NEW information model — of one application, or " +
+				"of no application at all, in which case it is a LIBRARY model every application on the " +
+				"server resolves against. Two " +
 				"documents are read: Atlas's own JSON (what atlas_get_information_model returns, so a " +
 				"model moves between applications and installations), and the XMI 2.5.1 a UML tool " +
 				"exports. The format is detected from the document unless you state it. Reading a " +
@@ -131,7 +137,7 @@ func infomodelTools() []Tool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"applicationId": stringProp("The process application that will own the imported model."),
+					"applicationId": stringProp("Optional: the process application that will own the imported model. Omit it to import into the library every application resolves against."),
 					"document":      stringProp("The whole source document: Atlas JSON, or UML XMI."),
 					"format":        stringProp("Optional: \"json\" or \"xmi\". Detected from the document when omitted."),
 					"name":          stringProp("Optional: a name for the model, overriding the one the document carries."),
@@ -139,18 +145,17 @@ func infomodelTools() []Tool {
 					"dryRun": map[string]any{"type": "boolean",
 						"description": "Report what the import would do — the notes and the model it would create — and store nothing."},
 				},
-				"required": []any{"applicationId", "document"},
+				"required": []any{"document"},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
-				appID, err := argString(args, "applicationId")
-				if err != nil {
-					return "", err
-				}
 				document, err := argString(args, "document")
 				if err != nil {
 					return "", err
 				}
-				payload := map[string]any{"applicationId": appID, "document": document}
+				payload := map[string]any{"document": document}
+				if appID := optString(args, "applicationId"); appID != "" {
+					payload["applicationId"] = appID
+				}
 				for _, field := range []string{"format", "name", "documentation"} {
 					if v := optString(args, field); v != "" {
 						payload[field] = v

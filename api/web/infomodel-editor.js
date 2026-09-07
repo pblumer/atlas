@@ -78,6 +78,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <a class="btn neutral" href="#/data" title="Back to the information models">← Model</a>
         <b class="im-title" id="im-name">${esc(state.model.name)}</b>
         <span class="im-rev muted" id="im-rev">r${state.model.revision}</span>
+        ${state.model.applicationId ? "" : `<span class="im-scope" id="im-scope"
+          title="No application owns this model, so every application on this server resolves against it. A class here is a class everywhere.">Library</span>`}
         <span class="im-palette" id="im-palette"></span>
         <span class="im-search">
           <input type="search" id="im-search" placeholder="Find a class or a member…"
