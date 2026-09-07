@@ -288,3 +288,38 @@ test("an agent-driven ad-hoc is marked on the canvas, and a plain one is not", a
   await expect(badgeOf("plain")).toHaveCount(1);
   expect(page.__errors).toEqual([]);
 });
+
+// What an agent may read is authored on the element too, beside what it may reach
+// (ADR-draft-what-an-agent-may-read). A reviewer sees both in one place, which is the
+// whole argument — an agent whose data comes from somewhere the diagram does not show is
+// only half reviewable.
+test("an agent container names what it may read, and clearing it removes the attribute", async ({ page }) => {
+  await open(page, "agent");
+  await expand(page, "Agent");
+  await expect(page.locator("#f-agent-context")).toHaveValue("antrag,kunde");
+
+  await page.locator("#f-agent-context").fill("antrag, kunde, dossier");
+  await page.locator("#f-agent-context").blur();
+  let xml = await elementXML(page, "adHocSubProcess", "agent");
+  expect(xml).toContain(`context="antrag, kunde, dossier"`);
+  // Written together with the rest, so editing one field never drops another.
+  expect(xml).toContain(`connector="anthropic_pb"`);
+  expect(xml).toContain(`model="claude-opus-5"`);
+
+  await expand(page, "Agent");
+  await page.locator("#f-agent-context").fill("");
+  await page.locator("#f-agent-context").blur();
+  xml = await elementXML(page, "adHocSubProcess", "agent");
+  expect(xml).not.toMatch(/context="/);
+  expect(xml).toContain(`connector="anthropic_pb"`);
+  expect(page.__errors).toEqual([]);
+});
+
+// The task must not offer it: the compiler refuses context on an ai task, so a field here
+// would be a way to author a model that does not deploy.
+test("an ai task offers no context list", async ({ page }) => {
+  await open(page, "einordnen");
+  await expect(page.locator("#f-agent-context")).toHaveCount(0);
+  await expect(page.locator("#f-st-context")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});

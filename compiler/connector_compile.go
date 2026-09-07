@@ -2050,14 +2050,14 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		return 0, fmt.Errorf("compiler: ai task %q needs a resultVariable to put the answer in "+
 			"(an answer nothing reads is a call nobody needed)", st.Id)
 	}
-	for _, unsupported := range []struct{ attr, value string }{
-		{"resultCollection", cn.ResultCollection},
-		{"resultElement", cn.ResultElement},
+	for _, unsupported := range []struct{ attr, value, instead string }{
+		{"resultCollection", cn.ResultCollection, "it is where a tool call's result is appended; an ai task makes one call and answers into resultVariable"},
+		{"resultElement", cn.ResultElement, "it says what to append after a tool call; an ai task calls nothing"},
+		{"context", cn.Context, "it names what a container is given to read; an ai task's prompt is FEEL over the variables it sees, so it already carries its own data"},
 	} {
 		if strings.TrimSpace(unsupported.value) != "" {
-			return 0, fmt.Errorf("compiler: ai task %q sets %s, which only an agent-driven ad-hoc subprocess reads "+
-				"(it is where a tool call's result is appended; an ai task makes one call and answers into resultVariable)",
-				st.Id, unsupported.attr)
+			return 0, fmt.Errorf("compiler: ai task %q sets %s, which only an agent-driven ad-hoc subprocess reads (%s)",
+				st.Id, unsupported.attr, unsupported.instead)
 		}
 	}
 	prompt, err := connectorValue(st.Id, "ai", "prompt", cn.Prompt)

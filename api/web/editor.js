@@ -6269,6 +6269,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             <label class="field"><span>Model</span>
               <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="leave empty for the Worker's own model"/></label>
             <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for). <b>Model</b> is which language model it asks, by the provider's own id; leave it empty and whatever that Worker is configured for runs.</p>
+            <label class="field"><span>May read</span>
+              <input type="text" id="f-agent-context" value="${esc(ac.context || "")}" placeholder="dossier, kunde"/></label>
+            <p class="muted" style="font-size:12px">The variables this agent is given, by name, comma-separated. What an agent may <b>reach</b> is the diagram; what it may <b>read</b> is this list — so a reviewer sees both on the element. A name the instance does not carry is sent as <code>(not set)</code>, so the agent says so rather than inventing a value. Leave it empty and the agent knows only its goal, its tools, and what its own calls returned — which is a real design when its tools fetch what it needs.</p>
             <h3>Tool results</h3>
             <label class="field"><span>Collect results into</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
@@ -7672,6 +7675,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const fagentconn = body.querySelector("#f-agent-connector");
     if (fagentconn) {
       const fagentmodel = body.querySelector("#f-agent-model");
+      const fagentctx = body.querySelector("#f-agent-context");
       const fagentcoll = body.querySelector("#f-agent-resultcoll");
       const fagentelem = body.querySelector("#f-agent-resultelem");
       const saveAgent = () => savePreservingPanel(() => {
@@ -7683,12 +7687,16 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // and an attribute spelling it out would only be a second way to say it
           // (ADR-0256).
           model: (fagentmodel.value || "").trim() || undefined,
+          // Naming none means the agent is given nothing, which the compiler reads from a
+          // missing attribute — an empty one would be a second way to say it.
+          context: (fagentctx.value || "").trim() || undefined,
           resultCollection: (fagentcoll.value || "").trim() || undefined,
           resultElement: elem === "" ? undefined : (elem.startsWith("=") ? elem : "= " + elem),
         });
       });
       fagentconn.addEventListener("change", saveAgent);
       fagentmodel.addEventListener("change", saveAgent);
+      fagentctx.addEventListener("change", saveAgent);
       fagentcoll.addEventListener("change", saveAgent);
       fagentelem.addEventListener("change", saveAgent);
       fillWorkerDatalist(api, body.querySelector("#dl-agent-connector"),
