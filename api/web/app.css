@@ -3818,6 +3818,14 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   margin: 0; padding: 8px 10px; border-top: 1px solid var(--border);
   background: var(--warn-soft);
 }
+/* When these steps were last read against the real thing. Quieter than the steps it
+   qualifies — it is a caveat, not an instruction — but present, because a set of menu
+   paths in somebody else's product with no date on it asks for more trust than it has
+   earned. */
+.wtdoc-checked {
+  margin: 0; padding: 7px 10px; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 11.5px; line-height: 1.45;
+}
 .wtdoc code, .wtdoc-trap code {
   font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 3px;

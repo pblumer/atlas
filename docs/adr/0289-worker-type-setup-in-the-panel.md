@@ -81,7 +81,15 @@ types.
   while the handbook is bilingual.
 - **Follow-ups / risks to watch:** Provider UIs are somebody else's and change without
   notice. The entries name paths (*IAM & Admin → Service accounts*), which is what makes
-  them useful and what will age; treat a renamed menu as a bug report.
+  them useful and what will age; treat a renamed menu as a bug report. Since nothing in
+  this repository can observe Google's console, each entry now carries a `checked` date
+  that the panel prints, and `TestSetupDocsAreRecentlyChecked` fails once an entry has
+  stood unread for a year. That test depends on the wall clock, which the testing
+  conventions otherwise forbid, and deliberately so: a freshness check that can only fail
+  when somebody edits the file would never fire, because the file not being edited is the
+  condition it exists to catch. The accepted cost is that it will one day turn CI red on
+  an unrelated change. The handbook's runbook cards carry no such date yet and rot the
+  same way.
 
 ## Pros and cons of the options
 

@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Worker Type's setup steps say when they were last checked.** The steps beside a
+  Worker Type name menu paths in somebody else's product — *IAM & Admin → Service
+  accounts*, *Certificates & secrets*, *Reset Token* — which is what makes them worth
+  writing and what silently stops being true when that product is rearranged. Nothing
+  here can observe Google's console, so the text would go on looking authoritative while
+  sending its reader in a circle. Each entry now carries the month it was last walked at
+  the provider, the panel prints it at the foot of the steps ("Steps last checked
+  September 2026. Where a provider has moved a menu since, the provider is right and this
+  is out of date"), and a test fails once an entry has stood unread for a year. That test
+  reads the wall clock, which the testing conventions otherwise forbid and which is
+  exactly the point: a freshness check that can only fail when somebody edits the file
+  would never fire (ADR-0289).
+
 - **Every Worker Type says how it is set up, where it is chosen.** Picking a Worker
   Type on a service task now shows, beside its fields, what has to exist before the
   task can run — whether it needs a configured Worker and a credential at all, the
