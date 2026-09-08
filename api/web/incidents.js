@@ -57,7 +57,7 @@ export function incidentWorkerChip(inc) {
 // your head, find the add form, fill it in, navigate back, resolve — and it was offered
 // for exactly the message that started ADR-0158: `no worker registered as X`. Since the
 // model states both the name and the type, there is nothing left for the Console to be
-// asked, so the same dialog opens with those two fixed (ADR-draft-create-the-worker-from-the-incident).
+// asked, so the same dialog opens with those two fixed (ADR-0287).
 //
 // The link survives for the one case that has no answer here: an incident that names a
 // worker but not its Worker Type (an older record, or a reference the runtime resolved
@@ -568,7 +568,7 @@ export async function fixWorkerFlow({ api, toast, incident }) {
 // addWorkerFlow creates the worker the parked task names, then retries it. It is
 // fixWorkerFlow's other half: that one opens a record that exists, this one is what an
 // operator needs when the message is `no worker registered as X` and the honest answer
-// is that nobody ever created X (ADR-draft-create-the-worker-from-the-incident).
+// is that nobody ever created X (ADR-0287).
 //
 // The name and the Worker Type are the incident's — which is to say the deployed
 // model's (ADR-0036/0041) — so neither is typed and neither can be got wrong. Resolves

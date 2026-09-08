@@ -340,6 +340,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0284](0284-transactional-child-view.md) | A cancellation sees the children created in its own batch | Proposed |
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Proposed |
 | [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Proposed |
+| [0287](0287-create-the-worker-from-the-incident.md) | Create the worker from the incident, and run the deploy preflight on every deploy path | Proposed |
 
 ## Status values
 

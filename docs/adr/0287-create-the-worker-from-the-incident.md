@@ -1,4 +1,4 @@
-# ADR-DRAFT: Create the worker from the incident, and run the deploy preflight on every deploy path
+# ADR-0287: Create the worker from the incident, and run the deploy preflight on every deploy path
 
 - **Status:** Proposed
 - **Date:** 2026-09-08

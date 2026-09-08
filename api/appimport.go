@@ -72,7 +72,7 @@ type importBundleResp struct {
 	// that ran on the publisher can name workers this server has never heard of, and
 	// the import is the first moment anybody here can be told. It is not a refusal:
 	// a target that provisions its workers after the first import is normal
-	// (ADR-draft-create-the-worker-from-the-incident).
+	// (ADR-0287).
 	Warnings []string `json:"warnings,omitempty"`
 }
 

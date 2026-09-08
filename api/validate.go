@@ -113,7 +113,7 @@ func (s *Server) dataFlowProblems(r io.Reader, applicationID string) []compiler.
 }
 
 // deployWarningsOnLoop is the deploy-time preflight, in one place so every deploy
-// path runs the same one (ADR-draft-create-the-worker-from-the-incident).
+// path runs the same one (ADR-0287).
 //
 // It used to be four lines inside handleDeploy, which meant it ran for a single-model
 // deploy and for nothing else: publishing an application (ADR-0128) and importing a

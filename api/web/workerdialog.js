@@ -10,7 +10,7 @@
 // Creating from the Console stays its inline form there, because that is where a
 // Worker Type and a name are *chosen*; creating from an incident chooses neither, since
 // the model already states both, so it is the same dialog with those two fields fixed
-// and a POST instead of a PATCH (ADR-draft-create-the-worker-from-the-incident). What
+// and a POST instead of a PATCH (ADR-0287). What
 // every surface shares either way is the shape of a Worker Type's fields, exported as
 // workerShape so the rules cannot drift apart.
 //

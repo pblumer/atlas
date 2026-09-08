@@ -58,7 +58,7 @@ _Changed_ / _Removed_ for each version.
   anyway: the deployed model states both the name and the type, and a worker created under
   anything else leaves the task parked. So every incident surface now opens the same worker
   dialog in a create mode with those two fixed, and **Add & retry** writes it and hands the
-  parked job one more attempt (ADR-draft-create-the-worker-from-the-incident).
+  parked job one more attempt (ADR-0287).
 - **Publishing an application runs the deploy-time preflight that only the Modeler's Deploy
   button ran.** The check that says a model names a worker nobody configured — along with the
   information model's data-flow findings and the foreign-namespace check — lived inside the
@@ -67,7 +67,7 @@ _Changed_ / _Removed_ for each version.
   so it could not have. That is how a model reaches production naming a worker that does not
   exist, and Publish is how most applications get there. The three checks are one function
   now, called by all three paths, and the Console shows what a publish warned about
-  (ADR-draft-create-the-worker-from-the-incident).
+  (ADR-0287).
 
 ## [0.5.0] — 2026-09-08
 

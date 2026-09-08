@@ -4776,7 +4776,7 @@ async function deployProject(id, reload) {
 //
 // The Modeler's own deploy has said this since ADR-0158; the publish route said
 // nothing at all, which is how a model reaches production naming a worker nobody
-// created (ADR-draft-create-the-worker-from-the-incident). Same class as the editor's
+// created (ADR-0287). Same class as the editor's
 // panel, so the two read alike.
 function showDeployWarnings(warnings) {
   const ov = document.createElement("div");
@@ -5490,7 +5490,7 @@ function incidentMenu(r, i) {
     // Nothing to open — the model names a worker nobody configured. Creating it is
     // the act, and the model already states the name and the Worker Type, so it
     // happens here rather than in the Console with the name carried in somebody's
-    // head (ADR-draft-create-the-worker-from-the-incident).
+    // head (ADR-0287).
     items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { row: i } });
   } else if (r.connector) {
     // A worker named without its Worker Type: nothing to create it *as*, so the

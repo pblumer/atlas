@@ -30,7 +30,7 @@ type projectDeployResp struct {
 	// They are not a refusal here either: an application is routinely published
 	// before the workers it names are provisioned, and to a server where they are
 	// provisioned later. Same shape as deployResp.Warnings, so a client reads one
-	// field whichever route it deployed through (ADR-draft-create-the-worker-from-the-incident).
+	// field whichever route it deployed through (ADR-0287).
 	Warnings []string `json:"warnings,omitempty"`
 }
 

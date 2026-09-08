@@ -104,8 +104,8 @@
         "de": "Beim Deployen eines einzelnen Diagramms wird seit 0.3 gewarnt, wenn es einen Worker nennt, den niemand konfiguriert hat, oder ein Datenobjekt gegen ein Vokabular typisiert, das ihn nicht kennt. Beim Publizieren einer ganzen Application blieb es still — und das ist der Weg, über den die meisten Applications auf einen Server gelangen. Das Problem zeigte sich damit erst an der ersten geparkten Aufgabe. Publish und Release-Import führen jetzt dieselben Prüfungen aus und melden sie."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0287",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0287-create-the-worker-from-the-incident.md"
       },
       "tags": [
         "Modeler",
