@@ -16,8 +16,12 @@ import (
 type xnode struct {
 	XMLName xml.Name
 	Attrs   []xml.Attr `xml:",any,attr"`
-	Inner   string     `xml:",innerxml"`
-	Kids    []xnode    `xml:",any"`
+	// Text is the element's own character data, without that of its children.
+	// A serialised .NET collection puts a cell's value there and its key in an
+	// <x:Key> child, so decoding a MIMWAL table needs the two apart.
+	Text  string  `xml:",chardata"`
+	Inner string  `xml:",innerxml"`
+	Kids  []xnode `xml:",any"`
 }
 
 // local is the element's namespace-stripped tag name (e.g. "IfElseActivity").

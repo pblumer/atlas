@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A MIMWAL activity's tables are readable.** MIMWAL keeps an activity's actual
+  work in serialised .NET collections hung off the element — an `UpdateResources`
+  carries an `UpdatesTable` and a `QueriesTable`, a `GenerateUniqueValue` carries
+  `ValueExpressions` and an `LdapQueriesTable` — which in the source are thousands
+  of characters of `Hashtable` entries with the assembly-qualified type of every
+  cell repeated on it. They are now rendered as a small table on the activity's
+  documentation, so a reviewer can read what a step queries and assigns without
+  reading the markup. The markup itself still stays in `atlas:mimSource`.
+
+  Columns are rendered **by position and not named**. MIMWAL's editor labels the
+  updates grid Target | Value | Allow Null, but the data does not bear that out —
+  in the workflow this was checked against, column 1 holds a literal in nine rows
+  and column 0 a query result in six, neither of which can be assigned to — so
+  naming them would state something unverified about every imported activity. The
+  `Count` MIMWAL writes into each table is treated as the check it is: reported
+  only when it disagrees with the number of decoded rows.
+
 - **A MIMWAL iteration becomes a multi-instance activity.** MIMWAL runs an
   activity once per value of its `Iteration` expression — `SplitString` of a
   delimited attribute, typically — which the importer modelled as a single step,

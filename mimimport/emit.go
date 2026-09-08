@@ -103,7 +103,7 @@ func emitExtensions(s *strings.Builder, n bnode, lead string) {
 		s.WriteString(lead)
 	}
 	if n.raw != "" {
-		fmt.Fprintf(s, "        <atlas:mimSource activity=%q>%s</atlas:mimSource>\n", attr(n.rawName), preserved(n.raw))
+		fmt.Fprintf(s, "        <atlas:mimSource activity=%q>%s</atlas:mimSource>\n", attr(n.rawName), text(n.raw))
 	}
 	s.WriteString("      </extensionElements>\n")
 }
@@ -157,13 +157,11 @@ func attr(s string) string {
 	return b.String()
 }
 
-// text escapes a string for use as XML character data.
-func text(s string) string { return attr(s) }
-
-// preserved escapes preserved XOML markup for use as character data. Only &, <
-// and > have to be escaped there, so — unlike the general escaper, which also
-// turns newlines, tabs and quotes into numeric references — an activity stays
-// readable in the generated file while still round-tripping exactly.
-func preserved(s string) string {
+// text escapes a string for use as XML character data. Only &, < and > have to
+// be escaped there, so — unlike attr, which also turns newlines, tabs and quotes
+// into numeric references because an attribute value normalises them — preserved
+// markup and a multi-line documentation stay readable in the generated file
+// while still round-tripping exactly.
+func text(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }

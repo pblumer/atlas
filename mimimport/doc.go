@@ -37,6 +37,12 @@
 // emitGuard and miPlaceholder for why — but both are documented on the model and
 // flagged in the Report.
 //
+// The serialised .NET collections a MIMWAL activity hangs off itself — the
+// queries it runs and the assignments it makes, thousands of characters of
+// Hashtable markup in the source — are rendered as a small table on the
+// activity's documentation, by position: the structure of such a table is
+// mechanical, the meaning of its columns is not (see tables.go).
+//
 // The conversion reproduces the workflow's *structure and intent*, not MIM's
 // runtime semantics: the authentication/authorization/action request model, the
 // FEEL bodies of individual activities, and diagram layout are intentionally out

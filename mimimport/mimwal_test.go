@@ -396,3 +396,82 @@ func TestGenerateUniqueValueIsClassified(t *testing.T) {
 		t.Errorf("it is a recognised activity, not a placeholder: %s", res.Report.String())
 	}
 }
+
+// TestMIMWALTablesAreDecoded covers the serialised .NET collections that hold a
+// MIMWAL activity's actual work: they are rendered as a readable table on the
+// activity's documentation, by position, without naming what a column means.
+func TestMIMWALTablesAreDecoded(t *testing.T) {
+	src, err := os.ReadFile("testdata/mimwal-workflow.xoml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(bytes.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	bpmn := string(res.BPMN)
+
+	for _, want := range []string{
+		"QueriesTable (1 row)",
+		"[0] AllGroups | /Group[DependsOn='[//Target/ObjectID]']",
+		"UpdatesTable (2 rows)",
+		// Cells come back in column order however the source listed them.
+		"[0] [//Queries/AllGroups] | [//WorkflowData/AllGroups] | false",
+		"[1] [//Target/DisplayName] | [//WorkflowData/Name]",
+		"ValueExpressions (2 entries)",
+		"[1] Left(Trim([//WorkflowData/AccountNameBase]),18)+[//UniquenessKey]",
+	} {
+		if !strings.Contains(bpmn, want) {
+			t.Errorf("generated BPMN is missing %q\n%s", want, bpmn)
+		}
+	}
+	// Count agreed with the decoded rows, so it is a check that passed, not content.
+	if strings.Contains(bpmn, "Count = ") {
+		t.Errorf("a Count that matches must not be rendered:\n%s", bpmn)
+	}
+	// Rendering must not cost the verbatim source.
+	if len(mimSources(t, res.BPMN)) != 3 {
+		t.Error("every activity must still carry its original markup")
+	}
+}
+
+// TestHashtableCountMismatchIsReported covers the case the Count exists for: it
+// disagrees with what was decoded, so a row went missing.
+func TestHashtableCountMismatchIsReported(t *testing.T) {
+	src := `<SequentialWorkflow><UpdateResources ActivityDisplayName="A">
+	  <UpdateResources.UpdatesTable><Hashtable>
+	    <String>x<x:Key xmlns:x="urn:x"><String>0:0</String></x:Key></String>
+	    <Int32>4<x:Key xmlns:x="urn:x"><String>Count</String></x:Key></Int32>
+	  </Hashtable></UpdateResources.UpdatesTable>
+	</UpdateResources></SequentialWorkflow>`
+	res, err := Convert(strings.NewReader(src), "C")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	if !strings.Contains(string(res.BPMN), "Count = 4, but 1 row decoded") {
+		t.Errorf("a Count that disagrees must be reported:\n%s", res.BPMN)
+	}
+}
+
+// TestUnknownPropertyIsNotRendered keeps the renderer quiet about property
+// elements it does not understand: they stay in atlas:mimSource, unsummarised,
+// rather than being reported as an empty table.
+func TestUnknownPropertyIsNotRendered(t *testing.T) {
+	src := `<SequentialWorkflow><ApprovalActivity ActivityDisplayName="A">
+	  <ApprovalActivity.ApprovalObject><SomeType Foo="1"/></ApprovalActivity.ApprovalObject>
+	</ApprovalActivity></SequentialWorkflow>`
+	res, err := Convert(strings.NewReader(src), "P")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	bpmn := string(res.BPMN)
+	if strings.Contains(bpmn, "ApprovalObject (") {
+		t.Errorf("an unrecognised property must not be rendered as a table:\n%s", bpmn)
+	}
+	if !strings.Contains(bpmn, "ApprovalActivity.ApprovalObject") {
+		t.Errorf("it must still be preserved verbatim:\n%s", bpmn)
+	}
+}

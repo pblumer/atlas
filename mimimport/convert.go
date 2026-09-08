@@ -101,7 +101,9 @@ type Result struct {
 // A leaf carrying a MIMWAL ActivityExecutionCondition is additionally wrapped in
 // an exclusive split/merge, because MIMWAL expresses conditionality per activity
 // rather than as control flow — see emitGuard. One carrying a MIMWAL Iteration
-// becomes a sequential multi-instance activity — see emitMultiInstance.
+// becomes a sequential multi-instance activity — see emitMultiInstance. The
+// serialised .NET collections a MIMWAL activity hangs off itself are rendered as
+// a table on its documentation — see mimTables.
 //
 // name, when non-empty, overrides the process name derived from the workflow.
 func Convert(r io.Reader, name string) (Result, error) {
@@ -368,9 +370,10 @@ func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	}
 	doc := detail
 	if iterated {
-		// One line, not two: a newline in character data survives the round trip
-		// as &#xA;, which is correct XML and unreadable in the file.
 		doc += " — MIM Iteration: " + iter
+	}
+	if tables := mimTables(n); tables != "" {
+		doc += "\n" + tables
 	}
 	id := b.addNode(bnode{
 		kind:    kind,
