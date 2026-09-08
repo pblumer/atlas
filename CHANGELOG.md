@@ -12,6 +12,44 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-08
+
+**This release closes the boundary.** `atlas serve` requires a login by default — `--auth`
+was opt-in, which meant the safe configuration was the one you had to know to ask for — and
+each of the 199 `/api/v1` routes names the role it requires, enforced in one place for every
+credential there is. `/metrics`, `/mcp`, the API description and the explorer moved behind
+that boundary, the last routes that had not. Atlas can now be an **OpenID Connect relying
+party** and, in the other direction, an **OAuth authorization server** a person can let an
+application act through; it terminates **TLS** itself with `--tls-cert`/`--tls-key`; and a
+machine can be given an **API token** rather than somebody's password. Upgrading from 0.4.0
+means the server that answered anonymously yesterday asks who you are today.
+
+**Connectors are Workers, and they run like it.** The rename goes all the way through — the
+Console, the Modeler, the handbook and the examples — and it is not only a word: central
+decisions, SCIM, SharePoint, SOAP, LDAP, clio and Jira all moved off the engine's own loop,
+which leaves no kind running in-process. The new Worker Types are **Discord**, **Google
+Sheets**, **Jira** and **web scraping**, each with the other direction as well — a Discord
+channel, a spreadsheet row, a Drive folder or a Jira issue can *start* a process.
+
+**Atlas can now say what the data in a process actually is.** A new top-level information
+model gives a data object a class you can see, drawn on a real diagram canvas with the
+Modeler's own properties panel; an instance shows the data it carries and where each value
+came from; a data store says where a class is kept; and "which instances are carrying this
+order?" — the question BPMN structurally cannot answer — has an answer. The Tasks app's
+sidebar folders became **saved filters** built from listboxes and evaluated on the server,
+and the console **speaks German** on the screens that have been translated.
+
+**And an external architecture and code audit was worked through end to end.** Sixteen of
+its seventeen findings are fixed, the seventeenth half. The log frames a batch rather than a
+record and carries a format version; a batch persists the work it still owes, so an instance
+interrupted at a batch boundary moves again; corruption in a sealed segment is a hard error;
+startup proves its log prefix or refuses to serve; one inventory of what is on disk drives
+backup and restore, with twelve directories that had drifted out of the full backup — the
+vault among them — back in it; a join synchronizes in its own execution scope; a gateway
+that cannot route parks with an incident instead of dropping the token; and reading a running
+instance is an object question rather than a role question. The records are ADR-0270 through
+ADR-0285.
+
 ### Added
 
 - **Discord is a Worker Type: a process can speak in the channel the team already
@@ -1618,6 +1656,102 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The log frames a batch, not a record — and a segment carries a format version.** `Sync`
+  wrote one frame per record, each with its own length and checksum, and the reader accepted
+  every whole frame it found before a torn one. A crash in the middle of a batch therefore
+  recovered *part* of it: the events before the tear were durable facts, the rest never
+  happened, and nothing in the log said the two belonged together (ADR-0285, audit F02).
+
+  A batch is now one frame with one length and one checksum, so batch atomicity falls
+  together with the frame integrity the reader already enforced — a torn batch is
+  indistinguishable from a torn frame, and those it has always discarded. No commit marker,
+  no second state machine in the reader.
+
+  **The on-disk format is version 2.** Existing logs are read as before: a version-1 segment
+  is recognised by its shape and decoded record-per-frame, so an installation upgrades
+  without a migration. The reverse does not hold — a segment written by 0.5.0 is not
+  readable by 0.4.0 — so this is a **breaking** change to the WAL format in the downgrade
+  direction. `maxRecordSize` is a batch bound now, and the reader's contract moved from
+  "one payload is one record" to "one payload is n records".
+
+- **Corruption in a sealed segment is a hard error, with the file and the offset.** The
+  reader could not tell the active tail of the log from a segment that was closed long ago,
+  and treated an invalid length, a checksum failure and truncated data the same way in both:
+  as end of file. In the active segment that is correct — a crash mid-write leaves exactly
+  that. In a sealed one it is data loss reported as success (ADR-0283, audit F03).
+
+  The reader is told which it is reading. In a sealed segment each of those cases now fails
+  with the filename and the byte offset; even in the last segment a checksum failure
+  *followed by more data* is no longer a harmless tail. The same lenient decoding lived a
+  second time in `wal/tailer.go`, where it silently truncated the OpenSearch export stream —
+  frame decoding is one implementation now, so the export path cannot drift lenient again.
+
+- **Startup proves its log prefix or refuses to serve.** Recovery reconstructs state from the
+  log; after compaction the beginning of that log is a checkpoint rather than genesis. If the
+  checkpoint was missing, `RecoverFrom` fell back to replaying what it could find and
+  *succeeded* — with an installation that had quietly lost everything before the gap
+  (ADR-0280, audit F04).
+
+  The start now establishes which prefix the state on disk actually stands for. If it is
+  missing, Atlas installs a verified checkpoint and replays the gapless suffix — the same
+  code the snapshot restore path uses, shared rather than copied — or it refuses to start
+  and says what to restore. A missing prefix is never again read as a successful replay from
+  genesis. ADR-0131 asked for this; this is where the contract is paid.
+
+- **A join synchronizes within its own execution scope.** Join state was keyed by process
+  instance and node. Parallel iterations of a multi-instance subprocess share both, so two
+  iterations reaching the same gateway synchronized across each other: one iteration's token
+  satisfied another's join (ADR-0277, audit F06). The key is now (process instance, execution
+  scope, gateway).
+
+  The inclusive join had the same confusion in both of its halves — it waited for siblings
+  that could never arrive, and when it did fire it consumed every token parked on the node,
+  including the other iteration's. The risk here is over-correcting rather than
+  under-correcting, so a subprocess on one branch has a test of its own.
+
+  Counting per incoming sequence flow, which is what OMG BPMN 2.0.2 §13.4 actually
+  prescribes, is deliberately **not** part of this: it revises the simplification ADR-0024
+  accepted knowingly, and that is a specification alignment with its own risk, not a bug fix.
+
+- **A gateway that cannot route parks with an incident instead of dropping the token.** An
+  exclusive gateway whose conditions all evaluated false, with no default flow, returned
+  without a word — and the token was gone. The instance sat there looking healthy, one token
+  short, with nothing anywhere saying why (ADR-0273, audit F08).
+
+  The ordering was the whole defect: the gateway wrote its `Completed` event *before* the
+  route was known, so by the time it found there was none it could no longer park. It decides
+  first now. Three lines away sat the more dangerous half: an evaluation **error** was read as
+  `false`, so a condition that could not be evaluated at all quietly took the default flow —
+  a branch nobody chose. The two are fixed separately and tested separately.
+
+- **A token may not hold the writer forever: element activations are budgeted.** A cycle with
+  no wait state in it — a loop of automatic tasks, a self-referential flow — drove the
+  partition's single writer without ever yielding, and every other instance on that partition
+  waited for a process that was never going to finish (ADR-0272, audit F12).
+
+  The budget counts **per token**, not per instance: a cycle is one token going round, while
+  fifty thousand multi-instance iterations are fifty thousand tokens taking one step each.
+  Any per-instance ceiling that stops the first stops the second too. A newly minted token
+  inherits its parent's count, or a cycle through any fork, join or subprocess exit would
+  reset its own budget. The default is 10 000 steps per token per run (`SetExecutionBudget`),
+  and it cannot be switched off — "off" is the behaviour it removes.
+
+  Stopping on the budget raises an incident on the element, which meant incidents needed a
+  reason: a jobless incident used to be resolved by *node type*, and that only works while a
+  node type has exactly one way to get stuck. `model.IncidentValue` now carries a `Reason`
+  behind the message; older records are one byte shorter and read as unclassified.
+
+- **A multi-instance activity's iteration count is checked before it is allocated.** The count
+  comes from the model or, more often, from an instance variable, and between the number and
+  the allocation stood nothing: a variable holding a billion meant a billion `expr.Value` in
+  one call on the processor goroutine, and the partition was gone before anyone could say why
+  (ADR-0276, audit F16).
+
+  The limit is checked *before* the allocation, defaults to 100 000 iterations
+  (`SetMaxIterations`), and the rejection is an incident on the body — resolvable once the
+  data is corrected, rather than a process nobody can reach. The limit itself is allowed;
+  refusing it would make it a budget of one less.
+
 - **`atlas_list_instances` (MCP) returns a page, not a bare array.** It answered with
   a plain JSON array, which cannot say it is a *page* — and the endpoint behind it caps
   at 1000 rows and flags the cut in a header the body does not carry. An agent handed
@@ -2454,6 +2588,122 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A batch persists the work it still owes, so an instance interrupted at a batch boundary
+  moves again.** Only events were durable, and an event says what *happened* — not what the
+  batch had queued up to do next. A crash between two batches therefore recovered an instance
+  that was materialised perfectly correctly and then stood still forever, because the internal
+  follow-up commands that would have carried it on had never been written down
+  (ADR-0271, audit F01).
+
+  The batch frame carries the internal commands still outstanding at its end, and recovery
+  seeds the queue from them. This touches invariant I6 ("only events are persisted") in the
+  letter and not in the spirit: the section is never folded by `applyToState`, and it is not a
+  fact about the process but the log's own bookkeeping that this batch had not finished its
+  work. I4 is untouched.
+
+  Two defects surfaced only because the acceptance matrix interrupts at *every* batch boundary,
+  with both a preserved and a rebuilt state — neither was reachable by thinking about it, and
+  neither showed up in the auditor's single reproduction. A batch that owes nothing writes a
+  zero-length continuation, because writing none left the previous one newest and replayed it:
+  duplicate jobs. And the continuation lifts the key counter above every key it carries, because
+  a queued command already holds a key no event has mentioned yet — the event is precisely what
+  the crash prevented — and the restart would otherwise mint that number a second time. The
+  symptom of *that* was a missing element instance and no error at all.
+
+  A reflection test enumerates the fields of `engine.Command` and fails as soon as one appears
+  that it cannot classify. The continuation only needs the closed subset the internal follow-ups
+  use; without the guard, every future field would be silent data loss on restart.
+
+- **The full backup contains every store, because one inventory says what is on disk.**
+  `backupDirs`, `fullBackupDirs` and the restore allowlist were three hand-kept lists living
+  nowhere near the code that creates the stores, and twelve directories had drifted out of the
+  full backup — the vault among them. Nothing reported it: the backup succeeded, and what it did
+  not contain was discovered at restore (ADR-0282, audit F05).
+
+  Every persistent store now registers itself with its directory, its backup class (design-time,
+  credential, secret, runtime, ephemeral) and its restore dependency, and all three lists are
+  *derived* from that. The archive carries a version and content manifest, and an import refuses
+  one missing a mandatory part.
+
+  The test is the durable half: it starts a server, reads the real data directory, and fails as
+  soon as a directory exists that no backup class claims. That is what stops the thirteenth
+  store from reopening the same hole — the twelve did not drift out through carelessness. It
+  found two categories no list would have: stores that come into being only when their feature
+  is used (`checkpoints`, `dmn-models`, `exporter` — absence is fine, omission is not), and one
+  the archive carries by its own mechanism rather than by walking the tree (only the newest
+  verified checkpoint goes in, deliberately). Both are properties of the registry now, not
+  footnotes. It has already earned its keep once: `main` added a `task-folders` store, and the
+  merge ran aground on it rather than a backup omitting it in silence.
+
+- **A cancellation sees the child created in its own batch.** `ChildInstancesOf` read through
+  the committed store rather than the running transaction, so terminating a parent missed any
+  child instance created in the same batch — the cascade walked past it and it kept running with
+  nobody left to own it (ADR-0284, audit F07). ADR-0238 justified the commit-only view with
+  determinism; that derivation is wrong, and reversing a recorded decision takes a record rather
+  than a quiet fix: the already-applied events of the running transaction are a deterministic
+  part of command processing.
+
+  The transactional read finds the child but does not finish the job. The cascade queues a
+  terminating command for the child while the child's own start event is still in the queue; that
+  runs first and rebuilds exactly the execution the cancellation had just removed, leaving an
+  element instance and an activatable job behind. A terminated instance now drops its unprocessed
+  work. Commands are never persisted and never replicated (I6), so this changes what runs next
+  and nothing about what recovery reconstructs.
+
+  A review of the surrounding code found the feared surface does not exist: in the whole `engine`
+  package exactly two reads bypass the transaction — this one, and `ForEachStartTimer`, which runs
+  at deploy time and not inside a batch.
+
+- **A hanging worker no longer blocks unrelated work.** `driveMu` covered the entire drain loop,
+  `jobRunner.Work` included, so one slow or wedged handler held the lock for its whole timeout and
+  every unrelated start, completion and cancellation queued up behind it (ADR-0274, audit F13).
+
+  Narrowing the lock was the smaller half. The identity was the work: an in-process claim had no
+  claim identity, so loosening the mutex would have introduced double execution. `Claim` leases
+  now — activating under the name `atlas:in-process`, which takes the job out of the activation
+  index before `Claim` returns, so a second claim cannot see it — and `Submit` checks lease and
+  epoch before applying, behind the same fence an external worker meets at the HTTP completion.
+  Only then could `driveMu` be narrowed to claim and submit.
+
+  It is deliberately not removed. "The work my request started is done when it returns" is a
+  contract every request path and a great many tests depend on, and serialising two short steps
+  keeps it at no measurable cost.
+
+- **An inclusive join's ancestor set is compiled, not rebuilt on every arrival.** Every token
+  reaching an inclusive join rederived reachability across the whole graph — reverse adjacency,
+  map and stack, allocated and thrown away per token movement — when a compiled process is
+  immutable and its ancestors had been the same the previous thousand times. That is invariants
+  I1 and I5 at once (ADR-0279, audit F14).
+
+  It is computed once at build, as a bitset per relevant join site: maps would have done the same
+  job and cost about half a megabyte per deployment for ten joins in a thousand nodes, where the
+  bitset costs a good kilobyte. The name moved with it — `NodesReaching` sounded like a general
+  graph query and answered for any node, `InclusiveJoinReach` says which ones it is for, and that
+  matters: an empty set at a real join reads as "nothing upstream" and fires it too early. A
+  compiler test holds every inclusive join to having one.
+
+- **A poll costs a page, not the backlog.** `ActivatableJobs` walked the entire index even after
+  it had the jobs it was asked for, because the callback kept returning `nil` past `want`. The
+  capability was never missing — the scan has always stopped on a callback error, and the API layer
+  has had `errListTruncated`/`unlessTruncated` for exactly this; the two polling sites simply had
+  not used it (ADR-0270, audit F15).
+
+  The worker pull stops at the page it asked for, and the in-process `Claim` takes a round instead
+  of the whole backlog, with an equal share per served type. Both callers already loop until empty,
+  so the bound costs a round and never a job. The durable half of the correction is in the doc
+  comment on `ActivatableJobs`, where the next caller reads what the contract is.
+
+- **Both HTTP servers have explicit read-header and idle timeouts.** A client could open a
+  connection and take as long as it liked to send its request headers, and an unused keep-alive
+  connection was never reclaimed (audit F17). `ReadHeaderTimeout` is 10s and `IdleTimeout` 120s on
+  both of this process's servers — the public listener and the loopback one.
+
+  `ReadTimeout` and `WriteTimeout` stay at zero, and that is a decision rather than an oversight:
+  the first would bound the whole request read and a restore upload is legitimately long, the
+  second would bound the whole response write and a worker long-polling for a job or a streamed
+  backup would be cut off mid-flight. Those endpoints carry their own deadlines per handler, where
+  the right number is known.
+
 - **The What's New generator refuses a conflicted CHANGELOG instead of shipping both
   sides of it.** `api/web/whats-new.json` is generated and committed, and
   `.gitattributes` marks it unmergeable so git raises a conflict rather than
@@ -3269,6 +3519,50 @@ _Changed_ / _Removed_ for each version.
   within one page.
 
 ### Security
+
+- **Deploying asks whether you may write to the project.** `POST /api/v1/deployments`
+  resolved its target project — from `?projectId=`, or from the draft's own assignment —
+  and then deployed into it without ever asking whether the caller belonged to it. Any
+  account that could reach the route could file a definition into any project on the
+  server, and MCP took the same path (ADR-0278, audit F09).
+
+  The membership check now runs *before* `claimBlockingModel` and `deployModel`, so a
+  refusal leaves neither a sidecar file nor a registry entry behind. It is the same
+  object-level write check the other project operations already made; the deploy route
+  was the one that resolved a project and then forgot to ask about it.
+
+- **A withdrawn role takes effect on the next request, not the next login.** Taking a role
+  away from somebody changed the record and nothing else: every session they already held
+  kept the roles it had been issued with, for as long as it lived. The mechanism to push a
+  change into live sessions existed and had been used for group membership for a long
+  time — it had simply never been wired for roles (ADR-0281, audit F10).
+
+  API tokens are deliberately not swept along: a token carries rights of its own, and the
+  console now says so where you can see it rather than quietly aligning them with the
+  owner's.
+
+- **Reading a running instance is an object question, not a role question.** The endpoint a
+  task form reads its values from answered for any signed-in identity: the variables of any
+  instance on the server, whether or not the caller had anything to do with it
+  (ADR-0275, audit F11). Lifting the route to `operator` would have been the wrong repair —
+  it locks out exactly the people the route exists for — so the role stays `any` and the
+  handler asks the object question instead.
+
+  Answering it needed a rule Atlas had never written down: what a BPMN candidate group,
+  free text in the model, has to do with an identity group. **An unclaimed task matches a
+  caller's group by name (case-insensitively) or by group id; a claimed task belongs to its
+  owner alone.** That is the one place this work decides new product behaviour rather than
+  protecting what exists, and it is written out in `api/instancescope.go` and in the record.
+
+  The result is *narrower* than before, including for people who could already read: a task
+  owner now gets the fields their form declares and nothing else, and a task with no form
+  grants nothing, because there is no declared set and guessing one is how an allowlist
+  becomes a formality. MCP and public start forms hold to the same extent — otherwise the
+  gap would only have moved. This also closes the code half of ISDS point O-02.
+
+  **Still open, and named rather than left to be found:** `GET /api/v1/tasks/{key}` has the
+  same gap in a smaller format, and the remaining instance-scoped reads are guarded by role
+  rather than by relationship — an `operator` anywhere sees every instance on the server.
 
 - **Not every account may deploy any more.** Each of the 199 `/api/v1` routes now
   names the role it requires, and one check at the boundary enforces it for every
@@ -5959,7 +6253,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/pblumer/atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pblumer/atlas/compare/v0.1.0...v0.2.0
