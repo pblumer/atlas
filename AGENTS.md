@@ -244,17 +244,42 @@ it will be read by humans.
 
 A commit an agent makes here is authored by the person who asked for it and
 committed by the agent. `.claude/hooks/commit-identity.sh` sets that up at
-session start from the table in `.claude/commit-identities`; add a line there
-for anyone whose agent commits should count for them, using an address their
-GitHub account actually carries. Nothing happens in a clone where a human's
-own git identity is configured.
+session start, using the address the session is signed in with. Nothing
+happens in a clone where a human's own git identity is configured.
+
+`.claude/commit-identities` is a correction, not a registry: add a row only
+when your sign-in address is not one your GitHub account carries, mapping it
+to one that is. Nobody needs a row to be attributed correctly, and a person
+the table does not know is never attributed to somebody else.
 
 The reason is narrow: GitHub attributes a commit to the account holding the
 *author* address, and `noreply@anthropic.com` is the account `claude`. Every
 commit still names the model in a `Co-Authored-By:` trailer and still records
 the agent as its committer — the split changes who the contribution counts
 for, not who wrote the code. Do not rewrite the author of commits that are
-already on `main`.
+already on `main`. See ADR-draft-agent-commit-attribution for why the split
+rather than the alternatives.
+
+**The hook is not the guarantee; CI is.** A hook fails silently — the session
+predates it, the environment stops setting `CLAUDE_CODE_USER_EMAIL`, a future
+version does not run project hooks — and the only symptom is a statistic
+drifting back over months. Eight agent-authored commits reached `main` in the
+four hours after the hook landed, from sessions cloned before it existed. So
+`.github/workflows/attribution.yml` fails any PR that would add a commit
+authored by an agent identity, and — second step — any whose author address
+no GitHub account holds, which counts for nobody just as quietly. If either
+fails on your branch, the fix is on the branch, not in the check:
+
+```bash
+.claude/hooks/commit-identity.sh   # sets author.* / committer.* for this repo
+git rebase origin/main --exec \
+  'git commit --amend --no-edit --author="$(git config author.name) <$(git config author.email)>"'
+git push --force-with-lease
+```
+
+Not `--reset-author`: that copies the *committer* onto the author, and the
+committer is the agent. If the hook printed nothing, the session has no entry
+in `.claude/commit-identities` — add one rather than working around the check.
 
 ## Pointers
 
