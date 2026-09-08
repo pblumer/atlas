@@ -2,6 +2,137 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "every-list-opens-with-its-search-boxes-showing",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Every list opens with its search boxes showing",
+        "de": "Jede Liste zeigt ihre Suchfelder von Anfang an"
+      },
+      "summary": {
+        "en": "Every table in Atlas can be searched column by column: a row of boxes under the header, one per column, each narrowing the list to the rows whose cell contains what you typed — and several at once when you fill in more than one. That row existed before, but it was collapsed behind a small funnel icon at the right end of the header, so what you saw when a list opened was a table with no visible way to search it. The boxes are now on screen from the moment the list is, on every list. The funnel is still there and now does the opposite: it takes the row away when you would rather have the vertical space, and a list remembers that choice for the next time you open it, exactly as it already remembers which column you sorted by. Where a list had grown its own search field above the table — the Modeler's application detail and the process list under Operations › Instances — that field is gone: the Name column's box does the same job and a little more, since it also searches the id printed under the name. The Tasks inbox and the Repository are not tables and keep their own search fields.",
+        "de": "Jede Tabelle in Atlas lässt sich spaltenweise durchsuchen: eine Zeile mit Feldern unter der Kopfzeile, eines pro Spalte, das die Liste auf die Zeilen einschränkt, deren Zelle den eingegebenen Text enthält — und mehrere Spalten gleichzeitig, wenn Sie mehrere Felder ausfüllen. Diese Zeile gab es schon, sie war aber hinter einem kleinen Trichtersymbol am rechten Rand der Kopfzeile eingeklappt; sichtbar war beim Öffnen einer Liste also eine Tabelle ohne erkennbare Suche. Die Felder stehen jetzt von Anfang an da, in jeder Liste. Das Trichtersymbol bleibt und macht nun das Gegenteil: Es blendet die Zeile aus, wenn Ihnen die Höhe wichtiger ist, und eine Liste merkt sich diese Entscheidung bis zum nächsten Öffnen — genauso, wie sie sich schon merkt, nach welcher Spalte Sie sortiert haben. Wo eine Liste ein eigenes Suchfeld über der Tabelle hatte — die Anwendungsansicht im Modeler und die Prozessliste unter Operations › Instances —, entfällt dieses Feld: Das Feld der Spalte Name leistet dasselbe und etwas mehr, weil es auch die ID unter dem Namen durchsucht. Der Aufgaben-Eingang und das Repository sind keine Tabellen und behalten ihre eigenen Suchfelder."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console",
+        "Modeler",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Modeler: the Applications list shows a box under each of Name, Artifacts and Last changed.",
+          "Type a few letters into the Name box — the list narrows as you type, and an application whose name does not contain them disappears.",
+          "Fill in a second box as well: a row has to match both, so Name plus Last changed finds what one column alone cannot.",
+          "Click a column header to sort by it; the arrow shows the direction, and clicking again reverses it.",
+          "Click the funnel at the right end of the header to put the boxes away. Navigate elsewhere and come back — that list is still without them, and the funnel brings them back."
+        ],
+        "de": [
+          "Öffnen Sie den Modeler: Die Liste der Anwendungen zeigt je ein Feld unter Name, Artifacts und Last changed.",
+          "Tippen Sie einige Buchstaben in das Feld unter Name — die Liste wird beim Tippen enger, Anwendungen ohne diese Zeichenfolge verschwinden.",
+          "Füllen Sie zusätzlich ein zweites Feld aus: Eine Zeile muss beide Bedingungen erfüllen, Name plus Last changed findet also, was eine Spalte allein nicht findet.",
+          "Klicken Sie auf eine Spaltenüberschrift, um danach zu sortieren; der Pfeil zeigt die Richtung, ein weiterer Klick dreht sie um.",
+          "Klicken Sie auf den Trichter am rechten Rand der Kopfzeile, um die Felder auszublenden. Wechseln Sie die Ansicht und kommen Sie zurück — die Liste ist weiterhin ohne Felder, der Trichter holt sie zurück."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "an-incident-that-says-no-worker-registered-as-x-can-now-crea",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Create the missing Worker from the incident itself",
+        "de": "Den fehlenden Worker direkt am Incident anlegen"
+      },
+      "summary": {
+        "en": "A task parked on \"no worker registered as X\" says what is wrong with it — nobody has configured X — and until now the only thing on offer was a link to the Console, where you had to remember the name and the Worker Type, create it, navigate back and resolve. The incident now creates it: the same Worker dialog opens with the name and the Worker Type the model states, already filled in and not yours to mistype, and \"Add & retry\" writes it and hands the parked task one more attempt.",
+        "de": "Eine Aufgabe, die auf «no worker registered as X» geparkt ist, nennt ihr Problem bereits — niemand hat X konfiguriert. Angeboten wurde bisher nur ein Link in die Konsole: Name und Worker Type merken, anlegen, zurücknavigieren, auflösen. Jetzt entsteht der Worker am Incident selbst. Es öffnet sich derselbe Worker-Dialog, mit Name und Worker Type aus dem Modell bereits eingetragen und nicht vertippbar, und «Add & retry» legt ihn an und gibt der geparkten Aufgabe einen weiteren Versuch."
+      },
+      "link": {
+        "label": "ADR-0160",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
+      },
+      "tags": [
+        "Operations",
+        "Workers"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations › Incidents, or the live diagram of the stuck instance.",
+          "On an incident whose chip reads \"— not configured\", click ⚙ Create worker…",
+          "Fill in what it takes to reach the target — endpoint, credential reference, provider. The name and the Worker Type are already set.",
+          "Press \"Add & retry\" to create it and retry the parked task in one step, or \"Add worker\" to create it and leave the incident open."
+        ],
+        "de": [
+          "Betrieb › Incidents öffnen, oder das Live-Diagramm der hängenden Instanz.",
+          "Bei einem Incident, dessen Chip «— not configured» zeigt, auf ⚙ Create worker… klicken.",
+          "Eintragen, was zum Erreichen des Ziels nötig ist — Endpunkt, Credential-Referenz, Provider. Name und Worker Type stehen bereits fest.",
+          "«Add & retry» legt den Worker an und wiederholt die geparkte Aufgabe in einem Schritt; «Add worker» legt ihn an und lässt den Incident offen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Incidents",
+          "de": "Incidents öffnen"
+        },
+        "route": "#/operations/incidents"
+      }
+    },
+    {
+      "id": "publishing-an-application-runs-the-deploy-time-preflight-tha",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Publishing an application warns you about what will not run",
+        "de": "Beim Publizieren einer Application wird gewarnt, was nicht laufen wird"
+      },
+      "summary": {
+        "en": "Deploying a single diagram has warned since 0.3 that it names a Worker nobody configured, or a data object typed against a vocabulary that does not carry it. Publishing a whole application said nothing at all — which is the route most applications reach a server through, so the first anybody heard of the problem was the first task to park. Publish and release import now run the same checks and report them.",
+        "de": "Beim Deployen eines einzelnen Diagramms wird seit 0.3 gewarnt, wenn es einen Worker nennt, den niemand konfiguriert hat, oder ein Datenobjekt gegen ein Vokabular typisiert, das ihn nicht kennt. Beim Publizieren einer ganzen Application blieb es still — und das ist der Weg, über den die meisten Applications auf einen Server gelangen. Das Problem zeigte sich damit erst an der ersten geparkten Aufgabe. Publish und Release-Import führen jetzt dieselben Prüfungen aus und melden sie."
+      },
+      "link": {
+        "label": "ADR-0287",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0287-create-the-worker-from-the-incident.md"
+      },
+      "tags": [
+        "Modeler",
+        "Workers",
+        "Validation"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and select the application.",
+          "Press Publish.",
+          "Anything that deployed but will not run as written is listed afterwards — the deploy is not refused for it, since publishing before the Workers exist is legitimate."
+        ],
+        "de": [
+          "Modeler öffnen und die Application auswählen.",
+          "Auf Publish drücken.",
+          "Was deployt wurde, aber so nicht laufen wird, erscheint danach als Liste — abgelehnt wird der Deploy deswegen nicht, denn ein Publizieren vor dem Einrichten der Worker ist legitim."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
       "version": "0.5.0",
       "date": "2026-09-08",
@@ -297,112 +428,6 @@
           "de": "Logo hochladen"
         },
         "route": "#/console/org"
-      }
-    },
-    {
-      "id": "a-button-label-that-stays-readable-on-your-brand-colour",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "A button label that stays readable on your brand colour",
-        "de": "Beschriftungen, die auf Ihrer Markenfarbe lesbar bleiben"
-      },
-      "summary": {
-        "en": "Text on a coloured button used to be white, fixed. White on a deep blue or a federal red is fine; white on a brand yellow or a pale mint is roughly 1.5:1, which nobody can read. Atlas now works out the label colour from the colour you chose — white or near-black, whichever the colour's own brightness makes legible — and applies it everywhere your colour is a background: primary buttons, count badges, active segments, and the submit button inside a form.",
-        "de": "Text auf einer farbigen Schaltfläche war bisher fest weiss. Weiss auf einem tiefen Blau oder einem Bundesrot ist gut lesbar; Weiss auf einem Markengelb oder einem hellen Mint ergibt rund 1.5:1 und ist für niemanden lesbar. Atlas leitet die Schriftfarbe jetzt aus der von Ihnen gewählten Farbe ab — Weiss oder ein sehr dunkles Grau, je nachdem, was auf dieser Helligkeit lesbar ist — und wendet sie überall dort an, wo Ihre Farbe als Fläche dient: primäre Schaltflächen, Zähler-Badges, aktive Segmente und die Absenden-Schaltfläche im Formular."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Organization",
-        "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Try a colour",
-          "de": "Farbe ausprobieren"
-        },
-        "route": "#/console/org"
-      }
-    },
-    {
-      "id": "forms-written-by-the-ai-worker",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Let the AI Worker write the form",
-        "de": "Der KI-Worker schreibt das Formular"
-      },
-      "summary": {
-        "en": "A blank form is the slow part of a form. Fourteen fields, a technical name for each one that has to match what the process calls that piece of data, a label, a hint, a rule about what is required — and you have already written most of that down twice: once in the process documentation, once in the mappings that name its variables. So: in the Modeler, press “Create a new form” on a user task or on a start event. The form editor opens with a generator already up, knowing which process and which step you came from — because pressing that link was you saying what the form is for, and you should not have to say it twice. Describe in your own words and your own language what the form should ask for, and it reads the model's own words for the rest: what the process is for, what each step says about itself, what its gateways decide on, and the names it already uses for its data. The fields come back named the way the process names them, and the form for a step you added five minutes ago knows about that step, because it reads the draft you are working on and not only what is deployed. The same button sits in the form editor's own bar, for a form you started from the Forms list. Nothing is saved. What comes back opens unsaved, under the id the form already had, and you read it, change what you want and press Save yourself — exactly as with a form you laid out by hand. Ask again over an open form and it changes that one instead of starting over, so “add a field for the period” adds a field rather than replacing the other twelve. It uses the AI Worker your operator already set up for processes: one address, one key in the vault, one place to change which model answers. Your browser never sees the key, no case data from a running instance is ever sent, and where no AI Worker is configured the button is simply not there. If a model sends back something that is not a form, you get the reason in the dialog with your description still in it, ready to try again.",
-        "de": "Das leere Formular ist der langsame Teil eines Formulars. Vierzehn Felder, für jedes ein technischer Name, der zu dem passen muss, wie der Prozess diese Angabe nennt, dazu Beschriftung, Hinweis und die Frage, was Pflicht ist — und das meiste davon hat man schon zweimal aufgeschrieben: in der Prozessdokumentation und in den Mappings, die die Variablen benennen. Also: im Modeler an einem User-Task oder an einem Start-Ereignis auf «Create a new form» drücken. Der Formular-Editor öffnet sich mit bereits geöffnetem Generator, der weiß, aus welchem Prozess und von welchem Schritt Sie kommen — denn dieser Klick war schon die Aussage, wofür das Formular da ist, und die soll man nicht zweimal machen müssen. Beschreiben Sie in eigenen Worten und in Ihrer Sprache, wonach gefragt werden soll; den Rest liest der Generator aus den eigenen Worten des Modells: wofür der Prozess da ist, was jeder Schritt über sich sagt, worüber seine Gateways entscheiden und welche Namen er für seine Daten schon verwendet. Die Felder kommen so benannt zurück, wie der Prozess sie benennt — und das Formular für einen Schritt, den Sie vor fünf Minuten eingefügt haben, kennt diesen Schritt, weil der Entwurf gelesen wird, an dem Sie arbeiten, und nicht nur das, was deployt ist. Derselbe Knopf sitzt in der Leiste des Formular-Editors, für ein Formular, das Sie über die Formularliste begonnen haben. Gespeichert wird nichts. Das Ergebnis öffnet sich ungespeichert unter der ID, die das Formular schon hatte; Sie lesen es, ändern, was Sie wollen, und drücken selbst auf Speichern — genau wie bei einem von Hand gebauten Formular. Fragen Sie über ein offenes Formular erneut, wird dieses geändert statt neu begonnen: «ein Feld für den Zeitraum ergänzen» ergänzt eines, statt die anderen zwölf zu ersetzen. Verwendet wird der KI-Worker, den Ihr Betrieb ohnehin für Prozesse eingerichtet hat: eine Adresse, ein Schlüssel im Tresor, eine Stelle, an der man das Modell wechselt. Ihr Browser sieht den Schlüssel nie, es werden keine Falldaten aus laufenden Instanzen gesendet, und wo kein KI-Worker eingerichtet ist, gibt es den Knopf schlicht nicht. Schickt ein Modell etwas zurück, das kein Formular ist, steht der Grund im Dialog — mit Ihrer Beschreibung noch darin, bereit für den nächsten Versuch."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Forms",
-        "AI"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the process in the Modeler and switch to the Implement tab.",
-          "Select the user task the form is for — or the start event, for the form that starts the process.",
-          "Press “Create a new form”. The form editor opens with the generator already on that step.",
-          "Write what the form should ask for. One or two sentences is enough.",
-          "Read what comes back on the canvas, change what you want, and Save.",
-          "Then go back to the task and link the form you just saved.",
-          "No generator? An administrator adds an AI Worker under Console › Workers first."
-        ],
-        "de": [
-          "Den Prozess im Modeler öffnen und auf den Tab Implement wechseln.",
-          "Den User-Task wählen, für den das Formular ist — oder das Start-Ereignis, für das Formular, das den Prozess startet.",
-          "Auf «Create a new form» drücken. Der Formular-Editor öffnet sich mit dem Generator auf genau diesem Schritt.",
-          "Aufschreiben, wonach gefragt werden soll. Ein, zwei Sätze genügen.",
-          "Das Ergebnis auf der Fläche lesen, anpassen, speichern.",
-          "Danach zurück zum Task und das eben gespeicherte Formular dort verknüpfen.",
-          "Kein Generator? Dann legt zuerst eine Administratorin unter Console › Workers einen KI-Worker an."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Forms",
-          "de": "Formulare öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-training-nuggets-play-full-screen-for-showing-one-to-a-r",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Training nuggets play full screen",
-        "de": "Schulungsnuggets laufen im Vollbild"
-      },
-      "summary": {
-        "en": "A nugget used to run at reading size, in the flow of the handbook. That is right for reading and wrong for what it keeps being used for: an onboarding session with the thing on a projector. The new button hands a nugget the whole screen — dark surround, the caption set large and centred underneath, and the space bar, arrow keys, Home and End driving it, so nobody has to aim a mouse at a small control in front of a room. Going full screen starts the run; leaving it stops it, rather than letting it animate on behind whatever came next. The picture keeps its own shape instead of filling the screen, so the highlight ring stays on the button it is pointing at.",
-        "de": "Ein Nugget lief bisher in Lesegrösse mitten im Handbuch. Das ist zum Lesen richtig und für den Fall falsch, für den es tatsächlich benutzt wird: eine Einführung mit dem Beamer im Raum. Die neue Schaltfläche gibt dem Nugget den ganzen Bildschirm — dunkler Rahmen, die Bildunterschrift gross und mittig darunter, und Leertaste, Pfeiltasten, Home und Ende steuern es, damit niemand vor einem Publikum eine kleine Schaltfläche treffen muss. Der Wechsel ins Vollbild startet den Ablauf, das Verlassen beendet ihn, statt ihn hinter dem nächsten Fenster weiterlaufen zu lassen. Das Bild behält seine eigene Form, statt den Bildschirm zu füllen — so bleibt der Markierungsrahmen auf der Schaltfläche, auf die er zeigt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Handbook"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the handbook",
-          "de": "Handbuch öffnen"
-        },
-        "route": "#/console"
       }
     }
   ]

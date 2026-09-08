@@ -583,6 +583,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <td><button type="button" class="icon-btn" data-act="del-attr" title="Remove">✕</button></td>
       </tr>`).join("");
 
+    // Both member tables below are `no-enhance`: they are editing grids, not lists of
+    // data — their cells are inputs the shared enhancer finds no text to sort or filter
+    // by, the row order is the order the class box reads in and is set by dragging, and
+    // the box above each of them already filters it (ADR-0286).
     paint(`
       ${pheadHTML(abbrev(kind.label), kind.label, c.name,
         `<button type="button" class="icon-btn" data-act="del-class" title="Delete this class">✕</button>`)}
@@ -603,7 +607,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-attr">+ Attribute</button></div>
           ${memberFilterHTML("Filter attributes by name or type…")}
-          <table class="im-attrs"><thead><tr>
+          <table class="im-attrs no-enhance"><thead><tr>
             <th></th><th>Name</th><th>Type</th><th>Card.</th><th title="Business key">⚿</th><th></th>
           </tr></thead><tbody>${attrRows || `<tr><td colspan="6" class="muted">No attributes yet.</td></tr>`}</tbody></table>
           ${kind.hasIdentity ? `<p class="im-hint-text"><b>The business key</b> is what makes two of these the
@@ -615,7 +619,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="add-literal">+ Literal</button></div>
           ${memberFilterHTML("Filter literals…")}
-          <table class="im-attrs"><tbody>
+          <table class="im-attrs no-enhance"><tbody>
             ${(c.literals || []).map((lit, i) => `<tr data-lit="${i}" data-member="${esc(String(lit).toLowerCase())}">
               <td class="im-grip" title="Drag to reorder" aria-label="Reorder">⠿</td>
               <td><input class="im-in" data-f="literal" value="${esc(lit)}" placeholder="approved"/></td>

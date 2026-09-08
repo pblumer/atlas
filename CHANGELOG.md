@@ -79,6 +79,40 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Every list opens with its search boxes showing.** Each data table has carried a
+  per-column filter row (`table.js`) since it replaced the hand-rolled sort and filter
+  code in each view — but collapsed behind a funnel icon in the header, so the first
+  thing anyone saw on a list was a table with no visible way to search it. The search
+  was there all along, one click away and invisible. The row is part of the list now:
+  the boxes are on screen when the list is. The funnel still collapses them for a list
+  where the vertical space matters more, and a table with a `data-dt-key` remembers
+  that choice the way it already remembers its sort column.
+
+  With one way to narrow a list, in the same place on every list, the two boxes that
+  did it their own way above a table are gone: the *Filter artifacts…* box in the
+  Modeler's application detail and the *Filter processes by name or ID…* box in
+  Operations › Instances. Both are what the Name/Process column's own box does, and it
+  does slightly more — the column filter also reaches the id line beneath the name. The
+  Tasks inbox and the Repository keep their search boxes: neither is a table, so a
+  column filter cannot stand in for them.
+
+  Three lists that had quietly lost their sorting and filters have them back. The audit
+  log after a refresh, the variable-search results and an application's Deployments tab
+  each build their table after the route's one enhancement pass has run, which left
+  them the only lists in the UI with no sort headers and no filter row at all.
+
+  Two tables that are not lists opted out of the enhancer instead: the SSO claim rules
+  in Console › Organization and the attribute grid of an information-model class. Both
+  are grids of inputs — there is no cell text to sort or filter by, so a filter typed
+  there would have hidden every row — and the attribute grid's order is set by dragging
+  and means something. Each already has the search that suits it.
+
+  Where a list is searched, and what a table has to be before the shared enhancer is
+  applied to it, is now a decision record (ADR-0286)
+  rather than a habit: the row is shown with the list, a view builds no search box over
+  a table it owns, a table that is not a list carries `no-enhance` and says why, and
+  code that replaces a whole table enhances it again.
+
 - **Flow-node ids come from the workflow, not from a counter.** An imported node
   was `Activity_1`, `Activity_2`, … in emission order, so inserting one activity
   in MIM shifted the id of every node below it and a re-import of a barely
@@ -98,6 +132,25 @@ _Changed_ / _Removed_ for each version.
   while loop's return) are excluded from the layering, as before.
 
 ### Fixed
+
+- **An incident that says "no worker registered as X" can now create X, instead of pointing
+  at the Console.** The one incident whose cause is named in its own message was the one
+  incident with no way out of it: the row offered a link to Console › Workers, which is the
+  detour ADR-0160 exists to remove — read the incident, carry the name and the Worker Type in
+  your head, find the add form, navigate back, resolve. It is not a choice to make there
+  anyway: the deployed model states both the name and the type, and a worker created under
+  anything else leaves the task parked. So every incident surface now opens the same worker
+  dialog in a create mode with those two fixed, and **Add & retry** writes it and hands the
+  parked job one more attempt (ADR-0287).
+- **Publishing an application runs the deploy-time preflight that only the Modeler's Deploy
+  button ran.** The check that says a model names a worker nobody configured — along with the
+  information model's data-flow findings and the foreign-namespace check — lived inside the
+  single-model deploy handler. Publishing an application and importing a release reach the
+  deploy directly and reported none of it; `projectDeployResp` had no `warnings` field at all,
+  so it could not have. That is how a model reaches production naming a worker that does not
+  exist, and Publish is how most applications get there. The three checks are one function
+  now, called by all three paths, and the Console shows what a publish warned about
+  (ADR-0287).
 
 - **The MIM importer reads the workflows MIM actually writes.** Three defects
   kept `atlas import-mim` (and `POST /api/v1/imports/mim`) from doing its job on

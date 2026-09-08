@@ -1,0 +1,34 @@
+{
+  "title": {
+    "en": "Publishing an application warns you about what will not run",
+    "de": "Beim Publizieren einer Application wird gewarnt, was nicht laufen wird"
+  },
+  "tags": [
+    "Modeler",
+    "Workers",
+    "Validation"
+  ],
+  "summary": {
+    "en": "Deploying a single diagram has warned since 0.3 that it names a Worker nobody configured, or a data object typed against a vocabulary that does not carry it. Publishing a whole application said nothing at all — which is the route most applications reach a server through, so the first anybody heard of the problem was the first task to park. Publish and release import now run the same checks and report them.",
+    "de": "Beim Deployen eines einzelnen Diagramms wird seit 0.3 gewarnt, wenn es einen Worker nennt, den niemand konfiguriert hat, oder ein Datenobjekt gegen ein Vokabular typisiert, das ihn nicht kennt. Beim Publizieren einer ganzen Application blieb es still — und das ist der Weg, über den die meisten Applications auf einen Server gelangen. Das Problem zeigte sich damit erst an der ersten geparkten Aufgabe. Publish und Release-Import führen jetzt dieselben Prüfungen aus und melden sie."
+  },
+  "tutorial": {
+    "en": [
+      "Open the Modeler and select the application.",
+      "Press Publish.",
+      "Anything that deployed but will not run as written is listed afterwards — the deploy is not refused for it, since publishing before the Workers exist is legitimate."
+    ],
+    "de": [
+      "Modeler öffnen und die Application auswählen.",
+      "Auf Publish drücken.",
+      "Was deployt wurde, aber so nicht laufen wird, erscheint danach als Liste — abgelehnt wird der Deploy deswegen nicht, denn ein Publizieren vor dem Einrichten der Worker ist legitim."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

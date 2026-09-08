@@ -16,7 +16,7 @@ import { copyText } from "./clipboard.js";
 // has to agree on what the markup means — and on the escaping that keeps it inert.
 import { renderMarkdown, markdownToPlain } from "./markdown.js";
 import {
-  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow,
+  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow, addWorkerFlow,
   incidentWorkerChip,
   repairFormFlow,
 } from "./incidents.js";
@@ -1442,6 +1442,10 @@ async function viewConsoleAudit() {
         <thead><tr><th>When</th><th>Action</th><th>Application</th><th>Change</th><th>By</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`;
+    // Refresh and the action picker rebuild the table itself, not just its rows, and
+    // the route's one enhancement pass is long past — so the new table needs its sort
+    // headers and filter row again.
+    enhanceViewTables();
   };
 
   await load("");
@@ -2324,6 +2328,10 @@ function ssoCard(provider, mapping, groups) {
   }
   const m = mapping || { enabled: false, claim: "", rules: [] };
   const rules = m.rules || [];
+  // The rules table is `no-enhance`: it is a grid of inputs rather than a list of data,
+  // so its cells carry no text for the shared enhancer to sort or filter on — a filter
+  // typed into it would hide every rule — and the order is the order they were written
+  // in (ADR-0286).
   return `
     <div class="card" id="sso-card" style="margin-top:18px">
       <div class="between"><h2>Single sign-on</h2>
@@ -2349,7 +2357,7 @@ function ssoCard(provider, mapping, groups) {
       <p class="muted" style="margin:6px 0 14px; font-size:12px">A claim name, or a dotted path for the
       providers that nest it — <code>groups</code>, <code>roles</code>,
       <code>realm_access.roles</code>.</p>
-      <table>
+      <table class="no-enhance">
         <thead><tr><th style="width:26%">Claim value</th><th style="width:28%">Grants roles</th>
           <th>Adds to groups</th><th></th></tr></thead>
         <tbody id="sso-rules">${rules.map((r) => ssoRuleRow(r, groups)).join("")}</tbody>
@@ -2854,7 +2862,7 @@ async function viewProjectDetail(id) {
         { sep: true },
         { label: "Delete", icon: "🗑", act: "deldraft", data: { key: d.processId }, danger: true },
       );
-      return `<tr data-name="${esc((d.name || d.processId).toLowerCase())}">
+      return `<tr>
         ${nameCell("BPMN", d.name || d.processId, esc(d.processId), href)}
         <td class="muted">Diagram</td>
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
@@ -2870,7 +2878,7 @@ async function viewProjectDetail(id) {
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
       );
-      return `<tr data-name="${esc(r.name.toLowerCase())}">
+      return `<tr>
         ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
@@ -2883,7 +2891,7 @@ async function viewProjectDetail(id) {
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delform", data: { id: f.id }, danger: true },
       );
-      return `<tr data-name="${esc((f.name || f.id).toLowerCase())}">
+      return `<tr>
         ${nameCell("FORM", f.name || f.id, esc(f.id), href)}
         <td class="muted">Form</td>
         <td class="muted" data-sort="${f.savedAt || 0}">${esc(fmtTime(f.savedAt))}</td>
@@ -2925,7 +2933,6 @@ async function viewProjectDetail(id) {
         <button data-pane="deployments" title="Show what this application currently has deployed">Deployments</button>
       </div>`}
       <div id="pane-artifacts">
-        <input class="filter-input" id="pd-filter" placeholder="Filter artifacts…" autocomplete="off">
         <div class="card" style="padding:0">
           <table data-dt-key="project-artifacts">
             <thead><tr><th>Name</th><th>Type</th><th>Last changed</th><th></th></tr></thead>
@@ -2940,13 +2947,6 @@ async function viewProjectDetail(id) {
         <p class="muted" style="padding:2px 2px 12px">What this application currently has deployed on this server.</p>
         <div id="pd-deployments"><p class="muted" style="padding:14px 2px">Loading…</p></div>
       </div>`}`;
-
-    const filter = document.getElementById("pd-filter");
-    filter.addEventListener("input", () => {
-      const q = filter.value.trim().toLowerCase();
-      for (const tr of root.querySelectorAll("#pd-rows tr[data-name]"))
-        tr.hidden = q !== "" && !tr.dataset.name.includes(q);
-    });
 
     // Tabs: Artifacts (design-time) and Deployments (what's live for this
     // application, ADR-0128). The deployments pane loads lazily on first open.
@@ -3117,6 +3117,9 @@ async function renderAppDeployments(id) {
 
   for (const b of host.querySelectorAll("button[data-promote]"))
     b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+  // This pane loads lazily on its first open, long after the route enhanced the view's
+  // tables — without this its lists would be the only ones with no sorting or filters.
+  enhanceViewTables();
 }
 
 // promoteRelease ships an existing release to a chosen target (ADR-0129). The
@@ -4754,8 +4757,16 @@ async function deployProject(id, reload) {
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
-      toast(n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application", "ok");
+      const warnings = rep.warnings || [];
+      const what = n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application";
+      toast(warnings.length
+        ? `${what} — with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : what, warnings.length ? "warn" : "ok");
       await reload();
+      // After the reload, so the block is not wiped by it. A publish that deployed
+      // fine can still name a worker nobody configured; the server does not refuse it
+      // (ADR-0158), so this is the moment to say so, while the operator is here.
+      if (warnings.length) showDeployWarnings(warnings);
       return;
     }
   } catch (e) {
@@ -4765,6 +4776,35 @@ async function deployProject(id, reload) {
   // Refused (or a server error): show why and reflect any DMN results in place.
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// showDeployWarnings reports what a publish deployed anyway. It is a dialog rather
+// than a block on the page because publishing reloads the view: a banner rendered into
+// it would be gone before it was read, and a toast has nowhere to put a list.
+//
+// The Modeler's own deploy has said this since ADR-0158; the publish route said
+// nothing at all, which is how a model reaches production naming a worker nobody
+// created (ADR-0287). Same class as the editor's
+// panel, so the two read alike.
+function showDeployWarnings(warnings) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Deploy warnings">
+      <div class="modal-head"><h2>Published, with warnings</h2></div>
+      <div class="modal-body">
+        <div class="deploy-warnings"><b>&#9888; Deployed, but this will not run as written:</b>
+          <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn" data-done title="Close this dialog">Close</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-done]").addEventListener("click", close);
+  ov.querySelector("[data-done]").focus();
 }
 
 // downloadApplicationSource downloads the application's source tree (ADR-0134): a
@@ -4894,10 +4934,6 @@ async function viewInstances() {
     process with a stuck token is flagged in the <b>Incidents</b> column, which opens the
     version holding it. Start the demo to park a token on a waiting task.</p>
     <div class="ops-toolbar">
-      <span class="ops-search">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M11 11l3 3"/></svg>
-        <input id="proc-filter" type="text" placeholder="Filter processes by name or ID…" aria-label="Filter processes" spellcheck="false"/>
-      </span>
       <form class="ops-jump" id="inst-jump" title="Open a specific instance's replay by its key">
         <input id="inst-key" type="text" inputmode="numeric" placeholder="Instance key…" aria-label="Instance key" spellcheck="false"/>
         <button class="btn neutral ops-jump-go" type="submit" title="Open this instance's replay" aria-label="Open replay">&rarr;</button>
@@ -4991,9 +5027,11 @@ async function viewInstances() {
     };
   };
 
-  // renderRows draws the process rows, narrowed by the top filter box (name or process
-  // id). Column sorting and per-column filtering are handled by the shared table
-  // enhancer over the rendered rows, so this only builds the rows and their sort keys.
+  // renderRows draws the process rows. Narrowing them is the table's own business:
+  // the Process column's filter box searches name *and* process id (the row carries
+  // both in its data-filter), which is what the box above this list used to do — so
+  // this only builds the rows and their sort keys, and the shared enhancer sorts and
+  // filters them.
   function renderRows() {
     if (!allGroups.length) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty">
@@ -5001,15 +5039,7 @@ async function viewInstances() {
         <a href="#/modeler">Modeler</a>.</td></tr>`;
       return;
     }
-    const q = (document.getElementById("proc-filter").value || "").trim().toLowerCase();
-    const filtered = q
-      ? allGroups.filter((g) => ((g.latest.name || "") + " " + g.processId).toLowerCase().includes(q))
-      : allGroups;
-    if (!filtered.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty">No processes match “${esc(q)}”.</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = filtered.map((g) => {
+    tbody.innerHTML = allGroups.map((g) => {
       const s = summary.get(g.processId) || { running: 0, finished: 0, latestCompletedAt: 0 };
       const label = g.latest.name || g.processId;
       const sub = g.latest.name
@@ -5125,7 +5155,6 @@ async function viewInstances() {
     }
   };
   document.getElementById("refresh").addEventListener("click", load);
-  document.getElementById("proc-filter").addEventListener("input", renderRows);
 
   document.getElementById("inst-jump").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -5223,6 +5252,7 @@ async function viewInstances() {
           <tbody>${body}</tbody>
         </table>
       </div>`;
+    enhanceViewTables();
   };
   document.getElementById("var-search").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -5464,9 +5494,15 @@ function incidentMenu(r, i) {
   items.push({ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } });
   if (r.connector && r.connectorId) {
     items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { row: i } });
+  } else if (r.connector && r.connectorKind) {
+    // Nothing to open — the model names a worker nobody configured. Creating it is
+    // the act, and the model already states the name and the Worker Type, so it
+    // happens here rather than in the Console with the name carried in somebody's
+    // head (ADR-0287).
+    items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { row: i } });
   } else if (r.connector) {
-    // Nothing to open — the model names a worker nobody configured, so the way out
-    // is the Console, where one is created.
+    // A worker named without its Worker Type: nothing to create it *as*, so the
+    // Console, where the type is picked, stays the answer.
     items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
   }
   return items;
@@ -5558,7 +5594,9 @@ async function viewIncidents() {
         ? !!(await fixVariablesFlow({ api, toast, incident }))
         : act === "fixconn"
           ? !!(await fixWorkerFlow({ api, toast, incident }))
-          : await resolveIncidentFlow({ api, toast, incident });
+          : act === "addconn"
+            ? !!(await addWorkerFlow({ api, toast, incident }))
+            : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
       refreshIncidentBadge(); // don't make the nav wait out its interval to agree
@@ -8802,6 +8840,11 @@ async function route() {
 // currently in the main view. It runs once per navigation (not as a live observer),
 // so it never watches the modeler's heavy SVG; each enhanced table then keeps itself
 // current via its own lightweight tbody observer as rows refresh.
+//
+// Rebuilding only a <tbody> therefore needs nothing. Code that replaces a whole *table*
+// — a refresh that rewrites its container, a pane that loads lazily, a results panel —
+// calls this again when it is done, or that list silently loses its sorting and its
+// filter row (ADR-0286).
 function enhanceViewTables() {
   for (const t of view.querySelectorAll("table:not(.no-enhance)")) {
     enhanceTable(t, { key: t.dataset.dtKey || undefined });

@@ -5,11 +5,14 @@
 // about which of them apply, and the same "check it before you save" button. So the
 // dialog lives here and both call it.
 //
-// It edits an existing record only. Creating a worker is a different act (it picks a
-// Worker Type and a name, and the name is the binding every model references,
-// ADR-0036/0041), and it keeps its inline form in the Console; what the two share is
-// the shape of a Worker Type's fields, exported as workerShape so the rules cannot
-// drift apart.
+// It opens on an existing record, and — since the incident that names a worker nobody
+// configured (ADR-0158's "no worker registered as X") — on one that does not exist yet.
+// Creating from the Console stays its inline form there, because that is where a
+// Worker Type and a name are *chosen*; creating from an incident chooses neither, since
+// the model already states both, so it is the same dialog with those two fields fixed
+// and a POST instead of a PATCH (ADR-0287). What
+// every surface shares either way is the shape of a Worker Type's fields, exported as
+// workerShape so the rules cannot drift apart.
 //
 // Deleting one lives here too (ADR-0163). It is not a dialog on the same record, but
 // it asks the same kind of question — what does this worker's configuration mean
@@ -249,29 +252,56 @@ export async function editWorkerFlow({ api, toast, worker, intro = "", extraLabe
   return { saved: true, extra: choice.extra };
 }
 
-// askWorker renders the dialog and resolves to {patch, extra}, or null. The fields
-// re-shape as the provider changes, because "which of these do I have to fill in" is a
-// property of the provider and finding that out from a rejected save is a worse way to
-// learn it.
-function askWorker({ api, worker, intro, extraLabel }) {
+// createWorkerFlow opens the same dialog on a worker that does not exist yet and
+// POSTs it. `name` and `kind` come from whoever knows them — today the incident, which
+// reads them off the model's own reference — and are shown fixed rather than typed:
+// the name is the binding every deployed model resolves through (ADR-0036/0041), so a
+// worker created under a near-miss of it would leave the parked task parked and the
+// operator looking at a worker that seems right.
+//
+// Resolves {saved, extra} after the create, or null when nothing was written.
+export async function createWorkerFlow({ api, toast, name, kind, intro = "", extraLabel = "", okToast = "Worker added" }) {
+  const choice = await askWorker({ api, worker: { name, kind, enabled: true }, intro, extraLabel, create: true });
+  if (!choice) return null;
+  try {
+    await api("POST", "/api/v1/connectors", choice.body);
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    toast(/403|forbidden/i.test(msg) ? "Adding a worker needs an admin account" : "Could not add the worker: " + msg, "warn");
+    return null;
+  }
+  if (okToast) toast(okToast, "ok");
+  return { saved: true, extra: choice.extra };
+}
+
+// askWorker renders the dialog and resolves to {patch, extra} — or {body, extra} when
+// `create` is set, since a create sends a whole record and an edit sends only what
+// changed — or null when nothing was confirmed. The fields re-shape as the provider
+// changes, because "which of these do I have to fill in" is a property of the provider
+// and finding that out from a rejected save is a worse way to learn it.
+function askWorker({ api, worker, intro, extraLabel, create = false }) {
   return new Promise((resolve) => {
     const c = worker || {};
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal conn-modal" role="dialog" aria-modal="true" aria-labelledby="conn-edit-title">
-        <div class="modal-head"><h2 id="conn-edit-title">Worker &middot; ${esc(c.name || "")}</h2></div>
+        <div class="modal-head"><h2 id="conn-edit-title">${create ? "New worker" : "Worker"} &middot; ${esc(c.name || "")}</h2></div>
         <div class="modal-body">
           ${intro ? `<p class="inc-modal-msg">${esc(intro)}</p>` : ""}
           ${c.problem ? `<p class="conn-problem"><b>Not usable right now:</b> ${esc(c.problem)}</p>` : ""}
-          <p class="muted" style="margin:0 0 10px">The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration.</p>
+          <p class="muted" style="margin:0 0 10px">${create
+            ? "The name and the Worker Type are the model's, not yours to pick here — they are what the parked task states, and a worker created under anything else would leave it parked. Fill in what it takes to reach the target; it is live as soon as you save."
+            : "The name is what every model references, so it is fixed here — changing it would leave those tasks looking for a worker that no longer exists. Everything else takes effect at once; a parked task retries against the new configuration."}</p>
           <div class="conn-fields">
-            <label class="field"><span>Kind</span><input value="${esc(c.kind || "")}" disabled/></label>
+            <label class="field conn-f-name" style="flex:1 1 200px"><span>Name</span><input id="conn-name" value="${esc(c.name || "")}" disabled/></label>
+            <label class="field"><span>Kind</span><input id="conn-kind" value="${esc(c.kind || "")}" disabled/></label>
             <label class="field conn-f-provider"><span class="conn-provider-label">Provider</span><select id="conn-provider"></select></label>
             <label class="field conn-f-endpoint" style="flex:1 1 220px"><span class="conn-endpoint-label">Endpoint</span><input id="conn-endpoint" value="${esc(c.endpoint || "")}"/></label>
             <label class="field conn-f-sender" style="flex:1 1 200px"><span>Sender</span><input id="conn-sender" value="${esc(c.sender || "")}" placeholder="bot@example.com"/></label>
             <label class="field conn-f-model" style="flex:1 1 200px"><span>Default model</span><input id="conn-model" value="${esc(c.model || "")}" title="What a task that names no model of its own asks. A task or an agent container may name one, and then that one runs."/></label>
             <label class="field conn-f-credref" style="flex:1 1 200px"><span class="conn-credref-label">Token reference</span><input id="conn-credref" value="${esc(c.credentialsRef || "")}"/></label>
+            <label class="field conn-f-connstr" style="flex:1 1 100%"><span>Connection string</span><input id="conn-connstr" type="password" autocomplete="new-password"/></label>
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
@@ -280,8 +310,8 @@ function askWorker({ api, worker, intro, extraLabel }) {
         <div class="modal-foot">
           <button class="btn neutral" data-conn-cancel title="Close without saving">Cancel</button>
           <button class="btn neutral conn-f-test" data-conn-test title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
-          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="Save the worker changes">Save</button>
-          ${extraLabel ? `<button class="btn" data-conn-extra title="Save the changes and retry the parked task">${esc(extraLabel)}</button>` : ""}
+          <button class="btn${extraLabel ? " neutral" : ""}" data-conn-save title="${create ? "Add this worker" : "Save the worker changes"}">${create ? "Add worker" : "Save"}</button>
+          ${extraLabel ? `<button class="btn" data-conn-extra title="${create ? "Add this worker and retry the parked task" : "Save the changes and retry the parked task"}">${esc(extraLabel)}</button>` : ""}
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -291,6 +321,7 @@ function askWorker({ api, worker, intro, extraLabel }) {
     const senderIn = ov.querySelector("#conn-sender");
     const modelIn = ov.querySelector("#conn-model");
     const credRefIn = ov.querySelector("#conn-credref");
+    const connStrIn = ov.querySelector("#conn-connstr");
     const enabledIn = ov.querySelector("#conn-enabled");
     const testOut = ov.querySelector(".conn-test-result");
 
@@ -315,10 +346,20 @@ function askWorker({ api, worker, intro, extraLabel }) {
       show(".conn-f-endpoint", sh.endpoint);
       show(".conn-f-sender", sh.sender);
       show(".conn-f-credref", sh.credRef !== "none");
+      // Two fields the edit dialog has no business showing. The name is the heading
+      // when it is fixed and already stored; on a create it is what the operator is
+      // about to commit to, so it is on the form, disabled, where it can be read back.
+      // A connection string is a SQL worker's whole configuration and is sealed into
+      // the vault on the way in (ADR-0188) — so there is one to type on a create and
+      // never one to show back on an edit.
+      show(".conn-f-name", create);
+      show(".conn-f-connstr", create && sh.sql);
+      show(".conn-enabled", !create);
       show(".conn-f-test", sh.test);
       endpointIn.placeholder = sh.endpointPlaceholder;
       ov.querySelector(".conn-credref-label").textContent = sh.credRefLabel;
       credRefIn.placeholder = sh.credRefPlaceholder;
+      connStrIn.placeholder = sh.dsnPlaceholder;
       ov.querySelector(".conn-hint").innerHTML = sh.hint;
     };
     providerSel.addEventListener("change", sync);
@@ -331,14 +372,17 @@ function askWorker({ api, worker, intro, extraLabel }) {
       testOut.textContent = "Checking…";
       btn.disabled = true;
       try {
-        // A SQL worker is checked through the vault reference it already has: the
-        // dialog never shows a connection string back, so there is nothing typed here
-        // to check instead. Which is the case that matters — an operator opens this
-        // dialog because a worker *stopped* working.
+        // On an edit, a SQL worker is checked through the vault reference it already
+        // has: the dialog never shows a connection string back, so there is nothing
+        // typed here to check instead. Which is the case that matters — an operator
+        // opens this dialog because a worker *stopped* working. On a create the string
+        // is right there on the form, and checking it before it is sealed is the last
+        // moment the operator can still fix it in the field they are looking at.
         const res = await api("POST", "/api/v1/connectors/test", {
           name: c.name, kind: c.kind, provider: providerSel.value,
           endpoint: endpointIn.value.trim(), sender: senderIn.value.trim(),
           credentialsRef: credRefIn.value.trim(),
+          connectionString: create && shape().sql ? connStrIn.value.trim() : "",
         });
         testOut.className = "conn-test-result " + (res.ok ? "ok" : "err");
         testOut.textContent = (res.ok ? "✓ " : "✕ ") + (res.detail || (res.ok ? "Works." : "Failed."));
@@ -350,6 +394,25 @@ function askWorker({ api, worker, intro, extraLabel }) {
 
     const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
     const onKey = (e) => { if (e.key === "Escape") close(null); };
+    // A create goes through workerCreateBody, the same function the Console's add form
+    // posts through, rather than assembling a second body here — "which fields does a
+    // create carry" is one decision (ADR-0160), and two copies of it is how the Console
+    // and this dialog would come to disagree about, say, an agent's model. The form it
+    // reads is synthesized from what this kind actually shows: a hidden field carries no
+    // value here, so nothing a shape hides can reach the server.
+    const createBody = (sh) => {
+      const f = new FormData();
+      f.set("name", c.name || "");
+      f.set("kind", c.kind || "");
+      if (sh.provider) f.set("provider", providerSel.value);
+      if (sh.endpoint) f.set("endpoint", endpointIn.value.trim());
+      if (sh.sender) f.set("sender", senderIn.value.trim());
+      if (sh.model) f.set("model", modelIn.value.trim());
+      if (sh.credRef !== "none") f.set("credentialsRef", credRefIn.value.trim());
+      if (sh.sql) f.set("connectionString", connStrIn.value.trim());
+      return workerCreateBody(f);
+    };
+
     // The patch carries every field this kind and provider actually use — the server
     // re-runs the kind's full validation on the resulting record (ADR-0160), so it has
     // to see what the operator is looking at. A field the shape hides is *omitted*,
@@ -360,6 +423,10 @@ function askWorker({ api, worker, intro, extraLabel }) {
     // about the provider and not about which fields a form drew.
     const submit = (extra) => {
       const sh = shape();
+      if (create) {
+        close({ body: createBody(sh), extra });
+        return;
+      }
       const patch = { enabled: enabledIn.checked };
       if (sh.endpoint) patch.endpoint = endpointIn.value.trim();
       if (sh.credRef !== "none") patch.credentialsRef = credRefIn.value.trim();
@@ -373,6 +440,7 @@ function askWorker({ api, worker, intro, extraLabel }) {
       }
       close({ patch, extra });
     };
+
     document.addEventListener("keydown", onKey);
     ov.querySelector("[data-conn-cancel]").addEventListener("click", () => close(null));
     ov.querySelector("[data-conn-save]").addEventListener("click", () => submit(false));
@@ -380,8 +448,11 @@ function askWorker({ api, worker, intro, extraLabel }) {
     if (extraBtn) extraBtn.addEventListener("click", () => submit(true));
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
     // Focus what this kind is most often opened to change: an agent's model, a mail
-    // worker's transport, everything else its endpoint.
-    (sh0.model ? modelIn : (c.kind === "mail" ? providerSel : endpointIn)).focus();
+    // worker's transport, everything else its endpoint. On a create the same holds,
+    // except for the kinds with no endpoint to type — there the credential is the
+    // configuration, so that is where the cursor belongs.
+    const first = sh0.model ? modelIn : (c.kind === "mail" ? providerSel : endpointIn);
+    (create && first === endpointIn && !sh0.endpoint ? credRefIn : first).focus();
   });
 }
 

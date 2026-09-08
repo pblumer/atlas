@@ -80,6 +80,7 @@
       window.__resolved = [];             // {key, retries} per resolve call the views made
       window.__varWrites = [];            // {instance, variables} per operator override
       window.__connPatches = [];          // {id, body} per worker edit
+      window.__connCreates = [];          // the create body per worker added from an incident
       window.__incidents = () => incidents;
 
       // The managed worker the mail task resolves through, as the worker list
@@ -91,10 +92,14 @@
         credentialsRef: "o365_pw", enabled: true, createdAt: ns(T),
         problem: "smtp: dial tcp: connection refused",
       }];
-      // Flips the incidents to a worker nobody configured — the other branch the
-      // row has to render, where there is nothing to open and the Console is the way.
-      window.__unconfigureConnector = () => {
-        incidents = incidents.map((i) => ({ ...i, connectorId: "" }));
+      // Flips the incidents to a worker nobody configured — the branch where there is
+      // no record to open and the way out is to create one. `kind` overrides the Worker
+      // Type the incident carries, so the test can also take it away: without one there
+      // is nothing to create *as*, and the row falls back to the Console.
+      window.__unconfigureConnector = (kind) => {
+        incidents = incidents.map((i) => ({
+          ...i, connectorId: "", connectorKind: kind === undefined ? i.connectorKind : kind,
+        }));
         workers = [];
       };
 
@@ -137,6 +142,15 @@
         }
         if (method === "POST") {
           if (url === "/api/v1/connectors/test") return { ok: true, detail: "Connected and authenticated." };
+          // Creating the worker the model names, from the incident itself: the way out
+          // of "no worker registered as X" when there is no record to open.
+          if (url === "/api/v1/connectors") {
+            window.__connCreates.push(body);
+            const rec = { id: "c9", enabled: true, ...body };
+            workers = [...workers, rec];
+            incidents = incidents.map((i) => (i.connector === rec.name ? { ...i, connectorId: rec.id } : i));
+            return rec;
+          }
           const m = url.match(/\/incidents\/(\w+)\/resolve$/);
           if (m) {
             window.__resolved.push({ key: m[1], retries: body && body.retries });
