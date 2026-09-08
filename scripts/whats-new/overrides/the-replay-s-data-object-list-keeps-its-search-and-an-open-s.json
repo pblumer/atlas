@@ -1,0 +1,21 @@
+{
+  "title": {
+    "en": "The Data tab's search survives a click, and an open trail stays put",
+    "de": "Die Suche in der Registerkarte «Daten» überlebt einen Klick, und ein offener Verlauf bleibt an seiner Zeile"
+  },
+  "summary": {
+    "en": "In the replay of a single instance, the Data tab lists what the instance is carrying. Its search boxes appeared when you opened the view and disappeared again as soon as you clicked an element on the diagram — so it looked as though the search had broken rather than as though there was none. They stay now. And the state trail a row opens into stays with that row: sorting the list no longer drags it under a different object, and filtering no longer makes it vanish under a row that is still there.",
+    "de": "In der Wiedergabe einer einzelnen Instanz zeigt die Registerkarte «Daten», was die Instanz mit sich führt. Die Suchfelder erschienen beim Öffnen der Ansicht und verschwanden wieder, sobald Sie ein Element im Diagramm anklickten — es sah also aus, als sei die Suche kaputt, und nicht, als gäbe es keine. Sie bleiben jetzt. Und der Zustandsverlauf, den eine Zeile aufklappt, bleibt bei dieser Zeile: Beim Sortieren rutscht er nicht mehr unter ein anderes Objekt, und beim Filtern verschwindet er nicht mehr unter einer Zeile, die stehen bleibt."
+  },
+  "tags": [
+    "Operations",
+    "Data"
+  ],
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

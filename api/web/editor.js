@@ -30,6 +30,15 @@ import { attachPlayground } from "./playground.js";
 // class canvas and Panorama use (ADR-0237). Fetched on demand, so the replay's
 // other tabs do not pay for it.
 import { loadCanvasBundle } from "./canvas-bundle.js";
+// A list this view rebuilds has to ask for its sorting and its filter row back
+// (ADR-0286 rule 4) — the route's one pass is long over by then. The record words that
+// rule as "calls enhanceViewTables()", which is right for the three lists that live in
+// app.js and wrong from here: app.js is the shell's entry module and runs initShell(),
+// the router and three server syncs at module scope, so importing it would boot the
+// whole application inside each of the thirty-five e2e harnesses that mount this view
+// on its own. table.js is a leaf with no side effects, and one table is all this view
+// rebuilds.
+import { enhanceTable } from "./table.js";
 import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
@@ -11605,7 +11614,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <td class="do-t-by">${writtenBy(h, i)}</td>
           <td class="do-t-at">${esc(fmtClock(h.at))}</td>
         </tr>`).join("");
-      return head + `<tr class="do-trail"><td colspan="6">
+      // data-dt-detail: the trail is not a row of this table's data, it is what the
+      // row above it opens into. The shared enhancer reads that attribute to carry it
+      // along when the list is sorted and to hide it with its row when a filter removes
+      // one — without it the trail is sorted as a stranger and lands under somebody
+      // else's object (ADR-0286). The Variables tab's <tr class="v-struct"> says the
+      // same thing about itself, for the same reason.
+      return head + `<tr class="do-trail" data-dt-detail><td colspan="6">
         <div class="do-trail-box">
           <div class="do-trail-h">State trail · every durable write to <b>${esc(d.name)}</b></div>
           <table class="do-trail-table"><tbody>${entries || `<tr><td class="muted">nothing recorded yet</td></tr>`}</tbody></table>
@@ -11618,6 +11633,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    // A whole new table, so a whole new enhancement: the route's pass ran once, before
+    // the first element was ever selected. Without this the list arrives with its
+    // filter row and loses it on the reader's first click — which is worse than never
+    // having had one, because it looks like the search broke rather than like there is
+    // none. Only this one table: the Variables tab's frame is built once and only its
+    // <tbody> is rewritten afterwards, so it keeps what the route's pass gave it.
+    enhanceTable(dataEl.querySelector(".do-table"));
   }
 
   // renderObjectDiagram draws the instance's objects and the lines between them.

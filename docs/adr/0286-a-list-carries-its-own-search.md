@@ -114,7 +114,22 @@ Four rules follow, and together they are the whole decision:
   honest fix would be for `enhanceViewTables` to observe the view, which
   [ADR-0012](0012-web-ui-app-shell.md)'s buildless shell can afford everywhere except
   the modeler's constantly-mutating SVG — worth revisiting if the convention is missed
-  twice. `no-enhance` is still the only opt-out and it is not checkable: a new editing
+  twice. **Missed once, 2026-09-08:** the replay's Data tab in `api/web/editor.js`
+  rebuilds its list on every element selection, so the list arrived with a filter row
+  and lost it on the reader's first click. It re-enhances itself now — but by calling
+  `enhanceTable` from `table.js` rather than `enhanceViewTables()` as the rule words it,
+  because `app.js` is the shell's entry module and runs `initShell()`, the router and
+  three server syncs at module scope: importing it from a view would boot the whole
+  application inside each of the thirty-five e2e harnesses that mount that view alone.
+  The rule holds; only its wording assumes the caller is already inside `app.js`. One
+  more miss and the observer is the answer.
+
+  The same fix turned up something rule 3 does not cover and a reader would not think to
+  look for: a table can be a list *and* still hold rows that are not its data. The
+  replay's state trail is one, and it carried no `data-dt-detail`, so sorting put it
+  under a stranger and a filter hid it under a row it had kept. `no-enhance` would have
+  been the wrong answer there — the list around it is a real list. Worth knowing that
+  the detail-row marker is as easy to miss as rule 4, and fails more visibly. `no-enhance` is still the only opt-out and it is not checkable: a new editing
   grid that forgets it gets filter boxes that hide its rows, and only a reader will
   notice. If a list ever needs a fuzzy search *across* columns, that is a case for a
   fourth kind of search under rule 2 — and it belongs in the shared helper, not above

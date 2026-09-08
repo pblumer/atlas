@@ -120,6 +120,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The replay's data-object list keeps its search, and an open state trail stays with
+  its row.** Showing every list's filter row by default
+  ([ADR-0286](docs/adr/0286-a-list-carries-its-own-search.md)) reached one list that was
+  not ready for it, and it went two ways at once.
+
+  The list arrived from Operations › a single instance › **Data** with a filter row, and
+  lost it again the moment the operator clicked anything: selecting an element on the
+  diagram re-renders the inspector, which rebuilds that table from scratch, and a rebuilt
+  table has to ask for its sorting and its search back. That is ADR-0286's own rule 4 and
+  this was the first place it was missed — worth recording, because that record says the
+  convention should be replaced by something automatic if it is missed twice.
+
+  Underneath it sat a second one, which fixing the first would have made visible rather
+  than fixed: the **state trail** a row opens into is not a row of the table's own data,
+  and it was not marked as the detail row it is. Sorted, it went by the text in its own
+  single cell and landed under a stranger's object — descending, it sorted to the very
+  top, nowhere near the object whose writes it lists. Filtered, it vanished under a row
+  the filter had *kept*, because the trail's one cell holds nothing in the Class or State
+  column a filter was typed into. It now carries `data-dt-detail`, exactly as the
+  Variables tab's expanded value already did, so it travels with its row when the list is
+  sorted and is hidden with it only when its row goes.
+
+  Found by reading dbuchs7's change against this view rather than by a report, and
+  measured through the real app shell — a harness that mounts the replay directly never
+  runs the route's enhancement pass, so neither half is visible from one.
+  `e2e/replay-tables.spec.mjs` covers all three behaviours through `index.html`; each was
+  watched failing first, and two of them were rewritten after the first versions passed
+  for the wrong reason (ascending sort happens to put a stray trail next to its own row
+  anyway, which is a coincidence and not the property).
+
 - **An incident that says "no worker registered as X" can now create X, instead of pointing
   at the Console.** The one incident whose cause is named in its own message was the one
   incident with no way out of it: the row offered a link to Console › Workers, which is the

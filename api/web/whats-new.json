@@ -99,6 +99,35 @@
       ]
     },
     {
+      "id": "the-replay-s-data-object-list-keeps-its-search-and-an-open-s",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Data tab's search survives a click, and an open trail stays put",
+        "de": "Die Suche in der Registerkarte «Daten» überlebt einen Klick, und ein offener Verlauf bleibt an seiner Zeile"
+      },
+      "summary": {
+        "en": "In the replay of a single instance, the Data tab lists what the instance is carrying. Its search boxes appeared when you opened the view and disappeared again as soon as you clicked an element on the diagram — so it looked as though the search had broken rather than as though there was none. They stay now. And the state trail a row opens into stays with that row: sorting the list no longer drags it under a different object, and filtering no longer makes it vanish under a row that is still there.",
+        "de": "In der Wiedergabe einer einzelnen Instanz zeigt die Registerkarte «Daten», was die Instanz mit sich führt. Die Suchfelder erschienen beim Öffnen der Ansicht und verschwanden wieder, sobald Sie ein Element im Diagramm anklickten — es sah also aus, als sei die Suche kaputt, und nicht, als gäbe es keine. Sie bleiben jetzt. Und der Zustandsverlauf, den eine Zeile aufklappt, bleibt bei dieser Zeile: Beim Sortieren rutscht er nicht mehr unter ein anderes Objekt, und beim Filtern verschwindet er nicht mehr unter einer Zeile, die stehen bleibt."
+      },
+      "link": {
+        "label": "ADR-0286",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0286-a-list-carries-its-own-search.md"
+      },
+      "tags": [
+        "Operations",
+        "Data"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "an-incident-that-says-no-worker-registered-as-x-can-now-crea",
       "version": "Unreleased",
       "date": null,
@@ -379,34 +408,6 @@
       },
       "tags": [
         "Console"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the inbox",
-          "de": "Zum Posteingang"
-        },
-        "route": "#/tasks"
-      }
-    },
-    {
-      "id": "every-task-row-shows-its-key",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Every task in the list now shows its number",
-        "de": "Jede Aufgabe in der Liste zeigt ihre Nummer"
-      },
-      "summary": {
-        "en": "A queue of a dozen tasks that all carry the same name was unreadable: nothing on the row told them apart, so there was no way to say which one you meant to a colleague, or to see that the one you just finished is gone. Each row now carries its own number — the same one the link to that task uses. The lane moved off the row to make space for it; it is on the task's detail pane, with its full path.",
-        "de": "Eine Warteschlange aus einem Dutzend gleich benannter Aufgaben war nicht lesbar: Nichts an der Zeile unterschied sie, also liess sich weder einer Kollegin sagen, welche man meint, noch sehen, dass die gerade erledigte weg ist. Jede Zeile trägt jetzt ihre eigene Nummer — dieselbe, die auch der Link auf diese Aufgabe verwendet. Die Lane ist dafür aus der Zeile gewichen; sie steht im Detailbereich der Aufgabe, mit vollem Pfad."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Tasks"
       ],
       "try": {
         "label": {
