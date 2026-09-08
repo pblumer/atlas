@@ -20,6 +20,13 @@
 // reachable from a test at all: app.js boots the whole console on import, so anything
 // left in it is only ever exercised by hand.
 
+// What this Worker Type needs at the provider before any of these fields mean
+// anything — the same text the Modeler's panel shows beside the type, and the deep
+// link into this server's own handbook (ADR-0289).
+// An operator opening this dialog on an empty record is the other half of the audience
+// the panel's block was written for.
+import { workerKindDocHTML } from "./workertypedocs.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -305,6 +312,7 @@ function askWorker({ api, worker, intro, extraLabel, create = false }) {
           </div>
           <label class="conn-enabled"><input type="checkbox" id="conn-enabled"${c.enabled ? " checked" : ""}/> <span>Enabled — a disabled worker is skipped, and its tasks park</span></label>
           <p class="muted conn-hint" style="margin:8px 0 0;font-size:12.5px"></p>
+          <div class="conn-setup" style="margin:10px 0 0">${workerKindDocHTML(c.kind)}</div>
           <p class="conn-test-result" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">

@@ -128,6 +128,16 @@ Adding a Worker Type is one package here plus one `managedConnectorKind` entry i
 [`api/connectorkinds.go`](api/connectorkinds.go) — not edits scattered across the
 server.
 
+**A Worker Type also ships its setup.** One entry in
+[`api/web/workertypedocs.js`](api/web/workertypedocs.js), keyed by the Modeler catalog
+id: what has to exist before a task of it can run, the ordered steps at the provider,
+the failure it is usually reported with, and the anchor of its handbook card in
+[`api/web/handbuch.html`](api/web/handbuch.html) — write that card too if the type has
+none. The properties panel, the Console's create form and the worker dialog all render
+it, so it is written once. `go test ./api -run SetupDoc` refuses a type that ships
+without it or a link into a card that no longer exists
+(ADR-0289).
+
 **Say Worker, not connector, in anything new you write.** [ADR-0203](docs/adr/0203-worker-execution-model.md)
 splits the old word into three: a **Worker Type** is a capability (`jira`, `mail`,
 `ad`), a **Worker** is one configured target and identity of that type — the name a

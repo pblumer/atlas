@@ -409,15 +409,29 @@ schlägt eindeutig fehl.
 
 ### AP4 — BPMN-Semantik und Fairness: F06, F08, F12 (M)
 
-> **Stand: umgesetzt.** F06, F08 und F12 sind behoben — Schritt 1 von F06, wie
-> geplant; die Zählung je eingehendem Flow bleibt offen und getrennt.
+> **Stand: umgesetzt.** F06, F08 und F12 sind behoben; F06 inzwischen in beiden
+> Schritten.
 >
-> **F06.** Der Schlüssel des Joins ist jetzt (Prozessinstanz, Ausführungsscope,
-> Knoten). Der Inclusive-Join hatte dieselbe Verwechslung in *beiden* Hälften:
-> er wartete auf Geschwister, die nie ankommen können, und verbrauchte beim
-> Feuern jedes auf dem Knoten parkierende Token — auch die der anderen
-> Iteration. Die Gefahr lag beim Übercorrigieren, nicht beim Untercorrigieren;
-> dafür gibt es einen eigenen Test mit einem Subprozess auf einem Zweig.
+> **F06, Schritt 1.** Der Schlüssel des Joins ist jetzt (Prozessinstanz,
+> Ausführungsscope, Knoten). Der Inclusive-Join hatte dieselbe Verwechslung in
+> *beiden* Hälften: er wartete auf Geschwister, die nie ankommen können, und
+> verbrauchte beim Feuern jedes auf dem Knoten parkierende Token — auch die der
+> anderen Iteration. Die Gefahr lag beim Übercorrigieren, nicht beim
+> Untercorrigieren; dafür gibt es einen eigenen Test mit einem Subprozess auf
+> einem Zweig.
+>
+> **F06, Schritt 2.** Gezählt wird jetzt je eingehendem Sequence Flow. Der
+> Schlüssel dafür lag schon in jedem Datensatz: `ElementInstanceValue.SourceFlowId`
+> hält fest, über welchen Flow das Token angekommen ist. Ein Join feuert, wenn
+> `IncomingCount` *verschiedene* Flows wartende Tokens haben, und verbraucht
+> genau eines je Flow — das älteste, weil der Index nach Schlüssel aufsteigend
+> liest. Zwei Tokens auf einem Zweig ersetzen damit den fehlenden Zweig nicht
+> mehr, und das überschüssige Token bleibt liegen, statt beim Feuern zu
+> verschwinden. Kein neuer Zustand, kein neues Ereignis, kein zusätzlicher Scan;
+> die Herleitung von ADR-0024 bleibt, nur ihre vereinfachte Zählregel wird
+> ersetzt (ADR-0290). Der Inclusive-Join hat denselben
+> Defekt in seiner eigenen Sprechweise: er löst seinen Überschuss jetzt sofort
+> auf, weil bei ihm nichts mehr nachkommen kann.
 >
 > **F08.** Die Reihenfolge war der ganze Fehler: das Gateway schrieb
 > `Completed`, *bevor* die Route feststand, konnte also gar nicht mehr
@@ -463,7 +477,8 @@ synchronisieren dadurch übereinander hinweg. In zwei Schritten:
 
 Schritt 1 ist Pflicht und dringend, Schritt 2 ist die eigentliche
 Semantikschuld. Sie zu trennen ist bewusst: Schritt 1 ist ein Bugfix,
-Schritt 2 eine Spezifikationsangleichung mit eigenem Risiko.
+Schritt 2 eine Spezifikationsangleichung mit eigenem Risiko. Beide sind
+umgesetzt, in dieser Reihenfolge und in getrennten Änderungen.
 
 **F08 — XOR ohne Route.** `OnCompleting` schreibt heute das Completed-Ereignis,
 *bevor* die Route feststeht, und kehrt bei fehlender Route wortlos zurück; der
@@ -659,9 +674,9 @@ Freigabe für dauerhafte geschäftskritische Ausführung frühestens nach AP3 �
 das ist der Punkt, an dem V1 und V2 geschlossen sind.
 
 > **Stand:** AP0 bis AP6 sind umgesetzt. V1, V2 und V3 sind geschlossen und die
-> Freigabeschwelle oben ist erreicht. Offen bleiben zwei bewusst zurückgestellte
-> Stücke: die Zählung je eingehendem Flow aus AP4 — eine Spezifikationsangleichung
-> mit eigenem Risiko, kein Bugfix — und die Vereinheitlichung der Budgets aus F16.
+> Freigabeschwelle oben ist erreicht. Die zurückgestellte Zählung je eingehendem
+> Flow aus AP4 ist nachgezogen; offen bleibt allein die Vereinheitlichung der
+> Budgets aus F16.
 
 ---
 
@@ -742,7 +757,7 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F03 | P1 | Korruption in abgeschlossenen Segmenten still übersprungen | AP3 | `TestAuditCorruptionInSealedSegmentMustFail` | behoben |
 | F04 | P1 | Nach Kompaktierung erfolgreicher, unvollständiger Recovery | AP3 | `TestAuditCompactedWALMissingStateFailsClosed` | behoben |
 | F05 | P1 | Vollsicherung lässt zentrale Stores aus | AP3 | `TestAuditFullSnapshotContainsPersistentStores` | behoben |
-| F06 | P1 | Joins vermischen Multi-Instance-Scopes | AP4 | `TestAuditParallelJoinSeparatesMultiInstanceScopes` | Schritt 1 behoben |
+| F06 | P1 | Joins vermischen Multi-Instance-Scopes | AP4 | `TestAuditParallelJoinSeparatesMultiInstanceScopes`, `TestTwoTokensOnOneFlowDoNotSatisfyTheOther` | behoben |
 | F07 | P1 | Abbruch übersieht Kind aus demselben Batch | AP1 | `TestAuditCancelSeesChildCreatedInSameBatch` | behoben |
 | F08 | P1 | XOR ohne Route verliert Token ohne Incident | AP4 | `TestAuditXORNoMatchRaisesIncident` | behoben |
 | F09 | P1 | Deployment umgeht Projektmitgliedschaft | AP1 | `TestAuditRawDeployRequiresProjectMembership` | behoben |

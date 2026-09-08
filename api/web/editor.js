@@ -43,6 +43,11 @@ import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
 import { fmtCount } from "./numfmt.js";
+// What a Worker Type needs before a task of it can run — the provider-side steps, the
+// shape of its vault secret, and the handbook card that says it at length. The panel is
+// where that question is asked (ADR-0289), so the answer
+// is rendered beside the fields rather than left in another tab.
+import { workerTypeDocHTML } from "./workertypedocs.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -4226,7 +4231,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Worker type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "workerType")}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "workerType")}${workerTypeDocHTML(cur.id)}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -4268,7 +4273,8 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "workerType") + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "workerType") +
+    workerTypeDocHTML(cur.id) + stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -6327,6 +6333,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
+            // The same setup block the Worker Type panel carries: a temis Worker is
+            // configured exactly like the rest, and this is the other place it is chosen.
+            html += workerTypeDocHTML("temis");
             html += `<label class="field"><span>Worker</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>

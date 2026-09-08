@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Every worker type now tells you how to set it up",
+        "de": "Jeder Worker-Typ erklärt jetzt selbst, wie er eingerichtet wird"
+      },
+      "summary": {
+        "en": "The hardest part of connecting Jira, Google Sheets or a mail server was never the diagram — it was the half-dozen steps at the provider that nobody mentions: which token to create, which permission to grant, which spreadsheet to share. Pick a worker type on a service task and that is now written beside its fields: whether it needs a configured worker and a credential at all, the steps to get there in order, the mistake this type is usually reported with, and a link straight into the matching chapter of the handbook this server serves itself. The same block greets you on the Console's New worker form, which is where you are actually standing when you configure one.",
+        "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
+      },
+      "link": {
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
+      },
+      "tags": [
+        "Modeler",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Configure a worker",
+          "de": "Worker konfigurieren"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
       "version": "Unreleased",
       "date": null,
@@ -375,48 +404,6 @@
         "Modeler",
         "Validation"
       ]
-    },
-    {
-      "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Build your own folders in the task inbox",
-        "de": "Eigene Ordner im Aufgaben-Posteingang"
-      },
-      "summary": {
-        "en": "The inbox had four fixed folders, and the question you actually arrive with in the morning — what is open on customer enquiries? — was retyped into the search box every day. Now you can save it as a folder. You pick the conditions from listboxes rather than typing them: the processes come from what is deployed, the task names and groups from the models, the people from the directory, so a folder cannot be built around something that does not exist. Underneath, Atlas shows the expression your choices make and how many tasks match right now. Counting happens across every open task, not just the page on screen, and a folder can be shared with your team — where only its owner can change it.",
-        "de": "Der Posteingang hatte vier feste Ordner, und die Frage, mit der man morgens tatsächlich anfängt — was ist bei den Kundenanfragen offen? — wurde jeden Tag neu ins Suchfeld getippt. Jetzt lässt sie sich als Ordner speichern. Die Bedingungen wählen Sie aus Listen statt sie zu tippen: die Prozesse kommen aus dem, was deployt ist, die Aufgabennamen und Gruppen aus den Modellen, die Personen aus dem Verzeichnis — ein Ordner kann also gar nicht auf etwas gebaut werden, das es nicht gibt. Darunter zeigt Atlas den Ausdruck, der aus Ihrer Auswahl entsteht, und wie viele Aufgaben gerade passen. Gezählt wird über alle offenen Aufgaben, nicht nur über die Seite auf dem Bildschirm, und ein Ordner lässt sich mit dem Team teilen — ändern darf ihn nur, wem er gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Tasks › Inbox and click ＋ Neuer Ordner in the sidebar.",
-          "Give the folder a name, then pick a field, an operator and a value — for example Prozess · ist · your process.",
-          "Watch the match count and the generated expression below the conditions while you change them.",
-          "Save. The folder appears in the sidebar with its own count, and you can reopen it later in the same listboxes."
-        ],
-        "de": [
-          "Öffnen Sie Tasks › Inbox und klicken Sie in der Seitenleiste auf ＋ Neuer Ordner.",
-          "Geben Sie dem Ordner einen Namen und wählen Sie Feld, Operator und Wert — zum Beispiel Prozess · ist · Ihr Prozess.",
-          "Beobachten Sie beim Ändern die Trefferzahl und den erzeugten Ausdruck unter den Bedingungen.",
-          "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the inbox",
-          "de": "Zum Posteingang"
-        },
-        "route": "#/tasks"
-      }
     }
   ]
 }

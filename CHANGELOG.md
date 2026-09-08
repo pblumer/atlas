@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every Worker Type says how it is set up, where it is chosen.** Picking a Worker
+  Type on a service task now shows, beside its fields, what has to exist before the
+  task can run — whether it needs a configured Worker and a credential at all, the
+  ordered steps to get there (create the Google service account key, grant admin
+  consent to the Entra app registration, invite the Discord bot to the server), the
+  failure that type is actually reported with, and a link into this server's own
+  handbook for the long version. The same block appears on the Console's *New worker*
+  form and in the worker dialog, which is where an operator stands, and on the business
+  rule task's temis binding. A type that needs nothing says so, instead of leaving the
+  absence of a dialog to be read as a missing step. The handbook gained a runbook for
+  the types that had none — Discord, the AI worker, clio (split from temis), SCIM, SOAP,
+  directory files, the plain job worker and user provisioning — plus per-product anchors
+  for the three SQL types, and a Go guard now refuses a Worker Type that ships without
+  its setup or a link into a handbook card that no longer exists
+  (ADR-0289).
+
 - **MIM and MIMWAL workflows import as what they mean, not as what their elements
   say.** The MIM importer was written against XOML as it is documented; run against
   a real 25-activity MIMWAL workflow it produced a model that misrepresented the

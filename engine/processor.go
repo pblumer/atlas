@@ -110,7 +110,13 @@ type Processor struct {
 	// across decisions so an OR split allocates nothing per token (invariant I1). It
 	// is valid only between a routing decision and the caller taking those flows.
 	routeBuf []int32
-	fatalErr error
+	// arrivalBuf and joinSetBuf hold a join's waiting tokens and the subset one
+	// firing consumes. Two buffers rather than one because an inclusive join re-scans
+	// the node while still holding the set it is consuming (ADR-0290).
+	// Reused across joins, like the buffers above.
+	arrivalBuf []Arrival
+	joinSetBuf []Arrival
+	fatalErr   error
 
 	// tokenSteps counts, per token, how many element activations it has driven in the
 	// current run — the execution budget (ADR-0272). It is

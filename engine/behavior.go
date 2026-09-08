@@ -3252,26 +3252,45 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // replays deterministically without re-counting (invariants I4/I6).
 type parallelGatewayBehavior struct{}
 
+// consumeSet completes the tokens one join firing takes — exactly the set chosen by
+// OldestPerFlow, one per incoming flow, leaving anything else on the node alone. It
+// returns the token the continuation descends from: the one consumed on the flow the
+// triggering arrival came in on, which is either that arrival or the older token it
+// was queued behind. Falls back to fallback when that flow is not in the set, which
+// is how an inclusive join's later firings find a lineage at all.
+func consumeSet(c *ProcessingContext, set []Arrival, arrivedOn int32, fallback uint64) uint64 {
+	parent := fallback
+	for _, a := range set {
+		if v := c.GetElementInstance(a.Key); v != nil {
+			if a.Flow == arrivedOn {
+				parent = v.TokenID
+			}
+			c.AppendElementEvent(a.Key, model.IntentCompleted, *v)
+		}
+	}
+	return parent
+}
+
 func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	node := c.process(ei.ProcessDefKey).Node(ei.ElementId)
 	if node.IncomingCount <= 1 {
 		c.AppendElementCommand(key, model.IntentCompleting, *ei) // fork: fire now
 		return
 	}
-	// Join: fire only when a token sits on every incoming flow. Until then this
+	// Join: fire only when a token sits on *every incoming flow* — BPMN 2.0.2 §13.4,
+	// and a different question from how many tokens are on the node. Until then this
 	// arrival waits here (stays Activated).
-	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId)
-	if int32(len(arrived)) < node.IncomingCount {
+	//
+	// A set is completed only by an arrival, so checking once per arrival is both
+	// sufficient and complete: no set can become full while nothing is arriving.
+	set := c.OldestPerFlow(c.ArrivalsOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId))
+	if int32(len(set)) < node.IncomingCount {
 		return
 	}
-	// All arrived: consume every waiting token, then fire the outgoing flow(s) once.
-	for _, k := range arrived {
-		if a := c.GetElementInstance(k); a != nil {
-			c.AppendElementEvent(k, model.IntentCompleted, *a)
-		}
-	}
+	// One token from each flow is consumed. Anything else waiting here belongs to the
+	// next firing and stays put (ADR-0290).
 	continuation := *ei
-	continuation.ParentTokenID = ei.TokenID
+	continuation.ParentTokenID = consumeSet(c, set, ei.SourceFlowId, ei.TokenID)
 	continuation.TokenID = 0
 	takeOutgoingFlows(c, &continuation)
 }
@@ -3302,17 +3321,36 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 	}
 	// Route before consuming: a join that cannot decide must leave every arrival
 	// parked, or the tokens are gone and the incident has nothing to resume (F08).
+	// Once, not per firing: the conditions read variables nothing below changes.
 	flows, fork, ok := inclusiveRouteOrPark(c, key, ei)
 	if !ok {
 		return
 	}
-	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId) {
-		if a := c.GetElementInstance(k); a != nil {
-			c.AppendElementEvent(k, model.IntentCompleted, *a)
+	// One token per occupied incoming flow, per firing — §13.4 again, with the
+	// inclusive gateway's "the flows that have one" in place of the parallel one's
+	// "every flow". Repeated until nothing is left, because nothing more can arrive:
+	// a surplus set that waited here would wait for an arrival that will never come,
+	// where a parallel join's surplus is right to wait (ADR-0290).
+	//
+	// Every firing consumes at least one waiting token and nothing arrives while this
+	// runs — an activation is a queued command, not an immediate one — so the tokens
+	// waiting at the start bound the number of firings. The loop re-scans; it cannot
+	// run on.
+	for range len(c.ArrivalsOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId)) {
+		set := c.OldestPerFlow(c.ArrivalsOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId))
+		if len(set) == 0 {
+			return
 		}
-	}
-	for _, flowID := range flows {
-		activateElement(c, ei, flowID, fork)
+		// A firing after the first consumes tokens this arrival is not among, so the
+		// continuation is a fresh token descending from the one consumed on its flow —
+		// as at the parallel join, and unlike the old code, which carried this arrival's
+		// own token through however many firings it triggered.
+		continuation := *ei
+		continuation.ParentTokenID = consumeSet(c, set, ei.SourceFlowId, ei.TokenID)
+		continuation.TokenID = 0
+		for _, flowID := range flows {
+			activateElement(c, &continuation, flowID, fork)
+		}
 	}
 }
 
