@@ -94,12 +94,14 @@ type Result struct {
 //	Notification/Email → serviceTask  (native, type mim-notification)
 //	FunctionEvaluator → serviceTask   (preserved, type mim-function)
 //	PowerShell*      → serviceTask    (preserved, type mim-powershell)
+//	*Unique*         → serviceTask    (preserved, type mim-uniquevalue)
 //	Create/Update/Delete/Group/Resource → serviceTask (preserved, type mim-resource)
 //	anything else    → task           (manual-review) with the XOML preserved
 //
 // A leaf carrying a MIMWAL ActivityExecutionCondition is additionally wrapped in
 // an exclusive split/merge, because MIMWAL expresses conditionality per activity
-// rather than as control flow — see emitGuard.
+// rather than as control flow — see emitGuard. One carrying a MIMWAL Iteration
+// becomes a sequential multi-instance activity — see emitMultiInstance.
 //
 // name, when non-empty, overrides the process name derived from the workflow.
 func Convert(r io.Reader, name string) (Result, error) {
@@ -177,6 +179,7 @@ type bnode struct {
 	def     string // default outgoing flow id (gateways only)
 	jobType string // serviceTask job type
 	doc     string // documentation note
+	iterate string // MIM Iteration expression: the activity is multi-instance
 	rawName string // originating XOML activity local name
 	raw     string // original XOML markup, preserved verbatim
 }
@@ -357,10 +360,17 @@ func (b *builder) setDefault(gwID, flowID string) {
 func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	kind, jobType, status, detail := classifyLeaf(n.local())
 	guard, guarded := executionCondition(n)
+	iter, iterated := iteration(n)
 
 	var split, merge string
 	if guarded {
 		split, merge = b.addGuardGateways(guard)
+	}
+	doc := detail
+	if iterated {
+		// One line, not two: a newline in character data survives the round trip
+		// as &#xA;, which is correct XML and unreadable in the file.
+		doc += " — MIM Iteration: " + iter
 	}
 	id := b.addNode(bnode{
 		kind:    kind,
@@ -368,14 +378,32 @@ func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 		jobType: jobType,
 		rawName: n.local(),
 		raw:     n.raw(),
-		doc:     detail,
+		doc:     doc,
+		iterate: iter,
 	})
 	b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: status, Detail: detail})
+	if iterated {
+		b.note(Note{NodeID: id, Activity: n.local(), Kind: "multiInstanceLoopCharacteristics", Status: StatusManualReview,
+			Detail: "MIM Iteration not translated to FEEL; the placeholder collection runs the activity once: " + iter})
+	}
 	if !guarded {
 		return id, id
 	}
 	b.emitGuard(n, split, merge, id, guard)
 	return split, merge
+}
+
+// iteration returns a MIMWAL activity's Iteration expression, if it carries one.
+// MIMWAL runs such an activity once per value of the expression — SplitString of
+// a delimited attribute, typically — which is a BPMN multi-instance activity, not
+// the single step the element alone suggests.
+func iteration(n xnode) (string, bool) {
+	v, ok := n.attr("Iteration")
+	if !ok {
+		return "", false
+	}
+	v = strings.TrimSpace(v)
+	return v, v != ""
 }
 
 // executionCondition returns an activity's guard, if it carries one. MIMWAL
@@ -444,6 +472,11 @@ func classifyLeaf(local string) (kind, jobType string, status Status, detail str
 		return "serviceTask", "mim-function", StatusPreserved, "FunctionEvaluator expression kept in atlas:mimSource; re-express as FEEL"
 	case strings.Contains(l, "powershell"):
 		return "serviceTask", "mim-powershell", StatusPreserved, "PowerShell activity kept in atlas:mimSource; wire a PowerShell worker"
+	case strings.Contains(l, "unique"):
+		// MIMWAL's GenerateUniqueValue: it evaluates value expressions in order and
+		// publishes the first that no existing resource and no LDAP object claims.
+		return "serviceTask", "mim-uniquevalue", StatusPreserved,
+			"MIMWAL unique-value generation kept in atlas:mimSource; wire a worker for its value expressions and conflict filter"
 	case strings.Contains(l, "resource"), strings.Contains(l, "create"), strings.Contains(l, "update"),
 		strings.Contains(l, "delete"), strings.Contains(l, "group"), strings.Contains(l, "provision"):
 		return "serviceTask", "mim-resource", StatusPreserved, "resource operation kept in atlas:mimSource; map to a target-system worker"

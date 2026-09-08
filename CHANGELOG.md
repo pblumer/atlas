@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A MIMWAL iteration becomes a multi-instance activity.** MIMWAL runs an
+  activity once per value of its `Iteration` expression — `SplitString` of a
+  delimited attribute, typically — which the importer modelled as a single step,
+  losing the loop entirely. Such an activity now carries a sequential
+  `multiInstanceLoopCharacteristics`. As with a guard, the expression is not
+  translated: the input collection is the placeholder `=[1]`, so the activity
+  runs exactly once as it did before, and the MIM expression is written to the
+  activity's documentation and flagged `manual-review`.
+
+- **MIMWAL's `GenerateUniqueValue` is recognised**, mapping to a
+  `mim-uniquevalue` service task rather than falling through to an unrecognised
+  plain-task placeholder. Its value expressions, LDAP queries, conflict filter
+  and publication target stay in `atlas:mimSource` for the worker that will
+  implement them.
+
 - **A MIMWAL guard becomes control flow.** The MIMWAL activity library does not
   express conditionality as `IfElseActivity`: an `UpdateResources` or
   `GenerateUniqueValue` runs only when its `ActivityExecutionCondition` holds, so

@@ -7,6 +7,6 @@
       </ns3:Hashtable>
     </ns1:UpdateResources.QueriesTable>
   </ns1:UpdateResources>
-  <ns1:UpdateResources x:Name="actionActivity3" ActivityDisplayName="Immer ausführen" ActivityExecutionCondition="" ActorType="Service" />
+  <ns1:UpdateResources x:Name="actionActivity3" ActivityDisplayName="Je Namensmuster ausführen" ActivityExecutionCondition="" Iteration="SplitString([//Target/AssetType/PatternAccountName],&quot;;&quot;)" ActorType="Service" />
   <ns1:GenerateUniqueValue x:Name="actionActivity2" ActivityDisplayName="Eindeutigen Kontonamen erzeugen" PublicationTarget="[//WorkflowData/AccountName]" ConflictFilter="/*[(AccountName = &apos;[//Value]&apos;)]" UniquenessSeed="1" QueryLdap="True" />
 </ns0:SequentialWorkflow>

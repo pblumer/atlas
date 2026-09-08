@@ -79,6 +79,7 @@ func (b *builder) emitNode(s *strings.Builder, n bnode) {
 			taskDef = fmt.Sprintf("        <zeebe:taskDefinition type=%q/>\n", attr(n.jobType))
 		}
 		emitExtensions(s, n, taskDef)
+		emitMultiInstance(s, n)
 		fmt.Fprintf(s, "    </%s>\n", n.kind)
 	}
 }
@@ -105,6 +106,34 @@ func emitExtensions(s *strings.Builder, n bnode, lead string) {
 		fmt.Fprintf(s, "        <atlas:mimSource activity=%q>%s</atlas:mimSource>\n", attr(n.rawName), preserved(n.raw))
 	}
 	s.WriteString("      </extensionElements>\n")
+}
+
+// miPlaceholder is the input collection of an activity whose MIM Iteration was
+// not translated: a one-element list, so the activity runs exactly once — what it
+// did before the iteration was modelled. The MIM expression itself
+// (SplitString of a delimited attribute, typically) reads MIM data through
+// references FEEL has no counterpart for, so translating it would risk a model
+// that looks right and is not; the original is on the activity's documentation
+// and flagged in the Report. mimValue names the current value, standing in for
+// MIM's [//Value].
+const (
+	miPlaceholder = "=[1]"
+	miElement     = "mimValue"
+)
+
+// emitMultiInstance writes the loop marker of an activity MIM iterates. It is
+// sequential because MIMWAL walks the values in order, and it comes after
+// <extensionElements> because that is where BPMN puts loopCharacteristics.
+func emitMultiInstance(s *strings.Builder, n bnode) {
+	if n.iterate == "" {
+		return
+	}
+	s.WriteString(`      <multiInstanceLoopCharacteristics isSequential="true">` + "\n")
+	s.WriteString("        <extensionElements>\n")
+	fmt.Fprintf(s, "          <zeebe:loopCharacteristics inputCollection=%q inputElement=%q/>\n",
+		attr(miPlaceholder), attr(miElement))
+	s.WriteString("        </extensionElements>\n")
+	s.WriteString("      </multiInstanceLoopCharacteristics>\n")
 }
 
 func emitFlow(s *strings.Builder, f bflow) {

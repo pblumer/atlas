@@ -32,9 +32,10 @@
 // Conditionality is part of that structure even where MIM does not express it as
 // control flow: an activity of the MIMWAL library runs only when its
 // ActivityExecutionCondition holds, so such an activity is wrapped in an
-// exclusive split with a bypass. The guard expression itself is not translated —
-// see emitGuard for why — but it is documented on the split and flagged in the
-// Report.
+// exclusive split with a bypass, and one carrying an Iteration becomes a
+// sequential multi-instance activity. Neither expression is translated — see
+// emitGuard and miPlaceholder for why — but both are documented on the model and
+// flagged in the Report.
 //
 // The conversion reproduces the workflow's *structure and intent*, not MIM's
 // runtime semantics: the authentication/authorization/action request model, the

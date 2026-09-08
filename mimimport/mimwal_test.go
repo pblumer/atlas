@@ -67,6 +67,7 @@ func TestConvertMIMWALWorkflow(t *testing.T) {
 	// Names come from ActivityDisplayName, not from the WF designer id in x:Name.
 	for _, want := range []string{
 		`name="Abhängige Objekte abfragen"`,
+		`name="Je Namensmuster ausführen"`,
 		`name="Eindeutigen Kontonamen erzeugen"`,
 	} {
 		if !strings.Contains(bpmn, want) {
@@ -297,4 +298,101 @@ func TestLayoutBypassIsForward(t *testing.T) {
 	}
 	validate(t, res.BPMN)
 	forwardEdges(t, res.BPMN)
+}
+
+// TestIterationBecomesMultiInstance covers the MIMWAL Iteration: an activity MIM
+// runs once per value of a delimited attribute is a multi-instance activity, not
+// the single step the element alone suggests.
+func TestIterationBecomesMultiInstance(t *testing.T) {
+	src, err := os.ReadFile("testdata/mimwal-workflow.xoml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(bytes.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	bpmn := string(res.BPMN)
+
+	// One iterated activity of three, walked in order.
+	if got := strings.Count(bpmn, "<multiInstanceLoopCharacteristics"); got != 1 {
+		t.Errorf("want one multi-instance activity, got %d:\n%s", got, bpmn)
+	}
+	for _, want := range []string{
+		`<multiInstanceLoopCharacteristics isSequential="true">`,
+		`<zeebe:loopCharacteristics inputCollection="=[1]" inputElement="mimValue"/>`,
+	} {
+		if !strings.Contains(bpmn, want) {
+			t.Errorf("generated BPMN is missing %s\n%s", want, bpmn)
+		}
+	}
+	// The untranslated expression stays readable on the activity and flagged.
+	if !strings.Contains(bpmn, "MIM Iteration: SplitString([//Target/AssetType/PatternAccountName]") {
+		t.Errorf("the activity should document its MIM Iteration:\n%s", bpmn)
+	}
+	var flagged int
+	for _, n := range res.Report.Notes {
+		if n.Kind == "multiInstanceLoopCharacteristics" && n.Status == StatusManualReview &&
+			strings.Contains(n.Detail, "SplitString") {
+			flagged++
+		}
+	}
+	if flagged != 1 {
+		t.Errorf("want the one iteration flagged with its expression, got %d", flagged)
+	}
+}
+
+// TestGuardAndIterationCombine covers an activity carrying both, which is how the
+// MIMWAL workflows that iterate a pattern are written: the guard wraps the
+// activity, the loop marker sits on it.
+func TestGuardAndIterationCombine(t *testing.T) {
+	res, err := Convert(strings.NewReader(
+		`<SequentialWorkflow><ns1:UpdateResources ActivityDisplayName="Beides"`+
+			` ActivityExecutionCondition="Eq([//Target/X],True)"`+
+			` Iteration="SplitString([//Target/P],&quot;;&quot;)"/></SequentialWorkflow>`), "GI")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	forwardEdges(t, res.BPMN)
+	bpmn := string(res.BPMN)
+	if got := strings.Count(bpmn, "<exclusiveGateway"); got != 2 {
+		t.Errorf("the guard still needs its split and merge, got %d gateways:\n%s", got, bpmn)
+	}
+	if !strings.Contains(bpmn, "<multiInstanceLoopCharacteristics") {
+		t.Errorf("the loop marker must survive the guard wrapper:\n%s", bpmn)
+	}
+}
+
+// TestEmptyIterationIsNotALoop guards the empty-attribute case: MIMWAL writes
+// Iteration="" on an activity that runs once.
+func TestEmptyIterationIsNotALoop(t *testing.T) {
+	res, err := Convert(strings.NewReader(
+		`<SequentialWorkflow><UpdateResources Iteration="" ActivityDisplayName="A"/></SequentialWorkflow>`), "I")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	if strings.Contains(string(res.BPMN), "multiInstanceLoopCharacteristics") {
+		t.Errorf("an empty Iteration must not produce a loop marker:\n%s", res.BPMN)
+	}
+}
+
+// TestGenerateUniqueValueIsClassified covers MIMWAL's other core activity, which
+// used to fall through to an unrecognised plain-task placeholder.
+func TestGenerateUniqueValueIsClassified(t *testing.T) {
+	res, err := Convert(strings.NewReader(
+		`<SequentialWorkflow><ns1:GenerateUniqueValue ActivityDisplayName="Kontoname"`+
+			` PublicationTarget="[//WorkflowData/AccountName]"/></SequentialWorkflow>`), "U")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	if !strings.Contains(string(res.BPMN), `type="mim-uniquevalue"`) {
+		t.Errorf("GenerateUniqueValue should map to a mim-uniquevalue service task:\n%s", res.BPMN)
+	}
+	if res.Report.Count(StatusManualReview) != 0 || res.Report.Count(StatusPreserved) != 1 {
+		t.Errorf("it is a recognised activity, not a placeholder: %s", res.Report.String())
+	}
 }
