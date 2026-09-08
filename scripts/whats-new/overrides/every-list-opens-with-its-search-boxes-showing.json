@@ -1,0 +1,38 @@
+{
+  "tags": [
+    "Console",
+    "Modeler",
+    "Operations"
+  ],
+  "title": {
+    "en": "Every list opens with its search boxes showing",
+    "de": "Jede Liste zeigt ihre Suchfelder von Anfang an"
+  },
+  "summary": {
+    "en": "Every table in Atlas can be searched column by column: a row of boxes under the header, one per column, each narrowing the list to the rows whose cell contains what you typed — and several at once when you fill in more than one. That row existed before, but it was collapsed behind a small funnel icon at the right end of the header, so what you saw when a list opened was a table with no visible way to search it. The boxes are now on screen from the moment the list is, on every list. The funnel is still there and now does the opposite: it takes the row away when you would rather have the vertical space, and a list remembers that choice for the next time you open it, exactly as it already remembers which column you sorted by. Where a list had grown its own search field above the table — the Modeler's application detail and the process list under Operations › Instances — that field is gone: the Name column's box does the same job and a little more, since it also searches the id printed under the name. The Tasks inbox and the Repository are not tables and keep their own search fields.",
+    "de": "Jede Tabelle in Atlas lässt sich spaltenweise durchsuchen: eine Zeile mit Feldern unter der Kopfzeile, eines pro Spalte, das die Liste auf die Zeilen einschränkt, deren Zelle den eingegebenen Text enthält — und mehrere Spalten gleichzeitig, wenn Sie mehrere Felder ausfüllen. Diese Zeile gab es schon, sie war aber hinter einem kleinen Trichtersymbol am rechten Rand der Kopfzeile eingeklappt; sichtbar war beim Öffnen einer Liste also eine Tabelle ohne erkennbare Suche. Die Felder stehen jetzt von Anfang an da, in jeder Liste. Das Trichtersymbol bleibt und macht nun das Gegenteil: Es blendet die Zeile aus, wenn Ihnen die Höhe wichtiger ist, und eine Liste merkt sich diese Entscheidung bis zum nächsten Öffnen — genauso, wie sie sich schon merkt, nach welcher Spalte Sie sortiert haben. Wo eine Liste ein eigenes Suchfeld über der Tabelle hatte — die Anwendungsansicht im Modeler und die Prozessliste unter Operations › Instances —, entfällt dieses Feld: Das Feld der Spalte Name leistet dasselbe und etwas mehr, weil es auch die ID unter dem Namen durchsucht. Der Aufgaben-Eingang und das Repository sind keine Tabellen und behalten ihre eigenen Suchfelder."
+  },
+  "tutorial": {
+    "en": [
+      "Open Modeler: the Applications list shows a box under each of Name, Artifacts and Last changed.",
+      "Type a few letters into the Name box — the list narrows as you type, and an application whose name does not contain them disappears.",
+      "Fill in a second box as well: a row has to match both, so Name plus Last changed finds what one column alone cannot.",
+      "Click a column header to sort by it; the arrow shows the direction, and clicking again reverses it.",
+      "Click the funnel at the right end of the header to put the boxes away. Navigate elsewhere and come back — that list is still without them, and the funnel brings them back."
+    ],
+    "de": [
+      "Öffnen Sie den Modeler: Die Liste der Anwendungen zeigt je ein Feld unter Name, Artifacts und Last changed.",
+      "Tippen Sie einige Buchstaben in das Feld unter Name — die Liste wird beim Tippen enger, Anwendungen ohne diese Zeichenfolge verschwinden.",
+      "Füllen Sie zusätzlich ein zweites Feld aus: Eine Zeile muss beide Bedingungen erfüllen, Name plus Last changed findet also, was eine Spalte allein nicht findet.",
+      "Klicken Sie auf eine Spaltenüberschrift, um danach zu sortieren; der Pfeil zeigt die Richtung, ein weiterer Klick dreht sie um.",
+      "Klicken Sie auf den Trichter am rechten Rand der Kopfzeile, um die Felder auszublenden. Wechseln Sie die Ansicht und kommen Sie zurück — die Liste ist weiterhin ohne Felder, der Trichter holt sie zurück."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
