@@ -24,11 +24,11 @@ sich selbst schon gestellt hat, und sieht neunmal, dass es eine Antwort gibt.
 |-----|------|-------|-----------|
 | I — Die Lage | 0:00–1:00 | 1 | Was wäre, wenn dieser Zwang Ihre Gelegenheit wäre? |
 | II — Der Umzug | 1:00–2:20 | 2 | Was wäre, wenn Sie Ihre MIM-Workflows nicht neu schreiben müssten? |
-| | 2:20–3:20 | 3 | Was wäre, wenn Ihre Identity-Logik lesbar wäre? |
-| | 3:20–4:30 | 4 | Was wäre, wenn jede Identität eine Akte hätte? |
+| | 2:20–3:10 | 3 | Was wäre, wenn Ihre Identity-Logik lesbar wäre? |
+| | 3:10–4:30 | 4 | Was wäre, wenn jede Identität eine Akte hätte? |
 | | 4:30–5:40 | 5 | Was wäre, wenn die Revision fragt, warum dieses Konto Zugriff hat? |
-| | 5:40–6:20 | 6 | Was wäre, wenn Ihre Plattform aus einer Datei bestünde? |
-| III — Der Hebel | 6:20–7:20 | 7 | Was wäre, wenn Identity nur der erste Prozess wäre? |
+| | 5:40–6:10 | 6 | Was wäre, wenn Ihre Plattform aus einer Datei bestünde? |
+| III — Der Hebel | 6:10–7:20 | 7 | Was wäre, wenn Identity nur der erste Prozess wäre? |
 | | 7:20–8:40 | 8 | Was wäre, wenn KI die Arbeit macht — und Sie trotzdem geradestehen können? |
 | Schluss | 8:40–10:00 | 9 | Was Atlas nicht ist, und was der nächste Schritt kostet |
 
@@ -63,6 +63,11 @@ Zusätzlich zur allgemeinen Vorbereitung (siehe
   Vorgänge.
 - **Eine Berechtigungs-Entscheidungstabelle** offen haben, die als Gegenstück zu
   MIM-Sets und -MPRs dient.
+- **Die Datenansicht vorbereiten** (Data → Instances): einen Vorgang aufgerufen haben,
+  dessen Objekte etwas hergeben. Und einmal in Data → Model geschaut haben, damit man
+  den Satz „so ist ein Mitarbeiter bei Ihnen definiert" mit einem Bild belegen kann.
+- **Panorama einmal aufgebaut** haben (Starmap). Wenn die Landschaft dünn aussieht, den
+  Beat in Szene 7 weglassen — ein leerer Sternenhimmel schadet mehr, als er nützt.
 - **Die Grenzen kennen** (Szene 9). Wer hier ins Schwimmen kommt, verliert den ganzen
   Auftritt. Die Liste steht in [`docs/comparisons/mim.md`](../comparisons/mim.md).
 
@@ -130,7 +135,7 @@ messbar statt danach.
 
 ---
 
-#### Szene 3 · 2:20–3:20 · Modeler, Diagramm und Entscheidungstabelle
+#### Szene 3 · 2:20–3:10 · Modeler, Diagramm und Entscheidungstabelle
 
 > „Halten wir kurz fest, was hier gerade passiert ist. In MIM steckt Ihre Fachlogik an
 > vier Orten: in Workflows, in Sets, in Management Policy Rules und in Sync-Regeln.
@@ -154,7 +159,7 @@ eigentliche Gewinn der Ablösung.
 
 ---
 
-#### Szene 4 · 3:20–4:30 · Operations Live-Ansicht → Tasks
+#### Szene 4 · 3:10–4:30 · Operations Live-Ansicht → Tasks → Data
 
 > „Jetzt der Betrieb. In MIM laufen Ihre Run-Profile nach Zeitplan. Zwischen zwei Läufen
 > ist der Zustand einer Identität eine Vermutung, und wenn etwas hängt, sucht jemand in
@@ -176,8 +181,24 @@ eigentliche Gewinn der Ablösung.
 > **Was wäre, wenn jede Identität eine Akte hätte statt eines Zustands in einer
 > Datenbank?**"
 
-**Botschaft:** Der Zustand jedes Eintritts ist jederzeit sichtbar, statt zwischen zwei
-Läufen unbekannt zu sein.
+*[In die Datenansicht wechseln, Data → Instances, den Vorgang von vorhin.]*
+
+> „Und weil Sie gleich fragen werden, wo denn die Daten bleiben: Das hier sind die
+> Objekte, die dieser Vorgang trägt — die Identität, die bestellten Dienste, jeweils mit
+> ihrem Zustand und ihrer Historie. Wer welchen Wert wann geschrieben hat, steht dabei.
+>
+> Und eine Ebene darüber —"
+
+*[Kurz auf Data → Model wechseln, das Klassendiagramm zeigen, dann wieder zurück.]*
+
+> „— steht, was ein *Mitarbeiter* in Ihrem Haus überhaupt ist: die Felder, die Beziehungen,
+> einmal definiert und von allen Prozessen geteilt. Das ist der Unterschied zwischen
+> Prozessen, die zufällig ähnliche Variablen haben, und einem Haus mit einem gemeinsamen
+> Begriff von Identität."
+
+**Botschaft:** Der Zustand jedes Eintritts ist jederzeit sichtbar, und die Daten dahinter
+sind typisiert und nachvollziehbar — nicht nur ein Beutel Variablen.
+**Regie:** Zwei Klicks, nicht mehr. Die Datenansicht ist hier ein Beleg, kein Thema.
 
 ---
 
@@ -205,7 +226,7 @@ Läufen unbekannt zu sein.
 
 ---
 
-#### Szene 6 · 5:40–6:20 · Console-Dashboard
+#### Szene 6 · 5:40–6:10 · Console-Dashboard
 
 > „Zwei Zahlen zum Betrieb. Erstens: Das hier sind rund fünfzigtausend Vorgänge, die
 > gerade gleichzeitig laufen.
@@ -228,7 +249,7 @@ Kopf, und das wirkt stärker.
 
 ### Akt III — Der Hebel
 
-#### Szene 7 · 6:20–7:20 · Applikationsübersicht
+#### Szene 7 · 6:10–7:20 · Applikationsübersicht → Panorama
 
 > „Und jetzt kommt der Teil, wegen dem ich das Gespräch überhaupt führen wollte.
 >
@@ -247,12 +268,27 @@ Kopf, und das wirkt stärker.
 > danach ist Grenzkosten.
 >
 > Und weil jede Anbindung zuerst als Attrappe laufen kann, beginnt ein neuer Prozess nicht
-> mit einem Integrationsprojekt, sondern mit einem Diagramm.
+> mit einem Integrationsprojekt, sondern mit einem Diagramm."
+
+*[Auf Panorama wechseln, die Landschaftssicht zeigen.]*
+
+> „Und das hier ist die Sicht, die einen Architekten interessiert: Ihre Landschaft —
+> Applikationen, Prozesse, Entscheidungen, Anbindungen, Zielsysteme. Der Punkt daran ist,
+> **dass niemand sie gezeichnet hat.** Sie wird aus dem abgeleitet, was tatsächlich
+> installiert ist und läuft.
 >
-> **Was wäre, wenn Identity nur der erste Prozess wäre?**"
+> Damit lässt sich die Frage beantworten, die in Ihrem Umfeld sonst ein Workshop ist:
+> *Wenn ich diesen Verzeichnisdienst abschalte — was steht still?* Sie klicken den Knoten
+> an und sehen, was daran hängt.
+>
+> **Was wäre, wenn Identity nur der erste Prozess wäre — und Ihre Architekturdokumentation
+> nicht mehr veralten könnte?**"
 
 **Botschaft:** Aus einer Zwangsablösung wird eine Plattformentscheidung mit fallenden
-Grenzkosten.
+Grenzkosten — und die Landschaftsdokumentation entsteht als Nebenprodukt statt als Projekt.
+**Regie:** Der Panorama-Beat ist der stärkste Moment für einen Architekten und der
+schwächste für einen reinen Kaufmann. Publikum vorher einschätzen; im Zweifel weglassen
+und die zwanzig Sekunden Szene 8 geben.
 
 ---
 
@@ -294,11 +330,15 @@ fertiges Produkt — sonst kippt die Glaubwürdigkeit, die Szene 9 gleich brauch
 
 > „Und jetzt sage ich Ihnen, was Atlas nicht ist, denn sonst wäre alles davor nichts wert.
 >
-> **Atlas ersetzt den Synchronisationskern von MIM nicht.** MIM hat einen Metaverse,
-> Connector Spaces, deklarative Attributflüsse mit Präzedenz und Join-Regeln. Das ist eine
-> eigene Produktkategorie, und Atlas hat davon nichts. Wer heute darauf angewiesen ist,
-> braucht dafür weiterhin eine Lösung — Entra ID Governance, ein IGA-Produkt, oder was
-> auch immer Ihre Analyse ergibt.
+> **Atlas ersetzt den Synchronisationskern von MIM nicht.** Und hier muss ich genau sein,
+> weil ich Ihnen vorhin ein Datenmodell gezeigt habe: Atlas kennt Typen und führt zu jedem
+> Vorgang seine Objekte mit Historie. Was es *nicht* hat, ist ein Metaverse — die Instanz,
+> die dieselbe Person aus fünf Quellsystemen zusammenführt, Konflikte zwischen deren
+> Attributen nach Präzedenzregeln auflöst und den Abgleich als Dauerbetrieb fährt. Dazu
+> gehören Connector Spaces, Join- und Projektionsregeln und deklarative Attributflüsse.
+> Das ist eine eigene Produktkategorie, und Atlas hat davon nichts. Wer darauf angewiesen
+> ist, braucht dafür weiterhin eine Lösung — Entra ID Governance, ein IGA-Produkt, oder
+> was auch immer Ihre Analyse ergibt.
 >
 > **Atlas ersetzt auch die Zusatzmodule nicht:** kein Privileged Access Management, kein
 > Zertifikatsmanagement, kein Self-Service-Passwortzurücksetzen, keine
@@ -359,6 +399,18 @@ und schwer abzulehnen.
 - **Was fehlt:** Synchronisationskern (Metaverse, Connector Space, Join/Projektion,
   deklarative Attributflüsse mit Präzedenz), PCNS und Passwortsynchronisation, SSPR,
   Privileged Access Management, BHOLD, Certificate Management.
+- **Panorama:** Die Landschaftssicht („Starmap") wird aus vorhandenen Ressourcen
+  abgeleitet — Prozessapplikationen, deployte Prozesse, Call Activities, Worker- und
+  Job-Typen, Releases, Deployment-Ziele, DMN-Entscheidungen — statt gezeichnet zu werden;
+  darauf setzen Abhängigkeits- und Auswirkungsanalyse auf, dazu ein Beobachtungszustand je
+  Knoten und ein ArchiMate-Export (ADR-0189, ADR-0211). Gezeichnete ArchiMate-Sichten
+  gibt es zusätzlich.
+- **Datenansicht:** Zwei Ebenen — *Model* ist die Typebene (eine Teilmenge des
+  UML-Klassendiagramms, die einem BPMN-Datenobjekt einen auflösbaren Typ gibt, ADR-0230),
+  *Instances* die tatsächlichen Objekte laufender Vorgänge. Datenobjekte sind typisiert,
+  tragen einen Datenzustand und eine Historie mit schreibendem Element (ADR-0053 ff.).
+  ADR-0230 ist als Entwurf geführt — im Pitch zeigen, was die Oberfläche wirklich kann,
+  und nichts darüber hinaus behaupten.
 - **Agentenfähigkeit:** Ein Agent ist ein Prozessschritt auf dem Job-Pfad; sein
   Werkzeugkasten sind die im Diagramm enthaltenen Aktivitäten. Diese Fähigkeit ist jung —
   Teile davon sind noch als Entwurf dokumentiert. Im Pitch als Richtung darstellen.
