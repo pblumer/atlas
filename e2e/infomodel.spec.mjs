@@ -48,7 +48,7 @@ test("a class reads as UML: its kind, its members, and which of them identify it
 test("the canvas refuses what the server would refuse, in the server's words", async ({ page }) => {
   // A value type cannot be the whole that owns parts, so Address → Customer as a
   // composition must be refused while it is being drawn.
-  await page.locator('.im-connect[data-kind="composition"]').click();
+  await page.locator('.djs-palette [data-action=\"composition\"]').click();
   await box(page, "Address").click();
   // Every class the matrix rules out fades, so the canvas offers only what is legal.
   await expect(box(page, "Customer").locator(".uml-class")).toHaveClass(/unreachable/);
@@ -64,7 +64,7 @@ test("the canvas refuses what the server would refuse, in the server's words", a
 });
 
 test("an enumeration cannot be related to at all", async ({ page }) => {
-  await page.locator('.im-connect[data-kind="association"]').click();
+  await page.locator('.djs-palette [data-action=\"association\"]').click();
   await box(page, "Order").click();
   await expect(box(page, "OrderStatus").locator(".uml-class")).toHaveClass(/unreachable/);
   await box(page, "OrderStatus").click();
@@ -73,7 +73,7 @@ test("an enumeration cannot be related to at all", async ({ page }) => {
 });
 
 test("a legal relationship is drawn, and the panel states how to read it", async ({ page }) => {
-  await page.locator('.im-connect[data-kind="composition"]').click();
+  await page.locator('.djs-palette [data-action=\"composition\"]').click();
   await box(page, "Order").click();
   await box(page, "Address").click();
 
@@ -108,7 +108,7 @@ test("a relationship is picked off the drawing, and stays picked while it is edi
 });
 
 test("a generalization has no roles, because is-a is not counted", async ({ page }) => {
-  await page.locator('.im-connect[data-kind="generalization"]').click();
+  await page.locator('.djs-palette [data-action=\"generalization\"]').click();
   await box(page, "Order").click();
   await box(page, "Customer").click();
   await expect(page.locator(".im-reading")).toHaveText("Order → Customer");
@@ -200,7 +200,7 @@ test("a move past either end is refused rather than wrapping", async ({ page }) 
 });
 
 test("saving sends local handles for new shapes and lets the server name them", async ({ page }) => {
-  await page.locator('.im-add[data-stereotype="businessObject"]').click();
+  await page.locator('.djs-palette [data-action=\"businessObject\"]').click();
   await page.locator("#im-c-name").fill("Invoice");
   await page.locator('[data-act="add-attr"]').click();
   await page.locator("#im-save").click();
@@ -290,7 +290,7 @@ test("a relationship's ends are their own group, and a generalization says why i
   // Roles and multiplicities are content, so the group says so before it is opened.
   await expect(page.locator('.pgroup[data-group="Ends"] .pgroup-dot')).toHaveCount(1);
 
-  await page.locator('.im-connect[data-kind="generalization"]').click();
+  await page.locator('.djs-palette [data-action=\"generalization\"]').click();
   await box(page, "Order").click();
   await box(page, "Customer").click();
   await expect(page.locator(".phead .kv")).toHaveText("Generalization");
@@ -332,7 +332,7 @@ test.describe("data stores", () => {
   });
 
   test("adding a store puts it on the canvas and selects it", async ({ page }) => {
-    await page.locator('[data-add="store"]').click();
+    await page.locator('.djs-palette [data-action="store"]').click();
     await expect(page.locator(".uml-store")).toHaveCount(2);
     await expect(page.locator(".phead .kv")).toHaveText("Data store");
     await page.locator("#im-s-name").fill("Invoices");
@@ -725,7 +725,10 @@ test.describe("room for a long member list", () => {
 // editor would put that one back as the selection and the other three would be gone
 // before anything could be done with them — a marquee that looks like it worked.
 test.describe("selecting several at once", () => {
-  const marquee = (page) => page.locator('#im-canvas [data-tool="marquee"]');
+  // The lasso lives in the palette's tools group now, where bpmn-js keeps it, and
+  // diagram-js lights it itself off its own tool events — so "armed" is the library's
+  // `highlighted-entry` class rather than an aria-pressed this view maintained.
+  const marquee = (page) => page.locator('.djs-palette [data-action="lasso"]');
 
   // A box drawn round the lower row — OrderStatus and Address — because those two
   // have empty sheet on every side of them: the box has to *enclose* what it takes,
@@ -748,9 +751,9 @@ test.describe("selecting several at once", () => {
   }
 
   test("a box takes hold of what is inside it, and the panel says what it holds", async ({ page }) => {
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(marquee(page)).not.toHaveClass(/highlighted-entry/);
     await marquee(page).click();
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(marquee(page)).toHaveClass(/highlighted-entry/);
 
     await boxLowerRow(page);
 
@@ -764,7 +767,7 @@ test.describe("selecting several at once", () => {
 
     // The mode is spent with the box. A button still lit would promise a gesture that
     // is back to panning.
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(marquee(page)).not.toHaveClass(/highlighted-entry/);
     expect(page.__errors).toEqual([]);
   });
 
@@ -839,9 +842,9 @@ test.describe("selecting several at once", () => {
 
   test("Escape gives the drag back to panning", async ({ page }) => {
     await marquee(page).click();
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(marquee(page)).toHaveClass(/highlighted-entry/);
     await page.keyboard.press("Escape");
-    await expect(marquee(page)).toHaveAttribute("aria-pressed", "false");
+    await expect(marquee(page)).not.toHaveClass(/highlighted-entry/);
 
     // The same gesture now moves the sheet, and takes hold of nothing.
     const before = await box(page, "OrderStatus").boundingBox();

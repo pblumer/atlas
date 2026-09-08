@@ -60,6 +60,35 @@
       }
     },
     {
+      "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The class diagram reads properly on a real model",
+        "de": "Das Klassendiagramm ist auch bei einem echten Modell lesbar"
+      },
+      "summary": {
+        "en": "Data › Model draws your information model. On anything larger than a handful of classes it did not hold together: attribute names ran out over the edges of their boxes, relationships were drawn as straight lines across everything between their ends, and several lines into the same class landed exactly on top of one another. Boxes now grow to fit what is written in them, lines turn at right angles like the process modeler's, and lines going the same way are spread apart. The tools for drawing have moved off the title bar into a palette down the left edge — the same one the process and decision modelers use.",
+        "de": "Unter «Daten › Modell» wird Ihr Informationsmodell gezeichnet. Bei mehr als einer Handvoll Klassen hielt das nicht stand: Attributnamen liefen über den Rand ihrer Kästchen hinaus, Beziehungen wurden als gerade Linien quer über alles Dazwischenliegende gezogen, und mehrere Linien zur selben Klasse lagen exakt übereinander. Kästchen wachsen jetzt mit ihrem Inhalt, Linien knicken rechtwinklig wie im Prozess-Modeler, und gleichlaufende Linien werden auseinandergezogen. Die Zeichenwerkzeuge sind aus der Titelleiste in eine Palette am linken Rand gewandert — dieselbe, die Prozess- und Entscheidungs-Modeler verwenden."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "every-list-opens-with-its-search-boxes-showing",
       "version": "Unreleased",
       "date": null,
@@ -375,48 +404,6 @@
         "Modeler",
         "Validation"
       ]
-    },
-    {
-      "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Build your own folders in the task inbox",
-        "de": "Eigene Ordner im Aufgaben-Posteingang"
-      },
-      "summary": {
-        "en": "The inbox had four fixed folders, and the question you actually arrive with in the morning — what is open on customer enquiries? — was retyped into the search box every day. Now you can save it as a folder. You pick the conditions from listboxes rather than typing them: the processes come from what is deployed, the task names and groups from the models, the people from the directory, so a folder cannot be built around something that does not exist. Underneath, Atlas shows the expression your choices make and how many tasks match right now. Counting happens across every open task, not just the page on screen, and a folder can be shared with your team — where only its owner can change it.",
-        "de": "Der Posteingang hatte vier feste Ordner, und die Frage, mit der man morgens tatsächlich anfängt — was ist bei den Kundenanfragen offen? — wurde jeden Tag neu ins Suchfeld getippt. Jetzt lässt sie sich als Ordner speichern. Die Bedingungen wählen Sie aus Listen statt sie zu tippen: die Prozesse kommen aus dem, was deployt ist, die Aufgabennamen und Gruppen aus den Modellen, die Personen aus dem Verzeichnis — ein Ordner kann also gar nicht auf etwas gebaut werden, das es nicht gibt. Darunter zeigt Atlas den Ausdruck, der aus Ihrer Auswahl entsteht, und wie viele Aufgaben gerade passen. Gezählt wird über alle offenen Aufgaben, nicht nur über die Seite auf dem Bildschirm, und ein Ordner lässt sich mit dem Team teilen — ändern darf ihn nur, wem er gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Tasks › Inbox and click ＋ Neuer Ordner in the sidebar.",
-          "Give the folder a name, then pick a field, an operator and a value — for example Prozess · ist · your process.",
-          "Watch the match count and the generated expression below the conditions while you change them.",
-          "Save. The folder appears in the sidebar with its own count, and you can reopen it later in the same listboxes."
-        ],
-        "de": [
-          "Öffnen Sie Tasks › Inbox und klicken Sie in der Seitenleiste auf ＋ Neuer Ordner.",
-          "Geben Sie dem Ordner einen Namen und wählen Sie Feld, Operator und Wert — zum Beispiel Prozess · ist · Ihr Prozess.",
-          "Beobachten Sie beim Ändern die Trefferzahl und den erzeugten Ausdruck unter den Bedingungen.",
-          "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the inbox",
-          "de": "Zum Posteingang"
-        },
-        "route": "#/tasks"
-      }
     }
   ]
 }

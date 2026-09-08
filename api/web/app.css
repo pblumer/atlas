@@ -5147,7 +5147,6 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 }
 .im-title { font-size: 14px; }
 .im-rev { font: 12px/1.5 ui-monospace, monospace; }
-.im-palette { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 8px; }
 
 /* Finding something in a model that outgrew its window — a class among thirty on the
    sheet, a member among forty in a panel. Both are view state and neither touches the
@@ -5180,13 +5179,34 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .im-filter-count { font-size: 11px; white-space: nowrap; }
 .im-filter-count.none { color: var(--danger, #b42318); }
 .im-filter-empty { margin: 6px 0 0; font-size: 12px; }
-.im-add, .im-connect {
-  font: 500 12px/1.5 system-ui, sans-serif; cursor: pointer; white-space: nowrap;
-  border: 1px solid var(--border); background: var(--bg); color: var(--text);
-  padding: 3px 9px; border-radius: 6px;
+/* The class canvas's palette is diagram-js's, the same one bpmn-js and dmn-js put
+   down their left edge — its frame, its groups and its separators all come from
+   vendor/canvas/diagram-js.css, so there is nothing to restate here. What is Atlas's
+   is which glyph stands for which entry, and that the armed relationship is lit.
+
+   Glyphs rather than an icon font: bpmn-js ships one for BPMN's shapes and there is
+   no UML equivalent to vendor, and four kilobytes of font for eight marks would be a
+   poor trade when the notation's own marks are in Unicode already. */
+.uml-pi::before {
+  font: 17px/1 system-ui, sans-serif; color: var(--text);
+  display: flex; align-items: center; justify-content: center; height: 100%;
 }
-.im-add:hover, .im-connect:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.im-connect.active { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.uml-pi-businessObject::before { content: "▭"; }
+.uml-pi-valueType::before { content: "▢"; }
+.uml-pi-enumeration::before { content: "☰"; font-size: 14px; }
+.uml-pi-store::before { content: "⛁"; }
+/* The four relationships carry the mark that tells them apart on the drawing, so the
+   palette and the diagram say the same thing about which is which. */
+.uml-pi-association::before { content: "─"; }
+.uml-pi-aggregation::before { content: "◇"; }
+.uml-pi-composition::before { content: "◆"; }
+.uml-pi-generalization::before { content: "△"; }
+.uml-pi-lasso::before { content: "⬚"; }
+.djs-palette .uml-pi:hover::before { color: var(--accent); }
+/* An armed relationship is a mode, and a mode has to be visible or it is a trap: the
+   entry stays lit for exactly as long as the next two clicks draw that line. */
+.djs-palette .uml-pi.active { background: var(--accent); border-radius: 4px; }
+.djs-palette .uml-pi.active::before { color: var(--accent-ink); }
 .im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
 
 .im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
@@ -5258,7 +5278,12 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
    login and user-management form, and this is a 5px change nobody asked for there. */
 .im-side .field select,
 .im-side .field textarea { display: block; margin-top: 5px; }
-.im-side .field textarea { resize: vertical; }
+/* Every textarea in this panel holds documentation — there is no FEEL and no script
+   here — so they all want the UI font rather than the monospace one a textarea
+   defaults to. The Modeler met this first and answered it the same way for its own
+   documentation field (.doc-field above); a paragraph set in code face reads as
+   something to be executed rather than something to be read. */
+.im-side .field textarea { resize: vertical; font: inherit; min-height: 56px; }
 /* The sentence that tells a modeler which kind to pick. It is the most consequential
    choice in this metamodel and a three-word palette makes it by accident. */
 .im-meaning { margin: -4px 0 12px; font: 12px/1.5 system-ui, sans-serif; color: var(--muted); }
@@ -5470,7 +5495,6 @@ button.im-problem:hover { background: var(--accent-soft); }
    cylinder — because the one mistake to prevent here is reading it as a class. A
    class says what an Order is; a store says where Orders are kept, and only the
    store is about storage at all. */
-.im-add.store { border-style: dashed; }
 .im-store { cursor: grab; }
 .im-store .im-store-body {
   fill: var(--im-store-fill);
