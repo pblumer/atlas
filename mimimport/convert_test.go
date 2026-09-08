@@ -129,7 +129,7 @@ func TestPreservedRawIsWellFormed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw := n.raw()
+	raw := n.raw(namespaces(n))
 	if _, _, err := decodeNode([]byte(raw)); err != nil {
 		t.Fatalf("preserved markup is not well-formed XML: %v\n%s", err, raw)
 	}

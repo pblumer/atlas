@@ -63,17 +63,19 @@ func (b *builder) layout() map[string]box {
 // edge per sequence flow, wired centre-right of the source to centre-left of the
 // target.
 func (b *builder) emitDI(s *strings.Builder, boxes map[string]box) {
-	fmt.Fprintf(s, "  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n")
-	fmt.Fprintf(s, "    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=%q>\n", b.report.ProcessID)
+	fmt.Fprintf(s, "  <bpmndi:BPMNDiagram id=%q>\n", b.claim("BPMNDiagram_1"))
+	fmt.Fprintf(s, "    <bpmndi:BPMNPlane id=%q bpmnElement=%q>\n", b.claim("BPMNPlane_1"), b.report.ProcessID)
 	for _, n := range b.nodes {
 		bx := boxes[n.id]
-		fmt.Fprintf(s, "      <bpmndi:BPMNShape id=%q bpmnElement=%q>\n", "di_"+n.id, n.id)
+		// Claimed, not just prefixed: a node id now comes from the workflow, so
+		// "di_<id>" is no longer guaranteed to be free.
+		fmt.Fprintf(s, "      <bpmndi:BPMNShape id=%q bpmnElement=%q>\n", b.claim("di_"+n.id), n.id)
 		fmt.Fprintf(s, "        <dc:Bounds x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\"/>\n", bx.x, bx.y, bx.w, bx.h)
 		s.WriteString("      </bpmndi:BPMNShape>\n")
 	}
 	for _, f := range b.flows {
 		sb, tb := boxes[f.from], boxes[f.to]
-		fmt.Fprintf(s, "      <bpmndi:BPMNEdge id=%q bpmnElement=%q>\n", "di_"+f.id, f.id)
+		fmt.Fprintf(s, "      <bpmndi:BPMNEdge id=%q bpmnElement=%q>\n", b.claim("di_"+f.id), f.id)
 		fmt.Fprintf(s, "        <di:waypoint x=\"%d\" y=\"%d\"/>\n", sb.x+sb.w, sb.cy())
 		fmt.Fprintf(s, "        <di:waypoint x=\"%d\" y=\"%d\"/>\n", tb.x, tb.cy())
 		s.WriteString("      </bpmndi:BPMNEdge>\n")

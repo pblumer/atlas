@@ -23,6 +23,15 @@
 // Warnings carry what belongs to no single node — today, that the input only
 // parsed after a repair.
 //
+// A preserved activity keeps its namespace binding: the fragment carries the
+// prefixes it needs and declares them, so it parses on its own, and the
+// <atlas:mimSource> element names the .NET type and assembly the namespace
+// identifies — which is what tells a MIMWAL activity apart from a stock MIM one
+// of the same local name (see namespace.go).
+//
+// Flow-node ids come from the activity's x:Name where it has one, so a re-import
+// of a workflow that gained a step does not renumber the steps it already had.
+//
 // Preserved markup is written as escaped character data, never in a CDATA
 // section: CDATA suppresses entity resolution, which would turn the quotation
 // marks inside a MIM expression into literal &#34; and change the expression

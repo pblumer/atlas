@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A preserved activity keeps its namespace, and says what type it is.** XOML
+  binds each activity library to a prefix on the workflow root, and that binding
+  is what distinguishes a stock MIM activity from a MIMWAL one of the same local
+  name. Go's decoder resolves prefixes away, so preserved markup was written from
+  the local name alone: `x:Name` came back as `xaml:Name`, the fragment's own
+  inner markup still referred to prefixes nothing declared — it did not parse on
+  its own — and the assembly and version an activity was authored against were
+  gone. A preserved fragment now carries the prefixes it uses and declares them,
+  and `<atlas:mimSource>` names the fully qualified .NET `type` and its
+  `assembly`. On a real MIMWAL workflow all 25 fragments now parse standalone,
+  at the cost of about 15% more markup for the repeated declarations.
+
 - **A MIMWAL activity's tables are readable.** MIMWAL keeps an activity's actual
   work in serialised .NET collections hung off the element — an `UpdateResources`
   carries an `UpdatesTable` and a `QueriesTable`, a `GenerateUniqueValue` carries
@@ -66,6 +78,17 @@ _Changed_ / _Removed_ for each version.
   `manual-review`, naming the one flow whose expression has to be filled in.
 
 ### Changed
+
+- **Flow-node ids come from the workflow, not from a counter.** An imported node
+  was `Activity_1`, `Activity_2`, … in emission order, so inserting one activity
+  in MIM shifted the id of every node below it and a re-import of a barely
+  changed workflow produced a diff touching everything — stranding any hand-made
+  adjustment. Ids now derive from the activity's `x:Name`, with the gateways of a
+  guard named `<id>_gate` and `<id>_join` after the activity they wrap, and a
+  join or loop exit after its split. Every id is claimed through one table, so a
+  name a workflow reuses, one that collides with the process id, and the
+  diagram-interchange ids all step aside instead of producing a document the
+  compiler rejects for a duplicate id.
 
 - **The import diagram lays out by longest path**, not shortest. A split that
   both enters an activity and bypasses it — a guarded MIMWAL activity, an empty

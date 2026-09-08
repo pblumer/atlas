@@ -148,12 +148,22 @@ func TestCleanEmbeddedHelper(t *testing.T) {
 	}
 }
 
-func TestLastSegmentHelper(t *testing.T) {
-	if got := lastSegment("http://a/b/xaml/"); got != "xaml" {
-		t.Errorf("lastSegment trailing = %q", got)
+func TestClrTypeHelper(t *testing.T) {
+	const asm = "Microsoft.ResourceManagement, Version=4.6.0.0, Culture=neutral"
+	typ, got := clrType("clr-namespace:Microsoft.ResourceManagement.Workflow.Activities;Assembly="+asm, "ApprovalActivity")
+	if want := "Microsoft.ResourceManagement.Workflow.Activities.ApprovalActivity"; typ != want {
+		t.Errorf("type = %q, want %q", typ, want)
 	}
-	if got := lastSegment("plain"); got != "plain" {
-		t.Errorf("lastSegment plain = %q", got)
+	if got != asm {
+		t.Errorf("assembly = %q, want %q", got, asm)
+	}
+	// A namespace that names no .NET type yields neither.
+	if typ, asm := clrType("http://schemas.microsoft.com/winfx/2006/xaml/workflow", "If"); typ != "" || asm != "" {
+		t.Errorf("non-clr namespace = (%q, %q), want empty", typ, asm)
+	}
+	// An assembly-less clr-namespace still names the type.
+	if typ, asm := clrType("clr-namespace:Foo.Bar", "Widget"); typ != "Foo.Bar.Widget" || asm != "" {
+		t.Errorf("assembly-less = (%q, %q)", typ, asm)
 	}
 }
 

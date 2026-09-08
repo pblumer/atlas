@@ -475,3 +475,211 @@ func TestUnknownPropertyIsNotRendered(t *testing.T) {
 		t.Errorf("it must still be preserved verbatim:\n%s", bpmn)
 	}
 }
+
+// TestPreservedFragmentStandsAlone covers what the namespace table is for: a
+// preserved activity must parse on its own, keep the prefix the source bound it
+// to, and name the .NET type and assembly its namespace identifies.
+func TestPreservedFragmentStandsAlone(t *testing.T) {
+	src, err := os.ReadFile("testdata/mimwal-workflow.xoml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(bytes.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+
+	// The qualified type distinguishes a MIMWAL activity from a stock MIM one of
+	// the same local name; the assembly names the version it was authored against.
+	bpmn := string(res.BPMN)
+	for _, want := range []string{
+		`type="MicrosoftServices.IdentityManagement.WorkflowActivityLibrary.Activities.UpdateResources"`,
+		`assembly="MicrosoftServices.IdentityManagement.WorkflowActivityLibrary, Version=2.20.723.0`,
+		`type="MicrosoftServices.IdentityManagement.WorkflowActivityLibrary.Activities.GenerateUniqueValue"`,
+	} {
+		if !strings.Contains(bpmn, want) {
+			t.Errorf("generated BPMN is missing %s\n%s", want, bpmn)
+		}
+	}
+
+	// Each fragment carries the declarations its own names need, so it parses
+	// with no context at all — the strict decoder, not the lenient one.
+	for i, frag := range mimSources(t, res.BPMN) {
+		var probe struct {
+			XMLName xml.Name
+			Attrs   []xml.Attr `xml:",any,attr"`
+		}
+		if err := xml.Unmarshal([]byte(frag), &probe); err != nil {
+			t.Fatalf("fragment %d does not parse on its own: %v\n%s", i, err, frag)
+		}
+		if !strings.HasPrefix(probe.XMLName.Space, "clr-namespace:") {
+			t.Errorf("fragment %d lost its namespace: %q", i, probe.XMLName.Space)
+		}
+		// x:Name must come back in the XAML namespace, not under an invented prefix.
+		var named bool
+		for _, a := range probe.Attrs {
+			if a.Name.Space == xamlNS && a.Name.Local == "Name" {
+				named = true
+			}
+		}
+		if !named {
+			t.Errorf("fragment %d lost its x:Name binding:\n%s", i, frag)
+		}
+	}
+}
+
+// TestFragmentDeclaresAnUndeclaredNamespace covers the minted-prefix path: a
+// document that uses a namespace it never bound still yields a fragment that
+// parses, because the fragment declares one for it.
+func TestFragmentDeclaresAnUndeclaredNamespace(t *testing.T) {
+	// The lenient decoder accepts the undeclared p: prefix; the fragment must not
+	// pass that problem on.
+	root, _, err := decodeNode([]byte(`<Workflow><p:CustomActivity Description="x"/></Workflow>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	frag := root.Kids[0].raw(namespaces(root))
+	if _, err := decodeStrict([]byte(frag)); err != nil {
+		t.Fatalf("fragment does not parse on its own: %v\n%s", err, frag)
+	}
+}
+
+// nodeIDs returns the id of every flow node in a generated process, keyed by its
+// name, so two conversions can be compared node for node.
+func nodeIDs(t *testing.T, bpmn []byte) map[string]string {
+	t.Helper()
+	var doc struct {
+		Nodes []struct {
+			XMLName xml.Name
+			ID      string `xml:"id,attr"`
+			Name    string `xml:"name,attr"`
+		} `xml:",any"`
+	}
+	var proc struct {
+		Process struct {
+			Inner []byte `xml:",innerxml"`
+		} `xml:"process"`
+	}
+	if err := xml.Unmarshal(bpmn, &proc); err != nil {
+		t.Fatal(err)
+	}
+	if err := xml.Unmarshal(append(append([]byte("<p>"), proc.Process.Inner...), []byte("</p>")...), &doc); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, n := range doc.Nodes {
+		if n.Name != "" {
+			out[n.Name] = n.ID
+		}
+	}
+	return out
+}
+
+// TestIDsSurviveAnInsertion is the point of deriving ids from x:Name: a workflow
+// that gained a step must not renumber the steps it already had. With ids from a
+// counter, inserting one activity shifted every id below it, so a re-import of a
+// barely changed workflow produced a diff touching every node.
+func TestIDsSurviveAnInsertion(t *testing.T) {
+	const tail = `<UpdateResources x:Name="two" ActivityDisplayName="Zwei" xmlns:x="` + xamlNS + `"/>
+	  <ApprovalActivity x:Name="three" ActivityDisplayName="Drei" xmlns:x="` + xamlNS + `"/>`
+	before := `<SequentialWorkflow>` + tail + `</SequentialWorkflow>`
+	after := `<SequentialWorkflow>
+	  <UpdateResources x:Name="inserted" ActivityDisplayName="Neu" xmlns:x="` + xamlNS + `"/>` + tail + `</SequentialWorkflow>`
+
+	first, err := Convert(strings.NewReader(before), "W")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	second, err := Convert(strings.NewReader(after), "W")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, first.BPMN)
+	validate(t, second.BPMN)
+
+	a, b := nodeIDs(t, first.BPMN), nodeIDs(t, second.BPMN)
+	for _, name := range []string{"Zwei", "Drei"} {
+		if a[name] == "" {
+			t.Fatalf("%q has no node in the first conversion: %v", name, a)
+		}
+		if a[name] != b[name] {
+			t.Errorf("%q changed id across the insertion: %q → %q", name, a[name], b[name])
+		}
+	}
+	if b["Neu"] == "" {
+		t.Error("the inserted activity has no node")
+	}
+}
+
+// TestDuplicateSourceNamesStayUnique covers two activities the designer gave the
+// same x:Name: BPMN ids are document-wide, so the second must step aside.
+func TestDuplicateSourceNamesStayUnique(t *testing.T) {
+	src := `<SequentialWorkflow xmlns:x="` + xamlNS + `">
+	  <UpdateResources x:Name="same" ActivityDisplayName="Erste"/>
+	  <UpdateResources x:Name="same" ActivityDisplayName="Zweite"/>
+	</SequentialWorkflow>`
+	res, err := Convert(strings.NewReader(src), "D")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN) // the compiler rejects a duplicate id, so this is the check
+	ids := nodeIDs(t, res.BPMN)
+	if ids["Erste"] != "same" || ids["Zweite"] != "same_2" {
+		t.Errorf("want same / same_2, got %q / %q", ids["Erste"], ids["Zweite"])
+	}
+}
+
+// TestActivityCannotTakeTheProcessID covers the one id that is spoken for before
+// any node exists.
+func TestActivityCannotTakeTheProcessID(t *testing.T) {
+	src := `<SequentialWorkflow xmlns:x="` + xamlNS + `">
+	  <UpdateResources x:Name="Prozess" ActivityDisplayName="Kollision"/>
+	</SequentialWorkflow>`
+	res, err := Convert(strings.NewReader(src), "Prozess")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	if res.Report.ProcessID != "Prozess" {
+		t.Fatalf("process id = %q", res.Report.ProcessID)
+	}
+	if got := nodeIDs(t, res.BPMN)["Kollision"]; got == "Prozess" {
+		t.Error("an activity took the process's own id")
+	}
+}
+
+// TestFragmentRespectsAReboundPrefix covers the case that makes the fragment's own
+// declarations authoritative: an element that rebinds a prefix the root also
+// declared. Rendering its name with the root's prefix would point it at the
+// namespace the fragment binds that prefix to, not its own.
+func TestFragmentRespectsAReboundPrefix(t *testing.T) {
+	// q and p both name urn:A on the root, p last; the element is in urn:A and
+	// rebinds p to urn:B.
+	root, _, err := decodeNode([]byte(
+		`<Workflow xmlns:q="urn:A" xmlns:p="urn:A"><q:Thing xmlns:p="urn:B" p:k="v"/></Workflow>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	frag := root.Kids[0].raw(namespaces(root))
+
+	var probe struct {
+		XMLName xml.Name
+		Attrs   []xml.Attr `xml:",any,attr"`
+	}
+	if err := xml.Unmarshal([]byte(frag), &probe); err != nil {
+		t.Fatalf("fragment does not parse: %v\n%s", err, frag)
+	}
+	if probe.XMLName.Space != "urn:A" {
+		t.Errorf("element landed in %q, want urn:A\n%s", probe.XMLName.Space, frag)
+	}
+	var found bool
+	for _, a := range probe.Attrs {
+		if a.Name.Space == "urn:B" && a.Name.Local == "k" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the rebound attribute lost its namespace:\n%s", frag)
+	}
+}

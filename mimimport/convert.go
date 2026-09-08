@@ -117,7 +117,7 @@ func Convert(r io.Reader, name string) (Result, error) {
 		wfName = root.displayName()
 	}
 
-	b := newBuilder(wfName)
+	b := newBuilder(wfName, namespaces(root))
 	b.report.Warnings = warnings
 	body := workflowBody(root)
 	entry, exit := b.emitSequence(body)
@@ -178,11 +178,14 @@ type bnode struct {
 	id      string
 	kind    string // startEvent,endEvent,userTask,serviceTask,task,exclusiveGateway,parallelGateway
 	name    string
+	srcID   string // preferred id, derived from the activity's x:Name
 	def     string // default outgoing flow id (gateways only)
 	jobType string // serviceTask job type
 	doc     string // documentation note
 	iterate string // MIM Iteration expression: the activity is multi-instance
 	rawName string // originating XOML activity local name
+	rawType string // its fully qualified .NET type, when the namespace names one
+	rawAsm  string // the assembly that type lives in
 	raw     string // original XOML markup, preserved verbatim
 }
 
@@ -191,32 +194,81 @@ type bflow struct {
 }
 
 type builder struct {
-	name   string
+	name string
+	// ns holds the prefix bindings of the workflow root, so a preserved activity
+	// keeps the namespace that names its .NET type and assembly (see nsTable).
+	ns     *nsTable
 	nodes  []bnode
 	flows  []bflow
 	report Report
 	nNode  int
 	nFlow  int
 	nGate  int
+	// used holds every id already handed out. BPMN ids are document-wide, and
+	// they now come partly from the workflow's own x:Name values, so nothing can
+	// assume a generated id is free.
+	used map[string]bool
 }
 
-func newBuilder(name string) *builder {
-	return &builder{name: name, report: Report{ProcessID: sanitizeID(name, "mim_workflow")}}
+func newBuilder(name string, ns *nsTable) *builder {
+	b := &builder{
+		name: name, ns: ns,
+		report: Report{ProcessID: sanitizeID(name, "mim_workflow")},
+		used:   map[string]bool{},
+	}
+	b.claim(b.report.ProcessID) // an activity must not take the process's own id
+	return b
 }
 
+// claim reserves id, or the first free "<id>_<n>" if something already holds it.
+func (b *builder) claim(id string) string {
+	if !b.used[id] {
+		b.used[id] = true
+		return id
+	}
+	for i := 2; ; i++ {
+		c := fmt.Sprintf("%s_%d", id, i)
+		if !b.used[c] {
+			b.used[c] = true
+			return c
+		}
+	}
+}
+
+// nextID reserves the first free "<prefix>_<n>", advancing the counter past any
+// number an activity's own name already took.
+func (b *builder) nextID(prefix string, n *int) string {
+	for {
+		*n++
+		id := fmt.Sprintf("%s_%d", prefix, *n)
+		if !b.used[id] {
+			b.used[id] = true
+			return id
+		}
+	}
+}
+
+// nodeID picks a node's id: the one derived from its x:Name when it has one, so
+// the id survives an edit elsewhere in the workflow, and a counter otherwise.
+func (b *builder) nodeID(srcID, prefix string, n *int) string {
+	if srcID == "" {
+		return b.nextID(prefix, n)
+	}
+	return b.claim(srcID)
+}
+
+// addNode appends a node, giving it an id unless the caller already reserved one.
 func (b *builder) addNode(n bnode) string {
 	if n.id == "" {
 		switch n.kind {
 		case "startEvent":
-			n.id = "StartEvent_1"
+			n.id = b.claim("StartEvent_1")
 		case "endEvent":
-			n.id = "EndEvent_1"
+			n.id = b.claim("EndEvent_1")
 		case "exclusiveGateway", "parallelGateway":
-			b.nGate++
-			n.id = fmt.Sprintf("Gateway_%d", b.nGate)
+			n.id = b.nodeID(n.srcID, "Gateway", &b.nGate)
 		default:
-			b.nNode++
-			n.id = fmt.Sprintf("Activity_%d", b.nNode)
+			n.id = b.nodeID(n.srcID, "Activity", &b.nNode)
 		}
 	}
 	b.nodes = append(b.nodes, n)
@@ -224,13 +276,38 @@ func (b *builder) addNode(n bnode) string {
 }
 
 func (b *builder) addFlow(from, to, name, cond string) string {
-	b.nFlow++
-	id := fmt.Sprintf("Flow_%d", b.nFlow)
+	id := b.nextID("Flow", &b.nFlow)
 	b.flows = append(b.flows, bflow{id: id, from: from, to: to, name: name, cond: cond})
 	return id
 }
 
 func (b *builder) note(n Note) { b.report.Notes = append(b.report.Notes, n) }
+
+// preserve fills in the bnode fields that carry an activity's original identity:
+// its local name, its .NET type and assembly, and its markup.
+func (b *builder) preserve(n xnode) bnode {
+	t, asm := clrType(n.XMLName.Space, n.local())
+	return bnode{srcID: sourceID(n), rawName: n.local(), rawType: t, rawAsm: asm, raw: n.raw(b.ns)}
+}
+
+// sourceID derives a BPMN id from the activity's x:Name — the identifier the WF
+// designer gives it, and the only one that survives an edit elsewhere in the
+// workflow. Ids from a counter shift as soon as an activity is inserted above,
+// which leaves a re-import of a barely changed workflow with a diff touching
+// every node and every hand-made adjustment stranded.
+func sourceID(n xnode) string {
+	for _, a := range n.Attrs {
+		if a.Name.Space == xamlNS && a.Name.Local == "Name" {
+			if id := sanitizeID(a.Value, ""); id != "" {
+				return id
+			}
+		}
+	}
+	if v, ok := n.attr("Name"); ok {
+		return sanitizeID(v, "")
+	}
+	return ""
+}
 
 // emit dispatches on the WF construct type and returns the entry/exit node ids
 // of the produced subgraph ("" for both when nothing was produced).
@@ -274,8 +351,10 @@ func (b *builder) emitSequence(kids []xnode) (entry, exit string) {
 // every other branch gets a placeholder FEEL condition, with the original WF
 // condition preserved for review.
 func (b *builder) emitIfElse(n xnode) (string, string) {
-	split := b.addNode(bnode{kind: "exclusiveGateway", name: n.displayName(), rawName: n.local(), raw: n.raw()})
-	join := b.addNode(bnode{kind: "exclusiveGateway", name: ""})
+	splitNode := b.preserve(n)
+	splitNode.kind, splitNode.name = "exclusiveGateway", n.displayName()
+	split := b.addNode(splitNode)
+	join := b.addNode(bnode{kind: "exclusiveGateway", srcID: split + "_join"})
 	branches := activityChildren(n)
 	b.note(Note{NodeID: split, Activity: n.local(), Kind: "exclusiveGateway", Status: StatusNative,
 		Detail: fmt.Sprintf("if/else split, %d branch(es)", len(branches))})
@@ -303,8 +382,10 @@ func (b *builder) emitIfElse(n xnode) (string, string) {
 // emitParallel turns a ParallelActivity into a parallel split/join. Each child
 // is a branch (usually a Sequence).
 func (b *builder) emitParallel(n xnode) (string, string) {
-	split := b.addNode(bnode{kind: "parallelGateway", name: n.displayName(), rawName: n.local(), raw: n.raw()})
-	join := b.addNode(bnode{kind: "parallelGateway", name: ""})
+	splitNode := b.preserve(n)
+	splitNode.kind, splitNode.name = "parallelGateway", n.displayName()
+	split := b.addNode(splitNode)
+	join := b.addNode(bnode{kind: "parallelGateway", srcID: split + "_join"})
 	branches := activityChildren(n)
 	b.note(Note{NodeID: split, Activity: n.local(), Kind: "parallelGateway", Status: StatusNative,
 		Detail: fmt.Sprintf("parallel split, %d branch(es)", len(branches))})
@@ -324,11 +405,15 @@ func (b *builder) emitParallel(n xnode) (string, string) {
 // gateway enters the body while its (placeholder) condition holds and otherwise
 // leaves through a merge gateway; the body loops back to the decision.
 func (b *builder) emitWhile(n xnode) (string, string) {
-	decide := b.addNode(bnode{kind: "exclusiveGateway", name: n.displayName(), rawName: n.local(), raw: n.raw()})
-	out := b.addNode(bnode{kind: "exclusiveGateway", name: ""})
+	decideNode := b.preserve(n)
+	decideNode.kind, decideNode.name = "exclusiveGateway", n.displayName()
+	decide := b.addNode(decideNode)
+	out := b.addNode(bnode{kind: "exclusiveGateway", srcID: decide + "_exit"})
 	be, bx := b.emitSequence(activityChildren(n))
 	if be == "" { // empty loop body: keep a placeholder step so the loop is well-formed
-		id := b.addNode(bnode{kind: "task", name: "Schleifenkörper", rawName: n.local(), raw: n.raw()})
+		bodyNode := b.preserve(n)
+		bodyNode.kind, bodyNode.name = "task", "Schleifenkörper"
+		id := b.addNode(bodyNode)
 		b.note(Note{NodeID: id, Activity: n.local(), Kind: "task", Status: StatusManualReview, Detail: "empty while body"})
 		be, bx = id, id
 	}
@@ -364,9 +449,12 @@ func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	guard, guarded := executionCondition(n)
 	iter, iterated := iteration(n)
 
+	// The task's id is reserved first so the gateways that guard it can be named
+	// after it, even though they are added before it.
+	leafID := b.nodeID(sourceID(n), "Activity", &b.nNode)
 	var split, merge string
 	if guarded {
-		split, merge = b.addGuardGateways(guard)
+		split, merge = b.addGuardGateways(guard, leafID)
 	}
 	doc := detail
 	if iterated {
@@ -375,15 +463,10 @@ func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	if tables := mimTables(n); tables != "" {
 		doc += "\n" + tables
 	}
-	id := b.addNode(bnode{
-		kind:    kind,
-		name:    n.displayName(),
-		jobType: jobType,
-		rawName: n.local(),
-		raw:     n.raw(),
-		doc:     doc,
-		iterate: iter,
-	})
+	leaf := b.preserve(n)
+	leaf.id = leafID
+	leaf.kind, leaf.name, leaf.jobType, leaf.doc, leaf.iterate = kind, n.displayName(), jobType, doc, iter
+	id := b.addNode(leaf)
 	b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: status, Detail: detail})
 	if iterated {
 		b.note(Note{NodeID: id, Activity: n.local(), Kind: "multiInstanceLoopCharacteristics", Status: StatusManualReview,
@@ -428,9 +511,10 @@ func executionCondition(n xnode) (string, bool) {
 // the task itself, so the generated markup reads in flow order. The split
 // documents the guard it stands for, which is the only place a reader of the
 // model sees the original expression.
-func (b *builder) addGuardGateways(guard string) (split, merge string) {
-	split = b.addNode(bnode{kind: "exclusiveGateway", doc: "MIM ActivityExecutionCondition: " + guard})
-	merge = b.addNode(bnode{kind: "exclusiveGateway"})
+func (b *builder) addGuardGateways(guard, taskID string) (split, merge string) {
+	split = b.addNode(bnode{kind: "exclusiveGateway", srcID: taskID + "_gate",
+		doc: "MIM ActivityExecutionCondition: " + guard})
+	merge = b.addNode(bnode{kind: "exclusiveGateway", srcID: taskID + "_join"})
 	return split, merge
 }
 

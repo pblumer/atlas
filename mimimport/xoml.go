@@ -56,43 +56,6 @@ func (n xnode) displayName() string {
 	return n.local()
 }
 
-// raw re-serialises the node to a compact XML string used to preserve the
-// original activity inside an <atlas:mimSource> element. It reproduces the tag,
-// its attributes and its inner markup; prefix normalisation aside, the activity
-// survives the round trip so no modelling information is lost.
-func (n xnode) raw() string {
-	var b strings.Builder
-	b.WriteByte('<')
-	b.WriteString(n.local())
-	for _, a := range n.Attrs {
-		name := a.Name.Local
-		if a.Name.Space != "" {
-			// Keep a readable prefix for xmlns-qualified attributes (e.g. x:Name).
-			if p := lastSegment(a.Name.Space); p != "" {
-				name = p + ":" + a.Name.Local
-			}
-		}
-		fmt.Fprintf(&b, ` %s="%s"`, name, attr(a.Value))
-	}
-	inner := strings.TrimSpace(n.Inner)
-	if inner == "" {
-		b.WriteString("/>")
-		return b.String()
-	}
-	b.WriteByte('>')
-	b.WriteString(inner)
-	fmt.Fprintf(&b, "</%s>", n.local())
-	return b.String()
-}
-
-func lastSegment(ns string) string {
-	ns = strings.TrimRight(ns, "/")
-	if i := strings.LastIndexAny(ns, "/:#"); i >= 0 {
-		return ns[i+1:]
-	}
-	return ns
-}
-
 // parseXOML reads an XOML document (or a FIMAutomation export that embeds one)
 // and returns its root activity element. When the input is a wrapper rather than
 // the workflow itself, the embedded XOML is located and re-parsed. Any repair

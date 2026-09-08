@@ -25,7 +25,7 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	fmt.Fprintf(&s, `             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"`+"\n")
 	fmt.Fprintf(&s, `             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"`+"\n")
 	fmt.Fprintf(&s, `             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"`+"\n")
-	fmt.Fprintf(&s, `             id="defs_%s" targetNamespace=%q>`+"\n", procID, nsMIM)
+	fmt.Fprintf(&s, `             id=%q targetNamespace=%q>`+"\n", b.claim("defs_"+procID), nsMIM)
 	fmt.Fprintf(&s, `  <process id=%q name=%q isExecutable="true">`+"\n", procID, attr(b.name))
 
 	doc := fmt.Sprintf(
@@ -103,7 +103,18 @@ func emitExtensions(s *strings.Builder, n bnode, lead string) {
 		s.WriteString(lead)
 	}
 	if n.raw != "" {
-		fmt.Fprintf(s, "        <atlas:mimSource activity=%q>%s</atlas:mimSource>\n", attr(n.rawName), text(n.raw))
+		// type and assembly name what the local activity name alone cannot: which
+		// library a MIMWAL and a stock MIM activity of the same name came from,
+		// and the version it was authored against.
+		qualified := ""
+		if n.rawType != "" {
+			qualified = fmt.Sprintf(" type=%q", attr(n.rawType))
+		}
+		if n.rawAsm != "" {
+			qualified += fmt.Sprintf(" assembly=%q", attr(n.rawAsm))
+		}
+		fmt.Fprintf(s, "        <atlas:mimSource activity=%q%s>%s</atlas:mimSource>\n",
+			attr(n.rawName), qualified, text(n.raw))
 	}
 	s.WriteString("      </extensionElements>\n")
 }
