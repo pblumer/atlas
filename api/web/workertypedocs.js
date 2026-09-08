@@ -267,7 +267,10 @@ export const WORKER_TYPE_DOCS = {
   },
 
   googlesheets: {
-    anchor: "runbook-googlesheets", title: "Google Sheets &amp; Drive",
+    // The link label is the short name, not the handbook card's full title ("Google
+    // Sheets & Drive"): at 270px that one wrapped onto a second line, and the card it
+    // opens says the rest.
+    anchor: "runbook-googlesheets", title: "Google Sheets",
     needs: `A configured Google Sheets Worker in ${WORKERS}: a vault bundle with a service account key. No endpoint — Google's addresses are the same for everyone.`,
     steps: [
       `<b>Google Cloud Console</b> &rarr; pick a project &rarr; <i>APIs &amp; Services</i> &rarr; enable the <b>Google Sheets API</b> <i>and</i> the <b>Google Drive API</b>. Drive is not optional: creating a spreadsheet, filing it in a folder and deleting it are Drive operations.`,
