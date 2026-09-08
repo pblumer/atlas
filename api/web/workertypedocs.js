@@ -109,7 +109,7 @@ export const WORKER_TYPE_DOCS = {
     needs: `A configured Active Directory Worker in ${WORKERS}: an LDAPS URL plus a vault bundle holding the bind account.`,
     steps: [
       `Create a <b>directory service account</b> — not a personal account, not a domain admin — and delegate account and group rights on exactly the OUs the processes work in. Delegation at OU level is the advantage AD has over Entra ID; use it.`,
-      `Store the bind bundle in the vault: ${VAULT}, e.g. <code>ad_prod_bind</code> holding <code>{"bindDN": "cn=svc-atlas,ou=Dienstkonten,dc=example,dc=com", "password": "…"}</code>.`,
+      `Store the bind bundle in the vault: ${VAULT}, e.g. <code>ad_prod_bind</code> holding <code>{"bindDN": "cn=svc-atlas,ou=service,dc=example,dc=com", "password": "…"}</code>.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Active Directory</b>, a <b>name</b> (this task states exactly that name), endpoint <code>ldaps://dc.example.com:636</code>, credential reference <code>ad_prod_bind</code>. Saving is enough — Atlas restarts the supervised worker with the new configuration itself.`,
       `Practise without a domain controller: a worker started with <code>ATLAS_AD_MOCK=1</code> serves the same tasks from a directory in its own memory, and <code>ATLAS_AD_MOCK_SEED</code> names an LDIF or DSML file it starts from.`,
     ],
@@ -139,6 +139,10 @@ export const WORKER_TYPE_DOCS = {
     trap: `Resetting a password or touching a role-bearing account needs more than <code>User.ReadWrite.All</code>: the app must also hold a <b>directory role</b> such as <i>User Administrator</i> — and even then it cannot act on holders of higher-privileged roles.`,
   },
 
+  // The three database entries quote the connection string exactly as the Console's own
+  // field placeholder does, `PASSWORT` included (SQL_DSN_EXAMPLES in workerdialog.js):
+  // an operator reads the example here and types into the field there, and two spellings
+  // of the same example is one more thing to wonder about.
   mssql: {
     anchor: "runbook-mssql", title: "Microsoft SQL Server",
     needs: `A configured Microsoft SQL Server Worker in ${WORKERS}. Its whole configuration is one connection string, which is the credential.`,
@@ -206,7 +210,7 @@ export const WORKER_TYPE_DOCS = {
     steps: [
       `<b>Start with Preview.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Mail</b>, provider <b>Preview</b>, a name, a sender address. It frames the message exactly as it would be sent and puts it in <i>Operations &rsaquo; Outbox</i> instead of delivering it — a mail task can be built and demonstrated with no credentials.`,
       `<b>SMTP:</b> provider <b>SMTP</b>, endpoint <code>smtp.example.com:587</code> (587 is assumed without a port), plus user and password. The only route that also works with a mail server in your own basement.`,
-      `<b>Gmail:</b> provider <b>Gmail API</b>, no endpoint, and a vault bundle — a service account <code>{"method": "serviceAccount", "clientEmail": "…", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "absender@deine-domain"}</code> (Workspace, domain-wide delegation for the <code>gmail.send</code> scope), or <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code> for a single mailbox.`,
+      `<b>Gmail:</b> provider <b>Gmail API</b>, no endpoint, and a vault bundle — a service account <code>{"method": "serviceAccount", "clientEmail": "…", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "sender@your-domain"}</code> (Workspace, domain-wide delegation for the <code>gmail.send</code> scope), or <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code> for a single mailbox.`,
       `<b>Microsoft Graph:</b> provider <b>Microsoft Graph</b>, no endpoint, vault bundle <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> from an app registration with the <code>Mail.Send</code> application permission and admin consent. This is the route when your organisation has switched off SMTP basic authentication.`,
       `Going live is a change of <b>worker</b>, not of model: the task keeps naming the same worker name.`,
     ],
@@ -254,8 +258,8 @@ export const WORKER_TYPE_DOCS = {
     needs: `A configured Jira Worker in ${WORKERS}: the site URL plus a vault bundle with the API token.`,
     steps: [
       `<b>Create an API token:</b> Atlassian account &rarr; <i>Security</i> &rarr; <i>API tokens</i> &rarr; create token. For <b>Jira Data Center</b>, a personal access token instead. Use a technical account, not your own.`,
-      `Store it in the vault: ${VAULT}, e.g. <code>jira_acme</code> holding <code>{"email": "du@example.com", "apiToken": "ATATT…"}</code> — or <code>{"token": "…"}</code> for Data Center. The worker tells the two shapes apart by their fields.`,
-      `${WORKERS} &rarr; <b>New worker</b>: type <b>Atlassian Jira</b>, a <b>name</b> (this task states exactly that name), endpoint <code>https://&lt;deine-site&gt;.atlassian.net</code>, credential reference <code>jira_acme</code>.`,
+      `Store it in the vault: ${VAULT}, e.g. <code>jira_acme</code> holding <code>{"email": "you@example.com", "apiToken": "ATATT…"}</code> — or <code>{"token": "…"}</code> for Data Center. The worker tells the two shapes apart by their fields.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Atlassian Jira</b>, a <b>name</b> (this task states exactly that name), endpoint <code>https://&lt;your-site&gt;.atlassian.net</code>, credential reference <code>jira_acme</code>.`,
       `<b>Entitle the account in the project:</b> create, comment and transition issues. Assigning additionally needs the <b>global</b> permission <i>Browse users and groups</i>, which is what <code>search-users</code> reads.`,
       `Prove it with a single <i>Create issue</i> against a scratch project before wiring anything else.`,
     ],
