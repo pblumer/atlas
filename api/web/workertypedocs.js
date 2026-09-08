@@ -117,7 +117,9 @@ export const WORKER_TYPE_DOCS = {
   },
 
   ldif: {
-    anchor: "runbook-ldif", title: "Directory file (LDIF/DSML)",
+    // Short name in the label, like Google Sheets: "(LDIF/DSML)" is a second line in a
+    // 270px panel, and the card behind the link names both formats in its first sentence.
+    anchor: "runbook-ldif", title: "Directory file",
     needs: "Nothing to configure: no Worker record, no credential, no endpoint. The task reads or writes text that is already a process variable.",
     steps: [
       `Pick the <b>format</b> explicitly — LDIF or DSML. There is deliberately no default: guessing a directory file's format from its bytes is how a malformed file becomes a plausible-looking empty result.`,
