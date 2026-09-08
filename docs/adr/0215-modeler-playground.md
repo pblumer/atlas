@@ -308,6 +308,46 @@ drawn, and the case's detail sits *above* the report rather than instead of it �
 reader came from the run, and going back to it should not cost them the numbers they
 were reading.
 
+### Three numbered steps that say where they stand
+
+The setup column had grown to four sections of boxes with nothing saying whether
+what was in them added up to a run. The answer was the Run button: press it, and
+find out from a toast that the case list was not valid JSON.
+
+The three sections that decide a run are now numbered, and each carries a one-line
+readout of what it will contribute — `300 generated · 1 field`, `a stream of 20 per
+hour`, `2 checks · 1 rule` — or of what is wrong with it. It is **not a wizard**:
+every step stays visible and editable, because the third one is usually the reason
+to go back and change the first. What the numbering buys is an answer to "is this
+ready?" without reading three sections of boxes.
+
+Three things make the readouts worth trusting rather than decorative.
+
+**They are the same rules the server applies, not a second opinion.** Step 1 checks
+what the generator checks — a count of at least one, and one value per name — and
+nothing it does not: a field row with no name is left out of the request rather than
+refused, so it is not flagged, and a dataset with no fields at all is a run of cases
+with no start variables, which is a legitimate thing to ask for. Step 2 does not
+judge the arrival stream itself; it reports what the **planner** said when the
+sparkline was fetched, so a stream the run would refuse is flagged here by the code
+that would refuse it.
+
+**Not filled in is distinguished from wrong.** Asserting nothing is stated, not
+flagged — a run nobody asserts anything about is a run somebody reads. A rule with
+nothing after `then` is flagged, because the verdict refuses it, and hearing that
+before the run beats hearing it after.
+
+**Run stops offering a run that cannot start.** The button is disabled while step 1
+or step 2 is unsatisfied, and says only that the steps name what is missing; the
+step itself carries the sentence. The expectations never block, because a run with
+none is the ordinary case.
+
+The heads repaint on their own, the way the sparkline does, rather than through a
+render of the column: every box in that column feeds one of them, most of those
+boxes are typed in, and a render would take the caret out of the box being typed in.
+A head carries no input of its own, so replacing one while somebody types in the
+section below it is safe.
+
 ### Where the cases came out
 
 "482 of 500 finished" is not the question a run is asked. The question is how many

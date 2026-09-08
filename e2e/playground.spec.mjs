@@ -797,3 +797,79 @@ test("the run is broken down by the outcome each case reached", async ({ page })
   await expect(rows.nth(2).locator(".pg-track i")).toHaveAttribute("style", "width:0.0%");
   expect(page.__errors).toEqual([]);
 });
+
+test("the setup is three numbered steps, each saying where it stands", async ({ page }) => {
+  await switchToBatch(page);
+  const steps = page.locator(".pg-step");
+  await expect(steps).toHaveCount(3);
+
+  // Step 1 reads the dataset that is actually driving the run, whichever of the
+  // three sources that is.
+  await expect(steps.nth(0)).toContainText("Dataset");
+  await expect(steps.nth(0).locator(".pg-step-note")).toHaveText("2 cases listed");
+  await expect(steps.nth(0).locator(".pg-step-n")).toHaveClass(/done/);
+
+  // Step 2 is the arrival stream in words — the same one the sparkline draws.
+  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("all at once");
+  await page.locator("#pg-arrival").selectOption("poisson");
+  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("a stream of 10 per hour");
+
+  // Step 3 counts what the run will be judged on. Asserting nothing is not a fault:
+  // it is a run somebody reads, and it does not stop the button.
+  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("2 checks");
+  await page.locator("#pg-x-finish").uncheck();
+  await page.locator("#pg-x-inc").uncheck();
+  await expect(steps.nth(2).locator(".pg-step-note")).toContainText("nothing asserted");
+  await expect(steps.nth(2).locator(".pg-step-n")).not.toHaveClass(/done/);
+  await expect(page.locator("#pg-batch")).toBeEnabled();
+
+  // A rule with nothing after "then" is a fault, and it is named before the run
+  // rather than by the verdict afterwards. The head follows the box as it is typed
+  // in, and the box keeps its caret — the head is repainted, the column is not.
+  await page.locator("#pg-rule-add").click();
+  await page.locator('.pg-rule [data-rule="when"]').fill("betrag < 1000");
+  await expect(steps.nth(2).locator(".pg-step-note.bad")).toContainText("says nothing the case has to show");
+  await expect(page.locator('.pg-rule [data-rule="when"]')).toBeFocused();
+  await expect(page.locator('.pg-rule [data-rule="when"]')).toHaveValue("betrag < 1000");
+
+  await page.locator('.pg-rule [data-rule="then"]').fill('end = "done"');
+  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("1 rule");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a dataset the run cannot use is named, and Run stops offering to run it", async ({ page }) => {
+  await switchToBatch(page);
+  const note = page.locator(".pg-step").first().locator(".pg-step-note");
+
+  // A list that is not JSON is something the panel can settle without the server,
+  // and saying so before the button beats a toast after it.
+  await page.locator("#pg-cases").fill("[{");
+  await expect(note).toHaveText("not valid JSON");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  await page.locator("#pg-cases").fill("[]");
+  await expect(note).toHaveText("the list is empty");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  // A CSV has nothing to run until a file is chosen — not a fault, but not a run.
+  await page.locator('#pg-setup button[data-source="csv"]').click();
+  await expect(note).toHaveText("choose a file");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  // A described dataset carries the generator's own two rules: it needs a count,
+  // and a case carries one value per name.
+  await page.locator('#pg-setup button[data-source="generated"]').click();
+  await expect(note).toHaveText("300 generated · 1 field");
+  await expect(page.locator("#pg-batch")).toBeEnabled();
+
+  await page.locator("#pg-gen-add").click();
+  await page.locator(".pg-field").nth(1).locator('[data-gen="name"]').fill("amount");
+  await expect(note).toHaveText('two fields are called "amount"');
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+
+  await page.locator("[data-gen-del]").nth(1).click();
+  await page.locator("#pg-gen-count").fill("");
+  await expect(note).toHaveText("how many cases?");
+  await expect(page.locator("#pg-batch")).toBeDisabled();
+  expect(page.__errors).toEqual([]);
+});
