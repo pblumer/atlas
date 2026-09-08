@@ -4627,7 +4627,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   font-size: 10px; font-weight: 700; line-height: 1;
   background: var(--border); color: var(--muted);
 }
-.pg-step-n.done { background: var(--accent); color: #fff; }
+.pg-step-n.done { background: var(--accent); color: var(--accent-ink); }
 .pg-step-note {
   margin-left: auto; min-width: 0; font-size: 11px; color: var(--muted);
   text-align: right; white-space: normal;

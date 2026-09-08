@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-08-26",
+  "generatedAt": "2026-09-08",
   "entries": [
     {
       "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "A process can post in Discord",
@@ -48,8 +48,8 @@
     },
     {
       "id": "a-discord-channel-can-start-a-process",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "A message in Discord can start a process",
@@ -94,8 +94,8 @@
     },
     {
       "id": "a-deploy-now-says-when-a-model-s-atlas-namespace-is-not-atla",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "A deploy warns when a model would break in the Modeler",
@@ -116,8 +116,8 @@
     },
     {
       "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "Build your own folders in the task inbox",
@@ -129,7 +129,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Tasks"
@@ -158,8 +158,8 @@
     },
     {
       "id": "the-console-speaks-german-on-the-screens-that-have-been-tran",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "The console has started speaking German",
@@ -171,7 +171,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Console"
@@ -186,8 +186,8 @@
     },
     {
       "id": "every-task-row-shows-its-key",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "Every task in the list now shows its number",
@@ -199,7 +199,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Tasks"
@@ -214,8 +214,8 @@
     },
     {
       "id": "clicking-an-element-in-operations-lists-the-instances-sittin",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "Click a task to see which instances are sitting on it",
@@ -227,7 +227,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Operations"
@@ -242,8 +242,8 @@
     },
     {
       "id": "your-brand-colour-reaches-the-forms",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "Your brand colour now reaches the forms themselves",
@@ -271,8 +271,8 @@
     },
     {
       "id": "the-public-start-form-and-the-sign-in-consent-screen-carry-y",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "The public start form and the consent screen carry your branding",
@@ -284,7 +284,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Organization",
@@ -301,8 +301,8 @@
     },
     {
       "id": "a-button-label-that-stays-readable-on-your-brand-colour",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "A button label that stays readable on your brand colour",
@@ -314,7 +314,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Organization",
@@ -330,8 +330,8 @@
     },
     {
       "id": "forms-written-by-the-ai-worker",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "Let the AI Worker write the form",
@@ -343,7 +343,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Forms",
@@ -379,8 +379,8 @@
     },
     {
       "id": "the-training-nuggets-play-full-screen-for-showing-one-to-a-r",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.5.0",
+      "date": "2026-09-08",
       "category": "Added",
       "title": {
         "en": "Training nuggets play full screen",
@@ -392,7 +392,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
       },
       "tags": [
         "Handbook"
