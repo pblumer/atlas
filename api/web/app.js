@@ -16,7 +16,7 @@ import { copyText } from "./clipboard.js";
 // has to agree on what the markup means — and on the escaping that keeps it inert.
 import { renderMarkdown, markdownToPlain } from "./markdown.js";
 import {
-  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow,
+  incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow, addWorkerFlow,
   incidentWorkerChip,
   repairFormFlow,
 } from "./incidents.js";
@@ -4749,8 +4749,16 @@ async function deployProject(id, reload) {
     rep = await res.json();
     if (res.ok && rep.deployed) {
       const n = (rep.definitions || []).length;
-      toast(n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application", "ok");
+      const warnings = rep.warnings || [];
+      const what = n ? `Published ${n} definition${n === 1 ? "" : "s"}` : "Nothing to publish in this application";
+      toast(warnings.length
+        ? `${what} — with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : what, warnings.length ? "warn" : "ok");
       await reload();
+      // After the reload, so the block is not wiped by it. A publish that deployed
+      // fine can still name a worker nobody configured; the server does not refuse it
+      // (ADR-0158), so this is the moment to say so, while the operator is here.
+      if (warnings.length) showDeployWarnings(warnings);
       return;
     }
   } catch (e) {
@@ -4760,6 +4768,35 @@ async function deployProject(id, reload) {
   // Refused (or a server error): show why and reflect any DMN results in place.
   toast(rep.reason || rep.error || "Publish refused", "err");
   for (const r of rep.references || []) applyRefStatus(r.id, r);
+}
+
+// showDeployWarnings reports what a publish deployed anyway. It is a dialog rather
+// than a block on the page because publishing reloads the view: a banner rendered into
+// it would be gone before it was read, and a toast has nowhere to put a list.
+//
+// The Modeler's own deploy has said this since ADR-0158; the publish route said
+// nothing at all, which is how a model reaches production naming a worker nobody
+// created (ADR-draft-create-the-worker-from-the-incident). Same class as the editor's
+// panel, so the two read alike.
+function showDeployWarnings(warnings) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Deploy warnings">
+      <div class="modal-head"><h2>Published, with warnings</h2></div>
+      <div class="modal-body">
+        <div class="deploy-warnings"><b>&#9888; Deployed, but this will not run as written:</b>
+          <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn" data-done title="Close this dialog">Close</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-done]").addEventListener("click", close);
+  ov.querySelector("[data-done]").focus();
 }
 
 // downloadApplicationSource downloads the application's source tree (ADR-0134): a
@@ -5449,9 +5486,15 @@ function incidentMenu(r, i) {
   items.push({ label: "Fix variables…", icon: "✎", act: "fixvars", data: { row: i } });
   if (r.connector && r.connectorId) {
     items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { row: i } });
+  } else if (r.connector && r.connectorKind) {
+    // Nothing to open — the model names a worker nobody configured. Creating it is
+    // the act, and the model already states the name and the Worker Type, so it
+    // happens here rather than in the Console with the name carried in somebody's
+    // head (ADR-draft-create-the-worker-from-the-incident).
+    items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { row: i } });
   } else if (r.connector) {
-    // Nothing to open — the model names a worker nobody configured, so the way out
-    // is the Console, where one is created.
+    // A worker named without its Worker Type: nothing to create it *as*, so the
+    // Console, where the type is picked, stays the answer.
     items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
   }
   return items;
@@ -5543,7 +5586,9 @@ async function viewIncidents() {
         ? !!(await fixVariablesFlow({ api, toast, incident }))
         : act === "fixconn"
           ? !!(await fixWorkerFlow({ api, toast, incident }))
-          : await resolveIncidentFlow({ api, toast, incident });
+          : act === "addconn"
+            ? !!(await addWorkerFlow({ api, toast, incident }))
+            : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
       refreshIncidentBadge(); // don't make the nav wait out its interval to agree

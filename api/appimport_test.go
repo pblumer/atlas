@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -194,5 +195,56 @@ func TestImportBadRequests(t *testing.T) {
 				t.Errorf("%s = %d, want 400", tc.name, code)
 			}
 		})
+	}
+}
+
+// workerRefBPMN is a released artifact whose service task resolves through a named
+// worker — the reference a receiving server can only check once it has the bundle.
+func workerRefBPMN(id string) string {
+	return fmt.Sprintf(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="%s" isExecutable="true">
+    <startEvent id="s"/>
+    <serviceTask id="notify">
+      <extensionElements><atlas:mailConnector connector="Patrick Blumer" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="notify"/>
+    <sequenceFlow id="f2" sourceRef="notify" targetRef="e"/>
+  </process>
+</definitions>`, id)
+}
+
+// TestImportWarnsAboutUnconfiguredWorker covers the receiving end of the preflight.
+// A release travels between servers, and the worker it names is configured on each of
+// them separately (ADR-0041) — so the import is exactly the moment the reference can
+// first be checked here, and the one moment somebody is looking. The bundle still
+// lands: an environment that provisions its workers after the first import is normal
+// (ADR-0158).
+func TestImportWarnsAboutUnconfiguredWorker(t *testing.T) {
+	ts := newTestServer(t)
+
+	raw, _ := json.Marshal(map[string]any{
+		"application": "Onboarding",
+		"release":     map[string]any{"version": 1, "note": ""},
+		"artifacts": []map[string]any{
+			{"kind": "process", "processId": "notifyme", "xml": workerRefBPMN("notifyme")},
+		},
+	})
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications/import", string(raw), "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("import = %d body=%s", code, body)
+	}
+	var res struct {
+		Imported bool     `json:"imported"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if !res.Imported {
+		t.Fatalf("import did not land: %s", body)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "not configured on this server") {
+		t.Fatalf("warnings = %v, want one naming the worker as unconfigured", res.Warnings)
 	}
 }

@@ -216,15 +216,73 @@ test.describe("reconfiguring the worker", () => {
     expect(page.__errors).toEqual([]);
   });
 
-  test("a name nobody configured points at the Console instead", async ({ page }) => {
+  test("a name nobody configured is created from the incident, and the task retries", async ({ page }) => {
     await open(page);
     await page.evaluate(() => window.__unconfigureConnector());
     await page.evaluate(() => window.__mountLive(window.__STUCK));
 
     const row = page.locator("#var-panel .inc-row");
     await expect(row.locator(".inc-conn")).toContainText("not configured");
-    // Nothing to open: the fix is to create one, and that lives in the Console.
+    // There is no record to edit, so the row offers the act that is actually missing:
+    // create the worker the model names. Sending the operator to the Console with the
+    // name in their head was the pre-ADR-0160 detour ADR-0160 removed everywhere else.
     await expect(row.locator("[data-fix-conn]")).toHaveCount(0);
+    await row.locator("[data-add-conn]").click();
+
+    const modal = page.locator(".conn-modal");
+    await expect(modal).toBeVisible();
+    // Name and Worker Type come from the incident and are not typed again: the name is
+    // the binding every model references, so a typo here would create a second worker
+    // and leave the task parked on the first.
+    await expect(modal.locator("#conn-name")).toHaveValue("Patrick Blumer");
+    await expect(modal.locator("#conn-name")).toBeDisabled();
+    await expect(modal.locator("#conn-kind")).toHaveValue("mail");
+    await expect(modal).toContainText("Task_pay is parked on this worker");
+
+    await modal.locator("#conn-endpoint").fill("smtp.example.com:587");
+    await modal.locator("#conn-credref").fill("smtp_pw");
+    await modal.locator("[data-conn-extra]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+
+    // One action: the worker exists now, under the name the model states, and the
+    // parked job was handed an attempt against it.
+    await expect.poll(() => page.evaluate(() => window.__connCreates)).toEqual([
+      {
+        name: "Patrick Blumer", kind: "mail", provider: "smtp",
+        endpoint: "smtp.example.com:587", sender: "", credentialsRef: "smtp_pw",
+      },
+    ]);
+    await expect.poll(() => page.evaluate(() => window.__resolved)).toEqual([{ key: "1001", retries: 1 }]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("creating without retrying leaves the incident standing", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__unconfigureConnector());
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+    await page.locator("#var-panel .inc-row [data-add-conn]").click();
+
+    const modal = page.locator(".conn-modal");
+    await modal.locator("#conn-endpoint").fill("smtp.example.com:2525");
+    await modal.locator("[data-conn-save]").click();
+    await expect(page.locator(".conn-modal")).toHaveCount(0);
+
+    await expect.poll(() => page.evaluate(() => window.__connCreates.length)).toBe(1);
+    expect(await page.evaluate(() => window.__resolved)).toEqual([]);
+    await expect(page.locator("#var-panel .inc-row")).toHaveCount(1);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a worker whose Worker Type the incident does not name still points at the Console", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__unconfigureConnector(""));
+    await page.evaluate(() => window.__mountLive(window.__STUCK));
+
+    // Without a Worker Type there is nothing to create *as*, so the dialog would have
+    // to guess. The Console, where the type is picked, stays the honest answer.
+    const row = page.locator("#var-panel .inc-row");
+    await expect(row.locator("[data-add-conn]")).toHaveCount(0);
     await expect(row.locator('a[href="#/console/workers"]')).toContainText("Configure");
     expect(page.__errors).toEqual([]);
   });

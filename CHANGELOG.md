@@ -48,6 +48,27 @@ _Changed_ / _Removed_ for each version.
   a table it owns, a table that is not a list carries `no-enhance` and says why, and
   code that replaces a whole table enhances it again.
 
+### Fixed
+
+- **An incident that says "no worker registered as X" can now create X, instead of pointing
+  at the Console.** The one incident whose cause is named in its own message was the one
+  incident with no way out of it: the row offered a link to Console › Workers, which is the
+  detour ADR-0160 exists to remove — read the incident, carry the name and the Worker Type in
+  your head, find the add form, navigate back, resolve. It is not a choice to make there
+  anyway: the deployed model states both the name and the type, and a worker created under
+  anything else leaves the task parked. So every incident surface now opens the same worker
+  dialog in a create mode with those two fixed, and **Add & retry** writes it and hands the
+  parked job one more attempt (ADR-draft-create-the-worker-from-the-incident).
+- **Publishing an application runs the deploy-time preflight that only the Modeler's Deploy
+  button ran.** The check that says a model names a worker nobody configured — along with the
+  information model's data-flow findings and the foreign-namespace check — lived inside the
+  single-model deploy handler. Publishing an application and importing a release reach the
+  deploy directly and reported none of it; `projectDeployResp` had no `warnings` field at all,
+  so it could not have. That is how a model reaches production naming a worker that does not
+  exist, and Publish is how most applications get there. The three checks are one function
+  now, called by all three paths, and the Console shows what a publish warned about
+  (ADR-draft-create-the-worker-from-the-incident).
+
 ## [0.5.0] — 2026-09-08
 
 **This release closes the boundary.** `atlas serve` requires a login by default — `--auth`

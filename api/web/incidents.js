@@ -9,7 +9,7 @@
 // budget, so it asks — which also gives room to say that a timer incident re-arms and
 // ignores the count, something window.prompt had nowhere to put.
 
-import { editWorkerFlow } from "./workerdialog.js";
+import { editWorkerFlow, createWorkerFlow } from "./workerdialog.js";
 import { loadFormViewer, formFieldKeys } from "./formviewer.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -49,18 +49,34 @@ export function incidentWorkerChip(inc) {
 // change what the task is configured to *talk to*. A mail task parked on an SMTP host
 // that will not authenticate is not fixed by correcting the data, by retrying, or by
 // declaring the work done — it is fixed by pointing its worker somewhere else
-// (ADR-0160). When the referenced worker does not exist at all there is nothing to
-// open, so the button becomes the way to the Console, where it can be created.
+// (ADR-0160).
 //
-// This is the diagram-side row only. The Operations incidents table puts the same two
+// When no worker of that name exists, the act is to create it, and that is offered
+// here too. It used to be a link to the Console, which is the pre-ADR-0160 detour that
+// ADR-0160 exists to remove — read the incident, carry the name and the Worker Type in
+// your head, find the add form, fill it in, navigate back, resolve — and it was offered
+// for exactly the message that started ADR-0158: `no worker registered as X`. Since the
+// model states both the name and the type, there is nothing left for the Console to be
+// asked, so the same dialog opens with those two fixed (ADR-draft-create-the-worker-from-the-incident).
+//
+// The link survives for the one case that has no answer here: an incident that names a
+// worker but not its Worker Type (an older record, or a reference the runtime resolved
+// by name alone). There is nothing to create *as*, and guessing a type would create the
+// wrong worker under the right name.
+//
+// This is the diagram-side row only. The Operations incidents table puts the same
 // non-primary actions behind the ⋯ menu every other table there uses, because a third
 // visible button pushed that table past the width of its card (ADR-0163) — so the two
-// surfaces render the action differently on purpose, over the same fixWorkerFlow.
+// surfaces render the action differently on purpose, over the same two flows.
 function incidentWorkerAction(inc) {
   if (!inc.connector) return "";
   if (!inc.connectorId) {
-    return `<a class="btn neutral sm" href="#/console/workers"
-      title="No worker is configured under this name — add one under Console &rsaquo; Workers">&#9881; Configure &#8599;</a>`;
+    if (!inc.connectorKind) {
+      return `<a class="btn neutral sm" href="#/console/workers"
+        title="No worker is configured under this name, and the incident does not say which Worker Type it should be — pick one under Console &rsaquo; Workers">&#9881; Configure &#8599;</a>`;
+    }
+    return `<button class="btn neutral sm" data-add-conn="${esc(String(inc.elementInstanceKey))}" data-inc="${esc(String(inc.elementInstanceKey))}"
+      title="No worker is configured under this name — create it here, under the name and Worker Type the model states, and retry against it">&#9881; Create worker&hellip;</button>`;
   }
   return `<button class="btn neutral sm" data-fix-conn="${esc(String(inc.connectorId))}" data-inc="${esc(String(inc.elementInstanceKey))}"
     title="Change what this task talks to — endpoint, provider, credential — and retry against it">&#9881; Worker&hellip;</button>`;
@@ -549,6 +565,31 @@ export async function fixWorkerFlow({ api, toast, incident }) {
   return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
 }
 
+// addWorkerFlow creates the worker the parked task names, then retries it. It is
+// fixWorkerFlow's other half: that one opens a record that exists, this one is what an
+// operator needs when the message is `no worker registered as X` and the honest answer
+// is that nobody ever created X (ADR-draft-create-the-worker-from-the-incident).
+//
+// The name and the Worker Type are the incident's — which is to say the deployed
+// model's (ADR-0036/0041) — so neither is typed and neither can be got wrong. Resolves
+// "resolved" when the incident was also cleared, "saved" when only the worker was
+// created, and null when nothing happened.
+export async function addWorkerFlow({ api, toast, incident }) {
+  if (!incident.connector || !incident.connectorKind) return null;
+  const res = await createWorkerFlow({
+    api, toast, name: incident.connector, kind: incident.connectorKind,
+    intro: `${incident.elementId || "This task"} is parked on this worker: ${incident.message || "(no message)"}`,
+    extraLabel: "Add & retry",
+    okToast: "",
+  });
+  if (!res) return null;
+  if (!res.extra) {
+    toast("Worker added — the incident is still open", "ok");
+    return "saved";
+  }
+  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+}
+
 // bindIncidentActions wires one surface's incident block: the actions on every row,
 // delegated on a container that re-renders under them. `resolve` picks which resolve
 // this surface offers — "quick" beside a diagram (one click, one attempt, ADR-0150),
@@ -556,7 +597,7 @@ export async function fixWorkerFlow({ api, toast, incident }) {
 // budget. onChanged runs after anything actually changed, so the caller can re-poll.
 // `incidents()` returns the rows currently on screen.
 export function bindIncidentActions(root, { api, toast, incidents, onChanged, resolve = "quick", within = "" }) {
-  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-complete]", "[data-repair]"]
+  const sel = ["[data-resolve]", "[data-fix-vars]", "[data-fix-conn]", "[data-add-conn]", "[data-complete]", "[data-repair]"]
     .map((s) => (within ? `${within} ${s}` : s)).join(", ");
   root.addEventListener("click", async (ev) => {
     const btn = ev.target.closest(sel);
@@ -575,9 +616,11 @@ export function bindIncidentActions(root, { api, toast, incidents, onChanged, re
             ? !!(await fixVariablesFlow({ api, toast, incident }))
             : btn.dataset.fixConn
               ? !!(await fixWorkerFlow({ api, toast, incident }))
-              : resolve === "ask"
-                ? await resolveIncidentFlow({ api, toast, incident })
-                : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+              : btn.dataset.addConn
+                ? !!(await addWorkerFlow({ api, toast, incident }))
+                : resolve === "ask"
+                  ? await resolveIncidentFlow({ api, toast, incident })
+                  : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
       if (changed && onChanged) await onChanged();
     } finally {
       btn.disabled = false;
