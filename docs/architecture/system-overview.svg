@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Atlas Architekturübersicht</title>
+  <desc id="desc">Kompakte Übersicht über Atlas Apps, HTTP API, MCP, die event-sourced Workflow Engine und das Worker-Modell mit Worker Types, konfigurierten Workern und skalierbaren Worker Instances.</desc>
+  <defs>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#2563a8"/>
+    </marker>
+    <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#d97706"/>
+    </marker>
+    <linearGradient id="engineBand" x1="0" x2="1">
+      <stop offset="0" stop-color="#0f4c81"/>
+      <stop offset="1" stop-color="#2563a8"/>
+    </linearGradient>
+    <style>
+      text{font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;fill:#172b3a}
+      .title{font-size:36px;font-weight:700;letter-spacing:-.5px}
+      .subtitle{font-size:17px;fill:#5b6b7a}
+      .eyebrow{font-size:13px;font-weight:700;letter-spacing:1.4px;fill:#5b6b7a}
+      .section{font-size:18px;font-weight:700}
+      .label{font-size:16px;font-weight:650}
+      .small{font-size:13px;fill:#5b6b7a}
+      .micro{font-size:12px;fill:#6b7785}
+      .white{fill:#fff}
+      .whiteMuted{fill:#dceaf6}
+      .card{fill:#fff;stroke:#dce4ec;stroke-width:1.4}
+      .app{fill:#eef5ff;stroke:#8bb8e8;stroke-width:1.4}
+      .iface{fill:#e8f7f4;stroke:#6bb9ad;stroke-width:1.4}
+      .workerType{fill:#fff6e8;stroke:#e9a84b;stroke-width:1.5}
+      .worker{fill:#fff;stroke:#d97706;stroke-width:1.8}
+      .instance{fill:#effaf2;stroke:#68ad79;stroke-width:1.5}
+      .line{fill:none;stroke:#718096;stroke-width:2}
+      .orangeLine{fill:none;stroke:#d97706;stroke-width:2.4}
+    </style>
+  </defs>
+
+  <rect width="1800" height="1200" fill="#f6f8fb"/>
+
+  <g transform="translate(70 52)">
+    <rect width="54" height="54" rx="13" fill="#050505"/>
+    <path fill="#fff" fill-rule="evenodd" d="M27 8 49 44H5ZM27 35l9 9H18Zm-3-20h6v5h5v6h-5v5h-6v-5h-5v-6h5Z"/>
+    <text x="72" y="29" class="title">Atlas Architektur</text>
+    <text x="72" y="53" class="subtitle">Von Benutzer und Agent bis zur dauerhaften Ausführung und externen Arbeit</text>
+  </g>
+  <g transform="translate(1455 62)">
+    <rect width="275" height="34" rx="17" fill="#e8eef5"/>
+    <circle cx="18" cy="17" r="5" fill="#36a269"/>
+    <text x="32" y="22" class="small">Stand: main · 08.09.2026</text>
+  </g>
+
+  <text x="70" y="155" class="eyebrow">NUTZER UND CLIENTS</text>
+  <g>
+    <rect x="70" y="172" width="520" height="82" rx="16" class="card"/>
+    <circle cx="105" cy="205" r="12" fill="#6a72db" opacity=".18"/>
+    <circle cx="105" cy="201" r="5" fill="#4e56bf"/>
+    <path d="M95 218c2-9 18-9 20 0" fill="none" stroke="#4e56bf" stroke-width="4" stroke-linecap="round"/>
+    <text x="132" y="207" class="label">Menschen</text>
+    <text x="132" y="229" class="small">Modellierung · Arbeit · Betrieb</text>
+
+    <rect x="610" y="172" width="520" height="82" rx="16" class="card"/>
+    <rect x="639" y="193" width="28" height="22" rx="3" fill="none" stroke="#2563a8" stroke-width="2.4"/>
+    <path d="M645 222h16m-8-7v7" stroke="#2563a8" stroke-width="2.4" stroke-linecap="round"/>
+    <text x="685" y="207" class="label">API-Clients</text>
+    <text x="685" y="229" class="small">Anwendungen · CLI · Automation</text>
+
+    <rect x="1150" y="172" width="580" height="82" rx="16" class="card"/>
+    <circle cx="1187" cy="205" r="15" fill="#e8f7f4" stroke="#42a394" stroke-width="2"/>
+    <path d="M1180 205h14m-7-7v14" stroke="#318c7e" stroke-width="2.2" stroke-linecap="round"/>
+    <text x="1220" y="207" class="label">AI Agents</text>
+    <text x="1220" y="229" class="small">Authoring · Ausführung · Analyse</text>
+  </g>
+
+  <rect x="70" y="302" width="1660" height="635" rx="26" fill="#fff" stroke="#b7c5d3" stroke-width="2"/>
+  <rect x="70" y="302" width="1660" height="47" rx="26" fill="#172b3a"/>
+  <rect x="70" y="328" width="1660" height="21" fill="#172b3a"/>
+  <text x="96" y="333" class="section white">ATLAS SINGLE BINARY</text>
+  <text x="1704" y="332" text-anchor="end" class="small whiteMuted">Go · keine externe Datenbank · kein Message Broker</text>
+
+  <text x="96" y="382" class="eyebrow">ATLAS APPS · EMBEDDED WEB UI</text>
+  <g>
+    <rect x="96" y="397" width="306" height="67" rx="13" class="app"/>
+    <text x="249" y="425" text-anchor="middle" class="label">Console</text>
+    <text x="249" y="447" text-anchor="middle" class="small">Organisation · Workers · Auth</text>
+    <rect x="418" y="397" width="306" height="67" rx="13" class="app"/>
+    <text x="571" y="425" text-anchor="middle" class="label">Modeler</text>
+    <text x="571" y="447" text-anchor="middle" class="small">BPMN · DMN · Forms · Apps</text>
+    <rect x="740" y="397" width="306" height="67" rx="13" class="app"/>
+    <text x="893" y="425" text-anchor="middle" class="label">Tasks</text>
+    <text x="893" y="447" text-anchor="middle" class="small">Human Work Items</text>
+    <rect x="1062" y="397" width="306" height="67" rx="13" class="app"/>
+    <text x="1215" y="425" text-anchor="middle" class="label">Operations</text>
+    <text x="1215" y="447" text-anchor="middle" class="small">Live · Replay · Incidents</text>
+    <rect x="1384" y="397" width="320" height="67" rx="13" class="app"/>
+    <text x="1544" y="425" text-anchor="middle" class="label">Panorama</text>
+    <text x="1544" y="447" text-anchor="middle" class="small">Architektur · Live Landscape</text>
+  </g>
+
+  <path d="M249 464V494M571 464V494M893 464V494M1215 464V494M1544 464V494" class="line"/>
+  <path d="M249 494H1544" class="line"/>
+  <text x="96" y="519" class="eyebrow">SCHNITTSTELLEN UND ZUGRIFF</text>
+  <g>
+    <rect x="96" y="534" width="391" height="76" rx="13" class="iface"/>
+    <text x="291.5" y="563" text-anchor="middle" class="label">Web UI</text>
+    <text x="291.5" y="587" text-anchor="middle" class="small">Browser · Session · Rollen</text>
+    <rect x="503" y="534" width="391" height="76" rx="13" class="iface"/>
+    <text x="698.5" y="563" text-anchor="middle" class="label">HTTP API</text>
+    <text x="698.5" y="587" text-anchor="middle" class="small">REST · JSON · OpenAPI</text>
+    <rect x="910" y="534" width="391" height="76" rx="13" class="iface"/>
+    <text x="1105.5" y="563" text-anchor="middle" class="label">MCP Adapter</text>
+    <text x="1105.5" y="587" text-anchor="middle" class="small">stdio + /mcp · verwendet HTTP API</text>
+    <rect x="1317" y="534" width="387" height="76" rx="13" class="iface"/>
+    <text x="1510.5" y="563" text-anchor="middle" class="label">Worker API</text>
+    <text x="1510.5" y="587" text-anchor="middle" class="small">HTTP long-poll · Lease · Fencing</text>
+  </g>
+
+  <rect x="96" y="669" width="1608" height="236" rx="18" fill="url(#engineBand)"/>
+  <text x="121" y="704" class="section white">WORKFLOW ENGINE</text>
+  <g>
+    <rect x="1044" y="680" width="176" height="29" rx="14.5" fill="#0a365d"/>
+    <text x="1132" y="699" text-anchor="middle" class="micro whiteMuted">Single Writer / Partition</text>
+    <rect x="1232" y="680" width="190" height="29" rx="14.5" fill="#0a365d"/>
+    <text x="1327" y="699" text-anchor="middle" class="micro whiteMuted">Durable before visible</text>
+    <rect x="1434" y="680" width="245" height="29" rx="14.5" fill="#0a365d"/>
+    <text x="1556.5" y="699" text-anchor="middle" class="micro whiteMuted">Live = Replay via applyToState</text>
+  </g>
+
+  <g>
+    <rect x="121" y="725" width="300" height="104" rx="13" fill="#fff" fill-opacity=".97"/>
+    <text x="271" y="754" text-anchor="middle" class="label">Graph Compiler</text>
+    <text x="271" y="778" text-anchor="middle" class="small">BPMN XML → validieren</text>
+    <text x="271" y="800" text-anchor="middle" class="small">FEEL kompilieren → Indizes</text>
+
+    <rect x="441" y="725" width="360" height="104" rx="13" fill="#fff" fill-opacity=".97"/>
+    <text x="621" y="754" text-anchor="middle" class="label">Partition 0..N</text>
+    <text x="621" y="778" text-anchor="middle" class="small">Command Queue + Single Writer</text>
+    <text x="621" y="800" text-anchor="middle" class="small">deterministischer Processor</text>
+
+    <rect x="821" y="725" width="330" height="104" rx="13" fill="#fff" fill-opacity=".97"/>
+    <text x="986" y="754" text-anchor="middle" class="label">Execution Services</text>
+    <text x="986" y="778" text-anchor="middle" class="small">Durable Jobs · Timer · Messages</text>
+    <text x="986" y="800" text-anchor="middle" class="small">FEEL · lokale DMN · Incidents</text>
+
+    <rect x="1171" y="725" width="508" height="104" rx="13" fill="#fff" fill-opacity=".97"/>
+    <text x="1425" y="754" text-anchor="middle" class="label">Event-sourced State</text>
+    <text x="1425" y="778" text-anchor="middle" class="small">WAL + ein fsync pro Batch</text>
+    <text x="1425" y="800" text-anchor="middle" class="small">applyToState → Pebble Materialisierung</text>
+  </g>
+
+  <path d="M421 777H441M801 777H821M1151 777H1171" stroke="#dceaf6" stroke-width="3"/>
+  <rect x="121" y="849" width="1558" height="36" rx="18" fill="#0a365d"/>
+  <text x="900" y="872" text-anchor="middle" class="small whiteMuted">Events erzeugen  →  WAL schreiben  →  fsync  →  State committen  →  Followups  →  Antworten &amp; Side Effects</text>
+
+  <text x="70" y="991" class="eyebrow">WORKER-MODELL · EXTERNE SIDE EFFECTS NACH DEM FSYNC</text>
+  <g>
+    <rect x="70" y="1008" width="354" height="135" rx="18" class="workerType"/>
+    <text x="94" y="1040" class="section">1 · Worker Type</text>
+    <text x="94" y="1065" class="small">Fähigkeit + Operationen + Konfigurationsschema</text>
+    <g transform="translate(82 1083)">
+      <rect width="50" height="26" rx="13" fill="#ffe7bf"/><text x="25" y="18" text-anchor="middle" class="micro">REST</text>
+      <rect x="56" width="50" height="26" rx="13" fill="#ffe7bf"/><text x="81" y="18" text-anchor="middle" class="micro">Mail</text>
+      <rect x="112" width="50" height="26" rx="13" fill="#ffe7bf"/><text x="137" y="18" text-anchor="middle" class="micro">Jira</text>
+      <rect x="168" width="65" height="26" rx="13" fill="#ffe7bf"/><text x="200.5" y="18" text-anchor="middle" class="micro">AD/Entra</text>
+      <rect x="239" width="48" height="26" rx="13" fill="#ffe7bf"/><text x="263" y="18" text-anchor="middle" class="micro">SQL</text>
+      <rect x="293" width="48" height="26" rx="13" fill="#ffe7bf"/><text x="317" y="18" text-anchor="middle" class="micro">…</text>
+    </g>
+
+    <rect x="520" y="1008" width="350" height="135" rx="18" class="worker"/>
+    <text x="544" y="1040" class="section">2 · Worker</text>
+    <text x="544" y="1065" class="small">Konfiguriertes Ziel + Identität</text>
+    <text x="544" y="1093" class="label">jira-production</text>
+    <text x="544" y="1117" class="small">Endpoint · Credential-Referenz · enabled</text>
+
+    <rect x="950" y="1008" width="400" height="135" rx="18" class="instance"/>
+    <text x="974" y="1040" class="section">3 · Worker Instances</text>
+    <text x="974" y="1065" class="small">0..N laufende Konsumenten desselben Workers</text>
+    <g transform="translate(976 1081)">
+      <rect width="98" height="38" rx="8" fill="#d9f1df"/><text x="49" y="24" text-anchor="middle" class="micro">Instance A</text>
+      <rect x="111" width="98" height="38" rx="8" fill="#d9f1df"/><text x="160" y="24" text-anchor="middle" class="micro">Instance B</text>
+      <rect x="222" width="98" height="38" rx="8" fill="#d9f1df"/><text x="271" y="24" text-anchor="middle" class="micro">Instance C</text>
+    </g>
+
+    <rect x="1430" y="1008" width="300" height="135" rx="18" class="card" stroke="#d97706" stroke-width="1.5"/>
+    <text x="1454" y="1040" class="section">4 · Zielsysteme</text>
+    <text x="1454" y="1065" class="small">Externe APIs und Dienste</text>
+    <text x="1454" y="1093" class="label">Jira · Mail · AD/Entra</text>
+    <text x="1454" y="1117" class="small">SQL · REST · SharePoint · …</text>
+  </g>
+  <path d="M424 1096H520" class="orangeLine" marker-end="url(#arrowOrange)"/>
+  <text x="472" y="1077" text-anchor="middle" class="micro">konfigurieren</text>
+  <path d="M870 1096H950" class="orangeLine" marker-end="url(#arrowOrange)"/>
+  <text x="910" y="1077" text-anchor="middle" class="micro">skalieren</text>
+  <path d="M1350 1096H1430" class="orangeLine" marker-end="url(#arrowOrange)"/>
+  <text x="1390" y="1077" text-anchor="middle" class="micro">ausführen</text>
+
+  <text x="70" y="1180" class="micro">Aktueller Implementierungsstand: Worker-Protokoll über HTTP (nicht gRPC). Worker Types sind heute im Atlas-Binary kompiliert; frei installierbare Pakete und Autoscaling-Policy sind Zielbild.</text>
+</svg>

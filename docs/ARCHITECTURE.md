@@ -38,36 +38,9 @@ See [ADR-0001](adr/0001-event-sourcing-and-log-structured-state.md), [ADR-0002](
 
 ## System overview
 
-```
-                          ┌─────────────────────────────────────────────┐
-                          │                  Atlas                   │
-                          │                                              │
-   Deploy BPMN  ────────► │  ┌────────────────┐                         │
-                          │  │  Graph Compiler │  (once per deployment)  │
-                          │  └───────┬────────┘                         │
-                          │          │ immutable CompiledProcess         │
-                          │          ▼                                   │
-   Client commands ─────► │  ┌────────────────────────────────────────┐ │
-   (start instance,       │  │            Partition 0..N               │ │
-    publish message,      │  │  ┌──────────────────────────────────┐   │ │
-    complete job)         │  │  │   Single-writer Processor loop    │   │ │
-                          │  │  │   - batch commands                │   │ │
-                          │  │  │   - mutate state (in-memory tx)   │   │ │
-                          │  │  │   - emit events                   │   │ │
-                          │  │  └────────┬─────────────┬───────────┘   │ │
-                          │  │           │             │                │ │
-                          │  │   ┌───────▼──────┐  ┌───▼──────────┐    │ │
-                          │  │   │   WAL (log)  │  │  State store │    │ │
-                          │  │   │ append+fsync │  │  (Pebble)    │    │ │
-                          │  │   └──────────────┘  └──────────────┘    │ │
-                          │  └────────────────────────────────────────┘ │
-                          │          │ jobs                              │
-                          └──────────┼──────────────────────────────────┘
-                                     ▼
-                          External job workers (gRPC stream)
-```
+![Atlas system overview: users, applications, interfaces, workflow engine, workers and target systems](architecture/system-overview.svg)
 
-A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **job workers** as jobs, and their results come back as new commands.
+A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands.
 
 ## The three pillars
 
