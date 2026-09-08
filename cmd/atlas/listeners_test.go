@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"net/http"
@@ -159,4 +160,58 @@ func waitServing(t *testing.T, addr string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("%s never started answering", addr)
+}
+
+// TestHTTPServerTimeouts pins the listener's timeout contract. A server built
+// with only an address and a handler inherits Go's zero values, which mean "no
+// limit": a client that opens a connection and dribbles a request header holds a
+// connection indefinitely, and a keep-alive connection nobody reuses is never
+// reclaimed. Neither is bounded by the request-body byte caps.
+//
+// The two zero values here are deliberate and are the reason this test states all
+// four rather than only the ones that are set.
+func TestHTTPServerTimeouts(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		srv  *http.Server
+	}{
+		{"public", newHTTPServer(":8080", http.NewServeMux(), nil)},
+		{"loopback", newHTTPServer("", http.NewServeMux(), nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.srv.ReadHeaderTimeout != readHeaderTimeout || tc.srv.ReadHeaderTimeout == 0 {
+				t.Errorf("ReadHeaderTimeout = %v, want %v", tc.srv.ReadHeaderTimeout, readHeaderTimeout)
+			}
+			if tc.srv.IdleTimeout != idleTimeout || tc.srv.IdleTimeout == 0 {
+				t.Errorf("IdleTimeout = %v, want %v", tc.srv.IdleTimeout, idleTimeout)
+			}
+			// A whole-request read deadline would cut off a slow but legitimate
+			// restore upload, which is bounded by bytes rather than by seconds.
+			if tc.srv.ReadTimeout != 0 {
+				t.Errorf("ReadTimeout = %v, want 0: the body is bounded by its byte cap, not by a clock", tc.srv.ReadTimeout)
+			}
+			// A write deadline would cut off a long-polling worker and a streamed
+			// backup, both of which hold a response open on purpose.
+			if tc.srv.WriteTimeout != 0 {
+				t.Errorf("WriteTimeout = %v, want 0: long polls and streamed backups hold a response open on purpose", tc.srv.WriteTimeout)
+			}
+		})
+	}
+}
+
+// TestHTTPServerCarriesItsAddressAndTLS: the timeouts are added to the server, not
+// substituted for what it is.
+func TestHTTPServerCarriesItsAddressAndTLS(t *testing.T) {
+	h := http.NewServeMux()
+	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
+	srv := newHTTPServer(":9443", h, cfg)
+	if srv.Addr != ":9443" {
+		t.Errorf("Addr = %q, want :9443", srv.Addr)
+	}
+	if srv.Handler == nil {
+		t.Error("Handler was dropped")
+	}
+	if srv.TLSConfig != cfg {
+		t.Error("TLSConfig was dropped")
+	}
 }

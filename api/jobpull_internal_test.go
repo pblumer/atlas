@@ -573,3 +573,45 @@ const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </bpmn:process>
 </bpmn:definitions>`
+
+// TestPullHandsOutEveryJobExactlyOnceAcrossManyPulls guards the bounded scan. The
+// pull used to read every waiting job of its type and discard all but the page it
+// wanted; it now stops at the page (ADR-0270). Stopping early
+// is only safe if nothing behind the stop is lost — so this drains a backlog one job
+// at a time and checks that the pulls together hand out each job once and only once.
+func TestPullHandsOutEveryJobExactlyOnceAcrossManyPulls(t *testing.T) {
+	srv := jobPullSrv(t, "send-email", `{}`)
+	const extra = 11
+	for range extra {
+		if code, body := serveInternal(t, srv, http.MethodPost, "/api/v1/processes/1/instances", "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("start extra instance: status=%d body=%s", code, body)
+		}
+	}
+
+	seen := map[uint64]int{}
+	for i := 0; i < extra+2; i++ { // one more pull than there are jobs
+		code, got := pull(t, srv, `{"type":"send-email","worker":"w1","maxJobs":1}`)
+		if code != http.StatusOK {
+			t.Fatalf("pull %d: status=%d", i, code)
+		}
+		if len(got.Jobs) == 0 {
+			break
+		}
+		if len(got.Jobs) != 1 {
+			t.Fatalf("pull %d returned %d jobs, want the one it asked for", i, len(got.Jobs))
+		}
+		seen[got.Jobs[0].JobKey]++
+	}
+	if len(seen) != extra+1 {
+		t.Fatalf("pulled %d distinct jobs, want all %d", len(seen), extra+1)
+	}
+	for key, n := range seen {
+		if n != 1 {
+			t.Errorf("job %d was leased %d times, want once", key, n)
+		}
+	}
+	// And the backlog really is drained: one more pull hands out nothing.
+	if code, got := pull(t, srv, `{"type":"send-email","worker":"w2","maxJobs":10}`); code != http.StatusOK || len(got.Jobs) != 0 {
+		t.Errorf("after draining: status=%d jobs=%d, want 200 and none", code, len(got.Jobs))
+	}
+}

@@ -74,9 +74,15 @@ func TestOpenLastSegmentOpenError(t *testing.T) {
 	}
 }
 
-// TestOpenTruncateError covers Open's Truncate failure: a segment symlinked to
-// /dev/null opens and reads (empty) fine, but truncating it fails with EINVAL.
-func TestOpenTruncateError(t *testing.T) {
+// TestOpenSkipsAnUnwritableSegment: a segment the writer cannot recognise — here
+// one symlinked to /dev/null, which reads as empty and holds no format header —
+// is not adopted for writing. Open succeeds, leaves the file alone, and continues
+// in a fresh segment, so one unusable file cannot stop the log from starting.
+//
+// This is the same path a pre-batch segment takes (ADR-0285):
+// anything without the version-2 header is read but never appended to, because a
+// batch cannot be written into a file whose framing predates batches.
+func TestOpenSkipsAnUnwritableSegment(t *testing.T) {
 	if _, err := os.Stat(os.DevNull); err != nil {
 		t.Skipf("no %s", os.DevNull)
 	}
@@ -85,8 +91,26 @@ func TestOpenTruncateError(t *testing.T) {
 	if err := os.Symlink(os.DevNull, link); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
-	if _, err := wal.Open(wal.Options{Dir: dir}); err == nil {
-		t.Fatal("Open of a segment symlinked to /dev/null: got nil error, want a truncate error")
+	l, err := wal.Open(wal.Options{Dir: dir})
+	if err != nil {
+		t.Fatalf("Open past an unusable segment: %v", err)
+	}
+	defer l.Close()
+	if err := l.Append([]byte("after")); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	if err := l.Sync(); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	var got []string
+	if err := l.Replay(func(data []byte) error {
+		got = append(got, string(data))
+		return nil
+	}); err != nil {
+		t.Fatalf("Replay: %v", err)
+	}
+	if len(got) != 1 || got[0] != "after" {
+		t.Fatalf("replayed %q, want [after] written to a fresh segment", got)
 	}
 }
 

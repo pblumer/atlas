@@ -464,9 +464,11 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 			// session: an OAuth grant can stand for months (ADR-0200).
 			s.revokeUserGrants(id)
 		} else {
-			// Roles changed but the account stands: rewrite what its grants may do
-			// rather than dropping them, so an administrative edit does not knock a
-			// person's worker over.
+			// Roles changed but the account stands: push the new set into the account's
+			// live sessions so it is enforced from the next request rather than the next
+			// login, and rewrite what its grants may do rather than dropping them, so an
+			// administrative edit does not knock a person's worker over.
+			s.sessions.setUserRoles(id, updated.Roles)
 			s.setUserGrantRoles(id, updated.Roles)
 		}
 		// Roles and the disabled flag are the two fields that change what an account

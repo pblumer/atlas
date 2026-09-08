@@ -102,7 +102,29 @@ type Processor struct {
 	followups    []Command
 	sideEffects  []sideEffect
 	encBuf       []byte
-	fatalErr     error
+	// contBuf holds the encoded continuation for the batch being committed. Reused
+	// across batches like encBuf, so persisting the outstanding queue costs no
+	// allocation per batch (invariant I1).
+	contBuf []byte
+	// routeBuf holds the outgoing flows an inclusive gateway decided to take, reused
+	// across decisions so an OR split allocates nothing per token (invariant I1). It
+	// is valid only between a routing decision and the caller taking those flows.
+	routeBuf []int32
+	fatalErr error
+
+	// tokenSteps counts, per token, how many element activations it has driven in the
+	// current run — the execution budget (ADR-0272). It is
+	// deliberately not durable: the question it answers is "is one token occupying the
+	// single writer right now", and a token that waited for a job or a timer in between
+	// was never the problem. Cleared when a run starts, and reused across runs like the
+	// per-batch maps beside it.
+	tokenSteps map[uint64]int32
+	// executionBudget is how many steps one token may take in a single run before the
+	// engine stops it with an incident. Set with SetExecutionBudget.
+	executionBudget int32
+	// maxIterations is how many iterations one multi-instance activity may ask for
+	// before the engine refuses it. Set with SetMaxIterations.
+	maxIterations int
 
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not
@@ -116,6 +138,12 @@ type Processor struct {
 	// same key would all read zero; this set closes that same-batch window. Cleared
 	// each batch (reused, not reallocated).
 	startsThisBatch map[startKeyIdent]struct{}
+	// terminatedThisBatch collects the process instances torn down during this
+	// batch, so advanceQueue can drop the work they still had scheduled. A cancel
+	// terminates what exists *now*; a command already queued for that instance would
+	// otherwise run in a later batch and rebuild what the teardown just removed. The
+	// map is reused across batches like startsThisBatch.
+	terminatedThisBatch map[uint64]struct{}
 }
 
 // startKeyIdent identifies a (definition, correlation key) pair for the per-batch
@@ -685,6 +713,9 @@ func (p *Processor) TickTimers() error {
 // drains. Deterministic and synchronous — the basis for tests and simple
 // embedding; the channel-driven concurrent loop arrives with the API milestone.
 func (p *Processor) RunUntilIdle() error {
+	// A run is the unit the execution budget is measured in: this is where a token's
+	// step count starts over, because this is where the writer was last free.
+	clear(p.tokenSteps)
 	for len(p.queue) > 0 {
 		if err := p.processBatch(); err != nil {
 			return err
@@ -715,6 +746,9 @@ func (p *Processor) processBatch() error {
 	p.fatalErr = nil
 	for k := range p.startsThisBatch {
 		delete(p.startsThisBatch, k) // reuse the map; empty by the next batch (ADR-0094)
+	}
+	for k := range p.terminatedThisBatch {
+		delete(p.terminatedThisBatch, k)
 	}
 
 	tx := p.store.NewTransaction()
@@ -760,6 +794,19 @@ func (p *Processor) processBatch() error {
 			return err
 		}
 	}
+	// The work this batch still owes, in the same frame as the events that caused
+	// it. Built before the sync because that is the only way it can be durable at
+	// the same instant: a continuation written afterwards could be lost while its
+	// events survived, which is the failure it exists to prevent. Built from the
+	// queue that will actually be installed, so work this batch dropped — a
+	// terminated instance's, say — is not resurrected on restart.
+	p.buildNextQueue(n)
+	p.contBuf = encodeContinuation(p.contBuf[:0], p.queueScratch)
+	if err := p.log.AppendContinuation(p.contBuf); err != nil {
+		tx.Close()
+		return err
+	}
+
 	var syncSeconds, commitSeconds float64
 	var started time.Time
 	if p.metrics != nil {
@@ -796,7 +843,9 @@ func (p *Processor) processBatch() error {
 	}
 
 	// Phase 4: followups go to the next batch; Phase 5: side effects post-fsync.
-	p.advanceQueue(n)
+	// The queue was assembled before the sync so it could be persisted with the
+	// batch; this is where it becomes live.
+	p.installNextQueue()
 	// Everything this batch wrote is now durable and visible, which is the earliest
 	// point at which counting it is honest (invariant I2, ADR-0142). QueueDepth is read
 	// after advanceQueue so it includes the follow-ups this batch scheduled.
@@ -866,9 +915,63 @@ func (p *Processor) processOne(cmd Command) {
 // advanceQueue drops the n consumed commands and appends this batch's followups,
 // reusing a scratch buffer so it does not allocate once warmed.
 func (p *Processor) advanceQueue(n int) {
+	p.buildNextQueue(n)
+	p.installNextQueue()
+}
+
+// buildNextQueue assembles the queue the next batch will run — the unconsumed
+// tail plus this batch's followups, less anything belonging to an instance this
+// batch terminated — into queueScratch, without installing it.
+//
+// It is separate from installing so the batch can *persist* that queue before it
+// commits: the continuation has to describe the work that will actually survive,
+// which means it is computed after the terminated-instance filter and not before
+// (ADR-0271).
+func (p *Processor) buildNextQueue(n int) {
 	p.queueScratch = append(p.queueScratch[:0], p.queue[n:]...)
 	p.queueScratch = append(p.queueScratch, p.followups...)
+	if len(p.terminatedThisBatch) > 0 {
+		kept := p.queueScratch[:0]
+		for i := range p.queueScratch {
+			if pi := commandInstanceKey(&p.queueScratch[i]); pi != 0 {
+				if _, gone := p.terminatedThisBatch[pi]; gone {
+					continue
+				}
+			}
+			kept = append(kept, p.queueScratch[i])
+		}
+		p.queueScratch = kept
+	}
+}
+
+// installNextQueue makes the queue built by buildNextQueue the live one.
+func (p *Processor) installNextQueue() {
 	p.queue, p.queueScratch = p.queueScratch, p.queue
+}
+
+// commandInstanceKey is the process instance whose *execution* a queued command
+// would advance, or 0 when it names none. Only the three token-carrying value
+// types answer: an element, a job and a timer each record the instance they
+// belong to, and each would rebuild a piece of an execution after that instance
+// is gone.
+//
+// Process-instance commands are deliberately excluded, for two reasons. Their key
+// does not mean one thing — a creation mints its instance key in the handler, so
+// cmd.Key is not an instance at all there — and their handlers already retire
+// themselves against a missing instance. More importantly, one of them must
+// survive: IntentPurging operates on an instance that has *already* finished, and
+// dropping it would leave history that is never purged.
+func commandInstanceKey(cmd *Command) uint64 {
+	switch cmd.ValueType {
+	case model.VTElementInstance:
+		return cmd.Value.element.ProcessInstanceKey
+	case model.VTJob:
+		return cmd.Value.job.ProcessInstanceKey
+	case model.VTTimer:
+		return cmd.Value.timer.ProcessInstanceKey
+	default:
+		return 0
+	}
 }
 
 func (p *Processor) fail(err error) {
@@ -907,6 +1010,15 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 		return err
 	}
 	after, seedPos, seedCounter := p.checkpointSeed(checkpointRoot, lastApplied)
+
+	// Prove the log still holds the prefix this state needs, before replaying a
+	// suffix and calling it a recovery. Compaction deletes the segments a checkpoint
+	// covers, so after one the log no longer starts at genesis — and a replay of what
+	// remains is indistinguishable from a replay of everything unless somebody checks
+	// where what remains begins (ADR-0280).
+	if err := p.proveThePrefix(lastApplied, after, checkpointRoot); err != nil {
+		return err
+	}
 
 	tx := p.store.NewTransaction()
 	defer tx.Close()
@@ -949,12 +1061,10 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 
 	// Skipping the prefix needs a record's position, which only the model layer can
-	// decode; the wal package asks for it through this.
-	if after == 0 {
-		err = p.log.Replay(onRecord)
-	} else {
-		err = p.log.ReplayFrom(after, recordPosition, onRecord)
-	}
+	// decode; the wal package asks for it through this. ReplayForRecovery also hands
+	// back the continuation the last batch carried — the work the engine had
+	// scheduled and not yet run when it stopped.
+	continuation, err := p.log.ReplayForRecovery(after, recordPosition, onRecord)
 	if err != nil {
 		return err
 	}
@@ -969,6 +1079,28 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	}
 	p.position = maxPos
 	p.keygen.counter = maxCounter
+
+	// Restore the obligation, not just the facts. Folding events rebuilds what
+	// happened; the queue is what still has to happen, and without it an instance
+	// interrupted at a batch boundary comes back correctly materialized and never
+	// moves again (ADR-0271). The commands are re-run, not
+	// re-applied: they go through the normal handlers, which is why the events they
+	// produce are written once and only once — the batch that scheduled them never
+	// got to run them.
+	if len(continuation) > 0 {
+		cmds, derr := decodeContinuation(continuation)
+		if derr != nil {
+			return derr
+		}
+		p.queue = append(p.queue[:0], cmds...)
+		// A restored command already holds a key that no event carries yet — the
+		// event it would have produced is what the crash prevented. Minting from the
+		// replayed events alone would hand that number out a second time.
+		if c := highestRestoredCounter(p.partition, cmds); c > p.keygen.counter {
+			p.keygen.counter = c
+		}
+	}
+
 	// Recorded last, so a recovery that failed leaves no stats claiming it succeeded.
 	p.recovery = RecoveryStats{Seconds: time.Since(started).Seconds(), Replayed: replayed, Done: true}
 	return nil

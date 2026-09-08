@@ -33,9 +33,9 @@ func unconditionalGatewayProcess(t testing.TB) *compiler.CompiledProcess {
 }
 
 // deadEndGatewayProcess builds Start → XOR gateway → (cond "amount > 100") → high
-// with NO default flow. When the condition is false the gateway takes no flow
-// (selectExclusiveFlow returns -1), so the branch simply ends without reaching an
-// end event — a modeling error that becomes an incident in a later milestone.
+// with NO default flow. When the condition is false no outgoing flow can be taken,
+// which is a modeling error: the gateway parks holding its token and raises an
+// incident naming itself (ADR-0273).
 func deadEndGatewayProcess(t testing.TB) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "deadend", 1)
@@ -123,10 +123,17 @@ func TestExclusiveGatewayTakesUnconditionalFlow(t *testing.T) {
 }
 
 // TestExclusiveGatewayNoMatchNoDefault drives an instance into a gateway whose
-// only condition is false and which has no default flow: no outgoing flow is
-// taken. The gateway completes but nothing follows, leaving the instance active
-// with no element instances and no "path" variable — and a replay reproduces that
-// same stuck state exactly.
+// only condition is false and which has no default flow.
+//
+// The gateway does not complete: it parks, holding its token, with one incident
+// naming it. That is the audit's F08 contract — the token is where an operator can
+// see and resume it, rather than consumed by a gateway that then found nowhere to
+// send it. A replay rebuilds the same parked element and the same incident from the
+// log alone, because the park is an event and not a decision re-made on recovery.
+//
+// This test used to assert the opposite (element instances = 0, no incident) and
+// was pinning the defect. It is rewritten rather than removed: the situation it
+// drives is exactly the one worth covering.
 func TestExclusiveGatewayNoMatchNoDefault(t *testing.T) {
 	dir := t.TempDir()
 	cp := deadEndGatewayProcess(t)
@@ -143,10 +150,14 @@ func TestExclusiveGatewayNoMatchNoDefault(t *testing.T) {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
 
-	// The gateway consumed its token and took no flow: the instance is still
-	// active but has no live element instances, and no branch variable was set.
-	if pi, ei := counts(t, h.store); pi != 1 || ei != 0 {
-		t.Fatalf("after run: process=%d element=%d, want 1 and 0", pi, ei)
+	// The gateway kept its token: the instance is active with the parked gateway on
+	// it, one incident says why, and no branch variable was set.
+	if pi, ei := counts(t, h.store); pi != 1 || ei != 1 {
+		t.Fatalf("after run: process=%d element=%d, want 1 and 1 (the parked gateway)", pi, ei)
+	}
+	live := incidents(t, h.store)
+	if len(live) != 1 {
+		t.Fatalf("incidents = %d, want exactly 1", len(live))
 	}
 	scope := model.NewKey(1, 1)
 	if got := readVar(t, h.store, scope, "path"); got != nil {
@@ -154,10 +165,13 @@ func TestExclusiveGatewayNoMatchNoDefault(t *testing.T) {
 	}
 	h.close(t)
 
-	// Replay reproduces the identical stuck state from the log.
+	// Replay reproduces the identical parked state, incident included, from the log.
 	store2 := replayInto(t, dir, cp)
-	if pi, ei := counts(t, store2); pi != 1 || ei != 0 {
-		t.Fatalf("after replay: process=%d element=%d, want 1 and 0", pi, ei)
+	if pi, ei := counts(t, store2); pi != 1 || ei != 1 {
+		t.Fatalf("after replay: process=%d element=%d, want 1 and 1", pi, ei)
+	}
+	if replayed := incidents(t, store2); len(replayed) != len(live) {
+		t.Fatalf("replayed incidents = %d, want %d", len(replayed), len(live))
 	}
 	if got := readVar(t, store2, scope, "path"); got != nil {
 		t.Fatalf("replayed path = %+v, want nil", got)

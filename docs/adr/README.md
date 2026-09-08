@@ -323,6 +323,22 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0267](0267-console-speaks-german-first.md) | The console speaks German first, through a catalogue rather than a rewrite | Proposed |
 | [0268](0268-task-folders-are-saved-filters.md) | Task folders are saved filters, stored as rules and generated into FEEL | Proposed |
 | [0269](0269-atlas-namespace-deploy-warning.md) | The engine stays namespace-blind, and the deploy says so | Proposed |
+| [0270](0270-bounded-job-polling.md) | A poll costs a page, not a backlog | Proposed |
+| [0271](0271-durable-continuation.md) | A batch persists the work it still owes | Proposed |
+| [0272](0272-execution-budget.md) | One token may not hold the writer forever | Proposed |
+| [0273](0273-gateway-routing-incident.md) | A gateway that cannot route parks, it does not complete | Proposed |
+| [0274](0274-in-process-job-leases.md) | The in-process runner claims what it works | Proposed |
+| [0275](0275-instance-visibility.md) | Reading a running instance is an object question | Proposed |
+| [0276](0276-iteration-budget.md) | A loop's size is checked before it is built | Proposed |
+| [0277](0277-join-scope-identity.md) | A join synchronizes within its own execution scope | Proposed |
+| [0278](0278-object-authorization.md) | Filing a deployment into a project is a write on that project | Proposed |
+| [0279](0279-precomputed-join-reachability.md) | Topology is compiled, including the join's ancestors | Proposed |
+| [0280](0280-prove-the-prefix.md) | Recovery proves its prefix or refuses to start | Proposed |
+| [0281](0281-session-role-revocation.md) | A role change takes effect on the next request, not the next login | Proposed |
+| [0282](0282-store-registry.md) | One inventory of what is on disk, and what a backup owes it | Proposed |
+| [0283](0283-strict-log-corruption.md) | Only the end of the active segment may be torn | Proposed |
+| [0284](0284-transactional-child-view.md) | A cancellation sees the children created in its own batch | Proposed |
+| [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Proposed |
 
 ## Status values
 
