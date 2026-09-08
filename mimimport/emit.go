@@ -28,9 +28,13 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	fmt.Fprintf(&s, `             id="defs_%s" targetNamespace=%q>`+"\n", procID, nsMIM)
 	fmt.Fprintf(&s, `  <process id=%q name=%q isExecutable="true">`+"\n", procID, attr(b.name))
 
-	fmt.Fprintf(&s, "    <documentation>%s</documentation>\n", text(fmt.Sprintf(
+	doc := fmt.Sprintf(
 		"Aus MIM/FIM-XOML konvertiert (Wurzel-Aktivität %s). %d nativ, %d erhalten, %d manuell zu prüfen. Nicht übersetzte Konstrukte sind in atlas:mimSource erhalten.",
-		root.local(), b.report.Count(StatusNative), b.report.Count(StatusPreserved), b.report.Count(StatusManualReview))))
+		root.local(), b.report.Count(StatusNative), b.report.Count(StatusPreserved), b.report.Count(StatusManualReview))
+	if len(b.report.Warnings) > 0 {
+		doc += " Hinweis: Die Eingabe war nicht wohlgeformt und wurde vor dem Parsen repariert; Einzelheiten im Konvertierungsbericht."
+	}
+	fmt.Fprintf(&s, "    <documentation>%s</documentation>\n", text(doc))
 
 	for _, n := range b.nodes {
 		b.emitNode(&s, n)
@@ -78,6 +82,14 @@ func (b *builder) emitNode(s *strings.Builder, n bnode) {
 
 // emitExtensions writes an <extensionElements> block combining an optional
 // leading fragment (e.g. a zeebe:taskDefinition) with the preserved XOML source.
+//
+// The source is written as ordinary escaped character data, never inside a
+// CDATA section. CDATA suppresses entity resolution, so an activity whose
+// attribute holds a quoted MIM expression — ActivityExecutionCondition,
+// Iteration, ConflictFilter all routinely do — would be preserved with the
+// literal text &#34; where the workflow had a quotation mark, silently
+// changing the expression. Escaping once here means a consumer that unescapes
+// the element text gets the activity's markup back exactly as MIM wrote it.
 func emitExtensions(s *strings.Builder, n bnode, lead string) {
 	if lead == "" && n.raw == "" {
 		return
@@ -87,7 +99,7 @@ func emitExtensions(s *strings.Builder, n bnode, lead string) {
 		s.WriteString(lead)
 	}
 	if n.raw != "" {
-		fmt.Fprintf(s, "        <atlas:mimSource activity=%q>%s</atlas:mimSource>\n", attr(n.rawName), cdata(n.raw))
+		fmt.Fprintf(s, "        <atlas:mimSource activity=%q>%s</atlas:mimSource>\n", attr(n.rawName), preserved(n.raw))
 	}
 	s.WriteString("      </extensionElements>\n")
 }
@@ -116,11 +128,10 @@ func attr(s string) string {
 // text escapes a string for use as XML character data.
 func text(s string) string { return attr(s) }
 
-// cdata wraps preserved markup in a CDATA section, falling back to escaped text
-// only if the payload itself contains the CDATA terminator.
-func cdata(s string) string {
-	if strings.Contains(s, "]]>") {
-		return text(s)
-	}
-	return "<![CDATA[" + s + "]]>"
+// preserved escapes preserved XOML markup for use as character data. Only &, <
+// and > have to be escaped there, so — unlike the general escaper, which also
+// turns newlines, tabs and quotes into numeric references — an activity stays
+// readable in the generated file while still round-tripping exactly.
+func preserved(s string) string {
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
 }

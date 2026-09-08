@@ -20,12 +20,14 @@ type mimNoteResp struct {
 	Detail   string `json:"detail,omitempty"`
 }
 
-// mimReportResp is the JSON form of a mimimport.Report: the per-status counts
-// plus the ordered notes.
+// mimReportResp is the JSON form of a mimimport.Report: the per-status counts,
+// the ordered notes, and any document-level warning (such as an input that only
+// parsed after its unquoted attribute values were repaired).
 type mimReportResp struct {
 	Native       int           `json:"native"`
 	Preserved    int           `json:"preserved"`
 	ManualReview int           `json:"manualReview"`
+	Warnings     []string      `json:"warnings,omitempty"`
 	Notes        []mimNoteResp `json:"notes"`
 }
 
@@ -119,6 +121,7 @@ func toMIMReport(rep mimimport.Report) mimReportResp {
 		Native:       rep.Count(mimimport.StatusNative),
 		Preserved:    rep.Count(mimimport.StatusPreserved),
 		ManualReview: rep.Count(mimimport.StatusManualReview),
+		Warnings:     rep.Warnings,
 		Notes:        make([]mimNoteResp, 0, len(rep.Notes)),
 	}
 	for _, n := range rep.Notes {

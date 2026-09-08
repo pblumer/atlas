@@ -3691,11 +3691,18 @@ async function importMIM(projectId, reload) {
   showMIMReport(res);
 }
 
-// showMIMReport renders the conversion report as a modal: per-node status badges
-// (native / preserved / manual-review), the node id, the source activity and a
-// reviewer note, plus a shortcut to open the freshly created draft in the Modeler.
+// showMIMReport renders the conversion report as a modal: any document-level
+// warning, then per-node status badges (native / preserved / manual-review), the
+// node id, the source activity and a reviewer note, plus a shortcut to open the
+// freshly created draft in the Modeler.
 function showMIMReport(res) {
   const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
+  // Document-level warnings belong to no node — an input the converter had to
+  // repair before it would parse is the one that exists today — so they go above
+  // the table rather than into it.
+  const warnings = (r.warnings || []).length
+    ? `<div class="warn-note">${(r.warnings || []).map((w) => esc(w)).join("<br>")}</div>`
+    : "";
   const color = (s) => ({ "native": "#1a7f37", "preserved": "#6a737d", "manual-review": "#9a6700" }[s] || "#6a737d");
   const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(s)}</span>`;
   const rows = (r.notes || []).map((n) =>
@@ -3707,6 +3714,7 @@ function showMIMReport(res) {
       <div class="modal-head"><h2>MIM import — ${esc(res.name || res.processId)}</h2></div>
       <div class="modal-body">
         <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
+        ${warnings}
         <div style="max-height:52vh; overflow:auto">
           <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
             <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>

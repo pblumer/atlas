@@ -1,6 +1,7 @@
 package mimimport
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -37,8 +38,13 @@ func (n xnode) attr(names ...string) (string, bool) {
 
 // displayName picks the most human-readable label MIM/WF activities carry,
 // falling back to the element's local name so a node is never nameless.
+//
+// ActivityDisplayName comes first because it is what the MIMWAL activity
+// library writes: every MIMWAL activity carries the author's label there and a
+// WF designer id (actionActivity6) in x:Name, so matching "Name" first would
+// name every node after the designer id and leave the diagram unreadable.
 func (n xnode) displayName() string {
-	if v, ok := n.attr("DisplayName", "Description", "Title", "Name"); ok {
+	if v, ok := n.attr("ActivityDisplayName", "DisplayName", "Description", "Title", "Name"); ok {
 		if s := strings.TrimSpace(v); s != "" {
 			return s
 		}
@@ -85,36 +91,72 @@ func lastSegment(ns string) string {
 
 // parseXOML reads an XOML document (or a FIMAutomation export that embeds one)
 // and returns its root activity element. When the input is a wrapper rather than
-// the workflow itself, the embedded XOML is located and re-parsed.
-func parseXOML(r io.Reader) (xnode, error) {
+// the workflow itself, the embedded XOML is located and re-parsed. Any repair
+// the input needed before it would parse is returned as a warning, so a
+// conversion never silently rests on a rewritten document.
+func parseXOML(r io.Reader) (xnode, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return xnode{}, err
+		return xnode{}, nil, err
 	}
-	root, err := decodeNode(data)
+	var warnings []string
+	root, repaired, err := decodeNode(data)
 	if err != nil {
-		return xnode{}, err
+		return xnode{}, nil, err
+	}
+	if repaired {
+		warnings = append(warnings, warnUnquoted)
 	}
 	if isWorkflowRoot(root) {
-		return root, nil
+		return root, warnings, nil
 	}
 	// Not a workflow root: this is likely an Export-FIMConfig resource graph that
 	// carries the XOML as an attribute value or a nested element's text.
 	if embedded, ok := findEmbeddedXOML(root); ok {
-		inner, err := decodeNode([]byte(embedded))
+		inner, innerRepaired, err := decodeNode([]byte(embedded))
 		if err != nil {
-			return xnode{}, fmt.Errorf("embedded XOML did not parse: %w", err)
+			return xnode{}, nil, fmt.Errorf("embedded XOML did not parse: %w", err)
 		}
-		return inner, nil
+		if innerRepaired && !repaired {
+			warnings = append(warnings, warnUnquoted)
+		}
+		return inner, warnings, nil
 	}
 	// Fall back to treating whatever we decoded as the workflow body; the caller
 	// still produces a (mostly manual-review) process rather than failing outright.
-	return root, nil
+	return root, warnings, nil
 }
 
-func decodeNode(data []byte) (xnode, error) {
+// warnUnquoted is reported when the input only parsed after quoteAttrValues
+// rewrote it, so a reviewer knows the source document was not well-formed. Like
+// every Note detail it is English: the server has no idea who is reading it
+// (ADR-0267), and the console decides how to present it.
+const warnUnquoted = "input was not well-formed XML: unquoted attribute values were quoted before parsing"
+
+// decodeNode parses one XOML document. MIM does not always emit well-formed
+// XML — it writes the xmlns declarations of a workflow root without quotes
+// around the value — and Go's decoder rejects that outright even with
+// Strict=false, which only relaxes namespace handling. So a failed parse is
+// retried once against a quoted copy; repaired reports whether that was needed.
+func decodeNode(data []byte) (n xnode, repaired bool, err error) {
+	n, err = decodeStrict(data)
+	if err == nil {
+		return n, false, nil
+	}
+	fixed, changed := quoteAttrValues(data)
+	if !changed {
+		return xnode{}, false, err
+	}
+	n, retryErr := decodeStrict(fixed)
+	if retryErr != nil {
+		return xnode{}, false, err // report the original failure, not the repair's
+	}
+	return n, true, nil
+}
+
+func decodeStrict(data []byte) (xnode, error) {
 	var n xnode
-	dec := xml.NewDecoder(strings.NewReader(string(data)))
+	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.Strict = false // XOML in the wild is not always namespace-clean
 	if err := dec.Decode(&n); err != nil {
 		return xnode{}, err
@@ -123,6 +165,116 @@ func decodeNode(data []byte) (xnode, error) {
 		return xnode{}, fmt.Errorf("input is not XML")
 	}
 	return n, nil
+}
+
+// quoteAttrValues puts quotes around attribute values that were serialised
+// without them, and reports whether it changed anything. It scans tags rather
+// than using a regexp so that an "=" inside an already-quoted value, inside
+// element text, or inside a comment or CDATA section is left alone.
+func quoteAttrValues(data []byte) ([]byte, bool) {
+	out := make([]byte, 0, len(data)+64)
+	changed := false
+	for i := 0; i < len(data); {
+		if data[i] != '<' {
+			out = append(out, data[i])
+			i++
+			continue
+		}
+		// Comments, CDATA sections and processing instructions carry no
+		// attributes: copy them through verbatim.
+		if end, ok := skipVerbatim(data, i); ok {
+			out = append(out, data[i:end]...)
+			i = end
+			continue
+		}
+		end, fixedTag, tagChanged := quoteTagAttrValues(data, i)
+		out = append(out, fixedTag...)
+		changed = changed || tagChanged
+		i = end
+	}
+	return out, changed
+}
+
+// skipVerbatim reports the end offset of a comment, CDATA section or processing
+// instruction starting at i, and whether data[i:] begins with one.
+func skipVerbatim(data []byte, i int) (int, bool) {
+	for _, m := range []struct{ open, close string }{
+		{"<!--", "-->"},
+		{"<![CDATA[", "]]>"},
+		{"<?", "?>"},
+		{"<!", ">"}, // doctype and other declarations
+	} {
+		if !bytes.HasPrefix(data[i:], []byte(m.open)) {
+			continue
+		}
+		if j := bytes.Index(data[i+len(m.open):], []byte(m.close)); j >= 0 {
+			return i + len(m.open) + j + len(m.close), true
+		}
+		return len(data), true
+	}
+	return 0, false
+}
+
+// quoteTagAttrValues rewrites one tag starting at i (data[i] == '<'), returning
+// the offset just past it, the tag's markup with every attribute value quoted,
+// and whether a value had to be quoted.
+func quoteTagAttrValues(data []byte, i int) (int, []byte, bool) {
+	out := []byte{data[i]}
+	changed := false
+	for i++; i < len(data); {
+		switch c := data[i]; {
+		case c == '"' || c == '\'':
+			j := i + 1
+			for j < len(data) && data[j] != c {
+				j++
+			}
+			if j < len(data) {
+				j++ // the closing quote
+			}
+			out = append(out, data[i:j]...)
+			i = j
+		case c == '>':
+			return i + 1, append(out, c), changed
+		case c == '=':
+			out = append(out, c)
+			i++
+			for i < len(data) && isXMLSpace(data[i]) {
+				out = append(out, data[i])
+				i++
+			}
+			if i >= len(data) || data[i] == '"' || data[i] == '\'' {
+				continue // already quoted (or truncated input): nothing to repair
+			}
+			start := i
+			for i < len(data) && !isXMLSpace(data[i]) && data[i] != '>' &&
+				!(data[i] == '/' && i+1 < len(data) && data[i+1] == '>') {
+				i++
+			}
+			out = append(out, quoteValue(data[start:i])...)
+			changed = true
+		default:
+			out = append(out, c)
+			i++
+		}
+	}
+	return len(data), out, changed
+}
+
+// quoteValue wraps a bare attribute value in whichever quote character it does
+// not itself contain, escaping as a last resort.
+func quoteValue(v []byte) []byte {
+	switch {
+	case !bytes.ContainsRune(v, '"'):
+		return []byte(`"` + string(v) + `"`)
+	case !bytes.ContainsRune(v, '\''):
+		return []byte("'" + string(v) + "'")
+	default:
+		return []byte(`"` + strings.ReplaceAll(string(v), `"`, "&quot;") + `"`)
+	}
+}
+
+func isXMLSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
 // isWorkflowRoot reports whether n looks like a WF workflow definition rather

@@ -82,12 +82,28 @@ func TestConvertInvalidInput(t *testing.T) {
 	}
 }
 
-func TestCDATAHelper(t *testing.T) {
-	if got := cdata("<a/>"); !strings.HasPrefix(got, "<![CDATA[") {
-		t.Errorf("plain payload should be wrapped in CDATA, got %q", got)
+// TestPreservedSourceIsNotCDATA guards the fix for the escaping bug: preserved
+// markup must be escaped character data, because a CDATA section would turn an
+// escaped quotation mark into the literal text &#34;.
+func TestPreservedSourceIsNotCDATA(t *testing.T) {
+	res, err := Convert(strings.NewReader(
+		`<SequentialWorkflow><PowerShellActivity ScriptText="Write-Host &quot;hi&quot;"/></SequentialWorkflow>`), "Q")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
 	}
-	if got := cdata("x]]>y"); strings.Contains(got, "CDATA") {
-		t.Errorf("payload with terminator must fall back to escaping, got %q", got)
+	if strings.Contains(string(res.BPMN), "<![CDATA[") {
+		t.Errorf("preserved source must not use CDATA:\n%s", res.BPMN)
+	}
+	sources := mimSources(t, res.BPMN)
+	if len(sources) != 1 {
+		t.Fatalf("want one preserved source, got %d", len(sources))
+	}
+	n, _, err := decodeNode([]byte(sources[0]))
+	if err != nil {
+		t.Fatalf("preserved source did not re-parse: %v\n%s", err, sources[0])
+	}
+	if got, _ := n.attr("ScriptText"); got != `Write-Host "hi"` {
+		t.Errorf("ScriptText = %q, want %q", got, `Write-Host "hi"`)
 	}
 }
 

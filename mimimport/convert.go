@@ -37,6 +37,9 @@ type Note struct {
 type Report struct {
 	ProcessID string
 	Notes     []Note
+	// Warnings are document-level observations that belong to no single node —
+	// today, that the input had to be repaired before it would parse.
+	Warnings []string
 }
 
 // Count returns how many notes carry the given status.
@@ -56,6 +59,9 @@ func (r Report) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "process %s: %d native, %d preserved, %d manual-review\n",
 		r.ProcessID, r.Count(StatusNative), r.Count(StatusPreserved), r.Count(StatusManualReview))
+	for _, w := range r.Warnings {
+		fmt.Fprintf(&b, "  [warning      ] %s\n", w)
+	}
 	for _, n := range r.Notes {
 		fmt.Fprintf(&b, "  [%-13s] %-16s %-18s %s", n.Status, n.NodeID, n.Kind, n.Activity)
 		if n.Detail != "" {
@@ -93,7 +99,7 @@ type Result struct {
 //
 // name, when non-empty, overrides the process name derived from the workflow.
 func Convert(r io.Reader, name string) (Result, error) {
-	root, err := parseXOML(r)
+	root, warnings, err := parseXOML(r)
 	if err != nil {
 		return Result{}, err
 	}
@@ -104,6 +110,7 @@ func Convert(r io.Reader, name string) (Result, error) {
 	}
 
 	b := newBuilder(wfName)
+	b.report.Warnings = warnings
 	body := workflowBody(root)
 	entry, exit := b.emitSequence(body)
 

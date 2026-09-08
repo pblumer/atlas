@@ -12,6 +12,32 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The MIM importer reads the workflows MIM actually writes.** Three defects
+  kept `atlas import-mim` (and `POST /api/v1/imports/mim`) from doing its job on
+  real exports:
+
+  - A workflow root whose `xmlns` declarations are serialised **without quotes**
+    around the value — which is how MIM writes them — failed to parse at all, so
+    the whole import returned an error. Such input is now repaired once before
+    parsing, and the repair is reported — as a `Report` warning on the CLI and in
+    the API response, and as a note in the generated process documentation.
+    Input that is broken for any other reason still fails with the parser's own
+    diagnosis.
+  - Activities from the **MIMWAL** activity library carry the author's label in
+    `ActivityDisplayName` and a WF designer id (`actionActivity6`) in `x:Name`.
+    Only the latter was recognised, so every node in a MIMWAL workflow was named
+    after the designer id and the imported diagram was unreadable.
+    `ActivityDisplayName` is now the first label consulted.
+  - Markup preserved in `<atlas:mimSource>` was wrapped in a **CDATA** section
+    after its attribute values had been escaped. CDATA suppresses entity
+    resolution, so a quotation mark inside a MIM expression was preserved as the
+    literal text `&#34;` — silently changing every `ActivityExecutionCondition`,
+    `Iteration` and `ConflictFilter` it appeared in. Preserved markup is now
+    written as escaped character data, and re-parses to the activity's original
+    attribute values.
+
 ## [0.5.0] — 2026-09-08
 
 **This release closes the boundary.** `atlas serve` requires a login by default — `--auth`
