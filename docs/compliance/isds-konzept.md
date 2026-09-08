@@ -8,7 +8,6 @@
 | | |
 |---|---|
 | **Schutzobjekt** | Atlas — BPMN 2.x Workflow Engine (Fachanwendungsplattform) |
-| **Klassifizierung** | intern |
 | **Status** | in Arbeit (Entwurf des Herstellers/Projekts, noch nicht geprüft) |
 | **Version** | 0.1 |
 | **Datum** | 2026-08-25 |
