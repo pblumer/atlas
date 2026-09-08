@@ -73,7 +73,7 @@ func (f *failRW) WriteHeader(int)           {}
 func TestWriteBackupWalkError(t *testing.T) {
 	// Opening the first allowlisted directory fails with a non-not-exist error,
 	// which the walk must surface rather than swallow.
-	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs[0]}
+	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs()[0]}
 	if err := writeBackup(tar.NewWriter(&bytes.Buffer{}), fsys); err == nil {
 		t.Fatal("writeBackup: want error from a failed directory walk, got nil")
 	}
@@ -102,7 +102,7 @@ func TestWriteBackupHeaderAndBodyWriteErrors(t *testing.T) {
 }
 
 func TestStreamBackupSurfacesWriteBackupError(t *testing.T) {
-	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs[0]}
+	fsys := errFS{FS: fstest.MapFS{}, failOpen: backupDirs()[0]}
 	if err := streamBackup(&bytes.Buffer{}, fsys); err == nil {
 		t.Fatal("streamBackup: want the underlying walk error, got nil")
 	}

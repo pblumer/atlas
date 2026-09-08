@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"os"
@@ -23,8 +24,8 @@ func (l *Log) Replay(fn func(data []byte) error) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range segs {
-		if err := replaySegment(filepath.Join(l.dir, name), fn); err != nil {
+	for i, name := range segs {
+		if err := replaySegment(filepath.Join(l.dir, name), i < len(segs)-1, fn); err != nil {
 			return err
 		}
 	}
@@ -61,8 +62,8 @@ func (l *Log) ReplayFrom(after uint64, positionOf func(data []byte) (uint64, err
 	if err != nil {
 		return err
 	}
-	for _, name := range segs[start:] {
-		if err := replaySegment(filepath.Join(l.dir, name), fn); err != nil {
+	for i, name := range segs[start:] {
+		if err := replaySegment(filepath.Join(l.dir, name), start+i < len(segs)-1, fn); err != nil {
 			return err
 		}
 	}
@@ -90,79 +91,302 @@ func (l *Log) firstSegmentHolding(segs []string, after uint64, positionOf func([
 	return start, nil
 }
 
+// EarliestPosition reports the log position of the oldest record still on disk,
+// and whether there is one at all.
+//
+// It is what lets a caller prove that the log still contains the prefix its state
+// needs. Compaction deletes whole segments (ADR-0131), so after one the log no
+// longer starts at genesis — and a replay of what remains looks exactly like a
+// replay of everything unless somebody checks where "what remains" begins.
+//
+// Segments that hold no readable record are skipped: a freshly rolled one carries
+// only its header, which says nothing about position.
+func (l *Log) EarliestPosition(positionOf func(data []byte) (uint64, error)) (uint64, bool, error) {
+	segs, err := l.segmentFiles()
+	if err != nil {
+		return 0, false, err
+	}
+	for _, name := range segs {
+		pos, ok, perr := l.firstPosition(name, positionOf)
+		if perr != nil {
+			return 0, false, perr
+		}
+		if ok {
+			return pos, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
 // firstPosition reads just the first record of a segment and reports its log position,
 // or ok=false when the segment holds no readable record.
 func (l *Log) firstPosition(name string, positionOf func([]byte) (uint64, error)) (uint64, bool, error) {
-	f, err := os.Open(filepath.Join(l.dir, name))
+	path := filepath.Join(l.dir, name)
+	// Only the first record is wanted, and the scan stops there, so nothing past it
+	// is read — sealedness cannot matter to a scan that never reaches the end.
+	seg, err := scanOf(path, false)
+	if err != nil {
+		return 0, false, err
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return 0, false, err
 	}
 	defer f.Close()
 	var pos uint64
 	var ok bool
-	_, err = readFrames(f, func(data []byte) error {
+	_, err = readBatches(f, seg, func(data []byte) error {
 		p, perr := positionOf(data)
 		if perr != nil {
 			return perr
 		}
 		pos, ok = p, true
 		return errStopScan
-	})
+	}, nil)
 	if err != nil && !errors.Is(err, errStopScan) {
 		return 0, false, err
 	}
 	return pos, ok, nil
 }
 
-func replaySegment(path string, fn func([]byte) error) error {
+// ReplayForRecovery is [Log.ReplayFrom] plus the continuation the last batch in
+// the log carried — the work that batch had scheduled and not yet done.
+//
+// Recovery is the one reader that needs it. Every other reader folds events, and
+// a continuation is not an event: it never reaches applyToState and replaying it
+// would be replaying an intention (invariant I6). It is handed back separately so
+// the caller can seed its queue with it and nothing else
+// (ADR-draft-durable-continuation).
+//
+// The last one wins because each continuation describes the whole outstanding
+// queue rather than a change to it, so an earlier one is a strictly older answer
+// to the same question. nil means the log ends owing nothing.
+func (l *Log) ReplayForRecovery(after uint64, positionOf func(data []byte) (uint64, error), onRecord func(data []byte) error) ([]byte, error) {
+	var continuation []byte
+	segs, err := l.segmentFiles()
+	if err != nil {
+		return nil, err
+	}
+	start := 0
+	if after != 0 {
+		if start, err = l.firstSegmentHolding(segs, after, positionOf); err != nil {
+			return nil, err
+		}
+	}
+	for i, name := range segs[start:] {
+		path := filepath.Join(l.dir, name)
+		seg, serr := scanOf(path, start+i < len(segs)-1)
+		if serr != nil {
+			return nil, serr
+		}
+		f, oerr := os.Open(path)
+		if oerr != nil {
+			return nil, oerr
+		}
+		_, rerr := readBatches(f, seg, onRecord, func(b []byte) { continuation = b })
+		f.Close()
+		if rerr != nil {
+			return nil, rerr
+		}
+	}
+	return continuation, nil
+}
+
+func replaySegment(path string, sealed bool, fn func([]byte) error) error {
+	seg, err := scanOf(path, sealed)
+	if err != nil {
+		return err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	_, err = readFrames(f, fn)
+	_, err = readBatches(f, seg, fn, nil)
 	return err
 }
 
-// readFrames reads length+CRC framed records from r, invoking fn (if non-nil)
-// for each valid one. It returns the byte offset of the end of the last valid
-// frame — the log's durable extent.
+// scanOf describes a segment file for a scan: its name for error messages, its
+// size so "is there data after this?" can be answered, and whether it has rolled.
+func scanOf(path string, sealed bool) (segmentScan, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return segmentScan{}, err
+	}
+	return segmentScan{name: filepath.Base(path), size: st.Size(), sealed: sealed}, nil
+}
+
+// segmentScan describes the file a scan is reading, which is what lets the reader
+// tell a crash apart from damage.
+type segmentScan struct {
+	name   string // file name, for an error a person can act on
+	size   int64  // total bytes, so "is there data after this?" is answerable
+	sealed bool   // a segment that has rolled: nothing in it can legitimately be torn
+}
+
+// readBatches reads framed batches from r, invoking fn (if non-nil) for every
+// record inside each whole batch, in order. It returns the byte offset of the end
+// of the last valid batch — the log's durable extent.
 //
-// A frame that is incomplete (truncated header or payload) or fails its CRC is
-// treated as a torn tail from a crash mid-batch: reading stops cleanly and the
-// returned offset excludes it. Only the very end of the last-written segment
-// can legitimately be torn, because whole frames are written and fsynced before
-// a segment rolls.
-func readFrames(r io.Reader, fn func([]byte) error) (int64, error) {
+// A batch that is incomplete or fails its CRC is a torn tail *only where a torn
+// tail can be*: at the very end of the segment being written. Everywhere else it
+// is damage, and damage is reported.
+//
+// The distinction is the finding this replaces. Treating every anomaly as a tail
+// meant a corrupt batch in a sealed segment ended that segment's scan quietly and
+// replay carried on with the next file — so a log of A, B, C came back as A, C,
+// reported as a clean recovery. An event that happened was gone, and the state
+// derived from it disagreed with the history that produced it, with nothing
+// anywhere saying so.
+//
+// Two things make a tail a tail: the segment is still being written, and nothing
+// follows the damage. A crash stops writing; it does not write past the point it
+// stopped. So a bad batch with more bytes after it was not left by a crash, even
+// in the active segment (ADR-draft-strict-log-corruption).
+//
+// A segment written before batch framing has no header and one record per frame.
+// It is read in that shape, which keeps an existing log readable across the
+// upgrade; those records were never batch-atomic on disk and cannot be made so
+// after the fact.
+func readBatches(r io.Reader, seg segmentScan, fn func([]byte) error, onContinuation func([]byte)) (int64, error) {
 	br := bufio.NewReader(r)
-	var consumed int64
-	var hdr [frameHeaderSize]byte
+	consumed := int64(0)
+	batched, torn, err := consumeSegmentHeader(br)
+	if err != nil {
+		return 0, fmt.Errorf("wal: %s: %w", seg.name, err)
+	}
+	if torn {
+		// The header write itself was interrupted, so the segment holds nothing.
+		return seg.tolerate(0, "segment header cut short")
+	}
+	if batched {
+		consumed = segmentHeaderSize
+	}
+	var hdr [batchHeaderSize]byte
 	for {
 		if _, err := io.ReadFull(br, hdr[:]); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				return consumed, nil // clean end or torn header
+			if err == io.EOF {
+				return consumed, nil // clean end
+			}
+			if err == io.ErrUnexpectedEOF {
+				// A header cut short: only the active segment's very end may look
+				// like this, and by construction nothing follows it.
+				return seg.tolerate(consumed, "batch header cut short")
 			}
 			return consumed, err
 		}
 		n := binary.LittleEndian.Uint32(hdr[0:])
 		sum := binary.LittleEndian.Uint32(hdr[4:])
-		if n == 0 || int64(n) > maxRecordSize {
-			return consumed, nil // corrupt or zeroed tail
+		if n == 0 || int64(n) > maxBatchBytes {
+			return seg.tolerateIfLast(consumed, consumed+batchHeaderSize,
+				fmt.Sprintf("batch length %d is not a length this log writes", n))
 		}
 		payload := make([]byte, n)
 		if _, err := io.ReadFull(br, payload); err != nil {
-			return consumed, nil // torn payload at tail
+			return seg.tolerate(consumed, "batch payload cut short")
 		}
 		if crc32.Checksum(payload, castagnoli) != sum {
-			return consumed, nil // corrupt frame
+			return seg.tolerateIfLast(consumed, consumed+batchHeaderSize+int64(n),
+				"batch checksum does not match its contents")
 		}
-		if fn != nil {
-			if err := fn(payload); err != nil {
-				return consumed, err
+		if !batched {
+			// Version 1: the frame's payload is the record.
+			if fn != nil {
+				if err := fn(payload); err != nil {
+					return consumed, err
+				}
+			}
+		} else if err := forEachEntryKind(payload, fn, onContinuation); err != nil {
+			return consumed, fmt.Errorf("wal: %s at byte %d: %w", seg.name, consumed, err)
+		}
+		consumed += batchHeaderSize + int64(n)
+	}
+}
+
+// tolerate accepts an anomaly that ran into the end of the file. Only the segment
+// still being written may end that way.
+func (seg segmentScan) tolerate(consumed int64, what string) (int64, error) {
+	if seg.sealed {
+		return consumed, fmt.Errorf("wal: %s is damaged at byte %d: %s. This segment has rolled, "+
+			"so every batch in it was written whole and forced to disk before the next segment "+
+			"existed — nothing in it can have been left torn by a crash", seg.name, consumed, what)
+	}
+	return consumed, nil
+}
+
+// tolerateIfLast accepts an anomaly only when nothing follows it. `after` is the
+// offset the damaged batch would have ended at.
+func (seg segmentScan) tolerateIfLast(consumed, after int64, what string) (int64, error) {
+	if !seg.sealed && after >= seg.size {
+		return consumed, nil
+	}
+	where := "is damaged"
+	if !seg.sealed {
+		where = "is damaged before its end"
+	}
+	return consumed, fmt.Errorf("wal: %s %s at byte %d: %s. %d bytes follow it, and a crash "+
+		"stops writing rather than writing past the damage, so this was not left by one",
+		seg.name, where, consumed, what, seg.size-after)
+}
+
+// consumeSegmentHeader reads and validates the version-2 segment header if one is
+// there, reporting whether the segment is batch-framed. A segment without the
+// magic is a version-1 file: nothing is consumed and the caller reads frames.
+func consumeSegmentHeader(br *bufio.Reader) (batched, torn bool, err error) {
+	// Peek returns whatever is there when the file is shorter than the header, which
+	// parseSegmentHeader reads as "ours, cut short" or "version 1" — the same
+	// decision the writer makes, from the same code.
+	hdr, _ := br.Peek(segmentHeaderSize)
+	batched, torn, err = parseSegmentHeader(hdr)
+	if err != nil || !batched {
+		return false, torn, err
+	}
+	if _, derr := br.Discard(segmentHeaderSize); derr != nil {
+		return false, false, derr
+	}
+	return true, false, nil
+}
+
+// forEachEntry walks the entries of a whole batch payload, handing every record
+// to fn. Only records are delivered: a batch may carry other kinds, and Replay's
+// contract is the events a caller folds.
+//
+// The payload has already passed its CRC, so a malformed entry here is not a torn
+// tail — it is a batch that is intact on disk and does not parse. That is
+// corruption, and it is returned as an error rather than swallowed as an end of
+// log.
+func forEachEntry(payload []byte, fn func([]byte) error) error {
+	return forEachEntryKind(payload, fn, nil)
+}
+
+// forEachEntryKind is forEachEntry with a sink for continuation entries as well.
+// onContinuation is called with the newest one in the payload; a nil sink skips
+// them, which is what every reader but recovery wants.
+func forEachEntryKind(payload []byte, fn func([]byte) error, onContinuation func([]byte)) error {
+	for off := 0; off < len(payload); {
+		if off+entryHeaderSize > len(payload) {
+			return fmt.Errorf("wal: truncated entry header at byte %d of a checksummed batch", off)
+		}
+		n := int(binary.LittleEndian.Uint32(payload[off:]))
+		off += entryHeaderSize
+		if n < 1 || off+n > len(payload) {
+			return fmt.Errorf("wal: entry length %d out of range at byte %d of a checksummed batch", n, off)
+		}
+		kind, body := payload[off], payload[off+1:off+n]
+		off += n
+		switch {
+		case kind == entryContinuation:
+			if onContinuation != nil {
+				onContinuation(append([]byte(nil), body...))
+			}
+		case kind == entryRecord && fn != nil:
+			// Copied: the contract is that fn's slice stays valid after it returns.
+			if err := fn(append([]byte(nil), body...)); err != nil {
+				return err
 			}
 		}
-		consumed += frameHeaderSize + int64(n)
 	}
+	return nil
 }
 
 // Compact deletes the segments a replay after `after` would never open, returning how

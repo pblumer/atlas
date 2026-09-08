@@ -18,32 +18,19 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// backupDirs is the design-time subtree of the data directory that the backup
-// endpoint captures and the restore endpoint accepts (ADR-0107). It is an
-// explicit allowlist, not an "everything except" denylist, so a sensitive store
-// added later (secrets, credentials, a new key file) is never swept into a
-// backup by default — it has to be added here deliberately.
+// The design-time subtree this backup carries is derived from the store registry
+// (storeregistry.go): every store classified design-time, and nothing else. It used
+// to be a list here, kept by hand and in a different file from the code creating
+// the stores — which is how twelve of them drifted out of the whole-instance
+// snapshot without a single test noticing (ADR-draft-store-registry).
 //
-// Deliberately excluded: the WAL and state store (runtime, rebuilt from the WAL
-// on restart), the user accounts and the vault key (secrets, ADR-0044/0070). The
-// worker store is included — it holds design-time worker configuration —
-// but its secrets live in the vault, so a restore onto a fresh instance leaves
-// workers needing their credentials re-entered.
-var backupDirs = []string{
-	"deployments",
-	"drafts",
-	"forms",
-	"projects",
-	"panorama-models",
-	"releases",
-	"dmnrefs",
-	"dmn-models",
-	"public-links",
-	"connectors",
-	"repository",
-	"inbound-subscriptions",
-	"settings",
-}
+// Deliberately absent, and now absent by classification rather than by memory: the
+// log and state store (runtime, rebuilt on restart), accounts (identity), and
+// anything holding a secret or a credential. A design-time backup is a portable
+// file meant to carry models between installations, so a credential riding along
+// in it would be a credential leaving the building. The worker store *is* carried
+// — it is design-time configuration — but its secrets live in the vault, so a
+// restore onto a fresh instance leaves workers needing their credentials again.
 
 // maxRestoreBytes caps the total uncompressed size a single restore will read, a
 // guard against a decompression bomb. Generous for real design-time data (models
@@ -93,7 +80,7 @@ func streamBackup(w io.Writer, fsys fs.FS) error {
 // back exactly. A directory that was never created is simply absent and skipped. The
 // per-directory walk is shared with the full snapshot (walkDirInto, ADR-0109).
 func writeBackup(tw *tar.Writer, fsys fs.FS) error {
-	for _, name := range backupDirs {
+	for _, name := range backupDirs() {
 		if err := walkDirInto(tw, fsys, name); err != nil {
 			return err
 		}
@@ -200,7 +187,7 @@ var renamedBackupDirs = map[string]string{
 // allowedBackupDir reports whether a top-level directory is in the design-time
 // allowlist.
 func allowedBackupDir(top string) bool {
-	for _, d := range backupDirs {
+	for _, d := range backupDirs() {
 		if d == top {
 			return true
 		}

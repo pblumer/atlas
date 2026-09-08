@@ -143,7 +143,7 @@ func TestRetryBackoffTimerOutlivesItsJob(t *testing.T) {
 // the incident it carried, so by the time the resolve is processed there is no
 // incident left to act on and it stops at the lookup. That ordering is what keeps
 // a resolve from re-arming a timer on a terminated element — the deeper no-op in
-// rearmTimerElement is unreachable precisely because of it, not because nobody
+// resumeParkedElement is unreachable precisely because of it, not because nobody
 // has managed to hit it.
 func TestResolveTimerIncidentAfterCancel(t *testing.T) {
 	h := openHarness(t, t.TempDir())

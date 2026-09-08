@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -284,13 +285,39 @@ func TestCrashRecoveryTornFrameSkipped(t *testing.T) {
 	assertSnapshotEqual(t, recoverFrom(t, sc), sc.snapA, "torn frame skipped")
 }
 
-// TestCrashRecoveryCorruptFrameSkipped: flipping a byte inside batch B's first frame
-// fails its CRC; the WAL treats it as a crash tail and stops there, so recovery
-// yields the state after A. Pins the per-frame CRC guard.
-func TestCrashRecoveryCorruptFrameSkipped(t *testing.T) {
+// TestCrashRecoveryCorruptionBeforeTheEndFails: flipping a byte inside B's first
+// batch fails its checksum — with the rest of B written after it. That is damage,
+// not a crash tail, and recovery must say so.
+//
+// This test used to assert the opposite: that any CRC failure ended the scan
+// quietly and recovery returned the state after A. It was pinning the defect. A
+// crash stops writing; it does not write past the point it stopped, so bytes
+// following the damage prove the damage came from somewhere else. Accepting it
+// dropped B's first batch out of the middle of the log and reported a clean
+// recovery over the hole (ADR-draft-strict-log-corruption).
+func TestCrashRecoveryCorruptionBeforeTheEndFails(t *testing.T) {
 	sc := twoBatchScenario(t)
-	corruptWALByte(t, sc.dir, sc.walSizeA+8) // first payload byte of B's first frame
-	assertSnapshotEqual(t, recoverFrom(t, sc), sc.snapA, "CRC-corrupt frame skipped")
+	corruptWALByte(t, sc.dir, sc.walSizeA+8) // first payload byte of B's first batch
+
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(sc.dir, "wal")})
+	if err != nil {
+		// Refusing to open is an equally loud answer, and names the file.
+		if !strings.Contains(err.Error(), ".wal") {
+			t.Errorf("error %q does not name the damaged segment", err)
+		}
+		return
+	}
+	defer log.Close()
+	store, err := state.Open(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatalf("fresh state.Open: %v", err)
+	}
+	defer store.Close()
+	p := engine.New(1, log, store, &manualClock{})
+	p.Deploy(sc.cp)
+	if err := p.Recover(); err == nil {
+		t.Fatal("recovery over damage with more log after it reported success; the records in the damaged batch are simply gone")
+	}
 }
 
 // TestCrashRecoveryIdempotent: two independent recoveries of the same WAL produce the

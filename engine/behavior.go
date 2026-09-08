@@ -128,6 +128,21 @@ func (p *Processor) registerBehaviors() {
 // each start event.
 func handleProcessInstanceActivating(c *ProcessingContext) {
 	defKey := c.cmd.Value.process.ProcessDefKey
+	// A child creation names the call activity that will resume when it finishes.
+	// If that element instance is already gone, the caller was cancelled between
+	// scheduling this command and running it, and starting the child now would
+	// produce an execution with nobody to report back to — the same orphan a cancel
+	// arriving the other way round produces, from the other side of the batch
+	// boundary (ADR-draft-transactional-child-view). Read through the transaction so
+	// a teardown applied earlier in this very batch counts.
+	//
+	// Only child creations are gated: an API, timer, message or signal start carries
+	// no parent element and must always be free to start.
+	if parentEl := c.cmd.Value.process.ParentElementInstanceKey; parentEl != 0 {
+		if c.GetElementInstance(parentEl) == nil {
+			return
+		}
+	}
 	piKey := c.NewKey()
 	cp := c.process(defKey)
 
@@ -283,6 +298,23 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 		}
 	})
 	c.AppendProcessInstanceEvent(piKey, model.IntentTerminated, terminated)
+	// A cancel tears down what exists now, and the work this instance still had
+	// scheduled has to go with it. That work is not hypothetical: a call activity's
+	// child can be created and its caller cancelled in one batch, which leaves the
+	// child's own start event queued at the moment the teardown cascades into it.
+	// Left in the queue it would activate against a terminated instance a batch
+	// later and rebuild the execution the cancel just removed — an element instance
+	// and an activatable job belonging to nobody
+	// (ADR-draft-transactional-child-view).
+	//
+	// This is scheduling, not state: commands are never persisted and never
+	// replayed (I6), so dropping them changes what runs next and nothing about what
+	// recovery rebuilds. A waiting timer, subscription or job is left alone, as
+	// before — those self-retire when they fire and find no element instance.
+	if c.p.terminatedThisBatch == nil {
+		c.p.terminatedThisBatch = make(map[uint64]struct{})
+	}
+	c.p.terminatedThisBatch[piKey] = struct{}{}
 }
 
 // handleProcessInstancePurging hard-deletes a finished instance's history (ADR-0115):
@@ -401,13 +433,47 @@ func isEventSubTrigger(ei *model.ElementInstanceValue) bool {
 func handleElementActivating(c *ProcessingContext) {
 	ei := &c.cmd.Value.element
 	c.AppendElementEvent(c.cmd.Key, model.IntentActivated, *ei)
+	// The token exists here and its behavior has not run yet, which is the one point
+	// where stopping it costs nothing: the element instance is on the log and can
+	// carry an incident, and nothing downstream has been set in motion
+	// (ADR-draft-execution-budget).
+	if c.p.chargeToken(ei.TokenID) {
+		parkOverBudget(c, c.cmd.Key, ei)
+		return
+	}
+	runElementBehavior(c, c.cmd.Key, ei)
+}
+
+// parkOverBudget stops a token that has used up its execution budget: the element
+// stays Activated, its behavior never runs, and an incident says why. Resolving it
+// runs the behavior — resumeParkedElement dispatches on the incident's reason, which
+// is what makes "this element never got to start" distinguishable from every other
+// way an element can be parked (ADR-draft-execution-budget).
+func parkOverBudget(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            c.p.overBudgetMessage(),
+		Reason:             model.IncidentOverBudget,
+	})
+}
+
+// runElementBehavior is what an activated element does: seed its iterations if it is
+// a multi-instance body, otherwise map its inputs, run its behavior and arm its
+// boundary events. Split out of handleElementActivating because an element the
+// execution budget stopped runs exactly this, later, when its incident is resolved —
+// so the resumed element starts the same way a fresh one would rather than a
+// second, drifting copy of it.
+func runElementBehavior(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	// A multi-instance body seeds its iterations rather than running the node's real
 	// behavior; its per-iteration data-input associations and io-mappings apply on
 	// each inner instance, not on the body (ADR-0077). An inner instance (role 2)
 	// falls through to the normal path and runs the real behavior.
 	if node := c.process(ei.ProcessDefKey).Node(ei.ElementId); node.MultiInstance >= 0 && ei.MultiInstance != miInner {
-		seedMultiInstance(c, c.cmd.Key, ei)
-		armBoundaryEvents(c, c.cmd.Key, ei)
+		seedMultiInstance(c, key, ei)
+		armBoundaryEvents(c, key, ei)
 		return
 	}
 	// Read the activity's data-input associations into process variables before its
@@ -420,11 +486,11 @@ func handleElementActivating(c *ProcessingContext) {
 	if !isEventSubTrigger(ei) {
 		applyDataInputAssociations(c, ei)
 		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-			applyInputMappings(c, c.cmd.Key, ei)
+			applyInputMappings(c, key, ei)
 		}
 	}
-	c.p.behavior(ei.BpmnElementType).OnActivated(c, c.cmd.Key, ei)
-	armBoundaryEvents(c, c.cmd.Key, ei)
+	c.p.behavior(ei.BpmnElementType).OnActivated(c, key, ei)
+	armBoundaryEvents(c, key, ei)
 }
 
 // Multi-instance element-instance roles (ADR-0077), mirrored on
@@ -957,7 +1023,7 @@ func handleIncidentResolved(c *ProcessingContext) {
 	if inc.JobKey == 0 {
 		// A timer incident carries no job (ADR-0064): re-arm the parked catch/boundary
 		// element instead of re-creating one.
-		rearmTimerElement(c, inc.ElementInstanceKey)
+		resumeParkedElement(c, inc.ElementInstanceKey, inc.Reason)
 		return
 	}
 	job := c.GetJob(inc.JobKey)
@@ -969,11 +1035,13 @@ func handleIncidentResolved(c *ProcessingContext) {
 	c.NotifyJobAvailable(job.JobType)
 }
 
-// rearmTimerElement re-runs the timer arm for a parked catch/boundary element
-// whose FEEL schedule failed and raised an incident (ADR-0064). Re-evaluated
-// against the instance's current variables, the schedule either resolves — a
-// timer is created and the token waits normally — or fails again, raising a fresh
-// incident (resolve is a genuine retry, not a blind clear).
+// resumeParkedElement resumes a parked element whose incident carries no job: it
+// re-runs whatever the element was doing when it stopped. That began as re-arming a
+// catch/boundary timer whose FEEL schedule failed (ADR-0064) and now covers a
+// mockup task's next attempt (ADR-0120), a runaway loop's next runs (ADR-0133) and a
+// gateway's routing decision (ADR-draft-gateway-routing-incident). In every case the
+// work is *re-run*, not skipped: it either succeeds and the token moves on, or fails
+// again and raises a fresh incident. Resolve is a genuine retry, never a blind clear.
 //
 // The element cannot actually be gone here, despite what the check below reads
 // like: this is only reached from handleIncidentResolved once it has found the
@@ -981,13 +1049,22 @@ func handleIncidentResolved(c *ProcessingContext) {
 // so an incident never outlives its element. The check stays because the processor
 // loop has no recover() — if that invariant ever shifts, returning is a no-op while
 // dereferencing nil would take the whole partition down with it.
-func rearmTimerElement(c *ProcessingContext, elKey uint64) {
+func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.IncidentReason) {
 	ei := c.GetElementInstance(elKey)
 	if ei == nil {
 		return
 	}
 	cp := c.process(ei.ProcessDefKey)
 	if cp == nil {
+		return
+	}
+	// An element the execution budget stopped never ran at all, whatever its type, so
+	// running it now is the whole of the resume (ADR-draft-execution-budget). The
+	// reason says so outright; every case below infers the resume from the node type,
+	// which only works while a node type has one way of getting stuck.
+	switch reason {
+	case model.IncidentOverBudget, model.IncidentTooManyIterations:
+		runElementBehavior(c, elKey, ei)
 		return
 	}
 	// A parked runaway loop carries a job-less incident too (ADR-0133, amended), on the
@@ -998,6 +1075,13 @@ func rearmTimerElement(c *ProcessingContext, elKey uint64) {
 	}
 	node := cp.Node(ei.ElementId)
 	switch node.Type {
+	case compiler.TypeExclusiveGateway, compiler.TypeInclusiveGateway:
+		// A gateway that could not route parked holding its token
+		// (ADR-draft-gateway-routing-incident). Resolving re-runs the decision from
+		// the same entry point the arrival ran, so the retry is genuine: a gateway
+		// that still cannot route parks again on a fresh incident instead of
+		// quietly clearing, and one that now can takes its flow exactly once.
+		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
 	case compiler.TypeMockupTask:
 		// A resolved mockup-failure incident (ADR-0120): re-arm a fresh attempt. The
 		// new timer key drives an independent duration and failure draw, so a retry can
@@ -1097,7 +1181,7 @@ func handleTimerTriggered(c *ProcessingContext) {
 // occurrence that just fired and either fires it (arming the next occurrence) or, if the FEEL
 // can't be re-evaluated against the instance's current variables, raises the ADR-0064 job-less
 // incident and parks — instead of silently ceasing to recur (ADR-0111). Resolving the incident
-// re-arms the element (rearmTimerElement).
+// re-arms the element (resumeParkedElement).
 func fireRecurringOrIncident(c *ProcessingContext, timer model.TimerValue, ei *model.ElementInstanceValue, raw compiler.TimerSchedule, fire func(*ProcessingContext, model.TimerValue, *model.ElementInstanceValue, compiler.TimerSchedule)) {
 	sched, err := resolveScheduleErr(c, raw, ei.ProcessInstanceKey)
 	if err != nil {
@@ -1424,6 +1508,17 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 	tokenID, parentID := ei.TokenID, uint64(0)
 	if tokenID == 0 || fork {
 		parentID, tokenID = ei.TokenID, key
+		// Taking a flow continues a thread of control even where it mints a new token
+		// id — a fork's branches, a join's continuation, a subprocess's exit — so the
+		// execution budget carries over. Otherwise a cycle through any of them would
+		// reset its own budget every lap (ADR-draft-execution-budget). A parallel
+		// join hands over a continuation whose own TokenID is already cleared and
+		// whose lineage is in ParentTokenID, so that is where its ancestry is read.
+		from := parentID
+		if from == 0 {
+			from = ei.ParentTokenID
+		}
+		c.p.inheritTokenSteps(tokenID, from)
 	}
 	c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -1606,13 +1701,23 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 	}
 }
 
-// takeInclusiveOutgoing takes every outgoing flow whose FEEL condition holds (an
-// unconditional, non-default flow always holds), or the default flow if none do.
-// This is the inclusive (OR) split: unlike the exclusive gateway, it may take
-// more than one branch.
-func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue) {
+// inclusiveRouteOrPark decides which outgoing flows an inclusive gateway takes:
+// every flow whose FEEL condition holds (an unconditional, non-default flow always
+// holds), or the default flow if none do. Unlike the exclusive gateway it may take
+// more than one branch, which is why fork is reported separately — the default
+// alone is one token continuing, not a fork.
+//
+// It decides, it does not act: the caller consumes tokens and takes the flows, in
+// that order, so a gateway that cannot decide still has its tokens
+// (ADR-draft-gateway-routing-incident). When it cannot decide it parks the gateway
+// with an incident itself and returns ok=false; the caller must then do nothing at
+// all.
+func inclusiveRouteOrPark(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) (flows []int32, fork, ok bool) {
 	cp := c.process(ei.ProcessDefKey)
-	took := false
+	// The buffer is processor-owned and reused, so an OR split allocates nothing per
+	// decision (I1). Nothing between here and the caller taking the flows routes
+	// again, so the alias stays valid.
+	taken := c.p.routeBuf[:0]
 	defaultFlow := int32(-1)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
 		f := cp.Flow(flowID)
@@ -1621,20 +1726,32 @@ func takeInclusiveOutgoing(c *ProcessingContext, ei *model.ElementInstanceValue)
 			continue
 		}
 		if f.Condition == nil {
-			activateElement(c, ei, flowID, true)
-			took = true
+			taken = append(taken, flowID)
 			continue
 		}
-		// Over the gateway's scope chain, matching the exclusive gateway (ADR-0085).
+		// Over the gateway's scope chain, matching the exclusive gateway (ADR-0086).
 		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
-		if err == nil && expr.IsTrue(v) {
-			activateElement(c, ei, flowID, true)
-			took = true
+		if err != nil {
+			c.p.routeBuf = taken
+			parkUnroutableGateway(c, key, ei, conditionFailure(cp, flowID, err))
+			return nil, false, false
+		}
+		if expr.IsTrue(v) {
+			taken = append(taken, flowID)
 		}
 	}
-	if !took && defaultFlow >= 0 {
-		activateElement(c, ei, defaultFlow, false)
+	c.p.routeBuf = taken
+	if len(taken) > 0 {
+		return taken, true, true
 	}
+	if defaultFlow >= 0 {
+		// The default is one token continuing, not a branch of a fork.
+		taken = append(taken, defaultFlow)
+		c.p.routeBuf = taken
+		return taken, false, true
+	}
+	parkUnroutableGateway(c, key, ei, noRouteMessage)
+	return nil, false, false
 }
 
 // builtinProcessInstanceKey is a reserved FEEL identifier that resolves to the
@@ -1719,7 +1836,7 @@ func armOneShotTimer(c *ProcessingContext, key uint64, ei *model.ElementInstance
 // schedule could not be evaluated (ADR-0064/0111): the initial arm (armOneShotTimer) and a
 // recurring re-arm (handleTimerTriggered) share it, so a failure at either point parks the
 // element visibly with the same operator-resolvable incident (JobKey stays zero — the marker
-// that routes resolution back to rearmTimerElement).
+// that routes resolution back to resumeParkedElement).
 func raiseTimerScheduleIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, err error) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -2053,7 +2170,7 @@ const (
 // the duration reproduces on replay without any new nondeterministic source (I6).
 // Because the key is fresh on every arm, each re-arm (after a simulated failure is
 // resolved) draws an independent duration and failure outcome. Shared by OnActivated
-// and rearmTimerElement so the two never diverge.
+// and resumeParkedElement so the two never diverge.
 func armMockupTimer(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MockupTask(cp.Node(ei.ElementId).Detail)
@@ -2096,7 +2213,7 @@ func mockupFailMessage(detail *compiler.MockupTaskDetail) string {
 
 // raiseMockupIncident parks a mockup task with a job-less incident on a simulated
 // failure (ADR-0120), mirroring raiseTimerScheduleIncident: JobKey stays zero, the
-// marker that routes resolution back through rearmTimerElement — which re-arms a
+// marker that routes resolution back through resumeParkedElement — which re-arms a
 // fresh attempt.
 func raiseMockupIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, message string) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
@@ -3100,15 +3217,21 @@ func (exclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 }
 
 func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	cp := c.process(ei.ProcessDefKey)
-	flowID := selectExclusiveFlow(c, cp, ei)
-	if flowID < 0 {
-		// No condition matched and there is no default flow: nothing is taken.
-		// This is a modeling error that becomes an incident once incidents land
-		// (Milestone 2); for now the branch simply ends here.
+	// Decide first, complete second. The gateway used to emit Completed and *then*
+	// look for a flow, so a decision that found none had already consumed the token:
+	// the instance stayed active with nothing in it, nothing downstream, and nothing
+	// to resolve (audit F08). A gateway that cannot route now never completes.
+	flowID, failure := selectExclusiveFlow(c, cp, ei)
+	if failure != "" {
+		parkUnroutableGateway(c, key, ei, failure)
 		return
 	}
+	if flowID < 0 {
+		parkUnroutableGateway(c, key, ei, noRouteMessage)
+		return
+	}
+	c.AppendElementEvent(key, model.IntentCompleted, *ei)
 	// Taking the flow goes through activateElement rather than building the element
 	// instance here: it is the one place that knows a flow into a multi-instance
 	// activity activates its *body* (ADR-0077). Hand-rolled, the gateway activated the
@@ -3122,7 +3245,9 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // once, producing a token on every outgoing flow. As a join (several incoming) it
 // waits until a token has arrived on each incoming flow — every arrival parks as a
 // live element instance on the gateway — then consumes them all and fires the
-// outgoing flow(s) once. The synchronization is captured entirely by which
+// outgoing flow(s) once. It synchronizes *within its own execution scope*: two
+// iterations of a multi-instance subprocess each have their own join
+// (ADR-draft-join-scope-identity). The synchronization is captured entirely by which
 // element instances exist and by the Completed/Activating events emitted, so it
 // replays deterministically without re-counting (invariants I4/I6).
 type parallelGatewayBehavior struct{}
@@ -3135,7 +3260,7 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	}
 	// Join: fire only when a token sits on every incoming flow. Until then this
 	// arrival waits here (stays Activated).
-	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId)
+	arrived := c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId)
 	if int32(len(arrived)) < node.IncomingCount {
 		return
 	}
@@ -3157,9 +3282,10 @@ func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 
 // inclusiveGatewayBehavior: an OR gateway. As a split (one incoming) it fires at
 // once, taking every outgoing flow whose condition holds (or the default). As a
-// join (several incoming) it waits until no token could still arrive — no active
-// token upstream and none in flight toward it — then consumes every token parked
-// on it and fires the outgoing flow(s) once. That "no more can arrive" test is
+// join (several incoming) it waits until no token could still arrive *in its own
+// execution scope* — no active token upstream and none in flight toward it — then
+// consumes every token parked on it in that scope and fires the outgoing flow(s)
+// once (ADR-draft-join-scope-identity). That "no more can arrive" test is
 // what distinguishes it from a parallel join, which waits for a fixed count: an
 // inclusive join waits only for the branches the split actually took.
 type inclusiveGatewayBehavior struct{}
@@ -3171,20 +3297,34 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 		return
 	}
 	// Join: park until nothing more can arrive at this gateway.
-	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.ElementId, cp.NodesReaching(ei.ElementId)) {
+	if c.TokenCanStillReach(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId, cp.InclusiveJoinReach(ei.ElementId)) {
 		return
 	}
-	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.ElementId) {
+	// Route before consuming: a join that cannot decide must leave every arrival
+	// parked, or the tokens are gone and the incident has nothing to resume (F08).
+	flows, fork, ok := inclusiveRouteOrPark(c, key, ei)
+	if !ok {
+		return
+	}
+	for _, k := range c.ElementInstancesOnNode(ei.ProcessInstanceKey, ei.FlowScopeKey, ei.ElementId) {
 		if a := c.GetElementInstance(k); a != nil {
 			c.AppendElementEvent(k, model.IntentCompleted, *a)
 		}
 	}
-	takeInclusiveOutgoing(c, ei)
+	for _, flowID := range flows {
+		activateElement(c, ei, flowID, fork)
+	}
 }
 
 func (inclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	flows, fork, ok := inclusiveRouteOrPark(c, key, ei)
+	if !ok {
+		return
+	}
 	c.AppendElementEvent(key, model.IntentCompleted, *ei)
-	takeInclusiveOutgoing(c, ei)
+	for _, flowID := range flows {
+		activateElement(c, ei, flowID, fork)
+	}
 }
 
 // eventBasedGatewayBehavior is a deferred choice (ADR-0110): on activation it arms every
@@ -3247,7 +3387,15 @@ func cancelEventGatewaySiblings(c *ProcessingContext, procKey, groupKey, selfKey
 // selectExclusiveFlow returns the outgoing flow an exclusive gateway takes: the
 // first (in flow order) whose FEEL condition is true, an unconditional non-default
 // flow, or the default flow; -1 if none apply.
-func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue) int32 {
+//
+// A condition that *fails to evaluate* stops the scan and comes back as a non-empty
+// failure message instead. It is deliberately not folded into "false". Atlas's rule
+// for a failed FEEL evaluation elsewhere is to write null and let the token carry on
+// (the rule TestFeelEvaluationFailureWritesNull pins) — that rule works because there
+// is a value to write and null is a defensible one. A routing decision has no such answer: treating an unevaluable
+// condition as false sends the token down the default branch, which nobody chose, or
+// nowhere at all (ADR-draft-gateway-routing-incident).
+func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue) (int32, string) {
 	defaultFlow := int32(-1)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
 		f := cp.Flow(flowID)
@@ -3256,18 +3404,52 @@ func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei 
 			continue
 		}
 		if f.Condition == nil {
-			return flowID // an unconditional flow is taken whenever reached
+			return flowID, "" // an unconditional flow is taken whenever reached
 		}
 		// Resolve the condition over the gateway's scope chain, so a gateway inside a
 		// subprocess or multi-instance body branches on that scope's variables, not
-		// only the process root (ADR-0085). For a top-level gateway FlowScopeKey is
+		// only the process root (ADR-0086). For a top-level gateway FlowScopeKey is
 		// the process-instance key, so this reads exactly the root as before.
 		v, err := f.Condition.Eval(bindInputsChain(c, f.Condition.Inputs(), ei.FlowScopeKey))
-		if err == nil && expr.IsTrue(v) {
-			return flowID
+		if err != nil {
+			return -1, conditionFailure(cp, flowID, err)
+		}
+		if expr.IsTrue(v) {
+			return flowID, ""
 		}
 	}
-	return defaultFlow
+	return defaultFlow, ""
+}
+
+// noRouteMessage is the incident an operator sees when a gateway's conditions all
+// held false and the model gave it no default flow. The wording names the modeling
+// error rather than the engine's internals: it is a diagram to fix, and until it is
+// fixed the token waits here.
+const noRouteMessage = "no outgoing sequence flow was taken and the gateway has no default flow"
+
+// conditionFailure is the incident message for a sequence-flow condition that could
+// not be evaluated, naming the flow by its target so the operator can find it in the
+// diagram. Built only on the failure path, so its concatenation costs nothing on a
+// gateway that routes (I1).
+func conditionFailure(cp *compiler.CompiledProcess, flowID int32, err error) string {
+	return "the condition on the sequence flow to " + cp.ElementBpmnId(cp.Flow(flowID).Target) +
+		" could not be evaluated: " + err.Error()
+}
+
+// parkUnroutableGateway leaves a gateway that could not decide exactly where it is —
+// Activated, holding its token — and raises an incident naming why (audit F08,
+// ADR-draft-gateway-routing-incident). It is the gateway's form of parkRunawayLoop:
+// no Completed event, so nothing downstream runs on a decision that was never made,
+// and the token is a thing an operator can see and resume rather than one that
+// silently left the process.
+func parkUnroutableGateway(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, why string) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            why,
+	})
 }
 
 // toVarKind maps the expr scalar kind to the model's stored kind (same order,
@@ -3785,7 +3967,11 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 		seedMultiInstanceIteration(c, bodyKey, ei, cp, d, 0, expr.Null)
 		return
 	}
-	items := multiInstanceItems(c, d, bodyKey)
+	items, asked := multiInstanceItems(c, d, bodyKey)
+	if asked > 0 {
+		parkOversizedLoop(c, bodyKey, ei, asked)
+		return
+	}
 	if d.OutputCollection >= 0 {
 		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
 	}
@@ -3907,28 +4093,60 @@ func standardLoop(cp *compiler.CompiledProcess, elementId int32) bool {
 // concrete list of N items: the input collection's elements, or — for a cardinality —
 // N nulls (there is no input element to bind). A non-list collection, a non-integer or
 // negative cardinality, or an evaluation error yields no iterations rather than a panic.
-func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) []expr.Value {
+//
+// asked is non-zero when the loop wanted more iterations than the budget allows, and
+// then items is nil: the count comes from the model or from an instance variable, so
+// the check happens *before* the list is built rather than after
+// (ADR-draft-iteration-budget). The caller parks the body.
+func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) (items []expr.Value, asked int) {
+	ceiling := c.p.iterationCeiling()
 	if d.InputCollection != nil {
 		v, err := d.InputCollection.Eval(bindInputsChain(c, d.InputCollection.Inputs(), bodyKey))
 		if err != nil {
-			return nil
+			return nil, 0
 		}
-		items, ok := expr.AsList(v)
+		got, ok := expr.AsList(v)
 		if !ok {
-			return nil
+			return nil, 0
 		}
-		return items
+		// The list itself already exists — it came from a variable — but seeding an
+		// iteration per element does not, and that is the part that is unbounded.
+		if len(got) > ceiling {
+			return nil, len(got)
+		}
+		return got, 0
 	}
 	if d.Cardinality != nil {
 		v, err := d.Cardinality.Eval(bindInputsChain(c, d.Cardinality.Inputs(), bodyKey))
 		if err != nil {
-			return nil
+			return nil, 0
 		}
 		if n, ok := expr.AsInt(v); ok && n >= 0 {
-			return nullList(n)
+			// Before nullList(n), not after: n is whatever the expression produced, and
+			// a variable holding a billion is a billion FEEL nulls in one call.
+			if n > ceiling {
+				return nil, n
+			}
+			return nullList(n), 0
 		}
 	}
-	return nil
+	return nil, 0
+}
+
+// parkOversizedLoop refuses a multi-instance activity that asked for more iterations
+// than the budget allows: the body stays activated holding its token, no iteration is
+// seeded, and an incident says how many were asked for and what the limit is
+// (ADR-draft-iteration-budget). Resolving re-evaluates the count, so fixing the data
+// — or raising the budget — lets the loop run, and leaving it parks it again.
+func parkOversizedLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, asked int) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: body.ProcessInstanceKey,
+		ElementInstanceKey: bodyKey,
+		ElementId:          body.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            c.p.tooManyIterationsMessage(asked),
+		Reason:             model.IncidentTooManyIterations,
+	})
 }
 
 // finishMultiInstanceIteration completes one inner iteration (ADR-0077): it collects the
@@ -3990,7 +4208,11 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 			}
 		}
 	} else if d.Sequential {
-		if items := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
+		// A loop that got past the budget when it was seeded is under it here too, so
+		// the refusal count is not re-examined: an over-budget answer would mean the
+		// collection grew mid-loop, and the empty list it yields ends the loop, which
+		// is the same thing a shrunk collection does.
+		if items, _ := multiInstanceItems(c, d, bodyKey); idx+1 < len(items) {
 			if body := c.GetElementInstance(bodyKey); body != nil {
 				seedMultiInstanceIteration(c, bodyKey, body, cp, d, idx+1, items[idx+1])
 			}

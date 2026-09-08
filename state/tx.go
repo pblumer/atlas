@@ -328,6 +328,36 @@ func (t *Tx) DeleteChildByParent(callElKey, childPiKey uint64) error {
 	return t.b.Delete(keyChildByParent(callElKey, childPiKey), nil)
 }
 
+// ChildInstancesOfParent calls fn with the process instance key of every live
+// child a call-activity element instance has started, as visible in this
+// transaction — committed rows plus this batch's own writes.
+//
+// The transactional view is the point. A caller and the child it starts can be
+// created in one batch, and a cancellation arriving in that same batch has to
+// tear down a child whose activation is applied but not yet committed. Reading
+// the committed store there would report no children and leave the child running
+// with no live caller. This is the same reason ElementInstancesOfProcess reads
+// through the batch, and it stays deterministic for exactly the same reason: what
+// the transaction has applied is a function of the records processed so far, not
+// of when the commit happens.
+//
+// The committed-store form on queries remains, as the off-loop and state-level
+// query — it is what a test asserting the index's maintenance wants to read.
+func (t *Tx) ChildInstancesOfParent(callElKey uint64, fn func(childPiKey uint64) error) error {
+	prefix := childByParentPrefix(callElKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		if err := fn(trailingKey(iter.Key())); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
+}
+
 // PutProcessInstanceHistory records a terminal (completed/terminated) process
 // instance in the history index. Written from applyToState when an instance
 // ends, from the event alone, so it replays identically on recovery (ADR-0017).

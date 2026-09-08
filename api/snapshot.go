@@ -48,25 +48,16 @@ import (
 // below. Exactly one checkpoint rides along — the archive should not carry every kept
 // snapshot of the same store.
 
-// fullBackupDirs is the whole-instance snapshot's directory set: the WAL first (so
-// the design-time and secret dirs captured after it are a superset of whatever the
-// WAL cut references — a deployment's sidecar is written before the WAL record that
-// starts an instance on it), then the design-time allowlist, then the credential
-// dirs — user accounts and peer deploy tokens (ADR-0129).
+// What a whole-instance snapshot carries is derived from the store registry
+// (storeregistry.go): everything that cannot be rebuilt from the rest. That is the
+// difference from the design-time backup, which carries only what an author would
+// move between installations.
 //
-// Deploy tokens ride in the snapshot but deliberately *not* in the design-time
-// backup (ADR-0107): a backup is a portable file meant to carry your models, and a
-// peer's credential is not part of your models. A snapshot, by contrast, exists to
-// reconstitute this exact engine elsewhere, which includes who may publish to it.
-var fullBackupDirs = func() []string {
-	dirs := []string{"wal"}
-	dirs = append(dirs, backupDirs...)
-	return append(dirs, "users", "deploy-tokens")
-}()
-
-// fullBackupFiles are the top-level files (not directories) in the snapshot. The
-// vault key is a single file at the data-dir root.
-var fullBackupFiles = []string{"vault.key"}
+// The distinction it now enforces used to be the bug. Deploy tokens rode in the
+// snapshot but not in the design-time backup, for a good reason (ADR-0107/0129);
+// the vault *key* rode in it while the encrypted secrets it opens did not, for no
+// reason at all — nobody had decided, because nothing made them
+// (ADR-draft-store-registry).
 
 // newestVerifiedCheckpoint returns the archive-relative directory of the newest
 // checkpoint under dataDir that passes full verification — manifest *and* state files —
@@ -141,12 +132,12 @@ func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
 			return err
 		}
 	}
-	for _, name := range fullBackupDirs {
+	for _, name := range fullBackupDirs() {
 		if err := walkDirInto(tw, fsys, name); err != nil {
 			return err
 		}
 	}
-	for _, name := range fullBackupFiles {
+	for _, name := range fullBackupFiles() {
 		if err := writeFileInto(tw, fsys, name); err != nil {
 			return err
 		}
@@ -311,12 +302,12 @@ func allowedFullEntry(top string) bool {
 	if top == checkpoint.DirBase {
 		return true // the recovery checkpoint that covers a compacted prefix (ADR-0131)
 	}
-	for _, d := range fullBackupDirs {
+	for _, d := range fullBackupDirs() {
 		if d == top {
 			return true
 		}
 	}
-	for _, f := range fullBackupFiles {
+	for _, f := range fullBackupFiles() {
 		if f == top {
 			return true
 		}
@@ -375,6 +366,45 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 		return false, err
 	}
 	return true, os.RemoveAll(staging)
+}
+
+// SeedStateFromCheckpoint gives a data directory with no state store its starting
+// point, from the newest checkpoint that verifies. It reports whether it seeded
+// one.
+//
+// It exists because a compacted log no longer carries the prefix that would
+// rebuild the store: those records were deleted, and they live only in the
+// checkpoint (ADR-0131). Recovery can detect that gap and refuse — and does
+// (ADR-draft-prove-the-prefix) — but refusing is only the right answer when
+// nothing can close it. Where a checkpoint can, the server should start.
+//
+// This runs at startup, before the store is opened, because that is the only
+// moment installing state files is possible: replacing the files under an open
+// Pebble store is not. It is the same installation the whole-instance restore
+// performs, called rather than copied, so the two cannot come to disagree about
+// what a checkpoint restores to.
+//
+// A directory that already has a state store is left alone. That store is the
+// newer answer, and replacing it with a checkpoint would discard everything
+// applied since.
+func SeedStateFromCheckpoint(dataDir string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(dataDir, "state")); err == nil {
+		return false, nil // already has one: the newer answer wins
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false, err
+	}
+	before, err := checkpoint.List(checkpoint.Dir(dataDir))
+	if err != nil {
+		return false, err
+	}
+	if err := installCheckpointState(dataDir); err != nil {
+		return false, err
+	}
+	if len(before) == 0 {
+		return false, nil // nothing to seed from; a whole log replays from genesis
+	}
+	_, statErr := os.Stat(filepath.Join(dataDir, "state"))
+	return statErr == nil, nil
 }
 
 // installCheckpointState seeds <dataDir>/state from the newest verified checkpoint the

@@ -2880,6 +2880,16 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		}
 	}
 
+	// The inclusive joins' ancestor sets, derived once here from the finished
+	// topology rather than per arrival at runtime
+	// (ADR-draft-precomputed-join-reachability).
+	joinReach := computeJoinReach(b.nodes,
+		func(id int32) []int32 {
+			n := &b.nodes[id]
+			return outgoing[n.OutgoingStart : n.OutgoingStart+n.OutgoingCount]
+		},
+		func(fid int32) int32 { return b.flows[fid].Target })
+
 	return &CompiledProcess{
 		Key:                b.key,
 		BpmnProcessId:      b.intern(b.bpmnProcessId),
@@ -2887,6 +2897,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		hasConditional:     hasConditional,
 		nodes:              b.nodes,
 		flows:              b.flows,
+		joinReach:          joinReach,
 		outgoingFlows:      outgoing,
 		boundaryEvents:     boundary,
 		scopeStarts:        scopeStarts,

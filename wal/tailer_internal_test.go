@@ -9,9 +9,11 @@ import (
 	"testing"
 )
 
-// frame renders one length+CRC framed record, as the writer stages it.
+// frame renders one length+CRC framed record in the pre-batch (version-1) layout:
+// a segment built from these carries no header, so the tests below drive the
+// compatibility path that keeps an existing log readable after the upgrade.
 func frame(payload []byte) []byte {
-	var hdr [frameHeaderSize]byte
+	var hdr [batchHeaderSize]byte
 	binary.LittleEndian.PutUint32(hdr[0:], uint32(len(payload)))
 	binary.LittleEndian.PutUint32(hdr[4:], crc32.Checksum(payload, castagnoli))
 	return append(hdr[:], payload...)
@@ -49,7 +51,7 @@ func TestTailerStopsAtZeroLengthFrame(t *testing.T) {
 	dir := t.TempDir()
 	seg := filepath.Join(dir, segmentName(0))
 	// One valid frame, then eight zero bytes (a zero length + zero crc header).
-	if err := os.WriteFile(seg, append(frame([]byte("only")), make([]byte, frameHeaderSize)...), 0o644); err != nil {
+	if err := os.WriteFile(seg, append(frame([]byte("only")), make([]byte, batchHeaderSize)...), 0o644); err != nil {
 		t.Fatalf("write segment: %v", err)
 	}
 	var got []string

@@ -784,31 +784,59 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	projectID := r.URL.Query().Get("projectId")
 	hasProjectParam := r.URL.Query().Has("projectId")
 	pid, _ := processIdentity(body)
-	var (
-		resp           deployResp
-		compErr        error
-		persistErr     error
-		projErr        error
-		claimed        string
-		e              error
-		unknownProject bool
-	)
-	s.do(func() {
-		if !hasProjectParam {
-			if d, ok, e := s.drafts.Get(pid); e == nil && ok {
+
+	// Inherit the matching draft's project when the caller named none. A project
+	// that has since been deleted degrades to Ungrouped (ADR-0034) rather than
+	// failing the deploy over a stale record the caller does not own.
+	if !hasProjectParam {
+		var (
+			d       draft
+			ok      bool
+			readErr error
+		)
+		s.do(func() { d, ok, readErr = s.drafts.Get(pid) })
+		if readErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read draft: "+readErr.Error())
+			return
+		}
+		if ok && d.ProjectID != "" {
+			var exists bool
+			s.do(func() { _, exists, readErr = s.projects.Get(d.ProjectID) })
+			if readErr != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "read project: "+readErr.Error())
+				return
+			}
+			if exists {
 				projectID = d.ProjectID
 			}
-		} else if projectID != "" {
-			_, ok, e := s.projects.Get(projectID)
-			if e != nil {
-				projErr = e
-				return
-			}
-			if !ok {
-				unknownProject = true
-				return
-			}
 		}
+	}
+	// Filing a definition into a project is a write on that project, so it needs
+	// editor there — the check the project deploy path has always made, and the
+	// axis a role-per-route table cannot express (ADR-0071,
+	// ADR-draft-object-authorization). Without it the global modeler role was enough
+	// to publish a runnable definition into any private project whose id the caller
+	// knew, by naming it or by matching the process id of a draft filed in it.
+	//
+	// It runs before the message claim and before deployModel, so a refused deploy
+	// leaves behind neither a sidecar file nor a registry entry. It also has to stay
+	// outside the deploy's own do(): authorization reads the project store through a
+	// do() of its own, and Loop.Do is a rendezvous, so dispatching onto the loop from
+	// the loop would deadlock.
+	if projectID != "" {
+		if code, msg := s.authorizeTargetProject(r, projectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	var (
+		resp       deployResp
+		compErr    error
+		persistErr error
+		claimed    string
+		e          error
+	)
+	s.do(func() {
 		// The claim on a message name, checked before anything is persisted (ADR-0205):
 		// a definition that would be delivered somebody else's inbound events must not
 		// exist even briefly.
@@ -846,10 +874,6 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	switch {
-	case projErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case compErr != nil:
 		// A compile failure is a client error: the submitted model is invalid.
 		httpapi.Error(w, http.StatusBadRequest, compErr.Error())
@@ -2608,11 +2632,22 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
+	// Being signed in is not a relationship to this instance. The role gate on this
+	// route is "any" so a task worker can prefill their form; the object question —
+	// may *you* read *this* instance, and how much of it — is asked here
+	// (ADR-draft-instance-visibility, audit F11).
+	acc, code, msg := s.instanceAccessFor(r, key)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	out := map[string]any{}
 	var scanErr error
 	s.do(func() {
 		scanErr = s.store.VisibleVariablesOfScope(key, func(v *model.VariableValue) error {
-			out[v.Name] = nativeVar(v)
+			if acc.allows(v.Name) {
+				out[v.Name] = nativeVar(v)
+			}
 			return nil
 		})
 	})
@@ -4590,13 +4625,25 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // incidentType names what an incident parked, the distinction the operator views
-// label: a job incident holds a service-task job whose retries ran out; a job-less
-// incident is a timer whose FEEL schedule stopped resolving (ADR-0064/0111).
+// label: a job incident holds a service-task job whose retries ran out; one the
+// execution budget raised holds a token that never got to run
+// (ADR-draft-execution-budget); a job-less incident is otherwise a timer whose FEEL
+// schedule stopped resolving (ADR-0064/0111).
+//
+// That last fallback is approximate and was already: a mockup task's simulated
+// failure, a runaway loop and a gateway that cannot route all raise job-less
+// incidents and all read as "timer" here. Classifying them is what
+// model.IncidentReason is for, and doing it is a change to each of those sources
+// rather than to this function.
 func incidentType(v *model.IncidentValue) string {
-	if v.JobKey != 0 {
+	switch {
+	case v.JobKey != 0:
 		return "job"
+	case v.Reason == model.IncidentOverBudget:
+		return "budget"
+	default:
+		return "timer"
 	}
-	return "timer"
 }
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
@@ -5439,13 +5486,20 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				return
 			}
 			// Collect first, then lease: activating mutates the very index being scanned.
+			// The scan *stops* at the page it wanted rather than reading on and
+			// discarding: the callback used to keep returning nil once it was full, so a
+			// poll for one job walked every waiting job of that type, and the cost of a
+			// worker's heartbeat grew with the backlog it was there to drain
+			// (ADR-draft-bounded-job-polling).
 			var keys []uint64
-			if scanErr = s.store.ActivatableJobs(jobType, func(k uint64) error {
-				if len(keys) < want {
-					keys = append(keys, k)
+			scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
+				keys = append(keys, k)
+				if len(keys) >= want {
+					return errListTruncated
 				}
 				return nil
-			}); scanErr != nil {
+			}))
+			if scanErr != nil {
 				return
 			}
 			for _, k := range keys {

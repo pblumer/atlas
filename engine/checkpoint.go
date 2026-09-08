@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/pblumer/atlas/checkpoint"
@@ -75,6 +76,43 @@ func recordPosition(data []byte) (uint64, error) {
 		return 0, err
 	}
 	return rec.Header.Position, nil
+}
+
+// proveThePrefix refuses a recovery whose log no longer reaches back to where the
+// state it is recovering into leaves off.
+//
+// covered is the highest position already accounted for: what the store has
+// applied, or what a usable checkpoint stands in for, whichever reaches further.
+// The log must then carry everything from covered+1 onward. If its oldest
+// surviving record sits above that, the records in between are gone from the log
+// and live only in a checkpoint — which this entry point cannot install, because
+// installing state files means replacing a store that is already open.
+//
+// So it fails, and says what would fix it. Refusing to start is visible; starting
+// without the prefix is not, and the missing instances look exactly like
+// instances that never existed (ADR-draft-prove-the-prefix).
+func (p *Processor) proveThePrefix(lastApplied, after uint64, checkpointRoot string) error {
+	covered := lastApplied
+	if after > covered {
+		covered = after
+	}
+	earliest, ok, err := p.log.EarliestPosition(recordPosition)
+	if err != nil {
+		return err
+	}
+	if !ok || earliest <= covered+1 {
+		return nil
+	}
+	where := "no checkpoint root was given"
+	if checkpointRoot != "" {
+		where = fmt.Sprintf("no checkpoint under %s covers it", checkpointRoot)
+	}
+	return fmt.Errorf("engine: the log starts at position %d but this state only reaches %d, so "+
+		"positions %d-%d are in neither. They were compacted out of the log and live only in a "+
+		"checkpoint, and %s. Restore the state directory from a checkpoint (or from a whole-instance "+
+		"snapshot) before starting, or start against a log that still has its prefix — replaying what "+
+		"is left would come up missing every instance below the cut",
+		earliest, covered, covered+1, earliest-1, where)
 }
 
 // checkpointSeed picks the newest checkpoint under root that recovery may skip past,
