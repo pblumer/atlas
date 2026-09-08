@@ -136,7 +136,7 @@ the failure it is usually reported with, and the anchor of its handbook card in
 none. The properties panel, the Console's create form and the worker dialog all render
 it, so it is written once. `go test ./api -run SetupDoc` refuses a type that ships
 without it or a link into a card that no longer exists
-(ADR-draft-worker-type-setup-in-the-panel).
+(ADR-0289).
 
 **Say Worker, not connector, in anything new you write.** [ADR-0203](docs/adr/0203-worker-execution-model.md)
 splits the old word into three: a **Worker Type** is a capability (`jira`, `mail`,

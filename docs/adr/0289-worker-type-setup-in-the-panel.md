@@ -1,4 +1,4 @@
-# ADR-DRAFT: A Worker Type carries its own setup, in the panel where it is chosen
+# ADR-0289: A Worker Type carries its own setup, in the panel where it is chosen
 
 - **Status:** Proposed
 - **Date:** 2026-09-08

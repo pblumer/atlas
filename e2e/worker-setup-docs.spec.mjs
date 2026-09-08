@@ -8,7 +8,7 @@
 // refactor silently drops: that the block is there at all, that its steps are behind the
 // fold while what a newcomer needs stays visible, and that the link points at this
 // type's handbook card rather than the top of the page
-// (ADR-draft-worker-type-setup-in-the-panel).
+// (ADR-0289).
 //
 // It reuses the placement harness: the same diagram already carries one task per
 // interesting Worker Type, and mounting the real editor.js twice would only differ in

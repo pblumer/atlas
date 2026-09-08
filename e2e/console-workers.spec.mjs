@@ -101,7 +101,7 @@ test("editing a configured worker stays on Workers", async ({ page }) => {
 
 // The Console's create form is where somebody who has just installed Atlas stands, and
 // the fields on it presuppose work at the provider that nothing on the screen used to
-// mention (ADR-draft-worker-type-setup-in-the-panel). The setup block follows the type
+// mention (ADR-0289). The setup block follows the type
 // picked in the form, so it is the steps for the worker actually being added.
 test("the New worker form says how the picked type is set up, and links to the handbook", async ({ page }) => {
   await goto(page, "#/console/workers");

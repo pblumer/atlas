@@ -3791,7 +3791,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 
 /* What a Worker Type needs before it works, in the panel where it is chosen
-   (ADR-draft-worker-type-setup-in-the-panel). Three parts, deliberately weighted: the
+   (ADR-0289). Three parts, deliberately weighted: the
    `needs` line and the handbook link are always visible — they are what someone who has
    never configured this type has to see without knowing to look — and the step-by-step
    is folded away, because an author who already has the worker wants the fields, not the

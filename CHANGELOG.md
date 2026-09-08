@@ -28,7 +28,7 @@ _Changed_ / _Removed_ for each version.
   directory files, the plain job worker and user provisioning — plus per-product anchors
   for the three SQL types, and a Go guard now refuses a Worker Type that ships without
   its setup or a link into a handbook card that no longer exists
-  (ADR-draft-worker-type-setup-in-the-panel).
+  (ADR-0289).
 
 - **MIM and MIMWAL workflows import as what they mean, not as what their elements
   say.** The MIM importer was written against XOML as it is documented; run against

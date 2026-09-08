@@ -45,7 +45,7 @@ import { groupifyPanel, groupController } from "./pgroup.js";
 import { fmtCount } from "./numfmt.js";
 // What a Worker Type needs before a task of it can run — the provider-side steps, the
 // shape of its vault secret, and the handbook card that says it at length. The panel is
-// where that question is asked (ADR-draft-worker-type-setup-in-the-panel), so the answer
+// where that question is asked (ADR-0289), so the answer
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
 

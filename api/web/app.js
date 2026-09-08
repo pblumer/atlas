@@ -23,7 +23,7 @@ import {
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
 // What a Worker Type needs at the provider before any of these fields mean anything,
 // plus the deep link into this server's own handbook
-// (ADR-draft-worker-type-setup-in-the-panel). The create form is where someone who has
+// (ADR-0289). The create form is where someone who has
 // just installed Atlas stands, so it is the surface that must not assume the reader has
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";

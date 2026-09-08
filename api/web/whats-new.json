@@ -15,8 +15,8 @@
         "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
       },
       "tags": [
         "Modeler",

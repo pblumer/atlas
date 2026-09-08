@@ -22,7 +22,7 @@
 
 // What this Worker Type needs at the provider before any of these fields mean
 // anything — the same text the Modeler's panel shows beside the type, and the deep
-// link into this server's own handbook (ADR-draft-worker-type-setup-in-the-panel).
+// link into this server's own handbook (ADR-0289).
 // An operator opening this dialog on an empty record is the other half of the audience
 // the panel's block was written for.
 import { workerKindDocHTML } from "./workertypedocs.js";
