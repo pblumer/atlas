@@ -12,6 +12,36 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A MIMWAL guard becomes control flow.** The MIMWAL activity library does not
+  express conditionality as `IfElseActivity`: an `UpdateResources` or
+  `GenerateUniqueValue` runs only when its `ActivityExecutionCondition` holds, so
+  a workflow of twenty conditional steps contains no branch element at all and
+  was imported as an unconditional chain — a model asserting a semantics the
+  source does not have. Such an activity is now wrapped in an exclusive
+  split/merge: the activity is entered on a condition, and the gateway default
+  bypasses it.
+
+  The guard expression is **not** translated to FEEL. The MIM function library
+  (`ConvertToBoolean`, `ParametersContain`, `IsPresent`, `RegexMatch`) has
+  semantics this package cannot reproduce faithfully, and its data references
+  (`[//Target/x]`, `[//WorkflowData/y]`) have no agreed FEEL counterpart, so a
+  translation would risk a model that looks right and is not. The entry
+  condition is the placeholder `= true` instead, which keeps the generated
+  process running every activity exactly as it did before guards were modelled;
+  the original expression is documented on the split and flagged
+  `manual-review`, naming the one flow whose expression has to be filled in.
+
+### Changed
+
+- **The import diagram lays out by longest path**, not shortest. A split that
+  both enters an activity and bypasses it — a guarded MIMWAL activity, an empty
+  if/else or parallel branch — reaches the merge in one hop and through the
+  activity in two, so shortest-path layering put the merge in the same column as
+  the activity and drew the edge between them pointing backwards. Back edges (a
+  while loop's return) are excluded from the layering, as before.
+
 ### Fixed
 
 - **The MIM importer reads the workflows MIM actually writes.** Three defects

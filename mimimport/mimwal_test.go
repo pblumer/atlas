@@ -82,7 +82,7 @@ func TestConvertMIMWALWorkflow(t *testing.T) {
 	// Re-parsing the preserved source must yield the activity's original
 	// attribute values, quotation marks included.
 	sources := mimSources(t, res.BPMN)
-	if len(sources) != 2 {
+	if len(sources) != 3 {
 		t.Fatalf("want a preserved source per activity, got %d", len(sources))
 	}
 	update, _, err := decodeNode([]byte(sources[0]))
@@ -97,7 +97,7 @@ func TestConvertMIMWALWorkflow(t *testing.T) {
 		t.Errorf("the MIMWAL queries table was not preserved:\n%s", update.Inner)
 	}
 
-	unique, _, err := decodeNode([]byte(sources[1]))
+	unique, _, err := decodeNode([]byte(sources[2]))
 	if err != nil {
 		t.Fatalf("preserved GenerateUniqueValue did not re-parse: %v\n%s", err, sources[1])
 	}
@@ -159,4 +159,142 @@ func TestDecodeNodeKeepsOriginalError(t *testing.T) {
 	if _, repaired, err := decodeNode([]byte(`<a b="1"/>`)); err != nil || repaired {
 		t.Errorf("well-formed input needs no repair: repaired=%v err=%v", repaired, err)
 	}
+}
+
+// forwardEdges reports every DI edge drawn right-to-left. The layout is a
+// left-to-right layering, so an edge pointing backwards means a node landed in
+// the wrong column, not that the model is wrong. Only for acyclic models: a
+// while loop's return edge points backwards by design.
+func forwardEdges(t *testing.T, bpmn []byte) {
+	t.Helper()
+	type wp struct {
+		X int `xml:"x,attr"`
+	}
+	var doc struct {
+		Edges []struct {
+			ID        string `xml:"id,attr"`
+			Waypoints []wp   `xml:"waypoint"`
+		} `xml:"BPMNDiagram>BPMNPlane>BPMNEdge"`
+	}
+	if err := xml.Unmarshal(bpmn, &doc); err != nil {
+		t.Fatalf("DI did not parse: %v", err)
+	}
+	if len(doc.Edges) == 0 {
+		t.Fatal("no DI edges at all")
+	}
+	for _, e := range doc.Edges {
+		if len(e.Waypoints) == 2 && e.Waypoints[1].X < e.Waypoints[0].X {
+			t.Errorf("edge %s is drawn backwards: x %d → %d", e.ID, e.Waypoints[0].X, e.Waypoints[1].X)
+		}
+	}
+}
+
+// TestGuardBecomesConditionalPath covers the MIMWAL guard: an activity carrying
+// an ActivityExecutionCondition is entered through a conditional split and
+// bypassed through the gateway default, and an activity without one is left in
+// the chain untouched.
+func TestGuardBecomesConditionalPath(t *testing.T) {
+	src, err := os.ReadFile("testdata/mimwal-workflow.xoml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Convert(bytes.NewReader(src), "")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	forwardEdges(t, res.BPMN)
+	bpmn := string(res.BPMN)
+
+	// One guarded activity of three: one split/merge pair, no more.
+	if got := strings.Count(bpmn, "<exclusiveGateway"); got != 2 {
+		t.Errorf("want a split and a merge for the one guarded activity, got %d gateways:\n%s", got, bpmn)
+	}
+	// The activity is entered on a condition and bypassed by the default, so the
+	// generated process still runs it while showing that it is conditional.
+	if !strings.Contains(bpmn, `name="ausführen"`) || !strings.Contains(bpmn, "<conditionExpression>= true</conditionExpression>") {
+		t.Errorf("the guarded activity should be entered on a placeholder condition:\n%s", bpmn)
+	}
+	if !strings.Contains(bpmn, `name="überspringen"`) {
+		t.Errorf("the guard needs a bypass:\n%s", bpmn)
+	}
+	if !strings.Contains(bpmn, "MIM ActivityExecutionCondition: Not(ParametersContain(") {
+		t.Errorf("the split should document the original guard:\n%s", bpmn)
+	}
+
+	// The bypass is the gateway default: once the placeholder is replaced by the
+	// real condition, an activity whose guard does not hold is skipped.
+	var doc struct {
+		Gateways []struct {
+			ID      string `xml:"id,attr"`
+			Default string `xml:"default,attr"`
+		} `xml:"process>exclusiveGateway"`
+		Flows []struct {
+			ID   string `xml:"id,attr"`
+			To   string `xml:"targetRef,attr"`
+			Name string `xml:"name,attr"`
+		} `xml:"process>sequenceFlow"`
+	}
+	if err := xml.Unmarshal(res.BPMN, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var defaultFlow string
+	for _, g := range doc.Gateways {
+		if g.Default != "" {
+			defaultFlow = g.Default
+		}
+	}
+	if defaultFlow == "" {
+		t.Fatal("the guard split needs a default flow")
+	}
+	for _, f := range doc.Flows {
+		if f.ID == defaultFlow && f.Name != "überspringen" {
+			t.Errorf("the default flow should be the bypass, got %q", f.Name)
+		}
+	}
+
+	// The untranslated guard is flagged, with its original expression.
+	var flagged int
+	for _, n := range res.Report.Notes {
+		if n.Kind == "conditionExpression" && n.Status == StatusManualReview &&
+			strings.Contains(n.Detail, "ParametersContain") {
+			flagged++
+		}
+	}
+	if flagged != 1 {
+		t.Errorf("want the one guard flagged for review with its expression, got %d", flagged)
+	}
+}
+
+// TestEmptyGuardIsNotAGateway guards the empty-attribute case: MIMWAL writes
+// ActivityExecutionCondition="" on an activity that always runs.
+func TestEmptyGuardIsNotAGateway(t *testing.T) {
+	res, err := Convert(strings.NewReader(
+		`<SequentialWorkflow><UpdateResources ActivityExecutionCondition="" ActivityDisplayName="A"/></SequentialWorkflow>`), "E")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	if strings.Contains(string(res.BPMN), "<exclusiveGateway") {
+		t.Errorf("an empty guard must not produce a gateway:\n%s", res.BPMN)
+	}
+}
+
+// TestLayoutBypassIsForward covers the layering fix on the shape that exposed
+// it: a split that both enters a branch and bypasses it reaches the merge in one
+// hop and through the branch in two.
+func TestLayoutBypassIsForward(t *testing.T) {
+	src := `<SequentialWorkflow>
+	  <ParallelActivity Description="Fan out">
+	    <SequenceActivity><NotificationActivity Description="A"/></SequenceActivity>
+	    <SequenceActivity/>
+	  </ParallelActivity>
+	  <UpdateResources ActivityExecutionCondition="Eq([//Target/X],True)" ActivityDisplayName="Guarded"/>
+	</SequentialWorkflow>`
+	res, err := Convert(strings.NewReader(src), "L")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+	forwardEdges(t, res.BPMN)
 }

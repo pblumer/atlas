@@ -29,6 +29,13 @@
 // while appearing to preserve it. A consumer unescapes the element text once
 // and holds the activity's markup as MIM wrote it.
 //
+// Conditionality is part of that structure even where MIM does not express it as
+// control flow: an activity of the MIMWAL library runs only when its
+// ActivityExecutionCondition holds, so such an activity is wrapped in an
+// exclusive split with a bypass. The guard expression itself is not translated —
+// see emitGuard for why — but it is documented on the split and flagged in the
+// Report.
+//
 // The conversion reproduces the workflow's *structure and intent*, not MIM's
 // runtime semantics: the authentication/authorization/action request model, the
 // FEEL bodies of individual activities, and diagram layout are intentionally out

@@ -59,11 +59,14 @@ func (b *builder) emitNode(s *strings.Builder, n bnode) {
 		if n.def != "" {
 			def = fmt.Sprintf(" default=%q", n.def)
 		}
-		if n.raw == "" {
+		if n.raw == "" && n.doc == "" {
 			fmt.Fprintf(s, "    <%s id=%q name=%q%s/>\n", n.kind, n.id, attr(n.name), def)
 			return
 		}
 		fmt.Fprintf(s, "    <%s id=%q name=%q%s>\n", n.kind, n.id, attr(n.name), def)
+		if n.doc != "" { // a guard gateway documents the MIM condition it stands for
+			fmt.Fprintf(s, "      <documentation>%s</documentation>\n", text(n.doc))
+		}
 		emitExtensions(s, n, "")
 		fmt.Fprintf(s, "    </%s>\n", n.kind)
 	default: // userTask, serviceTask, task

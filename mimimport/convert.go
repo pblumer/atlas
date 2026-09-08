@@ -97,6 +97,10 @@ type Result struct {
 //	Create/Update/Delete/Group/Resource → serviceTask (preserved, type mim-resource)
 //	anything else    → task           (manual-review) with the XOML preserved
 //
+// A leaf carrying a MIMWAL ActivityExecutionCondition is additionally wrapped in
+// an exclusive split/merge, because MIMWAL expresses conditionality per activity
+// rather than as control flow — see emitGuard.
+//
 // name, when non-empty, overrides the process name derived from the workflow.
 func Convert(r io.Reader, name string) (Result, error) {
 	root, warnings, err := parseXOML(r)
@@ -238,8 +242,7 @@ func (b *builder) emit(n xnode) (entry, exit string) {
 	case "conditionedactivitygroup":
 		return b.emitSequence(activityChildren(n))
 	default:
-		id := b.emitLeaf(n)
-		return id, id
+		return b.emitLeaf(n)
 	}
 }
 
@@ -346,9 +349,19 @@ func (b *builder) setDefault(gwID, flowID string) {
 }
 
 // emitLeaf maps a single (non-control-flow) activity to a BPMN task and records
-// its status. The original activity is preserved on every leaf.
-func (b *builder) emitLeaf(n xnode) string {
+// its status, returning the entry and exit of the produced subgraph. The
+// original activity is preserved on every leaf.
+//
+// An activity that carries a guard is wrapped in a conditional split/merge —
+// see emitGuard — so the entry and exit are the gateways rather than the task.
+func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	kind, jobType, status, detail := classifyLeaf(n.local())
+	guard, guarded := executionCondition(n)
+
+	var split, merge string
+	if guarded {
+		split, merge = b.addGuardGateways(guard)
+	}
 	id := b.addNode(bnode{
 		kind:    kind,
 		name:    n.displayName(),
@@ -358,7 +371,64 @@ func (b *builder) emitLeaf(n xnode) string {
 		doc:     detail,
 	})
 	b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: status, Detail: detail})
-	return id
+	if !guarded {
+		return id, id
+	}
+	b.emitGuard(n, split, merge, id, guard)
+	return split, merge
+}
+
+// executionCondition returns an activity's guard, if it carries one. MIMWAL
+// expresses conditionality per activity rather than as control flow: an
+// UpdateResources or GenerateUniqueValue runs only when its
+// ActivityExecutionCondition holds, and a workflow of twenty such activities has
+// no IfElseActivity in it at all. Reading only the control-flow elements would
+// therefore model such a workflow as an unconditional chain.
+func executionCondition(n xnode) (string, bool) {
+	v, ok := n.attr("ActivityExecutionCondition")
+	if !ok {
+		return "", false
+	}
+	v = strings.TrimSpace(v)
+	return v, v != ""
+}
+
+// addGuardGateways reserves the split and merge of a guarded activity ahead of
+// the task itself, so the generated markup reads in flow order. The split
+// documents the guard it stands for, which is the only place a reader of the
+// model sees the original expression.
+func (b *builder) addGuardGateways(guard string) (split, merge string) {
+	split = b.addNode(bnode{kind: "exclusiveGateway", doc: "MIM ActivityExecutionCondition: " + guard})
+	merge = b.addNode(bnode{kind: "exclusiveGateway"})
+	return split, merge
+}
+
+// condAlways is the placeholder that keeps a guarded activity on the path it
+// took before its guard was modelled. The guard itself is not translated — the
+// MIM function library (ConvertToBoolean, ParametersContain, IsPresent,
+// RegexMatch) has semantics this package cannot reproduce faithfully, and its
+// data references ([//Target/x], [//WorkflowData/y]) have no agreed FEEL
+// counterpart yet — so translating one would risk a model that looks right and
+// is not.
+const condAlways = "= true"
+
+// emitGuard wires a guarded activity between its split and merge: the activity
+// is entered on a condition, and a bypass carries the flow past it.
+//
+// The condition is the placeholder condAlways rather than the guard, so the
+// generated process still runs every activity exactly as it did before guards
+// were modelled; what changes is that the model now *shows* the activity is
+// conditional and names the one flow whose expression has to be filled in. The
+// bypass is the gateway default, which is where an untranslated guard belongs:
+// once the real condition replaces the placeholder, an activity whose guard does
+// not hold is skipped rather than silently run.
+func (b *builder) emitGuard(n xnode, split, merge, id, guard string) {
+	run := b.addFlow(split, id, "ausführen", condAlways)
+	b.addFlow(id, merge, "", "")
+	skip := b.addFlow(split, merge, "überspringen", "")
+	b.setDefault(split, skip)
+	b.note(Note{NodeID: run, Activity: n.local(), Kind: "conditionExpression", Status: StatusManualReview,
+		Detail: "MIM ActivityExecutionCondition not translated to FEEL; the placeholder always runs the activity: " + guard})
 }
 
 // classifyLeaf maps an activity's local name to a BPMN task kind, an optional

@@ -23,10 +23,11 @@ func nodeSize(kind string) (int, int) {
 }
 
 // layout places every node on a simple left-to-right layered grid: the column
-// (x) is the node's shortest-path distance from the start event, and rows (y)
+// (x) is the node's longest-path distance from the start event, and rows (y)
 // stack nodes that share a column. It is deliberately simple — not crossing-
 // minimised — but it renders immediately and can be re-flowed in the Modeler.
-// Back edges (a while loop's return) are placed like any other edge.
+// Back edges (a while loop's return) do not count towards a column but are drawn
+// like any other edge.
 func (b *builder) layout() map[string]box {
 	const (
 		colGap  = 200
@@ -34,10 +35,6 @@ func (b *builder) layout() map[string]box {
 		originX = 160
 		originY = 120
 	)
-	adj := map[string][]string{}
-	for _, f := range b.flows {
-		adj[f.from] = append(adj[f.from], f.to)
-	}
 	start := ""
 	for _, n := range b.nodes {
 		if n.kind == "startEvent" {
@@ -45,23 +42,7 @@ func (b *builder) layout() map[string]box {
 			break
 		}
 	}
-
-	// Shortest-path layer from start (BFS). First visit wins, so a loop's back
-	// edge never inflates a layer.
-	layer := map[string]int{}
-	if start != "" {
-		layer[start] = 0
-		for q := []string{start}; len(q) > 0; {
-			u := q[0]
-			q = q[1:]
-			for _, v := range adj[u] {
-				if _, seen := layer[v]; !seen {
-					layer[v] = layer[u] + 1
-					q = append(q, v)
-				}
-			}
-		}
-	}
+	layer := b.layers(start)
 
 	// Assign each node a row within its column, in declaration order for stability.
 	rows := map[int]int{}
@@ -99,4 +80,74 @@ func (b *builder) emitDI(s *strings.Builder, boxes map[string]box) {
 	}
 	s.WriteString("    </bpmndi:BPMNPlane>\n")
 	s.WriteString("  </bpmndi:BPMNDiagram>\n")
+}
+
+// layers assigns each node its column: the longest path from the start event
+// over the graph with back edges removed.
+//
+// Longest, not shortest: a split that both enters an activity and bypasses it —
+// a guarded MIMWAL activity, an empty if/else branch — reaches the merge in one
+// hop and through the activity in two. Shortest-path layering would then put the
+// merge in the same column as the activity and draw the edge between them
+// pointing backwards. Nodes the start event cannot reach keep column 0, as
+// before.
+func (b *builder) layers(start string) map[string]int {
+	layer := map[string]int{}
+	if start == "" {
+		return layer
+	}
+	out := map[string][]int{} // node id → indices of its outgoing flows
+	for i, f := range b.flows {
+		out[f.from] = append(out[f.from], i)
+	}
+
+	// A depth-first walk marks the flows that close a cycle: an edge into a node
+	// still on the walk's own stack cannot be a forward edge.
+	const (
+		onStack = 1
+		done    = 2
+	)
+	state := map[string]int{}
+	back := map[int]bool{}
+	var walk func(string)
+	walk = func(u string) {
+		state[u] = onStack
+		for _, i := range out[u] {
+			switch v := b.flows[i].to; state[v] {
+			case onStack:
+				back[i] = true
+			case done:
+			default:
+				walk(v)
+			}
+		}
+		state[u] = done
+	}
+	walk(start)
+
+	// Longest path over what is left, in topological order.
+	indeg := map[string]int{}
+	for i, f := range b.flows {
+		if back[i] || state[f.from] != done {
+			continue // a back edge, or an edge out of a node the start cannot reach
+		}
+		indeg[f.to]++
+	}
+	for q := []string{start}; len(q) > 0; {
+		u := q[0]
+		q = q[1:]
+		for _, i := range out[u] {
+			if back[i] {
+				continue
+			}
+			v := b.flows[i].to
+			if l := layer[u] + 1; l > layer[v] {
+				layer[v] = l
+			}
+			if indeg[v]--; indeg[v] == 0 {
+				q = append(q, v)
+			}
+		}
+	}
+	return layer
 }
