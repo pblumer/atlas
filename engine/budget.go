@@ -3,7 +3,7 @@ package engine
 import "strconv"
 
 // The execution budget: how much uninterrupted work one token may drive before the
-// engine stops it (ADR-draft-execution-budget).
+// engine stops it (ADR-0272).
 //
 // A partition has one writer (invariant I3), and every command runs on it. Nothing
 // in the engine bounded how long a single instance could keep that writer: a model
@@ -90,7 +90,7 @@ func (p *Processor) overBudgetMessage() string {
 // to stop. What makes them dangerous is that the count comes from the model or from
 // an instance variable, and the engine allocated from it before looking — a
 // variable holding a billion is a billion FEEL nulls, asked for in one call
-// (ADR-draft-iteration-budget).
+// (ADR-0276).
 //
 // A hundred thousand is far above what a modelled loop plausibly wants and far
 // below the point where the allocation is the problem.

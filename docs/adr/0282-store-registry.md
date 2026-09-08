@@ -1,4 +1,4 @@
-# ADR-DRAFT: One inventory of what is on disk, and what a backup owes it
+# ADR-0282: One inventory of what is on disk, and what a backup owes it
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A cancellation sees the children created in its own batch
+# ADR-0284: A cancellation sees the children created in its own batch
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

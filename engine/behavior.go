@@ -133,7 +133,7 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// scheduling this command and running it, and starting the child now would
 	// produce an execution with nobody to report back to — the same orphan a cancel
 	// arriving the other way round produces, from the other side of the batch
-	// boundary (ADR-draft-transactional-child-view). Read through the transaction so
+	// boundary (ADR-0284). Read through the transaction so
 	// a teardown applied earlier in this very batch counts.
 	//
 	// Only child creations are gated: an API, timer, message or signal start carries
@@ -305,7 +305,7 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	// Left in the queue it would activate against a terminated instance a batch
 	// later and rebuild the execution the cancel just removed — an element instance
 	// and an activatable job belonging to nobody
-	// (ADR-draft-transactional-child-view).
+	// (ADR-0284).
 	//
 	// This is scheduling, not state: commands are never persisted and never
 	// replayed (I6), so dropping them changes what runs next and nothing about what
@@ -436,7 +436,7 @@ func handleElementActivating(c *ProcessingContext) {
 	// The token exists here and its behavior has not run yet, which is the one point
 	// where stopping it costs nothing: the element instance is on the log and can
 	// carry an incident, and nothing downstream has been set in motion
-	// (ADR-draft-execution-budget).
+	// (ADR-0272).
 	if c.p.chargeToken(ei.TokenID) {
 		parkOverBudget(c, c.cmd.Key, ei)
 		return
@@ -448,7 +448,7 @@ func handleElementActivating(c *ProcessingContext) {
 // stays Activated, its behavior never runs, and an incident says why. Resolving it
 // runs the behavior — resumeParkedElement dispatches on the incident's reason, which
 // is what makes "this element never got to start" distinguishable from every other
-// way an element can be parked (ADR-draft-execution-budget).
+// way an element can be parked (ADR-0272).
 func parkOverBudget(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -1039,7 +1039,7 @@ func handleIncidentResolved(c *ProcessingContext) {
 // re-runs whatever the element was doing when it stopped. That began as re-arming a
 // catch/boundary timer whose FEEL schedule failed (ADR-0064) and now covers a
 // mockup task's next attempt (ADR-0120), a runaway loop's next runs (ADR-0133) and a
-// gateway's routing decision (ADR-draft-gateway-routing-incident). In every case the
+// gateway's routing decision (ADR-0273). In every case the
 // work is *re-run*, not skipped: it either succeeds and the token moves on, or fails
 // again and raises a fresh incident. Resolve is a genuine retry, never a blind clear.
 //
@@ -1059,7 +1059,7 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 		return
 	}
 	// An element the execution budget stopped never ran at all, whatever its type, so
-	// running it now is the whole of the resume (ADR-draft-execution-budget). The
+	// running it now is the whole of the resume (ADR-0272). The
 	// reason says so outright; every case below infers the resume from the node type,
 	// which only works while a node type has one way of getting stuck.
 	switch reason {
@@ -1077,7 +1077,7 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 	switch node.Type {
 	case compiler.TypeExclusiveGateway, compiler.TypeInclusiveGateway:
 		// A gateway that could not route parked holding its token
-		// (ADR-draft-gateway-routing-incident). Resolving re-runs the decision from
+		// (ADR-0273). Resolving re-runs the decision from
 		// the same entry point the arrival ran, so the retry is genuine: a gateway
 		// that still cannot route parks again on a fresh incident instead of
 		// quietly clearing, and one that now can takes its flow exactly once.
@@ -1511,7 +1511,7 @@ func activateElement(c *ProcessingContext, ei *model.ElementInstanceValue, flowI
 		// Taking a flow continues a thread of control even where it mints a new token
 		// id — a fork's branches, a join's continuation, a subprocess's exit — so the
 		// execution budget carries over. Otherwise a cycle through any of them would
-		// reset its own budget every lap (ADR-draft-execution-budget). A parallel
+		// reset its own budget every lap (ADR-0272). A parallel
 		// join hands over a continuation whose own TokenID is already cleared and
 		// whose lineage is in ParentTokenID, so that is where its ancestry is read.
 		from := parentID
@@ -1709,7 +1709,7 @@ func takeOutgoingFlows(c *ProcessingContext, ei *model.ElementInstanceValue) {
 //
 // It decides, it does not act: the caller consumes tokens and takes the flows, in
 // that order, so a gateway that cannot decide still has its tokens
-// (ADR-draft-gateway-routing-incident). When it cannot decide it parks the gateway
+// (ADR-0273). When it cannot decide it parks the gateway
 // with an incident itself and returns ok=false; the caller must then do nothing at
 // all.
 func inclusiveRouteOrPark(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) (flows []int32, fork, ok bool) {
@@ -3247,7 +3247,7 @@ func (exclusiveGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, e
 // live element instance on the gateway — then consumes them all and fires the
 // outgoing flow(s) once. It synchronizes *within its own execution scope*: two
 // iterations of a multi-instance subprocess each have their own join
-// (ADR-draft-join-scope-identity). The synchronization is captured entirely by which
+// (ADR-0277). The synchronization is captured entirely by which
 // element instances exist and by the Completed/Activating events emitted, so it
 // replays deterministically without re-counting (invariants I4/I6).
 type parallelGatewayBehavior struct{}
@@ -3285,7 +3285,7 @@ func (parallelGatewayBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 // join (several incoming) it waits until no token could still arrive *in its own
 // execution scope* — no active token upstream and none in flight toward it — then
 // consumes every token parked on it in that scope and fires the outgoing flow(s)
-// once (ADR-draft-join-scope-identity). That "no more can arrive" test is
+// once (ADR-0277). That "no more can arrive" test is
 // what distinguishes it from a parallel join, which waits for a fixed count: an
 // inclusive join waits only for the branches the split actually took.
 type inclusiveGatewayBehavior struct{}
@@ -3394,7 +3394,7 @@ func cancelEventGatewaySiblings(c *ProcessingContext, procKey, groupKey, selfKey
 // (the rule TestFeelEvaluationFailureWritesNull pins) — that rule works because there
 // is a value to write and null is a defensible one. A routing decision has no such answer: treating an unevaluable
 // condition as false sends the token down the default branch, which nobody chose, or
-// nowhere at all (ADR-draft-gateway-routing-incident).
+// nowhere at all (ADR-0273).
 func selectExclusiveFlow(c *ProcessingContext, cp *compiler.CompiledProcess, ei *model.ElementInstanceValue) (int32, string) {
 	defaultFlow := int32(-1)
 	for _, flowID := range cp.Outgoing(ei.ElementId) {
@@ -3438,7 +3438,7 @@ func conditionFailure(cp *compiler.CompiledProcess, flowID int32, err error) str
 
 // parkUnroutableGateway leaves a gateway that could not decide exactly where it is —
 // Activated, holding its token — and raises an incident naming why (audit F08,
-// ADR-draft-gateway-routing-incident). It is the gateway's form of parkRunawayLoop:
+// ADR-0273). It is the gateway's form of parkRunawayLoop:
 // no Completed event, so nothing downstream runs on a decision that was never made,
 // and the token is a thing an operator can see and resume rather than one that
 // silently left the process.
@@ -4097,7 +4097,7 @@ func standardLoop(cp *compiler.CompiledProcess, elementId int32) bool {
 // asked is non-zero when the loop wanted more iterations than the budget allows, and
 // then items is nil: the count comes from the model or from an instance variable, so
 // the check happens *before* the list is built rather than after
-// (ADR-draft-iteration-budget). The caller parks the body.
+// (ADR-0276). The caller parks the body.
 func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, bodyKey uint64) (items []expr.Value, asked int) {
 	ceiling := c.p.iterationCeiling()
 	if d.InputCollection != nil {
@@ -4136,7 +4136,7 @@ func multiInstanceItems(c *ProcessingContext, d *compiler.MultiInstanceDetail, b
 // parkOversizedLoop refuses a multi-instance activity that asked for more iterations
 // than the budget allows: the body stays activated holding its token, no iteration is
 // seeded, and an incident says how many were asked for and what the limit is
-// (ADR-draft-iteration-budget). Resolving re-evaluates the count, so fixing the data
+// (ADR-0276). Resolving re-evaluates the count, so fixing the data
 // — or raising the budget — lets the loop run, and leaving it parks it again.
 func parkOversizedLoop(c *ProcessingContext, bodyKey uint64, body *model.ElementInstanceValue, asked int) {
 	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{

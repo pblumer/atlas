@@ -294,7 +294,7 @@ func TestCrashRecoveryTornFrameSkipped(t *testing.T) {
 // crash stops writing; it does not write past the point it stopped, so bytes
 // following the damage prove the damage came from somewhere else. Accepting it
 // dropped B's first batch out of the middle of the log and reported a clean
-// recovery over the hole (ADR-draft-strict-log-corruption).
+// recovery over the hole (ADR-0283).
 func TestCrashRecoveryCorruptionBeforeTheEndFails(t *testing.T) {
 	sc := twoBatchScenario(t)
 	corruptWALByte(t, sc.dir, sc.walSizeA+8) // first payload byte of B's first batch

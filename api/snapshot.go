@@ -57,7 +57,7 @@ import (
 // snapshot but not in the design-time backup, for a good reason (ADR-0107/0129);
 // the vault *key* rode in it while the encrypted secrets it opens did not, for no
 // reason at all — nobody had decided, because nothing made them
-// (ADR-draft-store-registry).
+// (ADR-0282).
 
 // newestVerifiedCheckpoint returns the archive-relative directory of the newest
 // checkpoint under dataDir that passes full verification — manifest *and* state files —
@@ -375,7 +375,7 @@ func ApplyPendingRestore(dataDir string) (bool, error) {
 // It exists because a compacted log no longer carries the prefix that would
 // rebuild the store: those records were deleted, and they live only in the
 // checkpoint (ADR-0131). Recovery can detect that gap and refuse — and does
-// (ADR-draft-prove-the-prefix) — but refusing is only the right answer when
+// (ADR-0280) — but refusing is only the right answer when
 // nothing can close it. Where a checkpoint can, the server should start.
 //
 // This runs at startup, before the store is opened, because that is the only

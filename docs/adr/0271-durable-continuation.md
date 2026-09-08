@@ -1,4 +1,4 @@
-# ADR-DRAFT: A batch persists the work it still owes
+# ADR-0271: A batch persists the work it still owes
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -51,7 +51,7 @@ Chosen option: **option 1.** The batch carries a *continuation*: the commands it
 events scheduled, encoded as one entry inside the batch's own frame.
 
 Being in that frame is the point. The continuation is durable exactly when the
-events are — same length, same checksum, same fsync (ADR-draft-wal-batch-envelope)
+events are — same length, same checksum, same fsync (ADR-0285)
 — so the obligation cannot survive without its cause, and the cause cannot
 survive without the obligation. A continuation written after the sync could be
 lost while its events lived, which is the failure this record exists to remove.
@@ -142,7 +142,7 @@ this record does, in a place where invariant I6 says only facts belong.
 
 ## Links
 
-- rests on [ADR-draft-wal-batch-envelope](draft-wal-batch-envelope.md) (the frame
+- rests on [ADR-0285](0285-wal-batch-envelope.md) (the frame
   that makes events and continuation durable together)
 - qualifies invariant I4, [ADR-0001](0001-event-sourcing-and-log-structured-state.md)
 - relates to [ADR-0131](0131-engine-recovery-checkpoints-and-wal-compaction.md)

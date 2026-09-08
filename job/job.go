@@ -31,7 +31,7 @@ type Job struct {
 	// LeaseEpoch is the round's claim on this job — the fencing token the engine
 	// minted when the runner leased it (ADR-0007). Submit presents it back, so an
 	// outcome from a round whose lease has since elapsed and been handed on is
-	// dropped instead of applied (ADR-draft-in-process-job-leases).
+	// dropped instead of applied (ADR-0274).
 	LeaseEpoch uint64
 }
 
@@ -202,7 +202,7 @@ func (r *Runner) Handles(jobType int32) bool {
 // It exists because Claim runs on the single writer and reads a record per job: an
 // uncapped claim against a backlog of a hundred thousand held the writer for all of
 // them, and every other instance, timer and health probe waited behind a burst that
-// one round was never going to finish anyway (ADR-draft-bounded-job-polling).
+// one round was never going to finish anyway (ADR-0270).
 const DefaultClaimBatch = 256
 
 // errClaimFull stops a claim scan once the round's share is collected. A sentinel
@@ -245,7 +245,7 @@ func (r *Runner) claimBatchSize() int {
 // across every handler's outbound call. A lease is the identity that makes the
 // serialization unnecessary: the activation takes the job off the activatable index
 // before this returns, so a second claim cannot see it
-// (ADR-draft-in-process-job-leases).
+// (ADR-0274).
 //
 // Each served type gets an equal share of the round rather than whatever is left
 // after the types before it. Ranging a map is randomly ordered, so leaving it to
@@ -377,7 +377,7 @@ func (r *Runner) Submit(outcomes []Outcome) {
 		// outlived its lease has had the job handed on, and applying its outcome now
 		// would be the double execution the lease exists to prevent — the same fence
 		// the HTTP completion endpoint puts in front of an external worker's report
-		// (ADR-draft-in-process-job-leases).
+		// (ADR-0274).
 		if !r.holdsLease(o.Job) {
 			continue
 		}

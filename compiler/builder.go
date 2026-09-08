@@ -2882,7 +2882,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 
 	// The inclusive joins' ancestor sets, derived once here from the finished
 	// topology rather than per arrival at runtime
-	// (ADR-draft-precomputed-join-reachability).
+	// (ADR-0279).
 	joinReach := computeJoinReach(b.nodes,
 		func(id int32) []int32 {
 			n := &b.nodes[id]

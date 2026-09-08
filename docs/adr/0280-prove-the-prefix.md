@@ -1,4 +1,4 @@
-# ADR-DRAFT: Recovery proves its prefix or refuses to start
+# ADR-0280: Recovery proves its prefix or refuses to start
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -814,7 +814,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	// Filing a definition into a project is a write on that project, so it needs
 	// editor there — the check the project deploy path has always made, and the
 	// axis a role-per-route table cannot express (ADR-0071,
-	// ADR-draft-object-authorization). Without it the global modeler role was enough
+	// ADR-0278). Without it the global modeler role was enough
 	// to publish a runnable definition into any private project whose id the caller
 	// knew, by naming it or by matching the process id of a draft filed in it.
 	//
@@ -2635,7 +2635,7 @@ func (s *Server) handleInstanceVariables(w http.ResponseWriter, r *http.Request)
 	// Being signed in is not a relationship to this instance. The role gate on this
 	// route is "any" so a task worker can prefill their form; the object question —
 	// may *you* read *this* instance, and how much of it — is asked here
-	// (ADR-draft-instance-visibility, audit F11).
+	// (ADR-0275, audit F11).
 	acc, code, msg := s.instanceAccessFor(r, key)
 	if code != 0 {
 		httpapi.Error(w, code, msg)
@@ -4627,7 +4627,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 // incidentType names what an incident parked, the distinction the operator views
 // label: a job incident holds a service-task job whose retries ran out; one the
 // execution budget raised holds a token that never got to run
-// (ADR-draft-execution-budget); a job-less incident is otherwise a timer whose FEEL
+// (ADR-0272); a job-less incident is otherwise a timer whose FEEL
 // schedule stopped resolving (ADR-0064/0111).
 //
 // That last fallback is approximate and was already: a mockup task's simulated
@@ -5490,7 +5490,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// discarding: the callback used to keep returning nil once it was full, so a
 			// poll for one job walked every waiting job of that type, and the cost of a
 			// worker's heartbeat grew with the backlog it was there to drain
-			// (ADR-draft-bounded-job-polling).
+			// (ADR-0270).
 			var keys []uint64
 			scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
 				keys = append(keys, k)

@@ -79,7 +79,7 @@ func TestOpenLastSegmentOpenError(t *testing.T) {
 // is not adopted for writing. Open succeeds, leaves the file alone, and continues
 // in a fresh segment, so one unusable file cannot stop the log from starting.
 //
-// This is the same path a pre-batch segment takes (ADR-draft-wal-batch-envelope):
+// This is the same path a pre-batch segment takes (ADR-0285):
 // anything without the version-2 header is read but never appended to, because a
 // batch cannot be written into a file whose framing predates batches.
 func TestOpenSkipsAnUnwritableSegment(t *testing.T) {

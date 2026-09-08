@@ -1,7 +1,7 @@
 package api
 
 // This file is the inventory of everything Atlas keeps on disk, and what a backup
-// owes each of it (ADR-draft-store-registry).
+// owes each of it (ADR-0282).
 //
 // It exists because the previous arrangement could not be kept correct. The
 // backup's list of directories lived in one file and the code creating those

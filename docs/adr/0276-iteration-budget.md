@@ -1,4 +1,4 @@
-# ADR-DRAFT: A loop's size is checked before it is built
+# ADR-0276: A loop's size is checked before it is built
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -119,7 +119,7 @@ exists only at runtime. Option 4 is what the code did.
   bounds)
 - relates to [ADR-0133](0133-standard-loop-activities.md) (the runaway *loop*
   ceiling, which bounds repetitions rather than width)
-- relates to [`draft-execution-budget`](draft-execution-budget.md), the rate limit
+- relates to [`draft-execution-budget`](0272-execution-budget.md), the rate limit
   this size limit does not replace
 - relates to [ADR-0061](0061-incident-model.md) (the incident and its resolve path)
 - reported as F16 in

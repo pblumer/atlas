@@ -1,4 +1,4 @@
-# ADR-DRAFT: Filing a deployment into a project is a write on that project
+# ADR-0278: Filing a deployment into a project is a write on that project
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

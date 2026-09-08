@@ -2172,7 +2172,7 @@ func WithWorkerHistory(connector, scope string) Option {
 // *other* instance waited behind a request that had nothing to do with it.
 //
 // Narrowing it is only safe because a claim now leases
-// (ADR-draft-in-process-job-leases). Without an identity on the claim, two callers
+// (ADR-0274). Without an identity on the claim, two callers
 // driving at once would be
 // handed the same job and work it twice; with one, the activation takes the job off
 // the activatable index before Claim returns, so the second caller's claim cannot

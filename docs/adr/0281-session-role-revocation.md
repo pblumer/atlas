@@ -1,4 +1,4 @@
-# ADR-DRAFT: A role change takes effect on the next request, not the next login
+# ADR-0281: A role change takes effect on the next request, not the next login
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

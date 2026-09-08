@@ -576,7 +576,7 @@ const csvConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 
 // TestPullHandsOutEveryJobExactlyOnceAcrossManyPulls guards the bounded scan. The
 // pull used to read every waiting job of its type and discard all but the page it
-// wanted; it now stops at the page (ADR-draft-bounded-job-polling). Stopping early
+// wanted; it now stops at the page (ADR-0270). Stopping early
 // is only safe if nothing behind the stop is lost — so this drains a backlog one job
 // at a time and checks that the pulls together hand out each job once and only once.
 func TestPullHandsOutEveryJobExactlyOnceAcrossManyPulls(t *testing.T) {

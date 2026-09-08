@@ -13,7 +13,7 @@ import (
 // The runner used to dispatch whatever was activatable and take no claim on it, so
 // two callers driving at once were handed the same job and worked it twice — and the
 // only thing standing between that and production was a mutex held across every
-// handler's outbound call (ADR-draft-in-process-job-leases).
+// handler's outbound call (ADR-0274).
 //
 // A claim now leases: the activation takes the job off the activatable index before
 // Claim returns, so the second claim cannot see it.

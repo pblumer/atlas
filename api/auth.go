@@ -86,7 +86,7 @@ const defaultSessionTTL = 12 * time.Hour
 // session is one logged-in identity. Roles and group ids are snapshotted here so a
 // request can be authorized from the session alone (see Principal). Both are then
 // kept live: a group membership change (ADR-0185) and a role change
-// (ADR-draft-session-role-revocation) each push into the snapshot, so an
+// (ADR-0281) each push into the snapshot, so an
 // administrative edit takes effect on the account's next request rather than at
 // its next login.
 //

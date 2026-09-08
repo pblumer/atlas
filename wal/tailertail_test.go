@@ -26,7 +26,7 @@ func tailAll(t *testing.T, dir string) []string {
 // batch header made it to disk and the payload did not. The length says how much to
 // expect and the file ends short of it.
 //
-// A batch is all or nothing (ADR-draft-wal-batch-envelope), so the tailer must stop
+// A batch is all or nothing (ADR-0285), so the tailer must stop
 // at the last whole one and hand back an offset that excludes the fragment — not
 // read what is there and deliver half a batch's records, which is precisely the
 // "half a command" the batch envelope exists to prevent.

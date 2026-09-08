@@ -12,7 +12,7 @@ import (
 // reads a record per job, so an uncapped claim against a backlog held the writer for
 // all of it — and every other instance, timer and health probe waited behind a burst
 // that one round was never going to finish anyway
-// (ADR-draft-bounded-job-polling).
+// (ADR-0270).
 //
 // The cap costs a round, not a job: every caller drives in a loop until a claim
 // comes back empty, which the second half of this test is.

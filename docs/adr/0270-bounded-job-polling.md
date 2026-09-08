@@ -1,4 +1,4 @@
-# ADR-DRAFT: A poll costs a page, not a backlog
+# ADR-0270: A poll costs a page, not a backlog
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

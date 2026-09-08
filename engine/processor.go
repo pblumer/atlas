@@ -113,7 +113,7 @@ type Processor struct {
 	fatalErr error
 
 	// tokenSteps counts, per token, how many element activations it has driven in the
-	// current run — the execution budget (ADR-draft-execution-budget). It is
+	// current run — the execution budget (ADR-0272). It is
 	// deliberately not durable: the question it answers is "is one token occupying the
 	// single writer right now", and a token that waited for a job or a timer in between
 	// was never the problem. Cleared when a run starts, and reused across runs like the
@@ -926,7 +926,7 @@ func (p *Processor) advanceQueue(n int) {
 // It is separate from installing so the batch can *persist* that queue before it
 // commits: the continuation has to describe the work that will actually survive,
 // which means it is computed after the terminated-instance filter and not before
-// (ADR-draft-durable-continuation).
+// (ADR-0271).
 func (p *Processor) buildNextQueue(n int) {
 	p.queueScratch = append(p.queueScratch[:0], p.queue[n:]...)
 	p.queueScratch = append(p.queueScratch, p.followups...)
@@ -1015,7 +1015,7 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	// suffix and calling it a recovery. Compaction deletes the segments a checkpoint
 	// covers, so after one the log no longer starts at genesis — and a replay of what
 	// remains is indistinguishable from a replay of everything unless somebody checks
-	// where what remains begins (ADR-draft-prove-the-prefix).
+	// where what remains begins (ADR-0280).
 	if err := p.proveThePrefix(lastApplied, after, checkpointRoot); err != nil {
 		return err
 	}
@@ -1083,7 +1083,7 @@ func (p *Processor) RecoverFrom(checkpointRoot string) error {
 	// Restore the obligation, not just the facts. Folding events rebuilds what
 	// happened; the queue is what still has to happen, and without it an instance
 	// interrupted at a batch boundary comes back correctly materialized and never
-	// moves again (ADR-draft-durable-continuation). The commands are re-run, not
+	// moves again (ADR-0271). The commands are re-run, not
 	// re-applied: they go through the normal handlers, which is why the events they
 	// produce are written once and only once — the batch that scheduled them never
 	// got to run them.

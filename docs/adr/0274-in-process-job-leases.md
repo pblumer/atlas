@@ -1,4 +1,4 @@
-# ADR-DRAFT: The in-process runner claims what it works
+# ADR-0274: The in-process runner claims what it works
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -136,7 +136,7 @@ assignee.
   answer to a slow worker: the budget bounded the stall, the lease removes it
 - relates to [ADR-0002](0002-single-writer-partition-model.md) (the writer this
   keeps free)
-- relates to [`draft-bounded-job-polling`](draft-bounded-job-polling.md), which
+- relates to [`draft-bounded-job-polling`](0270-bounded-job-polling.md), which
   bounded the same claim's size
 - reported as F13 in
   [`docs/planning/audit-2026-09-07-umsetzungsplan.md`](../planning/audit-2026-09-07-umsetzungsplan.md)

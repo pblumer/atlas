@@ -15,7 +15,7 @@ var errEnough = errors.New("enough")
 // polling. The scan's contract is that a non-nil error from the callback ends it,
 // and what makes a poll cheap is the caller *using* that rather than reading on and
 // discarding — which is what the worker pull did, so asking for one job walked every
-// job of that type (ADR-draft-bounded-job-polling).
+// job of that type (ADR-0270).
 //
 // The proof is the visit count, not the result: at 1, 100 and 10,000 waiting jobs a
 // caller that wants one visits one. That is what "the cost of a heartbeat does not

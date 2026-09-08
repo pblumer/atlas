@@ -11,7 +11,7 @@ import (
 )
 
 // TestRecoveryRefusesAContinuationItCannotRead: the continuation is the work the
-// engine still owed when it stopped (ADR-draft-durable-continuation), and recovery
+// engine still owed when it stopped (ADR-0271), and recovery
 // re-runs it. A continuation that will not decode is therefore not an empty queue —
 // it is an unknown one, and starting with an unknown queue is starting an engine
 // that has quietly dropped work nobody can name.

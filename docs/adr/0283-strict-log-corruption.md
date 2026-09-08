@@ -1,4 +1,4 @@
-# ADR-DRAFT: Only the end of the active segment may be torn
+# ADR-0283: Only the end of the active segment may be torn
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -109,7 +109,7 @@ Option 1 was rejected because it makes an ordinary crash unrecoverable.
 
 ## Links
 
-- builds on [ADR-draft-wal-batch-envelope](draft-wal-batch-envelope.md) (the batch
+- builds on [ADR-0285](0285-wal-batch-envelope.md) (the batch
   is the unit that is whole or absent)
 - relates to [ADR-0131](0131-engine-recovery-checkpoints-and-wal-compaction.md)
   (compaction removes a prefix, which is why continuity is checkable)

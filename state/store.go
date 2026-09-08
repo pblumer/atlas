@@ -175,7 +175,7 @@ func (q queries) ElementInstancesOfProcess(procKey uint64, fn func(elKey uint64)
 // the nth entry visits n entries whatever the backlog behind it. Returning nil once
 // full and discarding the rest reads the whole slice instead, and that is what made
 // a worker's heartbeat cost grow with the backlog it was there to drain
-// (ADR-draft-bounded-job-polling). Callers that stop deliberately use a sentinel and
+// (ADR-0270). Callers that stop deliberately use a sentinel and
 // unwrap it; anything else is a real failure.
 func (q queries) ActivatableJobs(jobType int32, fn func(jobKey uint64) error) error {
 	return q.scanPrefix(jobActivatablePrefix(jobType), func(k, _ []byte) error {

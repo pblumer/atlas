@@ -173,7 +173,7 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 // far — replay applies the same records in the same order — so seeing them is as
 // reproducible as not seeing them, and strictly more correct. What the committed
 // view actually produced was a child that outlived the caller cancelled in the
-// batch that created it (ADR-draft-transactional-child-view).
+// batch that created it (ADR-0284).
 func (c *ProcessingContext) ChildInstancesOf(callElKey uint64) []uint64 {
 	var children []uint64
 	if err := c.tx.ChildInstancesOfParent(callElKey, func(childPiKey uint64) error {
@@ -219,7 +219,7 @@ func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerV
 // share a process instance and a node id but are separate executions with separate
 // tokens; matching on (instance, node) alone, a join counted the *other* iteration's
 // arrival as its own, fired early, and consumed a token that was never its to take
-// (ADR-draft-join-scope-identity). A token's scope is the identity of the execution
+// (ADR-0277). A token's scope is the identity of the execution
 // it belongs to, so it is part of the join's identity too.
 func (c *ProcessingContext) ElementInstancesOnNode(procKey, scopeKey uint64, elementId int32) []uint64 {
 	var keys []uint64
@@ -243,7 +243,7 @@ func (c *ProcessingContext) ElementInstancesOnNode(procKey, scopeKey uint64, ele
 // each firing the join separately.
 //
 // scopeKey scopes the question the same way it scopes a parallel join's count
-// (ADR-draft-join-scope-identity): a token in a *sibling* iteration of a
+// (ADR-0277): a token in a *sibling* iteration of a
 // multi-instance subprocess is on the same node ids but can never arrive here, and
 // letting it hold the join open made every iteration wait for the slowest one.
 //

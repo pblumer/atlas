@@ -1,4 +1,4 @@
-# ADR-DRAFT: Reading a running instance is an object question
+# ADR-0275: Reading a running instance is an object question
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

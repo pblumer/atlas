@@ -1,4 +1,4 @@
-# ADR-DRAFT: Topology is compiled, including the join's ancestors
+# ADR-0279: Topology is compiled, including the join's ancestors
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -14,7 +14,7 @@
 // write torn anywhere inside it fails as a whole and the batch is discarded
 // entire. Framing each record separately made every prefix of that one write
 // look like a shorter valid log, which let a crash leave half a command's
-// events behind (ADR-draft-wal-batch-envelope).
+// events behind (ADR-0285).
 //
 // Every segment opens with a 16-byte header naming the format, so a file written
 // by an older build is recognised rather than misread. Those segments — one
@@ -78,7 +78,7 @@ const (
 	// entryContinuation carries the work a batch still owes after committing: the
 	// commands its events scheduled, which lived only in memory until now. It is
 	// not an event — nothing folds it into state — so a reader that only wants
-	// records never sees it (ADR-draft-durable-continuation).
+	// records never sees it (ADR-0271).
 	entryContinuation uint8 = 1
 )
 
@@ -160,7 +160,7 @@ func Open(opts Options) (*Log, error) {
 		// predates batches. Writing continues in a fresh segment, so an existing log
 		// keeps running across the upgrade and only the records written from here on
 		// gain the all-or-nothing guarantee — the ones already on disk cannot be given
-		// it retroactively (ADR-draft-wal-batch-envelope).
+		// it retroactively (ADR-0285).
 		if err := l.openNewSegment(seq + 1); err != nil {
 			return nil, err
 		}
@@ -319,7 +319,7 @@ func (l *Log) Sync() error {
 	// either fall short of the declared length or fail the checksum, and either
 	// way the reader discards the batch entire. Framing each record separately
 	// made every prefix of the same write look like a shorter valid log, so half
-	// a command's events could survive a crash (ADR-draft-wal-batch-envelope).
+	// a command's events could survive a crash (ADR-0285).
 	payload := l.pending[batchHeaderSize:]
 	binary.LittleEndian.PutUint32(l.pending[0:], uint32(len(payload)))
 	binary.LittleEndian.PutUint32(l.pending[4:], crc32.Checksum(payload, castagnoli))
@@ -421,7 +421,7 @@ func segmentFilesIn(dir string) ([]string, error) {
 // a contiguous run. A gap in the middle is a segment that went missing some other
 // way, and replaying across it would skip everything it held without a word,
 // exactly the silent hole strict corruption checking exists to prevent
-// (ADR-draft-strict-log-corruption).
+// (ADR-0283).
 func checkSegmentContinuity(names []string) error {
 	for i := 1; i < len(names); i++ {
 		prev, err := parseSeq(names[i-1])

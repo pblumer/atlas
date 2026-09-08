@@ -135,7 +135,7 @@ var (
 // engine derived them on every arrival: a reverse adjacency over the whole graph, a
 // map and a stack, allocated and discarded per token movement. Topology does not
 // change while a process runs, so it is compiled once and looked up
-// (ADR-draft-precomputed-join-reachability).
+// (ADR-0279).
 //
 // The set lookup and every membership test it answers must therefore be free.
 func TestJoinReachabilityNoAlloc(t *testing.T) {

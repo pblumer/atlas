@@ -480,7 +480,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// It matters because a compacted log no longer holds the prefix that would
 	// rebuild the store from genesis: those records were deleted and live only in
 	// the checkpoint (ADR-0131). Without this, recovery would find the gap and
-	// refuse to start (ADR-draft-prove-the-prefix) — correct, but a refusal where a
+	// refuse to start (ADR-0280) — correct, but a refusal where a
 	// checkpoint could have closed it. A directory that already has a state store is
 	// left alone: that store is the newer answer.
 	if seeded, err := api.SeedStateFromCheckpoint(dataDir); err != nil {

@@ -8,7 +8,7 @@ import (
 )
 
 // This file makes a batch's outstanding work durable alongside the events that
-// scheduled it (ADR-draft-durable-continuation).
+// scheduled it (ADR-0271).
 //
 // A batch can commit events and, in doing so, schedule the commands that carry
 // its instances forward. Those commands lived only in memory, so a restart at a
@@ -18,7 +18,7 @@ import (
 //
 // The continuation is the batch's answer to "what is still owed". It is written
 // as one entry inside the batch's own frame, so it is durable exactly when the
-// events are — the same all-or-nothing unit (ADR-draft-wal-batch-envelope) — and
+// events are — the same all-or-nothing unit (ADR-0285) — and
 // it is not an event: applyToState never sees it, and replay does not fold it.
 // It only seeds the queue.
 

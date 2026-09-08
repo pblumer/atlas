@@ -1280,7 +1280,7 @@ type CompiledProcess struct {
 	flows []CompiledFlow
 
 	// joinReach is each inclusive join's ancestor set, computed at compile time
-	// (ADR-draft-precomputed-join-reachability). Nil when the process has no
+	// (ADR-0279). Nil when the process has no
 	// inclusive join, which is the common case.
 	joinReach map[int32]NodeSet
 
@@ -1454,7 +1454,7 @@ func (s *NodeSet) add(id int32) {
 // It used to be derived at runtime, on every arrival at every such join: a reverse
 // adjacency over the whole graph, a map and a stack, all allocated and thrown away
 // per token movement. That is topology, and topology is compiled, not interpreted
-// (invariants I1 and I5, ADR-draft-precomputed-join-reachability).
+// (invariants I1 and I5, ADR-0279).
 func (p *CompiledProcess) InclusiveJoinReach(node int32) NodeSet { return p.joinReach[node] }
 
 // computeJoinReach builds the ancestor set of each inclusive join in nodes, given

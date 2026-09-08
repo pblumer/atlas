@@ -22,7 +22,7 @@ import (
 // (storeregistry.go): every store classified design-time, and nothing else. It used
 // to be a list here, kept by hand and in a different file from the code creating
 // the stores — which is how twelve of them drifted out of the whole-instance
-// snapshot without a single test noticing (ADR-draft-store-registry).
+// snapshot without a single test noticing (ADR-0282).
 //
 // Deliberately absent, and now absent by classification rather than by memory: the
 // log and state store (runtime, rebuilt on restart), accounts (identity), and

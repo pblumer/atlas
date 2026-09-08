@@ -16,7 +16,7 @@ import (
 //
 // It also checks the scope filter on the same scan: an activation for a sibling
 // execution of the same subprocess is on the same node ids and can never arrive
-// here (ADR-draft-join-scope-identity).
+// here (ADR-0277).
 func TestTokenCanStillReachReadsOnlyActivations(t *testing.T) {
 	s := openStore(t)
 	p := &Processor{store: s, clock: &wbClock{}}
@@ -27,7 +27,7 @@ func TestTokenCanStillReachReadsOnlyActivations(t *testing.T) {
 	// The reach set comes from a real compiled join rather than a hand-built map: it
 	// is computed at compile time now, and a test that made its own would stop
 	// exercising the pairing this function depends on
-	// (ADR-draft-precomputed-join-reachability).
+	// (ADR-0279).
 	b := compiler.NewBuilder(1, "reach", 1)
 	st := b.AddStartEvent()
 	split := b.AddInclusiveGateway()

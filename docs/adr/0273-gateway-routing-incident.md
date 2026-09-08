@@ -1,4 +1,4 @@
-# ADR-DRAFT: A gateway that cannot route parks, it does not complete
+# ADR-0273: A gateway that cannot route parks, it does not complete
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

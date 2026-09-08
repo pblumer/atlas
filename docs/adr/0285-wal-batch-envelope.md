@@ -1,4 +1,4 @@
-# ADR-DRAFT: A batch is one framed unit in the log
+# ADR-0285: A batch is one framed unit in the log
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

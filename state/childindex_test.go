@@ -273,7 +273,7 @@ func TestCorruptDataObjectReadsFail(t *testing.T) {
 // transaction, which is what the engine's teardown uses: a child linked earlier in
 // the batch must be visible before the batch commits, and one unlinked in the
 // batch must already be gone. Reading the committed store instead is what let a
-// cancelled caller leave its child running (ADR-draft-transactional-child-view).
+// cancelled caller leave its child running (ADR-0284).
 func TestChildByParentThroughTransaction(t *testing.T) {
 	s := openStore(t)
 	const callA, callB = uint64(10), uint64(20)

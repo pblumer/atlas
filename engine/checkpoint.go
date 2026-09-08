@@ -90,7 +90,7 @@ func recordPosition(data []byte) (uint64, error) {
 //
 // So it fails, and says what would fix it. Refusing to start is visible; starting
 // without the prefix is not, and the missing instances look exactly like
-// instances that never existed (ADR-draft-prove-the-prefix).
+// instances that never existed (ADR-0280).
 func (p *Processor) proveThePrefix(lastApplied, after uint64, checkpointRoot string) error {
 	covered := lastApplied
 	if after > covered {

@@ -1180,10 +1180,10 @@ const (
 	IncidentUnclassified IncidentReason = 0
 	// IncidentOverBudget marks an element that was activated but never ran, because
 	// its token had used up the execution budget for this run
-	// (ADR-draft-execution-budget). Resolving it runs the behavior that never ran.
+	// (ADR-0272). Resolving it runs the behavior that never ran.
 	IncidentOverBudget IncidentReason = 1
 	// IncidentTooManyIterations marks a multi-instance activity that asked for more
-	// iterations than the instance budget allows (ADR-draft-iteration-budget). Like
+	// iterations than the instance budget allows (ADR-0276). Like
 	// IncidentOverBudget it names an element that never ran, so resolving it runs the
 	// behavior — which re-evaluates the count, and parks again if it is still too
 	// large.

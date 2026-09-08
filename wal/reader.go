@@ -156,7 +156,7 @@ func (l *Log) firstPosition(name string, positionOf func([]byte) (uint64, error)
 // a continuation is not an event: it never reaches applyToState and replaying it
 // would be replaying an intention (invariant I6). It is handed back separately so
 // the caller can seed its queue with it and nothing else
-// (ADR-draft-durable-continuation).
+// (ADR-0271).
 //
 // The last one wins because each continuation describes the whole outstanding
 // queue rather than a change to it, so an earlier one is a strictly older answer
@@ -242,7 +242,7 @@ type segmentScan struct {
 // Two things make a tail a tail: the segment is still being written, and nothing
 // follows the damage. A crash stops writing; it does not write past the point it
 // stopped. So a bad batch with more bytes after it was not left by a crash, even
-// in the active segment (ADR-draft-strict-log-corruption).
+// in the active segment (ADR-0283).
 //
 // A segment written before batch framing has no header and one record per frame.
 // It is read in that shape, which keeps an existing log readable across the

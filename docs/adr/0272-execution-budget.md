@@ -1,4 +1,4 @@
-# ADR-DRAFT: One token may not hold the writer forever
+# ADR-0272: One token may not hold the writer forever
 
 - **Status:** Proposed
 - **Date:** 2026-09-07
@@ -60,7 +60,7 @@ activated and then *stopped*: its behavior never runs, and an incident on it say
 why. `RunUntilIdle` therefore always returns, and everything else the report asks
 for follows from that — other instances advance, timers fire, the probe is
 answered, and a cancellation of the culprit reaches the loop (where the terminated
-instance's queued commands are dropped, ADR-draft-transactional-child-view).
+instance's queued commands are dropped, ADR-0284).
 
 **Why per token.** It is what separates a runaway from heavy work. A cycle is one
 token going round; a multi-instance activity over fifty thousand items is fifty

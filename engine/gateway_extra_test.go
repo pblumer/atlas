@@ -35,7 +35,7 @@ func unconditionalGatewayProcess(t testing.TB) *compiler.CompiledProcess {
 // deadEndGatewayProcess builds Start → XOR gateway → (cond "amount > 100") → high
 // with NO default flow. When the condition is false no outgoing flow can be taken,
 // which is a modeling error: the gateway parks holding its token and raises an
-// incident naming itself (ADR-draft-gateway-routing-incident).
+// incident naming itself (ADR-0273).
 func deadEndGatewayProcess(t testing.TB) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "deadend", 1)

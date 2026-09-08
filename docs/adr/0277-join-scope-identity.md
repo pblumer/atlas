@@ -1,4 +1,4 @@
-# ADR-DRAFT: A join synchronizes within its own execution scope
+# ADR-0277: A join synchronizes within its own execution scope
 
 - **Status:** Proposed
 - **Date:** 2026-09-07

@@ -37,7 +37,7 @@ func registerHandler(t *testing.T, srv *Server, name string, h func(job.Job) err
 // comfort to a caller queued behind a dead host.
 //
 // The mutex now covers claiming and submitting and not the call in between
-// (ADR-draft-in-process-job-leases). This starts an instance of an unrelated
+// (ADR-0274). This starts an instance of an unrelated
 // definition while a worker is stuck and requires it to finish on its own.
 func TestASlowWorkerDoesNotBlockAnIndependentInstance(t *testing.T) {
 	srv := newServerForErrors(t)
