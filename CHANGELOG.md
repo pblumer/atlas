@@ -12,6 +12,58 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **MIM and MIMWAL workflows import as what they mean, not as what their elements
+  say.** The MIM importer was written against XOML as it is documented; run against
+  a real 25-activity MIMWAL workflow it produced a model that misrepresented the
+  process. Four things it could not see before:
+
+  - **Conditionality.** MIMWAL does not use `IfElseActivity`: an activity runs only
+    when its `ActivityExecutionCondition` holds, so a workflow of twenty conditional
+    steps contains no branch element at all and was imported as an unconditional
+    chain — a model asserting a semantics the source does not have, with nothing in
+    the report to say so. A guarded activity is now wrapped in an exclusive
+    split/merge, entered on a condition and bypassed by the gateway default.
+
+  - **Iteration.** MIMWAL runs an activity once per value of its `Iteration`
+    expression — `SplitString` of a delimited attribute, typically — which was
+    modelled as a single step. Such an activity now carries a sequential
+    `multiInstanceLoopCharacteristics`.
+
+  - **What a step actually does.** The serialised .NET collections that hold an
+    activity's work — an `UpdateResources`' `UpdatesTable` and `QueriesTable`, a
+    `GenerateUniqueValue`'s `ValueExpressions` and `LdapQueriesTable` — are thousands
+    of characters of `Hashtable` markup in the source. They are now rendered as a
+    small table on the activity's documentation, so a reviewer can read what a step
+    queries and assigns without reading the markup. Columns are rendered by position
+    and **not named**: MIMWAL's editor labels the updates grid Target | Value | Allow
+    Null, but in the workflow this was checked against, column 1 holds a literal in
+    nine rows and column 0 a query result in six, and neither can be assigned to — so
+    naming them would state something unverified about every imported activity. The
+    `Count` MIMWAL writes into each table is treated as the check it is (it agreed in
+    all 46) and reported only when it disagrees.
+
+  - **Which library an activity came from.** XOML binds each activity library to a
+    prefix on the workflow root, which is what tells a stock MIM activity from a
+    MIMWAL one of the same local name and names the assembly it was authored against.
+    Go's decoder resolves prefixes away, so preserved markup was written from the
+    local name alone and the fragment referred to prefixes nothing declared — it did
+    not parse on its own. A fragment now carries and declares the prefixes it uses,
+    and `<atlas:mimSource>` names the fully qualified .NET `type` and `assembly`.
+    MIMWAL's `GenerateUniqueValue` is recognised too, mapping to a `mim-uniquevalue`
+    service task rather than an unrecognised placeholder.
+
+  Neither MIM expression is translated to FEEL. The MIM function library
+  (`ConvertToBoolean`, `ParametersContain`, `IsPresent`, `RegexMatch`) has semantics
+  this package cannot reproduce faithfully, and its data references
+  (`[//Target/x]`, `[//WorkflowData/y]`) have no agreed FEEL counterpart — a
+  translation would risk a model that looks right and is not, the one outcome worse
+  than an untranslated one. Placeholders (`= true`, `=[1]`) keep the generated
+  process behaving exactly as it did before these were modelled, and each original
+  expression is documented on the model and flagged `manual-review`, naming the
+  single expression to fill in.
+
 ### Changed
 
 - **Every list opens with its search boxes showing.** Each data table has carried a
@@ -48,6 +100,24 @@ _Changed_ / _Removed_ for each version.
   a table it owns, a table that is not a list carries `no-enhance` and says why, and
   code that replaces a whole table enhances it again.
 
+- **An imported model keeps its ids, and its diagram reads forward.** A node used to
+  be `Activity_1`, `Activity_2`, … in emission order, so inserting one activity in
+  MIM shifted every id below it: a re-import of a barely changed workflow produced a
+  diff touching everything, stranding any hand-made adjustment. Ids now derive from
+  the activity's `x:Name`, with a guard's gateways named `<id>_gate` and `<id>_join`
+  after the activity they wrap, and a join or loop exit after its split. Every id
+  goes through one table, so a name the workflow reuses, one that collides with the
+  process id, and the diagram-interchange ids all step aside instead of producing a
+  document the compiler rejects for a duplicate id.
+
+  The diagram lays out by longest path rather than shortest. A split that both enters
+  an activity and bypasses it reaches the merge in one hop and through the activity in
+  two, so shortest-path layering put the merge in the same column as the activity and
+  drew the edge between them pointing backwards — a defect the empty if/else and
+  parallel branches already had, and one a guard per activity would have made
+  pervasive. Back edges (a while loop's return) are excluded from the layering, as
+  before.
+
 ### Fixed
 
 - **An incident that says "no worker registered as X" can now create X, instead of pointing
@@ -68,6 +138,30 @@ _Changed_ / _Removed_ for each version.
   exist, and Publish is how most applications get there. The three checks are one function
   now, called by all three paths, and the Console shows what a publish warned about
   (ADR-0287).
+
+- **The MIM importer reads the workflows MIM actually writes.** Three defects
+  kept `atlas import-mim` (and `POST /api/v1/imports/mim`) from doing its job on
+  real exports:
+
+  - A workflow root whose `xmlns` declarations are serialised **without quotes**
+    around the value — which is how MIM writes them — failed to parse at all, so
+    the whole import returned an error. Such input is now repaired once before
+    parsing, and the repair is reported — as a `Report` warning on the CLI and in
+    the API response, and as a note in the generated process documentation.
+    Input that is broken for any other reason still fails with the parser's own
+    diagnosis.
+  - Activities from the **MIMWAL** activity library carry the author's label in
+    `ActivityDisplayName` and a WF designer id (`actionActivity6`) in `x:Name`.
+    Only the latter was recognised, so every node in a MIMWAL workflow was named
+    after the designer id and the imported diagram was unreadable.
+    `ActivityDisplayName` is now the first label consulted.
+  - Markup preserved in `<atlas:mimSource>` was wrapped in a **CDATA** section
+    after its attribute values had been escaped. CDATA suppresses entity
+    resolution, so a quotation mark inside a MIM expression was preserved as the
+    literal text `&#34;` — silently changing every `ActivityExecutionCondition`,
+    `Iteration` and `ConflictFilter` it appeared in. Preserved markup is now
+    written as escaped character data, and re-parses to the activity's original
+    attribute values.
 
 ## [0.5.0] — 2026-09-08
 

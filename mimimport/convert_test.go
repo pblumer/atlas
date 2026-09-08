@@ -125,12 +125,12 @@ func TestConvertWhileLoop(t *testing.T) {
 // verbatim in <atlas:mimSource> must be re-parseable XML, including attribute
 // values that contain quotes.
 func TestPreservedRawIsWellFormed(t *testing.T) {
-	n, err := decodeNode([]byte(`<PowerShellActivity Description='say "hi"' ScriptText="a &amp; b"/>`))
+	n, _, err := decodeNode([]byte(`<PowerShellActivity Description='say "hi"' ScriptText="a &amp; b"/>`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw := n.raw()
-	if _, err := decodeNode([]byte(raw)); err != nil {
+	raw := n.raw(namespaces(n))
+	if _, _, err := decodeNode([]byte(raw)); err != nil {
 		t.Fatalf("preserved markup is not well-formed XML: %v\n%s", err, raw)
 	}
 }

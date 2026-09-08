@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Modeler",
+    "Import"
+  ],
+  "title": {
+    "en": "Importing a real MIM workflow works, and the diagram is readable",
+    "de": "Der Import eines echten MIM-Workflows funktioniert — und das Diagramm ist lesbar"
+  },
+  "summary": {
+    "en": "Three things stood between the importer and a workflow exported from a real MIM installation. The file would not load at all, because MIM writes part of its header in a way strict XML readers reject. Every step was labelled with an internal designer name such as actionActivity6 instead of the name its author gave it, which made the imported diagram unreadable. And the original definition kept alongside each step was altered as it was stored, so quotation marks inside a MIM expression came back as stray characters. All three are fixed: such a file imports, the steps carry their real names, and what is kept beside them is what MIM wrote.",
+    "de": "Drei Dinge standen zwischen dem Importer und einem Workflow aus einer echten MIM-Installation. Die Datei liess sich gar nicht laden, weil MIM einen Teil des Kopfs so schreibt, wie strenge XML-Leser ihn ablehnen. Jeder Schritt trug einen internen Entwurfsnamen wie actionActivity6 statt des Namens, den sein Autor vergeben hat — das machte das importierte Diagramm unlesbar. Und die neben jedem Schritt aufbewahrte Originaldefinition wurde beim Speichern verändert, sodass Anführungszeichen in MIM-Ausdrücken als Zeichenfolge zurückkamen. Alle drei sind behoben: Eine solche Datei wird importiert, die Schritte tragen ihre echten Namen, und was neben ihnen aufbewahrt wird, ist das, was MIM geschrieben hat."
+  }
+}

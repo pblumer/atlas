@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Modeler",
+    "Import"
+  ],
+  "title": {
+    "en": "Re-importing a changed MIM workflow no longer renames everything",
+    "de": "Ein erneuter Import benennt nicht mehr alles um"
+  },
+  "summary": {
+    "en": "An imported step used to be numbered in the order it was written out, so adding one step in MIM renumbered every step after it. Comparing the new import against the old one then showed a difference on every element, and anything you had adjusted by hand was hard to carry over. A step now keeps the name it has in MIM, so a second import of a slightly changed workflow differs only where the workflow does. The diagram also lays out left to right without arrows doubling back on themselves.",
+    "de": "Ein importierter Schritt war bisher in der Reihenfolge seiner Ausgabe nummeriert, sodass ein einziger neuer Schritt in MIM alle folgenden umnummerierte. Ein Vergleich des neuen mit dem alten Import zeigte dann an jedem Element einen Unterschied, und von Hand vorgenommene Anpassungen liessen sich kaum übernehmen. Ein Schritt behält jetzt den Namen, den er in MIM hat — ein zweiter Import eines leicht geänderten Workflows unterscheidet sich nur dort, wo der Workflow sich unterscheidet. Ausserdem läuft das Diagramm von links nach rechts, ohne dass Pfeile zurückspringen."
+  }
+}
