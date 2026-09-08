@@ -244,10 +244,13 @@ it will be read by humans.
 
 A commit an agent makes here is authored by the person who asked for it and
 committed by the agent. `.claude/hooks/commit-identity.sh` sets that up at
-session start from the table in `.claude/commit-identities`; add a line there
-for anyone whose agent commits should count for them, using an address their
-GitHub account actually carries. Nothing happens in a clone where a human's
-own git identity is configured.
+session start, using the address the session is signed in with. Nothing
+happens in a clone where a human's own git identity is configured.
+
+`.claude/commit-identities` is a correction, not a registry: add a row only
+when your sign-in address is not one your GitHub account carries, mapping it
+to one that is. Nobody needs a row to be attributed correctly, and a person
+the table does not know is never attributed to somebody else.
 
 The reason is narrow: GitHub attributes a commit to the account holding the
 *author* address, and `noreply@anthropic.com` is the account `claude`. Every
@@ -263,8 +266,9 @@ version does not run project hooks — and the only symptom is a statistic
 drifting back over months. Eight agent-authored commits reached `main` in the
 four hours after the hook landed, from sessions cloned before it existed. So
 `.github/workflows/attribution.yml` fails any PR that would add a commit
-authored by an agent identity. If it fails on your branch, the fix is on the
-branch, not in the check:
+authored by an agent identity, and — second step — any whose author address
+no GitHub account holds, which counts for nobody just as quietly. If either
+fails on your branch, the fix is on the branch, not in the check:
 
 ```bash
 .claude/hooks/commit-identity.sh   # sets author.* / committer.* for this repo

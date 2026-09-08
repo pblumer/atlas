@@ -18,9 +18,9 @@ name: Commit attribution
 # request, before the commits are on main. Once they are on main the only remedy
 # is a force-push, which is not one.
 #
-# This deliberately does not look at the committer or at the Co-Authored-By
-# trailer. Both are supposed to name the agent; they are how the change stays
-# attributable. Only the author field decides who GitHub counts.
+# Neither step looks at the committer or at the Co-Authored-By trailer. Both are
+# supposed to name the agent; they are how the change stays attributable. Only
+# the author field decides who GitHub counts.
 
 on:
   pull_request:
@@ -33,8 +33,9 @@ jobs:
   authors:
     name: no agent-authored commits
     runs-on: ubuntu-latest
-    # Reads git history and nothing else. The cap is here because every job in
-    # this repository has one, not because this one can plausibly hang.
+    # Reads git history and asks GitHub about one commit at a time. The cap is
+    # here because every job in this repository has one, not because this one
+    # can plausibly hang.
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -85,9 +86,75 @@ jobs:
 
           Do not use 'git commit --amend --reset-author': it copies the
           *committer* onto the author, which is the agent, which is the problem.
+          MESSAGE
+          exit 1
 
-          If the hook printed nothing, this session has no entry in
-          .claude/commit-identities — add one (see the comments in that file)
-          rather than working around this check.
+      # The quieter half of the same failure. An address that is not the agent's
+      # still counts for nobody unless a GitHub account carries it: the name
+      # shows in the log, the contributor view lists it under no one, and the
+      # person it was meant to credit is missing exactly as before. This is what
+      # lets the hook work without a table row for every person — it records
+      # whatever address the session signs in with, and GitHub tells us here
+      # whether that address can be placed. `author` on the commit API is null
+      # precisely when no account holds it.
+      - name: Every author resolves to a GitHub account
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          shas="$(git log --format='%H' "origin/$BASE_REF..$HEAD_SHA")"
+          count="$(printf '%s\n' "$shas" | grep -c . || true)"
+
+          # One API call per commit. A branch with more than this is a rebase or
+          # an import, not a change under review, and is not worth the rate
+          # limit; the offline step above still covered every commit on it.
+          if [ "$count" -gt 50 ]; then
+            echo "$count commits — skipping the per-commit lookup."
+            exit 0
+          fi
+
+          unplaced=''
+          for sha in $shas; do
+            if ! login="$(gh api "repos/$REPO/commits/$sha" --jq '.author.login // ""' 2>&1)"; then
+              # A rate limit or an outage is not this PR's defect, and failing
+              # here would only teach people to re-run the job until it is quiet.
+              echo "Could not ask GitHub about $sha ($login) — skipping this step."
+              exit 0
+            fi
+            if [ -z "$login" ]; then
+              unplaced="$unplaced$(git log -1 --format='%h  %an <%ae>  %s' "$sha")"$'\n'
+            fi
+          done
+
+          if [ -z "$unplaced" ]; then
+            echo "Every author on this PR resolves to a GitHub account."
+            exit 0
+          fi
+
+          cat >&2 <<MESSAGE
+          No GitHub account holds the author address on these commits:
+
+          $unplaced
+          They would land on main credited to nobody. GitHub attributes a commit
+          only to an account that carries its author address; a name alone is
+          not an attribution.
+
+          Two ways out, either is fine:
+
+            - add the address to your GitHub account (Settings -> Emails), or
+            - map your sign-in address in .claude/commit-identities to one the
+              account already carries — its primary address, or
+              <id>+<login>@users.noreply.github.com.
+
+          Then re-author the commits on this branch:
+
+            .claude/hooks/commit-identity.sh
+            git rebase origin/$BASE_REF --exec \\
+              'git commit --amend --no-edit --author="\$(git config author.name) <\$(git config author.email)>"'
+            git push --force-with-lease
           MESSAGE
           exit 1
