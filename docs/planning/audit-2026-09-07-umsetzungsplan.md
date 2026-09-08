@@ -633,6 +633,19 @@ Seiteneffekte zurückbleiben.
 > durch den Baum, ohne eine einzige Datei zu betreten, und meldete «ok»; deshalb
 > zählt er jetzt, wie viel er gefunden hat.
 >
+> **Bewusst nicht gemacht: die Variablengrösse.** Der Bericht führt sie in seiner
+> Liste, und es gibt kein `Variable`-Budget. Jeder Weg, auf dem ein Wert heute in
+> eine Variable *hineinkommt*, ist begrenzt — ein HTTP-Körper, die Skriptausgabe,
+> die Antwort eines Konnektors, und hinter einem berechneten Wert das
+> Iterationsbudget. Was fehlt, ist also Tiefenstaffelung, keine offene Tür. Sie
+> fehlt, weil sie eine Entscheidung braucht, die diese Änderung nicht trifft:
+> `AppendVariableEvent` ist der eine Trichter, durch den jeder Schreibvorgang geht,
+> und er kann nicht fehlschlagen. Dort abzulehnen heisst entweder einen Schreibvorgang
+> still zu verwerfen (schlimmer als eine grosse Variable), oder einen Incident zu
+> erzeugen, während der Aufrufer weiterläuft, als gäbe es den Wert, oder
+> vierundzwanzig Aufrufstellen einen Fehler zu geben. Das ist eine Entscheidung über
+> das Fehlerverhalten und verdient einen eigenen Eintrag.
+>
 > **Nicht mitgemacht:** Komponenten, die im Prozess eines Workers laufen (die
 > Antwort eines Modellanbieters, ein Remedy-Aufruf, die Fehlerausschnitte im
 > Tracing) lesen den *benannten Vorgabewert*, nicht die Konfiguration dieser
@@ -802,5 +815,5 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | behoben |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | behoben |
 | F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
-| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | `TestNoCeilingWithoutAName`, `TestAScriptsOutputIsBounded` | behoben |
+| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | `TestNoCeilingWithoutAName`, `TestAScriptsOutputIsBounded` | behoben (ohne Variablengrösse, s. AP6) |
 | F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |

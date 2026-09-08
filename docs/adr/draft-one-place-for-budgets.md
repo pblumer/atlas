@@ -103,6 +103,17 @@ Chosen option: **option 1.**
 - **Negative:** the budgets in worker-process components are named but not
   configurable from the server's environment. They read their own defaults. Wiring a
   worker's configuration into them is a separate change, and it is not pretended here.
+- **Negative / deliberately not done:** F16's list also names *variable size*, and
+  there is no `Variable` budget here. Every path by which a value can now *enter* a
+  variable is bounded — an HTTP body, a script's output, a connector's answer, and
+  the iteration budget behind a computed one — so what is missing is defence in
+  depth rather than an open door. It is left out because it needs a decision this
+  one does not: `AppendVariableEvent` is the single funnel every write passes
+  through, and it cannot fail. Refusing there means either dropping a write in
+  silence (worse than a large variable), or raising an incident while the caller
+  carries on as though the value exists, or giving twenty-four call sites an error
+  to handle. That is a decision about the failure mode, and it deserves its own
+  record rather than a clause in this one.
 - **Follow-ups / risks to watch:** the completeness test knows three call shapes. A
   fourth way to bound a read — a custom reader, a framework's own limit — would pass
   unseen until somebody adds it to `ceilingCalls`. The count assertion (it must find
