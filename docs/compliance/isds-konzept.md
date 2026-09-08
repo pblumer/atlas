@@ -1,7 +1,7 @@
 # ISDS-Konzept — Atlas BPMN Workflow Engine
 
 > Antwortdokument zur Vorlage **P042-Hi01 — Informationssicherheits- und
-> Datenschutzkonzept (ISDS-Konzept)**, BIT-Template V120 / NCSC-Template V4.4.
+> Datenschutzkonzept (ISDS-Konzept)**
 > Kapitelnummerierung und Reihenfolge folgen der Vorlage, damit der Inhalt
 > direkt in das Word-Dokument übernommen werden kann.
 
