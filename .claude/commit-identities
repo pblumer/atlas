@@ -1,0 +1,22 @@
+# Who appears as the author of a commit an agent makes here.
+#
+# Left to itself, Claude Code commits as `Claude <noreply@anthropic.com>`.
+# That address belongs to the GitHub account `claude`, so every such commit
+# is counted towards that account in this repository's contributor
+# statistics rather than towards the person who asked for the change and
+# owns it.
+#
+# This table maps the signed-in person (environment variable
+# CLAUDE_CODE_USER_EMAIL) to the git identity to record as the *author*.
+# The address must be registered with that person's GitHub account —
+# either their primary address or <id>+<login>@users.noreply.github.com —
+# or GitHub attributes the commit to nobody at all.
+#
+# The *committer* stays the agent and every commit keeps its
+# `Co-Authored-By:` trailer, so where the change came from is still on the
+# record. What moves is only who GitHub counts it for.
+#
+# Format (one entry per line, `#` starts a comment):
+#   <CLAUDE_CODE_USER_EMAIL> = <git name> <<git email>>
+
+sbu@datix.ch = sbucher <buchersven@gmail.com>
