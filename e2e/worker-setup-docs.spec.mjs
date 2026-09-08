@@ -54,6 +54,21 @@ test("the steps are behind the fold, and open on demand", async ({ page }) => {
   expect(page.__errors).toEqual([]);
 });
 
+// The steps name menu paths in somebody else's product, so the panel says when they
+// were last read against it — inside the fold, with the steps they qualify.
+test("the steps say when they were last checked against the provider", async ({ page }) => {
+  await page.evaluate(() => window.__select("Activity_mail"));
+  const checked = page.locator(".wtdoc-checked");
+  await expect(checked).toBeHidden();
+  await page.locator(".wtdoc-more > summary").click();
+  await expect(checked).toBeVisible();
+  await expect(checked).toContainText(/Steps last checked \w+ 20\d\d/);
+  // Machine-readable alongside the prose, and it says which source wins when they differ.
+  await expect(checked.locator("time")).toHaveAttribute("datetime", /^20\d\d-\d\d$/);
+  await expect(checked).toContainText("the provider is right");
+  expect(page.__errors).toEqual([]);
+});
+
 test("a type that needs nothing says that, instead of showing nothing", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_login"));
   // User provisioning acts on this server's own login store: no Worker record, no

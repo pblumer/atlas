@@ -131,12 +131,14 @@ server.
 **A Worker Type also ships its setup.** One entry in
 [`api/web/workertypedocs.js`](api/web/workertypedocs.js), keyed by the Modeler catalog
 id: what has to exist before a task of it can run, the ordered steps at the provider,
-the failure it is usually reported with, and the anchor of its handbook card in
+the failure it is usually reported with, the anchor of its handbook card in
 [`api/web/handbuch.html`](api/web/handbuch.html) — write that card too if the type has
-none. The properties panel, the Console's create form and the worker dialog all render
-it, so it is written once. `go test ./api -run SetupDoc` refuses a type that ships
-without it or a link into a card that no longer exists
-(ADR-0289).
+none — and a `checked` date saying when you last walked those steps at the provider. The
+properties panel, the Console's create form and the worker dialog all render it, so it is
+written once. `go test ./api -run SetupDoc` refuses a type that ships without it, a link
+into a card that no longer exists, or steps unread for over a year (ADR-0289). When that
+last one fails, open the provider and walk the steps: bumping the date without re-reading
+tells the next reader they were verified when they were not.
 
 **Say Worker, not connector, in anything new you write.** [ADR-0203](docs/adr/0203-worker-execution-model.md)
 splits the old word into three: a **Worker Type** is a capability (`jira`, `mail`,
