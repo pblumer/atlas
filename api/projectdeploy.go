@@ -23,6 +23,15 @@ type projectDeployResp struct {
 	Reason      string                 `json:"reason,omitempty"`
 	Definitions []deployedProcess      `json:"definitions"`
 	References  []dmnRefValidationResp `json:"references"`
+	// Warnings are what a single-model deploy has reported since ADR-0158: things
+	// that registered fine but will not hold as written — a worker reference naming
+	// something not configured, a data object typed against a vocabulary that does
+	// not carry it, an Atlas extension element bound to somebody else's namespace.
+	// They are not a refusal here either: an application is routinely published
+	// before the workers it names are provisioned, and to a server where they are
+	// provisioned later. Same shape as deployResp.Warnings, so a client reads one
+	// field whichever route it deployed through (ADR-draft-create-the-worker-from-the-incident).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // handleDeployProject deploys a project as a bundle (ADR-0034): it first resolves
@@ -191,6 +200,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		persistErr error
 		claimed    string
 		deployed   []deployedProcess
+		warnings   []string
 	)
 	s.do(func() {
 		// Every draft's claim first, then any deploy: a bundle is "validate all, then
@@ -214,6 +224,11 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			}
 			deployed = append(deployed, dps...)
 		}
+		// The same preflight a single-model deploy runs, on the same loop and in the
+		// same closure — every draft of this bundle is registered by now, and every
+		// one of them files under this application, so one vocabulary answers for all
+		// (ADR-0158/0230).
+		warnings = s.deployWarningsOnLoop(deployed, id)
 	})
 	if persistErr != nil {
 		return bundleOutcome{status: http.StatusInternalServerError, errMsg: "persist deployment: " + persistErr.Error(), proj: proj}
@@ -230,9 +245,15 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	if deployed == nil {
 		deployed = []deployedProcess{}
 	}
+	// Off the loop on purpose: this reads the drafts' bytes and nothing the engine
+	// owns (I3). One pass per draft, because a namespace prefix is bound at each
+	// document's root and each draft is its own document.
+	for _, d := range drafts {
+		warnings = append(warnings, foreignAtlasNamespaceWarnings([]byte(d.XML))...)
+	}
 	return bundleOutcome{status: http.StatusOK, deployed: true, proj: proj, resp: projectDeployResp{
 		ID: proj.ID, Name: proj.Name, Deployed: true,
-		Definitions: deployed, References: refReports,
+		Definitions: deployed, References: refReports, Warnings: dedupeWarnings(warnings),
 	}}
 }
 

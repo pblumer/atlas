@@ -323,3 +323,104 @@ func TestBundleDeployStoreErrors(t *testing.T) {
 	}
 	srv.deploys = realDeploys
 }
+
+// deployWarnProjectBPMN is deployWarnBPMN under a second process id, so a bundle can
+// carry it alongside the plain deployable draft without the two colliding.
+const deployWarnProjectBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <process id="warnbundle" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="notify">
+      <extensionElements><atlas:mailConnector connector="Patrick Blumer" to="a@b.ch" subject="hi" body="hi"/></extensionElements>
+    </serviceTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="notify"/>
+    <sequenceFlow id="f2" sourceRef="notify" targetRef="end"/>
+  </process>
+</definitions>`
+
+// TestBundleDeployWarnsAboutUnconfiguredWorker is the regression for the preflight
+// that ran on one deploy path only. Publishing an application deploys the same models
+// as POST /api/v1/deployments, so it owes the operator the same warning: a model
+// naming a worker nobody configured deploys fine and then parks its first token, and
+// "Publish" is the route most applications reach production through (ADR-0128). The
+// deploy still succeeds — deploying before the workers exist is legitimate (ADR-0158).
+func TestBundleDeployWarnsAboutUnconfiguredWorker(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+
+	pid := x.mkProject("Preflight")
+	x.saveDraft(pid, deployWarnProjectBPMN)
+
+	code, b := x.do(http.MethodPost, "/api/v1/applications/"+pid+"/deploy", "")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, b)
+	}
+	var rep projectDeployResp
+	if err := json.Unmarshal(b, &rep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !rep.Deployed || len(rep.Definitions) != 1 {
+		t.Fatalf("deploy result = %+v, want the one definition registered", rep)
+	}
+	if len(rep.Warnings) != 1 {
+		t.Fatalf("warnings = %v, want exactly the unconfigured worker", rep.Warnings)
+	}
+	if !strings.Contains(rep.Warnings[0], "not configured on this server") ||
+		!strings.Contains(rep.Warnings[0], "Patrick Blumer") {
+		t.Errorf("warning = %q, want it to name the worker and say it is not configured", rep.Warnings[0])
+	}
+}
+
+// TestBundleDeployIsSilentWhenTheWorkerIsThere pins the other half: the preflight
+// says nothing when every reference resolves, so a publish does not learn to cry wolf.
+func TestBundleDeployIsSilentWhenTheWorkerIsThere(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	if err := srv.connectors.Save(connector{
+		ID: "1", Name: "Patrick Blumer", Kind: "mail", Provider: "smtp",
+		Endpoint: "mx.example.ch:587", Sender: "a@x", Enabled: true, CreatedAt: 1,
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	if err := srv.rebuildConnectorRegistries(); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+
+	pid := x.mkProject("Preflight quiet")
+	x.saveDraft(pid, deployWarnProjectBPMN)
+
+	code, b := x.do(http.MethodPost, "/api/v1/applications/"+pid+"/deploy", "")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, b)
+	}
+	var rep projectDeployResp
+	if err := json.Unmarshal(b, &rep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(rep.Warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", rep.Warnings)
+	}
+}
+
+// TestDedupeWarningsKeepsOrderAndDropsRepeats pins the one thing collapsing a
+// bundle's warnings must not do: reorder them, or swallow two findings that merely
+// look alike. Only an exact repeat goes.
+func TestDedupeWarningsKeepsOrderAndDropsRepeats(t *testing.T) {
+	if got := dedupeWarnings(nil); got != nil {
+		t.Errorf("dedupeWarnings(nil) = %v, want nil", got)
+	}
+	one := []string{"a"}
+	if got := dedupeWarnings(one); len(got) != 1 || got[0] != "a" {
+		t.Errorf("dedupeWarnings(one) = %v, want it untouched", got)
+	}
+	got := dedupeWarnings([]string{"b", "a", "b", "c", "a"})
+	want := []string{"b", "a", "c"}
+	if len(got) != len(want) {
+		t.Fatalf("dedupeWarnings = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("dedupeWarnings = %v, want %v", got, want)
+		}
+	}
+}

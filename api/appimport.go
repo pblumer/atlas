@@ -66,6 +66,14 @@ type importBundleResp struct {
 	Reason        string              `json:"reason,omitempty"`
 	Definitions   []deployedProcess   `json:"definitions"`
 	Release       *applicationRelease `json:"release,omitempty"`
+	// Warnings are the deploy-time preflight every deploy path owes its caller
+	// (ADR-0158), reported here for the same reason it is reported on a local deploy —
+	// and with more reason: a worker is configured per server (ADR-0041), so a release
+	// that ran on the publisher can name workers this server has never heard of, and
+	// the import is the first moment anybody here can be told. It is not a refusal:
+	// a target that provisions its workers after the first import is normal
+	// (ADR-draft-create-the-worker-from-the-incident).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // handleImportBundle receives a published application bundle from a peer. It is the
@@ -125,6 +133,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		rel         applicationRelease
 		opErr       error
 		conflictMsg string
+		warnings    []string
 	)
 	s.do(func() {
 		// Resolve or create the application. Matching by name is what makes the
@@ -222,6 +231,10 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if rel.Version > s.appVersions[appID] {
 			s.appVersions[appID] = rel.Version
 		}
+		// Still on the loop, with every artifact registered: the same preflight a
+		// local deploy runs, against this server's workers and this application's
+		// information model.
+		warnings = s.deployWarningsOnLoop(deployed, appID)
 	})
 
 	switch {
@@ -236,9 +249,13 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if deployed == nil {
 			deployed = []deployedProcess{}
 		}
+		// Off the loop, over the bytes the publisher sent and nothing else (I3).
+		for _, a := range req.Artifacts {
+			warnings = append(warnings, foreignAtlasNamespaceWarnings([]byte(a.XML))...)
+		}
 		httpapi.JSON(w, http.StatusOK, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: true,
-			Definitions: deployed, Release: &rel,
+			Definitions: deployed, Release: &rel, Warnings: dedupeWarnings(warnings),
 		})
 	}
 }
