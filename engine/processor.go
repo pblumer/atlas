@@ -112,7 +112,7 @@ type Processor struct {
 	routeBuf []int32
 	// arrivalBuf and joinSetBuf hold a join's waiting tokens and the subset one
 	// firing consumes. Two buffers rather than one because an inclusive join re-scans
-	// the node while still holding the set it is consuming (ADR-draft-per-flow-join-counting).
+	// the node while still holding the set it is consuming (ADR-0290).
 	// Reused across joins, like the buffers above.
 	arrivalBuf []Arrival
 	joinSetBuf []Arrival

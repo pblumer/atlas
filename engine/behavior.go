@@ -3288,7 +3288,7 @@ func (parallelGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 		return
 	}
 	// One token from each flow is consumed. Anything else waiting here belongs to the
-	// next firing and stays put (ADR-draft-per-flow-join-counting).
+	// next firing and stays put (ADR-0290).
 	continuation := *ei
 	continuation.ParentTokenID = consumeSet(c, set, ei.SourceFlowId, ei.TokenID)
 	continuation.TokenID = 0
@@ -3330,7 +3330,7 @@ func (inclusiveGatewayBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 	// inclusive gateway's "the flows that have one" in place of the parallel one's
 	// "every flow". Repeated until nothing is left, because nothing more can arrive:
 	// a surplus set that waited here would wait for an arrival that will never come,
-	// where a parallel join's surplus is right to wait (ADR-draft-per-flow-join-counting).
+	// where a parallel join's surplus is right to wait (ADR-0290).
 	//
 	// Every firing consumes at least one waiting token and nothing arrives while this
 	// runs — an activation is a queued command, not an immediate one — so the tokens

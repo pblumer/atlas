@@ -1,4 +1,4 @@
-# ADR-DRAFT: A join counts tokens per incoming flow
+# ADR-0290: A join counts tokens per incoming flow
 
 - **Status:** Proposed
 - **Date:** 2026-09-08

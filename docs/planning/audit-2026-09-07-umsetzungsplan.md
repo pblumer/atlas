@@ -429,7 +429,7 @@ schlägt eindeutig fehl.
 > mehr, und das überschüssige Token bleibt liegen, statt beim Feuern zu
 > verschwinden. Kein neuer Zustand, kein neues Ereignis, kein zusätzlicher Scan;
 > die Herleitung von ADR-0024 bleibt, nur ihre vereinfachte Zählregel wird
-> ersetzt (ADR-draft-per-flow-join-counting). Der Inclusive-Join hat denselben
+> ersetzt (ADR-0290). Der Inclusive-Join hat denselben
 > Defekt in seiner eigenen Sprechweise: er löst seinen Überschuss jetzt sofort
 > auf, weil bei ihm nichts mehr nachkommen kann.
 >

@@ -216,7 +216,7 @@ func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerV
 // gateway when there is at least one token on *each* incoming sequence flow, and
 // consumes exactly one from each — which is a different question from how many
 // tokens are on the node, and gives a different answer whenever a flow carries two
-// (ADR-draft-per-flow-join-counting).
+// (ADR-0290).
 type Arrival struct {
 	Key  uint64
 	Flow int32
