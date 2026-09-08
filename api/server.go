@@ -668,6 +668,19 @@ type Option func(*Server)
 // buffer, tees the standard logger into it, and passes it here.
 func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } }
 
+// budgets is how every handler reads a ceiling. It defaults a Server that was built
+// as a struct literal — tests do, in seventy-odd places — to [limits.Default],
+// because the zero Limits is sixteen ceilings of zero and a ceiling of zero admits
+// nothing. That failure does not look like missing configuration; it looks like a
+// bad request, and a test asserting "too large" would pass for the wrong reason.
+// New always sets them, so this only ever fires for a literal.
+func (s *Server) budgets() limits.Limits {
+	if s.limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.limits
+}
+
 // WithLimits sets the installation's resource budgets. Without it a server runs on
 // [limits.Default], which is what every ceiling in the API was before they had a
 // name. There is deliberately no way to remove a budget: "off" is the state they
@@ -1361,12 +1374,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// the options have all run by now: WithLimits is what s.limits already reflects.
 	// A service added without a line here keeps the defaults — the completeness test
 	// in the limits package is what notices.
-	s.formGen.Limits = s.limits
-	s.processDocs.Limits = s.limits
-	s.taskFolders.Limits = s.limits
-	s.panorama.Limits = s.limits
-	s.infomodel.Limits = s.limits
-	s.playground.Limits = s.limits
+	s.formGen.Limits = s.budgets()
+	s.processDocs.Limits = s.budgets()
+	s.taskFolders.Limits = s.budgets()
+	s.panorama.Limits = s.budgets()
+	s.infomodel.Limits = s.budgets()
+	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred
 	// and never persisted; absent one, a key is loaded from — or generated into —

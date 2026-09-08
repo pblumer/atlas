@@ -112,12 +112,12 @@ func (s *Server) handleRegisterDynamicClient(w http.ResponseWriter, r *http.Requ
 	// One byte past the limit, so an oversized body is *named* rather than silently
 	// truncated and then reported as malformed JSON — which would send a client
 	// looking for a syntax error it does not have.
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Registration+1))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Registration+1))
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "the body could not be read")
 		return
 	}
-	if int64(len(body)) > s.limits.Registration {
+	if int64(len(body)) > s.budgets().Registration {
 		oauthError(w, http.StatusRequestEntityTooLarge, "invalid_client_metadata",
 			"the registration request is too large")
 		return

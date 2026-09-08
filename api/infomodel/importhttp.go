@@ -54,7 +54,7 @@ type ImportResponse struct {
 // validator refuses is refused itself.
 func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 	var payload importRequest
-	if !decodeJSONLimit(w, r, &payload, s.Limits.Import) {
+	if !decodeJSONLimit(w, r, &payload, s.budgets().Import) {
 		return
 	}
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)

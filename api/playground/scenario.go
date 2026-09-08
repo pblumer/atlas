@@ -201,7 +201,7 @@ type checkResp struct {
 // editable after the fact.
 func (s *Service) HandleVerdict(w http.ResponseWriter, r *http.Request) {
 	var req expectReq
-	if !decode(w, r, s.Limits.Definition, &req) {
+	if !decode(w, r, s.budgets().Definition, &req) {
 		return
 	}
 	sess, ok := s.session(w, r)
@@ -296,7 +296,7 @@ func (s *Service) HandleCompare(w http.ResponseWriter, r *http.Request) {
 	}
 	// A report carries a sixty-slice timeline, so the baseline is the one body here
 	// that is not small.
-	if !decode(w, r, s.Limits.Payload, &req) {
+	if !decode(w, r, s.budgets().Payload, &req) {
 		return
 	}
 	before := reportFrom(req.Baseline)

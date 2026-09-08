@@ -56,7 +56,7 @@ type saveFormResp struct {
 // behaviour every non-interactive writer wants — an import, a source-tree apply, the
 // MCP authoring tools.
 func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Definition))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Definition))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

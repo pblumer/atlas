@@ -233,7 +233,7 @@ func (s *Server) fetchRemoteNode(ctx context.Context, peer remoteTarget) (nodeDe
 		// server is down".
 		return nodeDescriptor{}, fmt.Errorf("answered HTTP %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, s.limits.Request))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, s.budgets().Request))
 	if err != nil {
 		return nodeDescriptor{}, fmt.Errorf("reply could not be read: %w", err)
 	}

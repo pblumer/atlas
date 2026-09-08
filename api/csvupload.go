@@ -14,7 +14,7 @@ import (
 
 // csvMultipartMemory is how much of the multipart body ParseMultipartForm keeps
 // in memory before spilling parts to temp files; the total is still bounded by
-// s.limits.DataUpload via MaxBytesReader.
+// s.budgets().DataUpload via MaxBytesReader.
 const csvMultipartMemory = 4 << 20 // 4 MiB
 
 // csvInstanceResp is the result of starting an instance from a CSV upload: the
@@ -41,7 +41,7 @@ func (s *Server) handleCreateInstanceFromCSV(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, s.limits.DataUpload)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().DataUpload)
 	if err := r.ParseMultipartForm(csvMultipartMemory); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "parse upload: "+err.Error())
 		return

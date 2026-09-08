@@ -200,7 +200,7 @@ func (s *Server) planMigration(piKey, targetDefKey uint64, overrides []migration
 
 // readMigrationRequest decodes and sanity-checks the shared body.
 func (s *Server) readMigrationRequest(w http.ResponseWriter, r *http.Request) (migrationRequest, bool) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return migrationRequest{}, false

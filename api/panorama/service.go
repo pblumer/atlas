@@ -455,7 +455,7 @@ func writeReadOutcome(w http.ResponseWriter, refusal *operationRefusal, err erro
 }
 
 func (s *Service) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := readBounded(r.Body, (2*s.Limits.ModelUpload + s.Limits.Request))
+	body, err := readBounded(r.Body, (2*s.budgets().ModelUpload + s.budgets().Request))
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, errBodyTooLarge) {
@@ -494,4 +494,15 @@ func requestActor(r *http.Request) string {
 		return principal.Username
 	}
 	return ""
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

@@ -73,7 +73,7 @@ type importBundleResp struct {
 // handleImportBundle receives a published application bundle from a peer. It is the
 // only operation a deploy token may reach (deployAgentAllowed, ADR-0129).
 func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.AppBundle))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().AppBundle))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

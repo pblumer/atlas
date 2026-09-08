@@ -29,7 +29,7 @@ func toDmnRefResp(r dmnRef) dmnRefResp {
 // becoming a DMN editor. An optional projectId files it into a project and, when
 // present, must name an existing one. Body: {"name","modelRef","projectId"?}.
 func (s *Server) handleCreateDmnRef(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -120,7 +120,7 @@ func (s *Server) handleListDmnRefs(w http.ResponseWriter, r *http.Request) {
 // name an existing project; a present name must not be blank.
 func (s *Server) handleUpdateDmnRef(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

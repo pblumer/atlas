@@ -219,7 +219,7 @@ func (s *Service) Generate(r *http.Request, req Request) (Response, int, error) 
 		return Response{}, http.StatusBadGateway,
 			fmt.Errorf("the AI Worker %q answered with nothing", worker.Name)
 	}
-	schema, err := SchemaFrom(answer, strings.TrimSpace(req.FormID), s.Limits.Asset)
+	schema, err := SchemaFrom(answer, strings.TrimSpace(req.FormID), s.budgets().Asset)
 	if err != nil {
 		// The model answered, and its answer was not a form. That is not a server
 		// failure and not the author's mistake either — it is the one outcome this
@@ -289,4 +289,15 @@ func currentSchema(raw json.RawMessage) string {
 		return ""
 	}
 	return string(out)
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

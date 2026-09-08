@@ -93,7 +93,7 @@ func writeBackup(tw *tar.Writer, fsys fs.FS) error {
 func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	// Bound the compressed upload; the LimitReader below bounds the decompressed
 	// stream so a bomb cannot fill the disk.
-	r.Body = http.MaxBytesReader(w, r.Body, s.limits.Archive)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().Archive)
 	defer r.Body.Close()
 	gz, err := gzip.NewReader(r.Body)
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, s.limits.Archive))
+	tr := tar.NewReader(io.LimitReader(gz, s.budgets().Archive))
 	restored, entries := 0, 0
 	for {
 		hdr, err := tr.Next()

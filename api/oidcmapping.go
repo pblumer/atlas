@@ -244,7 +244,7 @@ func (s *Server) handleGetOIDCMapping(w http.ResponseWriter, _ *http.Request) {
 // against the groups as they are at this moment, inside the same run-loop turn
 // that writes the record.
 func (s *Server) handleSetOIDCMapping(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Request))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

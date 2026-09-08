@@ -195,7 +195,7 @@ type resultsResp struct {
 // and drawn here.
 func (s *Service) HandleStartRun(w http.ResponseWriter, r *http.Request) {
 	var req startRunReq
-	if !decode(w, r, s.Limits.Payload, &req) {
+	if !decode(w, r, s.budgets().Payload, &req) {
 		return
 	}
 	sess, ok := s.session(w, r)
@@ -228,7 +228,7 @@ func (s *Service) HandleStartRun(w http.ResponseWriter, r *http.Request) {
 // not a configured integration, so asking them to describe the columns they just
 // exported would be asking twice.
 func (s *Service) HandleStartRunFromCSV(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, s.Limits.DataUpload+multipartOverhead)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().DataUpload+multipartOverhead)
 	if err := r.ParseMultipartForm(csvMultipartMemory); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read upload: "+err.Error())
 		return
@@ -247,7 +247,7 @@ func (s *Service) HandleStartRunFromCSV(w http.ResponseWriter, r *http.Request) 
 		if readErr != nil {
 			break
 		}
-		if int64(len(data)) > s.Limits.DataUpload {
+		if int64(len(data)) > s.budgets().DataUpload {
 			httpapi.Error(w, http.StatusRequestEntityTooLarge, "the CSV is larger than the upload limit")
 			return
 		}

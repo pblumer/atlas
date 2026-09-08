@@ -71,7 +71,7 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, _ *http.Request) {
 // handleSetTheme stores the org-wide brand accent. Admin-gated: it changes what
 // every user of the instance sees.
 func (s *Server) handleSetTheme(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Theme))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -182,7 +182,7 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 	}
 	// Read one byte past the cap so an over-limit body is detected, not silently
 	// truncated into a "valid" smaller image.
-	data, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Asset+1))
+	data, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Asset+1))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -191,7 +191,7 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "empty logo body")
 		return
 	}
-	if int64(len(data)) > s.limits.Asset {
+	if int64(len(data)) > s.budgets().Asset {
 		httpapi.Error(w, http.StatusRequestEntityTooLarge, "logo exceeds the 512 KiB limit")
 		return
 	}
@@ -326,7 +326,7 @@ func (s *Server) handleGetRegistration(w http.ResponseWriter, _ *http.Request) {
 // registration off. 400 if the named process is not a publishable public form, so
 // an operator gets immediate feedback rather than a silently dead link.
 func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Theme))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -457,7 +457,7 @@ func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
 	// body" on a seed that was perfectly good, which is a maddening thing to debug.
 	// MaxBytesReader says the body is too large instead, and 256 KB holds a few thousand
 	// entries: past that, the answer is a smaller seed, not a bigger field.
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.limits.Settings))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

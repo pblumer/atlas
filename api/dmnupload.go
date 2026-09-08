@@ -32,7 +32,7 @@ func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusConflict, "DMN models are served by a remote temis service (ATLAS_DMN_RESOLVER_URL); add models there and reference them by name")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

@@ -105,7 +105,7 @@ func (s *Server) readSourceArchive(r io.Reader) ([]sourceFile, error) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, s.limits.AppBundle))
+	tr := tar.NewReader(io.LimitReader(gz, s.budgets().AppBundle))
 	var files []sourceFile
 	for {
 		hdr, err := tr.Next()
@@ -125,7 +125,7 @@ func (s *Server) readSourceArchive(r io.Reader) ([]sourceFile, error) {
 		if !ok {
 			return nil, fmt.Errorf("illegal path in archive: %q", hdr.Name)
 		}
-		data, err := io.ReadAll(io.LimitReader(tr, s.limits.AppBundle))
+		data, err := io.ReadAll(io.LimitReader(tr, s.budgets().AppBundle))
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", clean, err)
 		}
@@ -156,7 +156,7 @@ func cleanSourcePath(name string) (string, bool) {
 // The archive is decoded off the run loop; resolving the application, authorizing
 // against it, and writing every artifact happen together in one turn of the loop.
 func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, s.limits.AppBundle)
+	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().AppBundle)
 	defer r.Body.Close()
 
 	files, err := s.readSourceArchive(r.Body)

@@ -49,7 +49,7 @@ func toPublicLinkResp(l publicLink) publicLinkResp {
 // rather than piling up links. 400 if the process has no start form, 404 if it is
 // not deployed. Trusted route (gated with the rest of /api/v1 when auth is on).
 func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Theme))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -272,7 +272,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Settings))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

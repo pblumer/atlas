@@ -190,7 +190,7 @@ type folderReq struct {
 // anything malformed. ok=false means a response has already been written.
 func (s *Service) decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
 	var req folderReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, s.Limits.Request)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return req, false
 	}
@@ -370,7 +370,7 @@ type previewReq struct {
 // rather than a client-side guess over whatever page happened to be loaded.
 func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 	var req previewReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, s.Limits.Request)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
@@ -487,4 +487,15 @@ func (s *Service) matcher(f Folder) (*Matcher, error) {
 	}
 	s.compiled[f.ID] = cachedMatcher{at: f.UpdatedAt, m: m}
 	return m, nil
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

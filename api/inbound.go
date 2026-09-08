@@ -72,7 +72,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		httpapi.Error(w, code, msg)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -198,7 +198,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 // re-validates the correlation key when one is supplied.
 func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

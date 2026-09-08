@@ -255,7 +255,7 @@ func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request)
 // false (writing 400) on a malformed body, so every POST handler shares one
 // parse-and-validate path.
 func (s *Server) decodeSessionBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Definition))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Definition))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false

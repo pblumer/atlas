@@ -228,7 +228,7 @@ type updateNodeReq struct {
 // handleUpdateNode sets the operator-owned half of the descriptor. Absent fields
 // are left alone, so setting an environment does not silently clear a name.
 func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Registration))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Registration))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

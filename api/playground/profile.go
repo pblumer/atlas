@@ -42,7 +42,7 @@ type arrivalProfileResp struct {
 // going to get.
 func (s *Service) HandleArrivalProfile(w http.ResponseWriter, r *http.Request) {
 	var req arrivalProfileReq
-	if !decode(w, r, s.Limits.Definition, &req) {
+	if !decode(w, r, s.budgets().Definition, &req) {
 		return
 	}
 	sess, ok := s.session(w, r)

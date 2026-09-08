@@ -31,7 +31,7 @@ type validateResp struct {
 // model is reported as a problem, not an HTTP error); only a missing body or an
 // unreadable request is a 4xx, matching the deploy endpoint.
 func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

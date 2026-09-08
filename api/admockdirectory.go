@@ -55,7 +55,7 @@ func (s *Server) handleADMockDirectory(w http.ResponseWriter, _ *http.Request) {
 // deleted has to leave the view with it.
 func (s *Server) handleReportADMockDirectory(w http.ResponseWriter, r *http.Request) {
 	var snap ad.MockSnapshot
-	if err := json.NewDecoder(io.LimitReader(r.Body, s.limits.Payload)).Decode(&snap); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Payload)).Decode(&snap); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid mock directory report: "+err.Error())
 		return
 	}

@@ -184,7 +184,7 @@ type createReq struct {
 // (ADR-0143). Body: the produced PDF plus the element prose it describes.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.Limits.Import))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Import))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -449,7 +449,7 @@ type pruneResp struct {
 // already-short history removes nothing.
 func (s *Service) HandlePrune(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.Limits.Request))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -503,4 +503,15 @@ func (s *Service) HandlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.servePDF(w, rec)
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

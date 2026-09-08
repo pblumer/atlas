@@ -35,7 +35,7 @@ func (s *Service) HandleCapability(w http.ResponseWriter, r *http.Request) {
 // author's own eye are what make a generated artifact safe to deploy, and skipping
 // either to save a click would be trading the whole argument for the click.
 func (s *Service) HandleGenerate(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.Limits.Generated))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Generated))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

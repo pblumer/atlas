@@ -170,7 +170,7 @@ type occurrenceResp struct {
 // model.
 func (s *Service) HandleOpen(w http.ResponseWriter, r *http.Request) {
 	var req openReq
-	if !decode(w, r, s.Limits.Payload, &req) {
+	if !decode(w, r, s.budgets().Payload, &req) {
 		return
 	}
 
@@ -324,7 +324,7 @@ func (s *Service) HandleStartCase(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Variables map[string]any `json:"variables"`
 	}
-	if !decode(w, r, s.Limits.Definition, &body) {
+	if !decode(w, r, s.budgets().Definition, &body) {
 		return
 	}
 	vars, err := s.vars(body.Variables)
@@ -414,7 +414,7 @@ func (s *Service) HandleAdvanceClock(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Millis int64 `json:"millis"`
 	}
-	if !decode(w, r, s.Limits.Definition, &body) {
+	if !decode(w, r, s.budgets().Definition, &body) {
 		return
 	}
 	if body.Millis <= 0 {
@@ -441,7 +441,7 @@ func (s *Service) HandlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		CorrelationKey string         `json:"correlationKey"`
 		Variables      map[string]any `json:"variables"`
 	}
-	if !decode(w, r, s.Limits.Definition, &body) {
+	if !decode(w, r, s.budgets().Definition, &body) {
 		return
 	}
 	vars, err := s.vars(body.Variables)
@@ -494,7 +494,7 @@ func (s *Service) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Variables map[string]any `json:"variables"`
 	}
-	if !decode(w, r, s.Limits.Definition, &body) {
+	if !decode(w, r, s.budgets().Definition, &body) {
 		return
 	}
 	vars, verr := s.vars(body.Variables)
@@ -697,3 +697,14 @@ func occurrenceKind(k playground.OccurrenceKind) string {
 }
 
 func rfc3339(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
+}

@@ -43,7 +43,7 @@ func (s *Server) loadDeployTokens() error {
 // handleCreateDeployToken mints a token. Body: {"name": "..."} — a label naming
 // the peer it is for, so an operator can tell two credentials apart when revoking.
 func (s *Server) handleCreateDeployToken(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

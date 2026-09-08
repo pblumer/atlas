@@ -63,7 +63,7 @@ func (s *Server) handleGetSQLMock(w http.ResponseWriter, r *http.Request) {
 // handleSetSQLMock stores the switch and restarts the supervised SQL workers holding
 // it.
 func (s *Server) handleSetSQLMock(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.limits.Settings))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

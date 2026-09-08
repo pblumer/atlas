@@ -605,7 +605,7 @@ func (s *Server) connectorProblem(kind, name string) string {
 // handleCreateConnector creates a managed worker and rebuilds the
 // runtime registry so a central decision referencing it starts resolving at once.
 func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -742,7 +742,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 // credential reference, or enabled state) and rebuilds the registry.
 func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -918,7 +918,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	connID := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -1050,7 +1050,7 @@ func (s *Server) handleMailOutbox(w http.ResponseWriter, r *http.Request) {
 // the outbox holds its own lock.
 func (s *Server) handleDeliverMailOutbox(w http.ResponseWriter, r *http.Request) {
 	var m mail.OutboxMessage
-	if err := json.NewDecoder(io.LimitReader(r.Body, s.limits.Generated)).Decode(&m); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Generated)).Decode(&m); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid outbox message: "+err.Error())
 		return
 	}

@@ -38,7 +38,7 @@ func scenarioMetaOf(s playgroundScenario) scenarioMeta {
 // element is the sandbox's answer to give when the scenario runs, and deciding it
 // twice is how the two answers start disagreeing.
 func (s *Server) handleSaveScenario(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.DataUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().DataUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -190,7 +190,7 @@ func (s *Server) handleSaveScenarioBaseline(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.DataUpload))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().DataUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

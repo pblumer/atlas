@@ -115,7 +115,7 @@ func WithOIDC(cfg OIDCConfig) Option {
 			return
 		}
 		cfg.Issuer = strings.TrimRight(strings.TrimSpace(cfg.Issuer), "/")
-		s.oidc = newOIDCProvider(cfg, s.limits)
+		s.oidc = newOIDCProvider(cfg, s.budgets())
 	}
 }
 

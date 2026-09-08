@@ -21,7 +21,7 @@ import (
 // returning false on a read or parse error. Centralizing it keeps every identity
 // handler's body handling identical and in one place.
 func (s *Server) decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Request))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false
