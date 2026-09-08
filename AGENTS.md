@@ -257,7 +257,7 @@ The reason is narrow: GitHub attributes a commit to the account holding the
 commit still names the model in a `Co-Authored-By:` trailer and still records
 the agent as its committer — the split changes who the contribution counts
 for, not who wrote the code. Do not rewrite the author of commits that are
-already on `main`. See ADR-draft-agent-commit-attribution for why the split
+already on `main`. See ADR-0288 for why the split
 rather than the alternatives.
 
 **The hook is not the guarantee; CI is.** A hook fails silently — the session

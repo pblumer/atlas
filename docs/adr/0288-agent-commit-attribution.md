@@ -1,4 +1,4 @@
-# ADR-DRAFT: An agent's commit is authored by the person who asked for it
+# ADR-0288: An agent's commit is authored by the person who asked for it
 
 - **Status:** Proposed
 - **Date:** 2026-09-08

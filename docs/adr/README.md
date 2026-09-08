@@ -341,6 +341,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Proposed |
 | [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Proposed |
 | [0287](0287-create-the-worker-from-the-incident.md) | Create the worker from the incident, and run the deploy preflight on every deploy path | Proposed |
+| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Proposed |
 
 ## Status values
 
