@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas table filter-row e2e harness</title>
+    <!-- Drives the *real* api/web/table.js over a table shaped like the ones the app
+         renders (a name column with a link, a numeric column, a formatted date with a
+         data-sort, and a trailing actions column) against the *real* app.css.
+
+         The question this harness answers is one only a browser can: is the per-column
+         filter row *visible* on the list a user lands on, or does it take a click on the
+         funnel to find it? Source inspection cannot tell — the row is in the DOM either
+         way, and only the stylesheet's `display` decides (app.css: `thead
+         tr.dt-filter-row { display: none }` until `table.dt-filters-open`). -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="host" style="width:760px; margin:20px">
+      <div class="card" id="card-keyed" style="padding:0"></div>
+      <div class="card" id="card-plain" style="padding:0; margin-top:20px"></div>
+    </div>
+    <script type="module">
+      import { enhanceTable } from "/table.js";
+
+      const ROWS = [
+        ["Verluste Bürgschaftswesen (SOLL)", 8, "11.8.2026, 14:13:47", 1_754_921_627],
+        ["Testprozess Atlas", 2, "2.9.2026, 17:10:39", 1_756_826_039],
+        ["Onboarding", 5, "3.9.2026, 09:00:00", 1_756_882_800],
+      ];
+
+      const table = (rows) => `
+        <table>
+          <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
+          <tbody>${rows.map(([name, n, when, sort]) => `<tr>
+            <td data-filter="${name}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="#"><b>${name}</b></a></div></td>
+            <td class="muted">${n}</td>
+            <td class="muted" data-sort="${sort}">${when}</td>
+            <td class="row-actions"><button class="icon-btn">⋯</button></td>
+          </tr>`).join("")}</tbody>
+        </table>`;
+
+      // mount rebuilds a card's table from scratch and enhances it, the way a view does
+      // on every navigation — which is what makes the persisted open/closed state
+      // observable at all.
+      const mount = (id, key) => {
+        const card = document.getElementById(id);
+        card.innerHTML = table(ROWS);
+        enhanceTable(card.querySelector("table"), key ? { key } : {});
+      };
+
+      window.__mount = mount;
+      mount("card-keyed", "e2e-projects");
+      mount("card-plain", null);
+      window.__ready = true;
+    </script>
+  </body>
+</html>
