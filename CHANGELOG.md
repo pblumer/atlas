@@ -12,21 +12,6 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-### Changed
-
-- **`atlas_list_instances` (MCP) returns a page, not a bare array.** It answered with
-  a plain JSON array, which cannot say it is a *page* — and the endpoint behind it caps
-  at 1000 rows and flags the cut in a header the body does not carry. An agent handed
-  the array alone read the first page of three hundred thousand instances as though it
-  were the whole population, and acted on it.
-
-  It now answers with `{items, truncated, nextCursor}` — the envelope
-  `atlas_list_tasks` already used — and takes a `before` cursor to resume. The two list
-  tools are one protocol now: hand `nextCursor` back as `before`, never parse it. A
-  `truncated` page without a `nextCursor` means there is more but this listing has no
-  position to resume from; narrowing it (`process` plus a single `state`) is what gets
-  you one. **Breaking** for anything that parsed the array directly — read `items`.
-
 ### Added
 
 - **Discord is a Worker Type: a process can speak in the channel the team already
@@ -305,8 +290,6 @@ _Changed_ / _Removed_ for each version.
   a live count. A diff touching only those is the capture re-photographing the clock; a
   diff touching the other thirteen means something moved.
 
-### Added
-
 - **The nugget screenshots are output now, not artifacts somebody once made.** Their
   pictures are captures of the running product, which buys recognition and costs
   staleness: a shot of a UI that has since moved still renders, and a ring drawn on a
@@ -336,499 +319,6 @@ _Changed_ / _Removed_ for each version.
 
   What no test can catch, and the README says so plainly: a caption that no longer
   describes its picture. That failure has already happened once in this chapter. Read them.
-
-### Changed
-
-- **The object diagram is drawn on diagram-js now, so it zooms and pans.** The
-  instance's objects and the lines between them were built here as SVG strings, with a
-  layout of their own, and the cost showed up as things a reader expects and does not
-  find: a diagram bigger than the panel could only be scrolled, nothing could be
-  clicked, and there was no way to make it fit. That is word for word the complaint
-  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) made about the *class*
-  canvas a fortnight ago, one altitude down — the look was downstream of the
-  substrate — and it is the follow-up
-  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) named.
-
-  So the drawing moved onto the same shared bundle the class canvas and Panorama
-  already use, as `AtlasCanvas.uml.ObjectCanvas`, and the diagram gained zoom, pan,
-  selection and the same three controls — the same icons, the same step, the same
-  corner — that the two canvases beside it carry. Zooming a diagram is the same act
-  on all three surfaces, and a near-miss between them is worse than any one of the
-  choices on its own.
-
-  **Nothing about the notation changed, deliberately.** An object still reads as its
-  label underlined, its state in brackets, its members as `name = value` with the
-  business key marked and an absent member saying so; a containment still carries the
-  composition diamond and a key-resolved reference is still dashed and bare, because
-  those are different claims. The three e2e tests that state all of that were left
-  exactly as they were and still pass — which is the evidence the port changed the
-  substrate and not the picture. One detail did have to be put back deliberately:
-  diagram-js draws in insertion order, so the lines came out *over* the boxes where
-  they had always passed behind them. They are inserted ahead of the shapes now, in
-  their own order, and both halves of that have a test.
-
-  Two things are new rather than moved. The canvas **survives a re-render**: selecting
-  an element re-renders the whole inspector, and a live instance does it again on
-  every poll that brings new frames, so rebuilding the drawing each time would have
-  thrown away the zoom and the pan the reader had just set — the two things the port
-  exists to give them. And the diagram is **read-only on purpose**: the graph is
-  derived by the server, so there is no document to write back to and a box dragged
-  here would be put back by the next refresh. Move, resize and connect are absent
-  rather than refused, because a canvas that offers a gesture it silently discards is
-  worse than one that does not offer it.
-
-  Where a box *sits* is still decided in the browser, and that is not an oversight:
-  the server owns what relates to what because that is model semantics, and layout is
-  drawing. It just lives beside the renderer that uses it now instead of in a
-  twelve-thousand-line view file. The bundle grew 4,476 bytes for the whole notation
-  — one copy of diagram-js is the expensive part, and it was already paid for.
-
-- **The training nuggets show the real Atlas, not a drawing of it.** The stages
-  shipped as markup built from the handbook's own theme tokens, and the reasoning
-  for that was sound as far as it went: no binary weight, both colour schemes, both
-  languages in one file. What it missed is what a nugget is *for*. Somebody watching
-  one is trying to recognise the screen later, and a drawing has to guess the layout
-  — this one guessed a sidebar where Atlas runs its navigation across the top, and
-  drew the app switcher as a grid popup where the product opens a drawer. A learner
-  who trusted it would look in the wrong place twice before finding anything.
-
-  Every scene is now a capture of the running product: the Modeler with a real BPMN
-  model on the canvas, Operations showing five instances at once with their token
-  counts and their actual variables, the task inbox with its four filters, the
-  worker list, the audit log, the landscape. Twenty WebP images under `web/nuggets/`,
-  about 855 KB in total, fetched only when a nugget is played — opening the chapter
-  still costs nothing.
-
-  **A modelling error went out with the drawn version and is fixed by the same
-  change.** Two scenes drew an exclusive gateway with a single outgoing flow, which
-  is not a gateway at all: it branches or it is a waste of a shape. That is a poor
-  thing to teach anywhere and worse in material about BPMN. The shots carry a model
-  where the gateway genuinely splits — `Summe > 100 EUR?` into a human approval on
-  one side and straight through on the other, then a parallel gateway for picking,
-  shipping and invoicing — and the modeller nugget now says out loud that a gateway
-  with one exit would not be one.
-
-  Highlights and the cursor are percentages of the *image* rather than of the stage,
-  which is what makes them stable: an image keeps its aspect ratio at every width,
-  so a ring drawn on the Deploy button stays on it from a phone to a desktop. The
-  measurements are not eyeballed — the capture script reads each target's bounding
-  box out of the live page and writes it into the scene.
-
-  `e2e/nuggets.spec.mjs` follows the new failure modes: a scene naming an image that
-  is not shipped, a shipped image no scene uses (dead weight in a `//go:embed`
-  binary), a highlight running off the frame, a tap with no cursor, and every
-  referenced screenshot actually being served. Each was written by confirming it
-  fails against exactly that mistake.
-
-  The caption moved out of the picture and under it. Overlaying it looked tidier and
-  ate the bottom of every shot — which is where Atlas prints the legend explaining
-  the token markers, so the one scene that most needed its whole picture was the one
-  losing it.
-
-- **Every shipped model now carries its own diagram.** Four of them did not:
-  `order-fulfillment`, `galsync`, `entra-create-account` and `pruefe-datensaetze` shipped
-  with no `<bpmndi:BPMNDiagram>`, and Atlas generated one on deploy. That is enough to run
-  a model and not enough to read one — which stopped being a detail the moment the
-  handbook began rendering every example on its card, because a generated layout is what
-  the reader then sees first.
-
-  They are laid out by hand now, to the conventions in `AGENTS.md`: one straight main
-  axis, every branch in a lane of its own, orthogonal waypoints that go around boxes
-  rather than through them, and every gateway exit labelled with its answer — which meant
-  naming six branches in `galsync` and two in `pruefe-datensaetze` that had no name at
-  all, so a reader could not tell which way "deleted?" went. The two subprocesses are
-  drawn expanded, because the branching inside them is the example; collapsed, all that is
-  left is a box that explains nothing.
-
-  Each was checked as a rendered picture and not only as a deploy, which is the only way
-  the two rounds of label collisions in `order-fulfillment` were ever going to surface: a
-  gateway label centred over its own branch line reads fine, the same label lying across a
-  task box does not.
-
-- **Three mechanisms the engine has always had now have an example.** Signal, escalation
-  and compensation were demonstrated by no scenario in `examples/` — only as isolated
-  patterns in the conformance gallery and the recipe chapter, which show *that* they work
-  and never *what they are for*. The handbook's mechanism matrix said so out loud. It no
-  longer has to:
-
-  - **`examples/mahnwesen/`** chases an unpaid invoice, and is the escalation example. Two
-    boundaries hang on the same subprocess and their difference is the whole business
-    logic: the message "payment received" **interrupts**, because the dunning run is then
-    moot; the escalation does **not**, because the run should finish *and* the owner
-    should be asked. The subprocess is not cosmetic — an escalation is caught on the
-    enclosing activity, so without one there is none. Its deadlines are start variables,
-    since `<timeDuration>` takes FEEL (ADR-0055): the same process runs in seconds instead
-    of weeks.
-  - **`examples/preisaenderung/`** recalculates every open quote when the price list
-    changes, and is the signal example — deliberately paired with the one above, because
-    the pair is the lesson: a **message** hits exactly one instance, the one whose
-    correlation key matches; a **signal** hits **all** that are waiting and does not know
-    how many that is. Verified against a live server: three waiting quotes, one instance
-    of the thrower, three recalculated quotes.
-  - **`examples/reisestorno/`** books a flight and a hotel, has the payment declined, and
-    takes both back — the compensation example. An error jumps out of an activity that
-    just went wrong; a compensation undoes activities that completed *successfully* long
-    ago, which is the case a rollback is actually about. It unwinds backwards, and the
-    handlers hang off an `<association>` rather than a sequence flow — the proof being
-    that a run with `zahlungOk: true` carries no cancellation variables at all.
-
-  All three are framed for the readers the examples were thinnest on: a small business and
-  a private person. All three run with no worker, no credential and no network.
-
-  A fourth, **`examples/umzug/`**, is there for the audience alone rather than a
-  mechanism: organising a move, because a workflow engine reads as something for
-  corporations until somebody shows it doing a private person's Saturday. It happens to be
-  the only model in the tree that fires a timer on a **computed date** rather than after a
-  duration — and its two trip hazards are documented because both actually happened while
-  it was being built, and both produce the same incident: a process variable is persisted
-  as JSON and comes back a string (so the date has to be parsed again), and a zone id
-  where the timer needs an offset.
-
-- **The handbook now shows every example Atlas ships, and what it takes to run one.**
-  Thirty scenarios live under `examples/` — a shopping cart that computes a total in
-  FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
-  against the HR system, a Google Form whose every new row becomes a case. The handbook
-  showed two of them. `examples/README.md`, the only overview there was, is written for
-  developers, is half in English, and was missing five examples entirely, because nothing
-  checked.
-
-  The new **Beispiele** chapter describes all of them in both languages and on two levels
-  at once: what the scenario is *for* — who has the problem, what they get out of it — and
-  how it is *built*, down to the trap the reader is about to walk into (`query-one`
-  returns null and fails on two hits; a Sheets cell is text, so comparing it with a number
-  is `null` in FEEL; a Jira user search without the browse permission finds nobody
-  *without failing*). Each card renders the real diagram, and installs the real artifacts —
-  application, decision, forms, processes, publish — into the reader's own instance in one
-  click. Nine of them then start with one more click, most running to an end event with no
-  worker configured at all.
-
-  Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
-  happens outside Atlas and is where commissioning actually fails. The Google service
-  account and the sharing step without which a document you have open in front of you
-  answers 403; the Entra app registration with the two application permissions that cover
-  a joiner/mover/leaver flow and the one to remove if it is there; the Atlassian API token
-  and the global permission an assignment needs; the AD service account that should be
-  delegated on an OU rather than made a domain admin; the SQL user that should be granted
-  on views. With, for each, the symptom that tells you what is missing — a parked token
-  with no incident is a worker that is not running, an empty search result is usually a
-  permission.
-
-  The models are not copied into the page. They travel as one generated asset,
-  `api/web/examples-catalog.json`, which `go test ./examples -update` builds from the
-  files; a plain run fails when the served catalogue has drifted from them, when an
-  example has no card, when a card names an example that does not exist, or when two
-  examples would ship the same form id and installing the second would silently overwrite
-  the first one's form. That last one was not hypothetical: `onboarding` and
-  `entra-onboarding-selfservice` both shipped a form called `onb-start`, and the
-  self-service pair is now `eonb-start`/`eonb-freigabe`.
-
-### Fixed
-
-- **The What's New generator refuses a conflicted CHANGELOG instead of shipping both
-  sides of it.** `api/web/whats-new.json` is generated and committed, and
-  `.gitattributes` marks it unmergeable so git raises a conflict rather than
-  interleaving two generated files. The documented resolution is to take the merged
-  `CHANGELOG.md` and re-run the generator — but the two files change together, so at
-  that moment the CHANGELOG is usually conflicted too, and the generator read straight
-  past the markers: it looks for `- **bullets**`, and `<<<<<<< HEAD` is not one.
-
-  Both sides then became two entries in a feed that looked perfectly well-formed, and
-  CI's staleness check *passed*, because the committed file really was what the
-  generator produced from that source. Only a reader would ever have found out. Measured,
-  not assumed: a conflicted CHANGELOG produced a clean exit and a feed containing both
-  bullets.
-
-  It now refuses, naming the file and why — for `CHANGELOG.md` and for a conflicted
-  override, where the JSON parse error would otherwise send the reader looking for a
-  typo rather than for the merge they are in the middle of. A Go test drives the real
-  script against a throwaway tree, so the guard is exercised rather than asserted in
-  prose.
-
-  `make whats-new-resolve` is the resolution in one command: it regenerates the feed
-  from the merged CHANGELOG and stages it, and refuses while any *other* conflict is
-  still open — regenerating from a half-merged CHANGELOG being exactly what the guard
-  above exists to stop.
-
-- **The handbook blamed itself for a diagram the reader was simply not signed in to
-  see.** The recipes in _Rezepte_ ship their models without BPMN-DI, so the coordinates
-  come from `POST /api/v1/layout` — an endpoint that carries the `modeler` role, on a
-  page that is public. A reader who was not signed in therefore got no picture on any
-  of the 28 cards, and the note under each one said Atlas *"cannot lay this pattern out
-  completely yet"*. That was never true: Atlas lays them out fine, the request was
-  refused. The note now separates the three answers — sign in (with a link that takes
-  you there), a session that lacks the `modeler` role, and an actual layout limit, which
-  is the only one that is about the model. The first refusal also settles the chapter,
-  so the 27 further requests that could only fail the same way are no longer sent.
-
-- **Every instance start scanned the whole runtime on the single writer.** `/stats` looks
-  like an aggregate and is not one: all three of its counts walk a whole column family,
-  so on a server holding 50.000 instances and 200.000 tokens a single call was a
-  quarter-million-key scan. ADR-0080 introduced maintained counters, but for the
-  per-definition sums the Prometheus path uses — the counts behind `/stats` are the
-  authoritative scans it is explicitly contrasted with.
-
-  The endpoint was not the main caller. Seven of the eight callers are **write paths**
-  that report the counts back in their response — starting an instance, publishing a
-  message, cancelling or terminating a batch, a CSV upload — and each took a run-loop
-  turn of its own purely for that read-back. So every instance start paid a full
-  population scan on the single writer, and a load generator kept the engine executing
-  one per write, indefinitely. That is what made the API unreachable; the parked test
-  instances were not the load, they were the size that made each read-back expensive.
-
-  `readStats` now takes a `state.ReadView` instead of the live store, which moves the
-  counting off the run loop and makes it impossible to spell the on-loop version: a
-  caller must obtain a view. All eight sites go through one helper, so the write paths
-  were fixed by the same change as the endpoint. `GET /api/v1/incidents` was the same
-  defect in its milder form — two rows to return and its whole walk, its per-instance
-  lookups and its deployment-map reads inside the loop — and now runs off it too. Both
-  reads are snapshots, so a page can no longer mix an instance counted before a write
-  with a token counted after it. Both also answer 503 while the server is shutting down
-  rather than a 200 that cannot be told apart from a true empty answer: the old code
-  reported `{"activeProcessInstances":0,…}`, which reads as "the engine is empty". The
-  reasoning is in [the record on the runtime counts](docs/adr/0266-stats-and-incidents-off-the-loop.md).
-
-  `/stats` is no faster for its own caller — it still walks the population. It simply no
-  longer walks it for everybody else.
-
-- **Signing in waited for the engine, so a busy server locked everybody out.** On a
-  server carrying ~50.000 parked process instances, with load generators still starting
-  and finishing more, `POST /api/v1/auth/login` stopped answering while
-  `GET /api/v1/info` answered instantly. Nothing was down and nothing was slow: the
-  login was *queued*. Both of its lookups were dispatched onto the single-writer run
-  loop ([ADR-0002](docs/adr/0002-single-writer-partition-model.md)), which executes one
-  closure at a time in arrival order, so authentication was only ever as available as
-  the processor was idle — and an operator signs in precisely in order to deal with a
-  processor that is not.
-
-  Neither lookup reads engine state. Accounts and groups are durable sidecar records
-  ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) that never
-  travel through the WAL or the processor; they sat on the loop by convention. They now
-  read directly off it, so a login costs zero loop turns and answers at the speed of the
-  filesystem regardless of engine load — matching the rest of the session path, which
-  never needed the loop either ([ADR-0180](docs/adr/0180-groups-as-members.md),
-  [ADR-0185](docs/adr/0185-live-group-membership.md)). Writes are untouched: the run loop
-  remains the single writer of design-time state, and the OIDC callback's account
-  resolution deliberately stays on it, because that path may *create* the account it is
-  resolving and the check-then-write is atomic only inside one turn. A listing that meets
-  a record deleted from under it now skips that record instead of failing outright, which
-  is what an off-loop reader can legitimately see. The reasoning is in
-  [the record on signing in off the run loop](docs/adr/0265-login-off-the-run-loop.md).
-
-  What the login was queued *behind* is the entry below.
-
-- **The replay drew a deferred choice as several tokens, and parked one on the gateway
-  that was not there.** The live diagram stopped drawing an event-based gateway's race
-  literally in [ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md): the engine arms
-  every branch's catch at once ([ADR-0110](docs/adr/0110-event-based-gateways.md)), so a
-  waiting instance holds a token on each branch and none on the gateway, and drawn
-  one-for-one that says the same wait once per branch. The step-by-step instance replay
-  still drew it the old way — a token dot on every branch and a chip for each of them in
-  the legend below — so the two views described the same moment differently, which is what
-  a reader of both actually reported.
-
-  Two things were wrong, and the second one was a token drawn where no token was. The
-  frame fold ([ADR-0046](docs/adr/0046-single-process-step-replay.md),
-  [ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) keeps a completed
-  element's token visible until the activation it causes appears, so the token never
-  flickers out between the two. An event gateway is the one element whose successors
-  activate *before* it completes — it arms the branches on activation and only then
-  completes itself, taking no outgoing flow of its own — so it waited for an arrival that
-  had already been and gone, and its token stayed on the gateway for the rest of the
-  replay. On a looping model that is a race drawn as still running a full round after it
-  was decided, which is what a production instance showed: three tokens on a two-branch
-  race, one of them a ghost.
-
-  The gateway's token is now released when it completes, like a leaf's and a loop round's
-  — the other two hand-offs that go to nobody. And the replay draws the race the way the
-  live view does: one token on the **gateway**, the armed branches outlined dashed and
-  without a dot of their own, and one chip in the legend that names the race and says what
-  it is waiting for — *waiting for the first of 2 events* — rather than one chip per
-  branch. The rule is read off the diagram, exactly as the live view reads it (a catch
-  joins its gateway's race only when that gateway is its sole way in), and off the token
-  that forked it: every armed catch is a fork of the gateway's own token, so two races
-  running at once on one gateway stay two races. Once an event has fired and the losers
-  are cancelled, what is left on a branch is the winner running there, and it is drawn as
-  itself again.
-
-- **The class canvas could not take hold of more than one class at a time.**
-  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) put the canvas on diagram-js
-  for marquee selection among other things, and the marquee was the one it did not
-  reach: diagram-js ships the tool, but a plain drag on empty sheet pans — it has to,
-  or a diagram larger than its window could not be moved — so the gesture was never
-  offered to it, and ten boxes were still moved one at a time.
-
-  There is now a control for it beside zoom and undo, and holding Shift while dragging
-  does the same without it. Escape gives the drag back to panning. What the box takes
-  hold of moves together, and the panel says what it is holding — it still edits one
-  element at a time, because a name, a type and a multiplicity each belong to exactly
-  one thing, so it lists what is selected and each line is the way back to editing that
-  one on its own.
-
-- **A class with a hundred attributes had no room to show their names.** The panel was
-  340px wide and would not budge, and inside it the two selects — which carry every
-  class name in the model as options — took what they liked, leaving the name column a
-  stub that read `allowedA…` for forty members running.
-
-  The panel now takes the Modeler's divider: drag it to widen, double-click to put it
-  back, and the width is remembered. A person moves between the two surfaces in one
-  session, so it is the same divider with the same behaviour rather than a second one
-  of its own. Inside the table the layout is fixed, so the room goes to the name and
-  the selects keep the width they need and no more. And because the row being typed in
-  is deliberately *not* repainted — that is what keeps the caret in the field — the
-  name's tooltip and what the filter matches it against are now kept current as it is
-  typed, rather than lagging until the next repaint.
-
-  The view itself also stops sitting in the console's centred 1120px column when a
-  model is open, and takes the whole window the way the Modeler does — no column, no
-  page gutter and no frame around the editor, because a drawing surface that stops
-  22px short of the edge is a window inside a window. The list of models beside it
-  keeps the reading column; a list read across a 2000px screen is a worse list.
-
-  And the fit now uses the room it is given. diagram-js fits by shrinking only, never
-  magnifying past 100%, which is right for diagrams usually larger than the viewport
-  and wrong for a class diagram of six classes on a wide screen: it was drawn at its
-  own size in the middle of the window with the width going to nothing on either side.
-  A model with room to grow is now grown into it, up to 1.6× — past that a class box
-  has nothing more to say for the extra pixels. A model larger than the window is
-  shrunk to fit exactly as before.
-
-- **The class canvas could not be zoomed, searched, or undone.**
-  Two complaints from the same place: Data › Information model, on a model bigger
-  than the window.
-
-  **Zoom, pan and fit were there and invisible.** They have been the canvas's own
-  since it moved onto diagram-js ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
-  — the wheel scrolls, ctrl and the wheel zoom, a drag on empty sheet pans — and
-  nothing on the screen said so, so a diagram wider than the viewport could only be
-  scrolled at by somebody who already knew the gesture. The canvas now carries the
-  same three controls the Panorama canvas does, in the same corner with the same
-  icons and the same step, off the same CSS rather than a copy of it: zooming a
-  diagram is the same act on both surfaces, and a near-miss between two canvases a
-  person uses in one session is worse than either choice alone.
-
-  **And a model outgrows its window in two directions.** A sheet with thirty classes
-  on it, and a class with forty members in it — so there is now one search field in
-  the bar for both. It matches class names, attribute names, attribute *types* and
-  enumeration literals, and a hit says which class it is in (`Order · placedOn`).
-  Picking one selects the class, scrolls the sheet to it rather than fitting the
-  whole diagram, and — this is the point — narrows that class's panel to the member
-  that was searched for. Answering "where is `placedOn`" by selecting a class with
-  forty attributes and leaving the reader to scroll would hide the answer it just
-  gave.
-
-  **And undo came with the same key.** The canvas has kept a command stack since the
-  port and nothing ever asked it for anything: no button, no binding, so a mis-drag
-  was repaired by dragging back. It is now ↺ and ↻ beside the zoom controls, and
-  Ctrl/⌘ + Z — except while the caret is in a field, where Ctrl+Z belongs to what is
-  being typed. What it undoes is what the canvas does, which is moving something; a
-  renamed class or a retyped attribute is the panel editing the document and is not
-  on that stack, so the control says *the last move* rather than the last change.
-
-  The panel's filter is there on its own too, above the attributes and the literals,
-  matching name and type. It hides rows rather than removing them, so every row keeps
-  the index its editing and its reordering read, and it is applied to the DOM rather
-  than rendered — the panel re-renders on every keystroke, and a filter that
-  re-rendered would take the caret out of the field being typed in. Reordering is
-  refused while the list is narrowed, because dragging a row past rows that are not
-  on screen moves it somewhere nobody chose.
-
-- **The waiting-task badge on the live diagram counted its own page.** A user task with
-  1 275 people's work parked on it showed "500" on its 📋 link, and went on showing "500"
-  as the queue was worked down in the Tasks app — while the green token badge on the same
-  shape counted correctly. Nothing was stuck. 500 is the cap on one page of
-  `GET /api/v1/tasks`, and the badge was counting the rows it had been handed, so it could
-  not have said anything else until the queue fell below the cap.
-
-  The same cap could also delete the badge outright, which is the worse half: it is
-  applied across every definition *before* the list is filtered to the one on screen, so
-  enough waiting tasks on another process pushed this one's off the page and took the link
-  to a plainly waiting task with it.
-
-  Both facts — whether to draw the link, and whether it goes to a form or to the inbox —
-  now come from the element's live-token counter, which is exact at any scale
-  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) and is what the "All
-  instances" total in the picker beside it has always been read from. The link no longer
-  carries a count at all: the green badge on that shape is that number, and on a user task
-  "tokens waiting here" and "tasks waiting here" are one fact, so a second copy of it was
-  the same wait read twice — the reason an armed branch does not restate its gateway's
-  race either. The task list is still read for the one thing only it can say: which task
-  to open when exactly one is waiting.
-
-  Isolating a single instance now asks for *that instance's* tasks rather than filtering
-  the global page, so its form stays one click away under a flood — the endpoint has
-  resolved an instance's tasks through its own element index all along, and the live view
-  was the caller not using it. And completing a task in the Tasks app reloads the inbox
-  through the path that reads the paging headers, instead of only the body: the "more
-  exist" banner now goes away when the queue drains, and "Load older" no longer pages from
-  a cursor that has moved.
-
-- **Saving a layout onto a deployment was refused on diagrams nobody had edited.** The
-  first real use of "Save layout to deployment" hit the guard that is supposed to catch a
-  changed *process*, on a document whose process had not changed at all.
-
-  bpmn-js leaves out an attribute whose value equals the default its schema declares. A
-  deployed model carrying `cancelActivity="true"` on an interrupting boundary event —
-  which the BPMN examples write, and which every model copied from one carries — comes
-  back from the editor without it. The check compared the serialised attributes, saw one
-  missing, and refused. It was right about the bytes and wrong about the question, which
-  was never "are these two documents equal" but "is this picture of this model". Any
-  model with an interrupting boundary event, an event subprocess or a multi-instance
-  activity spelled out that way was affected, and there was nothing the operator could do
-  about it.
-
-  Writing an attribute at its default and leaving it out are the same statement in the
-  schema, and Atlas's compiler already reads them as the same statement. So the check now
-  reads them that way too, for the nineteen attributes BPMN gives a default. Two things
-  deliberately unchanged: it applies to BPMN's own attributes only — a `zeebe:` or
-  `atlas:` attribute that happens to share a name is a different attribute — and only to
-  the default value, so switching a boundary event to `cancelActivity="false"` is still
-  the real change it is, and still refused.
-
-  The refusal also says *what* differs now, by element and id, instead of only that
-  something does. That is the sentence somebody needs most in exactly this situation:
-  when they are sure they changed nothing, and are right
-  ([ADR-0251](docs/adr/0251-adjust-a-deployed-diagram.md), amended).
-
-- **The edges in the landscape nugget missed the nodes they connect.** The scene that
-  shows Panorama drew its edges as divs rotated by an angle computed from percentage
-  coordinates — and x is a share of the container's width while y is a share of its
-  height, so on anything that is not square both the angle and the length come out of
-  mixed units. On the 745×280 stage the page actually renders, an edge landed 22 degrees
-  off and 41 pixels too long, running straight past the node it was supposed to reach.
-
-  It is the failure mode this whole chapter is built to avoid, and it still got through:
-  the picture renders, the scene advances, no selector breaks, nothing throws and nothing
-  logs. It surfaced only from looking at a rendered frame.
-
-  The edges are an SVG now, with `preserveAspectRatio="none"`, so an endpoint sits
-  exactly on its coordinate whatever the aspect ratio, and `vector-effect:
-  non-scaling-stroke` keeps the line from being stretched with it. `e2e/nuggets.spec.mjs`
-  gains the assertion that was missing: for every edge, both ends land on a node.
-  Confirmed by moving one edge's endpoint and watching it fail — the first attempt at
-  that check was itself broken, matching against unescaped quotes that the JSON block
-  does not contain, so it never challenged the test at all.
-
-### Changed
-
-- **The two diagram-js canvases ship as one bundle.** The ArchiMate canvas
-  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)) and
-  the UML class canvas ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md)) each
-  carried their own copy of the library, because the second arrived later and merging
-  them then would have meant touching Panorama's shipped canvas for a saving that was
-  real but not urgent. ADR-0237 named the merge as the follow-up; this is it.
-
-  Both now ship as `api/web/vendor/canvas/atlas-canvas.js` under one global with a
-  namespace each — 123,109 bytes where the two were 211,888, and one cache entry rather
-  than two. Neither canvas's own code is touched: two entry files became two modules
-  under one entry that exports both. The honest cost is on the other side: a page that
-  opens only one of the two now carries both renderers, some 15 KB more than its own
-  bundle was — the right way round, since the renderers are the small part.
-
-  Loading it moved into one place (`api/web/canvas-bundle.js`), because two views
-  fetching the same file is new: whichever is opened first fetches it and the second
-  gets what is there, rather than a second `<script>` for the same bytes.
-
-### Added
 
 - **A deployed diagram can be tidied up without redeploying it.** You only find out that
   a picture is wrong once the process is running: a task's name disappears under a token
@@ -913,8 +403,6 @@ _Changed_ / _Removed_ for each version.
   a selector pointing at nothing, a removed container, and a caption copied across
   languages — rather than by observing that they pass.
 
-### Added
-
 - **An element's documentation is Markdown now, and the people who read it see it as
   such.** `<bpmn:documentation>` is the one field every element carries, and the Modeler
   has treated it as Markdown for as long as the Developer View has existed: it highlights
@@ -993,450 +481,6 @@ _Changed_ / _Removed_ for each version.
   app the shell offers must be a card in the welcome chapter. Both were written by
   confirming they fail against a broken anchor and a wrong route, rather than by
   observing that they pass.
-
-### Changed
-
-- **Runtime badges no longer sit on the names they are pointing at.** The Operations
-  views annotate a shape with badges — token counts, an incident marker, a link to a
-  waiting task, a decision to inspect — and each has its own corner, which is how an
-  operator learns to read them without reading them. The corners are unchanged. What was
-  wrong is that a corner meant *inside* the shape, and inside the shape is where the words
-  are.
-
-  Measured in a browser on an ordinary model, the old placement covered 69 of the 74
-  pixels of a line of a business rule task's name with the decision badge, and put the
-  token count on the captions of both the start event and the gateway. Two different
-  causes: a task's caption is drawn inside its box and a three-line name leaves about ten
-  pixels clear, which a 20px badge does not fit in; and an event's caption is not inside it
-  at all but centred underneath, four to five times wider than the circle — exactly where a
-  badge anchored to the bottom corner lands, because diagram-js's `bottom` and `right`
-  overlay keys position a badge's top-left corner rather than anchoring its far edge.
-
-  A badge now hangs outside the shape, on the side its caption is not: above and below for
-  a task, above only for an event, a gateway or a data object, whose name is drawn
-  underneath them. And it is the size of a count rather than of a sentence — a pill wide
-  enough for "⚠ 2 incidents" is 90px, which is most of a task and three times an event, so
-  two of them collide with each other wherever they are put. The incident marker, the task
-  link and the decision button are a glyph plus a count now; the words they used to spell
-  out are their tooltip and their accessible name, and the thing they name is listed in the
-  panel below the diagram either way
-  ([ADR-0252](docs/adr/0252-runtime-badges-clear-of-labels.md)).
-
-- **A count on the diagram is grouped in thousands.** Reported from a running process:
-  badges reading `25864`, `50002`, `23436`, `2428` around the shapes of one diagram.
-  Every number was right and none of them was legible — a five- or six-digit run is read
-  by counting digits, and two of them side by side cannot be compared at a glance at
-  all, which is the only reason the counts are drawn on the shapes instead of listed in
-  a table.
-
-  Every count the runtime views print now groups in threes — `25 864`, `50 002`: the
-  live view's three token badges and their tooltips, the replay's execution-count
-  badges, the incident badges, the Playground's run and heat-map badges, the count pills
-  in those views' headers, and — same engine counters, same problem — the Starmap's
-  running total on a node and its running/finished tally in the panel. Anything under a
-  thousand is untouched; a separator on `999` is noise in a pill that small.
-
-  The separator is a **narrow no-break space** (U+202F), not a locale's own mark.
-  A process is modelled in one country and operated from another: `25.864` is
-  twenty-five thousand to one reader and twenty-five point eight to the next, `25,864`
-  the same disagreement mirrored, and a badge has no room to say which it meant. A space
-  is the one grouping mark no locale reads as a decimal point (ISO 31-0), and the
-  no-break variant keeps a badge on one line at any count. `toLocaleString()` was the
-  other candidate, and it is wrong here for the reason it looks right: it would make the
-  separator a property of whoever is looking, so the same screenshot pasted into a
-  ticket would say something different to the person who received it. The whole choice
-  is one constant in `api/web/numfmt.js` — a house that wants the Swiss `25'864` changes
-  it there, in one place, and every badge follows.
-
-- **Google Sheets runs on a worker, like everything else.** It shipped with an
-  in-engine handler and no supervised form, so the Modeler's properties panel showed it
-  as the one Worker Type reading IN-ENGINE while the twelve around it said otherwise —
-  and a fresh install called Google, with a service-account private key, from the
-  engine's run loop. ADR-0164 has one exception left and it is the FEEL script task;
-  this was not meant to be a second.
-
-  The engine now hands each configured Google identity to the worker it supervises
-  (`ATLAS_GOOGLESHEETS_*`, the whole credential bundle as one opaque value, the way
-  SharePoint and the SQL kinds do), the `worker` package serves the kind, and
-  `googlesheets` joins the default offload set. The in-engine form stays as the opt-in
-  `--in-process-connectors` fallback every managed kind keeps.
-
-  The guard that should have caught this was a canary asserting the *opposite* — that
-  some managed kind was still unprovisioned, so a related check could not become a
-  tautology. Google Sheets was the last one. It is now inverted: every managed Worker
-  Type must be handed to its supervised worker, so the next kind added without that
-  fails a test instead of a properties panel.
-
-
-### Fixed
-
-- **A search term found more than it was asked for.** Reported from use:
-  `kdnr=MT-100` also returned MT-10001. The instance search widened every term into a
-  substring match, so an operator who named one customer got a list holding another one
-  beside it, with nothing on either row to tell them apart — and no way to ask about
-  only the one they meant.
-
-  It was not even consistent with itself. The value index
-  ([ADR-0244](docs/adr/0244-searchable-variables.md)) answers a
-  declared name exactly, so the same query matched exactly when the model carried
-  `atlas:searchable` for that name and matched as a substring when it did not. Whether
-  a name is declared is a property of the model: invisible from the search box,
-  changeable by a redeployment, and it had come to decide what a query means.
-
-  A term is now matched **whole**, and widening is something you ask for, in the two
-  shapes everyone knows from shells and file pickers: `*` for any run of characters,
-  `?` for exactly one, and a backslash to escape either, so a value that really contains
-  a star is still reachable. One rule for declared and undeclared names, for
-  `name=value` and free text, for the live index, the instance walk and the archive.
-  Under the index a pattern splits into its literal head and the rest: no wildcard is
-  the exact seek that already existed, and a wildcard seeks to a neighbourhood and
-  matches the full pattern before reporting anything — without that, `MT-1?` would
-  answer with every `MT-1` value the index holds.
-
-  The same predicate filters **bulk termination**, so an implicit widening there
-  selected instances the operator had not named. That is the version of this bug that
-  does not merely confuse.
-
-  This is a behaviour change: free text that used to match a value it occurred in now
-  matches one it equals, so `retail` becomes `*retail*`. The search hint, the handbook,
-  the OpenAPI summary and the MCP tool description all state the rule, because changing
-  what a query means in silence would be worse than the behaviour it replaces.
-  ([ADR-0248](docs/adr/0248-search-terms-are-literal.md))
-
-- **Opening a deployed process in the Modeler lost the application it belongs to, and
-  with it the whole vocabulary behind a data object's Type.** A draft carries its
-  application; a deployed version carries it too — the deploy records it — but the
-  route that opens one (`#/modeler/d/{key}`) does not name it and nothing looked it up.
-
-  The result was a Type field that had quietly stopped working: no classes offered, no
-  class shown for the one already set, and not even the "nothing models this yet"
-  warning — because *nothing is modelled* and *the vocabulary never loaded* are
-  different answers and only the first is safe to state. It looked exactly like a plain
-  text box, which is what the field was before there was an information model at all.
-  The breadcrumb gave it away: it named the process but not the application.
-
-- **A widened Properties column in the form editor gave its width to white space, not
-  to the panel.** The Design tab's side columns are resizable — our own affordance on
-  top of the vendored form-js Playground ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) —
-  and the drag sets the width of the *column*. But form-js pins the properties panel
-  inside that column to a fixed `--properties-panel-width: 250px`. So an author who
-  pulled the divider left to get room for a long FEEL expression got a 510px column
-  holding a 250px panel, and 260px of blank white between the panel and the window's
-  right edge, which stayed there across sessions because the width is remembered. The
-  mirror case was worse and quieter: dragged narrower than 250px, the panel was clipped
-  by the column rather than shrunk with it, so the rightmost part of every property row
-  was simply not reachable.
-
-  The panel now follows the column it lives in. The palette on the other side always
-  did — its content is fluid — which is why only one of the two columns showed it.
-  `e2e/form-side-columns.spec.mjs` holds the outcome at the default width, after a real
-  drag, for a width a previous session saved, and with the column collapsed to its rail.
-
-### Changed
-
-- **The live diagram tells a token that got through from one that was cancelled — and
-  draws a deferred choice once.** An element on the runtime overlay carried two numbers:
-  green for the tokens live on it, gray for the ones that had "passed through". Gray was
-  `visits − tokens`, and a visit is recorded on *activation*, so it counted every token
-  that had arrived and left — whether it completed and moved on, or was terminated: a
-  losing event-gateway branch, an activity a boundary event interrupted, a scope torn
-  down.
-
-  On an **event-based gateway** ([ADR-0110](docs/adr/0110-event-based-gateways.md)) that
-  was not imprecision but a wrong answer, because cancellation there is not an exception
-  — it is half of every outcome. The gateway arms *all* of its branches and completes
-  itself, so a waiting instance holds a token on each branch and none on the gateway,
-  and every decided race activates both branches and leaves both. The two branches
-  therefore showed the *identical* pair of numbers whatever had actually happened — on
-  one production diagram, `10 941` gray and `50 002` green on the message branch and the
-  same on the timer branch, which reads as "these two events arrive equally often" and is
-  not what either number means.
-
-  Three things changed, none of them in the engine's semantics. A terminated element
-  instance now bumps a retained counter of its own, per instance and per definition,
-  mirroring the visit counters beside it ([ADR-0022](docs/adr/0022-element-visit-history.md),
-  [ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) — a write-only merge on the
-  fold path, derived from the committed event alone, so replay rebuilds it. The overlay
-  splits the old gray badge into **gray = completed here and moved on** and **amber =
-  cancelled here**, so which event actually arrived is now readable at the branch itself.
-  And an event gateway's race is drawn as the one wait it is: the green count moves onto
-  the **gateway**, and its armed branches carry a dashed green outline and no live count
-  of their own — what that outline means is said once, in the live view's legend, which
-  shows the entry only for a diagram that has an event gateway in it. A catch joins its
-  gateway's group only when the gateway is its sole way in, so one reachable from
-  elsewhere as well keeps its own count.
-
-  **The history is reconstructed, not started from zero.** Terminations were never
-  counted before this, and a missing one is not a neutral gap: gray is *derived* as
-  visits − live − terminated, so every uncounted cancellation reads as a completion. On
-  a real event gateway with 70 563 visits and 20 561 decided races that was 19 881 old
-  cancellations sitting in gray, making both branches look like near-equal winners —
-  precisely the misreading this change is about. The lifecycle trail
-  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) has recorded every one of
-  them all along, so the counters are rebuilt from it once at startup, alongside the
-  other one-time counter seedings. It tops each instance up to what the trail says
-  rather than summing, so a store that already ran the counting build is corrected
-  instead of doubled. Two limits, stated rather than hidden: an instance whose history
-  has been purged has no trail left to count, and a migrated instance's older
-  cancellations land on the version it runs under now.
-  ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
-
-- **A data object can be pointed at a class you can see.** The **Type** of a data object
-  in the Modeler is the link the whole information model turns on — it is what lets two
-  processes agree that their `order` is the same kind of thing, and what a write to a
-  member of it is checked against. It was made by remembering a class name and typing it
-  into a box labelled *optional*, with the modelled classes hidden in a `<datalist>` that
-  nothing on the field mentioned.
-
-  The field now offers **the classes this application models**, grouped by the model they
-  live in and each carrying its business key — the fact that tells two similarly named
-  classes apart, and the thing you are actually trying to recall. It fills a free-text
-  field rather than replacing it: a diagram is routinely drawn before the vocabulary it
-  names exists, and typing a class nothing models yet has to stay possible
-  ([ADR-0230](docs/adr/0230-process-information-model.md)).
-
-  Below it, **the class itself is shown** — its kind, its members with their types and
-  cardinalities, and its business key marked exactly as the class canvas marks it — with
-  a link that opens the model in a new tab. Reading a name back tells you nothing about
-  whether it is the right class; its business key does, and that was one application of
-  the console away.
-
-  And when the type names a class nothing models yet, **Model it now** adds it where it
-  belongs instead of sending you off to do it by hand. It is added as a business object
-  with no attributes and no business key: those are the author's to choose, and guessing
-  them would be worse than leaving them open.
-
-- **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
-  structured value showed as `{3 fields}` and the whole of it was reachable only as a
-  tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
-  absent altogether on a touch device. The summary is now a button, and it opens the
-  same pretty-printed, syntax-highlighted window the **Variables** tab opens, with the
-  same Copy JSON. A data object is variable-shaped by design
-  ([ADR-0053](docs/adr/0053-first-class-data-objects.md)), so the two tabs
-  should answer "what is actually in there" with one surface.
-
-  Every write in the state trail opens too, and each window says which write it is
-  showing — a trail of four `{3 fields}` is unreadable if every window is titled the
-  same. Scalars are left alone: a string is already whole in its cell, and a button
-  around it would promise a second reading that does not exist.
-
-- **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
-  data store or a relationship under **Data › Information model** now gives you the same
-  panel the BPMN Modeler does: a header naming what is selected — its kind in small
-  type, its own name in bold, a type chip beside it — and collapsible property groups
-  below, each with a chevron and a filled dot when it carries content. Fields look like
-  fields do everywhere else in Atlas.
-
-  It is the same panel because it is the **same code**, not a lookalike. The Modeler had
-  grown the shape first, as a function inside `editor.js` that turns a rendered panel's
-  sections into groups. That is exactly the kind of thing worth having once: a copy
-  drifts from its model the first time either side is touched, and then two panels a
-  person uses in one sitting disagree about what a group is. It moved to
-  `api/web/pgroup.js`, and both panels call it.
-
-  What the two panels do *not* share is which groups start open, because the honest
-  answer differs. A BPMN element has a dozen sections and opening one of them is the
-  point, so only **General** starts open. A class has three, and one of them is its
-  attributes — the attributes *are* the class, so hiding them behind a click on every
-  selection would be worse than having no groups at all. So the class panel opens
-  everything, and collapsing is there for when a long attribute list is in the way.
-
-- **Central decisions run on a worker now — and the last in-process kind is gone**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 7).
-  A call to a decision service somebody else operates no longer happens on the loop
-  that owns the partition's state. `temis` joins the kinds Atlas offloads and
-  supervises by itself, which empties the record's "owed a worker half" table: every
-  kind that reaches another system now has one.
-
-  This slice did not copy the six before it. A central decision is a **business rule
-  task**, and its completion carries something no other job's does — a durable
-  evaluation record with the inputs, the outputs and the service's trace, retained so
-  an operator can see how a decision was made (ADR-0066). Nothing in the
-  engine↔worker protocol could carry one, so the completion contract widened: a
-  worker may now report the evaluation it performed, and `atlas worker` sends it.
-
-  The division is the part worth knowing. The worker is believed about the
-  **evaluation** and about nothing else: which element instance it belongs to is
-  stamped by the engine from the job the worker held a lease on, so a report cannot
-  attach itself to a task it did not run. A completion *by hand* never carries one at
-  all — an operator override is recorded as an intervention (ADR-0159), and letting
-  that path write an evaluation would put a decision nobody made into the audit trail.
-
-  What has **not** changed, though it looks like it should have: the record's
-  provenance. A central decision's trace was always the remote service's account of
-  its own evaluation. Offloading moved which process makes the call, not who authored
-  the trace.
-
-  `--in-process-connectors` keeps working. The record originally said it would become
-  an error once the table emptied; that promise contradicted its own driver that no
-  running deployment may break, and the amendment explains which of the two was
-  wrong.
-
-- **SCIM tasks run on a worker now**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
-  Creating, reading or searching a user at an identity provider no longer happens on
-  the loop that owns the partition's state. `scim` joins the kinds Atlas offloads and
-  supervises by itself.
-
-  It is REST's slice a third time, and the collector says so: `scimWorkerEnv` is the
-  third caller of one function rather than a third copy of it, and a test now deploys
-  a REST, a SOAP and a SCIM task together and holds that each worker gets its own
-  kind's secret and none of the others' — the failure a shared implementation makes
-  easy, and one that every per-kind test would pass.
-
-  One choice is deliberate: the payload carries the **authored** operation, base URL,
-  resource, id and filter, not the HTTP method and URL derived from them. A parked
-  job's payload is something an operator reads, and "operation: create, resource:
-  Users" answers what they came to ask where "POST .../Users" makes them work
-  backwards — and the derivation's own refusals (a `get` with no id would otherwise
-  become a list of every user) belong in `Run`, where both halves reach them.
-
-  One kind remains in-engine for want of a worker: `temis`.
-
-- **SharePoint tasks run on a worker now**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 5).
-  Creating a list item — a token fetch and an HTTP round trip to Microsoft Graph — no
-  longer happens on the loop that owns the partition's state. `sharepoint` joins the
-  kinds Atlas offloads and supervises by itself.
-
-  It is Jira's handover with a document library in place of an issue tracker
-  ([ADR-0141](docs/adr/0141-sharepoint-connector.md)): the task names its instance and
-  nothing more, because the Graph endpoint and the OAuth bundle are a worker record and
-  a vault secret — a URL is half a credential — so `sharepointWorkerEnv` renders the
-  instances the engine has configured.
-
-  One difference is deliberate: the credential is handed over as the **whole bundle**,
-  one opaque value, rather than field by field. The bundle has no public half worth
-  splitting — tenant and client ids sit in the same vault secret as the client secret
-  and the refresh token — and splitting it would mean deciding the grant's shape a
-  second time, where getting it wrong yields a worker that fails every job instead of
-  one that will not start. That is the SQL kinds' arrangement for the SQL kinds' reason.
-
-  An instance whose bundle does not resolve is left out rather than handed over empty,
-  so one unfinished record cannot stop a worker that also serves other kinds.
-
-  Two kinds remain in-engine for want of a worker: `scim`, `temis`.
-
-- **SOAP tasks run on a worker now**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
-  A call to somebody else's web service no longer happens on the loop that owns the
-  partition's state. `soap` joins the kinds Atlas offloads and supervises by itself.
-
-  It is REST's slice with an envelope around it, and that is the whole argument: the
-  endpoint, the SOAPAction and the body are model data and travel resolved with the
-  job, while the credential behind the task's `authSecret` is a vault **reference**
-  that is resolved where it is used. `soapWorkerEnv` is `restWorkerEnv` with a
-  different job type — the two collectors are now one function called twice rather
-  than two that drift, and a test holds that neither picks up the other kind's tasks.
-
-  Both halves go through one `soap.Resolve`/`soap.Run` pair; the in-process handler
-  was rewritten onto it, and the result travels through `soap.Result` so a task naming
-  no result variable completes with nothing rather than with an empty object.
-
-  Three kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `temis`.
-
-- **LDAP tasks run on a worker now**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
-  A bind, a search or a modify against a directory somebody else operates no longer
-  happens on the loop that owns the partition's state. `ldap` joins the kinds Atlas
-  offloads and supervises by itself, so a fresh install gets it without configuring
-  anything.
-
-  It is Active Directory's handover exactly (ADR-0182), because the two kinds share a
-  shape: an LDAP task authors its own server and bind DN, so those travel with the
-  job, while its bind password and client certificate are vault **references** — and a
-  reference is resolved where it is used. `ldapWorkerEnv` renders the references the
-  deployed models actually name, resolved through the vault, under the
-  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Both flavours are
-  covered: a certificate reference nothing answers to is a bind that cannot present an
-  identity, which is no better an outcome than a missing password.
-
-  The worker keeps the connection pool ADR-0154 introduced, so relocating the work
-  does not give back the reason binds were pooled in the first place. And both halves
-  now go through one `ldap.Resolve`/`ldap.Run` pair — the in-process handler was
-  rewritten onto it — so an offloaded search and an in-engine one cannot drift about
-  what an LDAP task means.
-
-  Four kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `soap`,
-  `temis`.
-
-- **A non-interrupting message or signal boundary event now fires every time, not once**
-  ([ADR-0236](docs/adr/0236-repeating-non-interrupting-boundary-events.md),
-  refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
-  says *reminder*: fire beside the host activity and leave it running. For as long as the
-  host runs, every occurrence should fire it again — and a recurring **timer** boundary
-  already did ([ADR-0054](docs/adr/0054-date-cycle-timers-for-catch-and-boundary.md)),
-  as does a non-interrupting event-subprocess trigger
-  ([ADR-0082](docs/adr/0082-event-subprocesses.md)).
-
-  A **message** or **signal** boundary did not. Taking its outgoing flow completed the
-  boundary's element instance, and its subscription retired with it, so the second message
-  correlated to nothing: no incident, no log line, nothing for the sender to see. Two
-  constructions a modeller reasonably reads as interchangeable disagreed about whether
-  "non-interrupting" means "repeatedly".
-
-  It now fires the way a recurring timer boundary fires — take the outgoing flow, re-open
-  the subscription, never complete the element instance. Staying armed rather than
-  completing and arming a replacement is deliberate: a replacement is only a queued
-  command for the rest of the batch, and a boundary instance is counted against its
-  scope, so a host completing in that window would leave an armed instance holding open a
-  scope that has already drained.
-
-  This changes behaviour for deployed models: one that relied on hearing the message once
-  will now hear it each time. The old behaviour was a defect and gave no way to depend on
-  it deliberately; a model that wants exactly one firing has the interrupting flag, or a
-  guard on the reminder branch. The escalation and conditional boundary kinds are
-  untouched — they arm inert and are *found* rather than waiting on a subscription, which
-  is a separate question.
-
-- **clio tasks run on a worker now**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
-  Writing an event, folding a subject's state, reading its history: three round trips
-  to an event store somebody else operates, all of them on the loop that owns the
-  partition's state. clio joins the kinds Atlas offloads and supervises by itself.
-
-  It is Remedy's handover with an event store in place of an ITSM instance — the
-  endpoint is a connector record, the token a vault reference behind it, and
-  `clioWorkerEnv` renders the stores the engine has configured. One difference is
-  deliberate: a store with **no** token is still handed over, because clio can be
-  reached without one and dropping it would leave a working instance unserved.
-
-  A clio write also carries something no other kind does — the event **body**, which is
-  the task's input mappings or the variables it sees. That is engine state, so it is
-  resolved in the engine and travels in the payload beside the idempotency key that
-  de-duplicates a retry. Both halves now go through one `clio.Run`: the in-process
-  handlers were rewritten to call it, so an offloaded write and an in-engine one cannot
-  disagree about what a clio task means.
-
-  Five kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `ldap`,
-  `soap`, `temis`.
-
-- **REST and LDIF tasks no longer run on the engine's own loop**
-  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md),
-  finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided
-  two years ago that a side-effecting service task belongs on a worker, and then chose
-  deprecation over a ban for one stated reason: a connector task could not run on a
-  worker yet. ADR-0168 closed that, and the worker halves have landed kind by kind
-  since — but the *default* never moved, so a fresh install still made outbound HTTP
-  calls from the processor's own process. `rest` and `ldif` now join the kinds Atlas
-  offloads and supervises by itself.
-
-  REST needed what Active Directory needed: its endpoint travels with the job, but its
-  `authSecret` is a vault reference, and a reference is resolved where it is used — on
-  a supervised worker, a child process with no vault. The engine now renders exactly
-  the references its deployed models name into that child's environment, under the
-  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Only what is deployed
-  travels: the running models' secrets, not the vault.
-
-  What is still in the engine is now a list rather than a condition — `clio`,
-  `sharepoint`, `scim`, `ldap`, `soap` and `temis` each need a worker half, one slice
-  each, and the record names them. Beside them stands the closed list of what stays
-  in-engine on purpose: FEEL, local DMN, the mockup task, timers, user tasks, and user
-  provisioning (which mutates Atlas's own store and has no endpoint to reach).
-  `--in-process-connectors` keeps working and now says at startup that it puts every
-  integration back on the run loop.
-
-### Added
 
 - **An instance that is gone is still findable.** History retention hard-deletes a
   finished instance once the exporter has it ([ADR-0115](docs/adr/0115-history-retention-hard-delete.md)) —
@@ -2352,8 +1396,814 @@ _Changed_ / _Removed_ for each version.
   ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md),
   [ADR-0201](docs/adr/0201-jira-connector.md)).
 
+- **Panorama models can say which Atlas resource an element means.** An ArchiMate
+  element in a Panorama model now carries **Atlas bindings**
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)):
+  an Application Component names a process application, a Business Process names a
+  BPMN process id, an Application Service names a worker or job type, a Node names a
+  deployment target, an Artifact names a release. Select an element in the model
+  viewer to see what it is bound to, and bind it from a picker of the resources you
+  may see.
+
+  Bindings are ordinary ArchiMate properties in an `atlas.` namespace, so a bound
+  model stays a standard model: it exports as Open Exchange XML like any other and
+  its bindings travel into Archi or any conformant tool. The keys are an allowlist,
+  which is what keeps credentials out — `atlas.credentialRef` is refused because it
+  was never permitted, and a rejected value is never echoed back.
+
+  **The document stores an opaque id and nothing else.** Names come from the server
+  at read time, filtered by what you may see, so a model can never hold a stale copy
+  of one. A binding that no longer resolves stays visible and says which of three
+  things it is: outside your access, no longer on this server, or a kind this Atlas
+  version cannot resolve yet. Removing it would make a broken binding look like an
+  absent one, and the model would then look correct.
+
+  **Editing a binding does not reformat your document.** The writer splices the
+  bytes it needs to change and leaves everything else exactly as it was — comments,
+  indentation, attribute order, and any standard content Atlas does not model.
+
+- **Panorama shows the landscape you already have.** Panorama's landing view is now
+  a derived mesh of the whole instance
+  ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
+  processes deployed under them, and the call activities between them, computed from
+  what Atlas already holds rather than from anything anybody drew. It therefore says
+  something on a server with no architecture model in it at all, and its edges are
+  facts the server can point at — a call activity *is* a dependency — resolved
+  through the same overrides the engine would follow, so the picture matches what
+  would actually run.
+
+  The graph is computed per requesting principal against the existing sharing scopes
+  (ADR-0071); nothing new to configure. Where your access cuts a dependency, the mesh
+  draws a **restricted** placeholder and keeps the edge instead of dropping it, and
+  the legend states how many there are — "this process depends on nothing" would be a
+  false statement when it means "you may not see what it depends on". A call target
+  that no deployment provides is shown as **unresolved**, which is a different finding
+  from a hidden one and is drawn differently. Clicking a process opens it in the
+  Operations live view: Panorama owns the landscape, and links into the process and
+  instance views rather than repeating them.
+
+  Nothing is stored — the mesh is a projection, recomputed on request, and it never
+  writes to an ArchiMate model. Above 400 nodes it collapses to applications and says
+  so in the legend rather than handing your browser a graph it cannot lay out; that
+  number is measured (a 400-node graph paints in about a second in Chromium), not
+  guessed.
+
+  **The landscape also draws what a process depends on besides another process:** the
+  **workers** its service tasks name, and the **decisions** its business-rule tasks
+  delegate to. That is the question a model cannot answer about itself — a task names
+  its worker by name and carries no endpoint and no secret, so nothing inside the
+  model can tell whether that name is configured on this server (ADR-0158). A process
+  pointing at a worker nobody configured deploys clean and parks its first token;
+  here it shows as **unresolved** before anything runs. A worker node carries its name
+  and its Worker Type and nothing else — the endpoint and the credential reference
+  stay on the server. Two references are deliberately *not* findings, mirroring the
+  deploy-time check exactly: one whose job type no managed Worker Type claims is not a
+  worker reference at all, and a name authored as a FEEL expression names no fixed
+  worker, since which one it reaches is known only at call time. Configured workers
+  and registered decisions that nothing references stay off the picture: the mesh is
+  the dependency graph, not an inventory.
+
+  **A search box** filters the mesh by name, kind or process id and reports how much
+  it is hiding — a filtered landscape otherwise looks exactly like a small one.
+
+  **Nothing is left stranded at the edge of the picture.** Reported three times as
+  "single nodes far away from the rest", and the first two fixes missed it because
+  both were about framing and this was about the settle. The pull that centres the
+  graph is deliberately weakest along the wide axis, so the picture takes the shape of
+  the frame — and that was tuned for a node its edges are also holding. A node with
+  **no edge** has none: the pull is all that keeps it near the picture, against a
+  repulsion that falls off with distance, and the balance sat far outside everything
+  else. On a thirty-four-node estate with ten unattached processes, two of them ended
+  hard against the left and right edges with the rest squeezed into the middle. That
+  is not a rare shape — a process deployed through the API, or before its application
+  existed, belongs to no application and is drawn with no edge at all. The pull is now
+  twice as strong on a node with nothing attached to it, which is measured rather than
+  reasoned: higher packs the loose nodes into a lump of their own instead.
+
+  **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
+  what this server *runs*, so a saved draft is absent from it by default — which
+  answers "is this deployed?" only if you already knew the process existed. Switch
+  drafts on and they appear beside the processes of the application that holds them,
+  in the process square so they read as the same kind of thing, with a lighter fill and
+  the dashed outline the placeholders already use: what is drawn is not running. The
+  fill is lighter rather than merely different — its first version was a warm tone of
+  exactly the same brightness as a deployed process, which on a projector or in print
+  left the dash doing all the work. They
+  claim nothing about running — no version, no instances, no status, and they can
+  never make an application look worse — and their only edge is the one that says
+  which application holds them, because a draft's call activities are a plan and
+  drawing them would put an intention on the canvas in the same ink as the facts.
+  A draft opens in the Modeler, where it exists, rather than in Operations, where it
+  does not. Off by default because an estate holds several drafts per deployed
+  process, and a landscape that collapsed to applications on account of undeployed
+  diagrams would be a worse picture than one that leaves them out; a saved view
+  remembers the switch, and an exported image says in its stamp that the drafts are
+  in it. Neither the ArchiMate nor the C4 export carries them, and each says so in
+  its declared loss: those documents describe a system that exists.
+
+- **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
+  library now opens its Open Exchange Diagram views on a read-only `diagram-js`
+  canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and
+  the same canvas/properties/problems frame as the BPMN and DMN editors
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)).
+  Selecting an element or relationship shows its standard type and identifier;
+  switching views projects the same reusable model elements into their stored
+  positions. The XML remains canonical and byte-preserved: viewing issues no
+  writes, while export remains available beside the canvas.
+
+- **A Jira connector.** Atlassian Jira is a first-class connector kind
+  ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
+  `<atlas:jiraConnector connector operation …>` performs one issue-tracker operation
+  against a server-registered Jira instance, off the processor loop and after fsync like
+  every other connector. Seven operations cover the loop a process actually runs —
+  `create-issue`, `get-issue`, `update-issue`, `transition-issue`, `add-comment`,
+  `assign-issue` and `search` (JQL) — and every authored value is literal-or-FEEL,
+  evaluated over the variables the task sees.
+
+  What it saves is the four things a REST task had to do by hand: the URL, the auth
+  block, Jira's nested body shape (`{"fields":{"project":{"key":…}}}`), and knowing that
+  a transition and an assignment are sub-resources at all. A transition may be named by
+  the button a person reads in Jira — the connector resolves its id first, so the model
+  is not pinned to one workflow configuration — a search follows Jira's paging and hands
+  back the issues rather than one page of an envelope, and an extra field keeps the JSON
+  shape its FEEL value had, so `labels` stays a list and `priority` an object.
+
+  The site URL and the credential live in the managed connector store and the vault, so a
+  move from a test Jira to production is a Console edit rather than a redeploy. Two
+  credential shapes are accepted and neither needs a flag to say which it is: `{email,
+  apiToken}` is Jira Cloud (HTTP Basic, the way Atlassian documents an API token) and
+  `{token}` a Data Center personal access token (bearer). The same fact decides how an
+  account is addressed when assigning an issue — `accountId` on Cloud, a username on Data
+  Center — so a model never has to know which product it is talking to. The transport is
+  Jira's REST API v2, which both products serve and which takes a description as a
+  string; v3 would make every model build an Atlassian Document Format tree to write one
+  sentence. Authored via a first-class **Jira Connector** service-task type in the
+  Modeler.
+
+- **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job
+  handler only ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)), which is the
+  arrangement [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) exists to end: a
+  login, a create and a logout against somebody else's ITSM host, on the engine's
+  single-writer loop. It now has the same split every offloaded kind has
+  ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md)) — the engine resolves the task,
+  because only it has the compiled process and the scope chain, and what travels is the
+  connector's *name*, the form and the evaluated field values. There is nowhere in that
+  payload to put a base URL or a password.
+
+  `atlas worker --connector remedy` serves the kind from its own environment
+  (`ATLAS_REMEDY_CONNECTORS`, plus `ATLAS_REMEDY_<NAME>_ENDPOINT`, `_USERNAME` and
+  `_PASSWORD`), and a worker Atlas supervises is handed that configuration at spawn out of
+  the connector store and the vault — so a Helix instance added in the Console is served
+  without anything set by hand. A connector with no endpoint, or whose credential bundle is
+  missing or half-filled, is left out rather than handed over incomplete: a named instance
+  missing a field makes the worker refuse at startup, which would take down every other
+  kind it serves. A worker holding no instance at all parks Remedy tasks instead of leasing
+  and failing them.
+
+  **Atlas runs that worker itself, by default** (ADR-0192). The kind
+  was opt-in only for as long as there was no worker to hand the credentials to; with the
+  handover built, that reason is gone, and a ticket create leaves the engine's loop on every
+  installation rather than only where somebody moved it by hand. **Nothing needs to be done
+  to upgrade** and nothing changes in any model — the same connector, built from the same
+  three values, resolved in a different process — and `--in-process-connectors` returns the
+  old arrangement wholesale. The payoff is an AR System reachable only from inside a
+  customer's network: a worker sitting there can serve it, and the service account can live
+  only in that worker rather than in the engine.
+
+- **A web-scrape task can read an RSS or Atom feed.** The web-scraping connector
+  ([ADR-0118](docs/adr/0118-web-scraping-connector.md)) shipped with exactly one way to
+  read a document: a CSS selector over static HTML, yielding an array of strings. It now
+  carries an explicit `format="html|rss|atom"` and an optional `maxItems="N"`
+  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)). In a feed mode one entry
+  arrives as one object — `title`, `link`, `description` and `published`, and all four
+  keys are always there — so a later step addresses `=schlagzeilen[1].link` instead of
+  zipping four unrelated arrays back together. A field the source omits is empty; a
+  publication date is passed through as the publisher wrote it, because reformatting it
+  would turn a source value into an Atlas interpretation.
+
+  **The format is model intent, and it is decided at deployment.** Atlas does not
+  inspect the response to pick a parser. Feeds are routinely served as
+  `application/xml` or worse, and a URL that answers differently after a redirect would
+  otherwise silently change the *shape of a process variable* — exactly the runtime
+  interpretation the compile-don't-interpret invariant exists to prevent. What the
+  authored format does change is the Accept header the fetch sends, which is content
+  negotiation, not detection.
+
+  **A misleading combination is refused rather than half-ignored.** A feed mode with a
+  CSS `selector` or an `attribute` fails at deploy, as do an unknown format and a
+  negative or non-numeric `maxItems`. `maxItems` cuts after extraction in document
+  order — the first N selector matches, or the first N feed entries.
+
+  **Nothing about an existing model changes.** `html` is the default and no bound is
+  the default, so a web-scrape task authored before this returns the same `[]string` it
+  returned before. The trade-off worth knowing when you write a new one: the element
+  type of the result variable now depends on the authored format — strings for HTML,
+  objects for a feed — and Atlas has no static variable schema to check that against, so
+  the Modeler says which you get and this note says it too.
+
+  Nothing moved onto the engine to make this work: the fetch and the XML decoding happen
+  on the web-scrape worker, after fsync, and a document that will not decode as the
+  authored format fails the job and retries like any other scrape. Authored in the
+  Modeler through a **Format** choice on the Web Scraping Connector, which hides
+  Selector and Attribute in the feed modes because the compiler rejects them there.
+  [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn) is the
+  end-to-end example: a news feed into a process variable, filtered by a FEEL script,
+  routed on by a gateway.
+
+  Deliberately out of scope for this slice, and worth knowing before you plan around it:
+  extension namespaces such as Dublin Core and Media RSS are ignored, and there is no
+  conditional request (`ETag`/`If-Modified-Since`), no feed discovery from a page's
+  `<link rel="alternate">`, and no cross-run deduplication. A scrape stays a read-once
+  GET; what has already been seen is the process's business, not the connector's.
 
 ### Changed
+
+- **`atlas_list_instances` (MCP) returns a page, not a bare array.** It answered with
+  a plain JSON array, which cannot say it is a *page* — and the endpoint behind it caps
+  at 1000 rows and flags the cut in a header the body does not carry. An agent handed
+  the array alone read the first page of three hundred thousand instances as though it
+  were the whole population, and acted on it.
+
+  It now answers with `{items, truncated, nextCursor}` — the envelope
+  `atlas_list_tasks` already used — and takes a `before` cursor to resume. The two list
+  tools are one protocol now: hand `nextCursor` back as `before`, never parse it. A
+  `truncated` page without a `nextCursor` means there is more but this listing has no
+  position to resume from; narrowing it (`process` plus a single `state`) is what gets
+  you one. **Breaking** for anything that parsed the array directly — read `items`.
+
+- **The object diagram is drawn on diagram-js now, so it zooms and pans.** The
+  instance's objects and the lines between them were built here as SVG strings, with a
+  layout of their own, and the cost showed up as things a reader expects and does not
+  find: a diagram bigger than the panel could only be scrolled, nothing could be
+  clicked, and there was no way to make it fit. That is word for word the complaint
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) made about the *class*
+  canvas a fortnight ago, one altitude down — the look was downstream of the
+  substrate — and it is the follow-up
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) named.
+
+  So the drawing moved onto the same shared bundle the class canvas and Panorama
+  already use, as `AtlasCanvas.uml.ObjectCanvas`, and the diagram gained zoom, pan,
+  selection and the same three controls — the same icons, the same step, the same
+  corner — that the two canvases beside it carry. Zooming a diagram is the same act
+  on all three surfaces, and a near-miss between them is worse than any one of the
+  choices on its own.
+
+  **Nothing about the notation changed, deliberately.** An object still reads as its
+  label underlined, its state in brackets, its members as `name = value` with the
+  business key marked and an absent member saying so; a containment still carries the
+  composition diamond and a key-resolved reference is still dashed and bare, because
+  those are different claims. The three e2e tests that state all of that were left
+  exactly as they were and still pass — which is the evidence the port changed the
+  substrate and not the picture. One detail did have to be put back deliberately:
+  diagram-js draws in insertion order, so the lines came out *over* the boxes where
+  they had always passed behind them. They are inserted ahead of the shapes now, in
+  their own order, and both halves of that have a test.
+
+  Two things are new rather than moved. The canvas **survives a re-render**: selecting
+  an element re-renders the whole inspector, and a live instance does it again on
+  every poll that brings new frames, so rebuilding the drawing each time would have
+  thrown away the zoom and the pan the reader had just set — the two things the port
+  exists to give them. And the diagram is **read-only on purpose**: the graph is
+  derived by the server, so there is no document to write back to and a box dragged
+  here would be put back by the next refresh. Move, resize and connect are absent
+  rather than refused, because a canvas that offers a gesture it silently discards is
+  worse than one that does not offer it.
+
+  Where a box *sits* is still decided in the browser, and that is not an oversight:
+  the server owns what relates to what because that is model semantics, and layout is
+  drawing. It just lives beside the renderer that uses it now instead of in a
+  twelve-thousand-line view file. The bundle grew 4,476 bytes for the whole notation
+  — one copy of diagram-js is the expensive part, and it was already paid for.
+
+- **The training nuggets show the real Atlas, not a drawing of it.** The stages
+  shipped as markup built from the handbook's own theme tokens, and the reasoning
+  for that was sound as far as it went: no binary weight, both colour schemes, both
+  languages in one file. What it missed is what a nugget is *for*. Somebody watching
+  one is trying to recognise the screen later, and a drawing has to guess the layout
+  — this one guessed a sidebar where Atlas runs its navigation across the top, and
+  drew the app switcher as a grid popup where the product opens a drawer. A learner
+  who trusted it would look in the wrong place twice before finding anything.
+
+  Every scene is now a capture of the running product: the Modeler with a real BPMN
+  model on the canvas, Operations showing five instances at once with their token
+  counts and their actual variables, the task inbox with its four filters, the
+  worker list, the audit log, the landscape. Twenty WebP images under `web/nuggets/`,
+  about 855 KB in total, fetched only when a nugget is played — opening the chapter
+  still costs nothing.
+
+  **A modelling error went out with the drawn version and is fixed by the same
+  change.** Two scenes drew an exclusive gateway with a single outgoing flow, which
+  is not a gateway at all: it branches or it is a waste of a shape. That is a poor
+  thing to teach anywhere and worse in material about BPMN. The shots carry a model
+  where the gateway genuinely splits — `Summe > 100 EUR?` into a human approval on
+  one side and straight through on the other, then a parallel gateway for picking,
+  shipping and invoicing — and the modeller nugget now says out loud that a gateway
+  with one exit would not be one.
+
+  Highlights and the cursor are percentages of the *image* rather than of the stage,
+  which is what makes them stable: an image keeps its aspect ratio at every width,
+  so a ring drawn on the Deploy button stays on it from a phone to a desktop. The
+  measurements are not eyeballed — the capture script reads each target's bounding
+  box out of the live page and writes it into the scene.
+
+  `e2e/nuggets.spec.mjs` follows the new failure modes: a scene naming an image that
+  is not shipped, a shipped image no scene uses (dead weight in a `//go:embed`
+  binary), a highlight running off the frame, a tap with no cursor, and every
+  referenced screenshot actually being served. Each was written by confirming it
+  fails against exactly that mistake.
+
+  The caption moved out of the picture and under it. Overlaying it looked tidier and
+  ate the bottom of every shot — which is where Atlas prints the legend explaining
+  the token markers, so the one scene that most needed its whole picture was the one
+  losing it.
+
+- **Every shipped model now carries its own diagram.** Four of them did not:
+  `order-fulfillment`, `galsync`, `entra-create-account` and `pruefe-datensaetze` shipped
+  with no `<bpmndi:BPMNDiagram>`, and Atlas generated one on deploy. That is enough to run
+  a model and not enough to read one — which stopped being a detail the moment the
+  handbook began rendering every example on its card, because a generated layout is what
+  the reader then sees first.
+
+  They are laid out by hand now, to the conventions in `AGENTS.md`: one straight main
+  axis, every branch in a lane of its own, orthogonal waypoints that go around boxes
+  rather than through them, and every gateway exit labelled with its answer — which meant
+  naming six branches in `galsync` and two in `pruefe-datensaetze` that had no name at
+  all, so a reader could not tell which way "deleted?" went. The two subprocesses are
+  drawn expanded, because the branching inside them is the example; collapsed, all that is
+  left is a box that explains nothing.
+
+  Each was checked as a rendered picture and not only as a deploy, which is the only way
+  the two rounds of label collisions in `order-fulfillment` were ever going to surface: a
+  gateway label centred over its own branch line reads fine, the same label lying across a
+  task box does not.
+
+- **Three mechanisms the engine has always had now have an example.** Signal, escalation
+  and compensation were demonstrated by no scenario in `examples/` — only as isolated
+  patterns in the conformance gallery and the recipe chapter, which show *that* they work
+  and never *what they are for*. The handbook's mechanism matrix said so out loud. It no
+  longer has to:
+
+  - **`examples/mahnwesen/`** chases an unpaid invoice, and is the escalation example. Two
+    boundaries hang on the same subprocess and their difference is the whole business
+    logic: the message "payment received" **interrupts**, because the dunning run is then
+    moot; the escalation does **not**, because the run should finish *and* the owner
+    should be asked. The subprocess is not cosmetic — an escalation is caught on the
+    enclosing activity, so without one there is none. Its deadlines are start variables,
+    since `<timeDuration>` takes FEEL (ADR-0055): the same process runs in seconds instead
+    of weeks.
+  - **`examples/preisaenderung/`** recalculates every open quote when the price list
+    changes, and is the signal example — deliberately paired with the one above, because
+    the pair is the lesson: a **message** hits exactly one instance, the one whose
+    correlation key matches; a **signal** hits **all** that are waiting and does not know
+    how many that is. Verified against a live server: three waiting quotes, one instance
+    of the thrower, three recalculated quotes.
+  - **`examples/reisestorno/`** books a flight and a hotel, has the payment declined, and
+    takes both back — the compensation example. An error jumps out of an activity that
+    just went wrong; a compensation undoes activities that completed *successfully* long
+    ago, which is the case a rollback is actually about. It unwinds backwards, and the
+    handlers hang off an `<association>` rather than a sequence flow — the proof being
+    that a run with `zahlungOk: true` carries no cancellation variables at all.
+
+  All three are framed for the readers the examples were thinnest on: a small business and
+  a private person. All three run with no worker, no credential and no network.
+
+  A fourth, **`examples/umzug/`**, is there for the audience alone rather than a
+  mechanism: organising a move, because a workflow engine reads as something for
+  corporations until somebody shows it doing a private person's Saturday. It happens to be
+  the only model in the tree that fires a timer on a **computed date** rather than after a
+  duration — and its two trip hazards are documented because both actually happened while
+  it was being built, and both produce the same incident: a process variable is persisted
+  as JSON and comes back a string (so the date has to be parsed again), and a zone id
+  where the timer needs an offset.
+
+- **The handbook now shows every example Atlas ships, and what it takes to run one.**
+  Thirty scenarios live under `examples/` — a shopping cart that computes a total in
+  FEEL, an exam with a hard deadline, a CSV checked row by row, a directory recertified
+  against the HR system, a Google Form whose every new row becomes a case. The handbook
+  showed two of them. `examples/README.md`, the only overview there was, is written for
+  developers, is half in English, and was missing five examples entirely, because nothing
+  checked.
+
+  The new **Beispiele** chapter describes all of them in both languages and on two levels
+  at once: what the scenario is *for* — who has the problem, what they get out of it — and
+  how it is *built*, down to the trap the reader is about to walk into (`query-one`
+  returns null and fails on two hits; a Sheets cell is text, so comparing it with a number
+  is `null` in FEEL; a Jira user search without the browse permission finds nobody
+  *without failing*). Each card renders the real diagram, and installs the real artifacts —
+  application, decision, forms, processes, publish — into the reader's own instance in one
+  click. Nine of them then start with one more click, most running to an end event with no
+  worker configured at all.
+
+  Alongside it, **Worker in Betrieb nehmen**: a runbook per worker type for the half that
+  happens outside Atlas and is where commissioning actually fails. The Google service
+  account and the sharing step without which a document you have open in front of you
+  answers 403; the Entra app registration with the two application permissions that cover
+  a joiner/mover/leaver flow and the one to remove if it is there; the Atlassian API token
+  and the global permission an assignment needs; the AD service account that should be
+  delegated on an OU rather than made a domain admin; the SQL user that should be granted
+  on views. With, for each, the symptom that tells you what is missing — a parked token
+  with no incident is a worker that is not running, an empty search result is usually a
+  permission.
+
+  The models are not copied into the page. They travel as one generated asset,
+  `api/web/examples-catalog.json`, which `go test ./examples -update` builds from the
+  files; a plain run fails when the served catalogue has drifted from them, when an
+  example has no card, when a card names an example that does not exist, or when two
+  examples would ship the same form id and installing the second would silently overwrite
+  the first one's form. That last one was not hypothetical: `onboarding` and
+  `entra-onboarding-selfservice` both shipped a form called `onb-start`, and the
+  self-service pair is now `eonb-start`/`eonb-freigabe`.
+
+- **The two diagram-js canvases ship as one bundle.** The ArchiMate canvas
+  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)) and
+  the UML class canvas ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md)) each
+  carried their own copy of the library, because the second arrived later and merging
+  them then would have meant touching Panorama's shipped canvas for a saving that was
+  real but not urgent. ADR-0237 named the merge as the follow-up; this is it.
+
+  Both now ship as `api/web/vendor/canvas/atlas-canvas.js` under one global with a
+  namespace each — 123,109 bytes where the two were 211,888, and one cache entry rather
+  than two. Neither canvas's own code is touched: two entry files became two modules
+  under one entry that exports both. The honest cost is on the other side: a page that
+  opens only one of the two now carries both renderers, some 15 KB more than its own
+  bundle was — the right way round, since the renderers are the small part.
+
+  Loading it moved into one place (`api/web/canvas-bundle.js`), because two views
+  fetching the same file is new: whichever is opened first fetches it and the second
+  gets what is there, rather than a second `<script>` for the same bytes.
+
+- **Runtime badges no longer sit on the names they are pointing at.** The Operations
+  views annotate a shape with badges — token counts, an incident marker, a link to a
+  waiting task, a decision to inspect — and each has its own corner, which is how an
+  operator learns to read them without reading them. The corners are unchanged. What was
+  wrong is that a corner meant *inside* the shape, and inside the shape is where the words
+  are.
+
+  Measured in a browser on an ordinary model, the old placement covered 69 of the 74
+  pixels of a line of a business rule task's name with the decision badge, and put the
+  token count on the captions of both the start event and the gateway. Two different
+  causes: a task's caption is drawn inside its box and a three-line name leaves about ten
+  pixels clear, which a 20px badge does not fit in; and an event's caption is not inside it
+  at all but centred underneath, four to five times wider than the circle — exactly where a
+  badge anchored to the bottom corner lands, because diagram-js's `bottom` and `right`
+  overlay keys position a badge's top-left corner rather than anchoring its far edge.
+
+  A badge now hangs outside the shape, on the side its caption is not: above and below for
+  a task, above only for an event, a gateway or a data object, whose name is drawn
+  underneath them. And it is the size of a count rather than of a sentence — a pill wide
+  enough for "⚠ 2 incidents" is 90px, which is most of a task and three times an event, so
+  two of them collide with each other wherever they are put. The incident marker, the task
+  link and the decision button are a glyph plus a count now; the words they used to spell
+  out are their tooltip and their accessible name, and the thing they name is listed in the
+  panel below the diagram either way
+  ([ADR-0252](docs/adr/0252-runtime-badges-clear-of-labels.md)).
+
+- **A count on the diagram is grouped in thousands.** Reported from a running process:
+  badges reading `25864`, `50002`, `23436`, `2428` around the shapes of one diagram.
+  Every number was right and none of them was legible — a five- or six-digit run is read
+  by counting digits, and two of them side by side cannot be compared at a glance at
+  all, which is the only reason the counts are drawn on the shapes instead of listed in
+  a table.
+
+  Every count the runtime views print now groups in threes — `25 864`, `50 002`: the
+  live view's three token badges and their tooltips, the replay's execution-count
+  badges, the incident badges, the Playground's run and heat-map badges, the count pills
+  in those views' headers, and — same engine counters, same problem — the Starmap's
+  running total on a node and its running/finished tally in the panel. Anything under a
+  thousand is untouched; a separator on `999` is noise in a pill that small.
+
+  The separator is a **narrow no-break space** (U+202F), not a locale's own mark.
+  A process is modelled in one country and operated from another: `25.864` is
+  twenty-five thousand to one reader and twenty-five point eight to the next, `25,864`
+  the same disagreement mirrored, and a badge has no room to say which it meant. A space
+  is the one grouping mark no locale reads as a decimal point (ISO 31-0), and the
+  no-break variant keeps a badge on one line at any count. `toLocaleString()` was the
+  other candidate, and it is wrong here for the reason it looks right: it would make the
+  separator a property of whoever is looking, so the same screenshot pasted into a
+  ticket would say something different to the person who received it. The whole choice
+  is one constant in `api/web/numfmt.js` — a house that wants the Swiss `25'864` changes
+  it there, in one place, and every badge follows.
+
+- **Google Sheets runs on a worker, like everything else.** It shipped with an
+  in-engine handler and no supervised form, so the Modeler's properties panel showed it
+  as the one Worker Type reading IN-ENGINE while the twelve around it said otherwise —
+  and a fresh install called Google, with a service-account private key, from the
+  engine's run loop. ADR-0164 has one exception left and it is the FEEL script task;
+  this was not meant to be a second.
+
+  The engine now hands each configured Google identity to the worker it supervises
+  (`ATLAS_GOOGLESHEETS_*`, the whole credential bundle as one opaque value, the way
+  SharePoint and the SQL kinds do), the `worker` package serves the kind, and
+  `googlesheets` joins the default offload set. The in-engine form stays as the opt-in
+  `--in-process-connectors` fallback every managed kind keeps.
+
+  The guard that should have caught this was a canary asserting the *opposite* — that
+  some managed kind was still unprovisioned, so a related check could not become a
+  tautology. Google Sheets was the last one. It is now inverted: every managed Worker
+  Type must be handed to its supervised worker, so the next kind added without that
+  fails a test instead of a properties panel.
+
+- **The live diagram tells a token that got through from one that was cancelled — and
+  draws a deferred choice once.** An element on the runtime overlay carried two numbers:
+  green for the tokens live on it, gray for the ones that had "passed through". Gray was
+  `visits − tokens`, and a visit is recorded on *activation*, so it counted every token
+  that had arrived and left — whether it completed and moved on, or was terminated: a
+  losing event-gateway branch, an activity a boundary event interrupted, a scope torn
+  down.
+
+  On an **event-based gateway** ([ADR-0110](docs/adr/0110-event-based-gateways.md)) that
+  was not imprecision but a wrong answer, because cancellation there is not an exception
+  — it is half of every outcome. The gateway arms *all* of its branches and completes
+  itself, so a waiting instance holds a token on each branch and none on the gateway,
+  and every decided race activates both branches and leaves both. The two branches
+  therefore showed the *identical* pair of numbers whatever had actually happened — on
+  one production diagram, `10 941` gray and `50 002` green on the message branch and the
+  same on the timer branch, which reads as "these two events arrive equally often" and is
+  not what either number means.
+
+  Three things changed, none of them in the engine's semantics. A terminated element
+  instance now bumps a retained counter of its own, per instance and per definition,
+  mirroring the visit counters beside it ([ADR-0022](docs/adr/0022-element-visit-history.md),
+  [ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) — a write-only merge on the
+  fold path, derived from the committed event alone, so replay rebuilds it. The overlay
+  splits the old gray badge into **gray = completed here and moved on** and **amber =
+  cancelled here**, so which event actually arrived is now readable at the branch itself.
+  And an event gateway's race is drawn as the one wait it is: the green count moves onto
+  the **gateway**, and its armed branches carry a dashed green outline and no live count
+  of their own — what that outline means is said once, in the live view's legend, which
+  shows the entry only for a diagram that has an event gateway in it. A catch joins its
+  gateway's group only when the gateway is its sole way in, so one reachable from
+  elsewhere as well keeps its own count.
+
+  **The history is reconstructed, not started from zero.** Terminations were never
+  counted before this, and a missing one is not a neutral gap: gray is *derived* as
+  visits − live − terminated, so every uncounted cancellation reads as a completion. On
+  a real event gateway with 70 563 visits and 20 561 decided races that was 19 881 old
+  cancellations sitting in gray, making both branches look like near-equal winners —
+  precisely the misreading this change is about. The lifecycle trail
+  ([ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) has recorded every one of
+  them all along, so the counters are rebuilt from it once at startup, alongside the
+  other one-time counter seedings. It tops each instance up to what the trail says
+  rather than summing, so a store that already ran the counting build is corrected
+  instead of doubled. Two limits, stated rather than hidden: an instance whose history
+  has been purged has no trail left to count, and a migrated instance's older
+  cancellations land on the version it runs under now.
+  ([ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md))
+
+- **A data object can be pointed at a class you can see.** The **Type** of a data object
+  in the Modeler is the link the whole information model turns on — it is what lets two
+  processes agree that their `order` is the same kind of thing, and what a write to a
+  member of it is checked against. It was made by remembering a class name and typing it
+  into a box labelled *optional*, with the modelled classes hidden in a `<datalist>` that
+  nothing on the field mentioned.
+
+  The field now offers **the classes this application models**, grouped by the model they
+  live in and each carrying its business key — the fact that tells two similarly named
+  classes apart, and the thing you are actually trying to recall. It fills a free-text
+  field rather than replacing it: a diagram is routinely drawn before the vocabulary it
+  names exists, and typing a class nothing models yet has to stay possible
+  ([ADR-0230](docs/adr/0230-process-information-model.md)).
+
+  Below it, **the class itself is shown** — its kind, its members with their types and
+  cardinalities, and its business key marked exactly as the class canvas marks it — with
+  a link that opens the model in a new tab. Reading a name back tells you nothing about
+  whether it is the right class; its business key does, and that was one application of
+  the console away.
+
+  And when the type names a class nothing models yet, **Model it now** adds it where it
+  belongs instead of sending you off to do it by hand. It is added as a business object
+  with no attributes and no business key: those are the author's to choose, and guessing
+  them would be worse than leaving them open.
+
+- **A data object's value opens as formatted JSON.** In an instance's **Data** tab, a
+  structured value showed as `{3 fields}` and the whole of it was reachable only as a
+  tooltip — unreadable past a few lines, impossible to scroll, select or copy from, and
+  absent altogether on a touch device. The summary is now a button, and it opens the
+  same pretty-printed, syntax-highlighted window the **Variables** tab opens, with the
+  same Copy JSON. A data object is variable-shaped by design
+  ([ADR-0053](docs/adr/0053-first-class-data-objects.md)), so the two tabs
+  should answer "what is actually in there" with one surface.
+
+  Every write in the state trail opens too, and each window says which write it is
+  showing — a trail of four `{3 fields}` is unreadable if every window is titled the
+  same. Scalars are left alone: a string is already whole in its cell, and a button
+  around it would promise a second reading that does not exist.
+
+- **The class diagram's properties panel is the Modeler's panel.** Selecting a class, a
+  data store or a relationship under **Data › Information model** now gives you the same
+  panel the BPMN Modeler does: a header naming what is selected — its kind in small
+  type, its own name in bold, a type chip beside it — and collapsible property groups
+  below, each with a chevron and a filled dot when it carries content. Fields look like
+  fields do everywhere else in Atlas.
+
+  It is the same panel because it is the **same code**, not a lookalike. The Modeler had
+  grown the shape first, as a function inside `editor.js` that turns a rendered panel's
+  sections into groups. That is exactly the kind of thing worth having once: a copy
+  drifts from its model the first time either side is touched, and then two panels a
+  person uses in one sitting disagree about what a group is. It moved to
+  `api/web/pgroup.js`, and both panels call it.
+
+  What the two panels do *not* share is which groups start open, because the honest
+  answer differs. A BPMN element has a dozen sections and opening one of them is the
+  point, so only **General** starts open. A class has three, and one of them is its
+  attributes — the attributes *are* the class, so hiding them behind a click on every
+  selection would be worse than having no groups at all. So the class panel opens
+  everything, and collapsing is there for when a long attribute list is in the way.
+
+- **Central decisions run on a worker now — and the last in-process kind is gone**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 7).
+  A call to a decision service somebody else operates no longer happens on the loop
+  that owns the partition's state. `temis` joins the kinds Atlas offloads and
+  supervises by itself, which empties the record's "owed a worker half" table: every
+  kind that reaches another system now has one.
+
+  This slice did not copy the six before it. A central decision is a **business rule
+  task**, and its completion carries something no other job's does — a durable
+  evaluation record with the inputs, the outputs and the service's trace, retained so
+  an operator can see how a decision was made (ADR-0066). Nothing in the
+  engine↔worker protocol could carry one, so the completion contract widened: a
+  worker may now report the evaluation it performed, and `atlas worker` sends it.
+
+  The division is the part worth knowing. The worker is believed about the
+  **evaluation** and about nothing else: which element instance it belongs to is
+  stamped by the engine from the job the worker held a lease on, so a report cannot
+  attach itself to a task it did not run. A completion *by hand* never carries one at
+  all — an operator override is recorded as an intervention (ADR-0159), and letting
+  that path write an evaluation would put a decision nobody made into the audit trail.
+
+  What has **not** changed, though it looks like it should have: the record's
+  provenance. A central decision's trace was always the remote service's account of
+  its own evaluation. Offloading moved which process makes the call, not who authored
+  the trace.
+
+  `--in-process-connectors` keeps working. The record originally said it would become
+  an error once the table emptied; that promise contradicted its own driver that no
+  running deployment may break, and the amendment explains which of the two was
+  wrong.
+
+- **SCIM tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 6).
+  Creating, reading or searching a user at an identity provider no longer happens on
+  the loop that owns the partition's state. `scim` joins the kinds Atlas offloads and
+  supervises by itself.
+
+  It is REST's slice a third time, and the collector says so: `scimWorkerEnv` is the
+  third caller of one function rather than a third copy of it, and a test now deploys
+  a REST, a SOAP and a SCIM task together and holds that each worker gets its own
+  kind's secret and none of the others' — the failure a shared implementation makes
+  easy, and one that every per-kind test would pass.
+
+  One choice is deliberate: the payload carries the **authored** operation, base URL,
+  resource, id and filter, not the HTTP method and URL derived from them. A parked
+  job's payload is something an operator reads, and "operation: create, resource:
+  Users" answers what they came to ask where "POST .../Users" makes them work
+  backwards — and the derivation's own refusals (a `get` with no id would otherwise
+  become a list of every user) belong in `Run`, where both halves reach them.
+
+  One kind remains in-engine for want of a worker: `temis`.
+
+- **SharePoint tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 5).
+  Creating a list item — a token fetch and an HTTP round trip to Microsoft Graph — no
+  longer happens on the loop that owns the partition's state. `sharepoint` joins the
+  kinds Atlas offloads and supervises by itself.
+
+  It is Jira's handover with a document library in place of an issue tracker
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md)): the task names its instance and
+  nothing more, because the Graph endpoint and the OAuth bundle are a worker record and
+  a vault secret — a URL is half a credential — so `sharepointWorkerEnv` renders the
+  instances the engine has configured.
+
+  One difference is deliberate: the credential is handed over as the **whole bundle**,
+  one opaque value, rather than field by field. The bundle has no public half worth
+  splitting — tenant and client ids sit in the same vault secret as the client secret
+  and the refresh token — and splitting it would mean deciding the grant's shape a
+  second time, where getting it wrong yields a worker that fails every job instead of
+  one that will not start. That is the SQL kinds' arrangement for the SQL kinds' reason.
+
+  An instance whose bundle does not resolve is left out rather than handed over empty,
+  so one unfinished record cannot stop a worker that also serves other kinds.
+
+  Two kinds remain in-engine for want of a worker: `scim`, `temis`.
+
+- **SOAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 4).
+  A call to somebody else's web service no longer happens on the loop that owns the
+  partition's state. `soap` joins the kinds Atlas offloads and supervises by itself.
+
+  It is REST's slice with an envelope around it, and that is the whole argument: the
+  endpoint, the SOAPAction and the body are model data and travel resolved with the
+  job, while the credential behind the task's `authSecret` is a vault **reference**
+  that is resolved where it is used. `soapWorkerEnv` is `restWorkerEnv` with a
+  different job type — the two collectors are now one function called twice rather
+  than two that drift, and a test holds that neither picks up the other kind's tasks.
+
+  Both halves go through one `soap.Resolve`/`soap.Run` pair; the in-process handler
+  was rewritten onto it, and the result travels through `soap.Result` so a task naming
+  no result variable completes with nothing rather than with an empty object.
+
+  Three kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `temis`.
+
+- **LDAP tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 3).
+  A bind, a search or a modify against a directory somebody else operates no longer
+  happens on the loop that owns the partition's state. `ldap` joins the kinds Atlas
+  offloads and supervises by itself, so a fresh install gets it without configuring
+  anything.
+
+  It is Active Directory's handover exactly (ADR-0182), because the two kinds share a
+  shape: an LDAP task authors its own server and bind DN, so those travel with the
+  job, while its bind password and client certificate are vault **references** — and a
+  reference is resolved where it is used. `ldapWorkerEnv` renders the references the
+  deployed models actually name, resolved through the vault, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Both flavours are
+  covered: a certificate reference nothing answers to is a bind that cannot present an
+  identity, which is no better an outcome than a missing password.
+
+  The worker keeps the connection pool ADR-0154 introduced, so relocating the work
+  does not give back the reason binds were pooled in the first place. And both halves
+  now go through one `ldap.Resolve`/`ldap.Run` pair — the in-process handler was
+  rewritten onto it — so an offloaded search and an in-engine one cannot drift about
+  what an LDAP task means.
+
+  Four kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `soap`,
+  `temis`.
+
+- **A non-interrupting message or signal boundary event now fires every time, not once**
+  ([ADR-0236](docs/adr/0236-repeating-non-interrupting-boundary-events.md),
+  refining [ADR-0040](docs/adr/0040-boundary-events.md)). Non-interrupting is how a model
+  says *reminder*: fire beside the host activity and leave it running. For as long as the
+  host runs, every occurrence should fire it again — and a recurring **timer** boundary
+  already did ([ADR-0054](docs/adr/0054-date-cycle-timers-for-catch-and-boundary.md)),
+  as does a non-interrupting event-subprocess trigger
+  ([ADR-0082](docs/adr/0082-event-subprocesses.md)).
+
+  A **message** or **signal** boundary did not. Taking its outgoing flow completed the
+  boundary's element instance, and its subscription retired with it, so the second message
+  correlated to nothing: no incident, no log line, nothing for the sender to see. Two
+  constructions a modeller reasonably reads as interchangeable disagreed about whether
+  "non-interrupting" means "repeatedly".
+
+  It now fires the way a recurring timer boundary fires — take the outgoing flow, re-open
+  the subscription, never complete the element instance. Staying armed rather than
+  completing and arming a replacement is deliberate: a replacement is only a queued
+  command for the rest of the batch, and a boundary instance is counted against its
+  scope, so a host completing in that window would leave an armed instance holding open a
+  scope that has already drained.
+
+  This changes behaviour for deployed models: one that relied on hearing the message once
+  will now hear it each time. The old behaviour was a defect and gave no way to depend on
+  it deliberately; a model that wants exactly one firing has the interrupting flag, or a
+  guard on the reminder branch. The escalation and conditional boundary kinds are
+  untouched — they arm inert and are *found* rather than waiting on a subscription, which
+  is a separate question.
+
+- **clio tasks run on a worker now**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md), slice 2).
+  Writing an event, folding a subject's state, reading its history: three round trips
+  to an event store somebody else operates, all of them on the loop that owns the
+  partition's state. clio joins the kinds Atlas offloads and supervises by itself.
+
+  It is Remedy's handover with an event store in place of an ITSM instance — the
+  endpoint is a connector record, the token a vault reference behind it, and
+  `clioWorkerEnv` renders the stores the engine has configured. One difference is
+  deliberate: a store with **no** token is still handed over, because clio can be
+  reached without one and dropping it would leave a working instance unserved.
+
+  A clio write also carries something no other kind does — the event **body**, which is
+  the task's input mappings or the variables it sees. That is engine state, so it is
+  resolved in the engine and travels in the payload beside the idempotency key that
+  de-duplicates a retry. Both halves now go through one `clio.Run`: the in-process
+  handlers were rewritten to call it, so an offloaded write and an in-engine one cannot
+  disagree about what a clio task means.
+
+  Five kinds remain in-engine for want of a worker: `sharepoint`, `scim`, `ldap`,
+  `soap`, `temis`.
+
+- **REST and LDIF tasks no longer run on the engine's own loop**
+  ([ADR-0233](docs/adr/0233-in-process-connectors-refused.md),
+  finishing [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md)). ADR-0164 decided
+  two years ago that a side-effecting service task belongs on a worker, and then chose
+  deprecation over a ban for one stated reason: a connector task could not run on a
+  worker yet. ADR-0168 closed that, and the worker halves have landed kind by kind
+  since — but the *default* never moved, so a fresh install still made outbound HTTP
+  calls from the processor's own process. `rest` and `ldif` now join the kinds Atlas
+  offloads and supervises by itself.
+
+  REST needed what Active Directory needed: its endpoint travels with the job, but its
+  `authSecret` is a vault reference, and a reference is resolved where it is used — on
+  a supervised worker, a child process with no vault. The engine now renders exactly
+  the references its deployed models name into that child's environment, under the
+  `ATLAS_CONNECTOR_<REF>_TOKEN` names the worker already reads. Only what is deployed
+  travels: the running models' secrets, not the vault.
+
+  What is still in the engine is now a list rather than a condition — `clio`,
+  `sharepoint`, `scim`, `ldap`, `soap` and `temis` each need a worker half, one slice
+  each, and the record names them. Beside them stands the closed list of what stays
+  in-engine on purpose: FEEL, local DMN, the mockup task, timers, user tasks, and user
+  provisioning (which mutates Atlas's own store and has no endpoint to reach).
+  `--in-process-connectors` keeps working and now says at startup that it puts every
+  integration back on the run loop.
 
 - **Everything a person reads now says Worker.** The Console's *Connectors* page was
   renamed to *Workers* by an adapter that rewrote the rendered DOM after the fact
@@ -2539,7 +2389,416 @@ _Changed_ / _Removed_ for each version.
   Nothing in the model moved: the attribute is still `connector="…"` and the
   extension elements are still `<atlas:jiraConnector>` and friends.
 
+- **The Active Directory mockup is switched on in the Console now, not on the command line.**
+  [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md) gave the AD connector a mockup mode and put
+  the switch in the worker's environment. The reasoning — the operator owns this decision, not the
+  model — still holds; the ceremony did not. Since [ADR-0182](docs/adr/0182-ad-default-offload.md)
+  the AD worker is a child Atlas starts itself, so "set the variable" meant **restart the server**,
+  and restarting the worker from the Workers view did not help: it re-inherits the environment of
+  the running parent, where the variable is still absent. The switch that exists to make drafting
+  cheap cost an engine restart, and the person who most wants to flip it is the least placed to
+  take everyone else's instance down.
+
+  It now sits in **Console › Connectors**, on an Active Directory card beside the managed connectors
+  and the vault: a checkbox, an optional seed file, Save. The AD worker restarts holding the new
+  setting and Atlas keeps running — through exactly the rendering ADR-0182 already built to hand
+  that worker its bind passwords. The card also says which state it is in, which is a better answer
+  to "did that account really get created?" than reading a log.
+
+  **Nothing changes until somebody uses it.** No stored setting means the server's own
+  `ATLAS_AD_MOCK` keeps deciding, exactly as before. A stored one decides either way — a stored
+  "off" overrides an inherited "on", because a switch that says off while the worker still
+  simulates would be lying to the person who flipped it. The Console writes the same two variables
+  a hand-run worker reads, so a worker in another network is configured exactly as it was, and
+  there is no private channel between a supervised worker and its parent. The model still says
+  nothing about being mocked. See ADR-0193.
+
+- **The class canvas is a real diagram canvas.** **Data › Information model** now draws
+  on diagram-js — the same library the BPMN modeller runs on — so a class box has a
+  selection outline you can see, moves with the rest of what you selected, and stays put
+  when you type. Marquee-select a group of classes, drag the sheet to pan, scroll to
+  zoom, nudge a box with the arrow keys, and undo a move you did not mean with Ctrl+Z.
+
+  None of that was missing on purpose. The canvas it replaces was hand-rolled SVG plus a
+  pointer-drag, which is a diagram library with everything hard left out: no selection
+  model, no undo, no zoom, no keyboard. Writing those is not the interesting part of a
+  class diagram — how a class, a data store and the four association kinds are drawn is,
+  and Atlas still owns exactly that, plus which of them the subset permits between which.
+
+  The drawing is now **reconciled rather than redrawn**. The editor re-renders on every
+  keystroke, and a redraw would have thrown away the zoom, the selection and the undo
+  stack on each character — so an edit updates the shapes that changed and leaves the
+  view alone.
+
+  It edits locally, which is the one place it parts company with the Panorama canvas
+  beside it ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)). That canvas never
+  creates anything: the server owns the document and the view is re-read. An information
+  model is a working copy with an explicit **Save**, which is what lets you draw three
+  classes and two relationships and *then* decide — and what makes an undo stack mean
+  anything at all. The rules still refuse whatever the served subset refuses; they just
+  refuse it at the point of drawing rather than at the point of writing, and say the same
+  sentence either way.
+
+  Honest cost: the binary now carries **two copies of diagram-js**, one for each canvas.
+  Merging them into a single bundle that exports both viewers is the named follow-up in
+  the record; it was left out of this change so this change would not touch Panorama's
+  shipped canvas.
+
+- **Every vendored bundle is held to the checksum its own recipe records,** not just the
+  first one that was. `ATLAS-VENDORED.txt` says "do not edit this by hand" and records
+  the SHA-256 the documented rebuild produces; the guard that checked that named one
+  bundle, so a second one arrived uncovered. It now walks the vendor directories, which
+  is how it immediately found that the DMN Modeler bundle recorded no sum at all — a
+  hand-edit or a forgotten rebuild there would have been invisible. That sum is recorded
+  now.
+
 ### Fixed
+
+- **The What's New generator refuses a conflicted CHANGELOG instead of shipping both
+  sides of it.** `api/web/whats-new.json` is generated and committed, and
+  `.gitattributes` marks it unmergeable so git raises a conflict rather than
+  interleaving two generated files. The documented resolution is to take the merged
+  `CHANGELOG.md` and re-run the generator — but the two files change together, so at
+  that moment the CHANGELOG is usually conflicted too, and the generator read straight
+  past the markers: it looks for `- **bullets**`, and `<<<<<<< HEAD` is not one.
+
+  Both sides then became two entries in a feed that looked perfectly well-formed, and
+  CI's staleness check *passed*, because the committed file really was what the
+  generator produced from that source. Only a reader would ever have found out. Measured,
+  not assumed: a conflicted CHANGELOG produced a clean exit and a feed containing both
+  bullets.
+
+  It now refuses, naming the file and why — for `CHANGELOG.md` and for a conflicted
+  override, where the JSON parse error would otherwise send the reader looking for a
+  typo rather than for the merge they are in the middle of. A Go test drives the real
+  script against a throwaway tree, so the guard is exercised rather than asserted in
+  prose.
+
+  `make whats-new-resolve` is the resolution in one command: it regenerates the feed
+  from the merged CHANGELOG and stages it, and refuses while any *other* conflict is
+  still open — regenerating from a half-merged CHANGELOG being exactly what the guard
+  above exists to stop.
+
+- **The handbook blamed itself for a diagram the reader was simply not signed in to
+  see.** The recipes in _Rezepte_ ship their models without BPMN-DI, so the coordinates
+  come from `POST /api/v1/layout` — an endpoint that carries the `modeler` role, on a
+  page that is public. A reader who was not signed in therefore got no picture on any
+  of the 28 cards, and the note under each one said Atlas *"cannot lay this pattern out
+  completely yet"*. That was never true: Atlas lays them out fine, the request was
+  refused. The note now separates the three answers — sign in (with a link that takes
+  you there), a session that lacks the `modeler` role, and an actual layout limit, which
+  is the only one that is about the model. The first refusal also settles the chapter,
+  so the 27 further requests that could only fail the same way are no longer sent.
+
+- **Every instance start scanned the whole runtime on the single writer.** `/stats` looks
+  like an aggregate and is not one: all three of its counts walk a whole column family,
+  so on a server holding 50.000 instances and 200.000 tokens a single call was a
+  quarter-million-key scan. ADR-0080 introduced maintained counters, but for the
+  per-definition sums the Prometheus path uses — the counts behind `/stats` are the
+  authoritative scans it is explicitly contrasted with.
+
+  The endpoint was not the main caller. Seven of the eight callers are **write paths**
+  that report the counts back in their response — starting an instance, publishing a
+  message, cancelling or terminating a batch, a CSV upload — and each took a run-loop
+  turn of its own purely for that read-back. So every instance start paid a full
+  population scan on the single writer, and a load generator kept the engine executing
+  one per write, indefinitely. That is what made the API unreachable; the parked test
+  instances were not the load, they were the size that made each read-back expensive.
+
+  `readStats` now takes a `state.ReadView` instead of the live store, which moves the
+  counting off the run loop and makes it impossible to spell the on-loop version: a
+  caller must obtain a view. All eight sites go through one helper, so the write paths
+  were fixed by the same change as the endpoint. `GET /api/v1/incidents` was the same
+  defect in its milder form — two rows to return and its whole walk, its per-instance
+  lookups and its deployment-map reads inside the loop — and now runs off it too. Both
+  reads are snapshots, so a page can no longer mix an instance counted before a write
+  with a token counted after it. Both also answer 503 while the server is shutting down
+  rather than a 200 that cannot be told apart from a true empty answer: the old code
+  reported `{"activeProcessInstances":0,…}`, which reads as "the engine is empty". The
+  reasoning is in [the record on the runtime counts](docs/adr/0266-stats-and-incidents-off-the-loop.md).
+
+  `/stats` is no faster for its own caller — it still walks the population. It simply no
+  longer walks it for everybody else.
+
+- **Signing in waited for the engine, so a busy server locked everybody out.** On a
+  server carrying ~50.000 parked process instances, with load generators still starting
+  and finishing more, `POST /api/v1/auth/login` stopped answering while
+  `GET /api/v1/info` answered instantly. Nothing was down and nothing was slow: the
+  login was *queued*. Both of its lookups were dispatched onto the single-writer run
+  loop ([ADR-0002](docs/adr/0002-single-writer-partition-model.md)), which executes one
+  closure at a time in arrival order, so authentication was only ever as available as
+  the processor was idle — and an operator signs in precisely in order to deal with a
+  processor that is not.
+
+  Neither lookup reads engine state. Accounts and groups are durable sidecar records
+  ([ADR-0044](docs/adr/0044-user-management-and-authentication-boundary.md)) that never
+  travel through the WAL or the processor; they sat on the loop by convention. They now
+  read directly off it, so a login costs zero loop turns and answers at the speed of the
+  filesystem regardless of engine load — matching the rest of the session path, which
+  never needed the loop either ([ADR-0180](docs/adr/0180-groups-as-members.md),
+  [ADR-0185](docs/adr/0185-live-group-membership.md)). Writes are untouched: the run loop
+  remains the single writer of design-time state, and the OIDC callback's account
+  resolution deliberately stays on it, because that path may *create* the account it is
+  resolving and the check-then-write is atomic only inside one turn. A listing that meets
+  a record deleted from under it now skips that record instead of failing outright, which
+  is what an off-loop reader can legitimately see. The reasoning is in
+  [the record on signing in off the run loop](docs/adr/0265-login-off-the-run-loop.md).
+
+  What the login was queued *behind* is the entry below.
+
+- **The replay drew a deferred choice as several tokens, and parked one on the gateway
+  that was not there.** The live diagram stopped drawing an event-based gateway's race
+  literally in [ADR-0249](docs/adr/0249-overlay-cancelled-tokens.md): the engine arms
+  every branch's catch at once ([ADR-0110](docs/adr/0110-event-based-gateways.md)), so a
+  waiting instance holds a token on each branch and none on the gateway, and drawn
+  one-for-one that says the same wait once per branch. The step-by-step instance replay
+  still drew it the old way — a token dot on every branch and a chip for each of them in
+  the legend below — so the two views described the same moment differently, which is what
+  a reader of both actually reported.
+
+  Two things were wrong, and the second one was a token drawn where no token was. The
+  frame fold ([ADR-0046](docs/adr/0046-single-process-step-replay.md),
+  [ADR-0136](docs/adr/0136-terminated-tokens-in-the-replay.md)) keeps a completed
+  element's token visible until the activation it causes appears, so the token never
+  flickers out between the two. An event gateway is the one element whose successors
+  activate *before* it completes — it arms the branches on activation and only then
+  completes itself, taking no outgoing flow of its own — so it waited for an arrival that
+  had already been and gone, and its token stayed on the gateway for the rest of the
+  replay. On a looping model that is a race drawn as still running a full round after it
+  was decided, which is what a production instance showed: three tokens on a two-branch
+  race, one of them a ghost.
+
+  The gateway's token is now released when it completes, like a leaf's and a loop round's
+  — the other two hand-offs that go to nobody. And the replay draws the race the way the
+  live view does: one token on the **gateway**, the armed branches outlined dashed and
+  without a dot of their own, and one chip in the legend that names the race and says what
+  it is waiting for — *waiting for the first of 2 events* — rather than one chip per
+  branch. The rule is read off the diagram, exactly as the live view reads it (a catch
+  joins its gateway's race only when that gateway is its sole way in), and off the token
+  that forked it: every armed catch is a fork of the gateway's own token, so two races
+  running at once on one gateway stay two races. Once an event has fired and the losers
+  are cancelled, what is left on a branch is the winner running there, and it is drawn as
+  itself again.
+
+- **The class canvas could not take hold of more than one class at a time.**
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md) put the canvas on diagram-js
+  for marquee selection among other things, and the marquee was the one it did not
+  reach: diagram-js ships the tool, but a plain drag on empty sheet pans — it has to,
+  or a diagram larger than its window could not be moved — so the gesture was never
+  offered to it, and ten boxes were still moved one at a time.
+
+  There is now a control for it beside zoom and undo, and holding Shift while dragging
+  does the same without it. Escape gives the drag back to panning. What the box takes
+  hold of moves together, and the panel says what it is holding — it still edits one
+  element at a time, because a name, a type and a multiplicity each belong to exactly
+  one thing, so it lists what is selected and each line is the way back to editing that
+  one on its own.
+
+- **A class with a hundred attributes had no room to show their names.** The panel was
+  340px wide and would not budge, and inside it the two selects — which carry every
+  class name in the model as options — took what they liked, leaving the name column a
+  stub that read `allowedA…` for forty members running.
+
+  The panel now takes the Modeler's divider: drag it to widen, double-click to put it
+  back, and the width is remembered. A person moves between the two surfaces in one
+  session, so it is the same divider with the same behaviour rather than a second one
+  of its own. Inside the table the layout is fixed, so the room goes to the name and
+  the selects keep the width they need and no more. And because the row being typed in
+  is deliberately *not* repainted — that is what keeps the caret in the field — the
+  name's tooltip and what the filter matches it against are now kept current as it is
+  typed, rather than lagging until the next repaint.
+
+  The view itself also stops sitting in the console's centred 1120px column when a
+  model is open, and takes the whole window the way the Modeler does — no column, no
+  page gutter and no frame around the editor, because a drawing surface that stops
+  22px short of the edge is a window inside a window. The list of models beside it
+  keeps the reading column; a list read across a 2000px screen is a worse list.
+
+  And the fit now uses the room it is given. diagram-js fits by shrinking only, never
+  magnifying past 100%, which is right for diagrams usually larger than the viewport
+  and wrong for a class diagram of six classes on a wide screen: it was drawn at its
+  own size in the middle of the window with the width going to nothing on either side.
+  A model with room to grow is now grown into it, up to 1.6× — past that a class box
+  has nothing more to say for the extra pixels. A model larger than the window is
+  shrunk to fit exactly as before.
+
+- **The class canvas could not be zoomed, searched, or undone.**
+  Two complaints from the same place: Data › Information model, on a model bigger
+  than the window.
+
+  **Zoom, pan and fit were there and invisible.** They have been the canvas's own
+  since it moved onto diagram-js ([ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
+  — the wheel scrolls, ctrl and the wheel zoom, a drag on empty sheet pans — and
+  nothing on the screen said so, so a diagram wider than the viewport could only be
+  scrolled at by somebody who already knew the gesture. The canvas now carries the
+  same three controls the Panorama canvas does, in the same corner with the same
+  icons and the same step, off the same CSS rather than a copy of it: zooming a
+  diagram is the same act on both surfaces, and a near-miss between two canvases a
+  person uses in one session is worse than either choice alone.
+
+  **And a model outgrows its window in two directions.** A sheet with thirty classes
+  on it, and a class with forty members in it — so there is now one search field in
+  the bar for both. It matches class names, attribute names, attribute *types* and
+  enumeration literals, and a hit says which class it is in (`Order · placedOn`).
+  Picking one selects the class, scrolls the sheet to it rather than fitting the
+  whole diagram, and — this is the point — narrows that class's panel to the member
+  that was searched for. Answering "where is `placedOn`" by selecting a class with
+  forty attributes and leaving the reader to scroll would hide the answer it just
+  gave.
+
+  **And undo came with the same key.** The canvas has kept a command stack since the
+  port and nothing ever asked it for anything: no button, no binding, so a mis-drag
+  was repaired by dragging back. It is now ↺ and ↻ beside the zoom controls, and
+  Ctrl/⌘ + Z — except while the caret is in a field, where Ctrl+Z belongs to what is
+  being typed. What it undoes is what the canvas does, which is moving something; a
+  renamed class or a retyped attribute is the panel editing the document and is not
+  on that stack, so the control says *the last move* rather than the last change.
+
+  The panel's filter is there on its own too, above the attributes and the literals,
+  matching name and type. It hides rows rather than removing them, so every row keeps
+  the index its editing and its reordering read, and it is applied to the DOM rather
+  than rendered — the panel re-renders on every keystroke, and a filter that
+  re-rendered would take the caret out of the field being typed in. Reordering is
+  refused while the list is narrowed, because dragging a row past rows that are not
+  on screen moves it somewhere nobody chose.
+
+- **The waiting-task badge on the live diagram counted its own page.** A user task with
+  1 275 people's work parked on it showed "500" on its 📋 link, and went on showing "500"
+  as the queue was worked down in the Tasks app — while the green token badge on the same
+  shape counted correctly. Nothing was stuck. 500 is the cap on one page of
+  `GET /api/v1/tasks`, and the badge was counting the rows it had been handed, so it could
+  not have said anything else until the queue fell below the cap.
+
+  The same cap could also delete the badge outright, which is the worse half: it is
+  applied across every definition *before* the list is filtered to the one on screen, so
+  enough waiting tasks on another process pushed this one's off the page and took the link
+  to a plainly waiting task with it.
+
+  Both facts — whether to draw the link, and whether it goes to a form or to the inbox —
+  now come from the element's live-token counter, which is exact at any scale
+  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) and is what the "All
+  instances" total in the picker beside it has always been read from. The link no longer
+  carries a count at all: the green badge on that shape is that number, and on a user task
+  "tokens waiting here" and "tasks waiting here" are one fact, so a second copy of it was
+  the same wait read twice — the reason an armed branch does not restate its gateway's
+  race either. The task list is still read for the one thing only it can say: which task
+  to open when exactly one is waiting.
+
+  Isolating a single instance now asks for *that instance's* tasks rather than filtering
+  the global page, so its form stays one click away under a flood — the endpoint has
+  resolved an instance's tasks through its own element index all along, and the live view
+  was the caller not using it. And completing a task in the Tasks app reloads the inbox
+  through the path that reads the paging headers, instead of only the body: the "more
+  exist" banner now goes away when the queue drains, and "Load older" no longer pages from
+  a cursor that has moved.
+
+- **Saving a layout onto a deployment was refused on diagrams nobody had edited.** The
+  first real use of "Save layout to deployment" hit the guard that is supposed to catch a
+  changed *process*, on a document whose process had not changed at all.
+
+  bpmn-js leaves out an attribute whose value equals the default its schema declares. A
+  deployed model carrying `cancelActivity="true"` on an interrupting boundary event —
+  which the BPMN examples write, and which every model copied from one carries — comes
+  back from the editor without it. The check compared the serialised attributes, saw one
+  missing, and refused. It was right about the bytes and wrong about the question, which
+  was never "are these two documents equal" but "is this picture of this model". Any
+  model with an interrupting boundary event, an event subprocess or a multi-instance
+  activity spelled out that way was affected, and there was nothing the operator could do
+  about it.
+
+  Writing an attribute at its default and leaving it out are the same statement in the
+  schema, and Atlas's compiler already reads them as the same statement. So the check now
+  reads them that way too, for the nineteen attributes BPMN gives a default. Two things
+  deliberately unchanged: it applies to BPMN's own attributes only — a `zeebe:` or
+  `atlas:` attribute that happens to share a name is a different attribute — and only to
+  the default value, so switching a boundary event to `cancelActivity="false"` is still
+  the real change it is, and still refused.
+
+  The refusal also says *what* differs now, by element and id, instead of only that
+  something does. That is the sentence somebody needs most in exactly this situation:
+  when they are sure they changed nothing, and are right
+  ([ADR-0251](docs/adr/0251-adjust-a-deployed-diagram.md), amended).
+
+- **The edges in the landscape nugget missed the nodes they connect.** The scene that
+  shows Panorama drew its edges as divs rotated by an angle computed from percentage
+  coordinates — and x is a share of the container's width while y is a share of its
+  height, so on anything that is not square both the angle and the length come out of
+  mixed units. On the 745×280 stage the page actually renders, an edge landed 22 degrees
+  off and 41 pixels too long, running straight past the node it was supposed to reach.
+
+  It is the failure mode this whole chapter is built to avoid, and it still got through:
+  the picture renders, the scene advances, no selector breaks, nothing throws and nothing
+  logs. It surfaced only from looking at a rendered frame.
+
+  The edges are an SVG now, with `preserveAspectRatio="none"`, so an endpoint sits
+  exactly on its coordinate whatever the aspect ratio, and `vector-effect:
+  non-scaling-stroke` keeps the line from being stretched with it. `e2e/nuggets.spec.mjs`
+  gains the assertion that was missing: for every edge, both ends land on a node.
+  Confirmed by moving one edge's endpoint and watching it fail — the first attempt at
+  that check was itself broken, matching against unescaped quotes that the JSON block
+  does not contain, so it never challenged the test at all.
+
+- **A search term found more than it was asked for.** Reported from use:
+  `kdnr=MT-100` also returned MT-10001. The instance search widened every term into a
+  substring match, so an operator who named one customer got a list holding another one
+  beside it, with nothing on either row to tell them apart — and no way to ask about
+  only the one they meant.
+
+  It was not even consistent with itself. The value index
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) answers a
+  declared name exactly, so the same query matched exactly when the model carried
+  `atlas:searchable` for that name and matched as a substring when it did not. Whether
+  a name is declared is a property of the model: invisible from the search box,
+  changeable by a redeployment, and it had come to decide what a query means.
+
+  A term is now matched **whole**, and widening is something you ask for, in the two
+  shapes everyone knows from shells and file pickers: `*` for any run of characters,
+  `?` for exactly one, and a backslash to escape either, so a value that really contains
+  a star is still reachable. One rule for declared and undeclared names, for
+  `name=value` and free text, for the live index, the instance walk and the archive.
+  Under the index a pattern splits into its literal head and the rest: no wildcard is
+  the exact seek that already existed, and a wildcard seeks to a neighbourhood and
+  matches the full pattern before reporting anything — without that, `MT-1?` would
+  answer with every `MT-1` value the index holds.
+
+  The same predicate filters **bulk termination**, so an implicit widening there
+  selected instances the operator had not named. That is the version of this bug that
+  does not merely confuse.
+
+  This is a behaviour change: free text that used to match a value it occurred in now
+  matches one it equals, so `retail` becomes `*retail*`. The search hint, the handbook,
+  the OpenAPI summary and the MCP tool description all state the rule, because changing
+  what a query means in silence would be worse than the behaviour it replaces.
+  ([ADR-0248](docs/adr/0248-search-terms-are-literal.md))
+
+- **Opening a deployed process in the Modeler lost the application it belongs to, and
+  with it the whole vocabulary behind a data object's Type.** A draft carries its
+  application; a deployed version carries it too — the deploy records it — but the
+  route that opens one (`#/modeler/d/{key}`) does not name it and nothing looked it up.
+
+  The result was a Type field that had quietly stopped working: no classes offered, no
+  class shown for the one already set, and not even the "nothing models this yet"
+  warning — because *nothing is modelled* and *the vocabulary never loaded* are
+  different answers and only the first is safe to state. It looked exactly like a plain
+  text box, which is what the field was before there was an information model at all.
+  The breadcrumb gave it away: it named the process but not the application.
+
+- **A widened Properties column in the form editor gave its width to white space, not
+  to the panel.** The Design tab's side columns are resizable — our own affordance on
+  top of the vendored form-js Playground ([ADR-0028](docs/adr/0028-forms-and-the-tasks-app.md)) —
+  and the drag sets the width of the *column*. But form-js pins the properties panel
+  inside that column to a fixed `--properties-panel-width: 250px`. So an author who
+  pulled the divider left to get room for a long FEEL expression got a 510px column
+  holding a 250px panel, and 260px of blank white between the panel and the window's
+  right edge, which stayed there across sessions because the width is remembered. The
+  mirror case was worse and quieter: dragged narrower than 250px, the panel was clipped
+  by the column rather than shrunk with it, so the rightmost part of every property row
+  was simply not reachable.
+
+  The panel now follows the column it lives in. The palette on the other side always
+  did — its content is fluid — which is why only one of the two columns showed it.
+  `e2e/form-side-columns.spec.mjs` holds the outcome at the default width, after a real
+  drag, for a width a previous session saved, and with the column collapsed to its rail.
 
 - **"Loading form…" could stand there for good.** Deploy & run opens the process's
   start form in a modal (ADR-0028), and the modal waited on two things — the vendored
@@ -2857,6 +3116,157 @@ _Changed_ / _Removed_ for each version.
   "has an empty url". The name travels now, and the Modeler's own descriptor learned
   the `connector` attribute as well: bpmn-js drops an attribute it has no property for,
   so opening such a task and pressing Save silently stripped it.
+
+- **An upgraded server no longer hands a returning browser half of the old UI.** The
+  embedded UI is a graph of ES modules that import each other by name, and it was served
+  with **no cache validator at all**: an embedded file has a zero modtime, so
+  `http.ServeContent` omits `Last-Modified`, and `http.FileServerFS` sets no `ETag`. That
+  leaves the browser to guess how long each file stays fresh, and it guesses *per file* —
+  so after an upgrade it could hold a new `editor.js` beside a cached `formviewer.js` and
+  die on `does not provide an export named …`, with a hard reload the only way out. Every
+  asset now carries a strong `ETag` over its own bytes and `Cache-Control: no-cache` —
+  "reuse it, but ask first", not "do not store it": the browser keeps its copy and
+  revalidates, and an unchanged file costs a 304 with no body.
+
+- **A menu's flyout opens to the right, and can be reached.** The "Move to" submenu on an
+  artifact row opened to the *left*, which is not where a submenu opens anywhere else, so
+  the hand went the wrong way first; it opens right now, and flips left only when the
+  right would run off screen. Reaching it was the worse half. The flyout is
+  `position: fixed` — a card's overflow would clip it otherwise — and was shown by
+  `.submenu:hover`, with a 5px gap to cross. A hand moving diagonally from the row to the
+  flyout crosses the menu rows in between, and every one of them is outside the pair, so
+  the flyout closed under the hand before it arrived: getting into it was a knack rather
+  than an action. It now sits flush against the parent menu, and which flyout is open is
+  held in a class rather than in `:hover`, so it survives a moment (260ms) after the
+  pointer leaves — the diagonal reach is forgiven, settling anywhere else still closes it,
+  and dismissing the menu closes it at once rather than after the grace period.
+
+- **Every properties group in the Form and DMN editors reads the same again.** form-js and
+  dmn-js mark a group whose entries are all unset with the class `empty` — their own state
+  flag, on the group's header. `app.css` carried a bare `.empty` for our "nothing here yet"
+  placeholders: centred text and 34px of padding all round. Nothing scoped it, so it reached
+  straight into the vendored panel, and every unset group became a **68px** block against
+  the **27px** of the groups that happened to have something set — with its title pushed
+  inward by the padding and clipped by the centring, so *Custom properties* appeared as
+  *Custom p*. Six rows in two shapes, for no reason a reader could see. The placeholder rule
+  is now held **off** that panel rather than overridden inside it, so the vendored widget's
+  own styling stands rather than being replaced by more of ours; our placeholders elsewhere
+  are untouched.
+
+- **The coverage floor is a floor again.** `scripts/check-coverage.sh` compared the total
+  that `go tool cover -func` prints, and that number is rounded to one decimal. The
+  rounding was not cosmetic — it *was* the comparison, so a repository sitting at
+  94.918% reported `95.0` and passed the 95% floor
+  ([ADR-0018](docs/adr/0018-test-driven-development.md)), and went on passing for as long
+  as it stayed above 94.95%. A floor that a below-floor repository satisfies is not a
+  floor, and the gap it hid grew in silence, because every run said OK. The total is now
+  computed from the merged profile itself — two sums over the per-block statement counts,
+  with no rounding at any step. The repository was brought back over the real line with
+  tests for behaviour that had none rather than with filler: the connector-name collisions
+  that would hand one supervised worker another's credential (mail's was covered, Entra's
+  and Remedy's were not), an `ATLAS_TOKEN` set to something this server will not accept,
+  a resolved job detail a worker cannot read, and what the last recovery actually
+  replayed. Both outcomes now say where the line is in statements rather than in tenths
+  of a percent: how many more would reach the floor, or how many could lapse before it
+  fails.
+
+- **The Active Directory mockup no longer asks you for a file path, and a typo in it no
+  longer takes the AD worker down.** The mockup's *starting entries* — the accounts and
+  groups a process expects to find, because a joiner creates its own account while a
+  leaver has nothing to disable in an empty directory — were configured as a **path on
+  the worker's host**, typed into an org-wide Console that cannot see that host. A
+  relative one resolved against the supervised child's working directory, which is not
+  something anybody can predict from a browser, and the field's free-text shape implied
+  a choice among several directories when there is exactly one.
+
+  Worse, it was fatal. A path that did not resolve made the worker refuse to start; the
+  supervisor restarts a child that exits, so the AD worker sat in a restart loop — the
+  Workers view showing **failed**, several hundred starts, and one log line every thirty
+  seconds. An optional field made every AD task in the instance unservable, indefinitely.
+
+  Now **Atlas holds the entries**. Pick an LDIF or DSML file or paste the content; the
+  Console parses it while you watch, refuses one it cannot read, and tells you how many
+  entries it found. Atlas writes the file the worker reads and names it after a digest of
+  its own content — which is what makes *replacing* a seed actually reach a running
+  worker, since the supervisor restarts a child only when its rendered environment
+  differs. An *Example* button fills in a small directory (an OU, two accounts, a group)
+  for the common case of not knowing what to put there. And a seed a worker cannot read
+  now starts an **empty** directory with a warning instead of refusing to start: a mock
+  touches nothing real, so an empty one costs a leaver one visible incident rather than
+  costing every AD task an outage
+  ([ADR-0202](docs/adr/0202-atlas-manages-the-ad-mock-seed.md)).
+
+  The request carrying it also has its own size limit now — 256 KiB, refused as too
+  large rather than silently truncated. It shared the theme's 4 KiB before and was read
+  through a truncating reader, so any real directory export came back as "invalid JSON
+  body".
+
+  `ATLAS_AD_MOCK_SEED` still takes a path for a worker you start yourself, which Atlas
+  has nowhere to write to.
+
+- **An Active Directory `create-user` with an empty entry object no longer crashes the
+  worker.** The connector wrote the default `objectClass` into the job's attribute map,
+  and a `create-user`, `create-group` or `create-contact` whose `entryVariable` resolved
+  to nothing left that map nil — so a misspelled variable name panicked the worker with
+  `assignment to entry in nil map`, against a real domain controller exactly as readily
+  as against a mockup. Such a create is now refused, saying what is empty, which also
+  prevents the quieter bad outcome: an account created in a real directory carrying an
+  objectClass and no name.
+
+- **Active Directory is a connector you configure, like every other one.** AD was the
+  one credential-bearing integration an operator could not create: the domain
+  controller's URL and the bind account lived in the *model*, on every task. That put it
+  on the wrong side of the line the rest of the catalogue draws — mail, Entra, Remedy,
+  Jira, SharePoint and the three SQL products are records you add in the Console, and
+  AD is a domain controller with a service account and a password, not an address like a
+  REST endpoint. It had inherited the model-authored shape from the LDAP connector
+  rather than from an argument
+  ([ADR-0206](docs/adr/0206-ad-as-a-console-connector.md)).
+
+  Now **Console › Connectors › New connector › Active Directory**: the LDAP URL, and a
+  credential reference naming a vault bundle `{"bindDN": …, "password": …}` — the Remedy
+  and Entra shape, so the record holds no credential and not even the service account's
+  name. A task then says `connector="prod-forest"` and nothing else about the directory.
+
+  **Several directories are several connectors,** served by one worker — which is the
+  question that had no good answer before. You do not need a worker per forest, and one
+  would not separate anything: jobs are handed out by type, not by target, so two AD
+  workers would race for the same queue.
+
+  **Nothing existing breaks.** A task carrying its own `url`, `bindDN` and `bindSecret`
+  compiles and runs unchanged. Only *both at once* is refused rather than resolved by
+  precedence — the two point at different forests, and a silent winner writes to the
+  wrong one.
+
+  The endpoint's scheme is checked when you save: AD refuses to set a password over an
+  unencrypted channel, so an `ldap://` directory works for every operation except the one
+  a joiner needs most, and would otherwise only say so on a real run.
+
+- **The AD mockup keeps several directories apart.** It served every URL from one set of
+  entries, so a process addressing two forests found that creating the same account in
+  the *second* failed with "entry already exists" — which no real pair of domain
+  controllers would ever do. The mockup was least trustworthy in exactly the topology
+  that most needs one. Each LDAP URL now gets its own in-memory directory, with its own
+  entries **and its own DirSync change history** — a shared counter was the subtler half
+  of the same bug, since a reconciliation loop over one forest would have reported writes
+  that happened in another, with a cookie making it look authoritative. The starting
+  entries are a template: every directory gets its own copy and diverges from the first
+  write. The switch itself stays org-wide on purpose — simulating one directory while
+  really writing to another is a half-state whose whole risk is that it looks like a full
+  mockup run.
+
+- **Two Google Sheets row watches on one Worker no longer share an idempotency mark.**
+  A row watch's mark was composed from the Worker's id and a field only clio watches
+  fill, which for every other kind is the empty string. So two watches on the same
+  Worker — two different spreadsheets — composed the *same* mark, and whichever polled
+  first advanced it past the other's rows. The second watch's form responses were
+  silently never delivered: no error, no incident, just processes that did not start
+  (ADR-0264).
+
+  A row watch now keys its mark on the spreadsheet it watches. Existing watches need no
+  migration and replay nothing: a row watch reads from its own stored cursor, and only
+  rows past that cursor are ever emitted, so the mark's only job is to catch a duplicate
+  within one page.
 
 ### Security
 
@@ -3275,450 +3685,6 @@ _Changed_ / _Removed_ for each version.
   answers `401` instead of `403` — nothing was presented, which is what `401` means.
   Which routes are public is otherwise unchanged; `/metrics` in particular is still
   served without a credential, now by declaration rather than by accident.
-
-### Added
-
-- **Panorama models can say which Atlas resource an element means.** An ArchiMate
-  element in a Panorama model now carries **Atlas bindings**
-  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)):
-  an Application Component names a process application, a Business Process names a
-  BPMN process id, an Application Service names a worker or job type, a Node names a
-  deployment target, an Artifact names a release. Select an element in the model
-  viewer to see what it is bound to, and bind it from a picker of the resources you
-  may see.
-
-  Bindings are ordinary ArchiMate properties in an `atlas.` namespace, so a bound
-  model stays a standard model: it exports as Open Exchange XML like any other and
-  its bindings travel into Archi or any conformant tool. The keys are an allowlist,
-  which is what keeps credentials out — `atlas.credentialRef` is refused because it
-  was never permitted, and a rejected value is never echoed back.
-
-  **The document stores an opaque id and nothing else.** Names come from the server
-  at read time, filtered by what you may see, so a model can never hold a stale copy
-  of one. A binding that no longer resolves stays visible and says which of three
-  things it is: outside your access, no longer on this server, or a kind this Atlas
-  version cannot resolve yet. Removing it would make a broken binding look like an
-  absent one, and the model would then look correct.
-
-  **Editing a binding does not reformat your document.** The writer splices the
-  bytes it needs to change and leaves everything else exactly as it was — comments,
-  indentation, attribute order, and any standard content Atlas does not model.
-
-- **Panorama shows the landscape you already have.** Panorama's landing view is now
-  a derived mesh of the whole instance
-  ([ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md)): applications, the
-  processes deployed under them, and the call activities between them, computed from
-  what Atlas already holds rather than from anything anybody drew. It therefore says
-  something on a server with no architecture model in it at all, and its edges are
-  facts the server can point at — a call activity *is* a dependency — resolved
-  through the same overrides the engine would follow, so the picture matches what
-  would actually run.
-
-  The graph is computed per requesting principal against the existing sharing scopes
-  (ADR-0071); nothing new to configure. Where your access cuts a dependency, the mesh
-  draws a **restricted** placeholder and keeps the edge instead of dropping it, and
-  the legend states how many there are — "this process depends on nothing" would be a
-  false statement when it means "you may not see what it depends on". A call target
-  that no deployment provides is shown as **unresolved**, which is a different finding
-  from a hidden one and is drawn differently. Clicking a process opens it in the
-  Operations live view: Panorama owns the landscape, and links into the process and
-  instance views rather than repeating them.
-
-  Nothing is stored — the mesh is a projection, recomputed on request, and it never
-  writes to an ArchiMate model. Above 400 nodes it collapses to applications and says
-  so in the legend rather than handing your browser a graph it cannot lay out; that
-  number is measured (a 400-node graph paints in about a second in Chromium), not
-  guessed.
-
-  **The landscape also draws what a process depends on besides another process:** the
-  **workers** its service tasks name, and the **decisions** its business-rule tasks
-  delegate to. That is the question a model cannot answer about itself — a task names
-  its worker by name and carries no endpoint and no secret, so nothing inside the
-  model can tell whether that name is configured on this server (ADR-0158). A process
-  pointing at a worker nobody configured deploys clean and parks its first token;
-  here it shows as **unresolved** before anything runs. A worker node carries its name
-  and its Worker Type and nothing else — the endpoint and the credential reference
-  stay on the server. Two references are deliberately *not* findings, mirroring the
-  deploy-time check exactly: one whose job type no managed Worker Type claims is not a
-  worker reference at all, and a name authored as a FEEL expression names no fixed
-  worker, since which one it reaches is known only at call time. Configured workers
-  and registered decisions that nothing references stay off the picture: the mesh is
-  the dependency graph, not an inventory.
-
-  **A search box** filters the mesh by name, kind or process id and reports how much
-  it is hiding — a filtered landscape otherwise looks exactly like a small one.
-
-  **Nothing is left stranded at the edge of the picture.** Reported three times as
-  "single nodes far away from the rest", and the first two fixes missed it because
-  both were about framing and this was about the settle. The pull that centres the
-  graph is deliberately weakest along the wide axis, so the picture takes the shape of
-  the frame — and that was tuned for a node its edges are also holding. A node with
-  **no edge** has none: the pull is all that keeps it near the picture, against a
-  repulsion that falls off with distance, and the balance sat far outside everything
-  else. On a thirty-four-node estate with ten unattached processes, two of them ended
-  hard against the left and right edges with the rest squeezed into the middle. That
-  is not a rare shape — a process deployed through the API, or before its application
-  existed, belongs to no application and is drawn with no edge at all. The pull is now
-  twice as strong on a node with nothing attached to it, which is measured rather than
-  reasoned: higher packs the loose nodes into a lump of their own instead.
-
-  **A Drafts switch** adds the diagrams nobody has deployed. The picture's subject is
-  what this server *runs*, so a saved draft is absent from it by default — which
-  answers "is this deployed?" only if you already knew the process existed. Switch
-  drafts on and they appear beside the processes of the application that holds them,
-  in the process square so they read as the same kind of thing, with a lighter fill and
-  the dashed outline the placeholders already use: what is drawn is not running. The
-  fill is lighter rather than merely different — its first version was a warm tone of
-  exactly the same brightness as a deployed process, which on a projector or in print
-  left the dash doing all the work. They
-  claim nothing about running — no version, no instances, no status, and they can
-  never make an application look worse — and their only edge is the one that says
-  which application holds them, because a draft's call activities are a plan and
-  drawing them would put an intention on the canvas in the same ink as the facts.
-  A draft opens in the Modeler, where it exists, rather than in Operations, where it
-  does not. Off by default because an estate holds several drafts per deployed
-  process, and a landscape that collapsed to applications on account of undeployed
-  diagrams would be a worse picture than one that leaves them out; a saved view
-  remembers the switch, and an exported image says in its stamp that the drafts are
-  in it. Neither the ArchiMate nor the C4 export carries them, and each says so in
-  its declared loss: those documents describe a system that exists.
-
-- **Panorama opens ArchiMate diagrams.** An architecture model in the Panorama
-  library now opens its Open Exchange Diagram views on a read-only `diagram-js`
-  canvas, with ArchiMate layer colours and shapes, view tabs, zoom and pan, and
-  the same canvas/properties/problems frame as the BPMN and DMN editors
-  ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)).
-  Selecting an element or relationship shows its standard type and identifier;
-  switching views projects the same reusable model elements into their stored
-  positions. The XML remains canonical and byte-preserved: viewing issues no
-  writes, while export remains available beside the canvas.
-
-- **A Jira connector.** Atlassian Jira is a first-class connector kind
-  ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
-  `<atlas:jiraConnector connector operation …>` performs one issue-tracker operation
-  against a server-registered Jira instance, off the processor loop and after fsync like
-  every other connector. Seven operations cover the loop a process actually runs —
-  `create-issue`, `get-issue`, `update-issue`, `transition-issue`, `add-comment`,
-  `assign-issue` and `search` (JQL) — and every authored value is literal-or-FEEL,
-  evaluated over the variables the task sees.
-
-  What it saves is the four things a REST task had to do by hand: the URL, the auth
-  block, Jira's nested body shape (`{"fields":{"project":{"key":…}}}`), and knowing that
-  a transition and an assignment are sub-resources at all. A transition may be named by
-  the button a person reads in Jira — the connector resolves its id first, so the model
-  is not pinned to one workflow configuration — a search follows Jira's paging and hands
-  back the issues rather than one page of an envelope, and an extra field keeps the JSON
-  shape its FEEL value had, so `labels` stays a list and `priority` an object.
-
-  The site URL and the credential live in the managed connector store and the vault, so a
-  move from a test Jira to production is a Console edit rather than a redeploy. Two
-  credential shapes are accepted and neither needs a flag to say which it is: `{email,
-  apiToken}` is Jira Cloud (HTTP Basic, the way Atlassian documents an API token) and
-  `{token}` a Data Center personal access token (bearer). The same fact decides how an
-  account is addressed when assigning an issue — `accountId` on Cloud, a username on Data
-  Center — so a model never has to know which product it is talking to. The transport is
-  Jira's REST API v2, which both products serve and which takes a description as a
-  string; v3 would make every model build an Atlassian Document Format tree to write one
-  sentence. Authored via a first-class **Jira Connector** service-task type in the
-  Modeler.
-
-- **The BMC Remedy connector runs on a worker.** Remedy shipped with an in-process job
-  handler only ([ADR-0106](docs/adr/0106-bmc-remedy-connector.md)), which is the
-  arrangement [ADR-0164](docs/adr/0164-no-in-process-service-tasks.md) exists to end: a
-  login, a create and a logout against somebody else's ITSM host, on the engine's
-  single-writer loop. It now has the same split every offloaded kind has
-  ([ADR-0168](docs/adr/0168-connector-work-on-a-worker.md)) — the engine resolves the task,
-  because only it has the compiled process and the scope chain, and what travels is the
-  connector's *name*, the form and the evaluated field values. There is nowhere in that
-  payload to put a base URL or a password.
-
-  `atlas worker --connector remedy` serves the kind from its own environment
-  (`ATLAS_REMEDY_CONNECTORS`, plus `ATLAS_REMEDY_<NAME>_ENDPOINT`, `_USERNAME` and
-  `_PASSWORD`), and a worker Atlas supervises is handed that configuration at spawn out of
-  the connector store and the vault — so a Helix instance added in the Console is served
-  without anything set by hand. A connector with no endpoint, or whose credential bundle is
-  missing or half-filled, is left out rather than handed over incomplete: a named instance
-  missing a field makes the worker refuse at startup, which would take down every other
-  kind it serves. A worker holding no instance at all parks Remedy tasks instead of leasing
-  and failing them.
-
-  **Atlas runs that worker itself, by default** (ADR-0192). The kind
-  was opt-in only for as long as there was no worker to hand the credentials to; with the
-  handover built, that reason is gone, and a ticket create leaves the engine's loop on every
-  installation rather than only where somebody moved it by hand. **Nothing needs to be done
-  to upgrade** and nothing changes in any model — the same connector, built from the same
-  three values, resolved in a different process — and `--in-process-connectors` returns the
-  old arrangement wholesale. The payoff is an AR System reachable only from inside a
-  customer's network: a worker sitting there can serve it, and the service account can live
-  only in that worker rather than in the engine.
-
-- **A web-scrape task can read an RSS or Atom feed.** The web-scraping connector
-  ([ADR-0118](docs/adr/0118-web-scraping-connector.md)) shipped with exactly one way to
-  read a document: a CSS selector over static HTML, yielding an array of strings. It now
-  carries an explicit `format="html|rss|atom"` and an optional `maxItems="N"`
-  ([ADR-0190](docs/adr/0190-webscrape-feed-extraction.md)). In a feed mode one entry
-  arrives as one object — `title`, `link`, `description` and `published`, and all four
-  keys are always there — so a later step addresses `=schlagzeilen[1].link` instead of
-  zipping four unrelated arrays back together. A field the source omits is empty; a
-  publication date is passed through as the publisher wrote it, because reformatting it
-  would turn a source value into an Atlas interpretation.
-
-  **The format is model intent, and it is decided at deployment.** Atlas does not
-  inspect the response to pick a parser. Feeds are routinely served as
-  `application/xml` or worse, and a URL that answers differently after a redirect would
-  otherwise silently change the *shape of a process variable* — exactly the runtime
-  interpretation the compile-don't-interpret invariant exists to prevent. What the
-  authored format does change is the Accept header the fetch sends, which is content
-  negotiation, not detection.
-
-  **A misleading combination is refused rather than half-ignored.** A feed mode with a
-  CSS `selector` or an `attribute` fails at deploy, as do an unknown format and a
-  negative or non-numeric `maxItems`. `maxItems` cuts after extraction in document
-  order — the first N selector matches, or the first N feed entries.
-
-  **Nothing about an existing model changes.** `html` is the default and no bound is
-  the default, so a web-scrape task authored before this returns the same `[]string` it
-  returned before. The trade-off worth knowing when you write a new one: the element
-  type of the result variable now depends on the authored format — strings for HTML,
-  objects for a feed — and Atlas has no static variable schema to check that against, so
-  the Modeler says which you get and this note says it too.
-
-  Nothing moved onto the engine to make this work: the fetch and the XML decoding happen
-  on the web-scrape worker, after fsync, and a document that will not decode as the
-  authored format fails the job and retries like any other scrape. Authored in the
-  Modeler through a **Format** choice on the Web Scraping Connector, which hides
-  Selector and Attribute in the feed modes because the compiler rejects them there.
-  [`examples/blick-schlagzeilen.bpmn`](examples/blick-schlagzeilen.bpmn) is the
-  end-to-end example: a news feed into a process variable, filtered by a FEEL script,
-  routed on by a gateway.
-
-  Deliberately out of scope for this slice, and worth knowing before you plan around it:
-  extension namespaces such as Dublin Core and Media RSS are ignored, and there is no
-  conditional request (`ETag`/`If-Modified-Since`), no feed discovery from a page's
-  `<link rel="alternate">`, and no cross-run deduplication. A scrape stays a read-once
-  GET; what has already been seen is the process's business, not the connector's.
-
-### Changed
-
-- **The Active Directory mockup is switched on in the Console now, not on the command line.**
-  [ADR-0181](docs/adr/0181-ad-connector-mock-mode.md) gave the AD connector a mockup mode and put
-  the switch in the worker's environment. The reasoning — the operator owns this decision, not the
-  model — still holds; the ceremony did not. Since [ADR-0182](docs/adr/0182-ad-default-offload.md)
-  the AD worker is a child Atlas starts itself, so "set the variable" meant **restart the server**,
-  and restarting the worker from the Workers view did not help: it re-inherits the environment of
-  the running parent, where the variable is still absent. The switch that exists to make drafting
-  cheap cost an engine restart, and the person who most wants to flip it is the least placed to
-  take everyone else's instance down.
-
-  It now sits in **Console › Connectors**, on an Active Directory card beside the managed connectors
-  and the vault: a checkbox, an optional seed file, Save. The AD worker restarts holding the new
-  setting and Atlas keeps running — through exactly the rendering ADR-0182 already built to hand
-  that worker its bind passwords. The card also says which state it is in, which is a better answer
-  to "did that account really get created?" than reading a log.
-
-  **Nothing changes until somebody uses it.** No stored setting means the server's own
-  `ATLAS_AD_MOCK` keeps deciding, exactly as before. A stored one decides either way — a stored
-  "off" overrides an inherited "on", because a switch that says off while the worker still
-  simulates would be lying to the person who flipped it. The Console writes the same two variables
-  a hand-run worker reads, so a worker in another network is configured exactly as it was, and
-  there is no private channel between a supervised worker and its parent. The model still says
-  nothing about being mocked. See ADR-0193.
-
-### Fixed
-
-- **An upgraded server no longer hands a returning browser half of the old UI.** The
-  embedded UI is a graph of ES modules that import each other by name, and it was served
-  with **no cache validator at all**: an embedded file has a zero modtime, so
-  `http.ServeContent` omits `Last-Modified`, and `http.FileServerFS` sets no `ETag`. That
-  leaves the browser to guess how long each file stays fresh, and it guesses *per file* —
-  so after an upgrade it could hold a new `editor.js` beside a cached `formviewer.js` and
-  die on `does not provide an export named …`, with a hard reload the only way out. Every
-  asset now carries a strong `ETag` over its own bytes and `Cache-Control: no-cache` —
-  "reuse it, but ask first", not "do not store it": the browser keeps its copy and
-  revalidates, and an unchanged file costs a 304 with no body.
-
-- **A menu's flyout opens to the right, and can be reached.** The "Move to" submenu on an
-  artifact row opened to the *left*, which is not where a submenu opens anywhere else, so
-  the hand went the wrong way first; it opens right now, and flips left only when the
-  right would run off screen. Reaching it was the worse half. The flyout is
-  `position: fixed` — a card's overflow would clip it otherwise — and was shown by
-  `.submenu:hover`, with a 5px gap to cross. A hand moving diagonally from the row to the
-  flyout crosses the menu rows in between, and every one of them is outside the pair, so
-  the flyout closed under the hand before it arrived: getting into it was a knack rather
-  than an action. It now sits flush against the parent menu, and which flyout is open is
-  held in a class rather than in `:hover`, so it survives a moment (260ms) after the
-  pointer leaves — the diagonal reach is forgiven, settling anywhere else still closes it,
-  and dismissing the menu closes it at once rather than after the grace period.
-
-- **Every properties group in the Form and DMN editors reads the same again.** form-js and
-  dmn-js mark a group whose entries are all unset with the class `empty` — their own state
-  flag, on the group's header. `app.css` carried a bare `.empty` for our "nothing here yet"
-  placeholders: centred text and 34px of padding all round. Nothing scoped it, so it reached
-  straight into the vendored panel, and every unset group became a **68px** block against
-  the **27px** of the groups that happened to have something set — with its title pushed
-  inward by the padding and clipped by the centring, so *Custom properties* appeared as
-  *Custom p*. Six rows in two shapes, for no reason a reader could see. The placeholder rule
-  is now held **off** that panel rather than overridden inside it, so the vendored widget's
-  own styling stands rather than being replaced by more of ours; our placeholders elsewhere
-  are untouched.
-
-- **The coverage floor is a floor again.** `scripts/check-coverage.sh` compared the total
-  that `go tool cover -func` prints, and that number is rounded to one decimal. The
-  rounding was not cosmetic — it *was* the comparison, so a repository sitting at
-  94.918% reported `95.0` and passed the 95% floor
-  ([ADR-0018](docs/adr/0018-test-driven-development.md)), and went on passing for as long
-  as it stayed above 94.95%. A floor that a below-floor repository satisfies is not a
-  floor, and the gap it hid grew in silence, because every run said OK. The total is now
-  computed from the merged profile itself — two sums over the per-block statement counts,
-  with no rounding at any step. The repository was brought back over the real line with
-  tests for behaviour that had none rather than with filler: the connector-name collisions
-  that would hand one supervised worker another's credential (mail's was covered, Entra's
-  and Remedy's were not), an `ATLAS_TOKEN` set to something this server will not accept,
-  a resolved job detail a worker cannot read, and what the last recovery actually
-  replayed. Both outcomes now say where the line is in statements rather than in tenths
-  of a percent: how many more would reach the floor, or how many could lapse before it
-  fails.
-
-- **The Active Directory mockup no longer asks you for a file path, and a typo in it no
-  longer takes the AD worker down.** The mockup's *starting entries* — the accounts and
-  groups a process expects to find, because a joiner creates its own account while a
-  leaver has nothing to disable in an empty directory — were configured as a **path on
-  the worker's host**, typed into an org-wide Console that cannot see that host. A
-  relative one resolved against the supervised child's working directory, which is not
-  something anybody can predict from a browser, and the field's free-text shape implied
-  a choice among several directories when there is exactly one.
-
-  Worse, it was fatal. A path that did not resolve made the worker refuse to start; the
-  supervisor restarts a child that exits, so the AD worker sat in a restart loop — the
-  Workers view showing **failed**, several hundred starts, and one log line every thirty
-  seconds. An optional field made every AD task in the instance unservable, indefinitely.
-
-  Now **Atlas holds the entries**. Pick an LDIF or DSML file or paste the content; the
-  Console parses it while you watch, refuses one it cannot read, and tells you how many
-  entries it found. Atlas writes the file the worker reads and names it after a digest of
-  its own content — which is what makes *replacing* a seed actually reach a running
-  worker, since the supervisor restarts a child only when its rendered environment
-  differs. An *Example* button fills in a small directory (an OU, two accounts, a group)
-  for the common case of not knowing what to put there. And a seed a worker cannot read
-  now starts an **empty** directory with a warning instead of refusing to start: a mock
-  touches nothing real, so an empty one costs a leaver one visible incident rather than
-  costing every AD task an outage
-  ([ADR-0202](docs/adr/0202-atlas-manages-the-ad-mock-seed.md)).
-
-  The request carrying it also has its own size limit now — 256 KiB, refused as too
-  large rather than silently truncated. It shared the theme's 4 KiB before and was read
-  through a truncating reader, so any real directory export came back as "invalid JSON
-  body".
-
-  `ATLAS_AD_MOCK_SEED` still takes a path for a worker you start yourself, which Atlas
-  has nowhere to write to.
-
-- **An Active Directory `create-user` with an empty entry object no longer crashes the
-  worker.** The connector wrote the default `objectClass` into the job's attribute map,
-  and a `create-user`, `create-group` or `create-contact` whose `entryVariable` resolved
-  to nothing left that map nil — so a misspelled variable name panicked the worker with
-  `assignment to entry in nil map`, against a real domain controller exactly as readily
-  as against a mockup. Such a create is now refused, saying what is empty, which also
-  prevents the quieter bad outcome: an account created in a real directory carrying an
-  objectClass and no name.
-
-- **Active Directory is a connector you configure, like every other one.** AD was the
-  one credential-bearing integration an operator could not create: the domain
-  controller's URL and the bind account lived in the *model*, on every task. That put it
-  on the wrong side of the line the rest of the catalogue draws — mail, Entra, Remedy,
-  Jira, SharePoint and the three SQL products are records you add in the Console, and
-  AD is a domain controller with a service account and a password, not an address like a
-  REST endpoint. It had inherited the model-authored shape from the LDAP connector
-  rather than from an argument
-  ([ADR-0206](docs/adr/0206-ad-as-a-console-connector.md)).
-
-  Now **Console › Connectors › New connector › Active Directory**: the LDAP URL, and a
-  credential reference naming a vault bundle `{"bindDN": …, "password": …}` — the Remedy
-  and Entra shape, so the record holds no credential and not even the service account's
-  name. A task then says `connector="prod-forest"` and nothing else about the directory.
-
-  **Several directories are several connectors,** served by one worker — which is the
-  question that had no good answer before. You do not need a worker per forest, and one
-  would not separate anything: jobs are handed out by type, not by target, so two AD
-  workers would race for the same queue.
-
-  **Nothing existing breaks.** A task carrying its own `url`, `bindDN` and `bindSecret`
-  compiles and runs unchanged. Only *both at once* is refused rather than resolved by
-  precedence — the two point at different forests, and a silent winner writes to the
-  wrong one.
-
-  The endpoint's scheme is checked when you save: AD refuses to set a password over an
-  unencrypted channel, so an `ldap://` directory works for every operation except the one
-  a joiner needs most, and would otherwise only say so on a real run.
-
-- **The AD mockup keeps several directories apart.** It served every URL from one set of
-  entries, so a process addressing two forests found that creating the same account in
-  the *second* failed with "entry already exists" — which no real pair of domain
-  controllers would ever do. The mockup was least trustworthy in exactly the topology
-  that most needs one. Each LDAP URL now gets its own in-memory directory, with its own
-  entries **and its own DirSync change history** — a shared counter was the subtler half
-  of the same bug, since a reconciliation loop over one forest would have reported writes
-  that happened in another, with a cookie making it look authoritative. The starting
-  entries are a template: every directory gets its own copy and diverges from the first
-  write. The switch itself stays org-wide on purpose — simulating one directory while
-  really writing to another is a half-state whose whole risk is that it looks like a full
-  mockup run.
-
-### Changed
-
-- **The class canvas is a real diagram canvas.** **Data › Information model** now draws
-  on diagram-js — the same library the BPMN modeller runs on — so a class box has a
-  selection outline you can see, moves with the rest of what you selected, and stays put
-  when you type. Marquee-select a group of classes, drag the sheet to pan, scroll to
-  zoom, nudge a box with the arrow keys, and undo a move you did not mean with Ctrl+Z.
-
-  None of that was missing on purpose. The canvas it replaces was hand-rolled SVG plus a
-  pointer-drag, which is a diagram library with everything hard left out: no selection
-  model, no undo, no zoom, no keyboard. Writing those is not the interesting part of a
-  class diagram — how a class, a data store and the four association kinds are drawn is,
-  and Atlas still owns exactly that, plus which of them the subset permits between which.
-
-  The drawing is now **reconciled rather than redrawn**. The editor re-renders on every
-  keystroke, and a redraw would have thrown away the zoom, the selection and the undo
-  stack on each character — so an edit updates the shapes that changed and leaves the
-  view alone.
-
-  It edits locally, which is the one place it parts company with the Panorama canvas
-  beside it ([ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md)). That canvas never
-  creates anything: the server owns the document and the view is re-read. An information
-  model is a working copy with an explicit **Save**, which is what lets you draw three
-  classes and two relationships and *then* decide — and what makes an undo stack mean
-  anything at all. The rules still refuse whatever the served subset refuses; they just
-  refuse it at the point of drawing rather than at the point of writing, and say the same
-  sentence either way.
-
-  Honest cost: the binary now carries **two copies of diagram-js**, one for each canvas.
-  Merging them into a single bundle that exports both viewers is the named follow-up in
-  the record; it was left out of this change so this change would not touch Panorama's
-  shipped canvas.
-
-- **Every vendored bundle is held to the checksum its own recipe records,** not just the
-  first one that was. `ATLAS-VENDORED.txt` says "do not edit this by hand" and records
-  the SHA-256 the documented rebuild produces; the guard that checked that named one
-  bundle, so a second one arrived uncovered. It now walks the vendor directories, which
-  is how it immediately found that the DMN Modeler bundle recorded no sum at all — a
-  hand-edit or a forgotten rebuild there would have been invisible. That sum is recorded
-  now.
-
-### Fixed
-
-- **Two Google Sheets row watches on one Worker no longer share an idempotency mark.**
-  A row watch's mark was composed from the Worker's id and a field only clio watches
-  fill, which for every other kind is the empty string. So two watches on the same
-  Worker — two different spreadsheets — composed the *same* mark, and whichever polled
-  first advanced it past the other's rows. The second watch's form responses were
-  silently never delivered: no error, no incident, just processes that did not start
-  (ADR-0264).
-
-  A row watch now keys its mark on the spreadsheet it watches. Existing watches need no
-  migration and replay nothing: a row watch reads from its own stored cursor, and only
-  rows past that cursor are ever emitted, so the mark's only job is to catch a duplicate
-  within one page.
 
 ## [0.4.0] — 2026-08-26
 
