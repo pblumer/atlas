@@ -32,3 +32,17 @@ func TestConfiguredBudgetsWin(t *testing.T) {
 		t.Errorf("budgets = %+v, want the configured %+v", got, want)
 	}
 }
+
+// TestAnOIDCProviderLiteralStillHasBudgets: same property, for the one component
+// that holds its own copy. An issuer's answers are external input, and a ceiling of
+// zero on them would refuse every discovery document as unreadable.
+func TestAnOIDCProviderLiteralStillHasBudgets(t *testing.T) {
+	if got := (&oidcProvider{}).budgets(); got != limits.Default() {
+		t.Errorf("an oidcProvider literal has %+v, want the defaults", got)
+	}
+	want := limits.Default()
+	want.Definition = 99
+	if got := (&oidcProvider{limits: want}).budgets(); got != want {
+		t.Errorf("budgets = %+v, want the configured %+v", got, want)
+	}
+}

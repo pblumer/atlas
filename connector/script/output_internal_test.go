@@ -91,3 +91,27 @@ func TestMaxOutputDefaults(t *testing.T) {
 		t.Errorf("negative MaxOutput = %d, want the default %d", got, defaultMaxOutput)
 	}
 }
+
+// TestTheDefaultRunnerCarriesTheBudget covers the path production takes: no fake
+// runner, so the executor builds the closure that calls the real os/exec and hands
+// it MaxOutput. Every other test substitutes e.run, which means the one wiring that
+// ships was the one nothing exercised — and it is the wiring that decides whether
+// the ceiling reaches the process at all.
+func TestTheDefaultRunnerCarriesTheBudget(t *testing.T) {
+	if _, err := exec.LookPath("printf"); err != nil {
+		t.Skip("printf not available")
+	}
+	e := New(Lang{Name: "sh", Bin: "printf"})
+	e.MaxOutput = 8
+	if _, err := e.runner()(context.Background(), "printf", []string{"%s", `"0123456789"`}, nil); err == nil {
+		t.Error("twelve bytes through an eight-byte budget were accepted")
+	}
+	e.MaxOutput = 64
+	out, err := e.runner()(context.Background(), "printf", []string{"%s", `"ok"`}, nil)
+	if err != nil {
+		t.Fatalf("a result inside the budget was refused: %v", err)
+	}
+	if string(out) != `"ok"` {
+		t.Errorf("stdout = %q, want %q", out, `"ok"`)
+	}
+}
