@@ -1,4 +1,4 @@
-# ADR-DRAFT: A list carries its own search
+# ADR-0286: A list carries its own search
 
 - **Status:** Proposed
 - **Date:** 2026-09-08

@@ -5,7 +5,7 @@
 // in the UI behaves the same way.
 //
 // The filter row is a list's own search, and shown with the list
-// (ADR-draft-a-list-carries-its-own-search): a view does not build a search box over a
+// (ADR-0286): a view does not build a search box over a
 // table it owns, and a table that is *not* a list — a grid of inputs, an editing
 // surface, a matrix — carries `no-enhance` instead of being enhanced.
 //
@@ -52,7 +52,7 @@ export function enhanceTable(table, opts = {}) {
   let sort = { col: -1, dir: "asc" };
   // The filter row is part of the list, not a mode to discover: a list opens with its
   // boxes showing, so the way to search it is the first thing on screen rather than
-  // something behind an icon (ADR-draft-a-list-carries-its-own-search). The funnel still
+  // something behind an icon (ADR-0286). The funnel still
   // takes it away for anyone who wants the vertical space back, and a keyed table
   // remembers that choice like it remembers its sort column — a table with no key opens
   // showing them every time.

@@ -586,7 +586,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // Both member tables below are `no-enhance`: they are editing grids, not lists of
     // data — their cells are inputs the shared enhancer finds no text to sort or filter
     // by, the row order is the order the class box reads in and is set by dragging, and
-    // the box above each of them already filters it (ADR-draft-a-list-carries-its-own-search).
+    // the box above each of them already filters it (ADR-0286).
     paint(`
       ${pheadHTML(abbrev(kind.label), kind.label, c.name,
         `<button type="button" class="icon-btn" data-act="del-class" title="Delete this class">✕</button>`)}

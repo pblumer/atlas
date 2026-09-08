@@ -339,6 +339,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0283](0283-strict-log-corruption.md) | Only the end of the active segment may be torn | Proposed |
 | [0284](0284-transactional-child-view.md) | A cancellation sees the children created in its own batch | Proposed |
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Proposed |
+| [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Proposed |
 
 ## Status values
 

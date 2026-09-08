@@ -2331,7 +2331,7 @@ function ssoCard(provider, mapping, groups) {
   // The rules table is `no-enhance`: it is a grid of inputs rather than a list of data,
   // so its cells carry no text for the shared enhancer to sort or filter on — a filter
   // typed into it would hide every rule — and the order is the order they were written
-  // in (ADR-draft-a-list-carries-its-own-search).
+  // in (ADR-0286).
   return `
     <div class="card" id="sso-card" style="margin-top:18px">
       <div class="between"><h2>Single sign-on</h2>
@@ -8791,7 +8791,7 @@ async function route() {
 // Rebuilding only a <tbody> therefore needs nothing. Code that replaces a whole *table*
 // — a refresh that rewrites its container, a pane that loads lazily, a results panel —
 // calls this again when it is done, or that list silently loses its sorting and its
-// filter row (ADR-draft-a-list-carries-its-own-search).
+// filter row (ADR-0286).
 function enhanceViewTables() {
   for (const t of view.querySelectorAll("table:not(.no-enhance)")) {
     enhanceTable(t, { key: t.dataset.dtKey || undefined });

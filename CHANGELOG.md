@@ -43,7 +43,7 @@ _Changed_ / _Removed_ for each version.
   and means something. Each already has the search that suits it.
 
   Where a list is searched, and what a table has to be before the shared enhancer is
-  applied to it, is now a decision record (ADR-draft-a-list-carries-its-own-search)
+  applied to it, is now a decision record (ADR-0286)
   rather than a habit: the row is shown with the list, a view builds no search box over
   a table it owns, a table that is not a list carries `no-enhance` and says why, and
   code that replaces a whole table enhances it again.
