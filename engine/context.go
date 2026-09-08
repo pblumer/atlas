@@ -209,28 +209,62 @@ func (c *ProcessingContext) ForEachStartTimer(fn func(key uint64, v model.TimerV
 	}
 }
 
-// ElementInstancesOnNode returns the keys of every live element instance sitting
-// on the given BPMN node *within one execution scope*, seen through the in-flight
-// transaction (so it includes one activated earlier in this batch). A parallel
-// join uses it to count how many tokens have arrived on its incoming flows.
+// Arrival is one token waiting on a join: the element instance holding it and the
+// incoming sequence flow it came in on.
 //
-// scopeKey is the caller's own FlowScopeKey and is what makes a join belong to one
-// execution rather than to the node. Two iterations of a multi-instance subprocess
-// share a process instance and a node id but are separate executions with separate
-// tokens; matching on (instance, node) alone, a join counted the *other* iteration's
-// arrival as its own, fired early, and consumed a token that was never its to take
-// (ADR-0277). A token's scope is the identity of the execution
-// it belongs to, so it is part of the join's identity too.
-func (c *ProcessingContext) ElementInstancesOnNode(procKey, scopeKey uint64, elementId int32) []uint64 {
-	var keys []uint64
+// The flow is what a join has to count by. BPMN 2.0.2 §13.4 activates a parallel
+// gateway when there is at least one token on *each* incoming sequence flow, and
+// consumes exactly one from each — which is a different question from how many
+// tokens are on the node, and gives a different answer whenever a flow carries two
+// (ADR-draft-per-flow-join-counting).
+type Arrival struct {
+	Key  uint64
+	Flow int32
+}
+
+// ArrivalsOnNode returns the tokens waiting on the given node in one execution
+// scope, oldest first, each with the flow it arrived on. The order is the index's:
+// element-instance keys ascend with their minting, so oldest-first is what the scan
+// yields, and it is what makes a join's choice of which token to consume both
+// first-in-first-out and a pure function of state.
+//
+// The result aliases a processor-owned buffer and is valid until the next call.
+func (c *ProcessingContext) ArrivalsOnNode(procKey, scopeKey uint64, elementId int32) []Arrival {
+	out := c.p.arrivalBuf[:0]
 	err := c.tx.ElementInstancesOfProcess(procKey, func(elKey uint64, v *model.ElementInstanceValue) error {
 		if v.ElementId == elementId && v.FlowScopeKey == scopeKey {
-			keys = append(keys, elKey)
+			out = append(out, Arrival{Key: elKey, Flow: v.SourceFlowId})
 		}
 		return nil
 	})
 	c.p.fail(err)
-	return keys
+	c.p.arrivalBuf = out
+	return out
+}
+
+// OldestPerFlow reduces arrivals to one token per distinct incoming flow — the
+// oldest on each — which is the set a join firing consumes. Everything it leaves
+// out is surplus: a second token on a flow that already has one, which belongs to
+// the *next* firing and must not be swallowed by this one.
+//
+// The result aliases a second processor-owned buffer, so it stays valid across a
+// re-scan of the node.
+func (c *ProcessingContext) OldestPerFlow(arrivals []Arrival) []Arrival {
+	set := c.p.joinSetBuf[:0]
+	for _, a := range arrivals {
+		seen := false
+		for _, s := range set {
+			if s.Flow == a.Flow {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			set = append(set, a)
+		}
+	}
+	c.p.joinSetBuf = set
+	return set
 }
 
 // TokenCanStillReach reports whether any live token in scopeKey could still arrive
