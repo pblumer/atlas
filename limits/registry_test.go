@@ -117,13 +117,18 @@ func TestNoCeilingWithoutAName(t *testing.T) {
 }
 
 // named reports whether a ceiling expression takes its number from the registry: the
-// registry itself, a service's configured budgets, or a name that is not this
+// registry itself, a component's budgets accessor, or a name that is not this
 // package's own — which makes it a parameter or a field, resolved by whoever called.
+//
+// `.budgets().` is the canonical form. Reading the field directly is not accepted,
+// and deliberately: a Server or Service built as a struct literal has the zero
+// Limits, which is every ceiling at zero, and the accessor is what defaults it.
 func named(expr string, pkgLevel map[string]bool) bool {
-	for _, ok := range []string{"limits.", ".Limits.", ".limits."} {
-		if strings.Contains(expr, ok) {
-			return true
-		}
+	// Package-qualified, so it must start the expression: `limits.Default().X` is the
+	// registry, while `s.limits.X` is the field behind the accessor and is exactly
+	// what this rule has to keep rejecting.
+	if strings.HasPrefix(expr, "limits.") || strings.Contains(expr, ".budgets().") {
+		return true
 	}
 	root := strings.TrimSpace(expr)
 	if i := strings.IndexAny(root, "+- ("); i > 0 {

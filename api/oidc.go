@@ -145,6 +145,15 @@ type oidcProvider struct {
 	keysAt  time.Time
 }
 
+// budgets defaults an oidcProvider built as a literal, for the same reason the
+// server's accessor does: the zero Limits is every ceiling at zero.
+func (p *oidcProvider) budgets() limits.Limits {
+	if p.limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return p.limits
+}
+
 func newOIDCProvider(cfg OIDCConfig, budgets limits.Limits) *oidcProvider {
 	return &oidcProvider{cfg: cfg, client: &http.Client{Timeout: oidcFetchTimeout}, limits: budgets}
 }
@@ -177,7 +186,7 @@ func (p *oidcProvider) get(ctx context.Context, url string) ([]byte, error) {
 	}
 	// A provider's documents are small; a body that is not is either a mistake or
 	// somebody feeding this process a large file over a URL an operator configured.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, p.limits.Definition))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, p.budgets().Definition))
 	if err != nil {
 		return nil, fmt.Errorf("oidc: read %s: %w", url, err)
 	}
@@ -288,7 +297,7 @@ func (p *oidcProvider) exchange(ctx context.Context, code, verifier, redirectURI
 		return "", fmt.Errorf("oidc: token exchange: %w", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, p.limits.Definition))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, p.budgets().Definition))
 	if err != nil {
 		return "", fmt.Errorf("oidc: read token response: %w", err)
 	}
