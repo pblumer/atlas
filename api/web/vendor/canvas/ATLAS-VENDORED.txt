@@ -38,6 +38,15 @@ Adding that third notation cost 4,476 bytes — 123,109 to 127,585 — which is 
 same arithmetic the merge above rests on. One copy of diagram-js is the expensive
 part and it is already paid for; a renderer is cheap.
 
+Two more of the library's own modules joined later, and they are the exception to
+that arithmetic because they are library rather than renderer: the palette — the one
+bpmn-js and dmn-js put down their left edge, whose stylesheet was already sitting in
+diagram-js.css unused — and ManhattanLayout, which bends a relationship into right
+angles instead of drawing it straight through whatever lies between its ends.
+Together 127,585 to 154,041, which is 26,456 bytes. Both replace something Atlas
+would otherwise have written and then maintained: a hand-rolled toolbox that looked
+like neither of the two canvases beside it, and a router that did not route.
+
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
 built against the library, so folding them in would mean building bpmn-js from
@@ -57,4 +66,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-9805dcb3eda0d4baf552e534460f9be3ae94b1488f523a9cf4d63afd1b0c7789
+632b4fc4f780fac42074051f8029d045caefca2dd52c41560ecd2293e2ff86cf

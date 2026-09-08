@@ -1,0 +1,21 @@
+{
+  "title": {
+    "en": "The class diagram reads properly on a real model",
+    "de": "Das Klassendiagramm ist auch bei einem echten Modell lesbar"
+  },
+  "summary": {
+    "en": "Data › Model draws your information model. On anything larger than a handful of classes it did not hold together: attribute names ran out over the edges of their boxes, relationships were drawn as straight lines across everything between their ends, and several lines into the same class landed exactly on top of one another. Boxes now grow to fit what is written in them, lines turn at right angles like the process modeler's, and lines going the same way are spread apart. The tools for drawing have moved off the title bar into a palette down the left edge — the same one the process and decision modelers use.",
+    "de": "Unter «Daten › Modell» wird Ihr Informationsmodell gezeichnet. Bei mehr als einer Handvoll Klassen hielt das nicht stand: Attributnamen liefen über den Rand ihrer Kästchen hinaus, Beziehungen wurden als gerade Linien quer über alles Dazwischenliegende gezogen, und mehrere Linien zur selben Klasse lagen exakt übereinander. Kästchen wachsen jetzt mit ihrem Inhalt, Linien knicken rechtwinklig wie im Prozess-Modeler, und gleichlaufende Linien werden auseinandergezogen. Die Zeichenwerkzeuge sind aus der Titelleiste in eine Palette am linken Rand gewandert — dieselbe, die Prozess- und Entscheidungs-Modeler verwenden."
+  },
+  "tags": [
+    "Data",
+    "Modeler"
+  ],
+  "try": {
+    "label": {
+      "en": "Open Data",
+      "de": "Daten öffnen"
+    },
+    "route": "#/data"
+  }
+}

@@ -31,6 +31,35 @@
       }
     },
     {
+      "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The class diagram reads properly on a real model",
+        "de": "Das Klassendiagramm ist auch bei einem echten Modell lesbar"
+      },
+      "summary": {
+        "en": "Data › Model draws your information model. On anything larger than a handful of classes it did not hold together: attribute names ran out over the edges of their boxes, relationships were drawn as straight lines across everything between their ends, and several lines into the same class landed exactly on top of one another. Boxes now grow to fit what is written in them, lines turn at right angles like the process modeler's, and lines going the same way are spread apart. The tools for drawing have moved off the title bar into a palette down the left edge — the same one the process and decision modelers use.",
+        "de": "Unter «Daten › Modell» wird Ihr Informationsmodell gezeichnet. Bei mehr als einer Handvoll Klassen hielt das nicht stand: Attributnamen liefen über den Rand ihrer Kästchen hinaus, Beziehungen wurden als gerade Linien quer über alles Dazwischenliegende gezogen, und mehrere Linien zur selben Klasse lagen exakt übereinander. Kästchen wachsen jetzt mit ihrem Inhalt, Linien knicken rechtwinklig wie im Prozess-Modeler, und gleichlaufende Linien werden auseinandergezogen. Die Zeichenwerkzeuge sind aus der Titelleiste in eine Palette am linken Rand gewandert — dieselbe, die Prozess- und Entscheidungs-Modeler verwenden."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "every-list-opens-with-its-search-boxes-showing",
       "version": "Unreleased",
       "date": null,
@@ -381,34 +410,6 @@
           "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
         ]
       },
-      "try": {
-        "label": {
-          "en": "Open the inbox",
-          "de": "Zum Posteingang"
-        },
-        "route": "#/tasks"
-      }
-    },
-    {
-      "id": "the-console-speaks-german-on-the-screens-that-have-been-tran",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "The console has started speaking German",
-        "de": "Die Konsole spricht Deutsch"
-      },
-      "summary": {
-        "en": "Atlas's interface was English everywhere. The task folders are the first screen with a real message catalogue behind it, and German is what it shows by default — because the people working through the inbox are not the people deploying the models, and their processes and forms are German already. The rest of the console follows screen by screen rather than in one sweep, so nothing is half-translated on the way. If you would rather read English, add ?lang=en to the URL once and it is remembered.",
-        "de": "Die Oberfläche von Atlas war durchgehend englisch. Die Aufgaben-Ordner sind die erste Ansicht mit einem echten Textkatalog dahinter, und die zeigt standardmässig Deutsch — weil die Menschen, die den Posteingang abarbeiten, nicht dieselben sind, die Modelle deployen, und deren Prozesse und Formulare längst deutsch sind. Der Rest der Konsole folgt Ansicht für Ansicht statt in einem Rutsch, damit unterwegs nichts halb übersetzt dasteht. Wer lieber Englisch liest, hängt einmal ?lang=en an die URL — die Wahl wird gemerkt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Console"
-      ],
       "try": {
         "label": {
           "en": "Open the inbox",
