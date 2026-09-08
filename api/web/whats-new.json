@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Every worker type now tells you how to set it up",
+        "de": "Jeder Worker-Typ erklärt jetzt selbst, wie er eingerichtet wird"
+      },
+      "summary": {
+        "en": "The hardest part of connecting Jira, Google Sheets or a mail server was never the diagram — it was the half-dozen steps at the provider that nobody mentions: which token to create, which permission to grant, which spreadsheet to share. Pick a worker type on a service task and that is now written beside its fields: whether it needs a configured worker and a credential at all, the steps to get there in order, the mistake this type is usually reported with, and a link straight into the matching chapter of the handbook this server serves itself. The same block greets you on the Console's New worker form, which is where you are actually standing when you configure one.",
+        "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Configure a worker",
+          "de": "Worker konfigurieren"
+        },
+        "route": "#/console/workers"
+      }
+    },
+    {
       "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
       "version": "Unreleased",
       "date": null,
@@ -381,34 +410,6 @@
           "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
         ]
       },
-      "try": {
-        "label": {
-          "en": "Open the inbox",
-          "de": "Zum Posteingang"
-        },
-        "route": "#/tasks"
-      }
-    },
-    {
-      "id": "the-console-speaks-german-on-the-screens-that-have-been-tran",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "The console has started speaking German",
-        "de": "Die Konsole spricht Deutsch"
-      },
-      "summary": {
-        "en": "Atlas's interface was English everywhere. The task folders are the first screen with a real message catalogue behind it, and German is what it shows by default — because the people working through the inbox are not the people deploying the models, and their processes and forms are German already. The rest of the console follows screen by screen rather than in one sweep, so nothing is half-translated on the way. If you would rather read English, add ?lang=en to the URL once and it is remembered.",
-        "de": "Die Oberfläche von Atlas war durchgehend englisch. Die Aufgaben-Ordner sind die erste Ansicht mit einem echten Textkatalog dahinter, und die zeigt standardmässig Deutsch — weil die Menschen, die den Posteingang abarbeiten, nicht dieselben sind, die Modelle deployen, und deren Prozesse und Formulare längst deutsch sind. Der Rest der Konsole folgt Ansicht für Ansicht statt in einem Rutsch, damit unterwegs nichts halb übersetzt dasteht. Wer lieber Englisch liest, hängt einmal ?lang=en an die URL — die Wahl wird gemerkt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Console"
-      ],
       "try": {
         "label": {
           "en": "Open the inbox",

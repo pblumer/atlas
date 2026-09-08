@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Workers"
+  ],
+  "title": {
+    "en": "Every worker type now tells you how to set it up",
+    "de": "Jeder Worker-Typ erklärt jetzt selbst, wie er eingerichtet wird"
+  },
+  "summary": {
+    "en": "The hardest part of connecting Jira, Google Sheets or a mail server was never the diagram — it was the half-dozen steps at the provider that nobody mentions: which token to create, which permission to grant, which spreadsheet to share. Pick a worker type on a service task and that is now written beside its fields: whether it needs a configured worker and a credential at all, the steps to get there in order, the mistake this type is usually reported with, and a link straight into the matching chapter of the handbook this server serves itself. The same block greets you on the Console's New worker form, which is where you are actually standing when you configure one.",
+    "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
+  },
+  "try": {
+    "label": {
+      "en": "Configure a worker",
+      "de": "Worker konfigurieren"
+    },
+    "route": "#/console/workers"
+  }
+}

@@ -98,3 +98,25 @@ test("editing a configured worker stays on Workers", async ({ page }) => {
   await expect(page.locator("#view h1")).toHaveText("Workers");
   expect(page.__errors).toEqual([]);
 });
+
+// The Console's create form is where somebody who has just installed Atlas stands, and
+// the fields on it presuppose work at the provider that nothing on the screen used to
+// mention (ADR-draft-worker-type-setup-in-the-panel). The setup block follows the type
+// picked in the form, so it is the steps for the worker actually being added.
+test("the New worker form says how the picked type is set up, and links to the handbook", async ({ page }) => {
+  await goto(page, "#/console/workers");
+  await page.click("#new-worker");
+  const doc = page.locator(".conn-setup .wtdoc");
+  await expect(doc).toBeVisible();
+  // The form opens on temis, the first option.
+  await expect(doc.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-temis");
+
+  await page.selectOption('.worker-form [name="kind"]', "googlesheets");
+  await expect(doc.locator(".wtdoc-needs")).toContainText("service account key");
+  await expect(doc.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-googlesheets");
+  await page.locator(".conn-setup .wtdoc-more > summary").click();
+  // The step that is forgotten more often than any other, on the screen where the
+  // worker is created rather than in an incident an hour later.
+  await expect(page.locator(".conn-setup .wtdoc-steps")).toContainText("Share the spreadsheet");
+  expect(page.__errors).toEqual([]);
+});

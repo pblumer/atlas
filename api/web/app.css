@@ -3790,6 +3790,49 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px;
 }
 
+/* What a Worker Type needs before it works, in the panel where it is chosen
+   (ADR-draft-worker-type-setup-in-the-panel). Three parts, deliberately weighted: the
+   `needs` line and the handbook link are always visible — they are what someone who has
+   never configured this type has to see without knowing to look — and the step-by-step
+   is folded away, because an author who already has the worker wants the fields, not the
+   recipe. The steps carry markup of their own (code spans, bold), so they are styled
+   here rather than inheriting the flat .muted hint. */
+.wtdoc { margin: 0 0 10px; }
+.wtdoc-needs {
+  margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px 6px 0 0;
+  border-bottom: none; background: var(--surface); font-size: 12.5px; line-height: 1.5;
+}
+.wtdoc-more {
+  border: 1px solid var(--border); border-radius: 0; background: var(--surface);
+  font-size: 12.5px; line-height: 1.5;
+}
+.wtdoc-more > summary {
+  padding: 6px 10px; cursor: pointer; font-weight: 600; color: var(--accent);
+  list-style-position: inside;
+}
+.wtdoc-more[open] > summary { border-bottom: 1px solid var(--border); }
+.wtdoc-steps { margin: 8px 0; padding: 0 10px 0 26px; }
+.wtdoc-steps li { margin: 0 0 7px; }
+.wtdoc-steps li:last-child { margin-bottom: 0; }
+.wtdoc-trap {
+  margin: 0; padding: 8px 10px; border-top: 1px solid var(--border);
+  background: var(--warn-soft);
+}
+.wtdoc code, .wtdoc-trap code {
+  font: 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 3px;
+  overflow-wrap: anywhere;
+}
+/* The link is a row of its own under the block: a deep link into the handbook this
+   server serves itself, so it also works on an installation with no internet. */
+.wtdoc-link {
+  display: block; padding: 6px 10px; border: 1px solid var(--border); border-radius: 0 0 6px 6px;
+  background: var(--surface); color: var(--accent); font-size: 12.5px; font-weight: 600;
+  text-decoration: none;
+}
+.wtdoc-link:hover { background: var(--accent-soft); }
+.wtdoc-link .ext { color: var(--muted); font-size: 11px; }
+
 /* One worker's recent jobs (ADR-0157). The list is for scanning outcomes, so a failed
    job is the thing that stands out and its variables stay folded until asked for. */
 .wkjobs-modal { width: min(860px, 94vw); }

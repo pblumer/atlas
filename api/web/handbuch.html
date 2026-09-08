@@ -60,6 +60,10 @@ main{padding:8px clamp(16px,4vw,44px) 96px;min-width:0}
 .hero h1{font-size:30px;margin:0 0 8px;letter-spacing:-.01em}
 .hero p{margin:0;color:var(--muted);max-width:70ch;font-size:16px}
 section{padding-top:40px;scroll-margin-top:66px}
+/* A deep link may land on a card rather than a section: the Modeler's properties panel
+   links straight to one Worker Type's runbook. Give a card with an id the same clearance
+   under the sticky top bar that a section has, so it does not arrive hidden behind it. */
+.card[id]{scroll-margin-top:66px}
 section>h2{font-size:23px;margin:0 0 6px;letter-spacing:-.01em;
   border-bottom:1px solid var(--border);padding-bottom:8px}
 section h3{font-size:17px;margin:26px 0 6px}
@@ -5323,6 +5327,34 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             not a dropdown – because only SQL&nbsp;Server can bind parameters <b>by name</b>. The other two refuse an
             object as parameters rather than putting it into an order nobody wrote.</li>
         </ol>
+        <div id="runbook-mssql">
+          <p data-l="de"><b>Microsoft SQL Server.</b> Verbindungszeichenfolge
+            <code>sqlserver://atlas:PASSWORT@sql.example.com:1433?database=hr</code>, Platzhalter <code>@p1</code>.
+            Der einzige der drei Treiber, der Parameter über <b>Namen</b> bindet – nur hier ist eine
+            Parametervariable in Objektform erlaubt.</p>
+          <p data-l="en"><b>Microsoft SQL Server.</b> Connection string
+            <code>sqlserver://atlas:PASSWORT@sql.example.com:1433?database=hr</code>, placeholder <code>@p1</code>.
+            The one of the three drivers that binds parameters <b>by name</b> – an object-shaped parameters variable
+            is accepted here and nowhere else.</p>
+        </div>
+        <div id="runbook-mariadb">
+          <p data-l="de"><b>MariaDB.</b> Verbindungszeichenfolge
+            <code>atlas:PASSWORT@tcp(mariadb.example.com:3306)/hr?parseTime=true</code> – die eigene Form des
+            MySQL-Treibers, die keine URL ist. Platzhalter <code>?</code>, gebunden in der Reihenfolge der Werte.</p>
+          <p data-l="en"><b>MariaDB.</b> Connection string
+            <code>atlas:PASSWORT@tcp(mariadb.example.com:3306)/hr?parseTime=true</code> – the MySQL driver's own
+            form, which is not a URL. Placeholder <code>?</code>, bound in the order of the values.</p>
+        </div>
+        <div id="runbook-postgres">
+          <p data-l="de"><b>PostgreSQL.</b> Verbindungszeichenfolge
+            <code>postgres://atlas:PASSWORT@db.example.com:5432/hr?sslmode=require</code>, Platzhalter
+            <code>$1</code>, <code>$2</code> … <code>sslmode=require</code> stehen lassen, ausser die Datenbank
+            liegt auf demselben Host.</p>
+          <p data-l="en"><b>PostgreSQL.</b> Connection string
+            <code>postgres://atlas:PASSWORT@db.example.com:5432/hr?sslmode=require</code>, placeholders
+            <code>$1</code>, <code>$2</code> … Keep <code>sslmode=require</code> unless the database sits on this
+            very host.</p>
+        </div>
         <p data-l="de"><b>Die Anweisung ist immer literal.</b> Das <code>statement</code>-Feld hat als einziges Feld in
           Atlas bewusst keinen <code>fx</code>-Schalter: eine aus Prozessdaten zusammengesetzte Anweisung wäre eine
           Injection, die keinen Anführungszeichenfehler mehr bräuchte. Werte kommen ausschliesslich als <b>gebundene
@@ -5376,24 +5408,135 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       </div>
 
       <div class="card" id="runbook-temis">
-        <h4 data-l="de">temis &amp; clio (Entscheidungen und Ereignisse)</h4><h4 data-l="en">temis &amp; clio (decisions and events)</h4>
-        <p data-l="de">Beide brauchen nur einen Endpoint (<code>https://temis.example.com</code>) und optional eine
-          Token-Referenz – ein offener Dienst im eigenen Netz braucht keine. <b>temis</b> ist der Weg, DMN-Modelle
-          zentral zu halten statt in jeder Atlas-Instanz; <b>clio</b> schreibt und liest Ereignisse in einem
-          Event-Store. Solange du DMN-Modelle lokal registrierst, brauchst du temis <i>nicht</i> – die eingebaute
-          Entscheidungs-Engine wertet sie aus.</p>
-        <p data-l="en">Both need only an endpoint (<code>https://temis.example.com</code>) and optionally a token
-          reference – an open service on your own network needs none. <b>temis</b> is the way to keep DMN models
-          centrally rather than in every Atlas instance; <b>clio</b> writes and reads events in an event store. As
-          long as you register DMN models locally you do <i>not</i> need temis – the built-in decision engine
-          evaluates them.</p>
+        <h4 data-l="de">temis (zentrale Entscheidungen)</h4><h4 data-l="en">temis (central decisions)</h4>
+        <p data-l="de">Braucht nur einen Endpoint (<code>https://temis.example.com</code>) und optional eine
+          Token-Referenz – ein offener Dienst im eigenen Netz braucht keine. temis ist der Weg, DMN-Modelle zentral
+          zu halten statt in jeder Atlas-Instanz. Solange du DMN-Modelle lokal registrierst, brauchst du temis
+          <i>nicht</i> – die eingebaute Entscheidungs-Engine wertet sie aus.</p>
+        <p data-l="en">Needs only an endpoint (<code>https://temis.example.com</code>) and optionally a token
+          reference – an open service on your own network needs none. temis is the way to keep DMN models centrally
+          rather than in every Atlas instance. As long as you register DMN models locally you do <i>not</i> need
+          temis – the built-in decision engine evaluates them.</p>
+        <ol>
+          <li data-l="de">Token, falls der Dienst einen verlangt, unter
+            <a href="/#/console/secrets">Console → Secrets</a> ablegen, z.&nbsp;B. <code>temis_token</code>.</li>
+          <li data-l="en">Where the service requires one, store the token under
+            <a href="/#/console/secrets">Console → Secrets</a>, e.g. <code>temis_token</code>.</li>
+          <li data-l="de"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: Typ <b>temis</b>,
+            ein Name, der Endpoint, die Token-Referenz.</li>
+          <li data-l="en"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: type
+            <b>temis</b>, a name, the endpoint, the token reference.</li>
+          <li data-l="de">Im Business-Rule-Task die Bindung <b>temis</b> wählen und den Worker-Namen nennen.</li>
+          <li data-l="en">In the business rule task choose the <b>temis</b> binding and name the worker.</li>
+        </ol>
+      </div>
+
+      <div class="card" id="runbook-clio">
+        <h4 data-l="de">clio (Ereignisse)</h4><h4 data-l="en">clio (events)</h4>
+        <p data-l="de">Schreibt und liest Ereignisse in einem Event-Store. Wie temis: ein Endpoint
+          (<code>https://clio.example.com</code>) und optional eine Token-Referenz, kein Konto bei einem Anbieter.</p>
+        <p data-l="en">Writes and reads events in an event store. Like temis: an endpoint
+          (<code>https://clio.example.com</code>) and optionally a token reference, no account at a provider.</p>
+        <ol>
+          <li data-l="de">Token, falls nötig, unter <a href="/#/console/secrets">Console → Secrets</a> ablegen.</li>
+          <li data-l="en">Store the token under <a href="/#/console/secrets">Console → Secrets</a> if there is one.</li>
+          <li data-l="de"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: Typ <b>clio</b>,
+            ein Name – <b>genau den</b> nennt jeder Task –, der Endpoint, die Token-Referenz.</li>
+          <li data-l="en"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: type <b>clio</b>,
+            a name – <b>exactly the one</b> every task states –, the endpoint, the token reference.</li>
+          <li data-l="de">Zuerst ein <b>Ereignis schreiben</b>, auf einem Wegwerf-Subject, bevor eine Abfrage an einem
+            Gateway hängt: Eine Abfrage auf ein Subject, auf das nie geschrieben wurde, antwortet „kein Zustand" –
+            und das ist nicht dasselbe wie „nicht erreichbar".</li>
+          <li data-l="en">Start by <b>writing one event</b> on a throwaway subject before a query hangs off a
+            gateway: a query on a subject nothing has written answers "no state" – which is not the same as "not
+            reachable".</li>
+        </ol>
+      </div>
+
+      <div class="card" id="runbook-discord">
+        <h4>Discord</h4>
+        <p data-l="de">Der Typ mit der kürzesten Einrichtung – und einer Falle, die wie ein falscher Token
+          aussieht.</p>
+        <p data-l="en">The type with the shortest setup – and one trap that looks exactly like a wrong token.</p>
+        <ol>
+          <li data-l="de"><b>Discord Developer Portal</b> → <i>New Application</i> → <i>Bot</i> →
+            <b>Reset Token</b>. Der Token wird genau einmal angezeigt.</li>
+          <li data-l="en"><b>Discord Developer Portal</b> → <i>New Application</i> → <i>Bot</i> →
+            <b>Reset Token</b>. The token is shown once.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>discord_team</code>: <code>{"botToken": "…"}</code> – nur
+            der Token; das Schema <code>Bot </code> setzt Atlas selbst davor.</li>
+          <li data-l="en">Create a secret, e.g. <code>discord_team</code>: <code>{"botToken": "…"}</code> – the
+            token alone; Atlas composes the <code>Bot </code> scheme itself.</li>
+          <li data-l="de"><b>Bot auf den Server einladen:</b> Developer Portal → <i>OAuth2</i> → URL-Generator,
+            Scope <code>bot</code>, die erzeugte URL im Browser öffnen. In jedem Kanal, in den ein Prozess schreibt,
+            braucht er <b>View Channel</b> und <b>Send Messages</b>.</li>
+          <li data-l="en"><b>Invite the bot to your server:</b> Developer Portal → <i>OAuth2</i> → URL generator,
+            scope <code>bot</code>, open the generated URL. In every channel a process writes to it needs
+            <b>View Channel</b> and <b>Send Messages</b>.</li>
+          <li data-l="de">Worker anlegen: Typ <b>Discord</b>, ein Name, Credential-Referenz
+            <code>discord_team</code>, <b>kein Endpoint</b> – Discords API-Adresse ist für alle dieselbe.</li>
+          <li data-l="en">Create the worker: type <b>Discord</b>, a name, credential reference
+            <code>discord_team</code>, <b>no endpoint</b> – Discord's API base is the same for everyone.</li>
+          <li data-l="de"><b>Kanal-ID besorgen:</b> in Discord den <i>Entwicklermodus</i> einschalten
+            (Benutzereinstellungen → Erweitert), dann Rechtsklick auf den Kanal → <b>Kanal-ID kopieren</b>. Ein
+            Thread ist selbst ein Kanal: Antworten in einem Thread ist ein Send message mit dessen ID.</li>
+          <li data-l="en"><b>Get the channel id:</b> in Discord switch on <i>Developer Mode</i> (User settings →
+            Advanced), then right-click the channel → <b>Copy Channel ID</b>. A thread is itself a channel: replying
+            in one is a Send message naming its id.</li>
+        </ol>
+        <p data-l="de"><b>Die Falle:</b> Eine fehlende Kanalberechtigung kommt als Code <code>50001</code>,
+          <i>Missing Access</i>, zurück – nicht als abgelehnter Token. Prüfe die Rechte im Kanal, bevor du den Token
+          neu erzeugst.</p>
+        <p data-l="en"><b>The trap:</b> a missing channel grant comes back as code <code>50001</code>,
+          <i>Missing Access</i> – not as a rejected token. Check the channel's permissions before you reset the
+          token.</p>
+      </div>
+
+      <div class="card" id="runbook-ai">
+        <h4 data-l="de">KI-Worker (Sprachmodell)</h4><h4 data-l="en">AI worker (language model)</h4>
+        <p data-l="de">Ein Konto beim Modellanbieter, ein Schlüssel, ein Standardmodell – mehr braucht es nicht.
+          Wichtig ist, was <i>nicht</i> im Modell steht: Endpoint, Schlüssel und Format liegen beim Worker, damit ein
+          Diagramm ohne Änderung von einem Anbieter zum nächsten zieht.</p>
+        <p data-l="en">An account at the model provider, a key, a default model – that is all. What matters is what
+          is <i>not</i> in the model: endpoint, key and wire format live on the worker, so a diagram moves from one
+          provider to the next unchanged.</p>
+        <ol>
+          <li data-l="de"><b>API-Schlüssel</b> beim Anbieter erzeugen (Anthropic Console, OpenAI-Plattform oder das
+            eigene Gateway) – einen, der dem Server gehört, nicht einer Person.</li>
+          <li data-l="en">Create an <b>API key</b> at the provider (Anthropic Console, the OpenAI platform, or your
+            own gateway) – one that belongs to the server, not to a person.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>anthropic_api_key</code>, das den Schlüssel selbst
+            enthält.</li>
+          <li data-l="en">Create a secret, e.g. <code>anthropic_api_key</code>, holding the key itself.</li>
+          <li data-l="de">Worker anlegen: Typ <b>AI agent model</b>, ein Name, das <b>Wire-Format</b>
+            (<i>Messages</i> ist Anthropics Format, <i>Chat Completions</i> das von OpenAI und allem, was sich
+            OpenAI-kompatibel nennt), die Schlüssel-Referenz und das <b>Standardmodell</b>. Der Endpoint bleibt leer,
+            ausser bei Gateway, Proxy oder selbst gehostetem Dienst.</li>
+          <li data-l="en">Create the worker: type <b>AI agent model</b>, a name, the <b>wire format</b>
+            (<i>Messages</i> is Anthropic's, <i>Chat Completions</i> is OpenAI's and that of anything calling itself
+            OpenAI-compatible), the key reference and the <b>default model</b>. Leave the endpoint empty unless you
+            go through a gateway, a proxy or a self-hosted deployment.</li>
+          <li data-l="de">Im Task <b>Model</b> leer lassen für das Standardmodell des Workers – oder pro Task eines
+            nennen: ein günstiges für eine Klassifikation, ein starkes für eine Empfehlung, über denselben Worker und
+            denselben Schlüssel.</li>
+          <li data-l="en">In the task leave <b>Model</b> empty for the worker's default – or name one per task: a
+            cheap model for a classification, a strong one for advice, through the same worker and the same key.</li>
+        </ol>
+        <p data-l="de"><b>Warum das nie in der Engine läuft:</b> Ein Modellaufruf dauert Sekunden bis Minuten und
+          kann hängen. Atlas beaufsichtigt deshalb für diesen Typ eine eigene Worker-Instanz und übernimmt ein
+          geändertes Modell beim Speichern, ohne Neustart.</p>
+        <p data-l="en"><b>Why this never runs inside the engine:</b> a model call takes seconds to minutes and can
+          hang. Atlas therefore supervises a worker instance of its own for this type and picks up a changed model on
+          save, with no restart.</p>
       </div>
 
       <h3 class="rz-group"><span data-l="de">Typen ohne Konfiguration</span><span data-l="en">Types with nothing to configure</span></h3>
       <p data-l="de">Diese Worker-Typen brauchen <b>keinen</b> konfigurierten Worker: Ihre Aufgaben tragen alles im
-        Modell oder brauchen gar keine Einstellung. Kein Secret, kein Name, kein Dialog – installieren und benutzen.</p>
-      <p data-l="en">These worker types need <b>no</b> configured worker: their tasks carry everything in the model, or
-        need no configuration at all. No secret, no name, no dialog – install and use.</p>
+        Modell, es gibt also keinen Namen und keinen Dialog. Ein Credential kann trotzdem nötig sein – es steht dann
+        als <b>Referenz</b> im Task und der Wert unter <a href="/#/console/secrets">Console → Secrets</a>.</p>
+      <p data-l="en">These worker types need <b>no</b> configured worker: their tasks carry everything in the model,
+        so there is no name and no dialog. A credential may still be needed – it then sits in the task as a
+        <b>reference</b>, with the value under <a href="/#/console/secrets">Console → Secrets</a>.</p>
       <div class="grid2">
         <div class="card" id="runbook-rest">
           <b>HTTP REST</b>
@@ -5435,13 +5578,99 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             quicker to write.</p>
         </div>
         <div class="card" id="runbook-ldap">
-          <b>LDAP · LDIF · SOAP · SCIM</b>
-          <p class="lead" data-l="de">Die generischen Protokoll-Typen für alles, was kein eigenes Worker-Kind hat.
-            Wenn es für dein Zielsystem einen spezialisierten Typ gibt (Active&nbsp;Directory statt LDAP), nimm den –
-            er kennt die Eigenheiten, die ein generischer Aufruf dir überlässt.</p>
-          <p class="lead" data-l="en">The generic protocol types for anything without a worker kind of its own. Where a
-            specialised type exists for your target system (Active&nbsp;Directory rather than LDAP), take it – it knows
-            the quirks a generic call leaves to you.</p>
+          <b>LDAP</b>
+          <p class="lead" data-l="de">Sucht in einem Verzeichnis oder legt Einträge an, ändert und löscht sie. Kein
+            konfigurierter Worker: Server-URL und Bind-DN stehen im Task, das <b>Bind-Passwort ist eine Referenz</b>
+            auf ein Secret unter <a href="/#/console/secrets">Console → Secrets</a>. Nimm <code>ldaps://</code> oder
+            <code>ldap://</code> mit STARTTLS. Für Active&nbsp;Directory gibt es den spezialisierten Typ – der kennt
+            die Eigenheiten, die ein generischer Aufruf dir überlässt. <b>Vorsicht:</b> Eine Suche ohne Berechtigung
+            antwortet „nichts gefunden" statt mit einem Fehler.</p>
+          <p class="lead" data-l="en">Searches a directory, or adds, modifies and deletes entries. No configured
+            worker: the server URL and the bind DN live in the task, and the <b>bind password is a reference</b> to a
+            secret under <a href="/#/console/secrets">Console → Secrets</a>. Use <code>ldaps://</code>, or
+            <code>ldap://</code> with STARTTLS. For Active&nbsp;Directory take the specialised type – it knows the
+            quirks a generic call leaves to you. <b>Careful:</b> a search without permission answers "nothing found"
+            rather than failing.</p>
+        </div>
+        <div class="card" id="runbook-scim">
+          <b>SCIM</b>
+          <p class="lead" data-l="de">Legt Benutzer und Gruppen bei einem Identity-Provider über SCIM&nbsp;2.0 an,
+            liest und ändert sie. Basis-URL und Ressource stehen im Task; das Provisioning-Token des Providers legst
+            du unter <a href="/#/console/secrets">Console → Secrets</a> ab und nennst es als Secret-Referenz
+            (Authentifizierung <i>Bearer token</i>). Beginne mit einer <b>Suche</b> statt mit einem Anlegen: Ein
+            Filter wie <code>userName eq "arno"</code> beweist Token und Basis-URL, ohne etwas zu schreiben – aber
+            beachte, dass eine unberechtigte Suche „keine Ressourcen" antwortet und nicht scheitert.</p>
+          <p class="lead" data-l="en">Creates, reads and updates users and groups at an identity provider over
+            SCIM&nbsp;2.0. Base URL and resource live in the task; store the provider's provisioning token under
+            <a href="/#/console/secrets">Console → Secrets</a> and name it as the secret reference (authentication
+            <i>Bearer token</i>). Start with a <b>search</b> rather than a create: a filter such as
+            <code>userName eq "arno"</code> proves the token and the base URL without writing anything – but note
+            that an unentitled search answers "no resources" instead of failing.</p>
+        </div>
+        <div class="card" id="runbook-soap">
+          <b data-l="de">SOAP / Web Services</b><b data-l="en">SOAP / web services</b>
+          <p class="lead" data-l="de">Ruft eine Operation eines älteren Web-Service auf. Endpoint
+            (<code>soap:address</code> aus der WSDL), Operationsname und Request-Rumpf stehen im Task; ein
+            Kennwort ist eine Secret-Referenz. Der Rumpf ist <b>nur das Request-Element</b> – den Envelope schreibt
+            Atlas darum. <b>Die häufigste Fehlersuche am falschen Ort:</b> Ein falscher oder fehlender
+            <code>SOAPAction</code>-Header wird von den meisten Stacks als Fault über den <i>Body</i> beantwortet.
+            Sieht der Body richtig aus, prüfe zuerst die Action.</p>
+          <p class="lead" data-l="en">Invokes an operation on a legacy web service. The endpoint
+            (<code>soap:address</code> from the WSDL), the operation name and the request body live in the task; a
+            password is a secret reference. The body is <b>the request element only</b> – Atlas writes the envelope
+            around it. <b>The most common search in the wrong place:</b> a wrong or missing <code>SOAPAction</code>
+            header is answered by most stacks with a fault about the <i>body</i>. When the body looks right, check
+            the action first.</p>
+        </div>
+        <div class="card" id="runbook-ldif">
+          <b data-l="de">Verzeichnisdatei (LDIF/DSML)</b><b data-l="en">Directory file (LDIF/DSML)</b>
+          <p class="lead" data-l="de">Liest oder schreibt Verzeichniseinträge in einer Datei. Kein Worker, kein
+            Secret, kein Endpoint – der Dateiinhalt ist eine Prozessvariable. Das <b>Format ist Pflicht</b>: Es aus
+            den Bytes zu raten, ist der Weg, auf dem eine kaputte Datei zu einem plausibel aussehenden leeren
+            Ergebnis wird. Die Einträge haben dieselbe Form <code>{dn, attributes}</code> wie eine LDAP-Suche, also
+            lässt sich ein Verzeichnis direkt in eine Datei schreiben.</p>
+          <p class="lead" data-l="en">Reads or writes directory entries held in a file. No worker, no secret, no
+            endpoint – the file's content is a process variable. The <b>format is required</b>: guessing it from the
+            bytes is how a malformed file becomes a plausible-looking empty result. Entries carry the same
+            <code>{dn, attributes}</code> shape an LDAP search returns, so a directory can be written straight to a
+            file.</p>
+        </div>
+        <div class="card" id="runbook-jobworker">
+          <b data-l="de">Job-Worker – dein eigener Prozess</b><b data-l="en">Job worker – a process of your own</b>
+          <p class="lead" data-l="de">Kein konfigurierter Worker und kein Credential: Der <b>Job-Typ</b> ist der
+            ganze Vertrag. Einen Worker startest du selbst:
+            <code>atlas worker --server http://localhost:8080 --handle payment=/usr/local/bin/pay.sh</code> (mit
+            eingeschalteter Anmeldung zusätzlich <code>--token</code> bzw. <code>ATLAS_TOKEN</code>). Der Job kommt
+            als JSON auf <b>stdin</b>, das JSON-Objekt auf <b>stdout</b> wird zu den Variablen, mit denen der Job
+            abschliesst; ein Exit-Code ungleich null lässt ihn scheitern und trägt stderr als Meldung.
+            <b>Steht der Token am Task ohne Incident</b>, holt niemand diesen Job-Typ ab – der Job wartet korrekt,
+            es fehlt nur der Worker.</p>
+          <p class="lead" data-l="en">No configured worker and no credential: the <b>job type</b> is the whole
+            contract. You start a worker yourself:
+            <code>atlas worker --server http://localhost:8080 --handle payment=/usr/local/bin/pay.sh</code> (with
+            authentication on, add <code>--token</code> or <code>ATLAS_TOKEN</code>). The job arrives as JSON on
+            <b>stdin</b>; the JSON object printed on <b>stdout</b> becomes the variables the job completes with, and
+            a non-zero exit fails it carrying stderr as the message. <b>A token sitting on the task with no
+            incident</b> means nobody is leasing that job type – the job waits correctly, the worker is what is
+            missing.</p>
+        </div>
+        <div class="card" id="runbook-userprov">
+          <b data-l="de">Benutzerbereitstellung (Atlas-Logins)</b><b data-l="en">User provisioning (Atlas logins)</b>
+          <p class="lead" data-l="de">Legt ein Atlas-Login an, setzt sein Passwort oder deaktiviert es. Kein Worker
+            und kein Credential – dieser Typ wirkt auf den <i>eigenen</i> Benutzerspeicher dieses Servers und ist
+            deshalb eingezäunt statt konfiguriert: Er läuft <b>nur für Prozesse im geschützten System-Projekt</b>,
+            dieselbe Aufgabe in einem gewöhnlichen Projekt weist der Deploy ab. Er ist standardmässig eingeschaltet;
+            <code>--user-provisioning=false</code> schaltet ihn ab. Setze immer einen <b>menschlichen
+            Freigabeschritt</b> davor, in dem eine Administratorin Rollen und Initialpasswort bestimmt – niemals ein
+            öffentliches Startformular. Das Passwort kommt als FEEL-Referenz (<code>=initialpasswort</code>), damit
+            keines im Modell steht.</p>
+          <p class="lead" data-l="en">Creates an Atlas login, sets its password, or disables it. No worker and no
+            credential – this type acts on this server's <i>own</i> user store, which is why it is fenced instead of
+            configured: it runs <b>only for processes in the protected system project</b>, and the same task in an
+            ordinary project is refused at deploy. It is on by default; <code>--user-provisioning=false</code>
+            switches it off. Always put a <b>human approval step</b> in front of it where an administrator decides
+            the roles and the initial password – never a public start form. The password arrives as a FEEL reference
+            (<code>=initialpasswort</code>), so none is written into the model.</p>
         </div>
         <div class="card" id="runbook-mockup">
           <b data-l="de">Mockup – gar kein Worker</b><b data-l="en">Mockup – no worker at all</b>

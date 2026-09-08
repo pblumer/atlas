@@ -21,6 +21,12 @@ import {
   repairFormFlow,
 } from "./incidents.js";
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
+// What a Worker Type needs at the provider before any of these fields mean anything,
+// plus the deep link into this server's own handbook
+// (ADR-draft-worker-type-setup-in-the-panel). The create form is where someone who has
+// just installed Atlas stands, so it is the surface that must not assume the reader has
+// already read the handbook.
+import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
@@ -3764,7 +3770,8 @@ function wireWorkerManagement(workers) {
         <button class="btn" type="submit" title="Add this configured worker">Add worker</button>
         <button class="btn neutral conn-f-test" type="button" id="conn-test" title="Connect and authenticate with what is typed above — nothing is saved and no message is sent">Test connection</button>
         <p class="conn-test-result" style="flex:1 1 100%;margin:0;font-size:12.5px" hidden></p>
-        <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p></form>`;
+        <p class="muted conn-hint" style="flex:1 1 100%;margin:0;font-size:12.5px"></p>
+        <div class="conn-setup" style="flex:1 1 100%;margin:0"></div></form>`;
       // Adapt the form to the kind and mail provider: SMTP needs a host:port endpoint
       // and (optionally) a password reference; a native provider (Gmail/Graph) needs no
       // endpoint but a credentialsRef naming a vault JSON auth bundle, and sends as the
@@ -3851,6 +3858,11 @@ function wireWorkerManagement(workers) {
         const hintEl = form.querySelector(".conn-hint");
         hintEl.innerHTML = sh.hint;
         hintEl.style.display = sh.hint ? "" : "none";
+        // And the part that is not about these fields at all: what has to exist at the
+        // provider first, and where the handbook says it at length. Someone adding their
+        // first worker is the reader who most needs it and the least likely to know the
+        // handbook has a chapter for exactly this.
+        form.querySelector(".conn-setup").innerHTML = workerKindDocHTML(kindSel.value);
       };
       kindSel.addEventListener("change", () => { fillProviders(); sync(); });
       providerSel.addEventListener("change", sync);
