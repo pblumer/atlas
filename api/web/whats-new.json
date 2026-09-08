@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A MIM workflow imports as the process it is, not as a straight line",
+        "de": "Ein MIM-Workflow wird als der Prozess importiert, der er ist — nicht als gerade Linie"
+      },
+      "summary": {
+        "en": "Workflows built with the MIMWAL activity library say almost nothing in the elements themselves: a step is conditional because it carries a condition, and repeats because it carries an iteration, not because the workflow contains a branch or a loop. The import used to read only the elements, so twenty conditional steps arrived as twenty unconditional ones — a diagram that looked like your process and did not behave like it. It now reads the conditions and the iterations too, draws them as gateways and loops, and puts each step's queries and assignments on the step in two readable lines instead of leaving them buried in the original markup. The MIM expressions themselves are not translated: each is written onto the model and listed for review, so you can see exactly what is left to fill in.",
+        "de": "Workflows, die mit der MIMWAL-Bibliothek gebaut sind, sagen in den Elementen selbst fast nichts aus: Ein Schritt ist bedingt, weil er eine Bedingung trägt, und er wiederholt sich, weil er eine Iteration trägt — nicht, weil der Workflow eine Verzweigung oder eine Schleife enthielte. Der Import las bisher nur die Elemente, also kamen zwanzig bedingte Schritte als zwanzig unbedingte an: ein Diagramm, das aussah wie Ihr Prozess und sich nicht so verhielt. Jetzt werden Bedingungen und Iterationen mitgelesen, als Gateways und Schleifen gezeichnet, und die Abfragen und Zuweisungen jedes Schritts stehen in zwei lesbaren Zeilen am Schritt statt vergraben im Originalmarkup. Die MIM-Ausdrücke selbst werden nicht übersetzt: Jeder steht am Modell und in der Prüfliste, damit Sie genau sehen, was noch auszufüllen ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ],
+      "try": {
+        "label": {
+          "en": "Import a MIM workflow",
+          "de": "MIM-Workflow importieren"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "every-list-opens-with-its-search-boxes-showing",
       "version": "Unreleased",
       "date": null,
@@ -46,6 +75,28 @@
         },
         "route": "#/modeler"
       }
+    },
+    {
+      "id": "an-imported-model-keeps-its-ids-and-its-diagram-reads-forwar",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Re-importing a changed MIM workflow no longer renames everything",
+        "de": "Ein erneuter Import benennt nicht mehr alles um"
+      },
+      "summary": {
+        "en": "An imported step used to be numbered in the order it was written out, so adding one step in MIM renumbered every step after it. Comparing the new import against the old one then showed a difference on every element, and anything you had adjusted by hand was hard to carry over. A step now keeps the name it has in MIM, so a second import of a slightly changed workflow differs only where the workflow does. The diagram also lays out left to right without arrows doubling back on themselves.",
+        "de": "Ein importierter Schritt war bisher in der Reihenfolge seiner Ausgabe nummeriert, sodass ein einziger neuer Schritt in MIM alle folgenden umnummerierte. Ein Vergleich des neuen mit dem alten Import zeigte dann an jedem Element einen Unterschied, und von Hand vorgenommene Anpassungen liessen sich kaum übernehmen. Ein Schritt behält jetzt den Namen, den er in MIM hat — ein zweiter Import eines leicht geänderten Workflows unterscheidet sich nur dort, wo der Workflow sich unterscheidet. Ausserdem läuft das Diagramm von links nach rechts, ohne dass Pfeile zurückspringen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ]
     },
     {
       "id": "an-incident-that-says-no-worker-registered-as-x-can-now-crea",
@@ -131,6 +182,28 @@
         },
         "route": "#/modeler"
       }
+    },
+    {
+      "id": "the-mim-importer-reads-the-workflows-mim-actually-writes",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Importing a real MIM workflow works, and the diagram is readable",
+        "de": "Der Import eines echten MIM-Workflows funktioniert — und das Diagramm ist lesbar"
+      },
+      "summary": {
+        "en": "Three things stood between the importer and a workflow exported from a real MIM installation. The file would not load at all, because MIM writes part of its header in a way strict XML readers reject. Every step was labelled with an internal designer name such as actionActivity6 instead of the name its author gave it, which made the imported diagram unreadable. And the original definition kept alongside each step was altered as it was stored, so quotation marks inside a MIM expression came back as stray characters. All three are fixed: such a file imports, the steps carry their real names, and what is kept beside them is what MIM wrote.",
+        "de": "Drei Dinge standen zwischen dem Importer und einem Workflow aus einer echten MIM-Installation. Die Datei liess sich gar nicht laden, weil MIM einen Teil des Kopfs so schreibt, wie strenge XML-Leser ihn ablehnen. Jeder Schritt trug einen internen Entwurfsnamen wie actionActivity6 statt des Namens, den sein Autor vergeben hat — das machte das importierte Diagramm unlesbar. Und die neben jedem Schritt aufbewahrte Originaldefinition wurde beim Speichern verändert, sodass Anführungszeichen in MIM-Ausdrücken als Zeichenfolge zurückkamen. Alle drei sind behoben: Eine solche Datei wird importiert, die Schritte tragen ihre echten Namen, und was neben ihnen aufbewahrt wird, ist das, was MIM geschrieben hat."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ]
     },
     {
       "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
@@ -341,93 +414,6 @@
           "de": "Zum Posteingang"
         },
         "route": "#/tasks"
-      }
-    },
-    {
-      "id": "clicking-an-element-in-operations-lists-the-instances-sittin",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Click a task to see which instances are sitting on it",
-        "de": "Auf eine Aufgabe klicken zeigt, welche Instanzen dort stehen"
-      },
-      "summary": {
-        "en": "A live diagram badged “25 205 here now” beside a list of fifty instances told you how many were waiting on a task and nothing about which ones — finding them meant searching for a value you had to know already. The diagram is the query now: click an element and the list shows exactly the instances whose token is sitting on it, click another and it switches, click the process beside the shapes and every instance is back. It works for every element a token can rest on, not only user tasks, and it costs the page you are shown — at hundreds of thousands of instances too.",
-        "de": "Ein Live-Diagramm mit „25 205 hier“ neben einer Liste von fünfzig Instanzen sagte Ihnen, wie viele auf einer Aufgabe warten, aber nichts darüber, welche — sie zu finden hieß, nach einem Wert zu suchen, den Sie schon kennen mussten. Jetzt ist das Diagramm die Abfrage: Klicken Sie ein Element an, und die Liste zeigt genau die Instanzen, deren Token dort steht; ein Klick auf ein anderes Element wechselt, ein Klick auf den Prozess neben den Formen zeigt wieder alle. Das gilt für jedes Element, auf dem ein Token stehen kann, nicht nur für User-Tasks, und es kostet nur die angezeigte Seite — auch bei hunderttausenden Instanzen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "your-brand-colour-reaches-the-forms",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Your brand colour now reaches the forms themselves",
-        "de": "Ihre Markenfarbe erreicht jetzt auch die Formulare"
-      },
-      "summary": {
-        "en": "Setting your organisation's colour used to tint everything around a form and stop at its edge: the form itself came from the form renderer's own stylesheet and stayed the stock blue, in a different typeface, on borders a shade off the ones beside it. It no longer does. A user task, an incident's repair form, the preview in the form editor and the public start form behind a share link are all painted from your palette, in the same typeface, on the same borders as the rest of Atlas.",
-        "de": "Bisher färbte Ihre Organisationsfarbe alles rund um ein Formular und hörte an dessen Rand auf: Das Formular selbst kam aus dem Stylesheet des Formular-Renderers, blieb im Standardblau, in einer anderen Schrift und mit Rahmen in einem leicht abweichenden Ton. Das ist vorbei. Eine Benutzeraufgabe, das Reparaturformular eines Incidents, die Vorschau im Formular-Editor und das öffentliche Startformular hinter einem Freigabelink werden aus Ihrer Palette gezeichnet — in derselben Schrift und mit denselben Rahmen wie der Rest von Atlas."
-      },
-      "link": {
-        "label": "ADR-0263",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0263-form-runtime-brand-theming.md"
-      },
-      "tags": [
-        "Organization",
-        "Forms"
-      ],
-      "try": {
-        "label": {
-          "en": "Set your brand colour",
-          "de": "Markenfarbe setzen"
-        },
-        "route": "#/console/org"
-      }
-    },
-    {
-      "id": "the-public-start-form-and-the-sign-in-consent-screen-carry-y",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "The public start form and the consent screen carry your branding",
-        "de": "Öffentliches Startformular und Zustimmungsseite tragen Ihr Erscheinungsbild"
-      },
-      "summary": {
-        "en": "Both pages are shown before anyone has signed in, and both used to display the built-in Atlas mark and the default blue no matter what you had configured. They now ask the server for your colour and your logo like every other page. That matters most for the start form: it is the page your own customers open. If the settings are momentarily unreachable the page still appears, in the default colours — a form that is late is worse than a form that is unbranded.",
-        "de": "Beide Seiten werden vor jeder Anmeldung gezeigt, und beide zeigten bisher das eingebaute Atlas-Zeichen und das Standardblau, unabhängig von Ihrer Konfiguration. Sie holen Farbe und Logo jetzt wie jede andere Seite vom Server. Am wichtigsten ist das beim Startformular: Es ist die Seite, die Ihre eigenen Kundinnen und Kunden öffnen. Sind die Einstellungen kurzzeitig nicht erreichbar, erscheint die Seite trotzdem, in den Standardfarben — ein verspätetes Formular wäre schlimmer als ein ungebrandetes."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Organization",
-        "Forms",
-        "Security"
-      ],
-      "try": {
-        "label": {
-          "en": "Upload your logo",
-          "de": "Logo hochladen"
-        },
-        "route": "#/console/org"
       }
     }
   ]

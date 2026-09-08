@@ -14,68 +14,55 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **A preserved activity keeps its namespace, and says what type it is.** XOML
-  binds each activity library to a prefix on the workflow root, and that binding
-  is what distinguishes a stock MIM activity from a MIMWAL one of the same local
-  name. Go's decoder resolves prefixes away, so preserved markup was written from
-  the local name alone: `x:Name` came back as `xaml:Name`, the fragment's own
-  inner markup still referred to prefixes nothing declared — it did not parse on
-  its own — and the assembly and version an activity was authored against were
-  gone. A preserved fragment now carries the prefixes it uses and declares them,
-  and `<atlas:mimSource>` names the fully qualified .NET `type` and its
-  `assembly`. On a real MIMWAL workflow all 25 fragments now parse standalone,
-  at the cost of about 15% more markup for the repeated declarations.
+- **MIM and MIMWAL workflows import as what they mean, not as what their elements
+  say.** The MIM importer was written against XOML as it is documented; run against
+  a real 25-activity MIMWAL workflow it produced a model that misrepresented the
+  process. Four things it could not see before:
 
-- **A MIMWAL activity's tables are readable.** MIMWAL keeps an activity's actual
-  work in serialised .NET collections hung off the element — an `UpdateResources`
-  carries an `UpdatesTable` and a `QueriesTable`, a `GenerateUniqueValue` carries
-  `ValueExpressions` and an `LdapQueriesTable` — which in the source are thousands
-  of characters of `Hashtable` entries with the assembly-qualified type of every
-  cell repeated on it. They are now rendered as a small table on the activity's
-  documentation, so a reviewer can read what a step queries and assigns without
-  reading the markup. The markup itself still stays in `atlas:mimSource`.
+  - **Conditionality.** MIMWAL does not use `IfElseActivity`: an activity runs only
+    when its `ActivityExecutionCondition` holds, so a workflow of twenty conditional
+    steps contains no branch element at all and was imported as an unconditional
+    chain — a model asserting a semantics the source does not have, with nothing in
+    the report to say so. A guarded activity is now wrapped in an exclusive
+    split/merge, entered on a condition and bypassed by the gateway default.
 
-  Columns are rendered **by position and not named**. MIMWAL's editor labels the
-  updates grid Target | Value | Allow Null, but the data does not bear that out —
-  in the workflow this was checked against, column 1 holds a literal in nine rows
-  and column 0 a query result in six, neither of which can be assigned to — so
-  naming them would state something unverified about every imported activity. The
-  `Count` MIMWAL writes into each table is treated as the check it is: reported
-  only when it disagrees with the number of decoded rows.
+  - **Iteration.** MIMWAL runs an activity once per value of its `Iteration`
+    expression — `SplitString` of a delimited attribute, typically — which was
+    modelled as a single step. Such an activity now carries a sequential
+    `multiInstanceLoopCharacteristics`.
 
-- **A MIMWAL iteration becomes a multi-instance activity.** MIMWAL runs an
-  activity once per value of its `Iteration` expression — `SplitString` of a
-  delimited attribute, typically — which the importer modelled as a single step,
-  losing the loop entirely. Such an activity now carries a sequential
-  `multiInstanceLoopCharacteristics`. As with a guard, the expression is not
-  translated: the input collection is the placeholder `=[1]`, so the activity
-  runs exactly once as it did before, and the MIM expression is written to the
-  activity's documentation and flagged `manual-review`.
+  - **What a step actually does.** The serialised .NET collections that hold an
+    activity's work — an `UpdateResources`' `UpdatesTable` and `QueriesTable`, a
+    `GenerateUniqueValue`'s `ValueExpressions` and `LdapQueriesTable` — are thousands
+    of characters of `Hashtable` markup in the source. They are now rendered as a
+    small table on the activity's documentation, so a reviewer can read what a step
+    queries and assigns without reading the markup. Columns are rendered by position
+    and **not named**: MIMWAL's editor labels the updates grid Target | Value | Allow
+    Null, but in the workflow this was checked against, column 1 holds a literal in
+    nine rows and column 0 a query result in six, and neither can be assigned to — so
+    naming them would state something unverified about every imported activity. The
+    `Count` MIMWAL writes into each table is treated as the check it is (it agreed in
+    all 46) and reported only when it disagrees.
 
-- **MIMWAL's `GenerateUniqueValue` is recognised**, mapping to a
-  `mim-uniquevalue` service task rather than falling through to an unrecognised
-  plain-task placeholder. Its value expressions, LDAP queries, conflict filter
-  and publication target stay in `atlas:mimSource` for the worker that will
-  implement them.
+  - **Which library an activity came from.** XOML binds each activity library to a
+    prefix on the workflow root, which is what tells a stock MIM activity from a
+    MIMWAL one of the same local name and names the assembly it was authored against.
+    Go's decoder resolves prefixes away, so preserved markup was written from the
+    local name alone and the fragment referred to prefixes nothing declared — it did
+    not parse on its own. A fragment now carries and declares the prefixes it uses,
+    and `<atlas:mimSource>` names the fully qualified .NET `type` and `assembly`.
+    MIMWAL's `GenerateUniqueValue` is recognised too, mapping to a `mim-uniquevalue`
+    service task rather than an unrecognised placeholder.
 
-- **A MIMWAL guard becomes control flow.** The MIMWAL activity library does not
-  express conditionality as `IfElseActivity`: an `UpdateResources` or
-  `GenerateUniqueValue` runs only when its `ActivityExecutionCondition` holds, so
-  a workflow of twenty conditional steps contains no branch element at all and
-  was imported as an unconditional chain — a model asserting a semantics the
-  source does not have. Such an activity is now wrapped in an exclusive
-  split/merge: the activity is entered on a condition, and the gateway default
-  bypasses it.
-
-  The guard expression is **not** translated to FEEL. The MIM function library
-  (`ConvertToBoolean`, `ParametersContain`, `IsPresent`, `RegexMatch`) has
-  semantics this package cannot reproduce faithfully, and its data references
-  (`[//Target/x]`, `[//WorkflowData/y]`) have no agreed FEEL counterpart, so a
-  translation would risk a model that looks right and is not. The entry
-  condition is the placeholder `= true` instead, which keeps the generated
-  process running every activity exactly as it did before guards were modelled;
-  the original expression is documented on the split and flagged
-  `manual-review`, naming the one flow whose expression has to be filled in.
+  Neither MIM expression is translated to FEEL. The MIM function library
+  (`ConvertToBoolean`, `ParametersContain`, `IsPresent`, `RegexMatch`) has semantics
+  this package cannot reproduce faithfully, and its data references
+  (`[//Target/x]`, `[//WorkflowData/y]`) have no agreed FEEL counterpart — a
+  translation would risk a model that looks right and is not, the one outcome worse
+  than an untranslated one. Placeholders (`= true`, `=[1]`) keep the generated
+  process behaving exactly as it did before these were modelled, and each original
+  expression is documented on the model and flagged `manual-review`, naming the
+  single expression to fill in.
 
 ### Changed
 
@@ -113,23 +100,23 @@ _Changed_ / _Removed_ for each version.
   a table it owns, a table that is not a list carries `no-enhance` and says why, and
   code that replaces a whole table enhances it again.
 
-- **Flow-node ids come from the workflow, not from a counter.** An imported node
-  was `Activity_1`, `Activity_2`, … in emission order, so inserting one activity
-  in MIM shifted the id of every node below it and a re-import of a barely
-  changed workflow produced a diff touching everything — stranding any hand-made
-  adjustment. Ids now derive from the activity's `x:Name`, with the gateways of a
-  guard named `<id>_gate` and `<id>_join` after the activity they wrap, and a
-  join or loop exit after its split. Every id is claimed through one table, so a
-  name a workflow reuses, one that collides with the process id, and the
-  diagram-interchange ids all step aside instead of producing a document the
-  compiler rejects for a duplicate id.
+- **An imported model keeps its ids, and its diagram reads forward.** A node used to
+  be `Activity_1`, `Activity_2`, … in emission order, so inserting one activity in
+  MIM shifted every id below it: a re-import of a barely changed workflow produced a
+  diff touching everything, stranding any hand-made adjustment. Ids now derive from
+  the activity's `x:Name`, with a guard's gateways named `<id>_gate` and `<id>_join`
+  after the activity they wrap, and a join or loop exit after its split. Every id
+  goes through one table, so a name the workflow reuses, one that collides with the
+  process id, and the diagram-interchange ids all step aside instead of producing a
+  document the compiler rejects for a duplicate id.
 
-- **The import diagram lays out by longest path**, not shortest. A split that
-  both enters an activity and bypasses it — a guarded MIMWAL activity, an empty
-  if/else or parallel branch — reaches the merge in one hop and through the
-  activity in two, so shortest-path layering put the merge in the same column as
-  the activity and drew the edge between them pointing backwards. Back edges (a
-  while loop's return) are excluded from the layering, as before.
+  The diagram lays out by longest path rather than shortest. A split that both enters
+  an activity and bypasses it reaches the merge in one hop and through the activity in
+  two, so shortest-path layering put the merge in the same column as the activity and
+  drew the edge between them pointing backwards — a defect the empty if/else and
+  parallel branches already had, and one a guard per activity would have made
+  pervasive. Back edges (a while loop's return) are excluded from the layering, as
+  before.
 
 ### Fixed
 
