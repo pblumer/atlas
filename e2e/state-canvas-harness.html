@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas state canvas e2e harness</title>
+    <!-- Drives AtlasCanvas.uml.StateCanvas directly (ADR-0259): the lifecycle a
+         business object carries, and what a BPMN data state resolves against. -->
+    <link rel="stylesheet" href="/vendor/canvas/diagram-js.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; }
+      #canvas { position: absolute; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="canvas"></div>
+    <script src="/vendor/canvas/atlas-canvas.js"></script>
+    <script>
+      // The rules the server serves, as api/infomodel/subset.go states them.
+      const RULES = { stereotypes: ["businessObject"], initialStates: 1,
+                      selfTransitions: true, leavesFinal: false, guards: false };
+      const LC = {
+        states: [
+          { name: "draft", initial: true, x: 40, y: 40 },
+          { name: "approved", x: 260, y: 40 },
+          { name: "shipped", final: true, x: 480, y: 40 },
+        ],
+        transitions: [
+          { id: "t1", from: "draft", to: "approved", name: "approve" },
+          { id: "t2", from: "approved", to: "shipped", name: "ship" },
+        ],
+      };
+      window.__lc = () => JSON.parse(JSON.stringify(LC));
+      window.__selected = null;
+      window.__mount = () => {
+        window.__canvas = new AtlasCanvas.uml.StateCanvas(document.getElementById("canvas"), {
+          rules: RULES,
+          onSelection: (bo) => { window.__selected = bo; },
+          paletteEntries: () => [
+            { id: "lasso", group: "tools", title: "Select several", onClick: (e) => window.__canvas.marquee(e) },
+            { id: "sep", group: "tools", separator: true },
+            { id: "state", group: "elements", title: "State", onClick: () => {} },
+            { id: "transition", group: "relations", title: "Transition", onClick: () => {} },
+          ],
+        });
+        window.__canvas.render(window.__lc(), []);
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

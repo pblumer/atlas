@@ -107,13 +107,46 @@ test("a relationship is picked off the drawing, and stays picked while it is edi
   expect(page.__errors).toEqual([]);
 });
 
+// Drawing is how a relationship is made; it was also the only way to change one, so an
+// end aimed at the wrong class meant deleting the line and drawing it again — losing
+// its name, its roles and its multiplicities with it.
+test("a relationship's end can be moved to another class, keeping the rest of it", async ({ page }) => {
+  await page.locator(".djs-element:has(.uml-edge)").click();
+  await expect(page.locator(".im-reading")).toHaveText("Customer → Order");
+
+  await page.locator('[data-side="to"][data-f="classId"]').selectOption({ label: "Address" });
+  await expect(page.locator(".im-reading")).toHaveText("Customer → Address");
+  // What it was called and how the two ends refer to each other survive the move.
+  await expect(page.locator('[data-side="to"][data-f="role"]')).toHaveValue("orders");
+
+  await page.locator("#im-save").click();
+  const saved = await page.evaluate(() => window.__saved.associations[0]);
+  expect(saved).toMatchObject({ name: "places", to: { classId: "c3", role: "orders", multiplicity: "0..*" } });
+  expect(page.__errors).toEqual([]);
+});
+
+test("a class this kind of relationship cannot reach is offered, and refused", async ({ page }) => {
+  await page.locator(".djs-element:has(.uml-edge)").click();
+  // Disabled rather than hidden, and carrying its reason: nothing points at an
+  // enumeration, because an enumeration is a set of values and not a thing. It is the
+  // same matrix Kind reads, from the other side.
+  const blocked = page.locator('[data-side="to"][data-f="classId"] option[disabled]');
+  await expect(blocked).toHaveText("OrderStatus — no association from here");
+  expect(page.__errors).toEqual([]);
+});
+
 test("a generalization has no roles, because is-a is not counted", async ({ page }) => {
   await page.locator('.djs-palette [data-action=\"generalization\"]').click();
   await box(page, "Order").click();
   await box(page, "Customer").click();
   await expect(page.locator(".im-reading")).toHaveText("Order → Customer");
-  await expect(page.locator(".im-end")).toHaveCount(0);
   await expect(page.locator(".im-hint-text")).toContainText("not a counted relationship");
+  // Which classes it runs between is still a fact about it — and the only one, since
+  // "is a kind of" is not counted.
+  await expect(page.locator(".im-end")).toHaveCount(2);
+  await expect(page.locator('.im-end [data-f="classId"]')).toHaveCount(2);
+  await expect(page.locator('.im-end [data-f="role"]')).toHaveCount(0);
+  await expect(page.locator('.im-end [data-f="multiplicity"]')).toHaveCount(0);
 });
 
 test("editing a class updates the drawing, and a rename retypes what referred to it", async ({ page }) => {
@@ -294,10 +327,11 @@ test("a relationship's ends are their own group, and a generalization says why i
   await box(page, "Order").click();
   await box(page, "Customer").click();
   await expect(page.locator(".phead .kv")).toHaveText("Generalization");
-  // The group is still there — it is where the sentence explaining the absence goes.
+  // The group is still there — it is where the sentence explaining the absence goes,
+  // above the two ends it still has.
   await expect(page.locator('.pgroup[data-group="Ends"] .im-hint-text'))
     .toContainText("not a counted relationship");
-  await expect(page.locator(".im-end")).toHaveCount(0);
+  await expect(page.locator('.im-end [data-f="role"]')).toHaveCount(0);
 });
 
 // Data stores on the class canvas (ADR-0230, slice 5b).
