@@ -307,12 +307,38 @@ function viewLogin() {
       await loadAuth();
       location.hash = "#/console";
       route();
-    } catch {
-      err.textContent = "Invalid username or password.";
+    } catch (ex) {
+      err.textContent = loginFailureText(ex);
       err.style.color = "var(--danger)";
       err.hidden = false;
     }
   });
+}
+
+// loginFailureText names what refused a sign-in, which is not always the password.
+//
+// A 401 is the only answer that is about the credentials, and it stays deliberately
+// vague — the server refuses an unknown account and a wrong password identically so
+// the login cannot be read as a directory, and the screen must not undo that.
+//
+// A 429 is the throttle (ADR-0197), and it is a different failure entirely: it
+// refuses the *attempt*, before the password is looked at, for a quarter of an hour
+// after five wrong guesses. Reporting it as a credential failure is how somebody
+// spends that quarter of an hour hunting a password that is already correct, and how
+// they land on restarting the server — the one action that clears the throttle's
+// in-memory buckets, and the only workaround the screen leaves them. Saying so leaks
+// nothing: the throttle counts attempts against names that do not exist too.
+//
+// Anything else — the store could not be read, the network went away — is not a
+// credential failure either, and it does not carry the server's wording onto a
+// pre-auth screen: what broke inside the instance belongs in its log, which is where
+// this points, the same way the federated-login error above does.
+function loginFailureText(e) {
+  switch (e?.status) {
+    case 401: return "Invalid username or password.";
+    case 429: return "Too many sign-in attempts — the password was not checked. Wait a few minutes and try again.";
+    default: return "The sign-in could not be completed. Try again, or ask an administrator to check the server log.";
+  }
 }
 
 // ---------- Dropdown menus ----------

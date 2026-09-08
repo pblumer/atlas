@@ -251,6 +251,19 @@ _Changed_ / _Removed_ for each version.
   for the wrong reason (ascending sort happens to put a stray trail next to its own row
   anyway, which is a coincidence and not the property).
 
+- **A throttled sign-in no longer reports itself as a wrong password.** The login screen
+  turned every failed login request into "Invalid username or password.", including the
+  429 the login throttle (ADR-0197) answers with. That throttle refuses the *attempt*
+  before the password is looked at: five wrong guesses and an account is refused for up
+  to a quarter of an hour, so from the sixth attempt on the correct password looked
+  exactly like a wrong one. Somebody who mistypes a generated admin password a few times
+  therefore goes hunting for a credential that is already right, and the only workaround
+  the screen leaves them is restarting the server — the one action that clears the
+  throttle's in-memory buckets. A 401 still says only that the credentials were refused,
+  which is what keeps the login from answering whether an account exists; a 429 now says
+  the attempt was throttled and the password was not checked; anything else points at the
+  server log instead of blaming the password. The OAuth consent screen's own sign-in form
+  carried the same three answers in one sentence and now makes the same distinction.
 - **An incident that says "no worker registered as X" can now create X, instead of pointing
   at the Console.** The one incident whose cause is named in its own message was the one
   incident with no way out of it: the row offered a link to Console › Workers, which is the

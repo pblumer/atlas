@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Security",
+    "Console"
+  ],
+  "title": {
+    "en": "A blocked sign-in says it was blocked, not that your password is wrong",
+    "de": "Eine gesperrte Anmeldung sagt, dass sie gesperrt ist — nicht, dass das Passwort falsch sei"
+  },
+  "summary": {
+    "en": "After five wrong passwords, Atlas stops checking passwords for that account for a few minutes — that is what keeps somebody from guessing their way in. The login screen used to report those minutes as \"Invalid username or password.\", so the right password looked exactly like a wrong one and there was nothing on screen to say why. The screen now tells the two apart: a refused password reads as before, a blocked attempt says the password was not checked and asks you to wait, and a server that could not answer at all points at its log.",
+    "de": "Nach fünf falschen Passwörtern prüft Atlas für dieses Konto einige Minuten lang gar keine Passwörter mehr — das hält jemanden davon ab, sich hineinzuraten. Diese Minuten meldete die Anmeldeseite bisher als \"Invalid username or password.\": Das richtige Passwort sah aus wie ein falsches, und auf dem Bildschirm stand nichts, was den Unterschied erklärt hätte. Jetzt werden beide Fälle unterschieden: Ein abgelehntes Passwort liest sich wie bisher, eine gesperrte Anmeldung sagt, dass das Passwort nicht geprüft wurde und man kurz warten soll, und ein Server, der überhaupt nicht antworten konnte, verweist auf sein Log."
+  }
+}
