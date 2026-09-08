@@ -12,9 +12,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// maxScriptBytes caps a script-run request body (source + sample variables).
-const maxScriptBytes = 256 << 10 // 256 KiB
-
 type runScriptReq struct {
 	Language  string         `json:"language"`
 	Source    string         `json:"source"`
@@ -40,7 +37,7 @@ type runScriptResp struct {
 // surface, ADR-0047). A run error (non-zero exit, timeout, bad output) is reported
 // faithfully as ok:false with the message, not an HTTP error.
 func (s *Server) handleRunScript(w http.ResponseWriter, r *http.Request) {
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxScriptBytes))
+	dec := json.NewDecoder(io.LimitReader(r.Body, s.limits.Settings))
 	dec.UseNumber() // keep numbers exact for the interpreter
 	var req runScriptReq
 	if err := dec.Decode(&req); err != nil {

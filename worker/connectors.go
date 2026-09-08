@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"log/slog"
 	"net/http"
@@ -595,7 +596,7 @@ func (o *httpOutbox) Deliver(m mail.OutboxMessage) error {
 		return fmt.Errorf("mail: preview: deliver to the outbox at %s: %w", o.url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, limits.Default().ErrorBody))
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("mail: preview: the outbox at %s answered %s", o.url, resp.Status)
 	}

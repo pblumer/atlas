@@ -51,7 +51,7 @@ type mimImportResp struct {
 // optional ?name= overrides the process name and ?projectId= files the draft
 // under a project (same validation as a normal draft save).
 func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

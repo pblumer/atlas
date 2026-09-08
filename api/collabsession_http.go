@@ -183,7 +183,7 @@ func (s *Server) handleDraftSessionJoin(w http.ResponseWriter, r *http.Request) 
 		Name string `json:"name"`
 	}
 	if r.ContentLength != 0 {
-		if !decodeSessionBody(w, r, &body) {
+		if !s.decodeSessionBody(w, r, &body) {
 			return
 		}
 	}
@@ -215,7 +215,7 @@ func (s *Server) handleDraftSessionPoll(w http.ResponseWriter, r *http.Request) 
 	var body struct {
 		ParticipantID string `json:"participantId"`
 	}
-	if !decodeSessionBody(w, r, &body) {
+	if !s.decodeSessionBody(w, r, &body) {
 		return
 	}
 	if body.ParticipantID == "" {
@@ -240,7 +240,7 @@ func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request)
 	var body struct {
 		ParticipantID string `json:"participantId"`
 	}
-	if !decodeSessionBody(w, r, &body) {
+	if !s.decodeSessionBody(w, r, &body) {
 		return
 	}
 	if body.ParticipantID == "" {
@@ -254,8 +254,8 @@ func (s *Server) handleDraftSessionLeave(w http.ResponseWriter, r *http.Request)
 // decodeSessionBody reads a small JSON action body. It caps the read and returns
 // false (writing 400) on a malformed body, so every POST handler shares one
 // parse-and-validate path.
-func decodeSessionBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+func (s *Server) decodeSessionBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Definition))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return false
@@ -276,7 +276,7 @@ func (s *Server) handleDraftSessionPresence(w http.ResponseWriter, r *http.Reque
 		ParticipantID string `json:"participantId"`
 		Selection     string `json:"selection"`
 	}
-	if !decodeSessionBody(w, r, &body) {
+	if !s.decodeSessionBody(w, r, &body) {
 		return
 	}
 	if body.ParticipantID == "" {
@@ -303,7 +303,7 @@ func (s *Server) handleDraftSessionLock(w http.ResponseWriter, r *http.Request) 
 		ElementID     string `json:"elementId"`
 		Action        string `json:"action"`
 	}
-	if !decodeSessionBody(w, r, &body) {
+	if !s.decodeSessionBody(w, r, &body) {
 		return
 	}
 	if body.ParticipantID == "" || body.ElementID == "" {
@@ -349,7 +349,7 @@ func (s *Server) handleDraftSessionChange(w http.ResponseWriter, r *http.Request
 		ElementID     string `json:"elementId"`
 		XML           string `json:"xml"`
 	}
-	if !decodeSessionBody(w, r, &body) {
+	if !s.decodeSessionBody(w, r, &body) {
 		return
 	}
 	if body.ParticipantID == "" || body.ElementID == "" {

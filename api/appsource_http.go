@@ -25,11 +25,6 @@ import (
 // Export is a read; import writes into the design-time stores. Neither goes near
 // the engine, the event log, or recovery.
 
-// maxSourceBytes caps an uploaded tree, compressed and decompressed alike. A
-// source tree is a handful of diagrams, so this is generous; it exists so a
-// malformed or hostile upload cannot be an unbounded read.
-const maxSourceBytes = 32 << 20 // 32 MiB
-
 // maxSourceEntries caps the number of files in an uploaded archive, bounding the
 // work a tar with millions of tiny entries can ask for.
 const maxSourceEntries = 2000
@@ -103,14 +98,14 @@ func writeSourceArchive(w io.Writer, files []sourceFile) error {
 // readSourceArchive reads a gzip tar back into a tree, rejecting anything it
 // cannot place: a path that is absolute or escapes the root, a non-regular entry,
 // more entries or more bytes than the caps allow.
-func readSourceArchive(r io.Reader) ([]sourceFile, error) {
+func (s *Server) readSourceArchive(r io.Reader) ([]sourceFile, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("body is not a gzip stream")
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, maxSourceBytes))
+	tr := tar.NewReader(io.LimitReader(gz, s.limits.AppBundle))
 	var files []sourceFile
 	for {
 		hdr, err := tr.Next()
@@ -130,7 +125,7 @@ func readSourceArchive(r io.Reader) ([]sourceFile, error) {
 		if !ok {
 			return nil, fmt.Errorf("illegal path in archive: %q", hdr.Name)
 		}
-		data, err := io.ReadAll(io.LimitReader(tr, maxSourceBytes))
+		data, err := io.ReadAll(io.LimitReader(tr, s.limits.AppBundle))
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", clean, err)
 		}
@@ -161,10 +156,10 @@ func cleanSourcePath(name string) (string, bool) {
 // The archive is decoded off the run loop; resolving the application, authorizing
 // against it, and writing every artifact happen together in one turn of the loop.
 func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxSourceBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.limits.AppBundle)
 	defer r.Body.Close()
 
-	files, err := readSourceArchive(r.Body)
+	files, err := s.readSourceArchive(r.Body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

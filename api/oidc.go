@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"net/url"
@@ -114,7 +115,7 @@ func WithOIDC(cfg OIDCConfig) Option {
 			return
 		}
 		cfg.Issuer = strings.TrimRight(strings.TrimSpace(cfg.Issuer), "/")
-		s.oidc = newOIDCProvider(cfg)
+		s.oidc = newOIDCProvider(cfg, s.limits)
 	}
 }
 
@@ -132,6 +133,10 @@ type oidcDiscovery struct {
 type oidcProvider struct {
 	cfg    OIDCConfig
 	client *http.Client
+	// limits bounds what the issuer can make this server read in one answer —
+	// discovery, the key set, a token response. The issuer is somebody else's
+	// service, so its answers are external input like any other.
+	limits limits.Limits
 
 	mu      sync.Mutex
 	disco   oidcDiscovery
@@ -140,8 +145,8 @@ type oidcProvider struct {
 	keysAt  time.Time
 }
 
-func newOIDCProvider(cfg OIDCConfig) *oidcProvider {
-	return &oidcProvider{cfg: cfg, client: &http.Client{Timeout: oidcFetchTimeout}}
+func newOIDCProvider(cfg OIDCConfig, budgets limits.Limits) *oidcProvider {
+	return &oidcProvider{cfg: cfg, client: &http.Client{Timeout: oidcFetchTimeout}, limits: budgets}
 }
 
 // getJSON fetches a document from the provider and decodes it.
@@ -172,7 +177,7 @@ func (p *oidcProvider) get(ctx context.Context, url string) ([]byte, error) {
 	}
 	// A provider's documents are small; a body that is not is either a mistake or
 	// somebody feeding this process a large file over a URL an operator configured.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, p.limits.Definition))
 	if err != nil {
 		return nil, fmt.Errorf("oidc: read %s: %w", url, err)
 	}
@@ -283,7 +288,7 @@ func (p *oidcProvider) exchange(ctx context.Context, code, verifier, redirectURI
 		return "", fmt.Errorf("oidc: token exchange: %w", err)
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, p.limits.Definition))
 	if err != nil {
 		return "", fmt.Errorf("oidc: read token response: %w", err)
 	}

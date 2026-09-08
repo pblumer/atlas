@@ -8,10 +8,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// maxRequestBytes bounds a generation request. The brief is prose and the schema is a
-// form; neither is large, and the form store's own ceiling is 1 MiB.
-const maxRequestBytes = 2 << 20
-
 // HandleCapability answers what the editor needs before it offers to generate anything:
 // whether there is an AI Worker to ask, and which ones this principal may name.
 //
@@ -39,7 +35,7 @@ func (s *Service) HandleCapability(w http.ResponseWriter, r *http.Request) {
 // author's own eye are what make a generated artifact safe to deploy, and skipping
 // either to save a click would be trading the whole argument for the click.
 func (s *Service) HandleGenerate(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.Limits.Generated))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

@@ -3,6 +3,7 @@ package infomodel
 import (
 	"bytes"
 	"context"
+	"github.com/pblumer/atlas/limits"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -54,7 +55,7 @@ func TestServiceDeleteAccessRules(t *testing.T) {
 // read is small, so meeting this cap means something other than modeling is going on.
 func TestServiceRefusesAnOversizedBody(t *testing.T) {
 	fx := newFixture(t)
-	huge := bytes.Repeat([]byte("x"), maxJSONBytes+1)
+	huge := bytes.Repeat([]byte("x"), int(limits.Default().ModelUpload)+1)
 	request(t, fx.service.HandleCreate, http.MethodPost, "/api/v1/infomodel/models",
 		bytes.NewReader(huge), http.StatusRequestEntityTooLarge)
 }

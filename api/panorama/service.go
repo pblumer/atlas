@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strconv"
@@ -13,8 +14,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
 )
-
-const maxJSONBytes = 2*MaxXMLBytes + 64<<10
 
 var errBodyTooLarge = errors.New("request body is too large")
 
@@ -70,6 +69,12 @@ type Service struct {
 	// transition noticed is not an architecture fact, so nothing about it is
 	// durable and a restart empties it.
 	journal *Journal
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-draft-one-place-for-budgets).
+	Limits limits.Limits
 }
 
 // CountForApplicationOnLoop counts models owned by one application. It is a
@@ -104,7 +109,7 @@ func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenera
 	catalog CatalogResolver, facts FactsResolver) *Service {
 	return &Service{
 		loop: loop, store: store, access: access, newID: newID, now: now,
-		catalog: catalog, facts: facts, journal: NewJournal(),
+		catalog: catalog, facts: facts, journal: NewJournal(), Limits: limits.Default(),
 	}
 }
 
@@ -119,7 +124,7 @@ type createRequest struct {
 // Panorama model. The XML is validated but stored byte-for-byte.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var payload createRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)
@@ -254,7 +259,7 @@ type updateRequest struct {
 // cannot both overwrite the same revision successfully.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	var payload updateRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	if payload.ExpectedRevision < 1 {
@@ -449,8 +454,8 @@ func writeReadOutcome(w http.ResponseWriter, refusal *operationRefusal, err erro
 	return false
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	body, err := readBounded(r.Body, maxJSONBytes)
+func (s *Service) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	body, err := readBounded(r.Body, (2*s.Limits.ModelUpload + s.Limits.Request))
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, errBodyTooLarge) {

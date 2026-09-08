@@ -76,7 +76,7 @@ func newID() (string, error) {
 
 // handleCreateProject creates a named project. Body: {"name": "..."}.
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -185,7 +185,7 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 // existing user.
 func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

@@ -63,10 +63,6 @@ const (
 	// authorization-server metadata only when it is actually served.
 	oauthRegisterPath = "/oauth/register"
 
-	// maxRegistrationBytes bounds a registration body. RFC 7591 metadata is a
-	// handful of short fields; anything larger is not a client with a long name.
-	maxRegistrationBytes = 16 << 10
-
 	// maxClientNameRunes bounds what a self-registered client may call itself,
 	// because that name is rendered on a consent screen a person is reading in order
 	// to make a decision. The page escapes it; this keeps it from crowding out the
@@ -116,12 +112,12 @@ func (s *Server) handleRegisterDynamicClient(w http.ResponseWriter, r *http.Requ
 	// One byte past the limit, so an oversized body is *named* rather than silently
 	// truncated and then reported as malformed JSON — which would send a client
 	// looking for a syntax error it does not have.
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxRegistrationBytes+1))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Registration+1))
 	if err != nil {
 		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "the body could not be read")
 		return
 	}
-	if len(body) > maxRegistrationBytes {
+	if int64(len(body)) > s.limits.Registration {
 		oauthError(w, http.StatusRequestEntityTooLarge, "invalid_client_metadata",
 			"the registration request is too large")
 		return

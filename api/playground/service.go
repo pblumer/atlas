@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strconv"
@@ -34,14 +35,6 @@ import (
 // client to hand back has to fit in it, or survive as a string the way an instance
 // key does.
 const maxExactJSONInt = 1<<53 - 1
-
-// maxModelBytes caps an inline model in an open request. A BPMN diagram is text;
-// this is a sanity bound on the request body, not a tuning knob.
-const maxModelBytes = 8 << 20 // 8 MiB
-
-// maxBodyBytes caps every other request body. They are small: variables, a stub
-// policy, a duration.
-const maxBodyBytes = 1 << 20 // 1 MiB
 
 // ModelSource resolves the model a session is asked to run and decides whether
 // this request may read it.
@@ -66,11 +59,17 @@ type Service struct {
 	// budget bounds every run this service starts. A caller does not get to ask
 	// for an unbounded one: a sandbox is a live engine on somebody's server.
 	budget playground.Budget
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-draft-one-place-for-budgets).
+	Limits limits.Limits
 }
 
 // New builds the Playground service over a session registry.
 func New(sessions *playground.Registry, source ModelSource, vars VarsFromMap) *Service {
-	return &Service{sessions: sessions, source: source, vars: vars, budget: playground.DefaultBudget()}
+	return &Service{sessions: sessions, source: source, vars: vars, budget: playground.DefaultBudget(), Limits: limits.Default()}
 }
 
 // --- wire shapes -------------------------------------------------------------
@@ -171,7 +170,7 @@ type occurrenceResp struct {
 // model.
 func (s *Service) HandleOpen(w http.ResponseWriter, r *http.Request) {
 	var req openReq
-	if !decode(w, r, maxModelBytes, &req) {
+	if !decode(w, r, s.Limits.Payload, &req) {
 		return
 	}
 
@@ -325,7 +324,7 @@ func (s *Service) HandleStartCase(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Variables map[string]any `json:"variables"`
 	}
-	if !decode(w, r, maxBodyBytes, &body) {
+	if !decode(w, r, s.Limits.Definition, &body) {
 		return
 	}
 	vars, err := s.vars(body.Variables)
@@ -415,7 +414,7 @@ func (s *Service) HandleAdvanceClock(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Millis int64 `json:"millis"`
 	}
-	if !decode(w, r, maxBodyBytes, &body) {
+	if !decode(w, r, s.Limits.Definition, &body) {
 		return
 	}
 	if body.Millis <= 0 {
@@ -442,7 +441,7 @@ func (s *Service) HandlePublishMessage(w http.ResponseWriter, r *http.Request) {
 		CorrelationKey string         `json:"correlationKey"`
 		Variables      map[string]any `json:"variables"`
 	}
-	if !decode(w, r, maxBodyBytes, &body) {
+	if !decode(w, r, s.Limits.Definition, &body) {
 		return
 	}
 	vars, err := s.vars(body.Variables)
@@ -495,7 +494,7 @@ func (s *Service) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Variables map[string]any `json:"variables"`
 	}
-	if !decode(w, r, maxBodyBytes, &body) {
+	if !decode(w, r, s.Limits.Definition, &body) {
 		return
 	}
 	vars, verr := s.vars(body.Variables)

@@ -166,7 +166,7 @@ func (s *Server) handlePresenceBeacon(w http.ResponseWriter, r *http.Request) {
 	payload := struct {
 		Active bool `json:"active"`
 	}{}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxUserBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

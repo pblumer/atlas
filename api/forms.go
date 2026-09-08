@@ -11,10 +11,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// maxFormBytes caps a stored form schema. form-js schemas are small JSON
-// documents; this is a generous ceiling that still refuses a runaway upload.
-const maxFormBytes = 1 << 20 // 1 MiB
-
 // formMeta is a form's listing metadata — everything but the schema, so a list
 // stays small (the Tasks app and Modeler fetch the schema per-form when needed).
 type formMeta struct {
@@ -60,7 +56,7 @@ type saveFormResp struct {
 // behaviour every non-interactive writer wants — an import, a source-tree apply, the
 // MCP authoring tools.
 func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxFormBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.Definition))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

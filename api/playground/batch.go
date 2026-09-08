@@ -21,9 +21,6 @@ import (
 // are sized for this number, not for an unbounded one.
 const maxCasesPerRun = 50_000
 
-// maxCSVBytes caps a dataset upload, matching the CSV start path's own ceiling.
-const maxCSVBytes = 16 << 20 // 16 MiB
-
 // csvMultipartMemory is how much of a multipart body is kept in memory before
 // parts spill to temp files.
 const csvMultipartMemory = 4 << 20
@@ -198,7 +195,7 @@ type resultsResp struct {
 // and drawn here.
 func (s *Service) HandleStartRun(w http.ResponseWriter, r *http.Request) {
 	var req startRunReq
-	if !decode(w, r, maxModelBytes, &req) {
+	if !decode(w, r, s.Limits.Payload, &req) {
 		return
 	}
 	sess, ok := s.session(w, r)
@@ -231,7 +228,7 @@ func (s *Service) HandleStartRun(w http.ResponseWriter, r *http.Request) {
 // not a configured integration, so asking them to describe the columns they just
 // exported would be asking twice.
 func (s *Service) HandleStartRunFromCSV(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxCSVBytes+multipartOverhead)
+	r.Body = http.MaxBytesReader(w, r.Body, s.Limits.DataUpload+multipartOverhead)
 	if err := r.ParseMultipartForm(csvMultipartMemory); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read upload: "+err.Error())
 		return
@@ -250,7 +247,7 @@ func (s *Service) HandleStartRunFromCSV(w http.ResponseWriter, r *http.Request) 
 		if readErr != nil {
 			break
 		}
-		if len(data) > maxCSVBytes {
+		if int64(len(data)) > s.Limits.DataUpload {
 			httpapi.Error(w, http.StatusRequestEntityTooLarge, "the CSV is larger than the upload limit")
 			return
 		}

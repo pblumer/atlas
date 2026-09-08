@@ -199,8 +199,8 @@ func (s *Server) planMigration(piKey, targetDefKey uint64, overrides []migration
 }
 
 // readMigrationRequest decodes and sanity-checks the shared body.
-func readMigrationRequest(w http.ResponseWriter, r *http.Request) (migrationRequest, bool) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+func (s *Server) readMigrationRequest(w http.ResponseWriter, r *http.Request) (migrationRequest, bool) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return migrationRequest{}, false
@@ -227,7 +227,7 @@ func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
-	req, ok := readMigrationRequest(w, r)
+	req, ok := s.readMigrationRequest(w, r)
 	if !ok {
 		return
 	}
@@ -257,7 +257,7 @@ func (s *Server) handleMigrateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
-	req, ok := readMigrationRequest(w, r)
+	req, ok := s.readMigrationRequest(w, r)
 	if !ok {
 		return
 	}
@@ -340,7 +340,7 @@ func (s *Server) handleMigrateInstancesOfProcess(w http.ResponseWriter, r *http.
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	req, ok := readMigrationRequest(w, r)
+	req, ok := s.readMigrationRequest(w, r)
 	if !ok {
 		return
 	}

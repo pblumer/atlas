@@ -46,7 +46,7 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "secret name is required")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

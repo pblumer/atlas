@@ -32,12 +32,6 @@ import (
 // — it is design-time configuration — but its secrets live in the vault, so a
 // restore onto a fresh instance leaves workers needing their credentials again.
 
-// maxRestoreBytes caps the total uncompressed size a single restore will read, a
-// guard against a decompression bomb. Generous for real design-time data (models
-// are small JSON/XML), tight enough to fail fast. It bounds both the compressed
-// upload and the decompressed stream.
-const maxRestoreBytes = 1 << 30 // 1 GiB
-
 // maxRestoreEntries caps how many archive members a restore will process, so an
 // archive of a vast number of tiny (or zero-byte) entries cannot spin the
 // handler — the byte budget alone would never trip on such an archive.
@@ -99,7 +93,7 @@ func writeBackup(tw *tar.Writer, fsys fs.FS) error {
 func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	// Bound the compressed upload; the LimitReader below bounds the decompressed
 	// stream so a bomb cannot fill the disk.
-	r.Body = http.MaxBytesReader(w, r.Body, maxRestoreBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.limits.Archive)
 	defer r.Body.Close()
 	gz, err := gzip.NewReader(r.Body)
 	if err != nil {
@@ -108,7 +102,7 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, maxRestoreBytes))
+	tr := tar.NewReader(io.LimitReader(gz, s.limits.Archive))
 	restored, entries := 0, 0
 	for {
 		hdr, err := tr.Next()

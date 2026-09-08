@@ -189,7 +189,7 @@ func writeFileInto(tw *tar.Writer, fsys fs.FS, name string) error {
 // path (ApplyPendingRestore) moves it into place and lets recovery rebuild state
 // from the restored WAL. Admin-gated when auth is on.
 func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxRestoreBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, s.limits.Archive)
 	defer r.Body.Close()
 
 	staging := filepath.Join(s.dataDir, restorePendingDir)
@@ -204,7 +204,7 @@ func (s *Server) handleRestoreFull(w http.ResponseWriter, r *http.Request) {
 	}
 	defer gz.Close()
 
-	tr := tar.NewReader(io.LimitReader(gz, maxRestoreBytes))
+	tr := tar.NewReader(io.LimitReader(gz, s.limits.Archive))
 	restored, entries := 0, 0
 	sawWAL := false
 	for {

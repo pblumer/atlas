@@ -54,7 +54,7 @@ func (s *Server) handlePublishApplication(w http.ResponseWriter, r *http.Request
 	var payload struct {
 		Note string `json:"note"`
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

@@ -42,7 +42,7 @@ const (
 //
 //   - ReadTimeout would bound the whole request read, body included. A restore
 //     upload is a gzip-tar of an entire data directory and is bounded by a byte
-//     cap (maxRestoreBytes); over a slow link a legitimate one can take longer
+//     cap (limits.Archive); over a slow link a legitimate one can take longer
 //     than any deadline worth setting for a header. The byte cap is the right
 //     limit for a body, and it is already enforced.
 //   - WriteTimeout would bound the whole response write. A worker long-polling for

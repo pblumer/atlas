@@ -14,12 +14,6 @@ import (
 // import must agree: a person reads the account of what an import will do, and then
 // does it. Two code paths that could drift is exactly how a preview stops being one.
 
-// maxImportBytes caps an imported document. It is larger than the cap on a model
-// document because an XMI export carries the whole UML metamodel around the classes
-// — profile applications, tool extensions, diagram references — and a document Atlas
-// reads ten classes out of is routinely megabytes of it.
-const maxImportBytes = 24 << 20
-
 type importRequest struct {
 	ApplicationID string `json:"applicationId"`
 	// Name overrides the name the document carries. A UML tool names its model after
@@ -60,7 +54,7 @@ type ImportResponse struct {
 // validator refuses is refused itself.
 func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 	var payload importRequest
-	if !decodeJSONLimit(w, r, &payload, maxImportBytes) {
+	if !decodeJSONLimit(w, r, &payload, s.Limits.Import) {
 		return
 	}
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)

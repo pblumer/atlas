@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strings"
@@ -23,13 +24,6 @@ import (
 // error a caller can tell apart. It does not know what a Panorama element is, what
 // an aggregation means, or which measures matter — that belongs to the caller,
 // which is what keeps this package free of the API's vocabulary.
-
-// maxSearchBytes bounds a search response. A caller here asks either for an
-// aggregation with no documents, or for a bounded page of documents with an explicit
-// field list, so a correct answer is small; a large body means a cluster answering
-// something other than what was asked, and reading it into memory to discover that is
-// the failure mode this prevents.
-const maxSearchBytes = 1 << 20
 
 // ErrSearchRefused is returned when the cluster answered and declined: it is
 // reachable and this server may not have what it asked for. Callers separate it
@@ -88,12 +82,12 @@ func (c *HTTPClient) Search(ctx context.Context, index string, query []byte) ([]
 
 	// Read one byte past the bound, so a body exactly at it is not mistaken for a
 	// truncated one.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSearchBytes+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Definition+1))
 	if err != nil {
 		return nil, fmt.Errorf("opensearch: read search response: %w", err)
 	}
-	if len(body) > maxSearchBytes {
-		return nil, fmt.Errorf("opensearch: search response exceeds %d bytes", maxSearchBytes)
+	if int64(len(body)) > limits.Default().Definition {
+		return nil, fmt.Errorf("opensearch: search response exceeds %d bytes", limits.Default().Definition)
 	}
 	return body, nil
 }

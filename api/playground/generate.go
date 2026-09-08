@@ -105,7 +105,7 @@ type previewResp struct {
 // worse than showing nothing.
 func (s *Service) HandleGeneratePreview(w http.ResponseWriter, r *http.Request) {
 	var req generateReq
-	if !decode(w, r, maxBodyBytes, &req) {
+	if !decode(w, r, s.Limits.Definition, &req) {
 		return
 	}
 	sess, ok := s.session(w, r)

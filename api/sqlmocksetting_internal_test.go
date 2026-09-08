@@ -399,7 +399,7 @@ func TestASeedLargerThanTheLimitIsRefusedRatherThanTruncated(t *testing.T) {
 
 	var big strings.Builder
 	big.WriteString(`{"answers":[`)
-	for i := 0; big.Len() < maxSQLMockBytes+(1<<12); i++ {
+	for i := 0; int64(big.Len()) < srv.limits.Settings+(1<<12); i++ {
 		if i > 0 {
 			big.WriteString(",")
 		}

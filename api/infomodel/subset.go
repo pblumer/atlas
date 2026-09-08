@@ -359,7 +359,7 @@ type SubsetLimit struct {
 	Reason string `json:"reason"`
 }
 
-var limits = []SubsetLimit{
+var subsetLimits = []SubsetLimit{
 	{
 		Area: "Interfaces, operations and visibility",
 		Reason: "A process information model describes the records a process moves, not the " +
@@ -408,6 +408,6 @@ func AuthoringSubset() Subset {
 		Multiplicities:   multiplicities,
 		StoreModes:       storeModes,
 		Matrix:           matrix,
-		Limits:           limits,
+		Limits:           subsetLimits,
 	}
 }

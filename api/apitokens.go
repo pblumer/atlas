@@ -50,7 +50,7 @@ func (s *Server) loadAPITokens() error {
 // omitted lifetime means the token does not expire, which is allowed and is said
 // out loud in the response rather than hidden in a default.
 func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

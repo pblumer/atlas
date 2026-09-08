@@ -28,12 +28,6 @@ import (
 // so this server never has to reach the same temis instance — a release is meant to
 // be the frozen thing that shipped.
 
-// maxImportBytes caps a bundle. It is larger than the single-model limit because a
-// bundle carries several BPMN definitions plus their resolved DMN models, but it is
-// still bounded: the endpoint accepts a multi-megabyte body from an authenticated
-// peer, so an unbounded read would be a memory-exhaustion lever for a leaked token.
-const maxImportBytes = 32 << 20 // 32 MiB
-
 // importBundleReq is the wire format a publishing peer sends.
 type importBundleReq struct {
 	// Application names the application to import into. It is matched by name and
@@ -79,7 +73,7 @@ type importBundleResp struct {
 // handleImportBundle receives a published application bundle from a peer. It is the
 // only operation a deploy token may reach (deployAgentAllowed, ADR-0129).
 func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxImportBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.AppBundle))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

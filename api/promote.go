@@ -71,7 +71,7 @@ type promoteResp struct {
 // this server may ship work and which credential it presents, which is operator
 // configuration, not application content.
 func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -160,7 +160,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	version := int32(version64)
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -389,7 +389,7 @@ func (s *Server) pushBundle(ctx context.Context, tgt deploymentTarget, credentia
 	defer resp.Body.Close()
 	out.RemoteStatus = resp.StatusCode
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBytes))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, s.limits.ModelUpload))
 	if err != nil {
 		out.Error = "read reply: " + err.Error()
 		return out
@@ -520,7 +520,7 @@ func (s *Server) fillRemoteStatus(ctx context.Context, st *targetStatus, tgt dep
 		st.Error = fmt.Sprintf("peer answered HTTP %d", resp.StatusCode)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, s.limits.ModelUpload))
 	if err != nil {
 		st.Error = "read reply: " + err.Error()
 		return

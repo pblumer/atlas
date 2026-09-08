@@ -211,7 +211,7 @@ func (s *Server) authorizeProject(r *http.Request, id, minRole string) (project,
 func (s *Server) handleSetProjectMember(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	userID := r.PathValue("userId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.limits.ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
