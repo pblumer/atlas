@@ -113,17 +113,19 @@ write that makes the problem smaller must always get through.
 - **Negative:** `AppendVariableEvent` now returns a value most of its callers ignore.
   They write engine-derived values — a loop index, a counter — that cannot exceed a
   budget sized for a record, but nothing forces a future caller to think about it.
-- **Negative, and stated as a limitation rather than a follow-up:** three write sites
-  refuse the value but do not yet stop what happens next — a message payload, a call
-  activity's result, an io-mapping. Terminating an element clears the incident it
-  carries (`engine/apply.go`), so if such an element completes, the report goes with
-  it and the only remaining evidence is the missing variable. The value is still not
-  written, and nothing oversized becomes durable; what is missing is the *visibility*
-  of the refusal on those paths. The loop and a worker's job result have their answer
-  — the body stays activated, the task stays parked — and the other three need the
-  same, one at a time, each with its own view of what "and then what" means.
-- **Follow-ups / risks to watch:** the quadratic re-serialisation above, and those
-  three sites.
+- **Positive:** every site at which a model's or a worker's value becomes a variable
+  now answers "and then what", and each answer is the one that site's semantics ask
+  for. A loop's body stays activated rather than seeding iterations whose results have
+  nowhere to land. A task whose result was refused stays parked — the job is done and
+  cannot be redone. A message or signal catch does not complete, because the
+  subscription is already correlated and neither is delivered twice. A call activity
+  does not resume without the result it called for, because the child is already gone.
+  An output mapping does not let its activity finish having promoted nothing, and its
+  local scope is kept, because that is where the raw result the mapping reads still
+  is. An input mapping stops the behaviour before it runs, rather than handing a
+  worker a job missing what the model promised it.
+- **Follow-ups / risks to watch:** the quadratic re-serialisation above. It is the
+  one thing here that a budget cannot fix.
 
 ## Pros and cons of the options
 
