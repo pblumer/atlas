@@ -242,6 +242,7 @@ export function cleanup() {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   destroyObjectCanvas();
+  destroyLifecycleCanvas();
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -263,6 +264,18 @@ function destroyObjectCanvas() {
   if (!objectCanvas) return;
   try { objectCanvas.canvas.destroy(); } catch { /* already gone */ }
   objectCanvas = null;
+}
+
+// lifecycleCanvas is the same thing for the Data tab's third reading: the state
+// machine a class declares with this instance's own life drawn on it (ADR-0259 §4).
+// A separate record rather than a mode of objectCanvas, because the two are different
+// notations of different documents and sharing one slot would mean one of them
+// silently tearing the other down.
+let lifecycleCanvas = null;
+function destroyLifecycleCanvas() {
+  if (!lifecycleCanvas) return;
+  try { lifecycleCanvas.canvas.destroy(); } catch { /* already gone */ }
+  lifecycleCanvas = null;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -10893,8 +10906,18 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // list is the type-free scan of what the instance holds, the object diagram the
   // instance-level twin of the class diagram under Data › Model. The choice is
   // remembered because it is about how a person reads data, not about this instance.
-  let dataView = localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list";
+  const DATA_VIEWS = ["list", "diagram", "lifecycle"];
+  const savedView = localStorage.getItem("atlas.replay.dataview");
+  let dataView = DATA_VIEWS.includes(savedView) ? savedView
+    : (localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list");
   let objectGraph = null; // the derived diagram, fetched on demand
+  // The lifecycle traces, fetched on demand and dropped whenever the objects move —
+  // a trace is a reading of a trail, so it is stale the moment the trail grows.
+  let lifecycleTraces = null;
+  // Which object's machine is on screen, by name. Several objects can each declare
+  // one and only one machine can be drawn, so the reader picks — and the pick has to
+  // survive the poll that re-renders this tab.
+  let lifecycleOf = null;
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
   // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
@@ -11630,15 +11653,19 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             title="What this instance holds, as a list">List</button>
           <button type="button" data-dview="diagram"${dataView === "diagram" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
             title="The same data as objects, linked the way the information model says they relate">Diagram</button>
+          <button type="button" data-dview="lifecycle"${dataView === "lifecycle" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="The states a class declares, with the ones this instance has been through and what moved it">Lifecycle</button>
         </span>
       </div>`;
   }
 
   function renderDataObjects() {
-    if (dataObjects.length && dataView === "diagram") return renderObjectDiagram();
+    if (dataObjects.length && dataView === "diagram") { destroyLifecycleCanvas(); return renderObjectDiagram(); }
+    if (dataObjects.length && dataView === "lifecycle") { destroyObjectCanvas(); return renderLifecycleOverlay(); }
     // Every other reading replaces this tab's body wholesale, so a canvas standing in
     // it goes now rather than being left bound to markup that no longer exists.
     destroyObjectCanvas();
+    destroyLifecycleCanvas();
     if (!dataObjects.length) {
       dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
       return;
@@ -11816,6 +11843,153 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     stage.querySelector('[data-tool="fit"]').addEventListener("click", () => objectCanvas?.canvas.fit());
   }
 
+  // renderLifecycleOverlay draws the state machine a data object's class declares,
+  // with this instance's own life on it (ADR-0259 §4): the states it has been
+  // through, the one it is in now, the moves it made and the element that made each.
+  //
+  // Nothing here is a new fact. The trail was already on disk with attribution and
+  // the machine was already in the information model; the overlay is reading one
+  // against the other, and it is read *on the server* for the reason the object graph
+  // is — which declared transition a move corresponds to is model semantics, and a
+  // second copy of that rule here would be a second place for it to be wrong.
+  //
+  // This is the same relationship the object diagram has to the class diagram, which
+  // is why UML was the right notation in the first place: the standard already draws
+  // the type and the instance as two pictures, and that is Atlas's design-time /
+  // run-time line.
+  async function renderLifecycleOverlay() {
+    if (!lifecycleTraces) {
+      destroyLifecycleCanvas();
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Reading the declared lifecycles…</p>`;
+      try {
+        lifecycleTraces = await api("GET", `/api/v1/instances/${key}/lifecycle`);
+      } catch (e) {
+        dataEl.innerHTML = dataHead() + `<p class="ops-empty err">Could not read the lifecycles: ${esc(e.message)}</p>`;
+        return;
+      }
+      if (current !== viewer) return; // navigated away while it was read
+      if (!Array.isArray(lifecycleTraces)) lifecycleTraces = [];
+    }
+    const traces = lifecycleTraces;
+    if (!traces.length) {
+      destroyLifecycleCanvas();
+      // Three different silences, and only the first is worth spelling out: a class
+      // without a lifecycle is the normal case, not a gap somebody should feel bad
+      // about. The way to add one is named, because that is the useful half.
+      const typed = dataObjects.some((d) => d.itemType);
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">${typed
+        ? `No class behind this instance's data objects declares a lifecycle yet. Open the class under
+           <b>Data › Model</b> and draw one, and the states it moves through appear here — with the ones
+           this instance has been through, and what moved it.`
+        : `These data objects declare no class, so there is no lifecycle to read them against.
+           Set a data object's <b>Type</b> in the Modeler and model that class under <b>Data</b>.`}</p>`;
+      return;
+    }
+    // One machine can be drawn at a time, so several objects means the reader picks.
+    // The pick survives a poll: this tab re-renders on every frame that lands, and a
+    // picker that reset itself would be unusable on a running instance.
+    if (!traces.some((x) => x.object === lifecycleOf)) lifecycleOf = traces[0].object;
+    const tr = traces.find((x) => x.object === lifecycleOf);
+    // Already showing exactly this: leave it alone. This tab re-renders whenever an
+    // element is selected and again on every live poll, so on a running instance the
+    // drawing would be rebuilt on a timer — throwing away the zoom and the pan the
+    // reader had just set, which are two of the things moving onto diagram-js was for.
+    // The traces are *replaced* when the objects move and never mutated, so identity
+    // is the whole test.
+    if (lifecycleCanvas && lifecycleCanvas.traces === traces && lifecycleCanvas.object === tr.object
+        && dataEl.contains(lifecycleCanvas.el)) return;
+
+    // Moves the machine does not join, folded onto one edge per pair so a datum that
+    // went round three times illegally draws one dashed line and not three on top of
+    // each other. They are drawn rather than only listed because what happened is the
+    // point of an overlay — dashed and in the danger colour, so it can never be read
+    // as something the model says.
+    const strays = new Map();
+    for (const u of tr.undeclared || []) {
+      const id = `undeclared:${u.from}\u0001${u.to}`;
+      const at = strays.get(id) || { id, from: u.from, to: u.to, undeclared: true, taken: 0 };
+      at.taken++;
+      at.lastBy = u.by || at.lastBy;
+      strays.set(id, at);
+    }
+    const machine = {
+      states: tr.states || [],
+      transitions: [...(tr.transitions || []), ...strays.values()],
+    };
+
+    const notes = [];
+    for (const s of tr.unknown || []) {
+      notes.push(`This object was written into <b>${esc(s)}</b>, which <b>${esc(tr.class)}</b> does not
+        declare — so it is not on the drawing. Either the process writes the wrong string, or the state
+        is real and the class has not been told about it.`);
+    }
+    for (const u of tr.undeclared || []) {
+      notes.push(`<b>${esc(u.from)} → ${esc(u.to)}</b>${u.by ? ` by <b>${esc(doLabel(u.by))}</b>` : ""}
+        ${u.at ? `at ${esc(fmtClock(u.at))} ` : ""}is a move <b>${esc(tr.class)}</b> declares no transition for.`);
+    }
+    if ((tr.transitions || []).some((x) => x.ambiguous && x.taken)) {
+      notes.push(`Two transitions join the same pair of states, and the trail records states rather than
+        transition ids — so both are marked and neither can be told to be the one that ran.`);
+    }
+
+    const picker = traces.length > 1
+      ? `<label class="og-pick"><span>Object</span><select id="lc-pick">${traces.map((x) =>
+          `<option value="${esc(x.object)}"${x.object === lifecycleOf ? " selected" : ""}>${
+            esc(x.object)} · ${esc(x.class)}</option>`).join("")}</select></label>`
+      : "";
+
+    dataEl.innerHTML = dataHead() + `
+      <div class="lc-bar">
+        <span class="lc-of"><b>${esc(tr.object)}</b> as <span class="do-class">${esc(tr.class)}</span></span>
+        ${tr.current
+          ? `<span class="lc-now">now <span class="do-state">${esc(tr.current)}</span></span>`
+          : `<span class="lc-now none">carries no state yet</span>`}
+        ${picker}
+      </div>
+      <div class="og-stage">
+        <div class="og-canvas" id="lc-canvas"></div>
+        <div class="og-tools">
+          <button type="button" class="icon-btn" data-lctool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" class="icon-btn" data-lctool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button type="button" class="icon-btn" data-lctool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+        </div>
+      </div>
+      ${notes.length ? `<div class="og-notes">${notes.map((n) => `<p>${n}</p>`).join("")}</div>` : ""}`;
+
+    const el = dataEl.querySelector("#lc-canvas");
+    let uml;
+    try {
+      uml = (await loadCanvasBundle()).uml;
+    } catch {
+      el.innerHTML = `<p class="ops-empty err">Could not load the diagram canvas.</p>`;
+      return;
+    }
+    // The bundle is a fetch, so this tab may have been re-rendered — or left — while
+    // it was in flight. Drawing into an element nothing shows any more would leave a
+    // live canvas nobody can reach and nothing tears down.
+    if (current !== viewer || !dataEl.contains(el)) return;
+    destroyLifecycleCanvas();
+    // Not editable: this is a reading of what happened, and the document it draws
+    // belongs to the information model, which is where it is authored.
+    const canvas = new uml.StateCanvas(el, { editable: false });
+    lifecycleCanvas = { canvas, el, object: tr.object, traces };
+    canvas.render(machine);
+
+    const stage = el.parentElement;
+    stage.querySelector('[data-lctool="zoom-in"]').addEventListener("click", () => lifecycleCanvas?.canvas.zoom(1.2));
+    stage.querySelector('[data-lctool="zoom-out"]').addEventListener("click", () => lifecycleCanvas?.canvas.zoom(1 / 1.2));
+    stage.querySelector('[data-lctool="fit"]').addEventListener("click", () => lifecycleCanvas?.canvas.fit());
+  }
+
+  // Which object's machine is drawn. A <select> answers with change and not click,
+  // so it is its own delegated listener on the same re-rendering body.
+  dataEl.addEventListener("change", (e) => {
+    const pick = e.target.closest("#lc-pick");
+    if (!pick || !dataEl.contains(pick)) return;
+    lifecycleOf = pick.value;
+    renderDataObjects();
+  });
+
   // The trail toggles are inside a body that re-renders, so they are wired by
   // delegation rather than re-bound on every render.
   dataEl.addEventListener("click", (e) => {
@@ -11840,7 +12014,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const view = e.target.closest("[data-dview]");
     if (!view || !dataEl.contains(view)) return;
     dataView = view.dataset.dview;
-    localStorage.setItem("atlas.replay.datadiagram", dataView === "diagram" ? "1" : "0");
+    localStorage.setItem("atlas.replay.dataview", dataView);
     renderDataObjects();
   });
 
@@ -12550,7 +12724,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const sig = (list) => list.map((d) => `${d.name}:${d.state}:${(d.history || []).length}:${d.at}`).join(",");
     if (sig(next) === sig(dataObjects)) return;
     dataObjects = next;
-    objectGraph = null; // derived from these objects, so it is stale the moment they move
+    // Both derived readings are read *from* these objects, so both are stale the
+    // moment they move — and a trace of a trail that has since grown is worse than no
+    // trace, because it says the datum stopped where it did not.
+    objectGraph = null;
+    lifecycleTraces = null;
     renderDataObjects();
   }
 

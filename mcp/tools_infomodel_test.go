@@ -291,6 +291,20 @@ func TestInformationModelToolsScenario(t *testing.T) {
 		t.Errorf("state = %q, want the data state the write advanced it to", graph.Nodes[0].State)
 	}
 
+	// 8b. The same instance read against the lifecycle its class declares. Here the
+	// process is deployed outside any application, so nothing resolves its class and
+	// there is no machine to draw — an empty answer, not a machine with no states.
+	lcJSON := callOne(t, atlas, "atlas_instance_lifecycle", map[string]any{"key": index.Objects[0].InstanceKey})
+	var traces []struct {
+		Object string `json:"object"`
+	}
+	if err := json.Unmarshal([]byte(lcJSON), &traces); err != nil {
+		t.Fatalf("decode lifecycle: %v (%s)", err, lcJSON)
+	}
+	if len(traces) != 0 {
+		t.Errorf("lifecycle = %+v, want none — no application, so no class and no declared life", traces)
+	}
+
 	// 9. And it can be removed.
 	if out := callOne(t, atlas, "atlas_delete_information_model", map[string]any{"id": created.ID}); !strings.Contains(out, "deleted") {
 		t.Errorf("delete said %q", out)
@@ -317,6 +331,7 @@ func TestInformationModelToolArgumentErrors(t *testing.T) {
 		{"atlas_information_model_schema", map[string]any{}},
 		{"atlas_information_model_schema", map[string]any{"id": "x"}},
 		{"atlas_instance_object_graph", map[string]any{}},
+		{"atlas_instance_lifecycle", map[string]any{}},
 	} {
 		if _, isErr := callTolerant(t, atlas, tc.tool, tc.args); !isErr {
 			t.Errorf("%s(%v): want a tool error, got success", tc.tool, tc.args)

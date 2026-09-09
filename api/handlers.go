@@ -3046,6 +3046,115 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 // authoring subset is served rather than duplicated: the rules for what relates to
 // what are model semantics, and a second copy of them in JavaScript is a second
 // place for them to be wrong. The browser gets nodes and lines to draw.
+// lifecycleView is one data object's declared lifecycle with its own life drawn on
+// it (ADR-0259 §4). The trace is inlined rather than nested under a key, because the
+// caller's question is about the object and the machine is the answer, not a
+// sub-object of it.
+type lifecycleView struct {
+	Object string `json:"object"`
+	Class  string `json:"class"`
+	infomodel.Trace
+}
+
+// handleInstanceLifecycle answers "where has this datum got to in the life its class
+// declares, and how did it get there" — the run-time twin of the lifecycle drawn in
+// the information model, the way the object diagram is the run-time twin of the class
+// diagram (ADR-0259 §4).
+//
+// It adds no fact. The trail, with the element that made each write, is the same one
+// the Data tab lists; the machine is the same one the editor draws. What is new is
+// reading them against each other, which is done here rather than in the browser for
+// the reason the object graph is: which declared transition a move corresponds to is
+// model semantics, and a second copy of that rule is a second place for it to be
+// wrong.
+//
+// An object whose class declares no lifecycle is simply absent — nil is the normal
+// case for a class and stays silent here as it does everywhere else.
+func (s *Server) handleInstanceLifecycle(w http.ResponseWriter, r *http.Request) {
+	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
+		return
+	}
+	out := []lifecycleView{}
+	var opErr error
+	s.do(func() {
+		objects := []dataObjectView{}
+		if opErr = s.store.DataObjectsOfScope(key, func(v *model.DataObjectValue) error {
+			objects = append(objects, toDataObjectView(v))
+			return nil
+		}); opErr != nil || len(objects) == 0 {
+			return
+		}
+		byName := make(map[string]*dataObjectView, len(objects))
+		for i := range objects {
+			byName[objects[i].Name] = &objects[i]
+		}
+		// The same annotation the Data tab's list gets: the declared class off the
+		// definition, and the trail off the log with each write attributed. Sharing it
+		// is what keeps "who moved this datum" one answer rather than two that can come
+		// to differ.
+		s.annotateDataObjects(key, byName, &opErr)
+		if opErr != nil {
+			return
+		}
+		applicationID := ""
+		pi, ok, err := s.store.ProcessInstance(key)
+		if err != nil {
+			opErr = err
+			return
+		}
+		if ok {
+			if d, found := s.deployments[pi.ProcessDefKey]; found && d.cp != nil {
+				applicationID = d.ProjectID
+			}
+		}
+		vocab, err := s.infomodel.VocabularyOnLoop(applicationID)
+		if err != nil {
+			opErr = err
+			return
+		}
+		for i := range objects {
+			o := &objects[i]
+			if o.ItemType == "" {
+				continue
+			}
+			c, found := vocab.Class(o.ItemType)
+			if !found || c.Lifecycle == nil {
+				continue
+			}
+			out = append(out, lifecycleView{
+				Object: o.Name, Class: o.ItemType,
+				Trace: infomodel.TraceLifecycle(c.Lifecycle, lifecycleTrail(o)),
+			})
+		}
+	})
+	if opErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read lifecycle: "+opErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// lifecycleTrail is the object's recorded life as the trace reads it. Where no
+// history was recorded at all — an instance older than the snapshot history, or one
+// whose objects were only ever seeded — the object's current state still says where
+// it is, and saying that is better than drawing a machine nothing is standing on. It
+// carries no attribution, which is honest: nothing is known about how it got there.
+func lifecycleTrail(o *dataObjectView) []infomodel.TrailEntry {
+	if len(o.History) == 0 {
+		if o.State == "" {
+			return nil
+		}
+		return []infomodel.TrailEntry{{State: o.State, At: o.At}}
+	}
+	trail := make([]infomodel.TrailEntry, 0, len(o.History))
+	for _, h := range o.History {
+		trail = append(trail, infomodel.TrailEntry{State: h.State, At: h.At, By: h.ProducedBy})
+	}
+	return trail
+}
+
 func (s *Server) handleInstanceObjectGraph(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {

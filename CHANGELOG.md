@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An instance's data objects are drawn on the lifecycle their class declares.** The
+  state trail was already on disk — every durable write, with the element that made it
+  — and the state machine was already in the information model. Nothing read them
+  against each other, so the question *where has this order got to, and what moved it
+  there* meant reading a list of writes and holding the machine in your head.
+
+  The replay's **Data** tab gained a third reading beside List and Diagram. It draws
+  the whole declared machine — including the ways out this instance never took, because
+  a picture of only what happened answers a different question — with the states this
+  datum has been through filled in, the one it is in now ringed, and each edge it
+  travelled carrying the BPMN element that moved it along. That last part is the thing
+  no class diagram can say, and the reason to draw this rather than list the trail.
+
+  The half worth the whole feature is what it says when something is wrong. A move the
+  machine does not join is drawn as what it is — dashed, apart, and never mistakable
+  for something the model says — and named in words underneath with the element that
+  made it. A state the class never declared is named too, since it cannot be drawn.
+  Together they are the run-time twin of the `data.illegal-transition` and
+  `data.unknown-state` deploy checks, and they catch what those cannot see: an instance
+  that started before the lifecycle was drawn, and a process the check never ran
+  against. Where two transitions join the same pair of states the trail cannot tell
+  them apart — it records states, not transition ids — so both are marked and the
+  panel says so rather than picking one.
+
+  This adds no event, no record type and no migration, and touches nothing in
+  `applyToState`: it is a read over what the log already said. `GET
+  /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
+  same answer in front of an agent (ADR-0259).
+
 - **A class says which states its instances move through, and the Modeler offers
   them.** BPMN puts a data state under a data object — `order [received]` →
   `[approved]` — and says nothing whatever about which states exist or which may
