@@ -230,7 +230,7 @@ func TestTheSetupBlockIsRenderedWhereTheChoiceIsMade(t *testing.T) {
 	for _, tc := range []struct{ file, call string }{
 		// In the Modeler the block is wrapped in its collapsible Setup group, so the
 		// call the panel makes is the group's rather than the block's.
-		{"web/editor.js", "workerTypeInfoHTML(cur.id, cur.fields)"},
+		{"web/editor.js", "workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))"},
 		{"web/app.js", "workerKindDocHTML(kindSel.value)"},
 		{"web/workerdialog.js", "workerKindDocHTML(c.kind)"},
 		// The business rule task's temis binding is the fourth place a Worker Type is

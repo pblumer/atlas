@@ -4286,15 +4286,14 @@ const WORKER_TYPE_INFO_GROUP = "Setup";
 // was written for. An explicit toggle wins over that and is remembered for the session,
 // as with every other group.
 //
-// `fields` is the kind's field list, from which "does this type name a configured
-// Worker at all" follows: a type whose task carries no `connector` field configures
-// nothing, so its setup is a one-time read and starts folded.
+// `namesAWorker` says whether a task of this type states a configured Worker at all —
+// see kindNamesAWorker. A type that configures nothing has a setup worth one read, so it
+// starts folded whatever this server has.
 // `context` picks the placement notice's wording, or is null where the caller has
 // already placed that notice itself and only the setup belongs in the group.
-function workerTypeInfoHTML(id, fields, context = "workerType") {
+function workerTypeInfoHTML(id, namesAWorker, context = "workerType") {
   const inner = (context ? placementNoticeHTML(id, context) : "") + workerTypeDocHTML(id);
   if (!inner) return "";
-  const namesAWorker = (fields || []).some((f) => f.key === "connector");
   const open = namesAWorker && !configuredKinds.has(id);
   return `<div class="io-group wt-group" data-group="${esc(WORKER_TYPE_INFO_GROUP)}"
        data-standalone-group="1" data-open-default="${open ? "1" : "0"}">
@@ -4304,6 +4303,15 @@ function workerTypeInfoHTML(id, fields, context = "workerType") {
     </div>
     <div class="io-group-body">${inner}</div>
   </div>`;
+}
+
+// kindNamesAWorker: does a task of this kind state the name of a configured Worker? It
+// is the catalog's own answer — the field that asks for one — rather than a second list
+// to keep in step. It compares rather than declares, on purpose: the Worker-picker drift
+// guard scans this file for a field declaring the connector key, so an object written in
+// that shape — even as an argument — is a field it then reports as missing its picker.
+function kindNamesAWorker(kind) {
+  return (kind.fields || []).some((f) => f.key === "connector");
 }
 
 // wireWorkerTypeInfo gives that group its collapse behaviour. It runs after every
@@ -4354,7 +4362,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Worker type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, cur.fields)}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -4396,7 +4404,7 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + workerTypeInfoHTML(cur.id, cur.fields) +
+  return picker + stKindHeadingHTML(cur) + workerTypeInfoHTML(cur.id, kindNamesAWorker(cur)) +
     stKindFieldsHTML(cur, ext);
 }
 
@@ -6520,7 +6528,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             // this is the other place it is chosen. The placement notice above stays
             // where it is — it belongs to the Evaluation field it sits under, and it is
             // one paragraph rather than a screen.
-            html += workerTypeInfoHTML("temis", [{ key: "connector" }], null);
+            html += workerTypeInfoHTML("temis", true, null);
             html += `<label class="field"><span>Worker</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>
