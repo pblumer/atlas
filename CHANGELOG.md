@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A diagram filed under no application no longer answers with silence.** A process
+  deployed outside an application has no application, so it has no information model,
+  so nothing about its data can be resolved — and until now the Modeler said so
+  nowhere. The class field quietly became plain text, the class card and the "no such
+  class" note never appeared, and the Problems panel read **"No problems"**, which is
+  the one reading a person must not be given: a clean bill that was never earned looks
+  exactly like one that was.
+
+  Both now say what is happening. The panel names the reason and the remedy — open the
+  process's draft from its application, or deploy it from there — and distinguishes it
+  from the other reason the picker can be empty, an application that models nothing
+  yet, because the two need different remedies. The Problems summary reads **"No
+  problems found — data not checked"** when there is no model behind the diagram, so
+  an empty list is never mistaken for a checked one.
+
+  The field is also called **Class** now rather than *Type*: what it holds is the class
+  from the information model, and calling it by that name is a shorter explanation than
+  the paragraph underneath (ADR-0230).
+
 ### Added
 
 - **A lifecycle that is ahead of the processes that write it now says so.** A class can

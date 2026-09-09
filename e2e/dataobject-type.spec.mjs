@@ -294,3 +294,47 @@ test("a state the class does not declare can be named, and the list says so", as
   expect(labels).toContain("archived — not a state of Order");
   expect(page.__errors).toEqual([]);
 });
+
+// A diagram deployed outside an application has no application, so it has no
+// information model, so nothing resolves. The panel used to answer that with silence
+// — a plain text field and a Problems panel reading "No problems" — and the two
+// reasons for it (no application, or an application that models nothing) need
+// completely different remedies.
+test.describe("with no application behind the diagram", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.evaluate(() => window.__mountLoose());
+    await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
+  });
+
+  test("the panel says why there is no class to pick, and what to do", async ({ page }) => {
+    await selectDataObject(page, "Ref_note");
+    await expect(page.locator("#p-body")).toContainText("not filed under an application");
+    // The half that matters most: an empty Problems panel here is a check that never
+    // ran, not a clean model, and saying so is the whole point.
+    await expect(page.locator("#p-body")).toContainText("empty rather than clean");
+    // No vocabulary, so the field is what it always was — free text, not a broken picker.
+    await expect(page.locator("#f-itemtype")).toHaveJSProperty("tagName", "INPUT");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("an application that models nothing is a different sentence", async ({ page }) => {
+    // Not the same remedy: here there *is* an application, it just has no classes yet.
+    await page.evaluate(() => window.__mount());
+    await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
+    await selectDataObject(page, "Ref_note");
+    await expect(page.locator("#p-body")).not.toContainText("not filed under an application");
+  });
+});
+
+test("an empty Problems panel says whether anything actually looked", async ({ page }) => {
+  // "No problems" is a claim. With no application there is no information model, so
+  // every data check is skipped rather than passed — and a clean bill that was never
+  // earned is indistinguishable from one that was.
+  await page.evaluate(() => window.__mountLoose());
+  await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
+  await expect(page.locator("#prob-summary")).toHaveText("No problems found — data not checked");
+
+  await page.evaluate(() => window.__mount());
+  await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
+  await expect(page.locator("#prob-summary")).not.toHaveText(/not checked/);
+});
