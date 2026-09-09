@@ -33,6 +33,12 @@ func TestDefaultsAreTheNumbersTheCodeAlreadyHad(t *testing.T) {
 		{"Archive", l.Archive, 1 << 30},
 		{"TokenSteps", int64(l.TokenSteps), 10_000},
 		{"Iterations", int64(l.Iterations), 100_000},
+		// Variable and Collection are new rather than gathered — there was no ceiling
+		// on a variable's value before them — so these two pin a decision instead of
+		// pinning history. See ADR-draft-a-variable-is-a-record for where the numbers
+		// come from and why one budget could not serve both.
+		{"Variable", l.Variable, 1 << 20},
+		{"Collection", l.Collection, 16 << 20},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)

@@ -114,3 +114,63 @@ func (p *Processor) tooManyIterationsMessage(asked int) string {
 		" iterations; the limit is " + strconv.Itoa(p.iterationCeiling()) +
 		". Check the collection or cardinality it reads, then resolve to try again"
 }
+
+// The size budgets: how large a single variable's value, and a multi-instance
+// activity's assembled output collection, may be
+// (ADR-draft-a-variable-is-a-record).
+//
+// They are two numbers rather than one because they bound different things. A
+// variable is a business record — a customer, an order, the inputs of a decision —
+// and a megabyte is already generous for one. An output collection is what a
+// legitimate loop accumulates at the iteration ceiling, which is a different order
+// of magnitude. One number could not serve both: it would either be so large that it
+// is no ceiling for a record, or so small that an ordinary loop cannot finish.
+//
+// Neither is a bound on what a loop *writes*. The collection is re-serialised once
+// per iteration, so the bytes written grow with the square of the iteration count,
+// and a budget small enough to make that safe would be smaller than one record. That
+// is a defect with its own fix, and hiding it inside one of these numbers would only
+// make it harder to find.
+
+// DefaultMaxVariable is how large one variable's value may be. A megabyte holds a
+// business record with room to spare; past that it is a document, and a document in a
+// token's scope is rewritten into the log on every touch.
+const DefaultMaxVariable int64 = 1 << 20
+
+// DefaultMaxCollection is how large a multi-instance activity's output collection may
+// be. It has to clear a legitimate loop at the iteration ceiling — a hundred thousand
+// modest results — while staying far below what costs the host its memory.
+const DefaultMaxCollection int64 = 16 << 20
+
+// SetMaxVariable sets how large one variable's value may be. Zero or less restores
+// [DefaultMaxVariable]; as with every budget here there is no way to turn it off.
+func (p *Processor) SetMaxVariable(n int64) { p.maxVariable = n }
+
+// SetMaxCollection sets how large an output collection may be. Zero or less restores
+// [DefaultMaxCollection].
+func (p *Processor) SetMaxCollection(n int64) { p.maxCollection = n }
+
+// variableCeiling is the effective limit for one value, defaulted.
+func (p *Processor) variableCeiling() int64 {
+	if p.maxVariable > 0 {
+		return p.maxVariable
+	}
+	return DefaultMaxVariable
+}
+
+// collectionCeiling is the effective limit for an output collection, defaulted.
+func (p *Processor) collectionCeiling() int64 {
+	if p.maxCollection > 0 {
+		return p.maxCollection
+	}
+	return DefaultMaxCollection
+}
+
+// tooLargeVariableMessage is what the operator reads on an element whose write was
+// refused. It names the variable, because an instance has many and only one of them
+// is the reason this element is parked.
+func (p *Processor) tooLargeVariableMessage(name string, size, ceiling int64) string {
+	return "the value written to \"" + name + "\" is " + strconv.FormatInt(size, 10) +
+		" bytes, and the limit is " + strconv.FormatInt(ceiling, 10) +
+		". Check what produced it, then resolve to write it again"
+}
