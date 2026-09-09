@@ -95,6 +95,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **An import from the Applications overview asks where to file the artifact.** An
+  import started inside an application already lands in that application — a BPMN
+  diagram, a DMN model, a form and a MIM/FIM XOML workflow all carry the application
+  they were started from, and that is unchanged. The **Applications** overview is not
+  inside one, so it had no application to name and used none, without asking and
+  without saying so: the file was picked, the toast said it had been imported, and the
+  artifact was under *Not assigned* — somewhere nobody had chosen and nobody had been
+  told about.
+
+  It now asks, once, after the file has been chosen — that order is not cosmetic: a
+  browser refuses to open a file picker from a task that no longer counts as a user
+  gesture, so a dialog in front of it would cost exactly that picker. **Not assigned**
+  stays a real answer and is the one the dialog opens on, so an artifact that belongs
+  to no application yet is still one Enter away; it is just the answer somebody gave
+  rather than the one nobody was asked for. A protected system application is not
+  offered, because writing into one is refused ([ADR-0122](docs/adr/0122-protected-system-project-and-bootstrap-deployment.md))
+  and offering it would only produce a 403 after the fact, and with no application to
+  choose between the question has one answer and is not asked at all.
+
 - **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
   things about the drawing were wrong on any model larger than the examples, and an
   imported Active Directory schema — forty-character attribute names, sixty classes —

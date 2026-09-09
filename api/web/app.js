@@ -2702,8 +2702,8 @@ async function viewModelerHome() {
   };
   onMenuAction(view, (act) => {
     if (act === "new-project") createProject(renderProjects);
-    if (act === "import") importArtifact("", renderProjects);
-    if (act === "import-mim") importMIM("", renderProjects);
+    if (act === "import") importArtifact(null, renderProjects);
+    if (act === "import-mim") importMIM(null, renderProjects);
     if (act === "import-source") importApplicationSource(renderProjects);
   });
 
@@ -3607,15 +3607,61 @@ async function saveOrConfirmOverwrite(save, question) {
   }
 }
 
+// resolveImportTarget answers "which application does this import land in?".
+//
+// A caller that already knows — an import started inside an application — passes that
+// id, or "" for the Not-assigned container, and nothing is asked: the answer is where
+// the author already is, and a dialog restating it is a click for no information. The
+// Applications overview is not inside one, so it passes null and the author picks.
+// It used to file the artifact under no application without saying so, which is how an
+// import came to sit somewhere nobody had chosen.
+//
+// "Not assigned" stays a real answer, and the one the dialog opens on: an artifact that
+// belongs to no application yet is a perfectly good outcome, it just has to be the one
+// somebody picked. Resolves to { projectId }, or null when the author cancels — not an
+// error, since importing nothing is what cancelling means.
+async function resolveImportTarget(projectId, fileName) {
+  if (projectId !== null) return { projectId };
+  let applications = [];
+  try {
+    applications = await api("GET", "/api/v1/applications");
+  } catch (e) {
+    toast("Could not load the applications: " + e.message, "err");
+    return null;
+  }
+  // A protected system application is platform-managed (ADR-0122) and refuses every
+  // write, so offering it as a destination would only produce a 403 after the fact.
+  const writable = applications.filter((a) => !a.protected && roleRank(a.myRole) >= 2);
+  // With nothing to choose between, the question has one answer and asking it is noise.
+  if (!writable.length) return { projectId: "" };
+  const picked = await openPickModal({
+    title: `Import ${fileName}`,
+    label: "Application",
+    options: [
+      { value: "", label: "Not assigned" },
+      ...writable.map((a) => ({ value: a.id, label: a.name })),
+    ],
+    hint: "The import is filed here. “Not assigned” keeps it outside every application.",
+    okLabel: "Import",
+  });
+  return picked ? { projectId: picked.option.value } : null;
+}
+
 // importArtifact imports a BPMN diagram, DMN model, or form from an uploaded file and
-// files it into the given project ("" = ungrouped). The kind is detected from the
-// extension and, for an ambiguous .xml, from the root element's namespace: a BPMN
-// diagram is saved as a draft (the backend derives its process id/name), a DMN model
-// is uploaded and referenced (the createDmnRef two-step), and a form-js .form/.json is
-// saved as a form. The list is refreshed on success.
+// files it into the given project ("" = Not assigned, null = ask which). The kind is
+// detected from the extension and, for an ambiguous .xml, from the root element's
+// namespace: a BPMN diagram is saved as a draft (the backend derives its process
+// id/name), a DMN model is uploaded and referenced (the createDmnRef two-step), and a
+// form-js .form/.json is saved as a form. The list is refreshed on success.
 async function importArtifact(projectId, reload) {
+  // The file is chosen first, while the click's user activation is still live: a
+  // browser refuses to open a file picker from a task that no longer counts as a
+  // gesture, and putting a dialog in front of it costs exactly that.
   const file = await pickFile(".bpmn,.dmn,.form,.xml,.json,application/xml,text/xml,application/json");
   if (!file) return;
+  const target = await resolveImportTarget(projectId, file.name);
+  if (!target) return;
+  projectId = target.projectId;
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   const base = file.name.replace(/\.[^.]+$/, "");
   let text;
@@ -3682,10 +3728,14 @@ async function importArtifact(projectId, reload) {
 // Export-FIMConfig XML that embeds one — into a BPMN draft via POST
 // /api/v1/imports/mim, then shows the per-node conversion report. The import
 // lands as a draft (never a deploy); constructs without a faithful BPMN mapping
-// are preserved in atlas:mimSource and flagged for review in the report.
+// are preserved in atlas:mimSource and flagged for review in the report. projectId
+// reads as it does for importArtifact: an id, "" for Not assigned, or null to ask.
 async function importMIM(projectId, reload) {
   const file = await pickFile(".xoml,.xml,application/xml,text/xml");
   if (!file) return;
+  const target = await resolveImportTarget(projectId, file.name);
+  if (!target) return;
+  projectId = target.projectId;
   let text;
   try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
   const base = file.name.replace(/\.[^.]+$/, "");
