@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Operations",
+    "Migration"
+  ],
+  "title": {
+    "en": "Migrated instances are found by the version they moved to",
+    "de": "Migrierte Instanzen werden von ihrer neuen Version gefunden"
+  },
+  "summary": {
+    "en": "An instance carries the searchable declaration of the version that wrote its values. Moving it to a version that declares more, or fewer, left that answer behind: a search over the new version simply did not return it, which reads like the instance is not there rather than like a stale index. A migration now brings the instance's searchability along, in both directions. For instances migrated before this, an administrator can repair a whole version in bounded batches; running that twice writes nothing the second time.",
+    "de": "Eine Instanz trägt die Suchbarkeits-Angabe der Version, die ihre Werte geschrieben hat. Wurde sie auf eine Version verschoben, die mehr oder weniger deklariert, blieb diese Angabe zurück: Eine Suche über die neue Version lieferte die Instanz schlicht nicht — was so aussieht, als gäbe es sie nicht, und nicht wie ein veralteter Index. Eine Migration zieht die Suchbarkeit jetzt mit, in beide Richtungen. Für Instanzen, die vorher migriert wurden, kann eine Administratorin oder ein Administrator eine ganze Version in begrenzten Schritten nachziehen; ein zweiter Durchlauf schreibt nichts mehr."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}
