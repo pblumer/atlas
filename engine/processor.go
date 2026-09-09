@@ -914,10 +914,14 @@ func (p *Processor) jobStats() JobStats {
 		switch h.Intent {
 		case model.IntentJobCreated:
 			s.Created++
+		case model.IntentJobActivated:
+			s.Activated++
 		case model.IntentJobCompleted:
 			s.Completed++
 		case model.IntentJobFailed:
 			s.Failed++
+		case model.IntentJobTimedOut:
+			s.TimedOut++
 		case model.IntentJobCanceled:
 			s.Canceled++
 		}
