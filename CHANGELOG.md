@@ -14,6 +14,67 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas now holds what the organisation must be able to do, not only what it runs.** A
+  deployed process could be found by its name and by nothing else: not by the business
+  capability it realises, not by who owns that capability, and not by what would stall
+  without it. The answer to all three lived in a slide deck, if anywhere.
+
+  Two design-time records close that, following the business architecture of Ruecker
+  and Strauch's *Enterprise Process Orchestration*. A **business capability** says what
+  has to be done, independently of how — its scope (including what it is explicitly
+  *not* responsible for), its input and output, its business owner, the resources it
+  draws on, what it requires from other capabilities, and the KPIs and SLAs it is held
+  to. A **value stream** is the ordered activity that meets a customer need, its stages
+  naming the capabilities that perform them.
+
+  A capability says how it is currently done in one of four ways: an executable process
+  here, a Worker, a purchased system, or a person. The last two are the point. A map
+  that could only record what Atlas already runs would tell you nothing the deployment
+  list does not, and `GET /api/v1/capabilities?realized=false` — everything nothing
+  currently automates — is the adoption backlog the whole thing exists to shrink.
+
+  Nothing about a realisation is stored beyond a portable key. Whether the process still
+  exists, at which version, with how many instances running, is resolved every time you
+  read, so the record cannot go stale about the installation. **Coverage** answers that
+  for one capability, along with what it depends on, what each of those has promised, who
+  depends on it, and which value-stream stages it performs.
+
+  The reverse direction is computed and never stored. `GET
+  /api/v1/business-architecture/gaps` compares the map against what this server actually
+  runs: capabilities nothing realises, realisations pointing at what is not here,
+  deployed processes no capability claims, stages with no capability, dependencies naming
+  no capability, and — the one worth the most — a call activity crossing from one
+  capability's process into another's that the caller never declared. It is a comparison
+  and never a merge: the method's black box is normally a service task, so a declared
+  dependency with no call activity is the ordinary case and raises nothing. Two things it
+  refuses to report: a purchased system or a person, which Atlas cannot see and will not
+  call a defect, and anything outside your sharing scope, which reads as restricted
+  rather than missing — with a count, so a clean report can be told from a blind one.
+
+  Capabilities are a **flat, tagged list**, and the record has no parent field. That is
+  the method's own advice and it is now structural: an "end-to-end" capability is
+  regularly invoked from inside another one, so any tree is wrong from some direction,
+  and a test asserts the field's absence rather than a comment asking for it. There is
+  one identity, the key, and it is also the filename — the map reads on disk as
+  `capabilities/loan-underwriting.json` and diffs like source. The price, stated in the
+  refusal that enforces it, is that a key cannot be renamed in place.
+
+  Both stores are design-time, so the existing export and restore already carry the map
+  between installations. The whole surface is available as MCP tools as well, because an
+  agent that deploys a process has no other way to say what the process is for.
+
+  Every KPI and SLA in the registry is a **declaration**. Atlas computes none of them,
+  and the coverage answer says so in a field rather than letting a client render a goal
+  as an achievement. The data to compute them is already there; whether it can be
+  aggregated at the volumes this is aimed at is an open question the decision record
+  carries, and measurement is a separate slice.
+
+  The method and how to work it are in `docs/architecture/business-architecture.md`,
+  including two things checking it against the tree turned up: a **none intermediate
+  throw event** — the method's milestone marker — does not compile, and Atlas's
+  Prometheus surface is operational rather than business-level, so a KPI dashboard
+  planned against `/metrics` will not find what it needs.
+
 - **An instance's data objects are drawn on the lifecycle their class declares.** The
   state trail was already on disk — every durable write, with the element that made it
   — and the state machine was already in the information model. Nothing read them
@@ -114,6 +175,15 @@ _Changed_ / _Removed_ for each version.
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
 ### Changed
+
+- **A refused write through MCP now says why, not just that.** A validation refusal has
+  always carried every reason at once — an author fixing a form should not make one round
+  trip per mistake — but the MCP client read only the one-line summary out of it. So an
+  agent saving an information model got "the model is not valid" and nothing else. It has
+  no form to read the details out of, so it retried blind, which is the failure mode the
+  tool surface exists to avoid. The shared client now appends the findings to the message,
+  reading both shapes in use, and skips a finding it cannot parse rather than losing the
+  whole refusal to one odd entry.
 
 - **A Worker Type's setup folds away once you have set it up.** The section that says
   where a type's work runs and what has to exist at the provider stood open above the

@@ -1,0 +1,11 @@
+{
+  "tags": ["MCP"],
+  "title": {
+    "en": "A refused write through MCP now says why, not just that it was refused",
+    "de": "Ein über MCP abgelehnter Schreibvorgang nennt jetzt den Grund, nicht nur die Ablehnung"
+  },
+  "summary": {
+    "en": "A validation refusal has always carried every reason at once, so somebody fixing a form does not make one round trip per mistake. The MCP client read only the one-line summary out of it, so an AI assistant saving an information model got \"the model is not valid\" and nothing else — and, having no form to read the details out of, retried blind. The reasons now travel with the message.",
+    "de": "Eine Validierungsablehnung enthielt schon immer alle Gründe auf einmal, damit beim Korrigieren eines Formulars nicht pro Fehler ein Durchgang nötig ist. Der MCP-Client las daraus nur die einzeilige Zusammenfassung. Ein KI-Assistent, der ein Informationsmodell speicherte, erhielt daher „das Modell ist nicht gültig“ und sonst nichts und versuchte es blind erneut. Die Gründe werden jetzt mit der Meldung übertragen."
+  }
+}

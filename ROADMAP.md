@@ -1552,7 +1552,7 @@ dataset of up to 50 000 cases":
 
 ---
 
-## Milestone B — Business architecture: capabilities & value streams 🔲
+## Milestone B — Business architecture: capabilities & value streams 🚧
 
 A parallel track: give Atlas a place for what an organisation must be able to do,
 above the processes that do it. The method is the business architecture of *Enterprise
@@ -1571,26 +1571,30 @@ the method and how to work it with Atlas as it stands are in
 [`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md).
 
 - ✅ **B0 — The method, written down.** The five levels mapped onto what Atlas has and
-  has not, the conventions that make the method workable before any of the below
-  exists (an application per capability, the capability definition in the process's own
-  `<bpmn:documentation>`, a required capability as a service task rather than a call
-  activity), and the measurement patterns with the Atlas fact each one actually
-  produces.
-- 🔲 **B1 — The capability record.** A new `api/capability` area service
+  has not, the conventions the method needs from a modeller whatever the registry holds
+  (an application per capability, a required capability as a service task rather than a
+  call activity, an end event named for its outcome), and the measurement patterns with
+  the Atlas fact each one actually produces.
+- ✅ **B1 — The capability record.** A new `api/capability` area service
   ([ADR-0147](docs/adr/0147-splitting-the-api-server-object.md)) over its own
   `sidecar.NewStore`, holding scope, inputs, outputs, business owner, resources,
   realisations, required capabilities, KPIs, SLAs, tags and a lifecycle state — with
-  **no parent field**, because the flat list is the method rather than a preference.
-  The business owner is free text with an optional principal: the person accountable
-  for a capability frequently has no account. Registered in
-  [`api/storeregistry.go`](api/storeregistry.go) as design-time, so a design-time
-  export carries the map.
-- 🔲 **B2 — The value stream record.** Ordered stages, each naming the capabilities
+  **no parent field**, because the flat list is the method rather than a preference,
+  and a test asserts the absence rather than a comment describing it. The business
+  owner is free text with an optional principal: the person accountable for a
+  capability frequently has no account. One identity, the key, which is also the
+  filename — so the map reads as `capabilities/loan-underwriting.json` and diffs like
+  source; the price is that a key cannot be renamed in place, and the refusal says so.
+  Registered in [`api/storeregistry.go`](api/storeregistry.go) as design-time, so the
+  existing export already carries the map between installations. Exposed as MCP tools
+  alongside the HTTP surface: an agent that deploys a process otherwise has no way to
+  say what part of the business it is for.
+- ✅ **B2 — The value stream record.** Ordered stages, each naming the capabilities
   that perform it, with the stream's own KPIs. The method's own inconsistency is
   accepted rather than engineered away: an end-to-end process spans several stages
   *and* is itself a capability, so a stage names capabilities and an end-to-end
   capability is named by every stage it spans.
-- 🔲 **B3 — Realisation, resolved at read time.** A capability's realisations point
+- ✅ **B3 — Realisation, resolved at read time.** A capability's realisations point
   outward by portable key ([ADR-0134](docs/adr/0134-git-backed-applications.md)) in one
   of four kinds — `process`, `worker`, `system`, `manual` — because the two that are
   not Atlas resources are the normal state of a capability before the work starts.
@@ -1598,16 +1602,23 @@ the method and how to work it with Atlas as it stands are in
   many instances are live) is resolved when the record is read and stored nowhere:
   [ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md) §4's
   discipline, for its reason.
-- 🔲 **B4 — The gap report.** The reverse direction, computed rather than stored, the
+- ✅ **B4 — The gap report.** The reverse direction, computed rather than stored, the
   way [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md) computes its overlay:
   capabilities realised by nothing (the manual work, made visible), realisations
   pointing at what no longer exists, deployed processes no capability claims, stages
-  with no capability, `requires` naming no capability, and a call activity crossing
-  into another capability's process that the caller never declared. A comparison, never
+  with no capability, `requires` naming no capability, one process two capabilities both
+  claim, and a call activity crossing into another capability's process that the caller
+  never declared. A comparison, never
   a merge — a declared dependency with no call is the normal case, since the method's
-  black box is usually a REST call. Reads run off the run loop
-  ([ADR-0239](docs/adr/0239-off-loop-queries.md)); nothing that grows with the instance
-  population runs on it.
+  black box is usually a REST call. It runs *on* the run loop, and only because nothing
+  in it grows with the instance population: the map and the deployment registry are
+  design-time size, and the running-instance count is the maintained O(1) per-definition
+  counter ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) rather than a scan.
+  [ADR-0239](docs/adr/0239-off-loop-queries.md) is the rule that makes that a check
+  somebody had to pass rather than an assumption. Alongside it, a per-capability
+  **coverage** read: the resolved
+  realisations, what the capability depends on and what each has promised, who depends
+  on it, and the value-stream stages it performs.
 - 🔲 **B5 — The milestone event compiles.** A **none intermediate throw event** — an
   event whose only job is to leave a trace in the engine's history — is the method's
   milestone marker, and today the compiler refuses it (*"only message, signal,
@@ -1633,6 +1644,16 @@ the method and how to work it with Atlas as it stands are in
 - 🔲 **B8 — The Console surface.** A capability list that is worth opening: filter by
   tag, sort by realisation state, and the gap report as the landing view rather than a
   report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
+- 🔲 **B9 — Document-level exchange.** One JSON document holding the whole map, and an
+  import that reports what it would do before doing it: reconciled by key rather than by
+  position, with a `dryRun` naming what it would add, change and leave alone. The
+  installation-level half already works — both stores are design-time, so the existing
+  export and restore ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carry them — and
+  this is the half that makes a map reviewable in a pull request and importable into a
+  second server without moving everything else with it. Cheap by construction: there are
+  no local ids to remap and no positional identity to preserve, so the document is the
+  records as they stand. Importing *another tool's* model — ArchiMate Open Exchange, or a
+  BIAN/eTOM reference model onto tags — is a separate slice again.
 
 Deliberately out of scope: business areas (Level 1) and integration capabilities
 (Level 5) as record kinds of their own — the first is a tag, and the second is what a

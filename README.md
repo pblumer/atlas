@@ -51,7 +51,7 @@ That's the whole setup. No SQL schema to migrate, no broker to provision, no sid
 - <img src="docs/brand/icons/tokens.svg" width="18" height="18" align="absmiddle" alt=""> **See every token.** A live view of all running instances on the diagram, plus a step-by-step replay of any single instance with per-step variable snapshots.
 - <img src="docs/brand/icons/human.svg" width="18" height="18" align="absmiddle" alt=""> **Human work included.** User tasks with real forms, claim/assign, candidate groups, and public start links — a Tasks app, not just an API.
 - <img src="docs/brand/icons/decisions.svg" width="18" height="18" align="absmiddle" alt=""> **Decisions as tables.** DMN business rule tasks with an embedded decision-table editor, and every evaluation recorded with its inputs, outputs and rule trace.
-- <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 65 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
+- <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 97 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
 
 ## Take the tour
 
@@ -128,7 +128,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 atlas mcp --server http://localhost:8080          # --token, or ATLAS_TOKEN, when the server requires a login
 ```
 
-Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 65 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, and runtime inspection. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
+Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 97 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, and the business-architecture registry that says what a process is *for*. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
 
 ## Running it for real
 

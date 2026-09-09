@@ -7,9 +7,8 @@ how to work that way with Atlas as it stands today.
 The method is the business architecture set out in **Bernd Ruecker and Leon Strauch,
 *Enterprise Process Orchestration*** (Wiley, 2025). It is not an Atlas invention and
 this document does not restate the book; it maps the method onto Atlas, says
-truthfully which parts Atlas supports today, shows how to work the method with what
-exists, and names the parts that are proposed but not built. The design record behind
-the proposed parts is
+truthfully which parts Atlas supports today, shows how to work the method, and names
+what is not built. The design record behind it is
 [ADR-draft-business-capabilities-and-value-streams](../adr/draft-business-capabilities-and-value-streams.md).
 
 **Related, but a different document.** [`enterprise-architecture.md`](enterprise-architecture.md)
@@ -24,7 +23,7 @@ about modelling *your* business capabilities, with Atlas as the tool.
 4. [Working this way with Atlas today](#working-this-way-with-atlas-today)
 5. [Modelling for measurement](#modelling-for-measurement)
 6. [Distributing a KPI as SLAs](#distributing-a-kpi-as-slas)
-7. [What is proposed and not built](#what-is-proposed-and-not-built)
+7. [What is built, and what is not](#what-is-built-and-what-is-not)
 
 ---
 
@@ -127,89 +126,137 @@ Three things this shows that a process model alone cannot:
 
 ## Where Atlas stands today
 
-The honest mapping. Nothing in the "have" column is speculative; nothing in the
-"missing" column is a plan.
+The honest mapping. Nothing in the "have" column is speculative, and the "missing"
+column names what is not built rather than what is planned.
 
 | Level | What Atlas has today | What is missing |
 |-------|----------------------|-----------------|
-| 1 Business areas | — | no record; a tag on an application is the nearest thing |
-| 2 Value streams | — | no record of streams or their stages |
-| 3 End-to-end processes | a deployed BPMN process, versioned, with documentation ([ADR-0143](../adr/0143-process-documentation-export.md)) | no process profile: no goal, no KPI, no business owner |
-| 4 Business capabilities | — | no capability record at all |
-| 5 Integration capabilities | Worker Types and Workers ([ADR-0203](../adr/0203-worker-execution-model.md)), the connector catalog | nothing ties a Worker Type to the business capability it serves |
-| Realisation edge | — | no statement of which process realises which capability |
-| Ownership | an application's sharing scope ([ADR-0071](../adr/0071-sharing-scopes.md)) | that is **access control**, not business ownership — see below |
-| Metrics | per-element visit and termination counters ([ADR-0080](../adr/0080-runtime-aggregate-counters.md)), the instance timeline, searchable variables ([ADR-0244](../adr/0244-searchable-variables.md)), the OpenSearch export ([ADR-0114](../adr/0114-opensearch-event-exporter.md)) | no KPI or SLA declaration, and nothing that aggregates per capability |
-| Architecture drawing | Panorama's ArchiMate documents and derived mesh ([ADR-0189](../adr/0189-panorama-architecture-modeling-and-live-overlays.md), [ADR-0211](../adr/0211-panorama-derived-landscape-mesh.md)) | a drawing has no owner field, no SLA and no list you can query |
+| 1 Business areas | a tag on a capability | no record of its own, deliberately |
+| 2 Value streams | a **value stream** record: ordered stages, each naming the capabilities that perform it | nothing draws it |
+| 3 End-to-end processes | a deployed BPMN process, versioned, with documentation ([ADR-0143](../adr/0143-process-documentation-export.md)); its profile is a capability carrying a tag | nothing |
+| 4 Business capabilities | a **capability** record: scope, inputs, outputs, business owner, resources, realisations, dependencies, KPIs, SLAs, tags, state | nothing |
+| 5 Integration capabilities | Worker Types and Workers ([ADR-0203](../adr/0203-worker-execution-model.md)), nameable as a capability's realisation | nothing |
+| Realisation edge | on the capability, by portable key, resolved at read time and stored nowhere | a model-side declaration, so the claim travels with an exported process |
+| Ownership | the capability's **business owner**, beside the application's sharing scope ([ADR-0071](../adr/0071-sharing-scopes.md)) | nothing: the two are separate fields, which is the point |
+| Metrics | per-element visit and termination counters ([ADR-0080](../adr/0080-runtime-aggregate-counters.md)), the instance timeline, searchable variables ([ADR-0244](../adr/0244-searchable-variables.md)), the OpenSearch export ([ADR-0114](../adr/0114-opensearch-event-exporter.md)) | **nothing computes a declared KPI or SLA.** They are declarations, and the API says so in every answer that carries one |
+| Architecture drawing | Panorama's ArchiMate documents and derived mesh ([ADR-0189](../adr/0189-panorama-architecture-modeling-and-live-overlays.md), [ADR-0211](../adr/0211-panorama-derived-landscape-mesh.md)) | no binding between an ArchiMate `Capability` and the registry record |
 
-**Panorama draws a capability; it does not register one.** Panorama's authorable
-subset includes the ArchiMate `Capability` element, and its bindings can point an
-element at an Atlas application, process, Worker or release. That is genuinely useful
-for communicating an architecture. It is not a capability registry: a shape on a view
-has a name and a position, not a scope, an owner, an input contract or an SLA, and
-"which capabilities have no realisation" becomes a question about a picture, answered
-by reading the picture.
-
-**An application's owner is not a capability's owner.** Atlas's `ownerId`,
-`visibility` and `members` on an application decide *who may open and change it*. The
-business owner of a capability is accountable for how it performs, is usually a
-different person, and often has no Atlas account at all. Do not read one as the other.
+**Panorama draws a capability; the registry holds one.** Panorama's authorable subset
+includes the ArchiMate `Capability` element, and its bindings can point an element at an
+Atlas application, process, Worker or release. That is for communicating an
+architecture. It is not the registry: a shape on a view has a name and a position, not a
+scope, an owner, an input contract or an SLA, and "which capabilities have no
+realisation" would be a question about a picture, answered by reading the picture. The
+two meet in a later slice, through binding keys on the drawing that name a registry
+record.
 
 ## Working this way with Atlas today
 
-The registry described in the next section does not exist yet. The method still works
-without it, with conventions and the artefacts Atlas already has. This is what to do
-now.
+### Write the map down
+
+The registry is two records and one report.
+
+```
+POST   /api/v1/capabilities            file a capability
+GET    /api/v1/capabilities?realized=false   the adoption backlog
+GET    /api/v1/capabilities/{key}/coverage   what actually does this, and what depends on it
+POST   /api/v1/value-streams           file a value stream with its ordered stages
+GET    /api/v1/business-architecture/gaps    the map against what this server runs
+GET    /api/v1/business-architecture/subset  the vocabularies this build accepts
+```
+
+The same surface is available as MCP tools — `atlas_list_capabilities`,
+`atlas_capability_coverage`, `atlas_business_architecture_gaps` and the rest — so an
+agent that deploys a process can say what part of the business it is for.
+
+Reading is open to every signed-in identity, because a capability map exists to cross
+the silos an application scope draws. Writing takes the modeler role. What *is* filtered
+is the landscape a read is resolved against: a process outside your scope is reported as
+restricted rather than as missing.
+
+**Start with the capabilities you do not automate.** A capability with no realisation is
+valid, expected, and the most useful row in the list — it is the work still done by hand
+or by a system nobody wrote down, and `?realized=false` is the backlog. A map that only
+contains what Atlas already runs would tell you nothing you could not read off the
+deployment list.
+
+**The key is the identity and cannot be renamed.** Choose it as you would a package
+name. It is the URL, the filename on disk, and what every `requires` and every
+value-stream stage says. Renaming means export, edit, import.
+
+### Name a realisation by its portable key
+
+A process realisation names the application's **portable key**
+([ADR-0134](../adr/0134-git-backed-applications.md)) and the BPMN process id, never a
+local application id — so the same map resolves on a second server:
+
+```json
+{"kind": "process", "applicationKey": "consumer-loans", "processId": "identity-verification"}
+{"kind": "worker",  "workerRef": "idmasters-rest"}
+{"kind": "system",  "note": "Acme KYC SaaS, REST"}
+{"kind": "manual",  "note": "Branch clerk checks the passport"}
+```
+
+Nothing about the deployed version, the running instances or whether it still exists is
+stored. All of it is resolved when you read, which is why the coverage answer is current
+and the record never goes stale about the installation.
+
+### Declare a dependency; do not let it be inferred
+
+`requires` is declared, and Atlas never derives it. From the caller's side a required
+capability is normally a **service task** or a message, not a call activity — a call
+activity states that the callee is a process in *this* engine, which is an
+implementation detail of the other capability and exactly what the black box hides.
+
+Atlas does compare the two. A call activity from one capability's process into
+another's, where the caller never declared the dependency, is a finding in the gap
+report. It is a comparison and never a merge: a declared dependency with no call
+activity is the ordinary case and raises nothing.
 
 ### One capability, one application, one process
 
 Make an Atlas **application** the unit of a business capability
-([ADR-0128](../adr/0128-process-applications.md)). Its portable key
-([ADR-0134](../adr/0134-git-backed-applications.md)) becomes the capability's stable
-name across servers, so the same capability is the same thing in development and in
-production. Inside it, one executable process realises the capability; supporting
-processes and forms live beside it.
+([ADR-0128](../adr/0128-process-applications.md)): its boundary matches the
+capability's, its deployable unit matches the ownership unit, and its portable key is
+what the realisation names. Inside it, one executable process realises the capability;
+supporting processes and forms live beside it, and a call between them stays inside the
+black box.
 
-This gives you three things immediately: a boundary that matches the capability's
-boundary, a deployable unit that matches the ownership unit, and a name that survives
-a move between installations.
-
-### Write the capability definition into the model
+### Write the definition into the model as well
 
 `AGENTS.md` already requires a `<bpmn:documentation>` on the process and on every
-element whose purpose is not obvious. Use the process-level documentation for the
-capability definition itself — the six parts above. Atlas shows it in the Modeler's
-Documentation field, beside the selected element in the replay, and it travels with
-every deploy, export and version. Written anywhere else, the next reader never finds
-it.
+element whose purpose is not obvious. The capability's own definition now has a better
+home, but the process-level documentation is still where a reader in the Modeler is —
+so say there what the process does and which capability it realises, and keep the
+scope, the owner and the SLA in the record where they can be queried.
 
-Keep it to the definition, not the implementation. If the text explains *how* the
-process works, it is element documentation and belongs on the elements.
+### Ownership: two different things, two different fields
 
-### Keep a required capability a black box
-
-Call another capability with a **service task** through a Worker, or by publishing a
-message — not with a call activity, unless you deliberately mean "the callee is a
-process in this engine and I depend on that". This is not pedantry: the choice decides
-whether swapping the other capability's implementation for a purchased system is a
-configuration change or a model change.
-
-Atlas resolves the call-activity graph, so call activities remain visible and useful —
-they are simply a statement about implementation coupling, which is what they should
-be.
+An application's `ownerId`, `visibility` and `members` decide **who may open and change
+it** ([ADR-0071](../adr/0071-sharing-scopes.md)). A capability's `owner` is the person
+accountable for **how it performs**. They are frequently different people, and the
+business owner often has no Atlas account at all — which is why that field is free text
+with an optional account link rather than a principal.
 
 ### Name the outcome, not the shape
 
 Name end events for what happened in business terms — `verified`, `rejected`,
-`timed-out` — not `end-1`. The measurement section below is entirely built on this,
-and it costs nothing at modelling time.
+`timed-out` — not `end-1`. The measurement section below is entirely built on this, and
+it costs nothing at modelling time.
 
-### Tag, do not nest
+### Tag; do not nest
 
-Applications carry no capability tag today, so the classification lives in your naming
-until the registry exists. Whatever convention you pick, resist a hierarchy: prefix
-tags (`area:lending`, `type:end-to-end`, `bian:level1:sales`) express any view you
-need without committing to one.
+Tags are the only classification there is, and the record has no parent field. Prefix
+them to express whatever view you need without committing to one: `area:lending`,
+`type:end-to-end`, `bian:level1:sales`.
+
+### Moving the map
+
+Both stores are design-time, so the existing design-time export and restore
+([ADR-0107](../adr/0107-backup-and-restore.md)) carry the map between installations with
+everything else an author moves. Because a record is filed under its own key, the
+archive reads as `capabilities/loan-underwriting.json` and diffs like source. A
+document-level export and import of the map alone is a named slice, not yet built.
 
 ## Modelling for measurement
 
@@ -294,33 +341,49 @@ lets an end-to-end target be reasoned about without opening every box beneath it
 Atlas holds none of these declarations today. What it does hold is the data to check
 them once they exist, per the table above.
 
-## What is proposed and not built
+## What is built, and what is not
 
-[ADR-draft-business-capabilities-and-value-streams](../adr/draft-business-capabilities-and-value-streams.md)
-proposes two design-time records in a new area service:
+**Built.** The capability record and the value-stream record, their stores and their
+routes; the realisation edge with every mutable fact resolved at read time; the
+per-capability coverage read; and the gap report, which compares the map against what
+this server actually runs and raises eight kinds of finding:
 
-- a **`Capability`** record — flat and tagged, with scope, inputs, outputs, business
-  owner, resources, realisations, required capabilities, KPIs, SLAs and a lifecycle
-  state, and deliberately **no parent field**;
-- a **`ValueStream`** record — ordered stages, each naming the capabilities that
-  perform it.
+| Finding | What it means |
+|---------|---------------|
+| `capability.unrealized` | nothing realises it: done by hand, done by a system nobody recorded, or not done |
+| `realization.missing` | it names a process or Worker that is not here |
+| `process.unclaimed` | a deployed process no capability claims |
+| `requires.unknown` | a dependency naming no capability |
+| `stage.empty` | a value-stream stage no capability performs |
+| `stage.unknown` | a stage naming no capability |
+| `process.shared` | two capabilities claim the same deployed process |
+| `call.undeclared` | one capability's process calls another's, undeclared |
 
-The realisation edge — *this capability is currently done by that* — lives on the
-capability and points outward by portable key, because two of its four kinds
-(a purchased system, manual work) have no BPMN model to carry it. Everything mutable
-about it is resolved when it is read and stored nowhere, which is the discipline
-[ADR-0189](../adr/0189-panorama-architecture-modeling-and-live-overlays.md) §4
-established for Panorama's bindings.
+The report also says how many references your own access hid from it, and what it
+looked at — so a suspiciously clean report can be told from an empty installation.
 
-The reverse direction is computed rather than stored — capabilities realised by
-nothing, deployed processes no capability claims, dependencies declared but never
-called, call activities that cross a capability boundary the caller never declared.
-That gap report is the point of the whole thing: it turns the adoption journey into a
-list that shrinks.
+Two things it deliberately never reports. A realisation by a purchased system or by a
+person is not checked, because Atlas cannot see either and reporting them would be
+reporting the limits of its eyesight as a defect in your architecture. And a reference
+outside your sharing scope is reported as restricted, never as missing.
 
-Read the record for the options weighed, what was refused and why, and the open
-question the measurement slice has to answer before any KPI in this method can be
-computed rather than merely declared.
+**Not built, each a named slice on [Milestone B](../../ROADMAP.md):**
+
+- **Measurement.** Every KPI and SLA in the registry is a *declaration*. Nothing computes
+  one, and the coverage answer says so in a field rather than leaving a client to render
+  a goal as an achievement. The data is there — see
+  [Modelling for measurement](#modelling-for-measurement) — but whether it can be
+  aggregated at the instance volumes this is aimed at, without the OpenSearch exporter,
+  is the open question the decision record carries.
+- **Document-level exchange** of the map on its own, with a dry-run import.
+- **The milestone event** — see [the gap above](#the-milestone-gap).
+- **Panorama binding keys**, so an ArchiMate `Capability` on a drawing names a registry
+  record.
+- **A model-side declaration**, so a process can state the capability it realises where
+  the delivery team already works, and carry it through an export.
+- **A Console surface.** Today the registry is the HTTP API and the MCP tools over it
+  (`atlas_list_capabilities`, `atlas_capability_coverage`, `atlas_business_architecture_gaps`
+  and the rest), so a person authors it through a client and an agent through its tools.
 
 ## Further reading
 

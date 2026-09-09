@@ -1,7 +1,7 @@
 # ADR-DRAFT: Business capabilities and value streams as design-time records
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
 - **Open question:** whether the KPIs and SLAs this record lets somebody declare can
@@ -94,9 +94,10 @@ asked in a real organisation running the method:
   between installations, so every reference it holds must be a portable one — the
   application key of [ADR-0134](0134-git-backed-applications.md), not a local
   random id.
-- **No unbounded scan on the run loop.** Coverage and gap reads walk deployments and
-  can walk instances. [ADR-0239](0239-off-loop-queries.md) is the constraint: a scan
-  that grows with the instance population runs off the loop or not at all.
+- **No unbounded scan on the run loop.** Coverage and gap reads walk deployments, and a
+  naive one would want per-process instance counts. [ADR-0239](0239-off-loop-queries.md)
+  is the constraint: a read that grows with the instance population runs off the loop or
+  not at all.
 - **One area, one service.** [ADR-0147](0147-splitting-the-api-server-object.md): a
   new API area is its own package holding a `*runloop.Loop`, not more methods on
   `Server`.
@@ -126,8 +127,7 @@ invention:
 
 | Field | Why it is there |
 |-------|-----------------|
-| `id` | local, random — the identity a URL uses |
-| `key` | the portable slug, stable across installations, the identity every reference uses |
+| `key` | **the** identity: the URL, the filename, what `requires` and a value-stream stage name, and what an export carries |
 | `name`, `summary` | what a reader sees in a list |
 | `scope` | what this capability is and is **not** responsible for — the method's first field, and the one that settles boundary arguments |
 | `inputs`, `outputs` | the interface: trigger and result, each with a kind (`api`, `event`, `message`, `manual`) and a description |
@@ -155,11 +155,33 @@ SVP, a department head, a role rather than an account. Requiring a principal wou
 either exclude them or produce a directory of ghost accounts. The optional principal
 link is there so that an owner who *is* an Atlas user can be resolved.
 
+**There is one identity, not two.** Most of Atlas's design-time records carry a random
+local id alongside a portable key, and this one deliberately does not. A random id
+would appear in every `requires` entry, in every value-stream stage and in every
+exported document, which would make the export unreadable to a person and force an
+import into another installation to remap the lot. The key is chosen by the author, is
+already meaningful, and is the same string on every server — so a record is filed on
+disk under `capabilities/loan-underwriting.json`, an export is diffable in review, and
+an import is idempotent.
+
+The cost is real and is accepted rather than hidden: **the key cannot be renamed in
+place**, because every reference to it is by key and a rename would silently break
+them all. A write that changes it is refused with that reason. Renaming means export,
+edit, import — which the exchange slice below makes an ordinary operation. A rename
+endpoint that rewrote every referrer is a later slice if it is ever wanted; guessing at
+it now would be inventing a cascade nobody has asked for.
+
+**The key is also a filename, and that is what makes its shape strict.** Lower-case
+letters, digits and dashes, 1 to 64 characters. A key that could name a path is refused
+by validation with a message, and refused again by the store's own filename predicate —
+so a request-supplied key cannot address a file outside the directory even if a caller
+reached the store another way.
+
 ### The `ValueStream` record
 
 | Field | Why it is there |
 |-------|-----------------|
-| `id`, `key`, `name`, `description` | as above |
+| `key`, `name`, `description` | as above |
 | `owner` | at this level, typically an executive; same shape as a capability's |
 | `stages` | **ordered**; each stage has a key, a name, a description and the capability keys that perform it |
 | `kpis` | the stream's own targets, which the capabilities' SLAs distribute |
@@ -204,11 +226,16 @@ The reverse direction is **computed, not stored**, mirroring Panorama's
 modelled-but-absent / present-but-unmodelled overlay
 ([ADR-0211](0211-panorama-derived-landscape-mesh.md)):
 
-- capabilities with no realisation — the manual work, made visible;
+- capabilities with no realisation — the manual work, made visible, except where the
+  capability is `deprecated`, which is *supposed* to have nothing doing it;
 - realisations pointing at an application or process that no longer exists;
 - deployed processes no capability claims;
-- value-stream stages with no capability;
+- value-stream stages with no capability, and stages naming a capability that is not
+  in the map;
 - `requires` entries naming no capability;
+- one deployed process claimed by two capabilities — one implementation with two owners
+  is the ambiguity the map exists to remove, so it is reported rather than resolved by
+  whichever record happened to be read last;
 - and the one worth the most: a **call activity** from a realising process into a
   process that realises another capability, where the caller's `requires` does not
   name it. Atlas already resolves the call-activity graph, so this is a comparison of
@@ -216,6 +243,41 @@ modelled-but-absent / present-but-unmodelled overlay
   declared dependency with no call is perfectly normal (the method's black box is
   usually a REST call, not a call activity), so the derived graph can add a finding
   but must never rewrite `requires`.
+
+### Exchange: moving a map between installations
+
+Atlas owns the map. It is not a mirror of an enterprise-architecture tool, and a read
+of it is authoritative. That makes exchange a requirement rather than a nicety: an
+owned artefact that cannot leave is a hostage, and a map that cannot be reviewed in a
+pull request will not be reviewed at all.
+
+Two levels, and the first is already there because of a decision made above.
+
+**Installation level, working now.** Both stores are registered in
+[`api/storeregistry.go`](../../api/storeregistry.go) as `classDesignTime`, so the
+existing design-time export and restore ([ADR-0107](0107-backup-and-restore.md)) carry
+them with everything else an author moves between servers. They carry no secret and no
+credential — a capability record holds names, prose and portable keys — so they belong
+in that class rather than beside the instance-local stores.
+
+Two properties of the record above are what make that export genuinely portable rather
+than merely present: a realization names the **portable application key**, so it still
+resolves on the far side, and a record is filed under its **own key**, so the archive
+reads as `capabilities/loan-underwriting.json` and diffs like source.
+
+**Document level, deferred to its own slice.** One JSON document holding the whole map —
+every capability and value stream, by key — with an import that reports what it would
+do before it does it (`dryRun`), reconciles by key rather than by position, and says
+which records it would add, change and leave alone. Deferred rather than built here
+because it is a different thing to get right (merge semantics, partial failure,
+reporting) and because the installation-level export already answers "get my map out of
+this server". The design above is what makes it a projection rather than a translation:
+there are no local ids to remap and no positional identity to preserve, so the document
+is the records as they stand.
+
+Importing *another tool's* model — ArchiMate Open Exchange, or a BIAN/eTOM reference
+model — is a third thing again, and is named as a follow-up below rather than promised
+here.
 
 ### What this record does not do
 
@@ -232,9 +294,33 @@ Stated so the gaps are decisions rather than omissions:
   exists to settle it.
 - **It has no approval workflow.** `state` is a field somebody sets, not a lifecycle
   Atlas drives. Atlas is the engine an organisation would model such a workflow *in*.
+- **It does not rename a key.** See above: one identity, and a rename that rewrote every
+  referrer is a cascade nobody has asked for yet.
+- **It does not mirror an enterprise-architecture tool.** Atlas owns the map. Where an
+  organisation already keeps one elsewhere, the answer is the exchange above plus the
+  gap report, not a synchronisation Atlas would have to arbitrate.
 
 ### Consequences
 
+- **Built, and where it sits.** Coverage and the gap report run *on* the run loop, which
+  is only sound because nothing in them grows with the instance population: the map and
+  the deployment registry are design-time size, the call-activity graph comes off the
+  immutable compiled model, and the running-instance figure is the maintained O(1)
+  per-definition counter ([ADR-0080](0080-runtime-aggregate-counters.md)) rather than a
+  scan. That is the check ADR-0239 exists to force; had any part of it needed a scan,
+  the read would have had to move off the loop instead.
+
+  The two records, their stores, the area service and its routes; the
+  realization edge with every mutable fact resolved at read time; the coverage read; and
+  the gap report with its eight finding kinds. The landscape they are compared against
+  is collected on the run loop and filtered by the caller's sharing scope, with a
+  restricted placeholder where a scope cuts a reference. The same surface is exposed as
+  MCP tools, because an agent deploying a process has no other way to say what part of
+  the business the process is for — and because it has no form to read a refusal out of,
+  which is why the shared MCP client now carries a validation refusal's findings rather
+  than only its one-line summary. Not built, and each named as a slice: measurement, the
+  document-level exchange, the Panorama binding keys, the model-side declaration, and a
+  Console surface.
 - **Positive.** The six questions above become one read each. A capability map can be
   authored before any process exists, which is when the method says to author it, and
   the coverage report then fills in as delivery lands. The gap report gives the
@@ -306,6 +392,10 @@ Stated so the gaps are decisions rather than omissions:
 - follows the business architecture of *Enterprise Process Orchestration*, Bernd
   Ruecker and Leon Strauch, Wiley 2025 (ISBN 978-1-394-30968-9), chapters 1, 3 and 5
 - described for readers in [`docs/architecture/business-architecture.md`](../architecture/business-architecture.md)
+- implemented in [`api/capability/`](../../api/capability), with the landscape it is
+  compared against collected in [`api/capabilitylandscape.go`](../../api/capabilitylandscape.go)
+- relates to [ADR-0107](0107-backup-and-restore.md) — the design-time export that carries
+  the map between installations
 - relates to [ADR-0189](0189-panorama-architecture-modeling-and-live-overlays.md) — the
   architecture document, its bindings, and the rule that a binding stores no mutable fact
 - relates to [ADR-0211](0211-panorama-derived-landscape-mesh.md) — the derived mesh and
@@ -316,8 +406,8 @@ Stated so the gaps are decisions rather than omissions:
   every realisation reference uses
 - relates to [ADR-0147](0147-splitting-the-api-server-object.md) — a new API area is a
   service
-- relates to [ADR-0239](0239-off-loop-queries.md) — why the coverage and gap reads run
-  off the run loop
+- relates to [ADR-0239](0239-off-loop-queries.md) — the rule the coverage and gap reads
+  had to be measured against before they could run *on* the loop
 - relates to [ADR-0099](0099-archimate-enterprise-architecture-view.md) — Atlas's own
   ArchiMate view, which models Atlas as a capability provider rather than modelling a
   customer's capabilities
