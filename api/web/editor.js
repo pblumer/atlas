@@ -242,6 +242,7 @@ export function cleanup() {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   destroyObjectCanvas();
+  destroyLifecycleCanvas();
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 window.__atlasCleanup = cleanup;
@@ -263,6 +264,18 @@ function destroyObjectCanvas() {
   if (!objectCanvas) return;
   try { objectCanvas.canvas.destroy(); } catch { /* already gone */ }
   objectCanvas = null;
+}
+
+// lifecycleCanvas is the same thing for the Data tab's third reading: the state
+// machine a class declares with this instance's own life drawn on it (ADR-0259 §4).
+// A separate record rather than a mode of objectCanvas, because the two are different
+// notations of different documents and sharing one slot would mean one of them
+// silently tearing the other down.
+let lifecycleCanvas = null;
+function destroyLifecycleCanvas() {
+  if (!lifecycleCanvas) return;
+  try { lifecycleCanvas.canvas.destroy(); } catch { /* already gone */ }
+  lifecycleCanvas = null;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -4269,6 +4282,66 @@ function placementNoticeHTML(id, context) {
   return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
 }
 
+// WORKER_TYPE_INFO_GROUP is the title the setup section carries in the panel, and the
+// key its collapsed state is remembered under. One title for every Worker Type on
+// purpose: "I do not want to read this" is a statement about the section, not about
+// Jira in particular, and the other groups behave the same way.
+const WORKER_TYPE_INFO_GROUP = "Setup";
+
+// workerTypeInfoHTML wraps what a Worker Type says about itself — where its work runs,
+// and what has to exist before it runs at all — in a collapsible group.
+//
+// It used to stand open above the fields, which is right the first time and wrong every
+// time after: on a 270px panel it is most of a screen, and an author who has already
+// configured this type is scrolling past it to reach the field they came for. It is a
+// group now, with the same chevron as Operation or Failure handling, and it starts
+// folded unless this server has no Worker of the type configured — the case the section
+// was written for. An explicit toggle wins over that and is remembered for the session,
+// as with every other group.
+//
+// `namesAWorker` says whether a task of this type states a configured Worker at all —
+// see kindNamesAWorker. A type that configures nothing has a setup worth one read, so it
+// starts folded whatever this server has.
+// `context` picks the placement notice's wording, or is null where the caller has
+// already placed that notice itself and only the setup belongs in the group.
+function workerTypeInfoHTML(id, namesAWorker, context = "workerType") {
+  const inner = (context ? placementNoticeHTML(id, context) : "") + workerTypeDocHTML(id);
+  if (!inner) return "";
+  const open = namesAWorker && !configuredKinds.has(id);
+  return `<div class="io-group wt-group" data-group="${esc(WORKER_TYPE_INFO_GROUP)}"
+       data-standalone-group="1" data-open-default="${open ? "1" : "0"}">
+    <div class="io-group-head" title="What this Worker Type needs before a task of it runs">
+      <span class="io-group-title">${esc(WORKER_TYPE_INFO_GROUP)}</span>
+      <span class="io-group-chevron" aria-hidden="true">&#9662;</span>
+    </div>
+    <div class="io-group-body">${inner}</div>
+  </div>`;
+}
+
+// kindNamesAWorker: does a task of this kind state the name of a configured Worker? It
+// is the catalog's own answer — the field that asks for one — rather than a second list
+// to keep in step. It compares rather than declares, on purpose: the Worker-picker drift
+// guard scans this file for a field declaring the connector key, so an object written in
+// that shape — even as an argument — is a field it then reports as missing its picker.
+function kindNamesAWorker(kind) {
+  return (kind.fields || []).some((f) => f.key === "connector");
+}
+
+// wireWorkerTypeInfo gives that group its collapse behaviour. It runs after every
+// render, beside groupifyPanel, because the panel is rebuilt on each selection and the
+// group is standalone markup that groupifyPanel deliberately leaves alone.
+function wireWorkerTypeInfo(body, ctl) {
+  for (const group of body.querySelectorAll(".wt-group")) {
+    if (group.dataset.wired === "1") continue;
+    group.dataset.wired = "1";
+    ctl.setDefault(WORKER_TYPE_INFO_GROUP, group.dataset.openDefault === "1");
+    group.classList.toggle("collapsed", ctl.isCollapsed(WORKER_TYPE_INFO_GROUP));
+    group.querySelector(".io-group-head").addEventListener("click", () => {
+      ctl.onToggle(WORKER_TYPE_INFO_GROUP, group.classList.toggle("collapsed"));
+    });
+  }
+}
+
 // stKindHeadingHTML renders the heading above the chosen kind's fields.
 //
 // When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
@@ -4302,7 +4375,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Worker type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "workerType")}${workerTypeDocHTML(cur.id)}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -4344,8 +4417,8 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "workerType") +
-    workerTypeDocHTML(cur.id) + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + workerTypeInfoHTML(cur.id, kindNamesAWorker(cur)) +
+    stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -5982,7 +6055,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
     groupifying = true;
-    try { groupifyPanel(body, groupCtl); } finally { groupifying = false; }
+    try {
+      groupifyPanel(body, groupCtl);
+      wireWorkerTypeInfo(body, groupCtl);
+    } finally { groupifying = false; }
   });
   panelObserver.observe(body, { childList: true });
 
@@ -6460,9 +6536,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
-            // The same setup block the Worker Type panel carries: a temis Worker is
-            // configured exactly like the rest, and this is the other place it is chosen.
-            html += workerTypeDocHTML("temis");
+            // The same setup block the Worker Type panel carries, and collapsible for
+            // the same reason: a temis Worker is configured exactly like the rest, and
+            // this is the other place it is chosen. The placement notice above stays
+            // where it is — it belongs to the Evaluation field it sits under, and it is
+            // one paragraph rather than a screen.
+            html += workerTypeInfoHTML("temis", true, null);
             html += `<label class="field"><span>Worker</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>
@@ -10982,8 +11061,18 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // list is the type-free scan of what the instance holds, the object diagram the
   // instance-level twin of the class diagram under Data › Model. The choice is
   // remembered because it is about how a person reads data, not about this instance.
-  let dataView = localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list";
+  const DATA_VIEWS = ["list", "diagram", "lifecycle"];
+  const savedView = localStorage.getItem("atlas.replay.dataview");
+  let dataView = DATA_VIEWS.includes(savedView) ? savedView
+    : (localStorage.getItem("atlas.replay.datadiagram") === "1" ? "diagram" : "list");
   let objectGraph = null; // the derived diagram, fetched on demand
+  // The lifecycle traces, fetched on demand and dropped whenever the objects move —
+  // a trace is a reading of a trail, so it is stale the moment the trail grows.
+  let lifecycleTraces = null;
+  // Which object's machine is on screen, by name. Several objects can each declare
+  // one and only one machine can be drawn, so the reader picks — and the pick has to
+  // survive the poll that re-renders this tab.
+  let lifecycleOf = null;
   let varFilter = "";    // Variables-tab name filter (persists across scrubs)
   let curVarList = [];   // the variable set the Variables tab is currently showing
   // Keys (scope\u0000name) the selected element itself wrote, when the Output side is
@@ -11719,15 +11808,19 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
             title="What this instance holds, as a list">List</button>
           <button type="button" data-dview="diagram"${dataView === "diagram" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
             title="The same data as objects, linked the way the information model says they relate">Diagram</button>
+          <button type="button" data-dview="lifecycle"${dataView === "lifecycle" ? ' class="active" aria-selected="true"' : ' aria-selected="false"'}
+            title="The states a class declares, with the ones this instance has been through and what moved it">Lifecycle</button>
         </span>
       </div>`;
   }
 
   function renderDataObjects() {
-    if (dataObjects.length && dataView === "diagram") return renderObjectDiagram();
+    if (dataObjects.length && dataView === "diagram") { destroyLifecycleCanvas(); return renderObjectDiagram(); }
+    if (dataObjects.length && dataView === "lifecycle") { destroyObjectCanvas(); return renderLifecycleOverlay(); }
     // Every other reading replaces this tab's body wholesale, so a canvas standing in
     // it goes now rather than being left bound to markup that no longer exists.
     destroyObjectCanvas();
+    destroyLifecycleCanvas();
     if (!dataObjects.length) {
       dataEl.innerHTML = `<p class="ops-empty">This process declares no data objects. Draw a data object on the diagram and give an activity a data association, and the data it carries — its value, its state, and where each value came from — appears here.</p>`;
       return;
@@ -11905,6 +11998,153 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     stage.querySelector('[data-tool="fit"]').addEventListener("click", () => objectCanvas?.canvas.fit());
   }
 
+  // renderLifecycleOverlay draws the state machine a data object's class declares,
+  // with this instance's own life on it (ADR-0259 §4): the states it has been
+  // through, the one it is in now, the moves it made and the element that made each.
+  //
+  // Nothing here is a new fact. The trail was already on disk with attribution and
+  // the machine was already in the information model; the overlay is reading one
+  // against the other, and it is read *on the server* for the reason the object graph
+  // is — which declared transition a move corresponds to is model semantics, and a
+  // second copy of that rule here would be a second place for it to be wrong.
+  //
+  // This is the same relationship the object diagram has to the class diagram, which
+  // is why UML was the right notation in the first place: the standard already draws
+  // the type and the instance as two pictures, and that is Atlas's design-time /
+  // run-time line.
+  async function renderLifecycleOverlay() {
+    if (!lifecycleTraces) {
+      destroyLifecycleCanvas();
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">Reading the declared lifecycles…</p>`;
+      try {
+        lifecycleTraces = await api("GET", `/api/v1/instances/${key}/lifecycle`);
+      } catch (e) {
+        dataEl.innerHTML = dataHead() + `<p class="ops-empty err">Could not read the lifecycles: ${esc(e.message)}</p>`;
+        return;
+      }
+      if (current !== viewer) return; // navigated away while it was read
+      if (!Array.isArray(lifecycleTraces)) lifecycleTraces = [];
+    }
+    const traces = lifecycleTraces;
+    if (!traces.length) {
+      destroyLifecycleCanvas();
+      // Three different silences, and only the first is worth spelling out: a class
+      // without a lifecycle is the normal case, not a gap somebody should feel bad
+      // about. The way to add one is named, because that is the useful half.
+      const typed = dataObjects.some((d) => d.itemType);
+      dataEl.innerHTML = dataHead() + `<p class="ops-empty">${typed
+        ? `No class behind this instance's data objects declares a lifecycle yet. Open the class under
+           <b>Data › Model</b> and draw one, and the states it moves through appear here — with the ones
+           this instance has been through, and what moved it.`
+        : `These data objects declare no class, so there is no lifecycle to read them against.
+           Set a data object's <b>Type</b> in the Modeler and model that class under <b>Data</b>.`}</p>`;
+      return;
+    }
+    // One machine can be drawn at a time, so several objects means the reader picks.
+    // The pick survives a poll: this tab re-renders on every frame that lands, and a
+    // picker that reset itself would be unusable on a running instance.
+    if (!traces.some((x) => x.object === lifecycleOf)) lifecycleOf = traces[0].object;
+    const tr = traces.find((x) => x.object === lifecycleOf);
+    // Already showing exactly this: leave it alone. This tab re-renders whenever an
+    // element is selected and again on every live poll, so on a running instance the
+    // drawing would be rebuilt on a timer — throwing away the zoom and the pan the
+    // reader had just set, which are two of the things moving onto diagram-js was for.
+    // The traces are *replaced* when the objects move and never mutated, so identity
+    // is the whole test.
+    if (lifecycleCanvas && lifecycleCanvas.traces === traces && lifecycleCanvas.object === tr.object
+        && dataEl.contains(lifecycleCanvas.el)) return;
+
+    // Moves the machine does not join, folded onto one edge per pair so a datum that
+    // went round three times illegally draws one dashed line and not three on top of
+    // each other. They are drawn rather than only listed because what happened is the
+    // point of an overlay — dashed and in the danger colour, so it can never be read
+    // as something the model says.
+    const strays = new Map();
+    for (const u of tr.undeclared || []) {
+      const id = `undeclared:${u.from}\u0001${u.to}`;
+      const at = strays.get(id) || { id, from: u.from, to: u.to, undeclared: true, taken: 0 };
+      at.taken++;
+      at.lastBy = u.by || at.lastBy;
+      strays.set(id, at);
+    }
+    const machine = {
+      states: tr.states || [],
+      transitions: [...(tr.transitions || []), ...strays.values()],
+    };
+
+    const notes = [];
+    for (const s of tr.unknown || []) {
+      notes.push(`This object was written into <b>${esc(s)}</b>, which <b>${esc(tr.class)}</b> does not
+        declare — so it is not on the drawing. Either the process writes the wrong string, or the state
+        is real and the class has not been told about it.`);
+    }
+    for (const u of tr.undeclared || []) {
+      notes.push(`<b>${esc(u.from)} → ${esc(u.to)}</b>${u.by ? ` by <b>${esc(doLabel(u.by))}</b>` : ""}
+        ${u.at ? `at ${esc(fmtClock(u.at))} ` : ""}is a move <b>${esc(tr.class)}</b> declares no transition for.`);
+    }
+    if ((tr.transitions || []).some((x) => x.ambiguous && x.taken)) {
+      notes.push(`Two transitions join the same pair of states, and the trail records states rather than
+        transition ids — so both are marked and neither can be told to be the one that ran.`);
+    }
+
+    const picker = traces.length > 1
+      ? `<label class="og-pick"><span>Object</span><select id="lc-pick">${traces.map((x) =>
+          `<option value="${esc(x.object)}"${x.object === lifecycleOf ? " selected" : ""}>${
+            esc(x.object)} · ${esc(x.class)}</option>`).join("")}</select></label>`
+      : "";
+
+    dataEl.innerHTML = dataHead() + `
+      <div class="lc-bar">
+        <span class="lc-of"><b>${esc(tr.object)}</b> as <span class="do-class">${esc(tr.class)}</span></span>
+        ${tr.current
+          ? `<span class="lc-now">now <span class="do-state">${esc(tr.current)}</span></span>`
+          : `<span class="lc-now none">carries no state yet</span>`}
+        ${picker}
+      </div>
+      <div class="og-stage">
+        <div class="og-canvas" id="lc-canvas"></div>
+        <div class="og-tools">
+          <button type="button" class="icon-btn" data-lctool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+          <button type="button" class="icon-btn" data-lctool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+          <button type="button" class="icon-btn" data-lctool="fit" title="Fit diagram" aria-label="Fit diagram">⊡</button>
+        </div>
+      </div>
+      ${notes.length ? `<div class="og-notes">${notes.map((n) => `<p>${n}</p>`).join("")}</div>` : ""}`;
+
+    const el = dataEl.querySelector("#lc-canvas");
+    let uml;
+    try {
+      uml = (await loadCanvasBundle()).uml;
+    } catch {
+      el.innerHTML = `<p class="ops-empty err">Could not load the diagram canvas.</p>`;
+      return;
+    }
+    // The bundle is a fetch, so this tab may have been re-rendered — or left — while
+    // it was in flight. Drawing into an element nothing shows any more would leave a
+    // live canvas nobody can reach and nothing tears down.
+    if (current !== viewer || !dataEl.contains(el)) return;
+    destroyLifecycleCanvas();
+    // Not editable: this is a reading of what happened, and the document it draws
+    // belongs to the information model, which is where it is authored.
+    const canvas = new uml.StateCanvas(el, { editable: false });
+    lifecycleCanvas = { canvas, el, object: tr.object, traces };
+    canvas.render(machine);
+
+    const stage = el.parentElement;
+    stage.querySelector('[data-lctool="zoom-in"]').addEventListener("click", () => lifecycleCanvas?.canvas.zoom(1.2));
+    stage.querySelector('[data-lctool="zoom-out"]').addEventListener("click", () => lifecycleCanvas?.canvas.zoom(1 / 1.2));
+    stage.querySelector('[data-lctool="fit"]').addEventListener("click", () => lifecycleCanvas?.canvas.fit());
+  }
+
+  // Which object's machine is drawn. A <select> answers with change and not click,
+  // so it is its own delegated listener on the same re-rendering body.
+  dataEl.addEventListener("change", (e) => {
+    const pick = e.target.closest("#lc-pick");
+    if (!pick || !dataEl.contains(pick)) return;
+    lifecycleOf = pick.value;
+    renderDataObjects();
+  });
+
   // The trail toggles are inside a body that re-renders, so they are wired by
   // delegation rather than re-bound on every render.
   dataEl.addEventListener("click", (e) => {
@@ -11929,7 +12169,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const view = e.target.closest("[data-dview]");
     if (!view || !dataEl.contains(view)) return;
     dataView = view.dataset.dview;
-    localStorage.setItem("atlas.replay.datadiagram", dataView === "diagram" ? "1" : "0");
+    localStorage.setItem("atlas.replay.dataview", dataView);
     renderDataObjects();
   });
 
@@ -12639,7 +12879,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const sig = (list) => list.map((d) => `${d.name}:${d.state}:${(d.history || []).length}:${d.at}`).join(",");
     if (sig(next) === sig(dataObjects)) return;
     dataObjects = next;
-    objectGraph = null; // derived from these objects, so it is stale the moment they move
+    // Both derived readings are read *from* these objects, so both are stale the
+    // moment they move — and a trace of a trail that has since grown is worse than no
+    // trace, because it says the datum stopped where it did not.
+    objectGraph = null;
+    lifecycleTraces = null;
     renderDataObjects();
   }
 

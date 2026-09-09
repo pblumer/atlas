@@ -294,6 +294,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/object-graph", s.handleInstanceObjectGraph, apiOp{
 			summary: "Derive a process instance's object diagram — its data objects as UML object nodes with their attributes and business keys, linked by containment and by matching business keys, plus the references this instance cannot resolve (ADR-0230)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Object graph", tObject())}},
+		{"GET", "/api/v1/instances/{key}/lifecycle", s.handleInstanceLifecycle, apiOp{
+			summary: "Read a process instance's data objects against the lifecycles their classes declare — the declared state machine with the states this instance has been through, the moves it made and the element that made each, plus the states and moves the model does not account for (ADR-0259)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Instance lifecycles", tArray())}},
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
