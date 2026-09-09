@@ -270,7 +270,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		case model.IntentVariableElementSet:
 			// One element of a list, named rather than carried: the fold reads the
 			// collection, sets the element and writes it back
-			// (ADR-draft-a-loop-records-its-element). It is a function of the batch's
+			// (ADR-0296). It is a function of the batch's
 			// own state and of the event, so replay reaches the same list (I4).
 			//
 			// No snapshot. A loop's half-filled collection is scratch at the body scope

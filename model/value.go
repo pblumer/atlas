@@ -429,7 +429,7 @@ type VariableValue struct {
 	// once per iteration, so the bytes written grew with the *square* of the iteration
 	// count: a hundred thousand results of a kilobyte each cost a hundred gigabytes to
 	// record a hundred megabytes of answer. Naming the element instead makes the record
-	// the size of one result (ADR-draft-a-loop-records-its-element).
+	// the size of one result (ADR-0296).
 	Index int32
 
 	// Indexed says this write belongs in the variable value index: its process

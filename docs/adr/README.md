@@ -381,6 +381,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0293](0293-open-questions-in-records-expire.md) | A record that rests on an open question says so, and the question expires | Proposed |
 | [0294](0294-a-variable-is-a-record.md) | A variable is a record, a collection is a loop's harvest — two budgets | Draft |
 | [0295](0295-migration-reindexes-searchable-variables.md) | A migration re-indexes what its target declares | Accepted |
+| [0296](0296-a-loop-records-its-element.md) | A loop records the element it produced, not the collection so far | Draft |
 
 ## Status values
 

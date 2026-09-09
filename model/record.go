@@ -371,7 +371,7 @@ const (
 	// per finished iteration, and it exists because the alternative grows with the
 	// square of the iteration count: writing the collection each round put the growing
 	// list into the log and into the variable timeline once per round
-	// (ADR-draft-a-loop-records-its-element).
+	// (ADR-0296).
 	//
 	// It folds by reading the collection, setting the element and writing it back —
 	// deterministic, a function of the batch's own state, so replay reaches the same

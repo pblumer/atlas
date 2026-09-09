@@ -1,4 +1,4 @@
-# ADR-DRAFT: A loop records the element it produced, not the collection so far
+# ADR-0296: A loop records the element it produced, not the collection so far
 
 - **Status:** Draft
 - **Date:** 2026-09-09

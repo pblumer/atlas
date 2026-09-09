@@ -414,7 +414,7 @@ func (c *ProcessingContext) appendCollection(intent model.Intent, v model.Variab
 // value, rather than recording the list. It is what a multi-instance activity emits
 // per finished iteration, and it is the whole of the fix for a cost that grew with
 // the square of the iteration count: the record is the size of one result, not of the
-// collection so far (ADR-draft-a-loop-records-its-element).
+// collection so far (ADR-0296).
 //
 // The collection's own ceiling is not checked here, because this write does not carry
 // the collection. What bounds it is that each element is checked against the variable
