@@ -173,6 +173,7 @@ jobActivatable:<jobType>:<key>   → nil                        (open jobs per t
 timer:<dueDate>:<timerKey>       → TimerValue                 (sorted by due date → range scan)
 msgSub:<msgName>:<corrKey>       → SubscriptionValue
 var:<scopeKey>:<name>            → bytes
+varEl:<scopeKey>:<name>\0<index> → bytes                      (one element of a collection a loop is filling)
 incident:<incidentKey>           → IncidentValue
 pi:<procInstKey>                 → ProcessInstanceValue       (live instances)
 piHist:<procInstKey>             → ProcessInstanceValue       (terminal history, ADR-0017)
@@ -188,6 +189,16 @@ a business value, not a key. It holds only the variable names a process declared
 searchable (`atlas:searchable`), so a process that declares none writes no entries
 and pays nothing; the NUL between the value and the instance key is what lets an
 *exact* match be a different query from a *prefix* one over the same ordered range.
+
+`varEl` exists for the duration of one loop. A multi-instance activity collects one
+result per round into one list, and storing the assembled list per round made the
+bytes grow with the square of the round count. While the loop is filling it, the
+collection's record says only how long the list is and each element sits under its
+own key; the promotion collapses it back into an ordinary `var` entry
+(ADR-draft-a-collection-under-construction). The NUL after the name does here what it
+does in `varIdx`: the index follows the name, so without a separator the elements of
+`a` and of `ab` would answer each other's scans. Nothing outside the storage layer
+meets this form — every read path assembles the list first.
 
 `piByEl` is `elByProc` read the other way round, and it answers the operator's
 question at the shape rather than at the instance: "which instances are sitting on
