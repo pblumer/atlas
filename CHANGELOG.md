@@ -12,7 +12,52 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A diagram filed under no application no longer answers with silence.** A process
+  deployed outside an application has no application, so it has no information model,
+  so nothing about its data can be resolved — and until now the Modeler said so
+  nowhere. The class field quietly became plain text, the class card and the "no such
+  class" note never appeared, and the Problems panel read **"No problems"**, which is
+  the one reading a person must not be given: a clean bill that was never earned looks
+  exactly like one that was.
+
+  Both now say what is happening. The panel names the reason and the remedy — open the
+  process's draft from its application, or deploy it from there — and distinguishes it
+  from the other reason the picker can be empty, an application that models nothing
+  yet, because the two need different remedies. The Problems summary reads **"No
+  problems found — data not checked"** when there is no model behind the diagram, so
+  an empty list is never mistaken for a checked one.
+
+  The field is also called **Class** now rather than *Type*: what it holds is the class
+  from the information model, and calling it by that name is a shorter explanation than
+  the paragraph underneath (ADR-0230).
+
 ### Added
+
+- **A lifecycle that is ahead of the processes that write it now says so.** A class can
+  declare that an order may be `cancelled`; whether anything ever cancels one is a
+  question about the *application*, not about any one process, so it could not be asked
+  where the other two lifecycle checks live — `CheckDataFlow` reads one compiled process
+  at a time, and "nothing ever writes this" is false until every process has been looked
+  at. Asking it there would mean either passing the other processes into a per-process
+  check, where the same finding repeats once per process and is attached to whichever one
+  happened to be deployed, or answering it wrong.
+
+  It is asked once, of the set: the newest version of each of the application's
+  processes, minus the deactivated ones, plus whatever is being deployed or drawn right
+  now — so the process that finally cancels an order clears the finding as it arrives
+  rather than one deploy later. The result is one sentence per class naming every state
+  nothing reaches, carrying no element, because it is a fact about the model rather than
+  about any element of any process. Like its two siblings it is a warning and refuses
+  nothing: a lifecycle is routinely drawn before the process that will write it.
+
+  The state instances are created in counts as reached, since every instance begins
+  there — so a data object that carries no data state at all leaves the lifecycle's own
+  starting state unreached, which is worth saying because the remedy is one field in the
+  Modeler. A class no process handles is not reported at all: that is a lifecycle drawn
+  before its processes, which is the normal order of work rather than a defect
+  (`data.unreachable-state`, ADR-0259).
 
 - **An OpenAPI document can configure the task that calls it.** `atlas openapi-template
   --spec petstore.yaml --out ./packages` writes one element-template package per

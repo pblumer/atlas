@@ -2,6 +2,92 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-diagram-filed-under-no-application-no-longer-answers-with-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Modeler now says when it cannot check your data",
+        "de": "Der Modeler sagt jetzt, wenn er Ihre Daten nicht prüfen kann"
+      },
+      "summary": {
+        "en": "If a diagram is not filed under an application there is no information model behind it, so nothing about its data objects can be resolved or checked. That used to look like everything being fine: the class field was a plain text box and the Problems panel said \"No problems\". Now the panel names the reason and what to do about it, and an unchecked diagram says \"No problems found — data not checked\" instead of claiming a clean bill it never earned.",
+        "de": "Liegt ein Diagramm unter keiner Anwendung, steht kein Informationsmodell dahinter — nichts an seinen Datenobjekten lässt sich auflösen oder prüfen. Bisher sah das aus, als wäre alles in Ordnung: Das Klassenfeld war ein einfaches Textfeld, und die Problemliste meldete „No problems\". Jetzt nennt das Panel den Grund und den Weg heraus, und ein ungeprüftes Diagramm sagt „No problems found — data not checked\", statt eine Unbedenklichkeit zu behaupten, die es nie erworben hat."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and select a data object.",
+          "If the Class field is a plain text box, read the note under it: either the diagram is filed under no application, or the application models nothing yet — two different remedies.",
+          "For the first: open the process's draft from its application, or deploy it from there.",
+          "The Problems bar tells you the same thing from the other side — it now distinguishes \"nothing wrong\" from \"nothing looked\"."
+        ],
+        "de": [
+          "Einen Prozess im Modeler öffnen und ein Datenobjekt auswählen.",
+          "Ist das Feld Class ein einfaches Textfeld, sagt der Hinweis darunter warum: entweder liegt das Diagramm unter keiner Anwendung, oder die Anwendung modelliert noch nichts — zwei verschiedene Wege heraus.",
+          "Für den ersten Fall: den Draft des Prozesses aus seiner Anwendung heraus öffnen oder von dort deployen.",
+          "Die Problemleiste sagt dasselbe von der anderen Seite — sie unterscheidet jetzt „nichts gefunden\" von „nichts geprüft\"."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas now tells you when a state nothing ever reaches",
+        "de": "Atlas sagt jetzt, wenn ein Zustand nie erreicht wird"
+      },
+      "summary": {
+        "en": "If a class says an order can be cancelled and no process in the application ever cancels one, you now hear about it — at deploy and in the Modeler's Problems panel. Either a process is missing or the model is describing a plan rather than what is built, and both are worth knowing. It is a note, never a refusal, and it stays quiet about a class no process handles yet: drawing a lifecycle before the process that writes it is the normal way round.",
+        "de": "Wenn eine Klasse sagt, eine Bestellung könne storniert werden, aber kein Prozess der Anwendung storniert je eine, erfahren Sie das jetzt — beim Deploy und in der Problemliste des Modelers. Entweder fehlt ein Prozess, oder das Modell beschreibt einen Plan statt des Gebauten; beides ist wissenswert. Es ist ein Hinweis, nie eine Ablehnung, und über eine Klasse, die noch kein Prozess anfasst, schweigt es: einen Lebenszyklus vor dem Prozess zu zeichnen, der ihn schreibt, ist die normale Reihenfolge."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, pick your information model, and give a business object a lifecycle with more states than your processes currently write.",
+          "Open a process of the same application in the Modeler.",
+          "The Problems panel names the class and every state nothing reaches, in one line.",
+          "Add the data association that writes that state — or a process that does — and the line goes away."
+        ],
+        "de": [
+          "Unter Daten das Informationsmodell öffnen und einem Geschäftsobjekt einen Lebenszyklus mit mehr Zuständen geben, als die Prozesse derzeit schreiben.",
+          "Einen Prozess derselben Anwendung im Modeler öffnen.",
+          "Die Problemliste nennt die Klasse und jeden nie erreichten Zustand in einer Zeile.",
+          "Die Datenzuweisung ergänzen, die diesen Zustand schreibt — oder den fehlenden Prozess —, und die Zeile verschwindet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "an-openapi-document-can-configure-the-task-that-calls-it",
       "version": "Unreleased",
       "date": null,
@@ -307,57 +393,6 @@
         },
         "route": "#/data"
       }
-    },
-    {
-      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "The handbook's worker runbooks are dated too",
-        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
-      },
-      "summary": {
-        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
-        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Handbook",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the runbooks",
-          "de": "Zu den Runbooks"
-        },
-        "route": "#/console"
-      }
-    },
-    {
-      "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "A MIM import says how much work it is, and hands over the rows",
-        "de": "Ein MIM-Import sagt, wie viel Arbeit er ist — und übergibt die Zeilen"
-      },
-      "summary": {
-        "en": "A single step of a MIM workflow often carries a whole table of reads and writes inside it — the queries it runs and the values it assigns. Until now the import reported such a step as one line, so a workflow that is days of work could read as a handful of items. It is now counted the way it has to be worked through: every row of those tables is its own entry in the import report, with the row's own content beside it. The rows also travel with the model as structured data on the step itself, so they can be listed, checked off and processed by other tools rather than read out of the original definition by hand. What the import deliberately does not do is guess: it never claims which system a row writes to, and it does not split a step into several boxes in the diagram, because that decision needs the synchronisation rules that live in MIM and not in the workflow.",
-        "de": "Ein einzelner Schritt eines MIM-Workflows enthält oft eine ganze Tabelle von Lese- und Schreibvorgängen — die Abfragen, die er ausführt, und die Werte, die er setzt. Bisher meldete der Import einen solchen Schritt als eine Zeile, sodass ein Workflow von mehreren Tagen Arbeit wie eine Handvoll Positionen aussehen konnte. Gezählt wird jetzt so, wie er abgearbeitet werden muss: Jede Zeile dieser Tabellen ist eine eigene Position im Importbericht, mit ihrem Inhalt daneben. Die Zeilen reisen zudem als strukturierte Daten am Schritt selbst mit, sodass sie sich auflisten, abhaken und von anderen Werkzeugen verarbeiten lassen, statt sie von Hand aus der Originaldefinition zu lesen. Was der Import bewusst nicht tut, ist raten: Er behauptet nie, in welches System eine Zeile schreibt, und er zerlegt einen Schritt nicht in mehrere Kästchen im Diagramm — diese Entscheidung braucht die Synchronisationsregeln, die in MIM liegen und nicht im Workflow."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ]
     }
   ]
 }
