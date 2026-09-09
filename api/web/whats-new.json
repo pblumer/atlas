@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-08",
+  "generatedAt": "2026-09-09",
   "entries": [
     {
       "id": "a-class-says-which-states-its-instances-move-through-and-the",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A business object can now say which states it moves through",
@@ -16,7 +16,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Data",
@@ -48,8 +48,8 @@
     },
     {
       "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "The handbook's worker runbooks are dated too",
@@ -77,8 +77,8 @@
     },
     {
       "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A MIM import says how much work it is, and hands over the rows",
@@ -90,7 +90,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Modeler",
@@ -99,8 +99,8 @@
     },
     {
       "id": "a-mim-import-asks-before-it-lands-on-something-and-says-what",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A MIM import asks before it overwrites, and shows what is at stake",
@@ -128,8 +128,8 @@
     },
     {
       "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "Setup instructions now tell you how old they are",
@@ -157,8 +157,8 @@
     },
     {
       "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "Every worker type now tells you how to set it up",
@@ -186,8 +186,8 @@
     },
     {
       "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A MIM workflow imports as the process it is, not as a straight line",
@@ -199,7 +199,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Modeler",
@@ -215,8 +215,8 @@
     },
     {
       "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Changed",
       "title": {
         "en": "The class diagram reads properly on a real model",
@@ -228,7 +228,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Data",
@@ -244,8 +244,8 @@
     },
     {
       "id": "every-list-opens-with-its-search-boxes-showing",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Changed",
       "title": {
         "en": "Every list opens with its search boxes showing",
@@ -257,7 +257,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Console",
@@ -290,8 +290,8 @@
     },
     {
       "id": "an-imported-model-keeps-its-ids-and-its-diagram-reads-forwar",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Changed",
       "title": {
         "en": "Re-importing a changed MIM workflow no longer renames everything",
@@ -303,7 +303,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Modeler",
@@ -312,8 +312,8 @@
     },
     {
       "id": "four-ways-a-mim-workflow-s-own-logic-went-missing",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Fixed",
       "title": {
         "en": "Four ways an imported MIM workflow lost its own logic",
@@ -325,7 +325,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Modeler",
@@ -334,8 +334,8 @@
     },
     {
       "id": "the-replay-s-data-object-list-keeps-its-search-and-an-open-s",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Fixed",
       "title": {
         "en": "The Data tab's search survives a click, and an open trail stays put",

@@ -12,6 +12,40 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-09
+
+**This release is about arriving from somewhere else.** A Microsoft Identity Manager
+workflow now imports as the process it *is* rather than as the elements it is made of.
+MIMWAL states conditionality and iteration in attributes instead of in branch and loop
+elements, so twenty guarded steps used to arrive as an unconditional chain — a diagram
+that looked like your process and did not behave like it. Conditions become gateways and
+iterations become multi-instance loops; each activity's queries and assignments are
+carried over as addressable rows and **counted as the work they are**, so the number a
+migration is planned with is the honest one; and an import that would land on an id
+somebody already holds now refuses with the impact spelled out — which deployed version,
+how many instances are running on it, which of its elements the incoming model still has.
+
+**The second half is for the empty installation.** Every Worker Type selectable on a
+service task now carries its own setup where the type is chosen: whether it needs a
+configured Worker and a credential at all, the steps at the provider in order, the
+failure it is usually reported with, and a link into the handbook this server serves
+itself. The Console's *New worker* form shows the same thing, which is where an operator
+actually stands. Both the short form and the handbook's long one say **when they were
+last read against the real thing**, and a test says so when they have not been — these
+steps name menus in somebody else's product, and nothing here can notice when that
+product is rearranged.
+
+**And the class canvas grew up.** An imported Active Directory schema — sixty classes,
+forty-character attribute names — showed three faults at once: boxes that were 200px
+whatever was written in them, relationships drawn as straight lines through whatever
+stood between their ends, and several of them landing exactly on top of each other so a
+click could only ever reach the last one drawn. Boxes size themselves now, lines are
+routed at right angles by the same router a sequence flow gets, and the palette is
+diagram-js's own — the one the process modeler already puts down its left edge.
+
+Nothing in this release changes an API, a stored format or a default. Upgrading from
+0.5.0 is a swap of the binary.
+
 ### Added
 
 - **A class says which states its instances move through, and the Modeler offers
@@ -6620,7 +6654,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pblumer/atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0
