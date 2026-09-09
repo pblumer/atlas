@@ -3,6 +3,11 @@
 - **Status:** Accepted
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
+- **Open question:** MIMWAL's grid column semantics are not established from its own
+  source. The positional cells, and the refusal to name a target column in
+  machine-readable markup, rest on that gap; answering it makes `target`/`allowNull`
+  an additive change.
+- **Question checked:** 2026-09
 
 ## Context and problem statement
 
