@@ -139,10 +139,27 @@ func TestTheCollectedAnswerIsUnchanged(t *testing.T) {
 func TestAnIterationResultTooLargeParksItsRound(t *testing.T) {
 	h := openHarness(t, t.TempDir())
 	defer h.close(t)
-	cp := bigResultLoop(t, 3) // each round produces about two hundred bytes
+	// The round's own result is small and the *collected element* is large, so the
+	// refusal happens where this test is aiming: at the write into the collection, not
+	// at the script task's own write, which has its own guard and would otherwise stop
+	// the round first and prove nothing about this path.
+	b := compiler.NewBuilder(1, "mi-fat-element", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[1, 2, 3]"), "items")
+	work := b.AddScriptTask(mustCompile(t, `"ok"`), "result")
+	b.SetMultiInstance(work, false, "item", "results",
+		mustCompile(t, "items"), nil, mustCompile(t, `"`+strings.Repeat("x", 200)+`"`), nil)
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
 
 	p := engine.New(1, h.log, h.store, &manualClock{})
-	p.SetMaxVariable(64) // below one round's result, far below the collection
+	p.SetMaxVariable(64) // above the round's own "ok", below the element it collects
 	p.Deploy(cp)
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
