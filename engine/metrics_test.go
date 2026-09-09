@@ -401,3 +401,17 @@ func TestLastRecoveryReportsTheReplayThatHappened(t *testing.T) {
 		t.Errorf("Seconds = %v, want the duration of the replay", rec.Seconds)
 	}
 }
+
+// jobTotals sums the job-lifecycle counts across every batch the recorder saw.
+func (r *recorder) jobTotals() engine.JobStats {
+	var s engine.JobStats
+	for _, b := range r.batches {
+		s.Created += b.Jobs.Created
+		s.Activated += b.Jobs.Activated
+		s.Completed += b.Jobs.Completed
+		s.Failed += b.Jobs.Failed
+		s.TimedOut += b.Jobs.TimedOut
+		s.Canceled += b.Jobs.Canceled
+	}
+	return s
+}

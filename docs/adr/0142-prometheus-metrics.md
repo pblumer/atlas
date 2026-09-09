@@ -1,7 +1,7 @@
 # ADR-0142: Operational metrics over a Prometheus endpoint
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-08-18
 - **Deciders:** Atlas engine team
 
@@ -241,8 +241,21 @@ This ADR is **not implemented in one change**. The slices:
    path, which changes what the log contains and so belongs in its own change; it is
    arguably a log-fidelity improvement in its own right, since today an incident can
    vanish with nothing in the log saying so.
-5. **Landed (partly)** — **job lifecycle counters**: `atlas_jobs_created_total`,
-   `_completed_total`, `_failed_total` and `_canceled_total`, counted from the batch's
+
+   **Resolved 2026-09-09 — `atlas_open_incidents` lands, and the new event is not built.**
+   The paragraph above is right that a *maintained counter* cannot work, and the change
+   it proposes — a resolution event on the terminate path — was reconsidered and refused.
+   It buys a counter by making every element termination write one more record, on the
+   hottest path in the engine, to observe a population an operator is expected to keep
+   near zero. The gauge is read at scrape time from `state.IncidentCount()` instead, a
+   prefix scan of the incident family. A scan cannot drift, because it counts the keys
+   that are there rather than a running total of events; and it is affordable here for
+   the reason a scan usually is not, since the family holds one key per stuck token. A
+   scrape costs what is broken, not what is running. The asymmetry with the three
+   maintained counters above is deliberate and is documented at the call site.
+5. **Landed** — **job lifecycle counters**: `atlas_jobs_created_total`,
+   `_activated_total`, `_completed_total`, `_failed_total`, `_lease_timeouts_total` and
+   `_canceled_total`, counted from the batch's
    own records after it is durable and carried on `BatchStats`, so they inherit slice 2's
    durability ordering and its single call per batch. The count walks records already in
    cache into locals, so it allocates nothing, and it runs only when metrics are attached.
@@ -251,14 +264,28 @@ This ADR is **not implemented in one change**. The slices:
    identically on replay (invariant I4), so a counter incremented there would be
    double-counted by every recovery.
 
-   Four pre-resolved counters, not one labelled by outcome. The label's values would be a
+   Pre-resolved counters, not one labelled by outcome. The label's values would be a
    closed enum and so permitted, but resolving a child per batch is what rule 1 forbids,
-   and four fields cost nothing.
+   and a field each costs nothing.
 
    **Activations, lease expiries and timeouts are absent**, not zero: the lease-based
    worker protocol (ADR-0007, programme F) does not exist yet, so there are no events to
    count. A permanent zero on a timeout counter reads as "nothing is timing out", which
    would be true and misleading. They land with that protocol.
+
+   **Resolved 2026-09-09 — the protocol landed, and so did the two counters.** The
+   paragraph above stopped being true when ADR-0007's lease protocol shipped, and stayed
+   in this record long enough to be quoted back as evidence that the protocol was
+   missing. `IntentJobActivated` and `IntentJobTimedOut` are durable facts and are now
+   counted beside the other four, from the same walk of the batch's own records.
+
+   The two are worth their series for reasons the original four cannot cover. An
+   activation is the only evidence that workers are *pulling*: a backlog nobody has taken
+   and a backlog being worked through are the same picture in created-minus-completed. A
+   lease timeout is the only evidence that a worker took a job and then vanished, which
+   the failure counter structurally never sees, because a worker that dies reports
+   nothing. A rate above roughly zero there means workers are crashing, or the lease is
+   shorter than the work.
 6. **Landed** — **what recovery cost**: `atlas_recovery_seconds` and
    `atlas_recovery_replayed_records`, from `Processor.LastRecovery()`. This is the number
    ADR-0131's checkpoint cadence exists to shrink, so without it "bounded recovery time"
