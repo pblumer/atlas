@@ -1,6 +1,6 @@
 # ADR-0292: A MIM import hands over its rows as data, and counts them as work
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
 
