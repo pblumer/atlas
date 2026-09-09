@@ -113,6 +113,24 @@ _Changed_ / _Removed_ for each version.
   the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
+### Changed
+
+- **A Worker Type's setup folds away once you have set it up.** The section that says
+  where a type's work runs and what has to exist at the provider stood open above the
+  fields. That is right the first time and wrong every time after: on a 270-pixel panel
+  it is most of a screen, and an author who has already configured the type scrolls past
+  all of it to reach the field they came for. It is a group now — the chevron, the title
+  and the collapse memory that Operation, Failure handling and the mapping lists already
+  have, and *Collapse all* reaches it like the rest.
+
+  It does not simply start folded, which would undo what it is for. It opens by itself
+  when this server has **no** Worker of that type configured *and* the type names one at
+  all — someone meeting a type they have not set up. A type that configures nothing (a
+  REST call, a mockup, user provisioning) has a setup worth one read, so it starts
+  folded. An explicit toggle beats both and survives the next selection, because one
+  title serves every Worker Type: not wanting to read it is a statement about the
+  section, not about Jira.
+
 ### Security
 
 - **Model-authored scripts no longer inherit Atlas credentials.** The supervised script

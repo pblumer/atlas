@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Modeler"
+  ],
+  "title": {
+    "en": "The setup notes fold away once you no longer need them",
+    "de": "Die Einrichtungshinweise lassen sich zuklappen, sobald Sie sie nicht mehr brauchen"
+  },
+  "summary": {
+    "en": "The notes beside a worker type — where its work runs, what has to exist at the provider before it runs at all — sat open above the fields on every task. Useful the first time, in the way ever after: on a narrow panel they fill most of the screen. They are now a section you can fold, with the same chevron as Operation or Failure handling, and folding it stays folded as you move from task to task. It still opens by itself where it helps: when this server has no worker of that type configured yet. Types that configure nothing at all — a REST call, a mockup — start folded, since their notes are worth a single read.",
+    "de": "Die Hinweise neben einem Worker-Typ — wo seine Arbeit läuft, was beim Anbieter vorhanden sein muss, damit sie überhaupt läuft — standen bei jedem Task offen über den Feldern. Beim ersten Mal nützlich, danach im Weg: Auf einem schmalen Panel füllen sie den halben Bildschirm. Jetzt sind sie ein Abschnitt zum Zuklappen, mit demselben Pfeil wie „Operation\" oder „Failure handling\", und zugeklappt bleiben sie es auch beim Wechsel auf den nächsten Task. Von selbst geöffnet wird weiterhin dort, wo es hilft: wenn dieser Server noch keinen Worker dieses Typs konfiguriert hat. Typen, die gar nichts zu konfigurieren haben — ein REST-Aufruf, ein Mockup —, starten zugeklappt, denn ihre Hinweise liest man einmal."
+  },
+  "try": {
+    "label": {
+      "en": "Open a service task",
+      "de": "Service-Task öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

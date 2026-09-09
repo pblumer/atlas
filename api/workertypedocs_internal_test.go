@@ -228,12 +228,18 @@ func TestEveryManagedWorkerKindHasSetupDocs(t *testing.T) {
 // refactor takes the block with it silently — the panel just renders one element less.
 func TestTheSetupBlockIsRenderedWhereTheChoiceIsMade(t *testing.T) {
 	for _, tc := range []struct{ file, call string }{
-		{"web/editor.js", "workerTypeDocHTML(cur.id)"},
+		// In the Modeler the block is wrapped in its collapsible Setup group, so the
+		// call the panel makes is the group's rather than the block's.
+		{"web/editor.js", "workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))"},
 		{"web/app.js", "workerKindDocHTML(kindSel.value)"},
 		{"web/workerdialog.js", "workerKindDocHTML(c.kind)"},
 		// The business rule task's temis binding is the fourth place a Worker Type is
 		// chosen, and the one whose setup nothing else in the Modeler mentions.
-		{"web/editor.js", `workerTypeDocHTML("temis")`},
+		{"web/editor.js", `workerTypeInfoHTML("temis"`},
+		// And the group is only a group if something gives it its collapse behaviour:
+		// without this the section renders permanently open, which is the state the
+		// group exists to end.
+		{"web/editor.js", "wireWorkerTypeInfo(body, groupCtl)"},
 	} {
 		body, err := fs.ReadFile(webFS, tc.file)
 		if err != nil {
