@@ -4488,12 +4488,19 @@ func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {
 // write and counts as written, while a collection past its budget is a refusal the
 // caller has to act on.
 func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) bool {
-	elems := readList(c, scope, name)
-	if idx < 0 || idx >= len(elems) {
-		return true
+	kind, b, text := expr.Classify(val)
+	if int64(len(text)) > c.p.variableCeiling() {
+		// One iteration's own result, measured against the budget for one value: it is
+		// a business record, and the collection it joins has its own, larger ceiling
+		// (ADR-0294). Refusing here rather than after the round trip means the element
+		// that produced it is the one the incident names.
+		parkOversizedWrite(c, scope, name, int64(len(text)), c.p.variableCeiling())
+		return false
 	}
-	elems[idx] = val
-	return writeList(c, scope, name, elems)
+	return c.appendVariableElement(model.VariableValue{
+		ScopeKey: scope, Name: name, Index: int32(idx),
+		Kind: toVarKind(kind), Bool: b, Text: text,
+	})
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate

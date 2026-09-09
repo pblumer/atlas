@@ -365,6 +365,21 @@ const (
 	// were stamped under. Appended at the end so every prior intent keeps its numeric
 	// value on the log.
 	IntentVariableIndexed
+
+	// IntentVariableElementSet sets one element of a list variable, naming the element
+	// rather than carrying the whole list. It is what a multi-instance activity emits
+	// per finished iteration, and it exists because the alternative grows with the
+	// square of the iteration count: writing the collection each round put the growing
+	// list into the log and into the variable timeline once per round
+	// (ADR-draft-a-loop-records-its-element).
+	//
+	// It folds by reading the collection, setting the element and writing it back —
+	// deterministic, a function of the batch's own state, so replay reaches the same
+	// list (I4). It records no snapshot: a loop's half-filled collection is scratch at
+	// the body scope until the loop promotes it, the same reasoning that keeps the
+	// dropping of an activity-local scope out of the timeline. Appended at the end so
+	// every prior intent keeps its numeric value on the log.
+	IntentVariableElementSet
 )
 
 func (i Intent) String() string {
@@ -455,6 +470,8 @@ func (i Intent) String() string {
 		return "VariableReindex"
 	case IntentVariableIndexed:
 		return "VariableIndexed"
+	case IntentVariableElementSet:
+		return "VariableElementSet"
 	default:
 		return "Intent(?)"
 	}

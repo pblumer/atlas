@@ -420,6 +420,18 @@ type VariableValue struct {
 	// existed. Stamped at command time and frozen into the event, never recomputed on
 	// replay (I6). Append-compatible: an old record ends after Text and decodes to 0.
 	ProducerKey uint64
+	// Index is which element of a list variable this write sets, or -1 for a write of
+	// the whole value — which is what every write outside a multi-instance activity's
+	// output collection is.
+	//
+	// A loop collects one result per iteration into one list. Writing the whole list
+	// each time put the growing collection into the log and into the variable timeline
+	// once per iteration, so the bytes written grew with the *square* of the iteration
+	// count: a hundred thousand results of a kilobyte each cost a hundred gigabytes to
+	// record a hundred megabytes of answer. Naming the element instead makes the record
+	// the size of one result (ADR-draft-a-loop-records-its-element).
+	Index int32
+
 	// Indexed says this write belongs in the variable value index: its process
 	// declared the name searchable (atlas:searchable) and the write is at the
 	// instance's root scope.
@@ -484,9 +496,11 @@ func (v *VariableValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.Text)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
 	if v.Indexed {
-		return append(dst, 1)
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
 	}
-	return append(dst, 0)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.Index+1))
 }
 
 func (v *VariableValue) decode(src []byte) error {
@@ -519,6 +533,13 @@ func (v *VariableValue) decode(src []byte) error {
 	// Indexed is appended after it, and reads false on a record written before the
 	// value index existed — such a write really is not in the index.
 	v.Indexed = len(tail) >= 9 && tail[8] != 0
+	// Index is appended after that, stored one higher so that a record written before
+	// it existed — which ends here and reads zero — decodes to -1, "this write is the
+	// whole value". Every such record is exactly that.
+	v.Index = -1
+	if len(tail) >= 13 {
+		v.Index = int32(binary.LittleEndian.Uint32(tail[9:])) - 1
+	}
 	return nil
 }
 
