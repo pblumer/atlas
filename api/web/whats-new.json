@@ -47,6 +47,35 @@
       }
     },
     {
+      "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Setup instructions now tell you how old they are",
+        "de": "Die Einrichtungsanleitungen sagen jetzt, wie alt sie sind"
+      },
+      "summary": {
+        "en": "The steps shown beside a worker type walk you through someone else's product — which menu to open at Google, which button to press at Atlassian. Those menus get rearranged, and nothing in Atlas can notice: the instructions would keep looking authoritative while quietly sending you in a circle, and you would have no way to tell whether you or the text was wrong. Each set of steps now says which month it was last walked through for real, right underneath them, and states plainly that where the provider has moved something since, the provider is right. A check inside Atlas flags any instructions that have gone a year without being re-read.",
+        "de": "Die Schritte neben einem Worker-Typ führen durch das Produkt eines anderen Anbieters — welches Menü bei Google zu öffnen ist, welche Schaltfläche bei Atlassian zu drücken. Diese Menüs werden umgebaut, und Atlas kann das nicht bemerken: Die Anleitung sähe weiterhin verbindlich aus und schickte Sie still im Kreis, ohne dass Sie beurteilen könnten, ob Sie oder der Text falsch liegen. Jede Anleitung nennt jetzt direkt darunter den Monat, in dem sie zuletzt tatsächlich durchgegangen wurde, und sagt klar: Wo der Anbieter seither etwas verschoben hat, hat der Anbieter recht. Eine Prüfung in Atlas meldet Anleitungen, die ein Jahr lang nicht mehr nachgelesen wurden."
+      },
+      "link": {
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
+      },
+      "tags": [
+        "Modeler",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open a service task",
+          "de": "Service-Task öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
       "version": "Unreleased",
       "date": null,
@@ -372,52 +401,6 @@
           "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie Discord und dann „Nachricht senden\". Tragen Sie Kanal-ID und Text ein; der fx-Schalter macht aus beidem eine FEEL-Expression über die Variablen der Instanz.",
           "Für die Kanal-ID schalten Sie in Discord den Entwicklermodus ein (Einstellungen › Erweitert), dann Rechtsklick auf den Kanal › „Kanal-ID kopieren\".",
           "Ist der Kanal privat, greifen serverweite Rechte dort nicht: Fügen Sie den Bot unter „Kanal bearbeiten › Berechtigungen\" dem Kanal selbst hinzu und setzen Sie die Rechte auf das grüne Häkchen statt sie grau zu lassen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "a-discord-channel-can-start-a-process",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "A message in Discord can start a process",
-        "de": "Eine Nachricht in Discord kann einen Prozess starten"
-      },
-      "summary": {
-        "en": "The other direction: until now a process could write to Discord but never hear from it. A Discord Worker now has an Events tab — give it a channel id and a message name, and every new message in that channel starts the processes waiting for that message. Somebody reporting a fault in chat opens a case without leaving the channel. Atlas polls Discord on a schedule, so nothing has to reach your server from the internet. A new watch starts from now, so pointing one at a busy channel does not start a process per message of history. The process receives the text, the author, whether the author was a bot, the message and channel ids, and the whole message for anything else.",
-        "de": "Die Gegenrichtung: Bisher konnte ein Prozess nach Discord schreiben, aber nie von Discord hören. Ein Discord-Worker hat jetzt einen Reiter „Events\" — Sie hinterlegen eine Kanal-ID und einen Nachrichtennamen, und jede neue Nachricht in diesem Kanal startet die Prozesse, die auf diese Nachricht warten. Wer eine Störung im Chat meldet, eröffnet damit einen Vorgang, ohne den Kanal zu verlassen. Atlas fragt Discord in einem Takt ab; es muss also nichts aus dem Internet Ihren Server erreichen. Eine neue Überwachung beginnt ab jetzt: Sie auf einen vollen Kanal zu richten startet nicht pro Alt-Nachricht einen Prozess. Der Prozess bekommt Text, Autor, ob der Autor ein Bot war, Nachrichten- und Kanal-ID — und die ganze Nachricht für alles Weitere."
-      },
-      "link": {
-        "label": "ADR-0262",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0262-discord-inbound-watch.md"
-      },
-      "tags": [
-        "Workers",
-        "Operations",
-        "Events"
-      ],
-      "tutorial": {
-        "en": [
-          "Under Console › Workers, open the Events… dialog on your Discord Worker and add a watch.",
-          "Enter the channel id and the message name your model's message start event listens for, then save.",
-          "The bot needs Read Message History on that channel. Without it Discord answers with an empty list rather than an error, so the watch would run and quietly find nothing.",
-          "Post a new message in the channel — messages already there are skipped by design — and watch the instance appear under Operations.",
-          "If the Worker also posts into the channel it watches, branch on authorBot: its own messages come back through the watch, and without that gate each one starts another round."
-        ],
-        "de": [
-          "Öffnen Sie unter Console › Workers bei Ihrem Discord-Worker den Dialog „Events…\" und legen Sie eine Überwachung an.",
-          "Tragen Sie die Kanal-ID und den Nachrichtennamen ein, auf den das Message-Start-Event Ihres Modells hört, und speichern Sie.",
-          "Der Bot braucht auf diesem Kanal das Recht „Nachrichtenverlauf anzeigen\". Ohne dieses Recht antwortet Discord mit einer leeren Liste statt mit einem Fehler — die Überwachung liefe also und fände still nichts.",
-          "Schreiben Sie eine neue Nachricht in den Kanal — was schon darin steht, wird bewusst übersprungen — und sehen Sie die Instanz unter Operations auftauchen.",
-          "Schreibt der Worker auch selbst in den überwachten Kanal, verzweigen Sie auf authorBot: Seine eigenen Nachrichten kommen durch die Überwachung zurück, und ohne diese Weiche startet jede davon die nächste Runde."
         ]
       },
       "try": {

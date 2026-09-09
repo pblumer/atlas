@@ -1,11 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"io/fs"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Every Worker Type ships the answer to "what do I have to do before this works".
@@ -24,8 +26,9 @@ import (
 
 var (
 	// A doc entry opens at two-space indent inside the exported map: `  jira: {`.
-	setupDocEntryRe = regexp.MustCompile(`(?m)^  ([a-zA-Z0-9]+): \{$`)
-	setupDocFieldRe = regexp.MustCompile(`(?m)^    anchor: "([a-z0-9-]+)", title: `)
+	setupDocEntryRe   = regexp.MustCompile(`(?m)^  ([a-zA-Z0-9]+): \{$`)
+	setupDocFieldRe   = regexp.MustCompile(`(?m)^    anchor: "([a-z0-9-]+)", title: `)
+	setupDocCheckedRe = regexp.MustCompile(`(?m)^    checked: "(\d{4})-(\d{2})",$`)
 	// One step per line, opened by a template literal or a plain string, at the
 	// indent the array's entries sit on. Counting the lines rather than parsing the
 	// array keeps a step that itself contains a bracket from being miscounted.
@@ -38,9 +41,10 @@ var (
 // workerTypeDoc is one parsed entry: what it links to, and enough of its body to tell a
 // written entry from a placeholder.
 type workerTypeDoc struct {
-	anchor string
-	body   string
-	steps  int
+	anchor  string
+	checked string
+	body    string
+	steps   int
 }
 
 // parseWorkerTypeDocs reads api/web/workertypedocs.js into entries keyed by catalog id.
@@ -69,6 +73,9 @@ func parseWorkerTypeDocs(t *testing.T) map[string]workerTypeDoc {
 		doc := workerTypeDoc{body: entry, steps: len(setupDocStepRe.FindAllString(entry, -1))}
 		if m := setupDocFieldRe.FindStringSubmatch(entry); m != nil {
 			doc.anchor = m[1]
+		}
+		if m := setupDocCheckedRe.FindStringSubmatch(entry); m != nil {
+			doc.checked = m[1] + "-" + m[2]
 		}
 		out[id] = doc
 	}
@@ -236,5 +243,75 @@ func TestTheSetupBlockIsRenderedWhereTheChoiceIsMade(t *testing.T) {
 			t.Errorf("%s no longer renders the Worker Type setup block (%s); the entries in "+
 				"workertypedocs.js are then written for a surface that shows none of them", tc.file, tc.call)
 		}
+	}
+}
+
+// The one thing about these entries that no other test can see.
+//
+// They name menu paths in somebody else's product — "IAM & Admin → Service accounts",
+// "Certificates & secrets", "Reset Token" — which is exactly what makes them worth
+// writing and exactly what stops being true when that product is rearranged. Nothing in
+// this repository observes Google's console. The text goes on looking authoritative, and
+// the person it sends in a circle is the one least able to tell whether they or the
+// instructions are wrong.
+//
+// So each entry states when it was last read against the real thing, the panel prints
+// that date, and this test puts a limit on how long it may stand unread.
+//
+// **This test depends on the wall clock, which the testing conventions otherwise
+// forbid, and that is the point.** A freshness check that can only fail when somebody
+// edits the file would never fire — the file not being edited is the condition it exists
+// to catch. The cost is real and belongs on the record: it will one day turn CI red on a
+// change that has nothing to do with these entries. The fix is never to bump the date.
+// It is to open the provider, walk the steps, correct what has moved, and then date what
+// you actually read.
+//
+// They were all written in one sitting, so they will all come due in one sitting. That
+// is an afternoon for twenty-four short entries — and re-dating them as they are checked
+// rather than all at once is what spreads the round after.
+const setupDocMaxAge = 12 * 30 * 24 * time.Hour // twelve months, in the units time understands
+
+func TestSetupDocsAreRecentlyChecked(t *testing.T) {
+	now := time.Now()
+	var missing, stale, ahead []string
+	for id, doc := range parseWorkerTypeDocs(t) {
+		if doc.checked == "" {
+			missing = append(missing, id)
+			continue
+		}
+		checked, err := time.Parse("2006-01", doc.checked)
+		if err != nil {
+			missing = append(missing, fmt.Sprintf("%s (unreadable date %q)", id, doc.checked))
+			continue
+		}
+		// A date in the future is a typo, and it is the one typo that makes this test
+		// quieter rather than louder — so it fails on its own terms rather than waiting
+		// out the year somebody added by accident.
+		if checked.After(now) {
+			ahead = append(ahead, fmt.Sprintf("%s (%s)", id, doc.checked))
+			continue
+		}
+		if now.Sub(checked) > setupDocMaxAge {
+			stale = append(stale, fmt.Sprintf("%s (last checked %s)", id, doc.checked))
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("%d Worker Type setup entries carry no `checked` date: %s\n\n"+
+			"Add `checked: \"YYYY-MM\"` naming the month you last walked these steps at the provider.",
+			len(missing), strings.Join(missing, ", "))
+	}
+	if len(ahead) > 0 {
+		sort.Strings(ahead)
+		t.Errorf("%d Worker Type setup entries are dated in the future: %s\n\n"+
+			"That silences this check for as long as the typo lasts.", len(ahead), strings.Join(ahead, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("%d Worker Type setup entries have not been checked in over a year: %s\n\n"+
+			"Open each provider, walk the steps as written, and correct what has moved — then date "+
+			"what you read. Bumping the date without re-reading is worse than the stale date, because "+
+			"it tells the next reader the steps were verified when they were not.",
+			len(stale), strings.Join(stale, ", "))
 	}
 }

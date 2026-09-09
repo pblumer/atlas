@@ -24,6 +24,15 @@
 // The strings are markup and are rendered as such. They are static module content —
 // never a value from a model, a record or a request — which is why this is the one
 // place in the panel that does not escape what it renders.
+//
+// Every entry carries a `checked` date, and the panel prints it. These steps name menu
+// paths in somebody else's product — *IAM & Admin → Service accounts* — which is what
+// makes them worth writing and what will silently stop being true when that product is
+// rearranged. Nothing here can detect that: the text goes on looking authoritative, and
+// the person it misleads is the one least able to tell whether they or the instructions
+// are wrong. The date does not fix that; it hands the reader the one fact that lets them
+// judge it for themselves, and it gives the staleness a name a test can hold
+// (TestSetupDocsAreRecentlyChecked).
 
 // HANDBOOK_URL is the manual this server serves itself (api/web/handbuch.html). A
 // relative URL on purpose: an air-gapped installation has the same handbook as a
@@ -40,12 +49,14 @@ const WORKERS = `<i>Console &rsaquo; Workers</i>`;
 //
 // - `anchor`  the handbook section or card id this links to.
 // - `title`   what the handbook calls it; the link says so rather than "Handbook".
+// - `checked` YYYY-MM: when these steps were last read against the real thing.
 // - `needs`   one line, always visible: what must exist before a task of this type runs.
 // - `steps`   the ordered setup, provider first, Atlas second, proof last.
 // - `trap`    the failure this type is actually reported with — omitted where there is none.
 export const WORKER_TYPE_DOCS = {
   worker: {
     anchor: "runbook-jobworker", title: "Job worker",
+    checked: "2026-09",
     needs: "No Worker record and no credential — the job type is the whole contract, and a worker process you run leases it.",
     steps: [
       `Give the task a <b>job type</b>: a stable name your worker subscribes to, e.g. <code>payment</code>. It is the only thing the model says about the work.`,
@@ -58,6 +69,7 @@ export const WORKER_TYPE_DOCS = {
 
   rest: {
     anchor: "runbook-rest", title: "HTTP REST",
+    checked: "2026-09",
     needs: "Nothing to configure on the server: URL, method, headers and body live in this task. A credential is named here, never pasted.",
     steps: [
       `Put the credential in the vault first: ${VAULT} &rarr; new secret, e.g. <code>crm_token</code>, holding the token or password itself.`,
@@ -70,6 +82,7 @@ export const WORKER_TYPE_DOCS = {
 
   scim: {
     anchor: "runbook-scim", title: "SCIM provisioning",
+    checked: "2026-09",
     needs: "Nothing to configure on the server: the provider's base URL lives in this task, its credential is a vault reference.",
     steps: [
       `At the identity provider, create a <b>provisioning token</b> for its SCIM 2.0 endpoint (Okta, Entra ID and most IdPs issue one per application) and note the base URL, e.g. <code>https://idp.example.com/scim/v2</code>.`,
@@ -82,6 +95,7 @@ export const WORKER_TYPE_DOCS = {
 
   ldap: {
     anchor: "runbook-ldap", title: "LDAP directory",
+    checked: "2026-09",
     needs: "No Worker record: the server URL and the bind DN live in this task, and the bind password is a vault reference.",
     steps: [
       `Create a <b>service account in the directory</b> — never a personal one — and delegate exactly the rights on exactly the subtrees the processes touch.`,
@@ -94,6 +108,7 @@ export const WORKER_TYPE_DOCS = {
 
   soap: {
     anchor: "runbook-soap", title: "SOAP / web services",
+    checked: "2026-09",
     needs: "Nothing to configure on the server: the endpoint and the request body live in this task, the credential is a vault reference.",
     steps: [
       `Take the endpoint out of the WSDL (<code>soap:address</code>) and the operation name out of its <code>&lt;operation&gt;</code>, e.g. <code>GetUser</code>.`,
@@ -106,6 +121,7 @@ export const WORKER_TYPE_DOCS = {
 
   ad: {
     anchor: "runbook-ad", title: "Active Directory",
+    checked: "2026-09",
     needs: `A configured Active Directory Worker in ${WORKERS}: an LDAPS URL plus a vault bundle holding the bind account.`,
     steps: [
       `Create a <b>directory service account</b> — not a personal account, not a domain admin — and delegate account and group rights on exactly the OUs the processes work in. Delegation at OU level is the advantage AD has over Entra ID; use it.`,
@@ -120,6 +136,7 @@ export const WORKER_TYPE_DOCS = {
     // Short name in the label, like Google Sheets: "(LDIF/DSML)" is a second line in a
     // 270px panel, and the card behind the link names both formats in its first sentence.
     anchor: "runbook-ldif", title: "Directory file",
+    checked: "2026-09",
     needs: "Nothing to configure: no Worker record, no credential, no endpoint. The task reads or writes text that is already a process variable.",
     steps: [
       `Pick the <b>format</b> explicitly — LDIF or DSML. There is deliberately no default: guessing a directory file's format from its bytes is how a malformed file becomes a plausible-looking empty result.`,
@@ -130,6 +147,7 @@ export const WORKER_TYPE_DOCS = {
 
   entra: {
     anchor: "runbook-entra", title: "Microsoft Entra ID",
+    checked: "2026-09",
     needs: `A configured Microsoft Entra ID Worker in ${WORKERS}: a vault bundle with tenant, client and secret. No endpoint — Graph's address is the same for everyone.`,
     steps: [
       `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration, <b>dedicated to this worker</b>. Note the <i>tenant id</i> and <i>client id</i>, then <i>Certificates &amp; secrets</i> &rarr; new client secret — its value is shown once.`,
@@ -147,6 +165,7 @@ export const WORKER_TYPE_DOCS = {
   // of the same example is one more thing to wonder about.
   mssql: {
     anchor: "runbook-mssql", title: "Microsoft SQL Server",
+    checked: "2026-09",
     needs: `A configured Microsoft SQL Server Worker in ${WORKERS}. Its whole configuration is one connection string, which is the credential.`,
     steps: [
       `Create a <b>technical database user</b> with rights on exactly the tables, views and procedures the processes need. No <code>db_owner</code>. Granting on views and stored procedures rather than tables makes the interface a contract instead of your schema.`,
@@ -159,6 +178,7 @@ export const WORKER_TYPE_DOCS = {
 
   mariadb: {
     anchor: "runbook-mariadb", title: "MariaDB",
+    checked: "2026-09",
     needs: `A configured MariaDB Worker in ${WORKERS}. Its whole configuration is one connection string, which is the credential.`,
     steps: [
       `Create a <b>technical database user</b> with rights on exactly the tables and views the processes need. No <code>SUPER</code>, no <code>GRANT ALL</code>.`,
@@ -171,6 +191,7 @@ export const WORKER_TYPE_DOCS = {
 
   postgres: {
     anchor: "runbook-postgres", title: "PostgreSQL",
+    checked: "2026-09",
     needs: `A configured PostgreSQL Worker in ${WORKERS}. Its whole configuration is one connection string, which is the credential.`,
     steps: [
       `Create a <b>technical database role</b> with rights on exactly the tables and views the processes need — not the owner role, and no <code>SUPERUSER</code>.`,
@@ -183,6 +204,7 @@ export const WORKER_TYPE_DOCS = {
 
   clio: {
     anchor: "runbook-clio", title: "clio event store",
+    checked: "2026-09",
     needs: `A configured clio Worker in ${WORKERS}: an endpoint, and a token reference only where the store requires one.`,
     steps: [
       `Have a clio event store reachable from this server, e.g. <code>https://clio.example.com</code>.`,
@@ -197,6 +219,7 @@ export const WORKER_TYPE_DOCS = {
   // the rest, so it carries the same entry. The panel that offers it renders this too.
   temis: {
     anchor: "runbook-temis", title: "temis",
+    checked: "2026-09",
     needs: `A configured temis Worker in ${WORKERS}: an endpoint, and a token reference only where the service requires one.`,
     steps: [
       `Check whether you need it at all: a DMN decision deployed into Atlas is evaluated by the built-in engine and needs no worker. temis is for keeping decisions <b>centrally</b>, outside this installation.`,
@@ -208,6 +231,7 @@ export const WORKER_TYPE_DOCS = {
 
   mail: {
     anchor: "runbook-mail", title: "Mail",
+    checked: "2026-09",
     needs: `A configured mail Worker in ${WORKERS} — and one of its four transports needs no mail server at all.`,
     steps: [
       `<b>Start with Preview.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Mail</b>, provider <b>Preview</b>, a name, a sender address. It frames the message exactly as it would be sent and puts it in <i>Operations &rsaquo; Outbox</i> instead of delivering it — a mail task can be built and demonstrated with no credentials.`,
@@ -221,6 +245,7 @@ export const WORKER_TYPE_DOCS = {
 
   csv: {
     anchor: "runbook-csv", title: "Text file",
+    checked: "2026-09",
     needs: "Nothing to configure: no Worker record, no credential, no endpoint. The layout is in the task, the file's text is a process variable.",
     steps: [
       `Reading: put the file's text into a variable first (a form upload, a REST call), name it as the source, and the rows land in the result variable as a JSON array of objects.`,
@@ -232,6 +257,7 @@ export const WORKER_TYPE_DOCS = {
 
   sharepoint: {
     anchor: "runbook-sharepoint", title: "SharePoint",
+    checked: "2026-09",
     needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph. No endpoint — Graph's address is the same for everyone.`,
     steps: [
       `The groundwork is Entra ID's: an <b>app registration</b>, a client secret, and admin consent. Note tenant id, client id and secret.`,
@@ -245,6 +271,7 @@ export const WORKER_TYPE_DOCS = {
 
   remedy: {
     anchor: "runbook-remedy", title: "BMC Remedy",
+    checked: "2026-09",
     needs: `A configured BMC Remedy Worker in ${WORKERS}: the AR System endpoint plus a vault bundle with a technical user.`,
     steps: [
       `Have your ITSM team create a <b>technical AR System user</b> entitled on exactly the forms the processes work on.`,
@@ -257,6 +284,7 @@ export const WORKER_TYPE_DOCS = {
 
   jira: {
     anchor: "runbook-jira", title: "Jira",
+    checked: "2026-09",
     needs: `A configured Jira Worker in ${WORKERS}: the site URL plus a vault bundle with the API token.`,
     steps: [
       `<b>Create an API token:</b> Atlassian account &rarr; <i>Security</i> &rarr; <i>API tokens</i> &rarr; create token. For <b>Jira Data Center</b>, a personal access token instead. Use a technical account, not your own.`,
@@ -273,6 +301,7 @@ export const WORKER_TYPE_DOCS = {
     // Sheets & Drive"): at 270px that one wrapped onto a second line, and the card it
     // opens says the rest.
     anchor: "runbook-googlesheets", title: "Google Sheets",
+    checked: "2026-09",
     needs: `A configured Google Sheets Worker in ${WORKERS}: a vault bundle with a service account key. No endpoint — Google's addresses are the same for everyone.`,
     steps: [
       `<b>Google Cloud Console</b> &rarr; pick a project &rarr; <i>APIs &amp; Services</i> &rarr; enable the <b>Google Sheets API</b> <i>and</i> the <b>Google Drive API</b>. Drive is not optional: creating a spreadsheet, filing it in a folder and deleting it are Drive operations.`,
@@ -286,6 +315,7 @@ export const WORKER_TYPE_DOCS = {
 
   discord: {
     anchor: "runbook-discord", title: "Discord",
+    checked: "2026-09",
     needs: `A configured Discord Worker in ${WORKERS}: a vault bundle with the bot token. No endpoint — Discord's API base is the same for everyone.`,
     steps: [
       `<b>Discord Developer Portal</b> &rarr; <i>New Application</i> &rarr; <i>Bot</i> &rarr; <b>Reset Token</b>, and copy the token. It is shown once.`,
@@ -299,6 +329,7 @@ export const WORKER_TYPE_DOCS = {
 
   aitask: {
     anchor: "runbook-ai", title: "AI worker",
+    checked: "2026-09",
     needs: `A configured AI Worker in ${WORKERS}: a wire format, an API key reference, and the model it asks by default.`,
     steps: [
       `Get an <b>API key</b> from the provider — Anthropic Console, OpenAI platform, or whatever your gateway issues — for a key that is this server's, not a person's.`,
@@ -311,6 +342,7 @@ export const WORKER_TYPE_DOCS = {
 
   webscrape: {
     anchor: "runbook-webscrape", title: "Web scraping",
+    checked: "2026-09",
     needs: "Nothing to configure: no Worker record and no credential. The URL and the selectors live in this task.",
     steps: [
       `For a page, name the URL and the fields as <code>name</code> + <b>CSS selector</b> (plus an attribute where you want <code>href</code> rather than the text).`,
@@ -322,6 +354,7 @@ export const WORKER_TYPE_DOCS = {
 
   userconnector: {
     anchor: "runbook-userprov", title: "User provisioning",
+    checked: "2026-09",
     needs: "No Worker record and no credential — it acts on this Atlas's own login store, which is why it is fenced instead of configured.",
     steps: [
       `It runs <b>only for processes in the protected system project</b>. A copy of the same task in an ordinary project is refused at deploy — that fence is the whole security model of this type.`,
@@ -334,6 +367,7 @@ export const WORKER_TYPE_DOCS = {
 
   mockup: {
     anchor: "runbook-mockup", title: "Mockup (simulation)",
+    checked: "2026-09",
     needs: "Nothing to configure, and nothing outside Atlas: the engine acts the foreign system itself.",
     steps: [
       `Give it a duration (or a minimum and a maximum) so the diagram behaves like the system it stands in for.`,
@@ -380,18 +414,35 @@ export function workerKindDocHTML(kind) {
   return renderDoc(docForWorkerKind(kind));
 }
 
+// monthName spells a YYYY-MM date out ("September 2026"). Written out rather than
+// printed as 09/2026, which reads as a day and a month to half the world.
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+function monthName(yyyymm) {
+  const [year, month] = String(yyyymm).split("-");
+  const name = MONTHS[Number(month) - 1];
+  return name ? `${name} ${year}` : String(yyyymm);
+}
+
 // renderDoc is the one markup for both surfaces; a Worker Type nobody documented
 // renders nothing rather than an empty box (the Go guard makes sure there is none).
 function renderDoc(doc) {
   if (!doc) return "";
   const steps = (doc.steps || []).map((s) => `<li>${s}</li>`).join("");
   const trap = doc.trap ? `<p class="wtdoc-trap"><b>Watch out:</b> ${doc.trap}</p>` : "";
+  // Inside the fold on purpose: it qualifies the steps, and the reader deciding how far
+  // to trust them is the reader who has opened them.
+  const checked = doc.checked
+    ? `<p class="wtdoc-checked">Steps last checked <time datetime="${doc.checked}">${monthName(doc.checked)}</time>. Where a provider has moved a menu since, the provider is right and this is out of date.</p>`
+    : "";
   return `<div class="wtdoc">
     <p class="wtdoc-needs">${doc.needs}</p>
     <details class="wtdoc-more">
       <summary>How to set this up</summary>
       <ol class="wtdoc-steps">${steps}</ol>
       ${trap}
+      ${checked}
     </details>
     <a class="wtdoc-link" href="${handbookHref(doc)}" target="_blank" rel="noopener"
        title="The handbook this server serves itself — no internet needed">Handbook: ${doc.title} <span class="ext" aria-hidden="true">&#8599;</span></a>
