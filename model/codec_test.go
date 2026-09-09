@@ -45,6 +45,16 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "variable index membership",
+			vt:     VTVariableIndex,
+			intent: IntentVariableIndexed,
+			value: &VariableIndexValue{
+				ProcessInstanceKey: NewKey(2, 9),
+				Name:               "identityId",
+				Indexed:            true,
+			},
+		},
+		{
 			name:   "job",
 			vt:     VTJob,
 			intent: IntentJobCreated,
@@ -470,15 +480,21 @@ func TestVariableIndexedRoundTrip(t *testing.T) {
 
 // TestVariableIndexedAppendCompatible pins its on-disk compatibility, and with it the
 // one honest limitation of the index: a record written before the flag existed reads
-// back as not indexed. Such a variable is findable by a content walk, never by a
-// seek, until it is written again — which is why the index is seeded once from the
-// declarations at startup rather than assumed complete.
+// back as not indexed. Such a variable is findable by a content walk, never by a seek,
+// until it is written again — or until its membership is corrected by a
+// VariableIndexed event, which is what a migration and an operator's reindex emit
+// (ADR-0295). Nothing seeds the index at
+// startup: it is folded from the log like every other derived index.
 func TestVariableIndexedAppendCompatible(t *testing.T) {
 	full := AppendValue(nil, &VariableValue{
 		ScopeKey: NewKey(1, 5), Name: "identityId", Kind: VarString, Text: "MT-1998",
 		ProducerKey: NewKey(1, 7), Indexed: true,
 	})
-	legacy := full[:len(full)-1] // exactly what the pre-index encoder would have written
+	// Exactly what the pre-index encoder would have written: the record ended after
+	// ProducerKey. Both fields appended since — the Indexed byte and the four-byte
+	// Index — come off, which is why this is not "drop the last byte": a later
+	// appended field would have made that silently strip the wrong one.
+	legacy := full[:len(full)-(1+4)]
 
 	v := VariableValue{Indexed: true} // reused: carries someone else's flag
 	if err := DecodeValueInto(&v, legacy); err != nil {
@@ -525,5 +541,57 @@ func TestVariableIndexText(t *testing.T) {
 				t.Errorf("IndexText() = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.wantOK)
 			}
 		})
+	}
+}
+
+// TestVariableIndexDecodeErrors covers the guards on a truncated membership record.
+// It carries a length-prefixed name, so a buffer can end in three places: before the
+// instance key, inside the name, and before the flag that is the whole point of the
+// record — and a flag read off the end would silently invert an instance's
+// searchability.
+func TestVariableIndexDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &VariableIndexValue{
+		ProcessInstanceKey: NewKey(1, 3), Name: "identityId", Indexed: true,
+	})
+	for _, tc := range []struct {
+		name string
+		buf  []byte
+	}{
+		{"before the key", full[:4]},
+		{"inside the name", full[:12]},
+		{"before the flag", full[:len(full)-1]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := DecodeValue(VTVariableIndex, tc.buf); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("DecodeValue = %v, want ErrShortBuffer", err)
+			}
+		})
+	}
+}
+
+// TestVariableIndexAppendCompatible: Index is the newest appended field, and a record
+// written before it existed has to read back as -1 — "this write is the whole value".
+// Zero would have been the wrong default: zero is a real index, and a record from
+// before the field would have claimed to set element 0 of a list.
+func TestVariableIndexAppendCompatible(t *testing.T) {
+	full := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "results", Kind: VarString, Text: "x", Index: 7,
+	})
+	legacy := full[:len(full)-4] // ends after the Indexed byte
+
+	v := VariableValue{Index: 7} // reused: carries someone else's index
+	if err := DecodeValueInto(&v, legacy); err != nil {
+		t.Fatalf("DecodeValueInto(legacy): %v", err)
+	}
+	if v.Index != -1 {
+		t.Errorf("Index = %d, want -1 — a record from before the field sets no element", v.Index)
+	}
+
+	var round VariableValue
+	if err := DecodeValueInto(&round, full); err != nil {
+		t.Fatalf("DecodeValueInto(full): %v", err)
+	}
+	if round.Index != 7 {
+		t.Errorf("Index = %d, want 7 round-tripped", round.Index)
 	}
 }

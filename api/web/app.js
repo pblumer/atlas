@@ -307,12 +307,38 @@ function viewLogin() {
       await loadAuth();
       location.hash = "#/console";
       route();
-    } catch {
-      err.textContent = "Invalid username or password.";
+    } catch (ex) {
+      err.textContent = loginFailureText(ex);
       err.style.color = "var(--danger)";
       err.hidden = false;
     }
   });
+}
+
+// loginFailureText names what refused a sign-in, which is not always the password.
+//
+// A 401 is the only answer that is about the credentials, and it stays deliberately
+// vague — the server refuses an unknown account and a wrong password identically so
+// the login cannot be read as a directory, and the screen must not undo that.
+//
+// A 429 is the throttle (ADR-0197), and it is a different failure entirely: it
+// refuses the *attempt*, before the password is looked at, for a quarter of an hour
+// after five wrong guesses. Reporting it as a credential failure is how somebody
+// spends that quarter of an hour hunting a password that is already correct, and how
+// they land on restarting the server — the one action that clears the throttle's
+// in-memory buckets, and the only workaround the screen leaves them. Saying so leaks
+// nothing: the throttle counts attempts against names that do not exist too.
+//
+// Anything else — the store could not be read, the network went away — is not a
+// credential failure either, and it does not carry the server's wording onto a
+// pre-auth screen: what broke inside the instance belongs in its log, which is where
+// this points, the same way the federated-login error above does.
+function loginFailureText(e) {
+  switch (e?.status) {
+    case 401: return "Invalid username or password.";
+    case 429: return "Too many sign-in attempts — the password was not checked. Wait a few minutes and try again.";
+    default: return "The sign-in could not be completed. Try again, or ask an administrator to check the server log.";
+  }
 }
 
 // ---------- Dropdown menus ----------
@@ -3679,75 +3705,181 @@ async function importArtifact(projectId, reload) {
 }
 
 // importMIM converts a Microsoft Identity Manager (MIM/FIM) XOML workflow — or an
-// Export-FIMConfig XML that embeds one — into a BPMN draft via POST
+// Export-FIMConfig XML, which may embed several — into BPMN drafts via POST
 // /api/v1/imports/mim, then shows the per-node conversion report. The import
-// lands as a draft (never a deploy); constructs without a faithful BPMN mapping
+// lands as drafts (never a deploy); constructs without a faithful BPMN mapping
 // are preserved in atlas:mimSource and flagged for review in the report.
+//
+// The server refuses with 409 rather than landing on a process id something else
+// already holds — a draft it would replace, or a deployed process whose running
+// instances a later deploy of this model would strand (ADR-0222: no unwanted
+// overwrites, and never silently). What it answers with is the impact, which is
+// what the dialog below shows before asking.
 async function importMIM(projectId, reload) {
   const file = await pickFile(".xoml,.xml,application/xml,text/xml");
   if (!file) return;
   let text;
   try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
   const base = file.name.replace(/\.[^.]+$/, "");
-  const path = "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
-    (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
+  const path = (overwrite) => "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
+    (projectId ? "&projectId=" + encodeURIComponent(projectId) : "") +
+    (overwrite ? "&overwrite=true" : "");
+
   let res;
-  try { res = await api("POST", path, text, true); }
-  catch (e) { toast("MIM import failed: " + e.message, "err"); return; }
-  const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
-  toast(`Imported “${res.name || res.processId}” — ${r.native} native, ${r.preserved} preserved, ${r.manualReview} to review`, "ok");
+  try {
+    res = await api("POST", path(false), text, true);
+  } catch (e) {
+    if (e.status !== 409 || !e.body || !Array.isArray(e.body.impacts)) {
+      toast("MIM import failed: " + e.message, "err");
+      return;
+    }
+    if (!(await confirmMIMOverwrite(e.body, file.name))) {
+      toast("Import cancelled — nothing was changed", "");
+      return;
+    }
+    try { res = await api("POST", path(true), text, true); }
+    catch (e2) { toast("MIM import failed: " + e2.message, "err"); return; }
+  }
+
+  const drafts = res.drafts || [];
+  const totals = drafts.reduce((a, d) => ({
+    native: a.native + (d.report ? d.report.native : 0),
+    preserved: a.preserved + (d.report ? d.report.preserved : 0),
+    manualReview: a.manualReview + (d.report ? d.report.manualReview : 0),
+  }), { native: 0, preserved: 0, manualReview: 0 });
+  const what = drafts.length > 1
+    ? `${drafts.length} workflows`
+    : `“${res.name || res.processId}”`;
+  toast(`Imported ${what} — ${totals.native} native, ${totals.preserved} preserved, ${totals.manualReview} to review`, "ok");
   if (reload) await reload();
   showMIMReport(res);
+}
+
+// confirmMIMOverwrite shows what the import would land on and asks whether to go
+// through with it. It resolves true only on an explicit Overwrite.
+//
+// It is a modal rather than a window.confirm because the answer is not one line:
+// a deployed process with running instances turns "an id is taken" into "these
+// instances could not be migrated onto this model", and that is the part somebody
+// needs to read before deciding.
+function confirmMIMOverwrite(conflict, fileName) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Import would overwrite" style="max-width:760px">
+        <div class="modal-head"><h2>Already in Atlas</h2></div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0 0 10px">Nothing has been imported yet. ${esc(fileName || "The file")} would be saved onto ${conflict.impacts.length === 1 ? "a process id that is" : "process ids that are"} already in use:</p>
+          <div style="max-height:52vh; overflow:auto">${conflict.impacts.map(mimImpactCard).join("")}</div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-cancel title="Leave what is there and import nothing">Cancel</button>
+          <button class="btn danger" data-ok title="Replace what is there with the imported model">Overwrite</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = (answer) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(answer); };
+    const onKey = (e) => { if (e.key === "Escape") close(false); };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-cancel]").addEventListener("click", () => close(false));
+    ov.querySelector("[data-ok]").addEventListener("click", () => close(true));
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(false); });
+  });
+}
+
+// mimImpactCard renders one process id's impact: the draft that would be
+// replaced, the deployed version sharing the id, and — the part that matters —
+// which of that version's elements the imported model no longer has, because a
+// running instance can only be migrated onto an element whose id it finds again.
+function mimImpactCard(i) {
+  const rows = [];
+  if (i.draft) {
+    rows.push(`<li><b>A draft is here</b> — “${esc(i.draft.name || i.processId)}”, last saved ${esc(fmtTime(i.draft.savedAt))}${i.draft.projectId ? ` in project <code>${esc(i.draft.projectId)}</code>` : ""}. Importing replaces it; a draft has no version history to get it back from.</li>`);
+  }
+  const d = i.deployed;
+  if (d) {
+    rows.push(`<li><b>Version ${d.version} is deployed</b> under this id (${esc(fmtTime(d.deployedAt))}), with ${d.activeInstances} running instance${d.activeInstances === 1 ? "" : "s"}. The import does not touch it — it writes the draft the next deploy of this process would use.</li>`);
+    const dropped = d.droppedElements || [];
+    if (dropped.length) {
+      rows.push(`<li>${d.keptElements} of ${d.keptElements + dropped.length} elements keep their id. These would be gone: ${dropped.slice(0, 12).map((e) => `<code>${esc(e)}</code>`).join(", ")}${dropped.length > 12 ? ` and ${dropped.length - 12} more` : ""}.</li>`);
+    }
+    if ((d.droppedDataObjects || []).length) {
+      rows.push(`<li>Data objects this model does not declare: ${d.droppedDataObjects.map((e) => `<code>${esc(e)}</code>`).join(", ")}.</li>`);
+    }
+  }
+  const risk = d && d.activeInstances > 0 && (d.droppedElements || []).length
+    ? `<div class="warn-note">Atlas migrates a running instance by matching element ids. ${d.activeInstances} instance${d.activeInstances === 1 ? " is" : "s are"} running on version ${d.version}, and ${(d.droppedElements || []).length} of its elements are not in this model — an instance standing on one of them could not be carried over to a deploy of it.</div>`
+    : "";
+  return `<div style="margin:0 0 14px"><div style="font-weight:600"><code>${esc(i.processId)}</code>${i.name && i.name !== i.processId ? ` — ${esc(i.name)}` : ""}</div>
+    <ul class="muted" style="margin:6px 0 0; padding-left:18px">${rows.join("")}</ul>${risk}</div>`;
 }
 
 // showMIMReport renders the conversion report as a modal: any document-level
 // warning, then one row per worksheet item with a status badge (native /
 // preserved / manual-review), the node it belongs to, the source activity and a
-// reviewer note, plus a shortcut to open the freshly created draft in the
-// Modeler. Items outnumber nodes — a decoded row of a MIMWAL table is its own
-// item, because it is its own read or write to re-express.
+// reviewer note, plus a shortcut to open a freshly created draft in the Modeler.
+// Items outnumber nodes — a decoded row of a MIMWAL table is its own item,
+// because it is its own read or write to re-express.
+//
+// An Export-FIMConfig export can hold several workflows, so the report is per
+// draft: one section each, and one "Open" per section rather than a single
+// destination that would be arbitrary.
 function showMIMReport(res) {
-  const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
-  // Document-level warnings belong to no node — an input the converter had to
-  // repair before it would parse is the one that exists today — so they go above
-  // the table rather than into it.
-  const warnings = (r.warnings || []).length
-    ? `<div class="warn-note">${(r.warnings || []).map((w) => esc(w)).join("<br>")}</div>`
-    : "";
+  const drafts = res.drafts && res.drafts.length
+    ? res.drafts
+    : [{ processId: res.processId, name: res.name, report: res.report, impact: null }];
   const color = (s) => ({ "native": "#1a7f37", "preserved": "#6a737d", "manual-review": "#9a6700" }[s] || "#6a737d");
   const badge = (s) => `<span style="display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;color:#fff;white-space:nowrap;background:${color(s)}">${esc(s)}</span>`;
-  const rows = (r.notes || []).map((n) =>
-    `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
+
+  const section = (d) => {
+    const r = d.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
+    // Document-level warnings belong to no node — an input the converter had to
+    // repair, or workflows it could not read — so they go above the table.
+    const warnings = (r.warnings || []).length
+      ? `<div class="warn-note">${(r.warnings || []).map((w) => esc(w)).join("<br>")}</div>` : "";
+    // What MIM knows about the workflow and the XOML does not say.
+    const src = d.source || {};
+    const facts = [
+      src.requestPhase ? `Request phase: <b>${esc(src.requestPhase)}</b>` : "",
+      src.runOnPolicyUpdate ? `Runs on policy update: ${esc(src.runOnPolicyUpdate)}` : "",
+      src.description ? esc(src.description) : "",
+    ].filter(Boolean).join(" · ");
+    const replaced = d.impact && (d.impact.draft || d.impact.deployed)
+      ? `<p class="muted" style="margin:0 0 10px">Replaced what was on this id.</p>` : "";
+    const rows = (r.notes || []).map((n) =>
+      `<tr><td>${badge(n.status)}</td><td><code>${esc(n.nodeId)}</code></td><td>${esc(n.kind)}</td><td>${esc(n.activity)}</td><td class="muted">${esc(n.detail || "")}</td></tr>`).join("");
+    return `<section style="margin:0 0 18px">
+      <h3 style="margin:0 0 4px; font-size:14px">${esc(d.name || d.processId)} <code class="muted">${esc(d.processId)}</code></h3>
+      ${facts ? `<p class="muted" style="margin:0 0 6px">${facts}</p>` : ""}
+      ${replaced}
+      <p class="muted" style="margin:0 0 8px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review — counted as items of work, so a node carrying a MIMWAL table contributes one per row. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b>, and their decoded rows in <b>atlas:mimCollection</b> — check them before deploying.</p>
+      ${warnings}
+      <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" class="muted">Nothing to report.</td></tr>`}</tbody></table>
+      <p style="margin:8px 0 0"><button class="btn neutral" data-open="${esc(d.processId)}" title="Open this draft in the Modeler">Open in Modeler</button></p>
+    </section>`;
+  };
+
   const ov = document.createElement("div");
   ov.className = "modal-ov";
   ov.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-label="MIM import report" style="max-width:860px">
-      <div class="modal-head"><h2>MIM import — ${esc(res.name || res.processId)}</h2></div>
-      <div class="modal-body">
-        <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review — counted as items of work, so a node carrying a MIMWAL table contributes one per row. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b>, and their decoded rows in <b>atlas:mimCollection</b> — check them before deploying.</p>
-        ${warnings}
-        <div style="max-height:52vh; overflow:auto">
-          <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="5" class="muted">Nothing to report.</td></tr>`}</tbody></table>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button class="btn neutral" data-close title="Close this report">Close</button>
-        <button class="btn" data-open title="Open the imported draft in the Modeler">Open in Modeler</button>
-      </div>
+      <div class="modal-head"><h2>MIM import — ${drafts.length > 1 ? `${drafts.length} workflows` : esc(drafts[0].name || drafts[0].processId)}</h2></div>
+      <div class="modal-body"><div style="max-height:62vh; overflow:auto">${drafts.map(section).join("")}</div></div>
+      <div class="modal-foot"><button class="btn" data-close title="Close this report">Close</button></div>
     </div>`;
   document.body.appendChild(ov);
   const close = () => { ov.remove(); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
   ov.querySelector("[data-close]").addEventListener("click", close);
-  ov.querySelector("[data-open]").addEventListener("click", () => {
+  ov.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
     close();
-    location.hash = "#/modeler/draft/" + encodeURIComponent(res.processId);
-  });
+    location.hash = "#/modeler/draft/" + encodeURIComponent(b.getAttribute("data-open"));
+  }));
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
 }
-
 // a "New worker" inline form and per-row Edit / Enable-Disable / Delete. Each
 // change hits the worker API, which rebuilds the runtime registry, then the page
 // re-renders. Only a token *reference* is ever entered — never a secret value

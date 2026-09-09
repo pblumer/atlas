@@ -1,0 +1,37 @@
+{
+  "tags": [
+    "Modeler",
+    "Operations"
+  ],
+  "title": {
+    "en": "Say what a process should be findable by, in the Modeler",
+    "de": "Im Modeler festlegen, wonach ein Prozess gefunden wird"
+  },
+  "summary": {
+    "en": "Searching a version's instances by a business value — \"where is MT-1998?\" — is a single read instead of a walk through every instance, but only for the variables the process says it wants to be found by. Until now that declaration existed only as an attribute in the BPMN file, so making one meant editing the exported XML by hand. The process properties now carry a Searchable variables field beside the two retention fields: select nothing in the diagram, open the Process group, and name the one or two business keys you actually search by.",
+    "de": "Die Suche nach einem Geschäftswert in den Instanzen einer Version — «wo ist MT-1998?» — ist ein einzelner Lesezugriff statt eines Durchlaufs durch alle Instanzen, aber nur für die Variablen, die der Prozess dafür benennt. Diese Angabe gab es bisher nur als Attribut in der BPMN-Datei, man musste also das exportierte XML von Hand bearbeiten. Die Prozess-Eigenschaften haben jetzt ein Feld «Searchable variables» neben den beiden Aufbewahrungsfeldern: nichts im Diagramm auswählen, die Gruppe «Process» öffnen und die ein bis zwei Geschäftsschlüssel eintragen, nach denen Sie tatsächlich suchen."
+  },
+  "tutorial": {
+    "en": [
+      "Open the Modeler and load the process you want to find instances of.",
+      "Click on empty canvas so nothing is selected — the panel then shows the process itself.",
+      "Open the Process group and find Searchable variables under Instance TTL and History TTL.",
+      "Type the variable names, separated by commas, for example: identityId, item.",
+      "Deploy. From then on, searching identityId=MT-1998 in Operations answers from the index."
+    ],
+    "de": [
+      "Öffnen Sie den Modeler und laden Sie den Prozess, dessen Instanzen Sie finden wollen.",
+      "Klicken Sie auf eine leere Stelle der Zeichenfläche, damit nichts ausgewählt ist — das Panel zeigt dann den Prozess selbst.",
+      "Öffnen Sie die Gruppe «Process»; «Searchable variables» steht unter «Instance TTL» und «History TTL».",
+      "Tragen Sie die Variablennamen kommagetrennt ein, zum Beispiel: identityId, item.",
+      "Deployen Sie. Danach beantwortet die Suche identityId=MT-1998 in Operations der Index."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

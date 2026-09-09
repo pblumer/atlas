@@ -366,3 +366,93 @@ func TestModdleKnowsEveryConnectorAttribute(t *testing.T) {
 		})
 	}
 }
+
+// bpmnOwnProcessAttrs are the <bpmn:process> attributes the BPMN moddle itself
+// declares, so bpmn-js round-trips them without anything from our package. Every
+// other attribute compiler/parse.go reads off a process is ours and has to be
+// declared in ProcessMeta.
+var bpmnOwnProcessAttrs = map[string]string{
+	"id":           "bpmn:BaseElement's own id",
+	"name":         "bpmn:CallableElement's own name",
+	"isExecutable": "bpmn:Process's own isExecutable",
+}
+
+// TestModdleKnowsEveryProcessAttribute asks a different question at the process root,
+// and the difference is worth stating because it is not the data-loss one above. An
+// attribute in a namespace the document declares survives a round trip either way:
+// moddle keeps what it has no property for in $attrs and writes it back out. What it
+// cannot do without a property is let anything *read or write* the setting — the
+// properties panel reads rootBo.<attr> and writes it through updateProperties, and
+// both of those go through moddle's properties, not $attrs. So an undeclared process
+// attribute is not lost, it is unauthorable: the Modeler cannot show it, and a field
+// offered for it would silently write nothing.
+//
+// That is exactly what happened to atlas:searchable (ADR-0244). It shipped as a
+// compiler attribute with no moddle property, so declaring a searchable variable
+// meant editing the XML by hand outside the Modeler.
+func TestModdleKnowsEveryProcessAttribute(t *testing.T) {
+	src, err := os.ReadFile("../compiler/parse.go")
+	if err != nil {
+		t.Fatalf("read compiler/parse.go: %v", err)
+	}
+	body := string(src)
+	start := strings.Index(body, "type xmlProcess struct {")
+	if start < 0 {
+		t.Fatal("xmlProcess is no longer declared in compiler/parse.go")
+	}
+	end := strings.Index(body[start:], "\n}")
+	if end < 0 {
+		t.Fatal("xmlProcess's declaration does not end")
+	}
+	var want []string
+	for _, m := range connectorAttrRe.FindAllStringSubmatch(body[start:start+end], -1) {
+		if _, own := bpmnOwnProcessAttrs[m[1]]; !own {
+			want = append(want, m[1])
+		}
+	}
+	if len(want) == 0 {
+		t.Fatal("found no Atlas attributes on xmlProcess; the pattern must have changed")
+	}
+
+	raw, err := os.ReadFile("web/atlas-moddle.json")
+	if err != nil {
+		t.Fatalf("read atlas-moddle.json: %v", err)
+	}
+	var moddle struct {
+		Types []struct {
+			Name       string   `json:"name"`
+			Extends    []string `json:"extends"`
+			Properties []struct {
+				Name string `json:"name"`
+			} `json:"properties"`
+		} `json:"types"`
+	}
+	if err := json.Unmarshal(raw, &moddle); err != nil {
+		t.Fatalf("decode atlas-moddle.json: %v", err)
+	}
+	declared := map[string]bool{}
+	for _, ty := range moddle.Types {
+		for _, ext := range ty.Extends {
+			if ext != "bpmn:Process" {
+				continue
+			}
+			for _, p := range ty.Properties {
+				declared[p.Name] = true
+			}
+		}
+	}
+
+	var missing []string
+	for _, attr := range want {
+		if !declared[attr] {
+			missing = append(missing, attr)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("atlas-moddle.json declares no bpmn:Process property for %d attribute(s) the compiler reads: %s\n\n"+
+			"bpmn-js drops an attribute it has no property for, so a Modeler round trip silently strips it — and "+
+			"nothing in the properties panel can offer a setting the moddle does not carry.",
+			len(missing), strings.Join(missing, ", "))
+	}
+}

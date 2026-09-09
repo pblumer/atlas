@@ -296,6 +296,77 @@ const isValidTtl = (s) => {
   return parts.some((p) => p !== undefined && Number(p) > 0); // must be strictly positive
 };
 
+// searchableProblem mirrors the compiler's reading of atlas:searchable (ADR-0244;
+// compiler/parse.go): a comma-separated list of variable names, forgiving about
+// spacing, in which a nameless entry or a repeated name fails the deploy rather
+// than silently indexing nothing. Returns the warning to show, or "" when the
+// declaration is one the deploy will accept. Like isValidTtl it only warns while
+// authoring; the deploy is the authority.
+const searchableProblem = (s) => {
+  const raw = String(s || "").trim();
+  if (!raw) return "";
+  const seen = new Set();
+  for (const part of raw.split(",")) {
+    const name = part.trim();
+    if (!name) return "Searchable variables: an entry has no name — check for a doubled or trailing comma";
+    if (seen.has(name)) return `Searchable variables: "${name}" is named twice`;
+    seen.add(name);
+  }
+  return "";
+};
+
+// SEARCHABLE_STRUCTURED_TYPES are the types the value index cannot hold. It answers
+// equality and prefix over a byte string, so a structured value is left out rather than
+// stored under its exact encoding (ADR-0244) — a declaration naming one indexes nothing
+// while looking like it works.
+const SEARCHABLE_STRUCTURED_TYPES = new Set(["json", "object", "array"]);
+
+// searchableMarksHTML renders one chip per declared searchable name, marked where the
+// model cannot honour the declaration. It is the answer to the failure this feature has
+// no other way of showing: a declared name that nothing ever writes, or writes as JSON,
+// indexes nothing — the deploy accepts it, the search stays empty, and no screen says
+// why.
+//
+// Two severities, because the two cases differ in what the author should do. Red is
+// certain: a repeated name is refused by the deploy, and a name the model itself says
+// holds a structured value can never be indexed. Amber is a question, not a verdict: the
+// static analysis behind the Variables panel sees what the *diagram* writes, and a
+// variable can also arrive from outside the model — a worker's output mapping the panel
+// cannot read, or an operator's write through the API — so an unknown name is "check
+// this", most often a typo, and never an error.
+function searchableMarksHTML(raw, modeler) {
+  const catalog = new Map();
+  try {
+    for (const v of collectDiagramVariables(modeler)) if (!catalog.has(v.name)) catalog.set(v.name, v);
+  } catch { /* best-effort: no catalog means no marks, never a broken panel */ }
+  const seen = new Set();
+  const chips = [];
+  for (const part of String(raw || "").split(",")) {
+    const name = part.trim();
+    if (!name) continue;
+    let cls = "", why = "";
+    const known = catalog.get(name);
+    if (seen.has(name)) {
+      cls = " sv-err";
+      why = `Named twice — the deploy refuses a repeated name.`;
+    } else if (!known) {
+      cls = " sv-warn";
+      why = `Nothing in this diagram writes a variable called "${name}". `
+        + `If that is a typo the index stays empty for it; if it is written from outside the model `
+        + `— a worker's output, or the variables API — this is fine.`;
+    } else if (SEARCHABLE_STRUCTURED_TYPES.has(known.type)) {
+      cls = " sv-err";
+      why = `${known.source} writes ${name} as ${known.type}. Only text, a number or true/false is `
+        + `indexed, so the index stays empty for this name.`;
+    } else {
+      why = known.type ? `${known.source} · ${known.type}` : known.source;
+    }
+    seen.add(name);
+    chips.push(`<span class="chip${cls}" title="${esc(why)}">${esc(name)}</span>`);
+  }
+  return chips.join("");
+}
+
 // --- Variable presentation (shared by the live and replay views) ---
 //
 // Operators inspect an instance's variables, which can be whole JSON structures.
@@ -6074,6 +6145,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
           <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
           <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
+          <label class="field"><span>Searchable variables</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
+          <div id="f-psearch-marks" class="sv-marks"></div>
+          <p class="muted" style="font-size:12px">The variable names this process wants to be <b>found by</b>, comma-separated. A declared name is answered from a value index, so searching <code>identityId=MT-1998</code> over this version in Operations costs the number of matches instead of a read through every instance &mdash; and a trailing <code>*</code> asks for a prefix. Indexed is a variable at the instance's <b>top level</b> whose value is text, a number or true/false and stays under 256 bytes; a JSON structure or a variable local to one activity is not. A declared name is matched <b>exactly</b>, upper and lower case included, while an undeclared one keeps the read-through search it always had. Declaring nothing costs nothing, so name the one or two business keys you actually search by &mdash; a status that thousands of instances share is a poor declaration. It applies to instances started after the next deploy.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -6114,6 +6188,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
           if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
           try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
+        });
+        // The marks are painted as the author types, not on change: the point of them is
+        // to answer "did I spell it right" while the name is being written.
+        const searchEl = body.querySelector("#f-psearch");
+        const searchMarks = body.querySelector("#f-psearch-marks");
+        const paintSearchMarks = () => { searchMarks.innerHTML = searchableMarksHTML(searchEl.value, modeler); };
+        paintSearchMarks();
+        searchEl.addEventListener("input", paintSearchMarks);
+        searchEl.addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // Same discipline as the TTLs: warn about a declaration the compiler will
+          // refuse (ADR-0244), but store what was typed rather than dropping it.
+          const problem = searchableProblem(v);
+          if (problem) toast(problem, "err");
+          try { modeling.updateProperties(rootEl, { searchable: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }

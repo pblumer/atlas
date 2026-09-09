@@ -131,6 +131,12 @@ type Processor struct {
 	// maxIterations is how many iterations one multi-instance activity may ask for
 	// before the engine refuses it. Set with SetMaxIterations.
 	maxIterations int
+	// maxVariable and maxCollection are how large one variable's value, and a
+	// multi-instance activity's assembled output collection, may be. Two numbers
+	// because they bound different things — see engine/budget.go. Set with
+	// SetMaxVariable and SetMaxCollection.
+	maxVariable   int64
+	maxCollection int64
 
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not
@@ -641,6 +647,25 @@ func (p *Processor) MigrateInstance(v model.ProcessMigrationValue, actor, reason
 		Value:     inflightValue{migration: v},
 		Actor:     actor,
 		Reason:    reason,
+	})
+}
+
+// ReindexInstanceVariables enqueues a repair of one instance's variable-index
+// membership: the handler compares the instance's root-scope variables against what its
+// own process declares searchable (ADR-0244) and emits a membership event for each one
+// that differs. An instance already in step produces no events, so the command is
+// idempotent and a repair run over a whole version costs one comparison per variable the
+// second time.
+//
+// It exists for the instances a migration reached before migration itself corrected
+// membership. Nothing about it is time- or definition-derived at fold time: the
+// comparison happens here, on the run loop, and only its answer reaches the log
+// (invariant I6). Call RunUntilIdle to process it.
+func (p *Processor) ReindexInstanceVariables(piKey uint64) {
+	p.queue = append(p.queue, Command{
+		Key:       piKey,
+		ValueType: model.VTVariableIndex,
+		Intent:    model.IntentVariableReindex,
 	})
 }
 

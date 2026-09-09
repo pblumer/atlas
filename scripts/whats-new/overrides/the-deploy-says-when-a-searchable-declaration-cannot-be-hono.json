@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Deployment"
+  ],
+  "title": {
+    "en": "The deploy answers with the same reading, for models it never sees in the Modeler",
+    "de": "Das Deployment gibt dieselbe Einschätzung, auch ohne Modeler"
+  },
+  "summary": {
+    "en": "The marker under the field only helps whoever is looking at the diagram. A model deployed from a pipeline or over the API never passes through the Modeler at all, so the deploy response now carries the same reading as a warning beside the ones it already gives. It never refuses the deploy. A name the model itself declares as a JSON input is always reported; a name nothing in the model produces is reported only where the model has stated its inputs, and the sentence says plainly that a worker writing it makes the case fine.",
+    "de": "Die Markierung unter dem Feld hilft nur, wer das Diagramm vor sich hat. Ein Modell, das aus einer Pipeline oder über die API deployt wird, sieht den Modeler nie. Deshalb enthält die Deploy-Antwort jetzt dieselbe Einschätzung als Warnung, neben den Warnungen, die sie ohnehin ausgibt. Abgelehnt wird nie. Ein Name, den das Modell selbst als JSON-Eingabe deklariert, wird immer gemeldet; ein Name, den nichts im Modell erzeugt, nur dann, wenn das Modell seine Eingaben überhaupt benannt hat — und der Satz sagt ausdrücklich, dass ein Worker, der ihn schreibt, den Fall in Ordnung macht."
+  }
+}

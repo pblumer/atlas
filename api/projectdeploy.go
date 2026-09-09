@@ -250,6 +250,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	// document's root and each draft is its own document.
 	for _, d := range drafts {
 		warnings = append(warnings, foreignAtlasNamespaceWarnings([]byte(d.XML))...)
+		warnings = append(warnings, searchableDeclarationWarnings([]byte(d.XML))...)
 	}
 	return bundleOutcome{status: http.StatusOK, deployed: true, proj: proj, resp: projectDeployResp{
 		ID: proj.ID, Name: proj.Name, Deployed: true,

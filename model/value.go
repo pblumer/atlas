@@ -420,6 +420,18 @@ type VariableValue struct {
 	// existed. Stamped at command time and frozen into the event, never recomputed on
 	// replay (I6). Append-compatible: an old record ends after Text and decodes to 0.
 	ProducerKey uint64
+	// Index is which element of a list variable this write sets, or -1 for a write of
+	// the whole value — which is what every write outside a multi-instance activity's
+	// output collection is.
+	//
+	// A loop collects one result per iteration into one list. Writing the whole list
+	// each time put the growing collection into the log and into the variable timeline
+	// once per iteration, so the bytes written grew with the *square* of the iteration
+	// count: a hundred thousand results of a kilobyte each cost a hundred gigabytes to
+	// record a hundred megabytes of answer. Naming the element instead makes the record
+	// the size of one result (ADR-0296).
+	Index int32
+
 	// Indexed says this write belongs in the variable value index: its process
 	// declared the name searchable (atlas:searchable) and the write is at the
 	// instance's root scope.
@@ -484,9 +496,11 @@ func (v *VariableValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.Text)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProducerKey)
 	if v.Indexed {
-		return append(dst, 1)
+		dst = append(dst, 1)
+	} else {
+		dst = append(dst, 0)
 	}
-	return append(dst, 0)
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.Index+1))
 }
 
 func (v *VariableValue) decode(src []byte) error {
@@ -519,6 +533,13 @@ func (v *VariableValue) decode(src []byte) error {
 	// Indexed is appended after it, and reads false on a record written before the
 	// value index existed — such a write really is not in the index.
 	v.Indexed = len(tail) >= 9 && tail[8] != 0
+	// Index is appended after that, stored one higher so that a record written before
+	// it existed — which ends here and reads zero — decodes to -1, "this write is the
+	// whole value". Every such record is exactly that.
+	v.Index = -1
+	if len(tail) >= 13 {
+		v.Index = int32(binary.LittleEndian.Uint32(tail[9:])) - 1
+	}
 	return nil
 }
 
@@ -944,6 +965,53 @@ func (v *ProcessMigrationValue) decode(src []byte) error {
 	return nil
 }
 
+// VariableIndexValue is one variable's membership in the value index, changed after
+// the fact. It carries no value, deliberately: the variable holds that, and the point
+// of this record is that the value did not change — only whether the index answers for
+// it (ADR-0244).
+//
+// It exists because membership is stamped by the version that wrote the value (I6),
+// while an instance can be moved to another version under an operator's hand. A
+// migration onto a version that declares more names, or fewer, would otherwise leave
+// the instance missing from the index its new version's search reads, or listed in it
+// under a version that never promised to be searchable by that name. The comparison is
+// made at command time against the compiled process, and one of these is emitted per
+// variable whose membership differs — so the fold, which cannot ask a compiled process
+// anything, is handed the answer.
+type VariableIndexValue struct {
+	ProcessInstanceKey uint64 // the root scope the variable lives in: only that scope is indexed
+	Name               string
+	Indexed            bool
+}
+
+func (*VariableIndexValue) ValueType() ValueType { return VTVariableIndex }
+
+func (v *VariableIndexValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = appendString(dst, v.Name)
+	if v.Indexed {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
+}
+
+func (v *VariableIndexValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	name, rest, err := readString(src[8:])
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 1 {
+		return ErrShortBuffer
+	}
+	v.Indexed = rest[0] != 0
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -1188,6 +1256,13 @@ const (
 	// behavior — which re-evaluates the count, and parks again if it is still too
 	// large.
 	IncidentTooManyIterations IncidentReason = 2
+	// IncidentVariableTooLarge marks an element whose write was refused because the
+	// value was past the budget for a variable, or for a multi-instance activity's
+	// output collection (ADR-0294). Unlike the two above it
+	// names an element that *did* run: the work happened and its result is the thing
+	// that will not fit. Resolving retries the write, so correcting the data — or
+	// raising the budget — lets it through.
+	IncidentVariableTooLarge IncidentReason = 3
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }
@@ -1306,6 +1381,8 @@ func newValue(vt ValueType) Value {
 		return &OperatorActionValue{}
 	case VTProcessMigration:
 		return &ProcessMigrationValue{}
+	case VTVariableIndex:
+		return &VariableIndexValue{}
 	default:
 		return nil
 	}

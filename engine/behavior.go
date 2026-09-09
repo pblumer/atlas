@@ -34,6 +34,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTProcessInstance, model.IntentTerminating):      handleProcessInstanceTerminating,
 		handlerKey(model.VTProcessInstance, model.IntentPurging):          handleProcessInstancePurging,
 		handlerKey(model.VTProcessMigration, model.IntentMigrating):       handleProcessMigrating,
+		handlerKey(model.VTVariableIndex, model.IntentVariableReindex):    handleVariableReindex,
 		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck): handleConditionRecheck,
 		handlerKey(model.VTElementInstance, model.IntentActivating):       handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):       handleElementCompleting,
@@ -372,6 +373,51 @@ func handleProcessMigrating(c *ProcessingContext) {
 		Reason:             c.cmd.Reason,
 		FromProcessDefKey:  v.FromProcessDefKey,
 	})
+	// The instance now runs a version that may declare other variables searchable than
+	// the one that stamped its values (ADR-0244). Without this it would be missing from
+	// the index its new version's search reads — a wrong answer, not a slow one, because
+	// a declared name is answered from the index alone.
+	appendVariableIndexChanges(c, v.ProcessInstanceKey, to)
+}
+
+// handleVariableReindex brings one instance's variable-index membership back in line
+// with what its own process declares — the repair an operator asks for over instances
+// that were migrated before the migration itself did this, or after a declaration was
+// added to a version that already had instances on it. It emits nothing for an instance
+// already in step, so running it twice writes nothing the second time.
+func handleVariableReindex(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil {
+		return // finished and purged, or never there
+	}
+	cp := c.process(pi.ProcessDefKey)
+	if cp == nil {
+		return // the definition was undeployed between the API's check and this command
+	}
+	appendVariableIndexChanges(c, piKey, cp)
+}
+
+// appendVariableIndexChanges compares an instance's root-scope variables against what
+// cp declares searchable and emits one event per variable whose membership differs.
+//
+// Only the root scope is asked, because only it is indexed: an activity-local scope is
+// scratch that disappears when the activity completes (ADR-0068). The comparison is by
+// name alone, exactly as the write path stamps it — whether a value can be indexed at
+// all (a scalar, short enough) is the index's own question, asked where the entry is
+// written, so that one answer cannot drift into two.
+func appendVariableIndexChanges(c *ProcessingContext, piKey uint64, cp *compiler.CompiledProcess) {
+	c.VariablesOfScope(piKey, func(v model.VariableValue) {
+		want := cp.IsSearchableVariable(v.Name)
+		if want == v.Indexed {
+			return
+		}
+		c.AppendVariableIndexEvent(model.VariableIndexValue{
+			ProcessInstanceKey: piKey,
+			Name:               v.Name,
+			Indexed:            want,
+		})
+	})
 }
 
 // historyPurgeDue freezes when retention may hard-delete an instance's finished record:
@@ -485,8 +531,15 @@ func runElementBehavior(c *ProcessingContext, key uint64, ei *model.ElementInsta
 	// isEventSubTrigger.
 	if !isEventSubTrigger(ei) {
 		applyDataInputAssociations(c, ei)
-		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-			applyInputMappings(c, key, ei)
+		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) && !applyInputMappings(c, key, ei) {
+			// An input past the budget was refused with an incident on this element.
+			// Running the behaviour anyway would work from an input that is not there —
+			// a worker would be handed a job missing what the model said to give it — and
+			// completing later would clear the incident with the element. So the element
+			// stays activated, exactly as the execution budget leaves one (ADR-0272), and
+			// resolving re-runs this activation
+			// (ADR-0294).
+			return
 		}
 	}
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, key, ei)
@@ -593,8 +646,15 @@ func handleElementCompleting(c *ProcessingContext) {
 		// Re-evaluating them over the body scope — which holds no round's raw result —
 		// evaluated to null, and wrote that null into the enclosing scope, fabricating
 		// a variable no run produced and overwriting any real value of that name.
-		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody {
-			applyOutputMappings(c, c.cmd.Key, ei)
+		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody &&
+			!applyOutputMappings(c, c.cmd.Key, ei) {
+			// An output past the budget was refused with an incident on this element.
+			// Completing it would clear that incident and drop the result the mapping was
+			// meant to promote, leaving an activity that looks finished and produced
+			// nothing (ADR-0294). The local scope is not dropped
+			// either: it still holds the raw result the mapping reads, and resolving
+			// re-runs this completion over it.
+			return
 		}
 		// A loop's element instances drop their own scope further down this same
 		// command, and it must not happen before the loop has read it: an iteration's
@@ -764,10 +824,13 @@ func handleJobCompleted(c *ProcessingContext) {
 	// claims, which is the whole of what a service task produces
 	// (ADR-0219).
 	c.producer = job.ElementInstanceKey
+	refused := false
 	for i := range c.cmd.StartVars {
 		v := c.cmd.StartVars[i]
 		v.ScopeKey = resultScope
-		c.AppendVariableEvent(model.IntentVariableCreated, v)
+		if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+			refused = true
+		}
 	}
 
 	// A business rule task's worker evaluates its decision off the processor
@@ -798,6 +861,15 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		// A result past the variable budget was refused above, with an incident on this
+		// element. Completing anyway would take that incident with it — terminating an
+		// element clears the one it carries — and the task would look successful while
+		// its result was never written. So the element stays activated: the job is done
+		// and cannot be redone, and resolving the incident is what moves it on
+		// (ADR-0294).
+		if refused {
+			return
+		}
 		// An agent-driven ad-hoc's round job is not a step that finishes its element: it
 		// decides the next one. When it comes back naming tools, the container activates
 		// them and stays Activated; only a completion naming none falls through to the
@@ -1948,11 +2020,15 @@ func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.El
 // scope, so a later input can read an earlier one and unmapped names resolve to the
 // enclosing scope. The value is frozen into a VariableCreated event, so replay
 // re-applies it rather than re-evaluating (invariants I4/I6).
-func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
+	fits := true
 	for _, m := range cp.IOInputs(ei.ElementId) {
-		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key))
+		if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key)) {
+			fits = false
+		}
 	}
+	return fits
 }
 
 // evalMapping evaluates one I/O mapping's FEEL source over the scope chain from
@@ -1981,12 +2057,16 @@ func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.
 // evaluated here (command processing) and frozen into VariableCreated events, so
 // replay re-applies them without re-evaluating (I4/I6). The raw result and input
 // locals are removed separately by dropLocalScope.
-func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
+	fits := true
 	for _, m := range cp.IOOutputs(ei.ElementId) {
 		// Evaluate over the local scope chain (key), promote to the parent (flow) scope.
-		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey))
+		if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey)) {
+			fits = false
+		}
 	}
+	return fits
 }
 
 // dropLocalScope deletes every variable in an activity's local scope when it
@@ -2078,13 +2158,19 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 	}
 
 	kind, b, text := expr.Classify(result)
-	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+	if !c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
 		ScopeKey: ioResultScope(cp, key, ei),
 		Name:     detail.ResultVar,
 		Kind:     toVarKind(kind),
 		Bool:     b,
 		Text:     text,
-	})
+	}) {
+		// A result past the variable budget was refused with an incident on this task.
+		// Completing it would clear that incident with the element and leave a script
+		// that looks to have run and produced nothing (ADR-0294). The task stays
+		// activated; resolving re-runs it, which re-evaluates the expression.
+		return
+	}
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -2440,13 +2526,21 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		// attributed to the element that received it and not to whatever published the
 		// message.
 		c.producer = m.elKey
+		fits := true
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
 		}
 		c.producer = prevProducer
-		if ei := c.GetElementInstance(m.elKey); ei != nil {
+		// A payload past the budget was refused with an incident on this catch event.
+		// Completing it anyway would clear that incident with the element and let the
+		// instance carry on as though the message had been received in full — the
+		// subscription is already correlated, so the message will not come again
+		// (ADR-0294).
+		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
@@ -2585,13 +2679,21 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		// production, not the broadcaster's, and the producer of the command that got
 		// here is put back afterwards (ADR-0219).
 		c.producer = m.elKey
+		fits := true
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
 		}
 		c.producer = prevProducer
-		if ei := c.GetElementInstance(m.elKey); ei != nil {
+		// A payload past the budget was refused with an incident on this catch event.
+		// Completing it anyway would clear that incident with the element and let the
+		// instance carry on as though the signal had been received in full — and a
+		// broadcast is not replayed for a subscriber that missed it
+		// (ADR-0294).
+		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
@@ -4010,8 +4112,14 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 		parkOversizedLoop(c, bodyKey, ei, asked)
 		return
 	}
-	if d.OutputCollection >= 0 {
-		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
+	if d.OutputCollection >= 0 && !writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items))) {
+		// The collection did not fit, so it was not written and an incident says so.
+		// Returning is the other half of that refusal: the body stays activated holding
+		// its token, no iteration is seeded, and resolving runs this behaviour again.
+		// Carrying on would seed a loop whose results have nowhere to land, and the
+		// instance would complete as though nothing were wrong — taking the incident
+		// with it (ADR-0294).
+		return
 	}
 	if len(items) == 0 {
 		// No iterations: the body completes immediately, taking its outgoing flow.
@@ -4205,7 +4313,15 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		if err != nil {
 			val = expr.Null
 		}
-		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
+		if !setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val) {
+			// The collection outgrew its budget on this iteration. The iteration's own
+			// work is done and its result is the thing that will not fit, so the
+			// iteration stays where it is with the incident on it rather than
+			// completing: a loop that carried on would drop this result and every later
+			// one, and finish looking successful
+			// (ADR-0294).
+			return
+		}
 	}
 	// The completion condition — for a standard loop, the loop condition (ADR-0133) —
 	// is evaluated over this iteration's scope chain (so it can read loopCounter, the
@@ -4286,7 +4402,9 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
 			out := *v
 			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
-			c.AppendVariableEvent(model.IntentVariableCreated, out)
+			// The collection's own budget, not the variable one: it fitted at the body
+			// scope, so refusing it one scope up would park a loop for having finished.
+			c.appendCollection(model.IntentVariableCreated, out)
 		}
 	}
 	dropLocalScope(c, bodyKey)
@@ -4312,12 +4430,51 @@ func nullList(n int) []expr.Value {
 	return items
 }
 
-// writeList writes a FEEL list value (canonical JSON) into scope under name (ADR-0077).
-func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) {
+// writeList writes a FEEL list value (canonical JSON) into scope under name
+// (ADR-0077), unless the serialised collection is past the collection budget — then
+// nothing is written and the element owning the scope is parked with an incident
+// (ADR-0294). It reports whether the write happened.
+//
+// The check is on the serialised text rather than before it, and the difference is
+// worth stating: the elements are already in memory, so what this bounds is the
+// canonical copy and everything downstream of it — the event, the log record, the
+// state write, and every later re-serialisation of the same collection. It is not the
+// "before the allocation" the iteration budget manages (ADR-0276), because by the
+// time a list is being written its elements exist; it is the point past which the
+// engine stops making the problem durable.
+func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) bool {
 	kind, b, text := expr.Classify(expr.ListOf(elems...))
-	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+	return c.appendCollection(model.IntentVariableCreated, model.VariableValue{
 		ScopeKey: scope, Name: name, Kind: toVarKind(kind), Bool: b, Text: text,
 	})
+}
+
+// parkOversizedWrite refuses a write whose value is past its budget: nothing is
+// written, and an incident on the element that produced it names the variable and both
+// sizes. Resolving retries the write, so correcting the data — or raising the budget —
+// lets it through, and leaving it refuses again
+// (ADR-0294).
+//
+// The element is the scope's own when the scope is one (a loop's body, a container),
+// and otherwise the write's producer, which is the element instance whose processing
+// wrote the value (ADR-0219). One of the two always names something an operator can
+// act on.
+func parkOversizedWrite(c *ProcessingContext, scope uint64, name string, size, ceiling int64) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message:            c.p.tooLargeVariableMessage(name, size, ceiling),
+		Reason:             model.IncidentVariableTooLarge,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope // an instance-root write: the instance is the subject
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
 }
 
 // readList reads a stored JSON list variable back into FEEL values; nil if absent or
@@ -4333,13 +4490,23 @@ func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {
 
 // setListElement sets index idx of a stored JSON list variable and writes it back; a
 // no-op if idx is out of range (ADR-0077).
-func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) {
-	elems := readList(c, scope, name)
-	if idx < 0 || idx >= len(elems) {
-		return
+// It reports whether the collection was written: an index out of range is nothing to
+// write and counts as written, while a collection past its budget is a refusal the
+// caller has to act on.
+func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) bool {
+	kind, b, text := expr.Classify(val)
+	if int64(len(text)) > c.p.variableCeiling() {
+		// One iteration's own result, measured against the budget for one value: it is
+		// a business record, and the collection it joins has its own, larger ceiling
+		// (ADR-0294). Refusing here rather than after the round trip means the element
+		// that produced it is the one the incident names.
+		parkOversizedWrite(c, scope, name, int64(len(text)), c.p.variableCeiling())
+		return false
 	}
-	elems[idx] = val
-	writeList(c, scope, name, elems)
+	return c.appendVariableElement(model.VariableValue{
+		ScopeKey: scope, Name: name, Index: int32(idx),
+		Kind: toVarKind(kind), Bool: b, Text: text,
+	})
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate
@@ -4403,20 +4570,32 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 	// than deferred: a closure would allocate on the command path (I1).
 	prevProducer := c.producer
 	c.producer = callerKey
+	fits := true
 	if detail.PropagateAllChild {
 		// All child variables merge into the caller's instance scope.
 		c.VariablesOfScope(childScope, func(v model.VariableValue) {
 			v.ScopeKey = caller.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, v)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+				fits = false
+			}
 		})
 	} else {
 		// Only the output mappings escape: each source is FEEL over the child's
 		// variables, promoted to the caller's instance scope.
 		for _, m := range callerCp.IOOutputs(caller.ElementId) {
-			c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey))
+			if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey)) {
+				fits = false
+			}
 		}
 	}
 	c.producer = prevProducer
+	// A result past the budget was refused with an incident on the call activity.
+	// Resuming it anyway would clear that incident with the element and let the caller
+	// carry on without the result it called for — and the child is already gone, so
+	// nothing would produce it again (ADR-0294).
+	if !fits {
+		return
+	}
 	c.AppendElementCommand(callerKey, model.IntentCompleting, *caller)
 }
 

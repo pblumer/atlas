@@ -369,10 +369,17 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 	c.appendEvent(key, model.VTTimer, intent, inflightValue{timer: v})
 }
 
-// AppendVariableEvent records a variable write. The value is data (a name and
+// AppendVariableEvent records a variable write and reports whether it happened: a
+// value past the variable budget is refused, with an incident naming it
+// (ADR-0294). Most callers write engine-derived values —
+// a loop index, a counter — which cannot exceed a budget sized for a business record,
+// and they ignore the result. A caller that writes something a model or a worker
+// produced should not.
+//
+// The value is data (a name and
 // contents), so unlike the graph-derived events this one does allocate for its
 // strings — variables are runtime data, not hot-path token movement.
-func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) {
+func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.VariableValue) bool {
 	// Stamped here rather than at each call site so no path can forget it, and so a
 	// value copied out of one scope and re-written into another (a call activity
 	// promoting its child's result, a loop promoting its body's) can never carry the
@@ -384,8 +391,57 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	// here freezes the answer into the event, and replay indexes exactly what the live
 	// write indexed (I6).
 	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	// A value past the budget is not written and not silently dropped: an incident
+	// names the variable and both sizes, and resolving retries
+	// (ADR-0294). Deleting is never refused — a delete carries
+	// no value, and refusing to shrink an instance would be the wrong way round.
+	return c.appendVariable(intent, v, c.p.variableCeiling())
+}
+
+// appendCollection is AppendVariableEvent measured against the *collection* budget
+// rather than the variable one. A multi-instance activity's output collection is what
+// a legitimate loop accumulates at the iteration ceiling, which is a different
+// question from what one business record may weigh — and measuring it against the
+// smaller number would refuse ordinary loops
+// (ADR-0294).
+func (c *ProcessingContext) appendCollection(intent model.Intent, v model.VariableValue) bool {
+	v.ProducerKey = c.producer
+	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	return c.appendVariable(intent, v, c.p.collectionCeiling())
+}
+
+// appendVariableElement records that one element of a list variable became this
+// value, rather than recording the list. It is what a multi-instance activity emits
+// per finished iteration, and it is the whole of the fix for a cost that grew with
+// the square of the iteration count: the record is the size of one result, not of the
+// collection so far (ADR-0296).
+//
+// The collection's own ceiling is not checked here, because this write does not carry
+// the collection. What bounds it is that each element is checked against the variable
+// budget and the loop's iteration count is bounded (ADR-0276) — the product of the two
+// is the ceiling the collection actually has, and it is now the only one that can be
+// exceeded without anything noticing. Said plainly in the record rather than papered
+// over: this is the one guarantee the change gives up.
+func (c *ProcessingContext) appendVariableElement(v model.VariableValue) bool {
+	v.ProducerKey = c.producer
+	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	c.appendEvent(v.ScopeKey, model.VTVariable, model.IntentVariableElementSet, inflightValue{variable: v})
+	c.markConditionDirty(v.ScopeKey)
+	return true
+}
+
+// appendVariable is the shared tail of both: a value past ceiling is not written and
+// not silently dropped — an incident names the variable and both sizes, and resolving
+// retries. Deleting is never refused: a delete carries no value, and refusing to
+// shrink an instance would be the budget working backwards.
+func (c *ProcessingContext) appendVariable(intent model.Intent, v model.VariableValue, ceiling int64) bool {
+	if intent != model.IntentVariableDeleted && int64(len(v.Text)) > ceiling {
+		parkOversizedWrite(c, v.ScopeKey, v.Name, int64(len(v.Text)), ceiling)
+		return false
+	}
 	c.appendEvent(v.ScopeKey, model.VTVariable, intent, inflightValue{variable: v})
 	c.markConditionDirty(v.ScopeKey)
+	return true
 }
 
 // indexesVariable reports whether a write of name into scopeKey belongs in the
@@ -480,6 +536,15 @@ func (c *ProcessingContext) AppendOperatorActionEvent(v model.OperatorActionValu
 // the log rather than by re-deriving it (invariants I4/I6).
 func (c *ProcessingContext) AppendMigrationEvent(v model.ProcessMigrationValue) {
 	c.appendEvent(v.ProcessInstanceKey, model.VTProcessMigration, model.IntentMigrated, inflightValue{migration: v})
+}
+
+// AppendVariableIndexEvent corrects one variable's membership in the value index
+// (ADR-0244). It carries no value: the variable holds that, and the whole point is that
+// the value did not change. Emitted only where an instance's declaration can change
+// under it — a migration, or an operator's reindex — one per variable whose membership
+// actually differs, so an instance already in step produces no events at all.
+func (c *ProcessingContext) AppendVariableIndexEvent(v model.VariableIndexValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariableIndex, model.IntentVariableIndexed, inflightValue{variableIndex: v})
 }
 
 // AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded

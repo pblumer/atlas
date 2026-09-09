@@ -43,6 +43,132 @@ _Changed_ / _Removed_ for each version.
   /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
   same answer in front of an agent (ADR-0259).
 
+- **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
+  such a name while it is typed, but a model deployed from a pipeline or over the API
+  never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:
+  the search then stays empty forever with nothing saying why. The deploy response now
+  carries the same reading, beside the worker and namespace warnings it already gives —
+  never a refusal, because a model is routinely deployed before the rest of its world
+  exists. It reads the model's own bytes rather than the compiled process, so it counts
+  writers generically, by attribute: every Worker Type, script and decision writes into a
+  `resultVariable`, including the kinds added after this was written. A name the model
+  itself declares as a JSON start variable is reported for any process, because the
+  declaration settles it. A name nothing in the model produces is reported only where the
+  model has stated its inputs — it declares start variables and links no form, whose
+  fields are a separate resource this cannot read — and the sentence says plainly that a
+  worker's own output or a write through the variables API makes it fine.
+
+- **A searchable declaration that indexes nothing now says so.** `atlas:searchable` names
+  variables, and nothing checked that the model writes any: a typo, or a name holding
+  JSON, is accepted by the deploy and then answers an empty search forever, with no screen
+  saying why. The field now paints a chip per declared name, read against the same static
+  analysis the Variables panel uses. Red where the model settles it — a repeated name the
+  deploy refuses, or a name the model itself says holds a structured value, which the
+  index cannot hold. Amber where it is a question rather than a verdict: nothing in the
+  diagram writes that name, which is usually a typo but not always, because a worker's
+  output or the variables API can write a name the diagram never mentions. Each chip
+  carries the reason as its tooltip, and they are painted as the name is typed.
+
+- **A migration now re-indexes what its target declares.** [ADR-0244](docs/adr/0244-searchable-variables.md)
+  argued that a declared searchable variable needs no backfill, and for the case it looked
+  at that holds: the attribute postdates every definition that could lack it. It missed the
+  one way an instance changes version after it has written values — migration
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)). An instance started on a
+  version that declares nothing and migrated onto one that declares `identityId` held a
+  value stamped "not indexed", so the version-scoped search — which for a declared name is
+  answered from the index alone — returned nothing for an instance the engine was holding.
+  A wrong answer, not a slow one, and a silent one.
+
+  A migration now emits one membership correction per variable whose answer differs under
+  the target's declaration, in both directions: a name the target declares and the source
+  did not is added, one it no longer declares is dropped. The comparison happens at command
+  time against the compiled process — the fold cannot ask one anything, which is ADR-0244's
+  own finding — so what reaches the log is the answer, and a replay rebuilds the identical
+  index. A migration between two versions that declare the same names emits nothing.
+
+  For the instances migrated before this,
+  **`POST /api/v1/processes/{key}/reindex-instances`** (admin, `?limit=`, default 500, max
+  5000) queues the same correction for a bounded batch of a definition's running instances
+  and reports what that definition declares. It is idempotent: an instance already in step
+  emits no events at all, so running it twice writes nothing the second time. Running
+  instances only — a finished instance's membership can no longer change through any normal
+  path, and reaching into the history family from a command handler was not worth it for a
+  strictly historical case.
+  ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md))
+
+- **The Modeler can now say what a process is found by.** `atlas:searchable`
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) turns an operator's value search
+  into a seek, but it shipped as an attribute with no field and no moddle property, so
+  the only way to declare a searchable variable was to hand-edit the exported XML
+  outside the tool. The process properties now carry a **Searchable variables** field
+  beside the two TTLs, validated the way they are: a nameless entry or a name given
+  twice is what the deploy refuses, so the panel says so while authoring and still
+  stores what was typed rather than dropping the author's value.
+
+  What was missing was never the round trip — moddle keeps an attribute it has no
+  property for in `$attrs` and writes it back, so a hand-authored declaration was
+  invisible rather than lost. It was that nothing could *read or write* it: the panel
+  reads `rootBo.searchable` and writes through `updateProperties`, and both go through
+  moddle's properties. A drift test now fails for any future `<bpmn:process>` attribute
+  the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
+  ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
+
+## [0.6.0] — 2026-09-09
+
+**This release is about arriving from somewhere else.** A Microsoft Identity Manager
+workflow now imports as the process it *is* rather than as the elements it is made of.
+MIMWAL states conditionality and iteration in attributes instead of in branch and loop
+elements, so twenty guarded steps used to arrive as an unconditional chain — a diagram
+that looked like your process and did not behave like it. Conditions become gateways and
+iterations become multi-instance loops; each activity's queries and assignments are
+carried over as addressable rows and **counted as the work they are**, so the number a
+migration is planned with is the honest one; and an import that would land on an id
+somebody already holds now refuses with the impact spelled out — which deployed version,
+how many instances are running on it, which of its elements the incoming model still has.
+
+**The second half is for the empty installation.** Every Worker Type selectable on a
+service task now carries its own setup where the type is chosen: whether it needs a
+configured Worker and a credential at all, the steps at the provider in order, the
+failure it is usually reported with, and a link into the handbook this server serves
+itself. The Console's *New worker* form shows the same thing, which is where an operator
+actually stands. Both the short form and the handbook's long one say **when they were
+last read against the real thing**, and a test says so when they have not been — these
+steps name menus in somebody else's product, and nothing here can notice when that
+product is rearranged.
+
+**And the class canvas grew up.** An imported Active Directory schema — sixty classes,
+forty-character attribute names — showed three faults at once: boxes that were 200px
+whatever was written in them, relationships drawn as straight lines through whatever
+stood between their ends, and several of them landing exactly on top of each other so a
+click could only ever reach the last one drawn. Boxes size themselves now, lines are
+routed at right angles by the same router a sequence flow gets, and the palette is
+diagram-js's own — the one the process modeler already puts down its left edge.
+
+**One thing to read before upgrading.** A parallel or inclusive join now counts tokens
+**per incoming sequence flow**, as BPMN 2.0.2 §13.4 requires and as Atlas did not. The
+change moves in the direction of *less* progress: a model that relied on a join firing on
+two tokens arriving over one branch now parks there instead — a deadlock you can see and
+terminate, where the old behaviour continued silently and swallowed the surplus. No API,
+no stored format and no default changes; this one is worth checking your models against.
+
+### Added
+
+- **One place names every resource budget, and one way sets them.** Atlas bounded
+  external input in about ninety places: thirty-odd named constants declared next to the
+  handler that used them, plus a scattering of bare literals written straight into the
+  call. Each was defensible where it stood; together they were not a policy, because
+  nothing said what the set *was* — and a set nobody can enumerate is a set nobody
+  notices a hole in. `limits.Limits` is that set, grouped by what a budget holds rather
+  than by which handler reads it, with defaults that are exactly the numbers the code
+  already carried. Names, environment variables and parsing are derived from the struct
+  itself, because a second list to keep in step is the failure this ends rather than one
+  to repeat. Configure with `ATLAS_LIMIT_*`; a value that is missing, not positive, or
+  too large for its field leaves the default standing and says so at startup. **There is
+  no way to turn a budget off.** One limit stated plainly: components running inside a
+  worker's process — a model provider's answer, a Remedy call, the error snippets in
+  tracing — read the named default rather than this installation's configured value,
+  because the server's environment does not reach them.
+
 - **A class says which states its instances move through, and the Modeler offers
   them.** BPMN puts a data state under a data object — `order [received]` →
   `[approved]` — and says nothing whatever about which states exist or which may
@@ -103,6 +229,31 @@ _Changed_ / _Removed_ for each version.
   put a structure into the diagram that the source does not contain. A cell says
   where it sat, never what it means: naming the columns would state something no
   reference settles.
+
+- **A MIM import asks before it lands on something, and says what is at stake.**
+  Importing a workflow whose process id was already taken replaced the draft
+  there without a word — the one outcome [ADR-0222](docs/adr/0222-artifact-id-renames.md)
+  rules out for every design-time store, and the MIM import was the path that
+  did not follow it. It now works out what each id holds *before* writing
+  anything and answers `409` with the impact; the Console shows it and asks.
+
+  The impact is not just "an id is taken". When the id is also a deployed
+  process, Atlas migrates a running instance by matching element ids
+  ([ADR-0162](docs/adr/0162-instance-migration.md)) — so the report names the
+  deployed version, how many instances are running on it, which of its elements
+  the imported model still has, which it does not, and which of its data objects
+  the model no longer declares. Those are the instances a later deploy of the
+  imported model could not carry over, named one by one rather than left to be
+  discovered at migration time. The import itself still only writes a draft and
+  deploys nothing.
+
+  An export holding several `WorkflowDefinition` resources now converts them all
+  — one draft each, named after its own resource — rather than the first and
+  silence. `ConvertAll` is the library entry point for it, `atlas import-mim`
+  writes one file per workflow beside the one `--out` names, and the resource's
+  own fields (`DisplayName`, `Description`, `RequestPhase`, `RunOnPolicyUpdate`,
+  `ObjectID`) reach the process documentation and the import response: MIM keeps
+  them outside the XOML, and the XOML is all the importer used to read.
 
 - **A Worker Type's setup steps say when they were last checked.** The steps beside a
   Worker Type name menu paths in somebody else's product — *IAM & Admin → Service
@@ -184,6 +335,52 @@ _Changed_ / _Removed_ for each version.
   single expression to fill in.
 
 ### Changed
+
+- **A join counts tokens per incoming sequence flow.** This is the semantic debt
+  [ADR-0024](docs/adr/0024-parallel-gateway-join.md) wrote down and accepted:
+  no token-count-per-flow, so a single incoming flow feeding two tokens was not
+  distinguished from two flows feeding one each. That is not the rare case it was taken
+  for — a fork whose branches rejoin through an exclusive merge produces it — and the
+  consequence was the one thing a parallel join exists to prevent: it fired while a
+  branch had not arrived, then consumed every token on the node, so the surplus vanished
+  with it.
+
+  A parallel gateway now activates when there is at least one token on **each** incoming
+  sequence flow and consumes exactly one from each, as OMG BPMN 2.0.2 §13.4 states.
+  Every waiting token already recorded the flow it arrived on, so the correct rule needs
+  no new state, no new event and no extra scan — only a different question asked of the
+  same walk. The inclusive join had the same defect in its own idiom: it fires when
+  nothing more can arrive, so its surplus is resolved then and there rather than parked
+  waiting for an arrival that cannot come, and its continuation is now a fresh token, as
+  the parallel join's already was.
+
+  **Behaviour moves in the direction of less progress.** A model that relied on a join
+  firing on two tokens from one branch now parks — a deadlocked join, visible in
+  Operations and terminable, where before it continued silently. Worth a look at any
+  model that forks and rejoins through an exclusive merge.
+
+- **A refused variable write now stops what comes next, instead of only saying so.**
+  The variable and collection budgets refuse a value past their ceiling and raise an
+  incident on the element that produced it. That was half a refusal: terminating an
+  element clears the incident it carries, so a site that refused a write and then let
+  its element finish left nothing behind at all — not the value, and not the report.
+  The run looked successful, and the only evidence was a variable that was not there.
+
+  Every site at which a model's or a worker's value becomes a variable now answers
+  what happens next, and each answer follows from that site's own semantics. A message
+  or signal catch does not complete, because its subscription is already correlated
+  and neither is delivered twice. A call activity does not resume without the result
+  it called for, because the child instance is already gone. An output mapping does
+  not let its activity finish having promoted nothing, and keeps the activity's local
+  scope — that is where the raw result the mapping reads still is, so resolving
+  re-evaluates over it. An input mapping stops the behaviour *before* it runs, rather
+  than handing a worker a job missing what the model promised it.
+
+  **Upgrade note:** an instance whose write is refused now stays where it is, with an
+  incident naming the variable and both sizes. Resolving it retries the write, so
+  correcting the data — or raising `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` —
+  lets it carry on. Before this, such an instance could complete as though nothing had
+  happened.
 
 - **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
   things about the drawing were wrong on any model larger than the examples, and an
@@ -284,6 +481,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Four ways a MIM workflow's own logic went missing.** Each was silent, and each
+  produced a model that read as if the source said something it does not:
+
+  - **A branch condition written as a WF property element was read as a step.**
+    `<IfElseBranchActivity.Condition>` is how a real MIM branch carries its
+    condition; XAML writes a property that way. The importer treated any child as
+    an activity, so the branch gained a task named after the property, doing
+    nothing, while the condition inside it went unread. Any `Type.Property`
+    element is now the property it is — and a condition is read from it,
+    including the name of the declarative rule it points to.
+  - **The last branch became the default whatever it carried.** Its condition was
+    dropped with no note, and an `IfElseActivity` with a single conditional
+    branch — plain "if X then do Y" — became an unconditional path reported as
+    native. A branch is the default only when it carries no condition; when every
+    branch is conditional the default bypasses them all, which is what WF does
+    when none holds.
+  - **A `ConditionedActivityGroup` disappeared into a plain sequence** — the group
+    element, its markup, its `UntilCondition` and every child's `WhenCondition`,
+    without a single note. Repetition and per-child conditionality are the whole
+    difference between a CAG and a sequence. It is now the repeat-until loop it
+    is, with each child guarded by its own condition.
+  - **A real `Export-FIMConfig` export was not recognised.** The importer looked
+    for the attribute's name written as an XML attribute; FIMAutomation writes it
+    as a child element, so nothing was found and a whole export converted into a
+    process of `ExportObject` placeholder tasks. Both shapes are read now.
+
 - **The replay's data-object list keeps its search, and an open state trail stays with
   its row.** Showing every list's filter row by default
   ([ADR-0286](docs/adr/0286-a-list-carries-its-own-search.md)) reached one list that was
@@ -314,6 +537,19 @@ _Changed_ / _Removed_ for each version.
   for the wrong reason (ascending sort happens to put a stray trail next to its own row
   anyway, which is a coincidence and not the property).
 
+- **A throttled sign-in no longer reports itself as a wrong password.** The login screen
+  turned every failed login request into "Invalid username or password.", including the
+  429 the login throttle (ADR-0197) answers with. That throttle refuses the *attempt*
+  before the password is looked at: five wrong guesses and an account is refused for up
+  to a quarter of an hour, so from the sixth attempt on the correct password looked
+  exactly like a wrong one. Somebody who mistypes a generated admin password a few times
+  therefore goes hunting for a credential that is already right, and the only workaround
+  the screen leaves them is restarting the server — the one action that clears the
+  throttle's in-memory buckets. A 401 still says only that the credentials were refused,
+  which is what keeps the login from answering whether an account exists; a 429 now says
+  the attempt was throttled and the password was not checked; anything else points at the
+  server log instead of blaming the password. The OAuth consent screen's own sign-in form
+  carried the same three answers in one sentence and now makes the same distinction.
 - **An incident that says "no worker registered as X" can now create X, instead of pointing
   at the Console.** The one incident whose cause is named in its own message was the one
   incident with no way out of it: the row offered a link to Console › Workers, which is the
@@ -356,6 +592,23 @@ _Changed_ / _Removed_ for each version.
     `Iteration` and `ConflictFilter` it appeared in. Preserved markup is now
     written as escaped character data, and re-parses to the activity's original
     attribute values.
+
+### Security
+
+- **A script task's output had no ceiling.** The worker collected a script's stdout with
+  `cmd.Output()`, which grows a buffer to whatever arrives — and a script's output is
+  written by code the model author controls. `while true: print(x)` was an unbounded
+  allocation on the machine the worker runs on, held back only by the 30-second timeout,
+  which at a gigabyte a second is not a bound. Both streams now go through a bounded
+  reader. The bound is one of the budgets above, so it has a name and can be raised.
+
+  Two things the fix had to survive, recorded because each looked correct and was not:
+  the first bounded reader embedded a `bytes.Buffer`, which promotes `ReadFrom` — and
+  `io.Copy` prefers it, so every byte landed in the buffer without `Write` ever being
+  called, and the ceiling looked like a cap while being none. And the test meant to prove
+  every budget is enumerated walked no files at all, because the root entry is named
+  `..` and its own skip-dotted-directories rule matched it; it reported success. It now
+  counts what it found and fails below forty.
 
 ## [0.5.0] — 2026-09-08
 
@@ -6598,7 +6851,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pblumer/atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0

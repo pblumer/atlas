@@ -53,6 +53,12 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/instances/{key}/migrate/plan",
 	"POST /api/v1/instances/{key}/migrate",
 	"POST /api/v1/processes/{key}/migrate-instances",
+	// The repair that rides beside the migration: a bounded run of variable-index
+	// membership corrections over a definition's instances (ADR-0244). It changes no
+	// value and no execution, only what the search can seek to — but it is the same
+	// shape as the migration batch, one command per instance of a whole version, so it
+	// is gated with it rather than with the operator's single-instance acts.
+	"POST /api/v1/processes/{key}/reindex-instances",
 
 	// What a worker did, in full: job payloads carry whatever the process carries.
 	"GET /api/v1/workers/{id}/history",

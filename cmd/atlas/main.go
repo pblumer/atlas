@@ -521,6 +521,8 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// (limits.TokenSteps / limits.Iterations, ADR-0272 and ADR-0276).
 	proc.SetExecutionBudget(budgets.TokenSteps)
 	proc.SetMaxIterations(int(budgets.Iterations))
+	proc.SetMaxVariable(budgets.Variable)
+	proc.SetMaxCollection(budgets.Collection)
 	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
 	}
@@ -1483,6 +1485,9 @@ table are decoded into <atlas:mimCollection> on the same element, and every one 
 them is an item of the report — which counts work, not nodes, so an activity with
 five assignments reports five. Re-check the model in the Modeler before deploying.
 
+An export holding several WorkflowDefinitions converts them all: with --out each
+lands in its own file, numbered after the first.
+
 Examples:
   atlas import-mim workflow.xoml > workflow.bpmn
   Export-FIMConfig ... | atlas import-mim --name Onboarding --out onboarding.bpmn
@@ -1509,22 +1514,50 @@ Flags:
 		r = f
 	}
 
-	res, err := mimimport.Convert(r, *name)
+	all, err := mimimport.ConvertAll(r, *name)
 	if err != nil {
 		return err
 	}
 
-	if *out == "" {
-		if _, err := os.Stdout.Write(res.BPMN); err != nil {
-			return err
+	// An Export-FIMConfig export carries one WorkflowDefinition per workflow, and
+	// an export of a whole installation carries all of them. Writing only the first
+	// and saying nothing is how the rest used to be lost, so each gets its own file
+	// — stdout can hold one XML document, and says which one it is.
+	for i, res := range all {
+		target := *out
+		if target == "" {
+			if i > 0 {
+				fmt.Fprintf(os.Stderr,
+					"skipped %q: stdout holds one document — use --out to write all %d\n",
+					res.Report.ProcessID, len(all))
+				continue
+			}
+			if _, err := os.Stdout.Write(res.BPMN); err != nil {
+				return err
+			}
+		} else {
+			if i > 0 {
+				target = numberedPath(*out, i+1)
+			}
+			if err := os.WriteFile(target, res.BPMN, 0o644); err != nil {
+				return err
+			}
+			if len(all) > 1 && !*quiet {
+				fmt.Fprintf(os.Stderr, "wrote %s\n", target)
+			}
 		}
-	} else if err := os.WriteFile(*out, res.BPMN, 0o644); err != nil {
-		return err
-	}
-	if !*quiet {
-		fmt.Fprint(os.Stderr, res.Report.String())
+		if !*quiet {
+			fmt.Fprint(os.Stderr, res.Report.String())
+		}
 	}
 	return nil
+}
+
+// numberedPath turns "onboarding.bpmn" into "onboarding-2.bpmn", so an export of
+// several workflows lands as several files beside the one the caller named.
+func numberedPath(path string, n int) string {
+	ext := filepath.Ext(path)
+	return fmt.Sprintf("%s-%d%s", strings.TrimSuffix(path, ext), n, ext)
 }
 
 // fatal reports a top-level command failure and exits non-zero. It replaces log.Fatalf
