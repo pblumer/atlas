@@ -794,6 +794,36 @@ func runtimeTools() []Tool {
 				return asText(c.post(path, "application/json", body))
 			},
 		},
+		{
+			Name: "atlas_reindex_instances",
+			Description: "Bring a bounded batch of one deployed definition's running instances back in " +
+				"line with what it declares atlas:searchable, so a value search over that version finds " +
+				"them by index. Needed only for instances migrated onto a version whose declaration " +
+				"differs from the one that wrote their values — a migration corrects that as it happens. " +
+				"Returns {processDefKey, searchable, submitted, remaining}; repeat while 'remaining' is " +
+				"true. Idempotent: an instance already in step is written nothing (ADR-0244).",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":   map[string]any{"type": "integer", "description": "The deployed definition key whose running instances to reindex."},
+					"limit": map[string]any{"type": "integer", "minimum": 1, "description": "Maximum instances to reindex in this call (default 500, capped at 5000)."},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/reindex-instances"
+				if limit, present, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if present {
+					path += "?limit=" + strconv.FormatUint(limit, 10)
+				}
+				return asText(c.post(path, "application/json", nil))
+			},
+		},
 	}
 }
 

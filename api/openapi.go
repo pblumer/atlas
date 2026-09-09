@@ -327,6 +327,9 @@ func (s *Server) apiRoutes() []apiRoute {
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Bulk migration result", tObject())}},
+		{"POST", "/api/v1/processes/{key}/reindex-instances", s.handleReindexInstancesOfProcess, apiOp{
+			summary: "Bring a bounded batch of a definition's running instances back in line with what it declares atlas:searchable (?limit=, default 500, max 5000); repeat while the response reports remaining=true. Needed only for instances migrated onto a version whose declaration differs from the one that wrote their values (ADR-0244)", tag: "Instances", role: RoleAdmin,
+			resp: jsonBody("Reindex result", tObject())}},
 		{"DELETE", "/api/v1/instances/{key}", s.handleCancelInstance, apiOp{
 			summary: "Cancel a running instance", tag: "Instances", role: RoleOperator, resp: jsonBody("Cancellation result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/cancel-instances", s.handleCancelInstancesOfProcess, apiOp{

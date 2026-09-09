@@ -866,6 +866,27 @@ func (t *Tx) reindexVariable(scope uint64, name string, next *model.VariableValu
 	return t.b.Set(keyVariableIndex(name, text, scope), nil, nil)
 }
 
+// SetVariableIndexed changes a variable's membership in the value index without
+// touching its value (ADR-0244). Membership is stamped by the version that wrote the
+// value, so when an instance moves to a version whose declaration differs — a
+// migration, or an operator's reindex — this is what brings the two back in line.
+//
+// It re-puts the variable with the new flag, which is what moves the index entry:
+// [Tx.reindexVariable] compares the stored record against the one being written, so
+// turning membership on adds the entry and turning it off removes it, both through the
+// one path that maintains the index. A variable that is gone, or already in step, is a
+// no-op — the command emits nothing in that case, but the fold must survive a replay of
+// an event whose variable a later record deleted.
+func (t *Tx) SetVariableIndexed(scope uint64, name string, indexed bool) error {
+	prev, err := t.GetVariable(scope, name)
+	if err != nil || prev == nil || prev.Indexed == indexed {
+		return err
+	}
+	next := *prev
+	next.Indexed = indexed
+	return t.PutVariable(&next)
+}
+
 // DeleteVariable removes a variable from its scope by name. It is idempotent —
 // deleting an absent variable is a no-op — and is used to drop an activity-local
 // variable scope when the activity completes (ADR-0068).

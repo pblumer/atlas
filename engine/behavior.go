@@ -34,6 +34,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTProcessInstance, model.IntentTerminating):      handleProcessInstanceTerminating,
 		handlerKey(model.VTProcessInstance, model.IntentPurging):          handleProcessInstancePurging,
 		handlerKey(model.VTProcessMigration, model.IntentMigrating):       handleProcessMigrating,
+		handlerKey(model.VTVariableIndex, model.IntentVariableReindex):    handleVariableReindex,
 		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck): handleConditionRecheck,
 		handlerKey(model.VTElementInstance, model.IntentActivating):       handleElementActivating,
 		handlerKey(model.VTElementInstance, model.IntentCompleting):       handleElementCompleting,
@@ -371,6 +372,51 @@ func handleProcessMigrating(c *ProcessingContext) {
 		Actor:              c.cmd.Actor,
 		Reason:             c.cmd.Reason,
 		FromProcessDefKey:  v.FromProcessDefKey,
+	})
+	// The instance now runs a version that may declare other variables searchable than
+	// the one that stamped its values (ADR-0244). Without this it would be missing from
+	// the index its new version's search reads — a wrong answer, not a slow one, because
+	// a declared name is answered from the index alone.
+	appendVariableIndexChanges(c, v.ProcessInstanceKey, to)
+}
+
+// handleVariableReindex brings one instance's variable-index membership back in line
+// with what its own process declares — the repair an operator asks for over instances
+// that were migrated before the migration itself did this, or after a declaration was
+// added to a version that already had instances on it. It emits nothing for an instance
+// already in step, so running it twice writes nothing the second time.
+func handleVariableReindex(c *ProcessingContext) {
+	piKey := c.cmd.Key
+	pi := c.GetProcessInstance(piKey)
+	if pi == nil {
+		return // finished and purged, or never there
+	}
+	cp := c.process(pi.ProcessDefKey)
+	if cp == nil {
+		return // the definition was undeployed between the API's check and this command
+	}
+	appendVariableIndexChanges(c, piKey, cp)
+}
+
+// appendVariableIndexChanges compares an instance's root-scope variables against what
+// cp declares searchable and emits one event per variable whose membership differs.
+//
+// Only the root scope is asked, because only it is indexed: an activity-local scope is
+// scratch that disappears when the activity completes (ADR-0068). The comparison is by
+// name alone, exactly as the write path stamps it — whether a value can be indexed at
+// all (a scalar, short enough) is the index's own question, asked where the entry is
+// written, so that one answer cannot drift into two.
+func appendVariableIndexChanges(c *ProcessingContext, piKey uint64, cp *compiler.CompiledProcess) {
+	c.VariablesOfScope(piKey, func(v model.VariableValue) {
+		want := cp.IsSearchableVariable(v.Name)
+		if want == v.Indexed {
+			return
+		}
+		c.AppendVariableIndexEvent(model.VariableIndexValue{
+			ProcessInstanceKey: piKey,
+			Name:               v.Name,
+			Indexed:            want,
+		})
 	})
 }
 

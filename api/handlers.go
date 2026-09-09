@@ -869,6 +869,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		// a namespace prefix is bound at the document root, so every pool of a
 		// collaboration shares the one declaration and the one mistake.
 		resp.Warnings = append(resp.Warnings, foreignAtlasNamespaceWarnings(body)...)
+		resp.Warnings = append(resp.Warnings, searchableDeclarationWarnings(body)...)
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
 }

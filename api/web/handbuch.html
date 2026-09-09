@@ -6302,7 +6302,9 @@ atlas worker --connector mssql</code></pre>
           und das Suchfeld über der Liste findet gezielt eine – gib einen <b>Instanzschlüssel</b> ein (das ist
           ein einzelner Lesezugriff, egal wie viele Instanzen es gibt) oder <code>name=wert</code> für eine
           Suche über die Prozessvariablen dieser Version. Damit die Wertsuche ebenfalls ein einzelner
-          Zugriff wird, sagt das Modell, wonach gesucht werden soll:
+          Zugriff wird, sagt das Modell, wonach gesucht werden soll: im Modeller trägst du die Namen
+          in den Prozess-Eigenschaften unter <b>Searchable variables</b> ein — nichts auswählen, Gruppe
+          <b>Process</b> — und das Modell erhält
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. Für eine so deklarierte
           Variable beantwortet der Index die Suche; alles andere liest die Instanzen der Version durch. Was
           du eingibst, wird dabei <b>vollständig</b> verglichen: <code>kdnr=MT-100</code> findet
@@ -6310,20 +6312,27 @@ atlas worker --connector mssql</code></pre>
           für beliebig viele Zeichen, <code>?</code> für genau eines, also findet <code>*MT-1*</code> alles,
           worin <code>MT-1</code> vorkommt. Willst du nach einem echten Stern oder Fragezeichen suchen,
           schreibe <code>\*</code> oder <code>\?</code>. Ein Prozess, der nichts deklariert, zahlt dafür
-          nichts.</li>
+          nichts. Migrierst du laufende Instanzen auf eine Version mit anderer Deklaration, zieht der
+          Index automatisch nach; für Instanzen, die vor dieser Änderung migriert wurden, gibt es
+          <code>POST /api/v1/processes/{key}/reindex-instances</code>.</li>
         <li data-l="en"><b><a href="/#/operations">Instances</a></b> – all runs, their state, variables and a
           complete timeline per instance. A version can hold hundreds of thousands of instances, so the list
           shows a <b>page</b> ("80 of 150") rather than everything: <b>Load more</b> fetches the next one, and
           the search box above the list finds a specific one – type an <b>instance key</b> (one read, whatever
           the instance count) or <code>name=value</code> to search this version's process variables. To make
-          the value search one read too, the model says what it wants to be found by:
+          the value search one read too, the model says what it wants to be found by: in the Modeler you type
+          the names into the process properties under <b>Searchable variables</b> — select nothing, group
+          <b>Process</b> — and the model gets
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. For a variable declared that
           way the index answers the search; anything else reads through the version's instances. Either way
           what you type is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not
           <code>MT-10001</code>. Widening is yours to ask for – <code>*</code> stands for any run of
           characters and <code>?</code> for exactly one, so <code>*MT-1*</code> finds anything containing
           <code>MT-1</code>. To search for a real star or question mark, write <code>\*</code> or
-          <code>\?</code>. A process that declares nothing pays nothing for it.</li>
+          <code>\?</code>. A process that declares nothing pays nothing for it. Migrating running instances onto a
+          version with a different declaration brings the index along; for instances migrated before
+          that was true, <code>POST /api/v1/processes/{key}/reindex-instances</code> repairs a
+          version's instances in bounded batches.</li>
         <li data-l="de"><b>Wer sitzt hier?</b> – in der <b>Live-Ansicht</b> einer Version ist das Diagramm
           selbst die Abfrage: <b>klicke auf ein Element</b>, und die Liste rechts zeigt genau die Instanzen,
           deren Token gerade dort steht. Ein Klick auf ein anderes Element wechselt, ein Klick daneben – auf

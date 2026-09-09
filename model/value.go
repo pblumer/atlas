@@ -944,6 +944,53 @@ func (v *ProcessMigrationValue) decode(src []byte) error {
 	return nil
 }
 
+// VariableIndexValue is one variable's membership in the value index, changed after
+// the fact. It carries no value, deliberately: the variable holds that, and the point
+// of this record is that the value did not change — only whether the index answers for
+// it (ADR-0244).
+//
+// It exists because membership is stamped by the version that wrote the value (I6),
+// while an instance can be moved to another version under an operator's hand. A
+// migration onto a version that declares more names, or fewer, would otherwise leave
+// the instance missing from the index its new version's search reads, or listed in it
+// under a version that never promised to be searchable by that name. The comparison is
+// made at command time against the compiled process, and one of these is emitted per
+// variable whose membership differs — so the fold, which cannot ask a compiled process
+// anything, is handed the answer.
+type VariableIndexValue struct {
+	ProcessInstanceKey uint64 // the root scope the variable lives in: only that scope is indexed
+	Name               string
+	Indexed            bool
+}
+
+func (*VariableIndexValue) ValueType() ValueType { return VTVariableIndex }
+
+func (v *VariableIndexValue) encode(dst []byte) []byte {
+	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessInstanceKey)
+	dst = appendString(dst, v.Name)
+	if v.Indexed {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
+}
+
+func (v *VariableIndexValue) decode(src []byte) error {
+	if len(src) < 8 {
+		return ErrShortBuffer
+	}
+	v.ProcessInstanceKey = binary.LittleEndian.Uint64(src)
+	name, rest, err := readString(src[8:])
+	if err != nil {
+		return err
+	}
+	v.Name = name
+	if len(rest) < 1 {
+		return ErrShortBuffer
+	}
+	v.Indexed = rest[0] != 0
+	return nil
+}
+
 // MessageSubscriptionValue is an open subscription: an element instance (a
 // message intermediate catch event) waiting for a named message whose
 // correlation key matches. Like a variable it carries genuine runtime data (the
@@ -1313,6 +1360,8 @@ func newValue(vt ValueType) Value {
 		return &OperatorActionValue{}
 	case VTProcessMigration:
 		return &ProcessMigrationValue{}
+	case VTVariableIndex:
+		return &VariableIndexValue{}
 	default:
 		return nil
 	}

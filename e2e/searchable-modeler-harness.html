@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas searchable-variables modeler e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor against a mock `api`, to verify
+         the process's "Searchable variables" declaration (atlas:searchable, ADR-0244).
+         Two things are being checked and only the exported XML can show them: that the
+         Modeler can now *author* the declaration at all — before this it existed only as
+         an attribute you hand-edited outside the tool — and that a model arriving with
+         one survives a round trip, which it does not unless api/web/atlas-moddle.json
+         declares the property (bpmn-js drops an attribute it has no property for).
+
+         The process declares two names, so the panel has something to show and the
+         round trip has something to lose. It also declares two start variables, which is
+         what the marks under the field are read against: identityId is written by the
+         model and typed string, payload is written but holds JSON (which the index cannot
+         hold), and "item" is written by nothing here. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+
+      const view = document.getElementById("view");
+
+      const DECLARED_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_searchable" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="identitaet" name="Identität" isExecutable="true" atlas:searchable="identityId,item">
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="identityId" type="string" />
+        <atlas:startVariable name="payload" type="json" />
+      </atlas:startForm>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start_1" name="Antrag geht ein"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="Activity_check" name="Prüfen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_check"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Activity_check" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="identitaet">
+    <bpmndi:BPMNShape id="Start_1_s" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_check_s" bpmnElement="Activity_check"><dc:Bounds x="260" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_s" bpmnElement="End_1"><dc:Bounds x="440" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f0_e" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f1_e" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="440" y="138"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The same process with nothing declared: the field must come up empty rather
+      // than showing the other model's names, and a declaration typed into it has to
+      // reach the XML that gets deployed.
+      const PLAIN_XML = DECLARED_XML.replace(' atlas:searchable="identityId,item"', "");
+
+      let current = DECLARED_XML;
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return current;
+        if (method === "GET" && /\/processes$/.test(url)) return [];
+        if (method === "GET" && /\/drafts$/.test(url)) return [];
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/forms/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      // The panel warns about a declaration the compiler would refuse, so the tests
+      // need to see the toasts as well as the XML.
+      window.__toasts = [];
+      const toast = (msg, kind) => window.__toasts.push({ msg: String(msg), kind });
+
+      window.__mount = (kind) => {
+        current = kind === "plain" ? PLAIN_XML : DECLARED_XML;
+        window.__toasts = [];
+        return mountEditor(view, { api, toast, key: 42 });
+      };
+      // Nothing selected is what shows the process itself, which is where the
+      // declaration lives.
+      window.__deselect = () => window.__atlasModeler.get("selection").select(null);
+      window.__xml = async () => (await window.__atlasModeler.saveXML({ format: true })).xml;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

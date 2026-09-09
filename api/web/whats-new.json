@@ -2,6 +2,129 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-deploy-says-when-a-searchable-declaration-cannot-be-hono",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The deploy answers with the same reading, for models it never sees in the Modeler",
+        "de": "Das Deployment gibt dieselbe Einschätzung, auch ohne Modeler"
+      },
+      "summary": {
+        "en": "The marker under the field only helps whoever is looking at the diagram. A model deployed from a pipeline or over the API never passes through the Modeler at all, so the deploy response now carries the same reading as a warning beside the ones it already gives. It never refuses the deploy. A name the model itself declares as a JSON input is always reported; a name nothing in the model produces is reported only where the model has stated its inputs, and the sentence says plainly that a worker writing it makes the case fine.",
+        "de": "Die Markierung unter dem Feld hilft nur, wer das Diagramm vor sich hat. Ein Modell, das aus einer Pipeline oder über die API deployt wird, sieht den Modeler nie. Deshalb enthält die Deploy-Antwort jetzt dieselbe Einschätzung als Warnung, neben den Warnungen, die sie ohnehin ausgibt. Abgelehnt wird nie. Ein Name, den das Modell selbst als JSON-Eingabe deklariert, wird immer gemeldet; ein Name, den nichts im Modell erzeugt, nur dann, wenn das Modell seine Eingaben überhaupt benannt hat — und der Satz sagt ausdrücklich, dass ein Worker, der ihn schreibt, den Fall in Ordnung macht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Deployment"
+      ]
+    },
+    {
+      "id": "a-searchable-declaration-that-indexes-nothing-now-says-so",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A name that will never be found is marked while you type it",
+        "de": "Ein Name, der nie gefunden wird, wird beim Tippen markiert"
+      },
+      "summary": {
+        "en": "Naming a variable as searchable is accepted whatever you write, so a typo, or a name holding a whole JSON structure, produced a search that stays empty forever with nothing saying why. Each name now gets a small marker under the field. Red where it is settled: the same name twice, or a name the model itself says holds a structure, which cannot be indexed. Amber where it is a question: nothing in this diagram writes that name — usually a typo, but a worker or an outside caller can write a name the diagram never mentions. Hover a marker for the reason.",
+        "de": "Eine als suchbar benannte Variable wurde bisher unbesehen übernommen. Ein Tippfehler oder ein Name, der eine ganze JSON-Struktur hält, führte damit zu einer Suche, die dauerhaft leer bleibt, ohne dass irgendwo stand, warum. Jeder Name erhält nun eine kleine Markierung unter dem Feld. Rot, wo die Sache klar ist: derselbe Name zweimal, oder ein Name, von dem das Modell selbst sagt, dass er eine Struktur hält, die nicht indexiert werden kann. Bernstein, wo es eine Frage ist: Nichts in diesem Diagramm schreibt diesen Namen — meist ein Tippfehler, aber ein Worker oder ein Aufruf von aussen kann einen Namen schreiben, den das Diagramm nie erwähnt. Der Grund steht im Tooltip der Markierung."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-migration-now-re-indexes-what-its-target-declares",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Migrated instances are found by the version they moved to",
+        "de": "Migrierte Instanzen werden von ihrer neuen Version gefunden"
+      },
+      "summary": {
+        "en": "An instance carries the searchable declaration of the version that wrote its values. Moving it to a version that declares more, or fewer, left that answer behind: a search over the new version simply did not return it, which reads like the instance is not there rather than like a stale index. A migration now brings the instance's searchability along, in both directions. For instances migrated before this, an administrator can repair a whole version in bounded batches; running that twice writes nothing the second time.",
+        "de": "Eine Instanz trägt die Suchbarkeits-Angabe der Version, die ihre Werte geschrieben hat. Wurde sie auf eine Version verschoben, die mehr oder weniger deklariert, blieb diese Angabe zurück: Eine Suche über die neue Version lieferte die Instanz schlicht nicht — was so aussieht, als gäbe es sie nicht, und nicht wie ein veralteter Index. Eine Migration zieht die Suchbarkeit jetzt mit, in beide Richtungen. Für Instanzen, die vorher migriert wurden, kann eine Administratorin oder ein Administrator eine ganze Version in begrenzten Schritten nachziehen; ein zweiter Durchlauf schreibt nichts mehr."
+      },
+      "link": {
+        "label": "ADR-0244",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
+      },
+      "tags": [
+        "Operations",
+        "Migration"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "the-modeler-can-now-say-what-a-process-is-found-by",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Say what a process should be findable by, in the Modeler",
+        "de": "Im Modeler festlegen, wonach ein Prozess gefunden wird"
+      },
+      "summary": {
+        "en": "Searching a version's instances by a business value — \"where is MT-1998?\" — is a single read instead of a walk through every instance, but only for the variables the process says it wants to be found by. Until now that declaration existed only as an attribute in the BPMN file, so making one meant editing the exported XML by hand. The process properties now carry a Searchable variables field beside the two retention fields: select nothing in the diagram, open the Process group, and name the one or two business keys you actually search by.",
+        "de": "Die Suche nach einem Geschäftswert in den Instanzen einer Version — «wo ist MT-1998?» — ist ein einzelner Lesezugriff statt eines Durchlaufs durch alle Instanzen, aber nur für die Variablen, die der Prozess dafür benennt. Diese Angabe gab es bisher nur als Attribut in der BPMN-Datei, man musste also das exportierte XML von Hand bearbeiten. Die Prozess-Eigenschaften haben jetzt ein Feld «Searchable variables» neben den beiden Aufbewahrungsfeldern: nichts im Diagramm auswählen, die Gruppe «Process» öffnen und die ein bis zwei Geschäftsschlüssel eintragen, nach denen Sie tatsächlich suchen."
+      },
+      "link": {
+        "label": "ADR-0244",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
+      },
+      "tags": [
+        "Modeler",
+        "Operations"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the Modeler and load the process you want to find instances of.",
+          "Click on empty canvas so nothing is selected — the panel then shows the process itself.",
+          "Open the Process group and find Searchable variables under Instance TTL and History TTL.",
+          "Type the variable names, separated by commas, for example: identityId, item.",
+          "Deploy. From then on, searching identityId=MT-1998 in Operations answers from the index."
+        ],
+        "de": [
+          "Öffnen Sie den Modeler und laden Sie den Prozess, dessen Instanzen Sie finden wollen.",
+          "Klicken Sie auf eine leere Stelle der Zeichenfläche, damit nichts ausgewählt ist — das Panel zeigt dann den Prozess selbst.",
+          "Öffnen Sie die Gruppe «Process»; «Searchable variables» steht unter «Instance TTL» und «History TTL».",
+          "Tragen Sie die Variablennamen kommagetrennt ein, zum Beispiel: identityId, item.",
+          "Deployen Sie. Danach beantwortet die Suche identityId=MT-1998 in Operations der Index."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -231,138 +354,6 @@
         "label": {
           "en": "Import a MIM workflow",
           "de": "MIM-Workflow importieren"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-join-counts-tokens-per-incoming-sequence-flow",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Changed",
-      "title": {
-        "en": "A parallel join now waits for every branch, as BPMN says it must",
-        "de": "Ein paralleler Join wartet jetzt auf jeden Zweig — so, wie BPMN es verlangt"
-      },
-      "summary": {
-        "en": "A parallel join is supposed to wait until a token has arrived over each of its incoming connections. Atlas counted tokens on the join rather than per connection, so two tokens arriving over the same branch could satisfy it while another branch had not arrived at all — and it then swallowed the extra token on its way through. That is not an exotic case: a fork whose branches rejoin through an exclusive merge produces it. The join now waits for one token on each incoming connection and takes exactly one from each. Please look at models that fork and rejoin: where such a join used to continue quietly with a branch missing, it now stops and waits, which shows up in Operations as a stuck token you can see and terminate rather than as a process that ran to the end on incomplete work.",
-        "de": "Ein paralleler Join soll warten, bis über jede seiner eingehenden Verbindungen ein Token eingetroffen ist. Atlas zählte die Tokens am Join statt je Verbindung — zwei Tokens über denselben Zweig konnten ihn also auslösen, während ein anderer Zweig noch gar nicht angekommen war, und das überzählige Token verschwand beim Durchlauf. Das ist kein exotischer Fall: Eine Verzweigung, deren Äste über ein exklusives Gateway wieder zusammenlaufen, erzeugt ihn. Der Join wartet jetzt auf ein Token je eingehender Verbindung und nimmt aus jeder genau eines. Bitte sehen Sie Modelle durch, die verzweigen und wieder zusammenführen: Wo ein solcher Join bisher still weiterlief, obwohl ein Zweig fehlte, bleibt er nun stehen — sichtbar in Operations als hängendes Token, das Sie beenden können, statt als Prozess, der auf unvollständiger Arbeit bis zum Ende lief."
-      },
-      "link": {
-        "label": "ADR-0024",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0024-parallel-gateway-join.md"
-      },
-      "tags": [
-        "Engine",
-        "BPMN"
-      ],
-      "try": {
-        "label": {
-          "en": "Check your models",
-          "de": "Modelle prüfen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-refused-variable-write-now-stops-what-comes-next-instead-o",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Changed",
-      "title": {
-        "en": "A value that does not fit now stops the step, instead of only being reported",
-        "de": "Ein Wert, der nicht passt, hält den Schritt jetzt an, statt nur gemeldet zu werden"
-      },
-      "summary": {
-        "en": "A variable has a size limit, and a value past it is refused with an incident naming the variable and both sizes. That was only half the story: ending an element clears the incident it carries, so a step that refused a write and then finished left nothing behind at all — not the value, and not the report. The run looked successful, and the only sign was a variable that was not there. Now the step stops. A message or signal does not complete, a called process does not hand its result back, and an activity does not finish having produced nothing. Resolve the incident and the write is retried, so correcting the data — or raising the limit — lets the instance carry on.",
-        "de": "Eine Variable hat eine Grössengrenze, und ein Wert darüber wird abgelehnt — mit einem Incident, der die Variable und beide Grössen nennt. Das war nur die halbe Geschichte: Wenn ein Element endet, wird sein Incident gelöscht. Ein Schritt, der einen Wert ablehnte und danach fertig wurde, hinterliess also gar nichts — weder den Wert noch die Meldung. Der Lauf sah erfolgreich aus, und das einzige Anzeichen war eine Variable, die fehlte. Jetzt bleibt der Schritt stehen. Eine Nachricht oder ein Signal wird nicht abgeschlossen, ein gerufener Prozess reicht sein Ergebnis nicht zurück, und eine Aktivität wird nicht fertig, ohne etwas erzeugt zu haben. Lösen Sie den Incident auf, wird erneut geschrieben — Daten korrigieren oder die Grenze anheben, und die Instanz läuft weiter."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Changed",
-      "title": {
-        "en": "The class diagram reads properly on a real model",
-        "de": "Das Klassendiagramm ist auch bei einem echten Modell lesbar"
-      },
-      "summary": {
-        "en": "Data › Model draws your information model. On anything larger than a handful of classes it did not hold together: attribute names ran out over the edges of their boxes, relationships were drawn as straight lines across everything between their ends, and several lines into the same class landed exactly on top of one another. Boxes now grow to fit what is written in them, lines turn at right angles like the process modeler's, and lines going the same way are spread apart. The tools for drawing have moved off the title bar into a palette down the left edge — the same one the process and decision modelers use.",
-        "de": "Unter «Daten › Modell» wird Ihr Informationsmodell gezeichnet. Bei mehr als einer Handvoll Klassen hielt das nicht stand: Attributnamen liefen über den Rand ihrer Kästchen hinaus, Beziehungen wurden als gerade Linien quer über alles Dazwischenliegende gezogen, und mehrere Linien zur selben Klasse lagen exakt übereinander. Kästchen wachsen jetzt mit ihrem Inhalt, Linien knicken rechtwinklig wie im Prozess-Modeler, und gleichlaufende Linien werden auseinandergezogen. Die Zeichenwerkzeuge sind aus der Titelleiste in eine Palette am linken Rand gewandert — dieselbe, die Prozess- und Entscheidungs-Modeler verwenden."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "every-list-opens-with-its-search-boxes-showing",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Changed",
-      "title": {
-        "en": "Every list opens with its search boxes showing",
-        "de": "Jede Liste zeigt ihre Suchfelder von Anfang an"
-      },
-      "summary": {
-        "en": "Every table in Atlas can be searched column by column: a row of boxes under the header, one per column, each narrowing the list to the rows whose cell contains what you typed — and several at once when you fill in more than one. That row existed before, but it was collapsed behind a small funnel icon at the right end of the header, so what you saw when a list opened was a table with no visible way to search it. The boxes are now on screen from the moment the list is, on every list. The funnel is still there and now does the opposite: it takes the row away when you would rather have the vertical space, and a list remembers that choice for the next time you open it, exactly as it already remembers which column you sorted by. Where a list had grown its own search field above the table — the Modeler's application detail and the process list under Operations › Instances — that field is gone: the Name column's box does the same job and a little more, since it also searches the id printed under the name. The Tasks inbox and the Repository are not tables and keep their own search fields.",
-        "de": "Jede Tabelle in Atlas lässt sich spaltenweise durchsuchen: eine Zeile mit Feldern unter der Kopfzeile, eines pro Spalte, das die Liste auf die Zeilen einschränkt, deren Zelle den eingegebenen Text enthält — und mehrere Spalten gleichzeitig, wenn Sie mehrere Felder ausfüllen. Diese Zeile gab es schon, sie war aber hinter einem kleinen Trichtersymbol am rechten Rand der Kopfzeile eingeklappt; sichtbar war beim Öffnen einer Liste also eine Tabelle ohne erkennbare Suche. Die Felder stehen jetzt von Anfang an da, in jeder Liste. Das Trichtersymbol bleibt und macht nun das Gegenteil: Es blendet die Zeile aus, wenn Ihnen die Höhe wichtiger ist, und eine Liste merkt sich diese Entscheidung bis zum nächsten Öffnen — genauso, wie sie sich schon merkt, nach welcher Spalte Sie sortiert haben. Wo eine Liste ein eigenes Suchfeld über der Tabelle hatte — die Anwendungsansicht im Modeler und die Prozessliste unter Operations › Instances —, entfällt dieses Feld: Das Feld der Spalte Name leistet dasselbe und etwas mehr, weil es auch die ID unter dem Namen durchsucht. Der Aufgaben-Eingang und das Repository sind keine Tabellen und behalten ihre eigenen Suchfelder."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Console",
-        "Modeler",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Modeler: the Applications list shows a box under each of Name, Artifacts and Last changed.",
-          "Type a few letters into the Name box — the list narrows as you type, and an application whose name does not contain them disappears.",
-          "Fill in a second box as well: a row has to match both, so Name plus Last changed finds what one column alone cannot.",
-          "Click a column header to sort by it; the arrow shows the direction, and clicking again reverses it.",
-          "Click the funnel at the right end of the header to put the boxes away. Navigate elsewhere and come back — that list is still without them, and the funnel brings them back."
-        ],
-        "de": [
-          "Öffnen Sie den Modeler: Die Liste der Anwendungen zeigt je ein Feld unter Name, Artifacts und Last changed.",
-          "Tippen Sie einige Buchstaben in das Feld unter Name — die Liste wird beim Tippen enger, Anwendungen ohne diese Zeichenfolge verschwinden.",
-          "Füllen Sie zusätzlich ein zweites Feld aus: Eine Zeile muss beide Bedingungen erfüllen, Name plus Last changed findet also, was eine Spalte allein nicht findet.",
-          "Klicken Sie auf eine Spaltenüberschrift, um danach zu sortieren; der Pfeil zeigt die Richtung, ein weiterer Klick dreht sie um.",
-          "Klicken Sie auf den Trichter am rechten Rand der Kopfzeile, um die Felder auszublenden. Wechseln Sie die Ansicht und kommen Sie zurück — die Liste ist weiterhin ohne Felder, der Trichter holt sie zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
         },
         "route": "#/modeler"
       }

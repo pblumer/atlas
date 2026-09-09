@@ -381,6 +381,16 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.MigrateInstance(&v.migration)
 		}
 
+	case model.VTVariableIndex:
+		if h.Intent == model.IntentVariableIndexed {
+			// Correct one variable's membership in the value index after its instance
+			// moved to a version that declares something else (ADR-0244). The comparison
+			// was made at command time against the compiled process, because this fold
+			// cannot ask one anything; what arrives here is the answer, so replay
+			// reproduces the same index from the log alone (invariants I4/I6).
+			return tx.SetVariableIndexed(v.variableIndex.ProcessInstanceKey, v.variableIndex.Name, v.variableIndex.Indexed)
+		}
+
 	case model.VTDecisionEvaluation:
 		if h.Intent == model.IntentDecisionEvaluated {
 			// Retain how a business rule task's decision was made — its inputs, outputs

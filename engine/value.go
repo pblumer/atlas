@@ -29,6 +29,11 @@ type inflightValue struct {
 	// also what makes inflightValue non-comparable, so compare one with reflect.DeepEqual
 	// rather than ==.
 	migration model.ProcessMigrationValue
+	// variableIndex rides only on the reindex command and the events it emits: a
+	// membership correction after a migration or an operator's repair (ADR-0244). Like
+	// migration it never rides token movement, so it costs the hot path nothing but the
+	// field.
+	variableIndex model.VariableIndexValue
 }
 
 // asValue returns a model.Value pointing at the active field, for encoding. The
@@ -68,6 +73,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.operatorAct
 	case model.VTProcessMigration:
 		return &v.migration
+	case model.VTVariableIndex:
+		return &v.variableIndex
 	}
 	return nil
 }
@@ -148,6 +155,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTProcessMigration:
 		if v, ok := rec.Value.(*model.ProcessMigrationValue); ok {
 			iv.migration = *v
+		}
+	case model.VTVariableIndex:
+		if v, ok := rec.Value.(*model.VariableIndexValue); ok {
+			iv.variableIndex = *v
 		}
 	}
 	return iv

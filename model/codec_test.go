@@ -45,6 +45,16 @@ func TestRecordRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name:   "variable index membership",
+			vt:     VTVariableIndex,
+			intent: IntentVariableIndexed,
+			value: &VariableIndexValue{
+				ProcessInstanceKey: NewKey(2, 9),
+				Name:               "identityId",
+				Indexed:            true,
+			},
+		},
+		{
 			name:   "job",
 			vt:     VTJob,
 			intent: IntentJobCreated,
@@ -470,9 +480,11 @@ func TestVariableIndexedRoundTrip(t *testing.T) {
 
 // TestVariableIndexedAppendCompatible pins its on-disk compatibility, and with it the
 // one honest limitation of the index: a record written before the flag existed reads
-// back as not indexed. Such a variable is findable by a content walk, never by a
-// seek, until it is written again — which is why the index is seeded once from the
-// declarations at startup rather than assumed complete.
+// back as not indexed. Such a variable is findable by a content walk, never by a seek,
+// until it is written again — or until its membership is corrected by a
+// VariableIndexed event, which is what a migration and an operator's reindex emit
+// (ADR-draft-migration-reindexes-searchable-variables). Nothing seeds the index at
+// startup: it is folded from the log like every other derived index.
 func TestVariableIndexedAppendCompatible(t *testing.T) {
 	full := AppendValue(nil, &VariableValue{
 		ScopeKey: NewKey(1, 5), Name: "identityId", Kind: VarString, Text: "MT-1998",
@@ -523,6 +535,31 @@ func TestVariableIndexText(t *testing.T) {
 			got, ok := tc.v.IndexText()
 			if ok != tc.wantOK || (ok && got != tc.want) {
 				t.Errorf("IndexText() = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
+
+// TestVariableIndexDecodeErrors covers the guards on a truncated membership record.
+// It carries a length-prefixed name, so a buffer can end in three places: before the
+// instance key, inside the name, and before the flag that is the whole point of the
+// record — and a flag read off the end would silently invert an instance's
+// searchability.
+func TestVariableIndexDecodeErrors(t *testing.T) {
+	full := AppendValue(nil, &VariableIndexValue{
+		ProcessInstanceKey: NewKey(1, 3), Name: "identityId", Indexed: true,
+	})
+	for _, tc := range []struct {
+		name string
+		buf  []byte
+	}{
+		{"before the key", full[:4]},
+		{"inside the name", full[:12]},
+		{"before the flag", full[:len(full)-1]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := DecodeValue(VTVariableIndex, tc.buf); !errors.Is(err, ErrShortBuffer) {
+				t.Errorf("DecodeValue = %v, want ErrShortBuffer", err)
 			}
 		})
 	}
