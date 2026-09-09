@@ -31,6 +31,11 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	doc := fmt.Sprintf(
 		"Aus MIM/FIM-XOML konvertiert (Wurzel-Aktivität %s). %d nativ, %d erhalten, %d manuell zu prüfen. Nicht übersetzte Konstrukte sind in atlas:mimSource erhalten.",
 		root.local(), b.report.Count(StatusNative), b.report.Count(StatusPreserved), b.report.Count(StatusManualReview))
+	// What MIM knows about the workflow and the XOML does not say — the phase it
+	// runs in above all — belongs on the process, not only in the import response.
+	if s := b.report.Source.describe(); s != "" {
+		doc += " Aus der MIM-WorkflowDefinition: " + s
+	}
 	if len(b.report.Warnings) > 0 {
 		doc += " Hinweis: Die Eingabe war nicht wohlgeformt und wurde vor dem Parsen repariert; Einzelheiten im Konvertierungsbericht."
 	}

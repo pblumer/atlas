@@ -40,11 +40,15 @@
 //
 // Conditionality is part of that structure even where MIM does not express it as
 // control flow: an activity of the MIMWAL library runs only when its
-// ActivityExecutionCondition holds, so such an activity is wrapped in an
-// exclusive split with a bypass, and one carrying an Iteration becomes a
-// sequential multi-instance activity. Neither expression is translated — see
-// emitGuard and miPlaceholder for why — but both are documented on the model and
-// flagged in the Report.
+// ActivityExecutionCondition holds, and a ConditionedActivityGroup's child runs
+// on the passes where its WhenCondition holds, so such an activity is wrapped in
+// an exclusive split with a bypass; one carrying an Iteration becomes a
+// sequential multi-instance activity, and the group itself the repeat-until loop
+// it is. An IfElseBranchActivity usually carries its condition as a WF property
+// element rather than an attribute, which is read as the condition it is rather
+// than as a step in the flow. No expression is translated — see emitGuard and
+// miPlaceholder for why — but each is documented on the model and flagged in the
+// Report.
 //
 // The serialised .NET collections a MIMWAL activity hangs off itself — the
 // queries it runs and the assignments it makes, thousands of characters of
