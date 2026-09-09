@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strings"
@@ -13,10 +14,6 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/token"
 )
-
-// maxJSONBytes caps a model document. A class diagram a person can read is small;
-// this is generous enough that the cap is never the thing a modeler meets.
-const maxJSONBytes = 4 << 20
 
 var (
 	errBodyTooLarge = errors.New("request body is too large")
@@ -53,11 +50,17 @@ type Service struct {
 	access AccessResolver
 	newID  IDGenerator
 	now    Clock
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-draft-one-place-for-budgets).
+	Limits limits.Limits
 }
 
 // New builds the service.
 func New(loop *runloop.Loop, store *Store, access AccessResolver, newID IDGenerator, now Clock) *Service {
-	return &Service{loop: loop, store: store, access: access, newID: newID, now: now}
+	return &Service{loop: loop, store: store, access: access, newID: newID, now: now, Limits: limits.Default()}
 }
 
 // HandleSubset serves the authoring subset: what may be created, what may be drawn
@@ -81,7 +84,7 @@ type createRequest struct {
 // HandleCreate starts an empty information model for an application.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var payload createRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	payload.ApplicationID = strings.TrimSpace(payload.ApplicationID)
@@ -210,7 +213,7 @@ type updateRequest struct {
 // deploy resolving `itemSubjectRef` against it never meets a half-model.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 	var payload updateRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 
@@ -530,8 +533,8 @@ func writeReadOutcome(w http.ResponseWriter, refusal *operationRefusal, err erro
 	return false
 }
 
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return decodeJSONLimit(w, r, dst, maxJSONBytes)
+func (s *Service) decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
+	return decodeJSONLimit(w, r, dst, s.budgets().ModelUpload)
 }
 
 func decodeJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
@@ -556,4 +559,15 @@ func requestActor(r *http.Request) string {
 		return principal.Username
 	}
 	return ""
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

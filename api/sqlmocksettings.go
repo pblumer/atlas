@@ -21,11 +21,6 @@ import (
 //
 // [ADR-0173]: https://github.com/pblumer/atlas/blob/main/docs/adr/0173-generic-sql-connector.md
 
-// maxSQLMockBytes bounds the mockup body, which carries the seed's whole text. It is
-// the AD switch's limit for the same reason: a seed of a few hundred answers is
-// unremarkable, and past this the answer is a smaller seed rather than a bigger field.
-const maxSQLMockBytes = 1 << 18 // 256 KiB
-
 // handleGetSQLMock reports the switch and what is loaded behind it.
 //
 // "configured" tells the Console the difference between a decision made here and none
@@ -68,7 +63,7 @@ func (s *Server) handleGetSQLMock(w http.ResponseWriter, r *http.Request) {
 // handleSetSQLMock stores the switch and restarts the supervised SQL workers holding
 // it.
 func (s *Server) handleSetSQLMock(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxSQLMockBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

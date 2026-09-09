@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"net/http"
 	"strings"
 	"time"
@@ -136,6 +137,12 @@ type Service struct {
 	source func(r *http.Request, processID string) (Source, bool, error)
 	// timeout bounds one call to a model.
 	timeout time.Duration
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-draft-one-place-for-budgets).
+	Limits limits.Limits
 }
 
 // New builds the generation service. All three collaborators are the server's, and each
@@ -144,7 +151,7 @@ type Service struct {
 func New(workers func(*http.Request) ([]Worker, error),
 	dial func(*http.Request, string) (agent.Model, error),
 	source func(*http.Request, string) (Source, bool, error)) *Service {
-	return &Service{workers: workers, dial: dial, source: source, timeout: defaultTimeout}
+	return &Service{workers: workers, dial: dial, source: source, timeout: defaultTimeout, Limits: limits.Default()}
 }
 
 // errNoWorker is the "not configured" state, told apart from every other failure because
@@ -212,7 +219,7 @@ func (s *Service) Generate(r *http.Request, req Request) (Response, int, error) 
 		return Response{}, http.StatusBadGateway,
 			fmt.Errorf("the AI Worker %q answered with nothing", worker.Name)
 	}
-	schema, err := SchemaFrom(answer, strings.TrimSpace(req.FormID))
+	schema, err := SchemaFrom(answer, strings.TrimSpace(req.FormID), s.budgets().Asset)
 	if err != nil {
 		// The model answered, and its answer was not a form. That is not a server
 		// failure and not the author's mistake either — it is the one outcome this
@@ -282,4 +289,15 @@ func currentSchema(raw json.RawMessage) string {
 		return ""
 	}
 	return string(out)
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

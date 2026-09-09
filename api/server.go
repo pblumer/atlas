@@ -76,6 +76,7 @@ import (
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/jobtype"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/metrics"
 	"github.com/pblumer/atlas/model"
@@ -172,6 +173,14 @@ type deployment struct {
 type Server struct {
 	proc  *engine.Processor
 	store *state.Store
+
+	// limits are the installation's resource budgets: how much a caller, a called
+	// service, or a running process may make this server hold at once. Every ceiling
+	// in the API reads its number from here rather than from a constant beside the
+	// handler, so the set is enumerable and an operator can move it (ADR-draft-one-place-for-budgets).
+	// New defaults it to limits.Default(), so a server nobody configured has every
+	// budget it always had.
+	limits limits.Limits
 
 	// dataDir is the root under which every durable store lives (the WAL, the
 	// state store, and the design-time sidecar directories). The backup/restore
@@ -658,6 +667,25 @@ type Option func(*Server)
 // so an operator can read server logs from the web UI. The command builds the
 // buffer, tees the standard logger into it, and passes it here.
 func WithLogBuffer(b *LogBuffer) Option { return func(s *Server) { s.logs = b } }
+
+// budgets is how every handler reads a ceiling. It defaults a Server that was built
+// as a struct literal — tests do, in seventy-odd places — to [limits.Default],
+// because the zero Limits is sixteen ceilings of zero and a ceiling of zero admits
+// nothing. That failure does not look like missing configuration; it looks like a
+// bad request, and a test asserting "too large" would pass for the wrong reason.
+// New always sets them, so this only ever fires for a literal.
+func (s *Server) budgets() limits.Limits {
+	if s.limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.limits
+}
+
+// WithLimits sets the installation's resource budgets. Without it a server runs on
+// [limits.Default], which is what every ceiling in the API was before they had a
+// name. There is deliberately no way to remove a budget: "off" is the state they
+// exist to prevent, so an unset field is a default and not an absence.
+func WithLimits(l limits.Limits) Option { return func(s *Server) { s.limits = l } }
 
 // WithoutDocs disables the OpenAPI document at /api/v1/openapi.json and the
 // Scalar API explorer at /api/docs, which are otherwise served by default. Pass
@@ -1165,6 +1193,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:        proc,
 		store:       store,
 		dataDir:     dataDir,
+		limits:      limits.Default(), // WithLimits overrides; there is no "no budget"
 		remoteNodes: newRemoteNodeCache(),
 		quit:        quit,
 		runLoop:     runloop.New(quit),
@@ -1340,6 +1369,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// WithPlaygroundSessions reaches the registry it configures.
 	s.playgroundSessions = playground.NewRegistry(s.playgroundTTL, playgroundMaxSessions)
 	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
+	// Every sub-service reads the ceilings this server was configured with, rather
+	// than the defaults its own constructor set. One assignment each, here, because
+	// the options have all run by now: WithLimits is what s.limits already reflects.
+	// A service added without a line here keeps the defaults — the completeness test
+	// in the limits package is what notices.
+	s.formGen.Limits = s.budgets()
+	s.processDocs.Limits = s.budgets()
+	s.taskFolders.Limits = s.budgets()
+	s.panorama.Limits = s.budgets()
+	s.infomodel.Limits = s.budgets()
+	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred
 	// and never persisted; absent one, a key is loaded from — or generated into —

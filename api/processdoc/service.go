@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strconv"
@@ -58,6 +59,12 @@ type Service struct {
 	// newToken mints a share token. Injected rather than called directly so the
 	// service can be driven with a deterministic token in tests.
 	newToken func() (string, error)
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-draft-one-place-for-budgets).
+	Limits limits.Limits
 }
 
 // New builds the documentation service over its own store directory. allow,
@@ -73,6 +80,7 @@ func New(loop *runloop.Loop, store *Store, allow func(clientIP string) bool,
 		allow:    allow,
 		deployed: deployed,
 		newToken: newToken,
+		Limits:   limits.Default(),
 	}
 }
 
@@ -84,11 +92,6 @@ func New(loop *runloop.Loop, store *Store, allow func(clientIP string) bool,
 //
 // Design-time only: nothing here reaches the event log, the processor, or
 // recovery.
-
-// maxUploadBytes caps a documentation upload. A document is a diagram raster
-// plus its element prose; this is a sanity bound on the base64-carrying request
-// body, not a tuning knob.
-const maxUploadBytes = 24 << 20 // 24 MiB
 
 // pdfMagic is the header every PDF opens with. The server stores opaque bytes,
 // but it refuses to store something that is plainly not a document — otherwise a
@@ -181,7 +184,7 @@ type createReq struct {
 // (ADR-0143). Body: the produced PDF plus the element prose it describes.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxUploadBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Import))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -446,7 +449,7 @@ type pruneResp struct {
 // already-short history removes nothing.
 func (s *Service) HandlePrune(w http.ResponseWriter, r *http.Request) {
 	processID := r.PathValue("processId")
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -500,4 +503,15 @@ func (s *Service) HandlePublic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.servePDF(w, rec)
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

@@ -70,7 +70,7 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name string `json:"name"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	name := strings.TrimSpace(payload.Name)
@@ -118,7 +118,7 @@ func (s *Server) handleRenameGroup(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Name string `json:"name"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	name := strings.TrimSpace(payload.Name)

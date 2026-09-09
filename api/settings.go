@@ -31,15 +31,6 @@ type registrationConfig struct {
 	URL       string `json:"url,omitempty"`
 }
 
-// maxThemeBytes bounds the theme request body — it carries a single short colour
-// string, so a tiny cap is plenty and fails a bloated body fast.
-const maxThemeBytes = 1 << 12
-
-// maxADMockBytes bounds the Active-Directory mockup body, which carries the seed's
-// whole text rather than a setting's worth of it
-// (ADR-0202).
-const maxADMockBytes = 1 << 18 // 256 KiB
-
 // hexColorRe matches a canonical "#rrggbb" colour. Validation lives server-side so
 // a malformed value can never be persisted and served to every browser.
 var hexColorRe = regexp.MustCompile(`^#[0-9a-f]{6}$`)
@@ -80,7 +71,7 @@ func (s *Server) handleGetTheme(w http.ResponseWriter, _ *http.Request) {
 // handleSetTheme stores the org-wide brand accent. Admin-gated: it changes what
 // every user of the instance sees.
 func (s *Server) handleSetTheme(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -118,11 +109,6 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// maxLogoBytes bounds an uploaded org logo (ADR-0148). A brand mark is small — a
-// few KB of PNG or SVG — so a tight cap rejects an oversized or bogus upload fast
-// while leaving generous headroom for a high-resolution raster mark.
-const maxLogoBytes = 512 << 10 // 512 KiB
 
 // pngMagic is the 8-byte signature every PNG begins with. Validating the bytes
 // server-side (not just the client's Content-Type) means a mislabelled or corrupt
@@ -196,7 +182,7 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 	}
 	// Read one byte past the cap so an over-limit body is detected, not silently
 	// truncated into a "valid" smaller image.
-	data, err := io.ReadAll(io.LimitReader(r.Body, maxLogoBytes+1))
+	data, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Asset+1))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -205,7 +191,7 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "empty logo body")
 		return
 	}
-	if len(data) > maxLogoBytes {
+	if int64(len(data)) > s.budgets().Asset {
 		httpapi.Error(w, http.StatusRequestEntityTooLarge, "logo exceeds the 512 KiB limit")
 		return
 	}
@@ -340,7 +326,7 @@ func (s *Server) handleGetRegistration(w http.ResponseWriter, _ *http.Request) {
 // registration off. 400 if the named process is not a publishable public form, so
 // an operator gets immediate feedback rather than a silently dead link.
 func (s *Server) handleSetRegistration(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxThemeBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -471,7 +457,7 @@ func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
 	// body" on a seed that was perfectly good, which is a maddening thing to debug.
 	// MaxBytesReader says the body is too large instead, and 256 KB holds a few thousand
 	// entries: past that, the answer is a smaller seed, not a bigger field.
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxADMockBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

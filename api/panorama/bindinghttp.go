@@ -59,7 +59,7 @@ type setBindingRequest struct {
 // left byte-for-byte alone.
 func (s *Service) HandleSetBinding(w http.ResponseWriter, r *http.Request) {
 	var payload setBindingRequest
-	if !decodeJSON(w, r, &payload) {
+	if !s.decodeJSON(w, r, &payload) {
 		return
 	}
 	if payload.ExpectedRevision < 1 {

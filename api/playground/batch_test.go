@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"github.com/pblumer/atlas/limits"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -502,10 +503,10 @@ func TestACSVOverTheUploadLimitIsRefusedBySize(t *testing.T) {
 
 	// A valid CSV, just too much of it.
 	var b strings.Builder
-	b.Grow(maxCSVBytes + 64<<10)
+	b.Grow(int(limits.Default().DataUpload) + 64<<10)
 	b.WriteString("kunde\n")
 	row := strings.Repeat("x", 63) + "\n"
-	for b.Len() <= maxCSVBytes {
+	for int64(b.Len()) <= limits.Default().DataUpload {
 		b.WriteString(row)
 	}
 	var body strings.Builder

@@ -42,10 +42,9 @@ import (
 // unauthenticated-by-them and must stay small and predictable; a label map is a
 // place free-form text otherwise accumulates without limit.
 const (
-	maxNodeLabels    = 20
-	maxNodeLabelLen  = 200
-	maxNodeFieldLen  = 200
-	maxNodeBodyBytes = 16 << 10
+	maxNodeLabels   = 20
+	maxNodeLabelLen = 200
+	maxNodeFieldLen = 200
 )
 
 // nodeIdentity is the operator-owned half of the descriptor, persisted under the
@@ -229,7 +228,7 @@ type updateNodeReq struct {
 // handleUpdateNode sets the operator-owned half of the descriptor. Absent fields
 // are left alone, so setting an environment does not silently clear a name.
 func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxNodeBodyBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Registration))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
