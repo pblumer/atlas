@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -8,6 +9,34 @@ import (
 	"testing"
 	"time"
 )
+
+// TestScriptWorkerDoesNotInheritTheServerEnvironment keeps unrelated server
+// credentials out of the process that hosts model-authored code. The worker token
+// is the sole intentional credential; principalFor confines it to worker routes.
+func TestScriptWorkerDoesNotInheritTheServerEnvironment(t *testing.T) {
+	t.Setenv("ATLAS_TOKEN", "worker-token")
+	t.Setenv("ATLAS_OIDC_CLIENT_SECRET", "oidc-secret")
+	t.Setenv("DATABASE_URL", "postgres://user:password@db/atlas")
+	t.Setenv("PATH", os.Getenv("PATH"))
+
+	env := map[string]string{}
+	for _, kv := range workerBaseEnvironment(SuperviseSpec{Connectors: []string{"script"}}) {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	if value, inherited := env["ATLAS_TOKEN"]; inherited {
+		t.Errorf("script worker inherited ambient ATLAS_TOKEN=%q instead of receiving its configured credential", value)
+	}
+	for _, name := range []string{"ATLAS_OIDC_CLIENT_SECRET", "DATABASE_URL"} {
+		if value, exposed := env[name]; exposed {
+			t.Errorf("script worker inherited %s=%q", name, value)
+		}
+	}
+	if _, ok := env["PATH"]; !ok {
+		t.Error("PATH was not preserved for interpreter resolution")
+	}
+}
 
 // waitFor polls until cond holds, so a test never depends on a sleep being long
 // enough. Child processes start when the operating system gets to them.

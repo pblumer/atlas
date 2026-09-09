@@ -84,6 +84,18 @@ _Changed_ / _Removed_ for each version.
   the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
+### Security
+
+- **Model-authored scripts no longer inherit Atlas credentials.** The supervised script
+  worker starts from an explicit runtime allowlist, and each interpreter receives only
+  that small runtime environment plus its source and process variables — never the
+  worker token or arbitrary deployment secrets. The internal credential handed to a
+  supervised worker is additionally confined to the worker protocol, so a leaked token
+  cannot read processes, instances or tasks. The existing PowerShell, Python and
+  JavaScript switches now reach the supervised worker as well; disabling all three parks
+  script jobs without starting an arbitrary-code worker.
+  ([ADR-0297](docs/adr/0297-confine-internal-worker-token.md))
+
 ## [0.6.0] — 2026-09-09
 
 **This release is about arriving from somewhere else.** A Microsoft Identity Manager
