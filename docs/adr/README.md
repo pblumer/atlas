@@ -382,6 +382,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0294](0294-a-variable-is-a-record.md) | A variable is a record, a collection is a loop's harvest — two budgets | Accepted | Landed |
 | [0295](0295-migration-reindexes-searchable-variables.md) | A migration re-indexes what its target declares | Accepted | Landed |
 | [0296](0296-a-loop-records-its-element.md) | A loop records the element it produced, not the collection so far | Accepted | Landed |
+| [0297](0297-confine-internal-worker-token.md) | Confine the internal worker token to the worker protocol | Accepted | Landed |
 
 ## The two states of a record
 

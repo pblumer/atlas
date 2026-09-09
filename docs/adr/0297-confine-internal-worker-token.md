@@ -1,4 +1,4 @@
-# ADR-DRAFT: Confine the internal worker token to the worker protocol
+# ADR-0297: Confine the internal worker token to the worker protocol
 
 - **Status:** Accepted
 - **Implementation:** Landed
