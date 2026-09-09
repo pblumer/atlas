@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook's worker runbooks are dated too",
+        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
+      },
+      "summary": {
+        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
+        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
+      },
+      "link": {
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the runbooks",
+          "de": "Zu den Runbooks"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
       "version": "Unreleased",
       "date": null,
@@ -342,51 +371,6 @@
         "Modeler",
         "Import"
       ]
-    },
-    {
-      "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "A process can post in Discord",
-        "de": "Ein Prozess kann in Discord schreiben"
-      },
-      "summary": {
-        "en": "A running process regularly has something to say to people, and e-mail is the wrong shape for a team that works in a chat channel. A process step can now send a message to a Discord channel, edit or delete one, read a message, list a channel, and open a thread — picked from a list in the Modeler instead of assembled as a REST call. What Discord answers goes into a variable, so a later step can address =sent.id to edit that same message or hang a thread under it. The bot token lives under Workers and is resolved by name, so the model never carries it. There is deliberately no reply-in-thread operation: in Discord a thread is itself a channel, so a reply is send-message addressing =thread.id.",
-        "de": "Ein laufender Prozess hat regelmässig etwas mitzuteilen, und E-Mail ist die falsche Form für ein Team, das in einem Chat-Kanal arbeitet. Ein Prozessschritt kann jetzt eine Nachricht in einen Discord-Kanal senden, sie bearbeiten oder löschen, eine Nachricht lesen, einen Kanal auflisten und einen Thread öffnen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Was Discord zurückgibt, landet in einer Variable: ein späterer Schritt spricht =gesendet.id an, um dieselbe Nachricht zu ändern oder einen Thread darunter zu hängen. Das Bot-Token liegt beim Worker und wird über den Namen aufgelöst, das Modell trägt es nie. Eine eigene Operation „im Thread antworten\" gibt es bewusst nicht: In Discord ist ein Thread selbst ein Kanal, eine Antwort ist also send-message an =faden.id."
-      },
-      "link": {
-        "label": "ADR-0258",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0258-discord-worker.md"
-      },
-      "tags": [
-        "Workers",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "In Discord's developer portal, create an application, add a bot, and copy its token. Invite the bot to your server with at least View Channel and Send Messages.",
-          "Under Console › Workers, add a Worker of kind discord and store the token as {\"botToken\": \"…\"} — without the word Bot in front, Atlas adds that itself.",
-          "In the Modeler, drop a service task, pick Discord, and choose Send message. Fill in the channel id and the text; the fx toggle makes either a FEEL expression over the instance's variables.",
-          "For the channel id, enable Developer Mode in Discord (User Settings › Advanced), then right-click the channel and choose Copy Channel ID.",
-          "If the channel is private, server-wide permissions do not reach it: add the bot to the channel itself under Edit Channel › Permissions, and set the rights to the green tick rather than leaving them grey."
-        ],
-        "de": [
-          "Legen Sie im Discord-Entwicklerportal eine Anwendung an, fügen Sie einen Bot hinzu und kopieren Sie dessen Token. Laden Sie den Bot mit mindestens „Kanal ansehen\" und „Nachrichten senden\" auf Ihren Server ein.",
-          "Legen Sie unter Console › Workers einen Worker der Art discord an und hinterlegen Sie das Token als {\"botToken\": \"…\"} — ohne das Wort Bot davor, das ergänzt Atlas selbst.",
-          "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie Discord und dann „Nachricht senden\". Tragen Sie Kanal-ID und Text ein; der fx-Schalter macht aus beidem eine FEEL-Expression über die Variablen der Instanz.",
-          "Für die Kanal-ID schalten Sie in Discord den Entwicklermodus ein (Einstellungen › Erweitert), dann Rechtsklick auf den Kanal › „Kanal-ID kopieren\".",
-          "Ist der Kanal privat, greifen serverweite Rechte dort nicht: Fügen Sie den Bot unter „Kanal bearbeiten › Berechtigungen\" dem Kanal selbst hinzu und setzen Sie die Rechte auf das grüne Häkchen statt sie grau zu lassen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console/workers"
-      }
     }
   ]
 }

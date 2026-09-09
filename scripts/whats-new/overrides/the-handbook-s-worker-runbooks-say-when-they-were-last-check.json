@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Handbook",
+    "Workers"
+  ],
+  "title": {
+    "en": "The handbook's worker runbooks are dated too",
+    "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
+  },
+  "summary": {
+    "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
+    "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
+  },
+  "try": {
+    "label": {
+      "en": "Open the runbooks",
+      "de": "Zu den Runbooks"
+    },
+    "route": "#/console"
+  }
+}
