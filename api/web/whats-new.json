@@ -265,6 +265,34 @@
       }
     },
     {
+      "id": "a-refused-variable-write-now-stops-what-comes-next-instead-o",
+      "version": "0.6.0",
+      "date": "2026-09-09",
+      "category": "Changed",
+      "title": {
+        "en": "A value that does not fit now stops the step, instead of only being reported",
+        "de": "Ein Wert, der nicht passt, hält den Schritt jetzt an, statt nur gemeldet zu werden"
+      },
+      "summary": {
+        "en": "A variable has a size limit, and a value past it is refused with an incident naming the variable and both sizes. That was only half the story: ending an element clears the incident it carries, so a step that refused a write and then finished left nothing behind at all — not the value, and not the report. The run looked successful, and the only sign was a variable that was not there. Now the step stops. A message or signal does not complete, a called process does not hand its result back, and an activity does not finish having produced nothing. Resolve the incident and the write is retried, so correcting the data — or raising the limit — lets the instance carry on.",
+        "de": "Eine Variable hat eine Grössengrenze, und ein Wert darüber wird abgelehnt — mit einem Incident, der die Variable und beide Grössen nennt. Das war nur die halbe Geschichte: Wenn ein Element endet, wird sein Incident gelöscht. Ein Schritt, der einen Wert ablehnte und danach fertig wurde, hinterliess also gar nichts — weder den Wert noch die Meldung. Der Lauf sah erfolgreich aus, und das einzige Anzeichen war eine Variable, die fehlte. Jetzt bleibt der Schritt stehen. Eine Nachricht oder ein Signal wird nicht abgeschlossen, ein gerufener Prozess reicht sein Ergebnis nicht zurück, und eine Aktivität wird nicht fertig, ohne etwas erzeugt zu haben. Lösen Sie den Incident auf, wird erneut geschrieben — Daten korrigieren oder die Grenze anheben, und die Instanz läuft weiter."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -338,28 +366,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "an-imported-model-keeps-its-ids-and-its-diagram-reads-forwar",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Changed",
-      "title": {
-        "en": "Re-importing a changed MIM workflow no longer renames everything",
-        "de": "Ein erneuter Import benennt nicht mehr alles um"
-      },
-      "summary": {
-        "en": "An imported step used to be numbered in the order it was written out, so adding one step in MIM renumbered every step after it. Comparing the new import against the old one then showed a difference on every element, and anything you had adjusted by hand was hard to carry over. A step now keeps the name it has in MIM, so a second import of a slightly changed workflow differs only where the workflow does. The diagram also lays out left to right without arrows doubling back on themselves.",
-        "de": "Ein importierter Schritt war bisher in der Reihenfolge seiner Ausgabe nummeriert, sodass ein einziger neuer Schritt in MIM alle folgenden umnummerierte. Ein Vergleich des neuen mit dem alten Import zeigte dann an jedem Element einen Unterschied, und von Hand vorgenommene Anpassungen liessen sich kaum übernehmen. Ein Schritt behält jetzt den Namen, den er in MIM hat — ein zweiter Import eines leicht geänderten Workflows unterscheidet sich nur dort, wo der Workflow sich unterscheidet. Ausserdem läuft das Diagramm von links nach rechts, ohne dass Pfeile zurückspringen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ]
     }
   ]
 }

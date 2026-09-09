@@ -258,6 +258,29 @@ no stored format and no default changes; this one is worth checking your models 
   Operations and terminable, where before it continued silently. Worth a look at any
   model that forks and rejoins through an exclusive merge.
 
+- **A refused variable write now stops what comes next, instead of only saying so.**
+  The variable and collection budgets refuse a value past their ceiling and raise an
+  incident on the element that produced it. That was half a refusal: terminating an
+  element clears the incident it carries, so a site that refused a write and then let
+  its element finish left nothing behind at all — not the value, and not the report.
+  The run looked successful, and the only evidence was a variable that was not there.
+
+  Every site at which a model's or a worker's value becomes a variable now answers
+  what happens next, and each answer follows from that site's own semantics. A message
+  or signal catch does not complete, because its subscription is already correlated
+  and neither is delivered twice. A call activity does not resume without the result
+  it called for, because the child instance is already gone. An output mapping does
+  not let its activity finish having promoted nothing, and keeps the activity's local
+  scope — that is where the raw result the mapping reads still is, so resolving
+  re-evaluates over it. An input mapping stops the behaviour *before* it runs, rather
+  than handing a worker a job missing what the model promised it.
+
+  **Upgrade note:** an instance whose write is refused now stays where it is, with an
+  incident naming the variable and both sizes. Resolving it retries the write, so
+  correcting the data — or raising `ATLAS_LIMIT_VARIABLE` / `ATLAS_LIMIT_COLLECTION` —
+  lets it carry on. Before this, such an instance could complete as though nothing had
+  happened.
+
 - **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
   things about the drawing were wrong on any model larger than the examples, and an
   imported Active Directory schema — forty-character attribute names, sixty classes —
