@@ -13,7 +13,11 @@
 > differs per language. Each run is bounded by a wall-clock timeout
 > (`--script-timeout`, default 30s). Enablement is **opt-out per language** at the
 > CLI (`--powershell` / `--python` / `--javascript`, all default on;
-> `=false` disables). The result contract is per-language: PowerShell uses its
+> `=false` disables), including when execution is delegated to the default
+> supervised worker. Both that worker and the interpreter process now start from
+> explicit environment allowlists: the interpreter receives the authored source
+> and instance variables, never the worker token or deployment secrets. The result
+> contract is per-language: PowerShell uses its
 > output stream, Python and JavaScript a variable named `result`. Still open: true
 > resource limits (memory/CPU), input mappings, incident/retry policy, and the
 > external gRPC worker for real customer-environment isolation.

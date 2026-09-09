@@ -675,12 +675,11 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// credential-bearing kinds on top, once their secrets have been moved to a worker
 	// by hand.
 	//
-	// One worker per kind, not one for all of them. Three reasons, and the first is
-	// not about tidiness: a script task inherits its worker's whole environment, so a
-	// single worker holding both the mail credential and the script interpreters
-	// would let a model-authored script read the SMTP password. Separate processes
-	// put that secret only where it is used. The other two follow from the same
-	// split — a restart, a state and a log per kind in the Workers view, and a script
+	// One worker per kind, not one for all of them. The first reason is a security
+	// boundary: the script worker and each interpreter now receive an allowlisted
+	// environment, while a mail credential is handed only to the mail worker. The
+	// other two follow from the same split — a restart, a state and a log per kind in
+	// the Workers view, and a script
 	// that pegs a core or leaks memory taking nothing else down with it, which is the
 	// isolation the script kind is moved out for in the first place.
 	if inProcessConnectors {
@@ -698,10 +697,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !inProcessConnectors {
 		defaults := api.DefaultOffloadedKinds()
 		offloadKinds = append(defaults, offloadKinds...)
-		for _, kind := range defaults {
-			specs = append(specs, api.SuperviseSpec{
-				ID: kind, Kinds: []string{kind}, Connectors: []string{kind},
-			})
+		defaultSpecs := defaultSuperviseSpecs(defaults, scriptLangs)
+		specs = append(specs, defaultSpecs...)
+		for range defaultSpecs {
 			handles = append(handles, nil)
 		}
 	}
@@ -718,7 +716,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// Kinds the operator asked this server to run a worker for. After the defaults, so
 	// asking for one of them is the no-op it should be rather than a second worker
 	// racing the first for the same jobs.
-	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs)
+	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs, scriptLangs)
 	if err != nil {
 		return err
 	}
@@ -872,6 +870,35 @@ func splitList(v string) []string {
 	return out
 }
 
+// defaultSuperviseSpecs builds the out-of-process workers Atlas starts without
+// configuration. Script is the one kind with a finer-grained enablement contract:
+// its three language flags must select the handlers in the child process too, and
+// disabling all three means no arbitrary-code worker is started at all.
+func defaultSuperviseSpecs(kinds []string, scriptLangs map[string]bool) []api.SuperviseSpec {
+	specs := make([]api.SuperviseSpec, 0, len(kinds))
+	for _, kind := range kinds {
+		spec := api.SuperviseSpec{ID: kind, Kinds: []string{kind}, Connectors: []string{kind}}
+		if kind == "script" {
+			spec.ScriptLanguages = enabledScriptLanguages(scriptLangs)
+			if len(spec.ScriptLanguages) == 0 {
+				continue
+			}
+		}
+		specs = append(specs, spec)
+	}
+	return specs
+}
+
+func enabledScriptLanguages(enabled map[string]bool) []string {
+	var languages []string
+	for _, lang := range script.Langs {
+		if enabled[lang.Name] {
+			languages = append(languages, lang.Name)
+		}
+	}
+	return languages
+}
+
 // superviseConnectorSpecs turns --supervise-connector kinds into the workers this
 // server starts for them, and the kinds it must therefore stop working itself.
 //
@@ -892,7 +919,7 @@ func splitList(v string) []string {
 // worker-only kind (entra) is supervised without being offloaded — there are no
 // in-process handlers to remove, and naming it in the offload list is refused at
 // startup as an unknown kind.
-func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec) ([]api.SuperviseSpec, []string, error) {
+func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scriptLangs map[string]bool) ([]api.SuperviseSpec, []string, error) {
 	var (
 		specs   []api.SuperviseSpec
 		offload []string
@@ -909,10 +936,17 @@ func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec) ([]
 			slices.ContainsFunc(specs, func(s api.SuperviseSpec) bool { return s.ID == kind }) {
 			continue
 		}
-		specs = append(specs, api.SuperviseSpec{ID: kind, Kinds: []string{kind}, Connectors: []string{kind}})
+		spec := api.SuperviseSpec{ID: kind, Kinds: []string{kind}, Connectors: []string{kind}}
 		if api.IsOffloadableKind(kind) {
 			offload = append(offload, kind)
 		}
+		if kind == "script" {
+			spec.ScriptLanguages = enabledScriptLanguages(scriptLangs)
+			if len(spec.ScriptLanguages) == 0 {
+				continue
+			}
+		}
+		specs = append(specs, spec)
 	}
 	return specs, offload, nil
 }
@@ -1038,6 +1072,7 @@ func runWorker(args []string) error {
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
 	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
+	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1051,6 +1086,9 @@ func runWorker(args []string) error {
 	env := func(name string) string {
 		if name == worker.WorkerIDEnv {
 			return *id
+		}
+		if name == script.LanguagesEnv && strings.TrimSpace(*scriptLanguages) != "" {
+			return *scriptLanguages
 		}
 		return os.Getenv(name)
 	}
