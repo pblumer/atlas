@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Import"
+  ],
+  "title": {
+    "en": "A MIM import asks before it overwrites, and shows what is at stake",
+    "de": "Der MIM-Import fragt vor dem Überschreiben — und zeigt, was auf dem Spiel steht"
+  },
+  "summary": {
+    "en": "Importing a workflow onto a name Atlas already knows used to replace what was there without asking. Now the import stops first and shows you what it found: the draft it would replace and when it was last saved, and — when a process of that name is already deployed — which version, how many instances are running on it, and exactly which of its steps the imported model no longer has. Those last ones are the running instances that could not be moved to the new model later, listed by name instead of turning up when you try. Nothing is written until you say to overwrite. An export containing several workflows now imports all of them, one draft each, instead of only the first.",
+    "de": "Ein Import auf einen Namen, den Atlas bereits kennt, ersetzte das Vorhandene bisher ohne Rückfrage. Jetzt hält der Import vorher an und zeigt, was er vorgefunden hat: den Entwurf, der ersetzt würde, samt letztem Speicherzeitpunkt — und falls unter diesem Namen bereits ein Prozess deployt ist, welche Version, wie viele Instanzen darauf laufen und welche seiner Schritte im importierten Modell fehlen. Genau diese laufenden Instanzen liessen sich später nicht auf das neue Modell übernehmen; sie stehen jetzt namentlich da, statt erst beim Versuch aufzutauchen. Geschrieben wird nichts, bevor Sie das Überschreiben bestätigen. Ein Export mit mehreren Workflows wird nun vollständig importiert, je ein Entwurf, statt nur der erste."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
