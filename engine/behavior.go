@@ -492,7 +492,7 @@ func runElementBehavior(c *ProcessingContext, key uint64, ei *model.ElementInsta
 			// completing later would clear the incident with the element. So the element
 			// stays activated, exactly as the execution budget leaves one (ADR-0272), and
 			// resolving re-runs this activation
-			// (ADR-draft-a-variable-is-a-record).
+			// (ADR-0294).
 			return
 		}
 	}
@@ -605,7 +605,7 @@ func handleElementCompleting(c *ProcessingContext) {
 			// An output past the budget was refused with an incident on this element.
 			// Completing it would clear that incident and drop the result the mapping was
 			// meant to promote, leaving an activity that looks finished and produced
-			// nothing (ADR-draft-a-variable-is-a-record). The local scope is not dropped
+			// nothing (ADR-0294). The local scope is not dropped
 			// either: it still holds the raw result the mapping reads, and resolving
 			// re-runs this completion over it.
 			return
@@ -2487,7 +2487,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		// Completing it anyway would clear that incident with the element and let the
 		// instance carry on as though the message had been received in full — the
 		// subscription is already correlated, so the message will not come again
-		// (ADR-draft-a-variable-is-a-record).
+		// (ADR-0294).
 		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
@@ -2640,7 +2640,7 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		// Completing it anyway would clear that incident with the element and let the
 		// instance carry on as though the signal had been received in full — and a
 		// broadcast is not replayed for a subscriber that missed it
-		// (ADR-draft-a-variable-is-a-record).
+		// (ADR-0294).
 		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
@@ -4533,7 +4533,7 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 	// A result past the budget was refused with an incident on the call activity.
 	// Resuming it anyway would clear that incident with the element and let the caller
 	// carry on without the result it called for — and the child is already gone, so
-	// nothing would produce it again (ADR-draft-a-variable-is-a-record).
+	// nothing would produce it again (ADR-0294).
 	if !fits {
 		return
 	}
