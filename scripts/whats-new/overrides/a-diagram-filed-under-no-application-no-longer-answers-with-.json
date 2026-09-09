@@ -1,0 +1,29 @@
+{
+  "tags": ["Modeler", "Data"],
+  "title": {
+    "en": "The Modeler now says when it cannot check your data",
+    "de": "Der Modeler sagt jetzt, wenn er Ihre Daten nicht prüfen kann"
+  },
+  "summary": {
+    "en": "If a diagram is not filed under an application there is no information model behind it, so nothing about its data objects can be resolved or checked. That used to look like everything being fine: the class field was a plain text box and the Problems panel said \"No problems\". Now the panel names the reason and what to do about it, and an unchecked diagram says \"No problems found — data not checked\" instead of claiming a clean bill it never earned.",
+    "de": "Liegt ein Diagramm unter keiner Anwendung, steht kein Informationsmodell dahinter — nichts an seinen Datenobjekten lässt sich auflösen oder prüfen. Bisher sah das aus, als wäre alles in Ordnung: Das Klassenfeld war ein einfaches Textfeld, und die Problemliste meldete „No problems\". Jetzt nennt das Panel den Grund und den Weg heraus, und ein ungeprüftes Diagramm sagt „No problems found — data not checked\", statt eine Unbedenklichkeit zu behaupten, die es nie erworben hat."
+  },
+  "tutorial": {
+    "en": [
+      "Open a process in the Modeler and select a data object.",
+      "If the Class field is a plain text box, read the note under it: either the diagram is filed under no application, or the application models nothing yet — two different remedies.",
+      "For the first: open the process's draft from its application, or deploy it from there.",
+      "The Problems bar tells you the same thing from the other side — it now distinguishes \"nothing wrong\" from \"nothing looked\"."
+    ],
+    "de": [
+      "Einen Prozess im Modeler öffnen und ein Datenobjekt auswählen.",
+      "Ist das Feld Class ein einfaches Textfeld, sagt der Hinweis darunter warum: entweder liegt das Diagramm unter keiner Anwendung, oder die Anwendung modelliert noch nichts — zwei verschiedene Wege heraus.",
+      "Für den ersten Fall: den Draft des Prozesses aus seiner Anwendung heraus öffnen oder von dort deployen.",
+      "Die Problemleiste sagt dasselbe von der anderen Seite — sie unterscheidet jetzt „nichts gefunden\" von „nichts geprüft\"."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open the Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}
