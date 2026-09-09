@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook's worker runbooks are dated too",
+        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
+      },
+      "summary": {
+        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
+        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
+      },
+      "link": {
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the runbooks",
+          "de": "Zu den Runbooks"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
       "version": "Unreleased",
       "date": null,
@@ -328,48 +357,6 @@
           "de": "Incidents öffnen"
         },
         "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "publishing-an-application-runs-the-deploy-time-preflight-tha",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Publishing an application warns you about what will not run",
-        "de": "Beim Publizieren einer Application wird gewarnt, was nicht laufen wird"
-      },
-      "summary": {
-        "en": "Deploying a single diagram has warned since 0.3 that it names a Worker nobody configured, or a data object typed against a vocabulary that does not carry it. Publishing a whole application said nothing at all — which is the route most applications reach a server through, so the first anybody heard of the problem was the first task to park. Publish and release import now run the same checks and report them.",
-        "de": "Beim Deployen eines einzelnen Diagramms wird seit 0.3 gewarnt, wenn es einen Worker nennt, den niemand konfiguriert hat, oder ein Datenobjekt gegen ein Vokabular typisiert, das ihn nicht kennt. Beim Publizieren einer ganzen Application blieb es still — und das ist der Weg, über den die meisten Applications auf einen Server gelangen. Das Problem zeigte sich damit erst an der ersten geparkten Aufgabe. Publish und Release-Import führen jetzt dieselben Prüfungen aus und melden sie."
-      },
-      "link": {
-        "label": "ADR-0287",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0287-create-the-worker-from-the-incident.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers",
-        "Validation"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and select the application.",
-          "Press Publish.",
-          "Anything that deployed but will not run as written is listed afterwards — the deploy is not refused for it, since publishing before the Workers exist is legitimate."
-        ],
-        "de": [
-          "Modeler öffnen und die Application auswählen.",
-          "Auf Publish drücken.",
-          "Was deployt wurde, aber so nicht laufen wird, erscheint danach als Liste — abgelehnt wird der Deploy deswegen nicht, denn ein Publizieren vor dem Einrichten der Worker ist legitim."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
