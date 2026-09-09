@@ -39,12 +39,23 @@ pasted, so the copy stays in English even where the surrounding docs are not.
 | `apple-touch-icon.png` | 180×180 home-screen icon |
 | `atlas-mark-256.png` `atlas-mark-512.png` | Raster logo (tile included; transparent outside its rounded corners) |
 | `atlas-social.svg` / `atlas-social.png` | 1200×630 social / link-preview card |
+| `atlas-social-flat.svg` | The same card with its text as outlines — renders identically where the fonts are missing |
 | `icons/*.svg` | The feature icons the README's Highlights list carries |
 
 The PNGs are rendered from the SVGs — the SVGs are the source of truth. To
 regenerate them, screenshot each SVG at the target size with headless Chromium
 (the page needs `margin:0` and the `<svg>` sized in CSS; crop the shot, because
 the headless viewport comes back shorter than `--window-size` asks for).
+
+**`atlas-social-flat.svg` is generated, not edited.** It is `atlas-social.svg`
+with every `<text>` replaced by the outlines of the glyphs it renders to, so it
+no longer depends on a font being installed. Rebuilding it is three steps:
+measure every character's position in headless Chromium through
+`getStartPositionOfChar`, pull the matching outlines out of the fonts fontconfig
+resolves `Arial` and `monospace` to, and emit one `<path>` per line. Measuring
+rather than re-shaping the text is what keeps kerning and letter-spacing exactly
+where the live-text cut puts them. Change `atlas-social.svg` and this cut is
+stale until it is rebuilt; there is no script in the tree for it yet.
 
 **The mark also lives inline in three other places**, because the Console is
 buildless and cannot fetch a file before it paints: the `<link rel="icon">` data
