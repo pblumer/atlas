@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Operations",
+    "Configuration"
+  ],
+  "title": {
+    "en": "Every size limit has a name, and one way to change it",
+    "de": "Jede Obergrenze hat einen Namen — und einen Weg, sie zu ändern"
+  },
+  "summary": {
+    "en": "Atlas caps what it accepts from outside in about ninety places — how large an upload may be, how many rows a query may return, how much output a script may produce. Each cap was sensible on its own, but nobody could list them, and a list nobody can read is a list nobody notices a hole in. They now sit in one place with the numbers they always had, and each can be raised or lowered with an ATLAS_LIMIT_ environment variable. A value that is missing or nonsensical leaves the default in place and says so when the server starts, and no limit can be switched off entirely. One honest gap: workers running as their own process use the standard values rather than what you configured on the server, because the server's settings do not reach them.",
+    "de": "Atlas begrenzt an rund neunzig Stellen, was es von aussen annimmt — wie gross ein Upload sein darf, wie viele Zeilen eine Abfrage liefern darf, wie viel ein Skript ausgeben darf. Jede Grenze war für sich sinnvoll, aber niemand konnte sie aufzählen — und eine Liste, die niemand lesen kann, ist eine Liste, in der niemand eine Lücke bemerkt. Sie stehen jetzt an einer Stelle, mit genau den Zahlen, die sie immer hatten, und jede lässt sich über eine Umgebungsvariable ATLAS_LIMIT_ anheben oder senken. Ein fehlender oder unsinniger Wert lässt die Voreinstellung stehen und wird beim Start protokolliert; abschalten lässt sich keine Grenze. Eine ehrliche Lücke: Worker, die als eigener Prozess laufen, verwenden die Standardwerte statt Ihrer Serverkonfiguration, weil die Einstellungen des Servers sie nicht erreichen."
+  }
+}

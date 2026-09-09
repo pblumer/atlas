@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Engine",
+    "BPMN"
+  ],
+  "title": {
+    "en": "A parallel join now waits for every branch, as BPMN says it must",
+    "de": "Ein paralleler Join wartet jetzt auf jeden Zweig — so, wie BPMN es verlangt"
+  },
+  "summary": {
+    "en": "A parallel join is supposed to wait until a token has arrived over each of its incoming connections. Atlas counted tokens on the join rather than per connection, so two tokens arriving over the same branch could satisfy it while another branch had not arrived at all — and it then swallowed the extra token on its way through. That is not an exotic case: a fork whose branches rejoin through an exclusive merge produces it. The join now waits for one token on each incoming connection and takes exactly one from each. Please look at models that fork and rejoin: where such a join used to continue quietly with a branch missing, it now stops and waits, which shows up in Operations as a stuck token you can see and terminate rather than as a process that ran to the end on incomplete work.",
+    "de": "Ein paralleler Join soll warten, bis über jede seiner eingehenden Verbindungen ein Token eingetroffen ist. Atlas zählte die Tokens am Join statt je Verbindung — zwei Tokens über denselben Zweig konnten ihn also auslösen, während ein anderer Zweig noch gar nicht angekommen war, und das überzählige Token verschwand beim Durchlauf. Das ist kein exotischer Fall: Eine Verzweigung, deren Äste über ein exklusives Gateway wieder zusammenlaufen, erzeugt ihn. Der Join wartet jetzt auf ein Token je eingehender Verbindung und nimmt aus jeder genau eines. Bitte sehen Sie Modelle durch, die verzweigen und wieder zusammenführen: Wo ein solcher Join bisher still weiterlief, obwohl ein Zweig fehlte, bleibt er nun stehen — sichtbar in Operations als hängendes Token, das Sie beenden können, statt als Prozess, der auf unvollständiger Arbeit bis zum Ende lief."
+  },
+  "try": {
+    "label": {
+      "en": "Check your models",
+      "de": "Modelle prüfen"
+    },
+    "route": "#/modeler"
+  }
+}
