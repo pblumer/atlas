@@ -1,4 +1,4 @@
-# ADR-DRAFT: What earns a Worker Type — admission criteria for a new kind
+# ADR-0299: What earns a Worker Type — admission criteria for a new kind
 
 - **Status:** Proposed
 - **Implementation:** Not started
