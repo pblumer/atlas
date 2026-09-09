@@ -252,7 +252,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0164](0164-no-in-process-service-tasks.md) | No in-process service tasks — the core loop must never be able to get stuck | Accepted | Landed |
 | [0165](0165-soap-connector.md) | SOAP / Web Services (WSDL) connector | Accepted | Landed |
 | [0166](0166-active-directory-connector.md) | Active Directory connector | Accepted | Landed |
-| [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Proposed | Not started |
+| [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Accepted | Partial |
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted | Landed |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Accepted | Landed |
 | [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted | Landed |
