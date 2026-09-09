@@ -24,6 +24,23 @@ _Changed_ / _Removed_ for each version.
   at two lengths: dating them apart is how one gets re-read while the other quietly does
   not (ADR-0289).
 
+- **A MIM import now hands over a worksheet, not a node inventory.** The serialised
+  .NET collections a MIMWAL activity carries — the named queries it runs and the
+  assignments it makes — were already decoded into a readable table on the step's
+  documentation. They are now also emitted as `<atlas:mimCollection>` extension
+  elements on the same element, one `<atlas:mimRow>` per row and one
+  `<atlas:mimCell column="…">` per cell, verbatim, so a tool can address a single row
+  without re-parsing the XOML kept in `atlas:mimSource`. And every one of those rows
+  is its own item of the conversion report: an `UpdateResources` with five
+  assignments and a query is one preserved node and **six** pieces of work, so the
+  manual-review count says six rather than one, and the number a migration is planned
+  with is the honest one. The rows stay out of the graph on purpose — which target
+  system a row writes to is not in the XOML at all but in MIM's sync rules, and MIM
+  applies the whole table as one request, so importing each row as its own task would
+  put a structure into the diagram that the source does not contain. A cell says
+  where it sat, never what it means: naming the columns would state something no
+  reference settles.
+
 - **A Worker Type's setup steps say when they were last checked.** The steps beside a
   Worker Type name menu paths in somebody else's product — *IAM & Admin → Service
   accounts*, *Certificates & secrets*, *Reset Token* — which is what makes them worth
