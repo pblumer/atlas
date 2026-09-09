@@ -58,7 +58,7 @@ the guard fails once it has stood for a year — the same interval, for the same
 reason, as the Worker Type setup steps of [ADR-0289](0289-worker-type-setup-in-the-panel.md).
 
 The reasoning behind the pair — including why it states a month somebody *looked*
-rather than a deadline somebody *set* — is in ADR-draft-open-questions-in-records-expire.
+rather than a deadline somebody *set* — is in ADR-0293.
 
 When the check fires, the fix is never to bump the date. Go and look: if the question
 now has an answer, delete both lines and check whether the decision that rested on the
@@ -378,6 +378,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0290](0290-per-flow-join-counting.md) | A join counts tokens per incoming flow | Proposed |
 | [0291](0291-one-place-for-budgets.md) | One place names every resource budget, and one way sets them | Draft |
 | [0292](0292-mim-import-worksheet.md) | A MIM import hands over its rows as data, and counts them as work | Accepted |
+| [0293](0293-open-questions-in-records-expire.md) | A record that rests on an open question says so, and the question expires | Proposed |
 
 ## Status values
 
