@@ -119,7 +119,7 @@ type Limits struct {
 	// business record — a customer, an order, the inputs of a decision. Anything
 	// larger than this is a document, and a document does not belong in a token's
 	// scope, where every touch rewrites the whole of it into the log
-	// (ADR-draft-a-variable-is-a-record).
+	// (ADR-0294).
 	Variable int64
 
 	// Collection is how large a multi-instance activity's assembled output collection

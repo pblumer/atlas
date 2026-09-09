@@ -117,7 +117,7 @@ func (p *Processor) tooManyIterationsMessage(asked int) string {
 
 // The size budgets: how large a single variable's value, and a multi-instance
 // activity's assembled output collection, may be
-// (ADR-draft-a-variable-is-a-record).
+// (ADR-0294).
 //
 // They are two numbers rather than one because they bound different things. A
 // variable is a business record — a customer, an order, the inputs of a decision —

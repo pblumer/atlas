@@ -1190,7 +1190,7 @@ const (
 	IncidentTooManyIterations IncidentReason = 2
 	// IncidentVariableTooLarge marks an element whose write was refused because the
 	// value was past the budget for a variable, or for a multi-instance activity's
-	// output collection (ADR-draft-a-variable-is-a-record). Unlike the two above it
+	// output collection (ADR-0294). Unlike the two above it
 	// names an element that *did* run: the work happened and its result is the thing
 	// that will not fit. Resolving retries the write, so correcting the data — or
 	// raising the budget — lets it through.
