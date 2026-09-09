@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A Worker Type's setup steps say when they were last checked.** The steps beside a
+  Worker Type name menu paths in somebody else's product — *IAM & Admin → Service
+  accounts*, *Certificates & secrets*, *Reset Token* — which is what makes them worth
+  writing and what silently stops being true when that product is rearranged. Nothing
+  here can observe Google's console, so the text would go on looking authoritative while
+  sending its reader in a circle. Each entry now carries the month it was last walked at
+  the provider, the panel prints it at the foot of the steps ("Steps last checked
+  September 2026. Where a provider has moved a menu since, the provider is right and this
+  is out of date"), and a test fails once an entry has stood unread for a year. That test
+  reads the wall clock, which the testing conventions otherwise forbid and which is
+  exactly the point: a freshness check that can only fail when somebody edits the file
+  would never fire (ADR-0289).
+
 - **Every Worker Type says how it is set up, where it is chosen.** Picking a Worker
   Type on a service task now shows, beside its fields, what has to exist before the
   task can run — whether it needs a configured Worker and a credential at all, the
@@ -81,6 +94,51 @@ _Changed_ / _Removed_ for each version.
   single expression to fill in.
 
 ### Changed
+
+- **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
+  things about the drawing were wrong on any model larger than the examples, and an
+  imported Active Directory schema — forty-character attribute names, sixty classes —
+  showed all three at once.
+
+  **A class box was 200 pixels wide whatever was written in it**, so
+  `msDS-ManagedPasswordPreviousId: string [0..*]` simply ran out over the border and
+  across whatever stood beside it. A box now grows to hold its members, up to 380px.
+  The members are set in a monospace face, so that width is arithmetic rather than a
+  guess. Past 380 a member is shortened **in its name** — `msDS-Managed…Id` — because
+  the type and the multiplicity are the shorter half and the half a reader is after.
+
+  **Relationships were straight lines between box centres**, which is fine for six
+  classes and unreadable for sixty: the line left at whatever angle the geometry made
+  and crossed every box between its ends. They are routed at right angles now, by
+  `ManhattanLayout` — the same router bpmn-js gives a sequence flow, so the two
+  canvases bend their lines alike. Two further faults sat under that one: several
+  relationships into the same class came out **exactly on top of each other**, one
+  line where there were three, and a *click could only ever reach the last one drawn*;
+  they are spread across five corridors now. And the dashed line from a data store to
+  its class was being routed like a relationship, which on a real model is three
+  hundred pixels of vertical line crossing everything in between — for a line that
+  only ever meant *this one*. It is an annotation (ADR-0230 §7), so it points
+  straight again.
+
+  **The palette is diagram-js's own** — the one bpmn-js and dmn-js put down their left
+  edge, with its chrome, its groups and its separators, whose stylesheet was already
+  in the vendored bundle and unused. Where a row of text buttons sat in the title bar,
+  as far from the sheet as the window allows, there is now a toolbox against it: the
+  three stereotypes and the data store, then the four relationships carrying the marks
+  that tell them apart on the drawing (◇ aggregation, ◆ composition, △ generalization),
+  and the lasso above them in the tools group where the process modeler keeps it. The
+  entries are built from the served subset, so the palette offers exactly what the
+  write path accepts and gains a stereotype the day the server does.
+
+  Fitting now takes the palette's width off before choosing the zoom rather than
+  scrolling it away afterwards — a fitted model used to open with its first column
+  behind the toolbox, and scrolling a diagram that already filled the window only
+  trades the left edge for the right one.
+
+  One thing in the properties panel with it: its textareas hold documentation and
+  nothing else — no FEEL, no scripts — and were being drawn in the monospace face a
+  textarea defaults to. Prose set in code face reads as something to be executed. The
+  Modeler met this first and answered it the same way for its own documentation field.
 
 - **Every list opens with its search boxes showing.** Each data table has carried a
   per-column filter row (`table.js`) since it replaced the hand-rolled sort and filter

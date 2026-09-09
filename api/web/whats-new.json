@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Setup instructions now tell you how old they are",
+        "de": "Die Einrichtungsanleitungen sagen jetzt, wie alt sie sind"
+      },
+      "summary": {
+        "en": "The steps shown beside a worker type walk you through someone else's product — which menu to open at Google, which button to press at Atlassian. Those menus get rearranged, and nothing in Atlas can notice: the instructions would keep looking authoritative while quietly sending you in a circle, and you would have no way to tell whether you or the text was wrong. Each set of steps now says which month it was last walked through for real, right underneath them, and states plainly that where the provider has moved something since, the provider is right. A check inside Atlas flags any instructions that have gone a year without being re-read.",
+        "de": "Die Schritte neben einem Worker-Typ führen durch das Produkt eines anderen Anbieters — welches Menü bei Google zu öffnen ist, welche Schaltfläche bei Atlassian zu drücken. Diese Menüs werden umgebaut, und Atlas kann das nicht bemerken: Die Anleitung sähe weiterhin verbindlich aus und schickte Sie still im Kreis, ohne dass Sie beurteilen könnten, ob Sie oder der Text falsch liegen. Jede Anleitung nennt jetzt direkt darunter den Monat, in dem sie zuletzt tatsächlich durchgegangen wurde, und sagt klar: Wo der Anbieter seither etwas verschoben hat, hat der Anbieter recht. Eine Prüfung in Atlas meldet Anleitungen, die ein Jahr lang nicht mehr nachgelesen wurden."
+      },
+      "link": {
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
+      },
+      "tags": [
+        "Modeler",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open a service task",
+          "de": "Service-Task öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
       "version": "Unreleased",
       "date": null,
@@ -57,6 +86,35 @@
           "de": "MIM-Workflow importieren"
         },
         "route": "#/modeler"
+      }
+    },
+    {
+      "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The class diagram reads properly on a real model",
+        "de": "Das Klassendiagramm ist auch bei einem echten Modell lesbar"
+      },
+      "summary": {
+        "en": "Data › Model draws your information model. On anything larger than a handful of classes it did not hold together: attribute names ran out over the edges of their boxes, relationships were drawn as straight lines across everything between their ends, and several lines into the same class landed exactly on top of one another. Boxes now grow to fit what is written in them, lines turn at right angles like the process modeler's, and lines going the same way are spread apart. The tools for drawing have moved off the title bar into a palette down the left edge — the same one the process and decision modelers use.",
+        "de": "Unter «Daten › Modell» wird Ihr Informationsmodell gezeichnet. Bei mehr als einer Handvoll Klassen hielt das nicht stand: Attributnamen liefen über den Rand ihrer Kästchen hinaus, Beziehungen wurden als gerade Linien quer über alles Dazwischenliegende gezogen, und mehrere Linien zur selben Klasse lagen exakt übereinander. Kästchen wachsen jetzt mit ihrem Inhalt, Linien knicken rechtwinklig wie im Prozess-Modeler, und gleichlaufende Linien werden auseinandergezogen. Die Zeichenwerkzeuge sind aus der Titelleiste in eine Palette am linken Rand gewandert — dieselbe, die Prozess- und Entscheidungs-Modeler verwenden."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
       }
     },
     {
@@ -352,70 +410,6 @@
           "de": "Workers öffnen"
         },
         "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "a-deploy-now-says-when-a-model-s-atlas-namespace-is-not-atla",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "A deploy warns when a model would break in the Modeler",
-        "de": "Ein Deploy warnt, wenn ein Modell im Modeler zerbrechen würde"
-      },
-      "summary": {
-        "en": "Hand-written BPMN can bind the atlas prefix to a namespace that is almost right — and the engine will not notice, because it matches an extension element on its name alone. The model deploys, compiles and runs perfectly. The Modeler is stricter: it does not recognise those elements at all, so opening the process looks fine and then every Save fails with a message about a prefix called ns0. A deploy now says so up front, naming the elements, the namespace it found and the one line to change. The model still deploys — it runs correctly, and refusing it would strand models that have worked for years. Only models written or generated by hand are affected; anything the Modeler saved is already right.",
-        "de": "Handgeschriebenes BPMN kann das atlas-Präfix an einen Namensraum binden, der fast stimmt — und die Engine merkt es nicht, weil sie ein Extension-Element nur über seinen Namen erkennt. Das Modell wird deployt, kompiliert und läuft einwandfrei. Der Modeler ist strenger: Er erkennt diese Elemente gar nicht, das Öffnen sieht also gut aus, und dann scheitert jedes Speichern mit einer Meldung über ein Präfix namens ns0. Der Deploy sagt es jetzt vorher — mit den betroffenen Elementen, dem gefundenen Namensraum und der einen Zeile, die zu ändern ist. Das Modell wird trotzdem deployt: Es läuft korrekt, und es abzulehnen würde Modelle stranden lassen, die seit Jahren funktionieren. Betroffen sind nur von Hand geschriebene oder generierte Modelle; was der Modeler gespeichert hat, stimmt bereits."
-      },
-      "link": {
-        "label": "ADR-0269",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0269-atlas-namespace-deploy-warning.md"
-      },
-      "tags": [
-        "Modeler",
-        "Validation"
-      ]
-    },
-    {
-      "id": "task-folders-the-tasks-app-s-sidebar-folders-are-now-saved-f",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "Build your own folders in the task inbox",
-        "de": "Eigene Ordner im Aufgaben-Posteingang"
-      },
-      "summary": {
-        "en": "The inbox had four fixed folders, and the question you actually arrive with in the morning — what is open on customer enquiries? — was retyped into the search box every day. Now you can save it as a folder. You pick the conditions from listboxes rather than typing them: the processes come from what is deployed, the task names and groups from the models, the people from the directory, so a folder cannot be built around something that does not exist. Underneath, Atlas shows the expression your choices make and how many tasks match right now. Counting happens across every open task, not just the page on screen, and a folder can be shared with your team — where only its owner can change it.",
-        "de": "Der Posteingang hatte vier feste Ordner, und die Frage, mit der man morgens tatsächlich anfängt — was ist bei den Kundenanfragen offen? — wurde jeden Tag neu ins Suchfeld getippt. Jetzt lässt sie sich als Ordner speichern. Die Bedingungen wählen Sie aus Listen statt sie zu tippen: die Prozesse kommen aus dem, was deployt ist, die Aufgabennamen und Gruppen aus den Modellen, die Personen aus dem Verzeichnis — ein Ordner kann also gar nicht auf etwas gebaut werden, das es nicht gibt. Darunter zeigt Atlas den Ausdruck, der aus Ihrer Auswahl entsteht, und wie viele Aufgaben gerade passen. Gezählt wird über alle offenen Aufgaben, nicht nur über die Seite auf dem Bildschirm, und ein Ordner lässt sich mit dem Team teilen — ändern darf ihn nur, wem er gehört."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-5-0"
-      },
-      "tags": [
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Tasks › Inbox and click ＋ Neuer Ordner in the sidebar.",
-          "Give the folder a name, then pick a field, an operator and a value — for example Prozess · ist · your process.",
-          "Watch the match count and the generated expression below the conditions while you change them.",
-          "Save. The folder appears in the sidebar with its own count, and you can reopen it later in the same listboxes."
-        ],
-        "de": [
-          "Öffnen Sie Tasks › Inbox und klicken Sie in der Seitenleiste auf ＋ Neuer Ordner.",
-          "Geben Sie dem Ordner einen Namen und wählen Sie Feld, Operator und Wert — zum Beispiel Prozess · ist · Ihr Prozess.",
-          "Beobachten Sie beim Ändern die Trefferzahl und den erzeugten Ausdruck unter den Bedingungen.",
-          "Speichern. Der Ordner steht mit eigener Zahl in der Seitenleiste und lässt sich später wieder mit denselben Listen öffnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the inbox",
-          "de": "Zum Posteingang"
-        },
-        "route": "#/tasks"
       }
     }
   ]

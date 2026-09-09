@@ -24,7 +24,10 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
 // How wide a class is drawn. It is the one piece of geometry this file still needs,
 // to place a new box where there is room; the rest lives with the drawing, in
 // api/web/vendor/canvas/src/uml.js.
-const BOX_W = 200;
+// The step a new class is placed on, not the width one is drawn at: a class box now
+// grows to hold its members (up to 380px in uml.js), so a grid stepped by the old
+// fixed 200 would drop the next one on top of the last.
+const BOX_STEP = 400;
 
 // The bundle carries both canvases; this view wants the UML half of it.
 function loadCanvas() {
@@ -78,7 +81,6 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         <a class="btn neutral" href="#/data" title="Back to the information models">← Model</a>
         <b class="im-title" id="im-name">${esc(state.model.name)}</b>
         <span class="im-rev muted" id="im-rev">r${state.model.revision}</span>
-        <span class="im-palette" id="im-palette"></span>
         <span class="im-search">
           <input type="search" id="im-search" placeholder="Find a class or a member…"
             aria-label="Find a class or a member" autocomplete="off" role="combobox"
@@ -98,10 +100,6 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="icon-btn" data-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
             <button type="button" class="icon-btn" data-tool="fit" title="Fit the whole diagram in the window" aria-label="Fit diagram">⊡</button>
             <span class="im-tool-sep" aria-hidden="true"></span>
-            <button type="button" class="icon-btn" data-tool="marquee" aria-pressed="false"
-              title="Select several at once: draw a box around them. Shift and drag does the same without this button, and Escape puts the drag back to panning."
-              aria-label="Select several">⬚</button>
-            <span class="im-tool-sep" aria-hidden="true"></span>
             <button type="button" class="icon-btn" data-tool="undo" title="Undo the last move on the canvas (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↺</button>
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
           </div>
@@ -118,7 +116,6 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const sideEl = root.querySelector("#im-side");
   const problemsEl = root.querySelector("#im-problems");
   const saveBtn = root.querySelector("#im-save");
-  const marqueeBtn = root.querySelector('[data-tool="marquee"]');
   const undoBtn = root.querySelector('[data-tool="undo"]');
   const redoBtn = root.querySelector('[data-tool="redo"]');
   const dirtyEl = root.querySelector("#im-dirty");
@@ -128,21 +125,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // difference between a business object and a value type is the single most
   // consequential choice in this metamodel, and a palette of three bare words is
   // how it gets made by accident.
-  root.querySelector("#im-palette").innerHTML = subset.stereotypes.map((s) =>
-    `<button type="button" class="im-add" data-stereotype="${esc(s.stereotype)}"
-       title="${esc(s.meaning)}">+ ${esc(s.label)}</button>`).join("") +
-    `<button type="button" class="im-add store" data-add="store"
-       title="Where instances of a class outlive the process that made them. Declared once here and named by every process that reaches it — which is the thing BPMN's dataStoreReference gestures at and then says nothing about.">+ Data store</button>` +
-    subset.associationKinds.map((k) =>
-      `<button type="button" class="im-connect" data-kind="${esc(k.kind)}"
-         title="${esc(k.rule)}">${esc(k.label)}</button>`).join("");
-
   // The canvas. Everything a modeler expects of one — zoom, pan, marquee, multi-select
   // move, undo of a move, keyboard nudging — comes from diagram-js; what Atlas owns is
   // how a class is drawn and what the served subset permits between two of them
   // (ADR-0237).
   const canvas = new uml.ClassCanvas(canvasEl, {
     subset,
+    paletteEntries,
     onSelection: (bo, all) => onCanvasSelection(bo, all),
     onChange: () => { absorbMoves(); syncHistoryButtons(); },
     onTool: (tool) => showMarquee(tool === "marquee"),
@@ -170,10 +159,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // The button arms it and nothing more. Whether the mode is still on is the canvas's
   // to say and this only follows, because the mode ends without the button being
   // touched: the box being drawn spends it, and Escape takes it back.
-  marqueeBtn.addEventListener("click", (e) => canvas.marquee(e));
+  // Whether the next drag draws a box is the canvas's to say and this only follows:
+  // the mode ends without anything being pressed — the box being drawn spends it, and
+  // Escape takes it back. diagram-js lights the palette entry itself, off the same
+  // tool events, so all that is left here is the cursor over the sheet.
   function showMarquee(on) {
-    marqueeBtn.classList.toggle("active", on);
-    marqueeBtn.setAttribute("aria-pressed", on ? "true" : "false");
     canvasEl.classList.toggle("marquee", on);
   }
 
@@ -366,8 +356,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     syncCanvas();
     renderSide();
     renderProblems();
-    root.querySelectorAll(".im-connect").forEach((b) =>
-      b.classList.toggle("active", !!state.connecting && state.connecting.kind === b.dataset.kind));
+    // Which relationship is armed lives in the palette now, and the palette is
+    // diagram-js's — so it is told to ask again rather than having a class toggled on it.
+    canvas.refreshPalette();
     canvasEl.classList.toggle("connecting", !!state.connecting);
   }
 
@@ -1099,48 +1090,93 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   function freeSpot() {
     const cols = 4;
     const n = state.model.classes.length;
-    return { x: 40 + (n % cols) * (BOX_W + 60), y: 40 + Math.floor(n / cols) * 200 };
+    return { x: 40 + (n % cols) * (BOX_STEP + 60), y: 40 + Math.floor(n / cols) * 220 };
   }
 
-  root.querySelector("#im-palette").addEventListener("click", (e) => {
-    if (e.target.closest('[data-add="store"]')) {
-      const spot = freeSpot();
-      const st = {
-        id: `new-${Math.random().toString(36).slice(2, 10)}`, name: "NewStore", class: "",
-        worker: "", mode: (subset.storeModes[0] || {}).mode || "read",
-        x: spot.x, y: spot.y + 240,
-      };
-      state.model.stores.push(st);
-      selectOne({ kind: "store", id: st.id });
-      state.connecting = null;
-      markDirty(); render();
-      return;
-    }
-    const add = e.target.closest(".im-add");
-    if (add) {
-      const kind = stereotypeOf(add.dataset.stereotype);
-      const spot = freeSpot();
-      const c = {
-        id: "", name: `New${kind.label.replace(/\s/g, "")}`, stereotype: kind.stereotype,
-        attributes: kind.hasAttributes ? [] : undefined, literals: kind.hasAttributes ? undefined : [],
-        identity: [], x: spot.x, y: spot.y,
-      };
+  // ---- the palette --------------------------------------------------------
+  //
+  // Down the canvas's left edge, in diagram-js's own palette — the one bpmn-js and
+  // dmn-js put there, with its chrome and its stylesheet, because a person moving
+  // between the process modeler and this one should not have to find a second kind of
+  // toolbox. It used to be a row of text buttons in the title bar, which put the
+  // things you draw with as far from the sheet you draw on as the window allows.
+  //
+  // The entries come from the served subset, so the palette offers exactly what the
+  // write path accepts (ADR-0230) and gains a stereotype the day the server does.
+
+  function addClass(stereotype) {
+    const kind = stereotypeOf(stereotype);
+    const spot = freeSpot();
+    const c = {
       // A new class needs a local handle until the server mints its real id, because
       // selection and association ends both address a class by id.
-      c.id = `new-${Math.random().toString(36).slice(2, 10)}`;
-      state.model.classes.push(c);
-      selectOne({ kind: "class", id: c.id });
-      state.connecting = null;
-      markDirty(); render();
-      return;
+      id: `new-${Math.random().toString(36).slice(2, 10)}`,
+      name: `New${kind.label.replace(/\s/g, "")}`, stereotype: kind.stereotype,
+      attributes: kind.hasAttributes ? [] : undefined, literals: kind.hasAttributes ? undefined : [],
+      identity: [], x: spot.x, y: spot.y,
+    };
+    state.model.classes.push(c);
+    selectOne({ kind: "class", id: c.id });
+    state.connecting = null;
+    markDirty(); render();
+  }
+
+  function addStore() {
+    const spot = freeSpot();
+    const st = {
+      id: `new-${Math.random().toString(36).slice(2, 10)}`, name: "NewStore", class: "",
+      worker: "", mode: (subset.storeModes[0] || {}).mode || "read",
+      x: spot.x, y: spot.y + 240,
+    };
+    state.model.stores.push(st);
+    selectOne({ kind: "store", id: st.id });
+    state.connecting = null;
+    markDirty(); render();
+  }
+
+  // Arming a relationship is a mode: the next two classes clicked become its ends.
+  // Pressing the armed one again puts it away, which is the only way out that does
+  // not require drawing something first.
+  function armConnect(kind) {
+    state.connecting = state.connecting && state.connecting.kind === kind
+      ? null : { kind, fromId: null };
+    render();
+  }
+
+  function paletteEntries() {
+    // The lasso leads, in diagram-js's own `tools` group, exactly where bpmn-js puts
+    // it. That group is not decoration: the palette lights the active tool by reading
+    // `[data-group=tools]` out of its own markup, and with no such group it reads null
+    // and throws the moment any tool is activated — which took the lasso down with it.
+    // A tool belongs in the tools group; the crash was the library saying so.
+    const out = [{
+      id: "lasso", group: "tools",
+      title: "Select several at once: draw a box around them. Shift and drag does the same " +
+        "without this, and Escape puts the drag back to panning.",
+      onClick: (event) => canvas.marquee(event),
+    }, { id: "sep-tools", group: "tools", separator: true }];
+    for (const st of subset.stereotypes) {
+      out.push({
+        id: st.stereotype, group: "elements", title: `${st.label} — ${st.meaning}`,
+        onClick: () => addClass(st.stereotype),
+      });
     }
-    const connect = e.target.closest(".im-connect");
-    if (connect) {
-      state.connecting = state.connecting && state.connecting.kind === connect.dataset.kind
-        ? null : { kind: connect.dataset.kind, fromId: null };
-      render();
+    out.push({
+      id: "store", group: "elements",
+      title: "Data store — where instances of a class outlive the process that made them. " +
+        "Declared once here and named by every process that reaches it.",
+      onClick: () => addStore(),
+    });
+    out.push({ id: "sep-relations", group: "elements", separator: true });
+    for (const k of subset.associationKinds) {
+      out.push({
+        id: k.kind, group: "relations", title: `${k.label} — ${k.rule}`,
+        active: !!state.connecting && state.connecting.kind === k.kind,
+        onClick: () => armConnect(k.kind),
+      });
     }
-  });
+    return out;
+  }
 
   // Selecting on the canvas and selecting in the panel are the same selection, so
   // the round trip is guarded: telling the panel what the canvas selected must not

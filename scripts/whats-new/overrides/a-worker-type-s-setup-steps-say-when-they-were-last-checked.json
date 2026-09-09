@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Workers"
+  ],
+  "title": {
+    "en": "Setup instructions now tell you how old they are",
+    "de": "Die Einrichtungsanleitungen sagen jetzt, wie alt sie sind"
+  },
+  "summary": {
+    "en": "The steps shown beside a worker type walk you through someone else's product — which menu to open at Google, which button to press at Atlassian. Those menus get rearranged, and nothing in Atlas can notice: the instructions would keep looking authoritative while quietly sending you in a circle, and you would have no way to tell whether you or the text was wrong. Each set of steps now says which month it was last walked through for real, right underneath them, and states plainly that where the provider has moved something since, the provider is right. A check inside Atlas flags any instructions that have gone a year without being re-read.",
+    "de": "Die Schritte neben einem Worker-Typ führen durch das Produkt eines anderen Anbieters — welches Menü bei Google zu öffnen ist, welche Schaltfläche bei Atlassian zu drücken. Diese Menüs werden umgebaut, und Atlas kann das nicht bemerken: Die Anleitung sähe weiterhin verbindlich aus und schickte Sie still im Kreis, ohne dass Sie beurteilen könnten, ob Sie oder der Text falsch liegen. Jede Anleitung nennt jetzt direkt darunter den Monat, in dem sie zuletzt tatsächlich durchgegangen wurde, und sagt klar: Wo der Anbieter seither etwas verschoben hat, hat der Anbieter recht. Eine Prüfung in Atlas meldet Anleitungen, die ein Jahr lang nicht mehr nachgelesen wurden."
+  },
+  "try": {
+    "label": {
+      "en": "Open a service task",
+      "de": "Service-Task öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

@@ -27,19 +27,40 @@ import RulesModule from "diagram-js/lib/features/rules";
 import LassoToolModule from "diagram-js/lib/features/lasso-tool";
 import KeyboardModule from "diagram-js/lib/features/keyboard";
 import KeyboardMoveSelectionModule from "diagram-js/lib/features/keyboard-move-selection";
+// The palette bpmn-js and dmn-js put down their left edge is diagram-js's own, and so
+// is the stylesheet that dresses it — vendoring the library brought both. What Atlas
+// supplies is the list of entries, which is the only part that is Atlas's.
+import PaletteModule from "diagram-js/lib/features/palette";
 import { append, attr, create } from "tiny-svg";
 import inherits from "inherits-browser";
 import RuleProvider from "diagram-js/lib/features/rules/RuleProvider";
+// The same routing bpmn-js gives a sequence flow. A class diagram is read along its
+// lines, and a straight line between two box centres crosses everything between them.
+import { connectRectangles } from "diagram-js/lib/layout/ManhattanLayout";
 
 // Box geometry, carried over from the canvas this replaces so a saved model opens
 // looking the way its author left it. A class is as tall as its members make it, so
 // the shape of the diagram carries information rather than a grid does.
+//
+// BOX_W is the narrowest a class is drawn, not the width of one: a box grows to hold
+// what is written in it, up to BOX_MAX. It used to be the only width there was, and a
+// member wider than 200px simply ran out over the border and across whatever was
+// beside it — which an Active Directory model, whose attribute names run to forty
+// characters, does on nearly every row.
 export const BOX_W = 200;
+// Past this a box stops being a box and starts being a column. A member too long for
+// it is elided in the middle rather than cut off at the end: the tail of
+// `msDS-ManagedPasswordPreviousId: string [0..*]` is the type and the multiplicity,
+// which is the half a reader is usually after.
+const BOX_MAX = 380;
 
 // How far fitting will magnify a model that is smaller than its window, and how much
 // of the room it leaves as margin. Past MAX_FIT the drawing stops gaining anything
 // from the extra pixels — a class box has a fixed amount to say — and starts looking
 // like a zoom somebody left on by accident.
+// How much of the sheet the palette covers: measured at 94px including its gutter,
+// plus air so a class does not sit against it.
+const PALETTE_ROOM = 130;
 const MAX_FIT = 1.6;
 const FIT_MARGIN = 0.94;
 const HEAD_H = 34;
@@ -52,6 +73,62 @@ export function classHeight(cls) {
   return HEAD_H + PAD + Math.max(1, rows.length) * ROW_H + PAD / 2;
 }
 export const STORE_HEIGHT = STORE_H;
+
+// Advances per character, from the stylesheet's own fonts. The member rows are
+// `ui-monospace` at 12px, where every glyph is the same width and 0.6em is that
+// width exactly — so their measurement is arithmetic rather than an estimate. The
+// header is proportional, where it is an estimate, and deliberately a generous one:
+// a box slightly wider than its title is a box, and one slightly narrower is a title
+// with its last letters outside it.
+const CH_MONO = 12 * 0.6;
+const CH_NAME = 13 * 0.62;
+const CH_STEREO = 10 * 0.6;
+
+// memberLine is the one string a row draws, and the one the width is measured from.
+// It is built here rather than in the renderer so the two cannot disagree — a width
+// computed from a different string than the one drawn is the bug this replaces,
+// wearing a different hat.
+export function memberLine(cls, row) {
+  if (cls.stereotype === "enumeration") return String(row);
+  const key = (cls.identity || []).includes(row.name) ? "⚿ " : "";
+  const mult = row.multiplicity && row.multiplicity !== "1" ? ` [${row.multiplicity}]` : "";
+  return `${key}${row.name}: ${row.type}${mult}`;
+}
+
+// classWidth sizes a box to hold what is written in it.
+export function classWidth(cls) {
+  const rows = (cls.stereotype === "enumeration" ? cls.literals : cls.attributes) || [];
+  let widest = 0;
+  for (const row of rows) widest = Math.max(widest, memberLine(cls, row).length * CH_MONO);
+  // The header is centred, so it needs the room on both sides that a member needs on
+  // one — hence the same padding twice, and no more.
+  widest = Math.max(widest, (cls.name || "unnamed").length * CH_NAME);
+  widest = Math.max(widest, (`«${cls.stereotype || "businessObject"}»`).length * CH_STEREO);
+  return Math.round(Math.min(BOX_MAX, Math.max(BOX_W, widest + PAD * 2)));
+}
+
+// roomFor is how many monospace characters fit across a box's members.
+const roomFor = (width) => Math.floor((width - PAD * 2) / CH_MONO);
+
+// shorten takes a string down to `room` characters, from the middle. A long
+// identifier's middle is the part that carries the least — `msDS-Managed…Id` still
+// says which member it is, where a cut-off tail would not.
+function shorten(str, room) {
+  if (str.length <= room) return str;
+  if (room < 4) return str.slice(0, Math.max(0, room));
+  const head = Math.ceil((room - 1) / 2);
+  return str.slice(0, head) + "…" + str.slice(str.length - (room - 1 - head));
+}
+
+// fitMember shortens the *name* only, and never the type or the multiplicity.
+// Those are the shorter half and the half a reader is usually after — "which member
+// is this, and what does it hold" survives, where eliding the whole line from the
+// middle would take the answer with it. The three parts stay three parts, so the row
+// keeps the colouring that tells them apart.
+function fitMember(name, tail, width) {
+  const room = roomFor(width) - tail.length;
+  return room >= 1 ? shorten(name, room) : shorten(name, 1);
+}
 
 function svg(name, attributes, parent) {
   const node = create(name);
@@ -85,9 +162,12 @@ function classVisual(parent, shape) {
   svg("line", { x1: 0, y1: HEAD_H, x2: shape.width, y2: HEAD_H, class: "uml-sep" }, g);
   // The stereotype rides above the name in guillemets, which is how UML says what
   // kind of classifier this is.
-  text(g, `«${bo.stereotype || "businessObject"}»`,
+  // The header is centred, so it is shortened against its own font rather than the
+  // members' — and a name too long for its box is the one thing here a reader cannot
+  // recover from the panel, so the box grows for it first and elides only at BOX_MAX.
+  text(g, shorten(`«${bo.stereotype || "businessObject"}»`, Math.floor((shape.width - PAD * 2) / CH_STEREO)),
     { x: shape.width / 2, y: 14, class: "uml-stereo", "text-anchor": "middle" });
-  text(g, bo.name || "unnamed",
+  text(g, shorten(bo.name || "unnamed", Math.floor((shape.width - PAD * 2) / CH_NAME)),
     { x: shape.width / 2, y: 28, class: "uml-cname", "text-anchor": "middle" });
 
   if (!rows.length) {
@@ -98,7 +178,7 @@ function classVisual(parent, shape) {
   rows.forEach((row, i) => {
     const y = HEAD_H + PAD + i * ROW_H + 13;
     if (bo.stereotype === "enumeration") {
-      text(g, row, { x: PAD, y, class: "uml-literal" });
+      text(g, shorten(String(row), roomFor(shape.width)), { x: PAD, y, class: "uml-literal" });
       return;
     }
     // The business key is marked on the box because it is the fact the whole model
@@ -109,9 +189,12 @@ function classVisual(parent, shape) {
       const t = svg("tspan", { class: cls }, line);
       t.textContent = content;
     };
-    span(`${isKey ? "⚿ " : ""}${row.name}`, "uml-attr-name");
-    span(`: ${row.type}`, "uml-attr-type");
-    if (row.multiplicity && row.multiplicity !== "1") span(` [${row.multiplicity}]`, "uml-attr-mult");
+    const key = isKey ? "⚿ " : "";
+    const type = `: ${row.type}`;
+    const mult = row.multiplicity && row.multiplicity !== "1" ? ` [${row.multiplicity}]` : "";
+    span(key + fitMember(row.name, key + type + mult, shape.width), "uml-attr-name");
+    span(type, "uml-attr-type");
+    if (mult) span(mult, "uml-attr-mult");
   });
   return g;
 }
@@ -246,13 +329,86 @@ export const dock = (shape, other) => {
   return { x: here.x + dx * scale, y: here.y + dy * scale };
 };
 
-// route gives a connection its waypoints. A class related to its own kind — an
-// Employee who reports to an Employee — needs a loop rather than a line: the toolbar
-// refuses to draw one, but an imported model may well contain one (ADR-0232), and
-// docking a shape against itself is a division by a zero-length direction. The shape
-// is UML's: out of the right edge, back into the top.
-export const route = (source, target) => {
-  if (source !== target) return [dock(source, target), dock(target, source)];
+// route gives a connection its waypoints.
+//
+// It is orthogonal — out of one box's side, along, and into the other's — because
+// that is how a class diagram is read and how every tool that draws one routes it.
+// A straight line between two box centres, which is what this did, is fine for six
+// classes and unreadable for sixty: it leaves at whatever angle the geometry happens
+// to make, crosses every box between the two, and arrives somewhere on a border with
+// nothing to say which side it meant. connectRectangles is the library's own router,
+// the one bpmn-js gives a sequence flow, so the two canvases bend their lines alike.
+//
+// A class related to its own kind — an Employee who reports to an Employee — needs a
+// loop rather than a line: the palette refuses to draw one, but an imported model may
+// well contain one (ADR-0232), and a router asked to connect a rectangle to itself
+// has no direction to work from. The shape is UML's: out of the right edge, back
+// into the top.
+// LANE is how far apart two routes are held when they would otherwise share a
+// corridor. Wide enough to read as two lines at the zoom a model is fitted to, narrow
+// enough that five of them still look like a bundle going the same way.
+const LANE = 14;
+const LANES = 5;
+
+// lane spaces a connection out from the ones drawn beside it.
+//
+// Two relationships into the same class are routed by the same geometry and come out
+// on the same line, one exactly on top of the other: the diagram says one line where
+// there are two, and a click can only ever reach whichever was drawn last.
+//
+// The index is the connection's position in the document, not a hash of its id. A
+// hash was the first attempt and is the wrong tool: with five corridors two ids
+// collide one time in five, and "one time in five" on a diagram means a reader meets
+// it on their first real model. Counting cannot collide.
+//
+// What counting costs is that adding a relationship can move an existing line into
+// the next corridor. That is the right price — the routes are derived and nothing
+// persists them, so a line's exact corridor was never something to hold on to, while
+// two lines in one corridor is a picture that lies.
+function lane(index) {
+  return ((index % LANES) - (LANES - 1) / 2) * LANE;
+}
+
+// spread moves a route's middle corridor into its own lane, when it has one and when
+// there is room: a corridor pushed past either box would be a line leaving one and
+// re-entering it, which is worse than the overlap it was avoiding.
+function spread(points, index, source, target) {
+  if (!points || points.length !== 4) return points;
+  const off = lane(index);
+  if (!off) return points;
+  const [a, b, c, d] = points;
+  if (b.x === c.x && a.y === b.y && c.y === d.y) {
+    const lo = Math.min(source.x + source.width, target.x + target.width) + 8;
+    const hi = Math.max(source.x, target.x) - 8;
+    const x = b.x + off;
+    if (x > lo && x < hi) return [a, { x, y: b.y }, { x, y: c.y }, d];
+  } else if (b.y === c.y && a.x === b.x && c.x === d.x) {
+    const lo = Math.min(source.y + source.height, target.y + target.height) + 8;
+    const hi = Math.max(source.y, target.y) - 8;
+    const y = b.y + off;
+    if (y > lo && y < hi) return [a, { x: b.x, y }, { x: c.x, y }, d];
+  }
+  return points;
+}
+
+// straight is the store's line to the class it holds. A store and its class do not
+// relate — one *is kept in* the other (ADR-0230 §7) — so the line is an annotation
+// pointing at something, and an annotation points rather than travels. Routing it
+// orthogonally like a relationship gave it a corridor of its own to run down, which
+// on a real model is three hundred pixels of vertical line crossing every
+// relationship in between, for a line that only ever meant "this one".
+export const route = (source, target, index = 0, straight = false) => {
+  if (straight && source !== target) return [dock(source, target), dock(target, source)];
+  if (source !== target) {
+    // h:h — leave a side, enter a side. Vertical stacking is the other reading, and
+    // the wrong one here: the layout an import produces and the one people arrange by
+    // hand both run in columns, so a line's business is nearly always sideways.
+    const points = connectRectangles(source, target, undefined, undefined, { preferredLayouts: ["h:h"] });
+    // The router declines a pair it cannot lay out orthogonally without crossing one
+    // of them. Docking straight is worse than a bend and better than nothing drawn.
+    if (!points || !points.length) return [dock(source, target), dock(target, source)];
+    return spread(points, index, source, target);
+  }
   const right = source.x + source.width;
   const midY = source.y + source.height / 2;
   const backIn = source.x + source.width - 40;
@@ -309,6 +465,42 @@ UmlRules.prototype.init = function() {
   this.addRule("shape.resize", () => false); // a class is as tall as its members make it
 };
 
+// UmlPalette hands diagram-js's palette the entries the host built.
+//
+// The entries are not defined here on purpose. What may be added is the served subset
+// (ADR-0230) and what a connection does is the editor's business, so the canvas would
+// have to be told both anyway — and a palette that reads its own list from a table it
+// invented is how the palette and the write path come to disagree. It is given a
+// function rather than a list because one of the entries is a *mode*: which
+// relationship is armed changes while the palette is on screen, and the palette has
+// to be able to ask again.
+function UmlPalette(palette, config) {
+  this.read = (config && config.entries) || (() => []);
+  palette.registerProvider(this);
+}
+UmlPalette.$inject = ["palette", "config.umlPalette"];
+
+UmlPalette.prototype.getPaletteEntries = function() {
+  const out = {};
+  for (const e of this.read()) {
+    out[e.id] = e.separator
+      ? { group: e.group, separator: true }
+      : {
+        group: e.group,
+        className: `uml-pi uml-pi-${e.id}${e.active ? " active" : ""}`,
+        title: e.title,
+        action: { click: e.onClick },
+      };
+  }
+  return out;
+};
+
+const PaletteProviderModule = {
+  __depends__: [PaletteModule],
+  __init__: ["umlPalette"],
+  umlPalette: ["type", UmlPalette],
+};
+
 const RulesProviderModule = {
   __depends__: [RulesModule],
   __init__: ["umlRules"],
@@ -321,7 +513,7 @@ const VIEW_MODULES = [
 ];
 const EDIT_MODULES = [
   ModelingModule, MoveModule, RulesProviderModule, LassoToolModule,
-  KeyboardModule, KeyboardMoveSelectionModule,
+  KeyboardModule, KeyboardMoveSelectionModule, PaletteProviderModule,
 ];
 
 export class ClassCanvas {
@@ -333,6 +525,8 @@ export class ClassCanvas {
       // canvas without it would allow every connection, which is worse than allowing
       // none: it would promise what the write path refuses.
       subset: options.subset || { matrix: {} },
+      // What the palette offers, asked for again every time it is rebuilt.
+      umlPalette: { entries: options.paletteEntries || (() => []) },
       modules: this.editable ? [...VIEW_MODULES, ...EDIT_MODULES] : VIEW_MODULES,
     });
     this.canvas = this.diagram.get("canvas");
@@ -362,8 +556,18 @@ export class ClassCanvas {
       // is built for a palette and is wrong at both ends here: it lets go of the tool
       // the moment the box starts being drawn, and it is never told at all when
       // Escape cancels an armed drag that had not begun.
+      //
+      // The palette lights its own entry off the tool manager, which hears the tool
+      // being armed and does not hear this gesture end — the box being drawn spends
+      // it, and Escape takes it back, and neither is a tool being put away. So the
+      // canvas, which does know, tells the palette: an entry still lit after the mode
+      // is gone promises a drag that is back to panning.
+      const palette = () => this.diagram.get("palette");
       eventBus.on(["lasso.selection.init", "lasso.init"], () => options.onTool?.("marquee"));
-      eventBus.on(["lasso.selection.cleanup", "lasso.cleanup"], () => options.onTool?.(null));
+      eventBus.on(["lasso.selection.cleanup", "lasso.cleanup"], () => {
+        options.onTool?.(null);
+        palette().updateToolHighlight("");
+      });
       this.commandStack = this.diagram.get("commandStack");
       // One event for "the picture changed", whatever changed it — a drag, an undo,
       // a redo. The host does not need to know which.
@@ -391,6 +595,14 @@ export class ClassCanvas {
   allowedFrom(sourceStereotype, targetStereotype) {
     if (!this.editable) return [];
     return this.diagram.get("umlSubset").allowedBetween(sourceStereotype, targetStereotype);
+  }
+
+  // The palette carries a mode — which relationship the next two clicks will draw —
+  // so the host says when that changed and the palette asks for its entries again.
+  // Rebuilding is the whole of it: the entries are read fresh, and diagram-js keeps
+  // the open/closed state it already had.
+  refreshPalette() {
+    if (this.editable) this.diagram.get("palette")._rebuild();
   }
 
   undo() { if (this.commandStack?.canUndo()) this.commandStack.undo(); }
@@ -443,6 +655,9 @@ export class ClassCanvas {
     const byName = new Map();
     for (const [id, { kind, item }] of wanted) {
       const height = kind === "store" ? STORE_H : classHeight(item);
+      // A store is one line and keeps the old fixed width; a class is as wide as its
+      // members make it, the same way it is as tall as their number makes it.
+      const width = kind === "store" ? BOX_W : classWidth(item);
       // `element` says what sort of thing this is; `kind` on an association says
       // which of the four it is. The panel needs both, so they are two names.
       const bo = { element: kind, kind, ...item, invalid: invalid(id), unreachable: unreachable.has(id) };
@@ -452,6 +667,7 @@ export class ClassCanvas {
         // cannot keep a renamed class alive under its old name.
         shape.businessObject = bo;
         shape.height = height;
+        shape.width = width;
         // A shape the author has dragged keeps where they put it; one they have not
         // follows the document, which is what moves a class the server repositioned.
         const origin = this.origin.get(id);
@@ -464,7 +680,7 @@ export class ClassCanvas {
       } else {
         shape = this.factory.createShape({
           id, type: kind === "store" ? "uml:store" : "uml:class",
-          x: item.x, y: item.y, width: BOX_W, height, businessObject: bo,
+          x: item.x, y: item.y, width, height, businessObject: bo,
         });
         this.canvas.addShape(shape, this.root);
         this.shapes.set(id, shape);
@@ -479,11 +695,12 @@ export class ClassCanvas {
       this.canvas.removeConnection(conn);
       this.connections.delete(id);
     }
+    let drawn = 0;
     const link = (id, type, source, target, businessObject) => {
       if (!source || !target) return;
       const conn = this.factory.createConnection({
         id, type, source, target,
-        waypoints: route(source, target), businessObject,
+        waypoints: route(source, target, drawn++, type === "uml:store-link"), businessObject,
       });
       this.canvas.addConnection(conn, this.root);
       this.connections.set(id, conn);
@@ -588,10 +805,21 @@ export class ClassCanvas {
     this.canvas.zoom("fit-viewport", "auto");
     const box = this.canvas.viewbox();
     if (!box.inner.width || !box.inner.height) return; // nothing drawn yet
-    const room = Math.min(box.outer.width / box.inner.width, box.outer.height / box.inner.height);
+    // The palette floats over the sheet's left edge, which is exactly where fitting
+    // puts the leftmost class — so a fitted model opened with its first column behind
+    // the toolbox, and reading it began by panning the drawing out from under the
+    // thing you draw with. It is taken off the width *before* the zoom is chosen
+    // rather than scrolled away afterwards: scrolling a model that already filled the
+    // window only trades the left edge for the right one.
+    const gutter = this.editable ? PALETTE_ROOM : 0;
+    const usable = Math.max(160, box.outer.width - gutter);
+    const room = Math.min(usable / box.inner.width, box.outer.height / box.inner.height);
     // A margin, so the outermost boxes do not sit against the edge of the sheet.
     const wanted = Math.min(room * FIT_MARGIN, MAX_FIT);
-    if (wanted > this.canvas.zoom()) this.canvas.zoom(wanted, "auto");
+    this.canvas.zoom(wanted, "auto");
+    // Half the gutter, not all of it: the zoom above already left the room, and this
+    // only slides the model into the middle of what is left.
+    this.canvas.scroll({ dx: gutter / 2, dy: 0 });
   }
   zoom(delta) {
     const now = this.canvas.zoom();
