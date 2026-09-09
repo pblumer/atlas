@@ -1,4 +1,4 @@
-# ADR-DRAFT: A record has two states — whether the decision holds, and whether it is built
+# ADR-0298: A record has two states — whether the decision holds, and whether it is built
 
 - **Status:** Accepted
 - **Implementation:** Landed

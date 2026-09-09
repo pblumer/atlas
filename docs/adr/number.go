@@ -51,7 +51,7 @@ type Record struct {
 	// Implementation answers "is it built". One field carried both for 295 records
 	// and could answer neither: a decision whose code had shipped still read
 	// `Proposed`, because nothing in the process ever went back to change it.
-	// ADR-draft-two-states-for-a-record says why they are separate rather than merged.
+	// ADR-0298 says why they are separate rather than merged.
 	Implementation string
 	// OpenQuestion and QuestionChecked are the optional pair a record carries when
 	// its reasoning rests on something nobody could answer: what the question is,

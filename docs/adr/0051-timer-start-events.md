@@ -13,7 +13,7 @@
 > written and is kept for that reason; it has not been true for some time. Duration,
 > date and cycle timer starts compile, schedule, fire and replay, with recovery tests.
 > The note stayed because nothing in the process ever revisited a merged record — the
-> problem `ADR-draft-two-states-for-a-record` exists to fix, and why this record now
+> problem `ADR-0298` exists to fix, and why this record now
 > carries an `Implementation` line that a test keeps honest.
 
 ## Context and problem statement

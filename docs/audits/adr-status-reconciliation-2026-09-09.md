@@ -9,7 +9,7 @@ production packages the records describe.
 
 This is Phase 0 of [the ADR implementation audit of
 2026-08-25](adr-implementation-audit-2026-08-25.md), applied. The decision it
-implements is recorded in `ADR-draft-two-states-for-a-record`; this document is the
+implements is recorded in `ADR-0298`; this document is the
 evidence behind the classification it applied, so that a later reader can check the
 call rather than take it.
 
