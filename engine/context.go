@@ -371,7 +371,7 @@ func (c *ProcessingContext) AppendTimerEvent(key uint64, intent model.Intent, v 
 
 // AppendVariableEvent records a variable write and reports whether it happened: a
 // value past the variable budget is refused, with an incident naming it
-// (ADR-draft-a-variable-is-a-record). Most callers write engine-derived values —
+// (ADR-0294). Most callers write engine-derived values —
 // a loop index, a counter — which cannot exceed a budget sized for a business record,
 // and they ignore the result. A caller that writes something a model or a worker
 // produced should not.
@@ -393,7 +393,7 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
 	// A value past the budget is not written and not silently dropped: an incident
 	// names the variable and both sizes, and resolving retries
-	// (ADR-draft-a-variable-is-a-record). Deleting is never refused — a delete carries
+	// (ADR-0294). Deleting is never refused — a delete carries
 	// no value, and refusing to shrink an instance would be the wrong way round.
 	return c.appendVariable(intent, v, c.p.variableCeiling())
 }
@@ -403,7 +403,7 @@ func (c *ProcessingContext) AppendVariableEvent(intent model.Intent, v model.Var
 // a legitimate loop accumulates at the iteration ceiling, which is a different
 // question from what one business record may weigh — and measuring it against the
 // smaller number would refuse ordinary loops
-// (ADR-draft-a-variable-is-a-record).
+// (ADR-0294).
 func (c *ProcessingContext) appendCollection(intent model.Intent, v model.VariableValue) bool {
 	v.ProducerKey = c.producer
 	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)

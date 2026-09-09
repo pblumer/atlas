@@ -1,4 +1,4 @@
-# ADR-DRAFT: A variable is a record, a collection is a loop's harvest — two budgets
+# ADR-0294: A variable is a record, a collection is a loop's harvest — two budgets
 
 - **Status:** Draft
 - **Date:** 2026-09-09

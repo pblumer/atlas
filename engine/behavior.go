@@ -820,7 +820,7 @@ func handleJobCompleted(c *ProcessingContext) {
 		// element clears the one it carries — and the task would look successful while
 		// its result was never written. So the element stays activated: the job is done
 		// and cannot be redone, and resolving the incident is what moves it on
-		// (ADR-draft-a-variable-is-a-record).
+		// (ADR-0294).
 		if refused {
 			return
 		}
@@ -4066,7 +4066,7 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 		// its token, no iteration is seeded, and resolving runs this behaviour again.
 		// Carrying on would seed a loop whose results have nowhere to land, and the
 		// instance would complete as though nothing were wrong — taking the incident
-		// with it (ADR-draft-a-variable-is-a-record).
+		// with it (ADR-0294).
 		return
 	}
 	if len(items) == 0 {
@@ -4267,7 +4267,7 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 			// iteration stays where it is with the incident on it rather than
 			// completing: a loop that carried on would drop this result and every later
 			// one, and finish looking successful
-			// (ADR-draft-a-variable-is-a-record).
+			// (ADR-0294).
 			return
 		}
 	}
@@ -4381,7 +4381,7 @@ func nullList(n int) []expr.Value {
 // writeList writes a FEEL list value (canonical JSON) into scope under name
 // (ADR-0077), unless the serialised collection is past the collection budget — then
 // nothing is written and the element owning the scope is parked with an incident
-// (ADR-draft-a-variable-is-a-record). It reports whether the write happened.
+// (ADR-0294). It reports whether the write happened.
 //
 // The check is on the serialised text rather than before it, and the difference is
 // worth stating: the elements are already in memory, so what this bounds is the
@@ -4401,7 +4401,7 @@ func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Val
 // written, and an incident on the element that produced it names the variable and both
 // sizes. Resolving retries the write, so correcting the data — or raising the budget —
 // lets it through, and leaving it refuses again
-// (ADR-draft-a-variable-is-a-record).
+// (ADR-0294).
 //
 // The element is the scope's own when the scope is one (a loop's body, a container),
 // and otherwise the write's producer, which is the element instance whose processing

@@ -207,7 +207,7 @@ func TestProcessBatchRecordTooLarge(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 	// The variable budget now sits in front of this path and refuses such a value
-	// with a resumable incident (ADR-draft-a-variable-is-a-record), which is the
+	// with a resumable incident (ADR-0294), which is the
 	// better answer and not the one under test here. Raised out of the way, so the
 	// WAL's own cap — the last line, where the failure is an aborted batch rather
 	// than an incident — is still reached and still covered.

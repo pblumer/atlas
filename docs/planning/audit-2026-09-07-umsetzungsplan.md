@@ -636,7 +636,7 @@ Seiteneffekte zurückbleiben.
 > **Die Variablengrösse — nachgezogen.** Sie stand in der Liste des Berichts und war
 > als Einzige offen geblieben, weil sie eine Entscheidung brauchte, die die
 > Vereinheitlichung nicht traf: was beim Ablehnen passiert. Jetzt zwei Budgets, und
-> zwar bewusst zwei (ADR-draft-a-variable-is-a-record). `Variable` fragt, was *ein
+> zwar bewusst zwei (ADR-0294). `Variable` fragt, was *ein
 > fachlicher Datensatz* wiegen darf — ein Kunde, eine Bestellung, die Eingaben einer
 > Entscheidung —, dafür ist ein Megabyte reichlich. `Collection` fragt, was ein
 > legitimer Loop an der Iterationsdecke *ansammeln* darf, und das ist eine andere
