@@ -177,7 +177,7 @@ type Server struct {
 	// limits are the installation's resource budgets: how much a caller, a called
 	// service, or a running process may make this server hold at once. Every ceiling
 	// in the API reads its number from here rather than from a constant beside the
-	// handler, so the set is enumerable and an operator can move it (ADR-draft-one-place-for-budgets).
+	// handler, so the set is enumerable and an operator can move it (ADR-0291).
 	// New defaults it to limits.Default(), so a server nobody configured has every
 	// budget it always had.
 	limits limits.Limits

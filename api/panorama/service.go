@@ -73,7 +73,7 @@ type Service struct {
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own once it has read the
 	// environment, so every ceiling in this service is the one operators configured
-	// (ADR-draft-one-place-for-budgets).
+	// (ADR-0291).
 	Limits limits.Limits
 }
 

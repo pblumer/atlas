@@ -1,4 +1,4 @@
-# ADR-DRAFT: One place names every resource budget, and one way sets them
+# ADR-0291: One place names every resource budget, and one way sets them
 
 - **Status:** Draft
 - **Date:** 2026-09-08
