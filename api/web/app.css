@@ -5291,6 +5291,27 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-transition-line { stroke: var(--text); stroke-width: 1.3; }
 .uml-transition-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; }
 
+/* The derived model — what an application's processes imply, read without anyone
+   having modelled anything (ADR-draft-derive-the-model-from-the-processes). It is
+   evidence rather than a document, so it is deliberately quieter than the authored
+   model's canvas: no palette, no accent, and its qualifications above the drawing
+   rather than under it, because a derived picture mistaken for a complete one is
+   worse than no picture. */
+.dm-root { padding: 18px 22px 26px; }
+.dm-link { margin-left: 8px; font-size: 12px; white-space: nowrap; }
+.dm-gaps {
+  margin: 14px 0 10px; padding: 10px 14px; font-size: 13px;
+  border: 1px solid var(--warn); border-radius: 8px; background: var(--warn-soft); color: var(--text);
+}
+.dm-gaps ul { margin: 6px 0 0; padding-left: 18px; }
+.dm-gaps li { margin: 3px 0; }
+.dm-stage { position: relative; height: 460px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.dm-stage.small { height: 300px; margin-top: 10px; }
+.dm-side { margin-top: 14px; }
+.dm-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.dm-card-head { display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
+.dm-gaps-inline { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+
 /* The bar above the run-time overlay: which object is drawn, where it has got to,
    and — only when more than one object has a machine — which one to draw. */
 .lc-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px 0; font-size: 13px; }

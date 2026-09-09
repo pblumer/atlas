@@ -7961,7 +7961,10 @@ async function viewInfoModels() {
       <td><div class="artifact-name"><span class="chip">UML</span>
         <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
-      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}
+        <a class="dm-link" href="#/data/derived/${encodeURIComponent(app.id)}"
+           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>`
+        : `<span class="muted">Missing application</span>`}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>
       <td class="muted">r${m.revision}</td>
@@ -7980,6 +7983,8 @@ async function viewInfoModels() {
       ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
         <button class="btn ghost" data-act="import-im"
           title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+        <button class="btn ghost" data-act="derived-im"
+          title="Read what an application's processes already imply, without modelling anything">As built…</button>
         <button class="btn" data-act="new-im">Create new</button>
       </div>` : ""}
     </div>
@@ -8035,6 +8040,22 @@ async function viewInfoModels() {
         app: target, file, api, toast,
         navigate: (id) => { location.hash = `#/data/m/${encodeURIComponent(id)}`; },
       });
+      return;
+    }
+    // "As built" is scoped to an application, not to a model — an application with no
+    // model at all is exactly the case it exists for, and that case has no row to
+    // hang a link on. Every application is offered, not only the writable ones:
+    // reading what a process implies changes nothing.
+    if (e.target.closest('[data-act="derived-im"]')) {
+      const picked = await openPickModal({
+        title: "As built",
+        label: "Application",
+        options: applications.map((app) => ({ value: app.id, label: app.name })),
+        hint: "Read what this application's processes already imply about its data. Nothing is modelled and nothing is written.",
+        okLabel: "Read it",
+      });
+      if (!picked) return;
+      location.hash = `#/data/derived/${encodeURIComponent(picked.option.value)}`;
       return;
     }
     const btn = e.target.closest('[data-act="new-im"]');
@@ -8241,6 +8262,22 @@ async function viewDataInstances() {
     if (e.key === "Enter" && e.target.closest(".di-field")) apply();
   });
   enhanceViewTables();
+}
+
+// viewDerivedModel opens the *as built* reading of one application: the classes,
+// members and states its processes imply, with nothing modelled by hand
+// (ADR-draft-derive-the-model-from-the-processes). It is the counterpart of
+// viewInfoModel, not a mode of it — the two are different statements about the same
+// subject, and keeping them apart is the whole point.
+async function viewDerivedModel(applicationId) {
+  const gen = navGen;
+  const mod = await import("./derived-model.js");
+  const application = await resolveProject(applicationId);
+  if (superseded(gen)) return;
+  // Two live diagram-js instances stand on this page, so leaving it has to take them
+  // down rather than leave them bound to markup that is gone.
+  window.__atlasCleanup = mod.cleanupDerivedModel;
+  await mod.mountDerivedModel(view, { api, applicationId, application });
 }
 
 // viewInfoModel opens one model on the class canvas, which lives in its own module
@@ -8951,6 +8988,8 @@ async function route() {
     if (path === "#/data/instances") return await viewDataInstances();
     const imm = path.match(/^#\/data\/m\/(.+)$/);
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
+    const imd = path.match(/^#\/data\/derived\/(.+)$/);
+    if (imd) return await viewDerivedModel(decodeURIComponent(imd[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

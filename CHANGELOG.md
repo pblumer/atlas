@@ -35,6 +35,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The information model can now be read off the processes instead of typed in beside
+  them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) both run in one direction: a person
+  models the vocabulary, and the processes are checked against it. Neither record priced
+  what that puts in front of the first user, which is a blank page — until classes exist,
+  the Modeler's class picker is empty, the data-state field is free text, and the Problems
+  panel reports nothing because there is nothing to report against. Meanwhile the engine
+  already knew most of it: a data object declares a name and often a type, every data
+  output association names the path it writes (`customer.name`), every data object may
+  carry a data state, and the compiled graph already says which writes can follow which.
+
+  **Data → As built** draws what an application's processes actually carry. A class per
+  data object, named by its `itemSubjectRef` or, failing that, by the object itself; a
+  member per write path; and, per class, the state machine its data states imply, with a
+  transition wherever the compiled graph says one write can precede another. It is a read
+  over the newest active version of each of the application's processes — the same set
+  the deploy checks assemble — so it costs a request and no storage, and it is drawn on
+  the same two canvases the authored model and the run-time overlay use, in their
+  read-only mode.
+
+  The two readings are deliberately different statements rather than two copies of one.
+  What is derived is what is **built**; what somebody models by hand is what is
+  **wanted**. Neither is written into the other, because the point is not to make them
+  agree — their difference is the work not yet done. A `cancelled` state in the model that
+  no process ever writes is a backlog item, which is the same fact `data.unreachable-state`
+  reports from the other side.
+
+  What derivation cannot see is said above the drawing rather than under it, because a
+  derived picture mistaken for a complete one is worse than no picture. No derived class
+  carries a business key — nothing in BPMN says which attribute identifies a thing, and
+  it is the one fact every cross-process capability rests on, so it stays the first thing
+  to add by hand. Attributes are untyped, since a FEEL expression's result type is not a
+  static fact of the model. Per class it also says when the name came from the data object
+  rather than a declared type, which is the case most likely to be spelled wrongly, and
+  when a dotted write path proved a member has members of its own that nothing in BPMN
+  names. Nothing on the view is editable: it is evidence about the processes, not a
+  document about the business.
+
+  Also readable as `GET /api/v1/infomodel/derived?applicationId=…` and, for agents, as the
+  MCP tool `atlas_derived_information_model`.
+
 - **A lifecycle that is ahead of the processes that write it now says so.** A class can
   declare that an order may be `cancelled`; whether anything ever cancels one is a
   question about the *application*, not about any one process, so it could not be asked

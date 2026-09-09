@@ -45,6 +45,49 @@
       }
     },
     {
+      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See the classes and states your processes already carry — without modelling first",
+        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
+      },
+      "summary": {
+        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
+        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
+      },
+      "link": {
+        "label": "ADR draft",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-derive-the-model-from-the-processes.md"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data and press As built…, then pick the application you want to read.",
+          "The class diagram is what that application's processes carry — no model of yours is involved.",
+          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
+          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
+        ],
+        "de": [
+          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
+          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
+          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
+          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
       "version": "Unreleased",
       "date": null,
@@ -370,35 +413,6 @@
           "de": "Daten öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "The handbook's worker runbooks are dated too",
-        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
-      },
-      "summary": {
-        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
-        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Handbook",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the runbooks",
-          "de": "Zu den Runbooks"
-        },
-        "route": "#/console"
       }
     }
   ]

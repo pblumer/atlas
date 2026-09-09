@@ -1,10 +1,10 @@
 # ADR-DRAFT: Derive the information model from the processes that use it
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Patrick Blumer
-- **Open question:** whether a derived model should ever be written into a document, and if so how a re-derivation reconciles with what a person has since edited. This record deliberately settles only the read.
+- **Open question:** how the difference between the derived and the authored model is best presented as work — a list, a marked-up drawing, or something that can be handed to a planning tool. This record settles the read and names the difference; it does not settle its shape.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -46,9 +46,10 @@ already written by hand?**
 - **The blank page is the real barrier**, not the modelling itself. A person who can
   see the classes their processes already carry has something to correct; a person
   facing an empty canvas has to invent it.
-- **Nothing derived may overwrite anything authored.** The documentation on that
-  enumeration is worth more than the five strings it documents, and no generator will
-  ever produce it.
+- **The two models are different statements, not two copies of one.** What is derived
+  is what is *built* — it is the truth about the system as it runs. What a person
+  models by hand is a wish: a target, not yet reality. Neither may overwrite the other,
+  and the point is not to make them agree. Their difference is the interesting part.
 - **A derivation that hides its losses is worse than none.** ADR-0232 settled this for
   the XMI import and the discipline is the same here: a lossy read that does not
   report its losses is discovered later, by a deploy warning, at the worst moment.
@@ -74,15 +75,29 @@ already written by hand?**
 
 ## Decision outcome
 
-Chosen option: **"A derived view, never a document"** — for now, and deliberately only
-for now.
+Chosen option: **"A derived view, never a document"** — and the reason is stronger
+than "it is the safe first step".
 
-It is the option that delivers what was actually asked for — *see which classes exist
-and which states they can be in, without modelling first* — at close to no risk,
-because it writes nothing. It is also the option that makes the other three
-**evaluable**: you cannot sensibly decide whether to seed, reconcile or track
-provenance until you can look at what derivation actually produces on a real
-application. Options 2–4 all rest on an assumption this one tests.
+**The derived model is the truth; the authored model is the plan.** A process that
+writes `cancelled` is evidence that an order can be cancelled. A class somebody drew
+with a `cancelled` state and no process behind it is a statement of intent — it says
+what the system *should* do, and it is exactly as valuable for being unbuilt. Writing
+one into the other would destroy the only thing that makes the pair worth having.
+
+That reframes what the difference between them is. It is not drift to be reconciled
+away; it is **the work not yet done**, and reading it is a design in its own right.
+This record does not settle its shape — a list, a marked-up drawing, something a
+planning tool can take — but it settles that the difference is a first-class output
+and not an error condition.
+
+Options 2 and 4 are refused on that ground rather than on cost: seeding writes the
+truth into the plan, and provenance-inside-one-document mixes the two statements in
+one place. Option 3 survives in altered form — not as a reconciliation that merges
+toward one model, but as a *reading of the difference*, and it is named as the next
+record rather than folded into this one.
+
+The immediate payoff stands unchanged: *see which classes exist and which states they
+can be in, without modelling first.*
 
 ### 1. What is read, and from where
 
@@ -93,8 +108,7 @@ set `CheckApplication` already assembles, and for the same reason:
 |---|---|
 | A class | a data object's `itemSubjectRef`; failing that, the data object's own name |
 | An attribute | the target path of every data output association writing that object |
-| A nested class | a path that walks through a member (`order.lines[…]`) |
-| `isCollection` | the data object's own flag |
+| A structured attribute | a dotted path (`customer.name`) says `customer` has members; nothing in BPMN names the class it is |
 | A state | every `<dataState>` on the object or any reference to it |
 | The initial state | the state the object is created in |
 | A transition | an ordered pair of writes the compiled graph says can follow one another |
@@ -110,7 +124,10 @@ class rather than as a footnote:
   keyless, and says so.
 - **Attribute types.** A FEEL expression's result type is not a static fact of the
   model. Derived attributes are untyped.
-- **Multiplicity** beyond the collection flag.
+- **Multiplicity**, including a data object's `isCollection`. The flag is readable, but
+  it says *this data object holds many of them*, which is a fact about the object and
+  not about the type — and a class diagram has nowhere to put it. Multiplicity lives on
+  an attribute or an association end, and a process states neither.
 - **Which states are final.** "Nothing leaves it" is a statement about intent; the
   graph only shows what no process happens to do next.
 - **Associations** other than the containment a nested write path implies.
@@ -147,15 +164,21 @@ evidence about the processes, not a document about the business.
   drawing a machine — which is the specific thing that could not be seen at all.
 - **Positive:** it makes the authored model checkable *by eye* against reality, which
   is a different and cheaper test than the deploy checks.
-- **Negative:** two pictures of the same subject, one derived and one authored, with
-  no mechanism keeping them in step. Mitigated only by the derived one being obviously
-  read-only and obviously incomplete.
+- **Positive:** the pair becomes a way to see what is planned but not built. The
+  `data.unreachable-state` warning of ADR-0259 is already one instance of it read from
+  the other side — "the class declares `cancelled` and nothing writes it" is a backlog
+  item, not a defect, and this record is the reason it can be read that way.
+- **Negative:** two drawings a reader must not confuse. Everything hangs on each one
+  saying plainly which it is — what is built, or what is wanted — because a derived
+  picture mistaken for the plan, or a plan mistaken for the truth, is worse than
+  either alone.
 - **Negative:** a derived class named after a data object rather than a type will
   usually be named wrongly (`identitaet` the object versus `Identitaet` the class). The
   view must not pretend otherwise.
-- **Follow-up:** whether to seed, reconcile or track provenance. That decision should
-  be taken *after* this view has been pointed at real applications, and the evidence it
-  produces is the input to it.
+- **Follow-up:** the shape of the difference — how "planned but not built" is best
+  presented, and whether it can be handed to whatever tracks work. That decision wants
+  this view pointed at real applications first, because the evidence it produces is
+  its input.
 
 ## Pros and cons of the options
 
@@ -166,18 +189,19 @@ evidence about the processes, not a document about the business.
 
 ### Option 2 — a one-time seed
 - Good: one document; a real head start on the blank page.
-- Bad: the second run has nothing good to do. Re-deriving after the processes change is
-  the merge problem again, with a person's edits in the middle of it.
+- Bad: it writes the truth into the plan, which is the one move that destroys the
+  distinction the pair is for. The second run also has nothing good to do.
 
 ### Option 3 — a reconciliation
-- Good: one source of truth, kept current, and never silently overwritten.
-- Bad: by far the most machinery, and it needs an identity for derived elements that
-  survives a re-derivation — which is a design problem in its own right.
+- Good: keeps the difference visible and current.
+- Bad: as *merging* toward one model, it is the same mistake as seeding. As a *reading
+  of the difference* it is the right next record — and it needs an identity for a
+  derived element that survives a re-derivation, which is a design problem of its own.
 
 ### Option 4 — provenance inside one document
 - Good: precise about what may be refreshed.
-- Bad: a rule inside the document that every reader and every writer must learn, to
-  solve a problem we have not yet shown that we have.
+- Bad: it puts both statements in one document and asks every reader and writer to keep
+  them apart by a rule. Two documents keep them apart by construction.
 
 ## Links
 

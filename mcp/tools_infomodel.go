@@ -272,6 +272,33 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_derived_information_model",
+			Description: "Derive an application's information model from the processes that use it, without " +
+				"anyone having modelled anything: the classes their data objects carry, the members their " +
+				"writes target, and the states and transitions they actually reach. This is what is *built* — " +
+				"the model somebody authors under Data is a different statement, a target, and this never " +
+				"writes into it. Read the two together and the difference is the work not yet done. Read " +
+				"`gaps` before trusting the picture: it says what could not be read, above all that no class " +
+				"has a business key, because nothing in BPMN says which attribute identifies a thing.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": map[string]any{
+						"type":        "string",
+						"description": "The process application whose processes to read (from atlas_list_applications).",
+					},
+				},
+				"required": []string{"applicationId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "applicationId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/infomodel/derived?applicationId=" + url.QueryEscape(id)))
+			},
+		},
+		{
 			Name: "atlas_instance_lifecycle",
 			Description: "Read one process instance's data objects against the lifecycles their classes " +
 				"declare: the state machine as modelled, with the states this instance has actually been " +
