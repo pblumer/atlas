@@ -14,6 +14,7 @@ import (
 func TestFEELFormsCompileAndEvaluate(t *testing.T) {
 	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	vars := map[string]expr.Value{
+		"scanAt":            expr.DateTime(now),
 		"processId":         expr.String("kunden-anfrage"),
 		"taskName":          expr.String("Anfrage sichten"),
 		"assignee":          expr.Null,
@@ -46,12 +47,12 @@ func TestFEELFormsCompileAndEvaluate(t *testing.T) {
 		{`"Team Lead" in lanePath`, true},
 		{`priority >= 70`, true},
 		{`priority <= 50`, false},
-		{`dueDate != null and dueDate < now()`, true},
-		{`dueDate != null and dueDate < now() + duration("P3D")`, true},
+		{`dueDate != null and dueDate < scanAt`, true},
+		{`dueDate != null and dueDate < scanAt + duration("P3D")`, true},
 		{`dueDate = null`, false},
 		{`hasForm`, true},
 		{`not(hasForm)`, false},
-		{`instanceCreatedAt < now() - duration("P2D")`, true},
+		{`instanceCreatedAt < scanAt - duration("P2D")`, true},
 	}
 	for _, tc := range cases {
 		c, err := expr.CompileAuto(tc.src)

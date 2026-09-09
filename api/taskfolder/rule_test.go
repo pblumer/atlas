@@ -52,15 +52,15 @@ func TestRuleFEELIsGenerated(t *testing.T) {
 		{"priority is", Condition{Field: FieldPriority, Op: OpIs, Value: "50"},
 			`priority = 50`},
 		{"due overdue", Condition{Field: FieldDue, Op: OpOverdue},
-			`dueDate != null and dueDate < now()`},
+			`dueDate != null and dueDate < scanAt`},
 		{"due within", Condition{Field: FieldDue, Op: OpWithin, Value: "P3D"},
-			`dueDate != null and dueDate < now() + duration("P3D")`},
+			`dueDate != null and dueDate < scanAt + duration("P3D")`},
 		{"due none", Condition{Field: FieldDue, Op: OpNone}, `dueDate = null`},
 		{"due any", Condition{Field: FieldDue, Op: OpAny}, `dueDate != null`},
 		{"instance older than days", Condition{Field: FieldInstanceAge, Op: OpOlderThan, Value: "2", Unit: UnitDays},
-			`instanceCreatedAt < now() - duration("P2D")`},
+			`instanceCreatedAt < scanAt - duration("P2D")`},
 		{"instance newer than hours", Condition{Field: FieldInstanceAge, Op: OpNewerThan, Value: "4", Unit: UnitHours},
-			`instanceCreatedAt > now() - duration("PT4H")`},
+			`instanceCreatedAt > scanAt - duration("PT4H")`},
 		{"has form", Condition{Field: FieldForm, Op: OpHas}, `hasForm`},
 		{"has no form", Condition{Field: FieldForm, Op: OpHasNot}, `not(hasForm)`},
 	}
@@ -99,7 +99,7 @@ func TestRuleFEELJoinsConditions(t *testing.T) {
 		{Field: FieldDue, Op: OpOverdue},
 		{Field: FieldPriority, Op: OpAtLeast, Value: "70"},
 	}}
-	wantAny := "(dueDate != null and dueDate < now())\n  or priority >= 70"
+	wantAny := "(dueDate != null and dueDate < scanAt)\n  or priority >= 70"
 	if got := any.FEEL(); got != wantAny {
 		t.Errorf("any:\n got %q\nwant %q", got, wantAny)
 	}
@@ -271,6 +271,43 @@ func TestMatcherMatches(t *testing.T) {
 				t.Errorf("Match() = %v, want %v (FEEL: %s)", got, tc.want, tc.rule.FEEL())
 			}
 		})
+	}
+}
+
+// TestMatcherJudgesAgainstTheGivenMoment pins the parameter Match takes. The
+// generated FEEL used to call now(), which reads the real clock, so the moment
+// the caller passed was accepted and ignored: a scan judged each row against its
+// own instant, and a test could anchor whatever date it liked without that date
+// deciding anything. Both moments below are far from any wall clock, and each
+// one alone decides the answer.
+func TestMatcherJudgesAgainstTheGivenMoment(t *testing.T) {
+	due := time.Date(2020, 1, 1, 12, 0, 0, 0, time.UTC)
+	task := Task{DueDate: due.UnixMilli(), InstanceCreatedAt: due.UnixMilli()}
+	me := User{ID: "usr_1", Name: "patrick"}
+	overdue, err := Compile(Rule{Match: MatchAll, Conditions: []Condition{
+		{Field: FieldDue, Op: OpOverdue}}})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if got := overdue.Match(task, me, due.Add(-time.Hour)); got {
+		t.Error("a task due an hour later reads as overdue; the moment passed to Match is being ignored")
+	}
+	if got := overdue.Match(task, me, due.Add(time.Hour)); !got {
+		t.Error("a task due an hour earlier does not read as overdue")
+	}
+
+	// The same for an age window, where the old form drifted with the clock: the
+	// instance is one day old at the first moment and eight at the second.
+	age, err := Compile(Rule{Match: MatchAll, Conditions: []Condition{
+		{Field: FieldInstanceAge, Op: OpOlderThan, Value: "5", Unit: UnitDays}}})
+	if err != nil {
+		t.Fatalf("Compile: %v", err)
+	}
+	if got := age.Match(task, me, due.AddDate(0, 0, 1)); got {
+		t.Error("an instance one day old reads as older than five days")
+	}
+	if got := age.Match(task, me, due.AddDate(0, 0, 8)); !got {
+		t.Error("an instance eight days old does not read as older than five days")
 	}
 }
 
