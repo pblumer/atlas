@@ -76,6 +76,32 @@ func (s *Service) budgets() limits.Limits {
 	return s.Limits
 }
 
+// dispatch runs fn on the run loop and reports whether it ran at all.
+//
+// [runloop.Loop.Do] abandons the closure when the loop is shutting down, leaving every
+// result variable at its zero value — and its own doc says a caller must read that as
+// "not produced" rather than as an answer. For this area the difference is not
+// academic. An abandoned listing is an empty list, an abandoned gap report reads as
+// "nothing is wrong", and an abandoned create answers 201 for a record that was never
+// written. Each of those is the most reassuring possible answer from a server that did
+// nothing, which is the one answer a report like this must never give.
+//
+// So every closure says it ran, and a closure that did not becomes a refusal.
+func (s *Service) dispatch(fn func()) bool {
+	ran := false
+	s.loop.Do(func() {
+		ran = true
+		fn()
+	})
+	return ran
+}
+
+// writeShuttingDown answers a request the run loop refused because the server is
+// stopping.
+func writeShuttingDown(w http.ResponseWriter) {
+	httpapi.Error(w, http.StatusServiceUnavailable, "server is shutting down")
+}
+
 var errStale = errors.New("stale revision")
 
 const (
@@ -108,7 +134,7 @@ func (s *Service) HandleListCapabilities(w http.ResponseWriter, r *http.Request)
 
 	out := []CapabilitySummary{}
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		all, err := s.caps.LoadAll()
 		if err != nil {
 			opErr = err
@@ -130,7 +156,10 @@ func (s *Service) HandleListCapabilities(w http.ResponseWriter, r *http.Request)
 			}
 			out = append(out, summarizeCapability(c))
 		}
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list capabilities: "+opErr.Error())
 		return
@@ -155,7 +184,7 @@ func (s *Service) HandleCreateCapability(w http.ResponseWriter, r *http.Request)
 
 	var exists bool
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		if _, found, err := s.caps.Get(c.Key); err != nil {
 			opErr = err
 			return
@@ -164,7 +193,10 @@ func (s *Service) HandleCreateCapability(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		opErr = s.caps.Save(c)
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case exists:
 		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
@@ -182,7 +214,10 @@ func (s *Service) HandleGetCapability(w http.ResponseWriter, r *http.Request) {
 	var c Capability
 	var found bool
 	var opErr error
-	s.loop.Do(func() { c, found, opErr = s.caps.Get(r.PathValue("key")) })
+	if !s.dispatch(func() { c, found, opErr = s.caps.Get(r.PathValue("key")) }) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read capability: "+opErr.Error())
@@ -226,7 +261,7 @@ func (s *Service) HandleUpdateCapability(w http.ResponseWriter, r *http.Request)
 	var found bool
 	var opErr error
 	var saved Capability
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		current, exists, err := s.caps.Get(key)
 		if err != nil {
 			opErr = err
@@ -246,7 +281,10 @@ func (s *Service) HandleUpdateCapability(w http.ResponseWriter, r *http.Request)
 		if opErr = s.caps.Save(next); opErr == nil {
 			saved = next
 		}
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case !found && opErr == nil:
 		httpapi.Error(w, http.StatusNotFound, notFoundCapability)
@@ -285,7 +323,7 @@ func (s *Service) HandleDeleteCapability(w http.ResponseWriter, r *http.Request)
 	result := DeletionResult{Deleted: key}
 	var found bool
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		_, exists, err := s.caps.Get(key)
 		if err != nil {
 			opErr = err
@@ -328,7 +366,10 @@ func (s *Service) HandleDeleteCapability(w http.ResponseWriter, r *http.Request)
 			}
 		}
 		opErr = s.caps.Delete(key)
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "delete capability: "+opErr.Error())
@@ -351,7 +392,7 @@ func (s *Service) HandleCoverage(w http.ResponseWriter, r *http.Request) {
 		opErr  error
 		target Capability
 	)
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		var exists bool
 		target, exists, opErr = s.caps.Get(key)
 		if opErr != nil || !exists {
@@ -374,7 +415,10 @@ func (s *Service) HandleCoverage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rep = Coverage(target, all, streams, land)
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "resolve coverage: "+opErr.Error())
@@ -394,7 +438,7 @@ func (s *Service) HandleCoverage(w http.ResponseWriter, r *http.Request) {
 func (s *Service) HandleGaps(w http.ResponseWriter, r *http.Request) {
 	var rep GapReport
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		caps, err := s.caps.LoadAll()
 		if err != nil {
 			opErr = err
@@ -411,7 +455,10 @@ func (s *Service) HandleGaps(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rep = Gaps(caps, streams, land)
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "compare the map against this server: "+opErr.Error())
 		return
@@ -426,7 +473,7 @@ func (s *Service) HandleListValueStreams(w http.ResponseWriter, r *http.Request)
 	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
 	out := []ValueStreamSummary{}
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		all, err := s.streams.LoadAll()
 		if err != nil {
 			opErr = err
@@ -438,7 +485,10 @@ func (s *Service) HandleListValueStreams(w http.ResponseWriter, r *http.Request)
 			}
 			out = append(out, summarizeValueStream(v))
 		}
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	if opErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list value streams: "+opErr.Error())
 		return
@@ -463,7 +513,7 @@ func (s *Service) HandleCreateValueStream(w http.ResponseWriter, r *http.Request
 
 	var exists bool
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		if _, found, err := s.streams.Get(v.Key); err != nil {
 			opErr = err
 			return
@@ -472,7 +522,10 @@ func (s *Service) HandleCreateValueStream(w http.ResponseWriter, r *http.Request
 			return
 		}
 		opErr = s.streams.Save(v)
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case exists:
 		httpapi.Error(w, http.StatusConflict,
@@ -489,7 +542,10 @@ func (s *Service) HandleGetValueStream(w http.ResponseWriter, r *http.Request) {
 	var v ValueStream
 	var found bool
 	var opErr error
-	s.loop.Do(func() { v, found, opErr = s.streams.Get(r.PathValue("key")) })
+	if !s.dispatch(func() { v, found, opErr = s.streams.Get(r.PathValue("key")) }) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read value stream: "+opErr.Error())
@@ -523,7 +579,7 @@ func (s *Service) HandleUpdateValueStream(w http.ResponseWriter, r *http.Request
 	var found bool
 	var opErr error
 	var saved ValueStream
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		current, exists, err := s.streams.Get(key)
 		if err != nil {
 			opErr = err
@@ -543,7 +599,10 @@ func (s *Service) HandleUpdateValueStream(w http.ResponseWriter, r *http.Request
 		if opErr = s.streams.Save(next); opErr == nil {
 			saved = next
 		}
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case !found && opErr == nil:
 		httpapi.Error(w, http.StatusNotFound, notFoundValueStream)
@@ -562,7 +621,7 @@ func (s *Service) HandleDeleteValueStream(w http.ResponseWriter, r *http.Request
 	key := r.PathValue("key")
 	var found bool
 	var opErr error
-	s.loop.Do(func() {
+	if !s.dispatch(func() {
 		_, exists, err := s.streams.Get(key)
 		if err != nil {
 			opErr = err
@@ -573,7 +632,10 @@ func (s *Service) HandleDeleteValueStream(w http.ResponseWriter, r *http.Request
 		}
 		found = true
 		opErr = s.streams.Delete(key)
-	})
+	}) {
+		writeShuttingDown(w)
+		return
+	}
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "delete value stream: "+opErr.Error())

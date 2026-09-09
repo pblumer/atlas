@@ -552,3 +552,160 @@ func TestGapsReportsWhatTheCallerMayNotSee(t *testing.T) {
 		t.Errorf("a realization the caller cannot see was reported as missing: %s", body)
 	}
 }
+
+// TestGapsFollowsACallOverride is the claim the landscape collector makes in a comment
+// and nothing checked: a call activity's dependency is the one the engine would
+// actually take, redirects and pins included. An edge that read the model's own
+// `calledElement` would report a dependency this server never takes, which is a finding
+// about a process that is not running.
+func TestGapsFollowsACallOverride(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	if login(t, admin, ts, "admin", "password1") != http.StatusOK {
+		t.Fatal("admin login")
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/projects", `{"name":"CRM"}`)
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	appID := decodeProject(t, body).ID
+
+	for _, xml := range []string{
+		capabilityBPMN("identity"),
+		capabilityBPMN("identity-v2"),
+		capabilityCallerBPMN("onboarding", "identity"),
+	} {
+		if code, b := cReq(t, admin, ts, "POST", "/api/v1/deployments?projectId="+appID, xml); code != http.StatusOK {
+			t.Fatalf("deploy: %d %s", code, b)
+		}
+	}
+
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/business-architecture/gaps", "")
+	if code != http.StatusOK {
+		t.Fatalf("gaps: %d %s", code, body)
+	}
+	var probe struct {
+		Findings []struct {
+			ApplicationKey string `json:"applicationKey"`
+			ProcessID      string `json:"processId"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		t.Fatal(err)
+	}
+	appKey := ""
+	for _, f := range probe.Findings {
+		if f.ProcessID == "identity" {
+			appKey = f.ApplicationKey
+		}
+	}
+	if appKey == "" {
+		t.Fatalf("no application key in %s", body)
+	}
+
+	claim := func(key, processID string, requires []string) {
+		t.Helper()
+		payload, err := json.Marshal(map[string]any{
+			"key": key, "name": key, "state": "active",
+			"requires": requires,
+			"realizations": []map[string]any{
+				{"kind": "process", "applicationKey": appKey, "processId": processID}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code, b := cReq(t, admin, ts, "POST", "/api/v1/capabilities", string(payload)); code != http.StatusCreated {
+			t.Fatalf("create capability %s: %d %s", key, code, b)
+		}
+	}
+	// Onboarding declares the dependency its model states, so nothing is reported.
+	claim("onboarding", "onboarding", []string{"identity"})
+	claim("identity", "identity", nil)
+	claim("identity-next", "identity-v2", nil)
+
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/business-architecture/gaps", "")
+	if code != http.StatusOK {
+		t.Fatalf("gaps: %d %s", code, body)
+	}
+	var before struct {
+		Counts map[string]int `json:"counts"`
+	}
+	if err := json.Unmarshal(body, &before); err != nil {
+		t.Fatal(err)
+	}
+	if before.Counts["call.undeclared"] != 0 {
+		t.Fatalf("fixture: the declared dependency was reported anyway: %s", body)
+	}
+
+	// Redirect the call to the other capability's process. The declared dependency is
+	// now the wrong one, and the report has to say so.
+	if code, b := cReq(t, admin, ts, "PUT", "/api/v1/call-activities/overrides/identity",
+		`{"action":"redirect","targetProcessId":"identity-v2"}`); code != http.StatusOK {
+		t.Fatalf("set override: %d %s", code, b)
+	}
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/business-architecture/gaps", "")
+	if code != http.StatusOK {
+		t.Fatalf("gaps: %d %s", code, body)
+	}
+	var after struct {
+		Counts   map[string]int `json:"counts"`
+		Findings []struct {
+			Kind          string `json:"kind"`
+			CapabilityKey string `json:"capabilityKey"`
+			RequiredKey   string `json:"requiredKey"`
+			ProcessID     string `json:"processId"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(body, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Counts["call.undeclared"] != 1 {
+		t.Fatalf("the redirect was not followed: %s", body)
+	}
+	for _, f := range after.Findings {
+		if f.Kind != "call.undeclared" {
+			continue
+		}
+		if f.RequiredKey != "identity-next" || f.ProcessID != "identity-v2" {
+			t.Errorf("finding = %+v, want the dependency the engine would actually take", f)
+		}
+	}
+}
+
+// A deployment filed under no application still belongs on the landscape. It carries no
+// application key, so no realization can name it — and the report says it is unclaimed
+// rather than leaving it out, which would make an ungrouped process invisible to the
+// one view meant to find work nobody has mapped.
+func TestGapsSeesAnUngroupedDeployment(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments",
+		capabilityBPMN("ungrouped"), "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/business-architecture/gaps", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("gaps: %d %s", code, body)
+	}
+	var rep struct {
+		Counts   map[string]int `json:"counts"`
+		Findings []struct {
+			Kind           string `json:"kind"`
+			ApplicationKey string `json:"applicationKey"`
+			ProcessID      string `json:"processId"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(body, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Counts["process.unclaimed"] != 1 {
+		t.Fatalf("counts = %v, want the ungrouped process reported (%s)", rep.Counts, body)
+	}
+	for _, f := range rep.Findings {
+		if f.ProcessID != "ungrouped" {
+			continue
+		}
+		if f.ApplicationKey != "" {
+			t.Errorf("an ungrouped deployment reported application key %q", f.ApplicationKey)
+		}
+	}
+}

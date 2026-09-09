@@ -234,6 +234,12 @@ func TestAClosingLoopDoesNotAnswerSuccessfully(t *testing.T) {
 		func() time.Time { return time.Unix(0, 0) })
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/capabilities", svc.HandleListCapabilities)
+	mux.HandleFunc("POST /api/v1/capabilities", svc.HandleCreateCapability)
+	mux.HandleFunc("GET /api/v1/capabilities/{key}/coverage", svc.HandleCoverage)
+	mux.HandleFunc("GET /api/v1/business-architecture/gaps", svc.HandleGaps)
+	mux.HandleFunc("GET /api/v1/value-streams", svc.HandleListValueStreams)
+	mux.HandleFunc("POST /api/v1/value-streams", svc.HandleCreateValueStream)
 	mux.HandleFunc("GET /api/v1/capabilities/{key}", svc.HandleGetCapability)
 	mux.HandleFunc("PUT /api/v1/capabilities/{key}", svc.HandleUpdateCapability)
 	mux.HandleFunc("DELETE /api/v1/capabilities/{key}", svc.HandleDeleteCapability)
@@ -242,6 +248,15 @@ func TestAClosingLoopDoesNotAnswerSuccessfully(t *testing.T) {
 	mux.HandleFunc("DELETE /api/v1/value-streams/{key}", svc.HandleDeleteValueStream)
 
 	for _, tc := range []struct{ method, path string }{
+		// The two reads that must never answer "nothing is wrong" from a loop that
+		// never ran: an empty gap report and an empty capability list are the two
+		// answers this area could give that look like good news.
+		{"GET", "/api/v1/business-architecture/gaps"},
+		{"GET", "/api/v1/capabilities"},
+		{"GET", "/api/v1/value-streams"},
+		{"POST", "/api/v1/capabilities"},
+		{"POST", "/api/v1/value-streams"},
+		{"GET", "/api/v1/capabilities/a/coverage"},
 		{"GET", "/api/v1/capabilities/a"},
 		{"PUT", "/api/v1/capabilities/a"},
 		{"DELETE", "/api/v1/capabilities/a"},
@@ -249,7 +264,7 @@ func TestAClosingLoopDoesNotAnswerSuccessfully(t *testing.T) {
 		{"PUT", "/api/v1/value-streams/v"},
 		{"DELETE", "/api/v1/value-streams/v"},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, io.Reader(nopBody(`{"name":"X"}`)))
+		req := httptest.NewRequest(tc.method, tc.path, io.Reader(nopBody(`{"key":"a","name":"X"}`)))
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		if rec.Code < 400 {
