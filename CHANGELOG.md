@@ -84,6 +84,30 @@ _Changed_ / _Removed_ for each version.
   the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
+### Fixed
+
+- **A loop no longer stores its collection once per round.** A multi-instance activity
+  collects one result per iteration into one list. [ADR-0296](docs/adr/0296-a-loop-records-its-element.md)
+  stopped it *recording* the whole list each round, which made the log linear, and said
+  plainly that it had not fixed the other half: the fold still put the assembled
+  collection back under one key per element, so the state store went on absorbing bytes
+  that grew with the square of the iteration count. Measured on a loop whose round
+  produces two hundred bytes, doubling the iterations multiplied the store by 2.5, then
+  2.9, then 3.3 — and now multiplies it by about 1.9, flat. A collection being filled is
+  held one key per element and collapsed into an ordinary value when the loop promotes
+  it ([ADR-draft-a-collection-under-construction](docs/adr/draft-a-collection-under-construction.md));
+  nothing that reads a variable changed, because the storage layer assembles the list
+  before any reader sees it.
+
+- **A loop whose results outgrew their budget now parks instead of finishing empty.**
+  The collection budget of [ADR-0294](docs/adr/0294-a-variable-is-a-record.md) is
+  measured when the loop hands its collection to the enclosing scope. That refusal was
+  raised and then thrown away: the activity completed anyway, which deleted the incident
+  along with the element carrying it and dropped the collection with the scope holding
+  it — so a loop that ran every iteration finished looking successful with nothing to
+  show. The activity now stays put holding its token, and resolving the incident hands
+  the same collection up again, so raising the budget releases it.
+
 ## [0.6.0] — 2026-09-09
 
 **This release is about arriving from somewhere else.** A Microsoft Identity Manager

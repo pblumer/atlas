@@ -125,6 +125,64 @@
       }
     },
     {
+      "id": "a-loop-no-longer-stores-its-collection-once-per-round",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A long loop no longer costs disk with the square of its length",
+        "de": "Eine lange Schleife kostet nicht mehr Platz im Quadrat ihrer Länge"
+      },
+      "summary": {
+        "en": "A multi-instance activity gathers one result per round into one list, and it used to store the whole list again every round: round fifty wrote fifty results to record one. A loop of eighty rounds left five times more behind than it needed to, and the gap widened with every round. It now stores the one result it just produced. The collected list is exactly what it was — this is about what the engine keeps, not about what your process gets.",
+        "de": "Eine Multi-Instance-Aktivität sammelt je Durchlauf ein Ergebnis in eine Liste, und sie legte bisher jeden Durchlauf die ganze Liste erneut ab: Durchlauf fünfzig schrieb fünfzig Ergebnisse, um eines festzuhalten. Eine Schleife über achtzig Durchläufe hinterliess fünfmal mehr als nötig, und der Abstand wuchs mit jedem weiteren. Jetzt wird nur das eine Ergebnis abgelegt, das gerade entstanden ist. Die gesammelte Liste ist unverändert — es geht darum, was die Engine aufbewahrt, nicht darum, was Ihr Prozess bekommt."
+      },
+      "link": {
+        "label": "ADR-0296",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0296-a-loop-records-its-element.md"
+      },
+      "tags": [
+        "Engine",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
+      "id": "a-loop-whose-results-outgrew-their-budget-now-parks-instead-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A loop that collected too much now stops and says so",
+        "de": "Eine Schleife, die zu viel gesammelt hat, hält jetzt an und sagt es"
+      },
+      "summary": {
+        "en": "There is a ceiling on how large a collected list may be, and it is checked when the loop hands its list on. The refusal used to be reported and then swallowed: the activity finished anyway, which cleared the incident and dropped the list with it, so a loop that ran every single round ended up looking successful with nothing to show for it. The activity now waits with an incident naming the variable and both sizes. Raising the budget and resolving it hands the same list on.",
+        "de": "Für eine gesammelte Liste gibt es eine Obergrenze, geprüft in dem Moment, in dem die Schleife ihre Liste weitergibt. Die Ablehnung wurde bisher gemeldet und dann verschluckt: die Aktivität schloss trotzdem ab, damit verschwand der Incident und die Liste mit ihm — eine Schleife, die jeden Durchlauf gelaufen war, sah am Ende erfolgreich aus und hatte nichts vorzuweisen. Jetzt bleibt die Aktivität stehen, mit einem Incident, der die Variable und beide Grössen nennt. Budget erhöhen und auflösen gibt dieselbe Liste weiter."
+      },
+      "link": {
+        "label": "ADR-0294",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0294-a-variable-is-a-record.md"
+      },
+      "tags": [
+        "Engine",
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -296,64 +354,6 @@
         "label": {
           "en": "Open a service task",
           "de": "Service-Task öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "Every worker type now tells you how to set it up",
-        "de": "Jeder Worker-Typ erklärt jetzt selbst, wie er eingerichtet wird"
-      },
-      "summary": {
-        "en": "The hardest part of connecting Jira, Google Sheets or a mail server was never the diagram — it was the half-dozen steps at the provider that nobody mentions: which token to create, which permission to grant, which spreadsheet to share. Pick a worker type on a service task and that is now written beside its fields: whether it needs a configured worker and a credential at all, the steps to get there in order, the mistake this type is usually reported with, and a link straight into the matching chapter of the handbook this server serves itself. The same block greets you on the Console's New worker form, which is where you are actually standing when you configure one.",
-        "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Configure a worker",
-          "de": "Worker konfigurieren"
-        },
-        "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "A MIM workflow imports as the process it is, not as a straight line",
-        "de": "Ein MIM-Workflow wird als der Prozess importiert, der er ist — nicht als gerade Linie"
-      },
-      "summary": {
-        "en": "Workflows built with the MIMWAL activity library say almost nothing in the elements themselves: a step is conditional because it carries a condition, and repeats because it carries an iteration, not because the workflow contains a branch or a loop. The import used to read only the elements, so twenty conditional steps arrived as twenty unconditional ones — a diagram that looked like your process and did not behave like it. It now reads the conditions and the iterations too, draws them as gateways and loops, and puts each step's queries and assignments on the step in two readable lines instead of leaving them buried in the original markup. The MIM expressions themselves are not translated: each is written onto the model and listed for review, so you can see exactly what is left to fill in.",
-        "de": "Workflows, die mit der MIMWAL-Bibliothek gebaut sind, sagen in den Elementen selbst fast nichts aus: Ein Schritt ist bedingt, weil er eine Bedingung trägt, und er wiederholt sich, weil er eine Iteration trägt — nicht, weil der Workflow eine Verzweigung oder eine Schleife enthielte. Der Import las bisher nur die Elemente, also kamen zwanzig bedingte Schritte als zwanzig unbedingte an: ein Diagramm, das aussah wie Ihr Prozess und sich nicht so verhielt. Jetzt werden Bedingungen und Iterationen mitgelesen, als Gateways und Schleifen gezeichnet, und die Abfragen und Zuweisungen jedes Schritts stehen in zwei lesbaren Zeilen am Schritt statt vergraben im Originalmarkup. Die MIM-Ausdrücke selbst werden nicht übersetzt: Jeder steht am Modell und in der Prüfliste, damit Sie genau sehen, was noch auszufüllen ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ],
-      "try": {
-        "label": {
-          "en": "Import a MIM workflow",
-          "de": "MIM-Workflow importieren"
         },
         "route": "#/modeler"
       }

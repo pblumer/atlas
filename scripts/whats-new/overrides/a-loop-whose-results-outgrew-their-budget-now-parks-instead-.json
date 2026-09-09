@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Engine",
+    "Operations"
+  ],
+  "title": {
+    "en": "A loop that collected too much now stops and says so",
+    "de": "Eine Schleife, die zu viel gesammelt hat, hält jetzt an und sagt es"
+  },
+  "summary": {
+    "en": "There is a ceiling on how large a collected list may be, and it is checked when the loop hands its list on. The refusal used to be reported and then swallowed: the activity finished anyway, which cleared the incident and dropped the list with it, so a loop that ran every single round ended up looking successful with nothing to show for it. The activity now waits with an incident naming the variable and both sizes. Raising the budget and resolving it hands the same list on.",
+    "de": "Für eine gesammelte Liste gibt es eine Obergrenze, geprüft in dem Moment, in dem die Schleife ihre Liste weitergibt. Die Ablehnung wurde bisher gemeldet und dann verschluckt: die Aktivität schloss trotzdem ab, damit verschwand der Incident und die Liste mit ihm — eine Schleife, die jeden Durchlauf gelaufen war, sah am Ende erfolgreich aus und hatte nichts vorzuweisen. Jetzt bleibt die Aktivität stehen, mit einem Incident, der die Variable und beide Grössen nennt. Budget erhöhen und auflösen gibt dieselbe Liste weiter."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

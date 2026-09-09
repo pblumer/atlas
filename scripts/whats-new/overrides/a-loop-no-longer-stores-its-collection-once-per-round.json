@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Engine",
+    "Operations"
+  ],
+  "title": {
+    "en": "A long loop no longer costs disk with the square of its length",
+    "de": "Eine lange Schleife kostet nicht mehr Platz im Quadrat ihrer Länge"
+  },
+  "summary": {
+    "en": "A multi-instance activity gathers one result per round into one list, and it used to store the whole list again every round: round fifty wrote fifty results to record one. A loop of eighty rounds left five times more behind than it needed to, and the gap widened with every round. It now stores the one result it just produced. The collected list is exactly what it was — this is about what the engine keeps, not about what your process gets.",
+    "de": "Eine Multi-Instance-Aktivität sammelt je Durchlauf ein Ergebnis in eine Liste, und sie legte bisher jeden Durchlauf die ganze Liste erneut ab: Durchlauf fünfzig schrieb fünfzig Ergebnisse, um eines festzuhalten. Eine Schleife über achtzig Durchläufe hinterliess fünfmal mehr als nötig, und der Abstand wuchs mit jedem weiteren. Jetzt wird nur das eine Ergebnis abgelegt, das gerade entstanden ist. Die gesammelte Liste ist unverändert — es geht darum, was die Engine aufbewahrt, nicht darum, was Ihr Prozess bekommt."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}
