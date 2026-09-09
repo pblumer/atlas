@@ -54,8 +54,13 @@ measure every character's position in headless Chromium through
 `getStartPositionOfChar`, pull the matching outlines out of the fonts fontconfig
 resolves `Arial` and `monospace` to, and emit one `<path>` per line. Measuring
 rather than re-shaping the text is what keeps kerning and letter-spacing exactly
-where the live-text cut puts them. Change `atlas-social.svg` and this cut is
-stale until it is rebuilt; there is no script in the tree for it yet.
+where the live-text cut puts them.
+
+Both derived cuts are built by [`scripts/brand/social.py`](../../scripts/brand/social.py):
+run it after any change to `atlas-social.svg`, and `--check` to verify they are
+not left behind. It compares the outlines against the source before writing, so
+a machine whose fonts resolve differently fails loudly instead of committing
+the wrong letterforms.
 
 **The mark also lives inline in three other places**, because the Console is
 buildless and cannot fetch a file before it paints: the `<link rel="icon">` data
