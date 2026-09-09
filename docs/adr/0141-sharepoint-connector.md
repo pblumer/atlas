@@ -1,6 +1,7 @@
 # ADR-0141: A SharePoint connector (create list item, via Microsoft Graph)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 

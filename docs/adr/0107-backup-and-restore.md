@@ -1,6 +1,7 @@
 # ADR-0107: Backup and restore — a one-file download of the design-time data directory
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 

@@ -1,6 +1,7 @@
 # ADR-0261: The diagram is the query — filtering instances by the element they sit on
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine team
 

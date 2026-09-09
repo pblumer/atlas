@@ -1,6 +1,7 @@
 # ADR-0223: Jira account lookup
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0037: Structured JSON variables
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Patrick Blumer
 

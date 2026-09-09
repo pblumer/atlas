@@ -1,6 +1,7 @@
 # ADR-0118: A web-scraping connector — model-authored URL + CSS selector extraction
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
 

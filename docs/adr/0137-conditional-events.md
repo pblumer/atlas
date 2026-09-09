@@ -1,6 +1,7 @@
 # ADR-0137: Conditional events (data-triggered catch/boundary)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 

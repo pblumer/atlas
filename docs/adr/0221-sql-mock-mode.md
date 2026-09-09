@@ -1,6 +1,7 @@
 # ADR-0221: A database task runs against seeded answers, not against a SQL engine
 
-- **Status:** Proposed (amended 2026-09-02: the switch is in the Console — an org-wide
+- **Status:** Accepted (amended 2026-09-02: the switch is in the Console — an org-wide
+- **Implementation:** Landed
   setting with the seed stored beside it, restarting the supervised SQL workers on save,
   which is the follow-up the original record named as not built.)
 - **Date:** 2026-09-02

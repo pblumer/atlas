@@ -1,6 +1,7 @@
 # ADR-0248: A search term is literal, and widening is asked for
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-04
 - **Deciders:** Atlas engine team
 

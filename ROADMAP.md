@@ -50,7 +50,7 @@ The control-flow basics most real models use.
   for exactly the branches the split took. Correct for reconverging splits with
   pass-through branches (no double fire), and recovery-tested. Cyclic inclusive
   joins still to come (ADR-0033).
-- 🚧 **Input/output variable mappings** ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)):
+- ✅ **Input/output variable mappings** ([ADR-0068](docs/adr/0068-task-io-variable-mappings.md)):
   generic `zeebe:ioMapping` on job-backed activities, backed by **activity-local
   variable scopes** and scope-chain FEEL resolution — Camunda-faithful semantics
   (input mappings create locals the activity sees; output mappings promote only
@@ -70,9 +70,12 @@ The control-flow basics most real models use.
   ([ADR-0086](docs/adr/0086-gateway-conditions-resolve-over-scope-chain.md)), so a
   business rule task or a gateway nested in a subprocess or a multi-instance body
   reads its enclosing scope's variables (e.g. a per-row `inputElement` or a
-  per-row `verdict`) rather than only the process root. Remaining: extend the same
-  scope-chain read to the REST/clio workers, and reuse the local-scope machinery
-  for embedded subprocess scopes.
+  per-row `verdict`) rather than only the process root. The two items this entry
+  carried as remaining are closed: the connector workers read up the chain because a
+  task's input mapping *is* the outbound payload
+  ([ADR-0174](docs/adr/0174-connector-payloads-are-the-input-mapping.md)), and embedded
+  subprocesses reuse the same local-scope machinery
+  ([ADR-0074](docs/adr/0074-embedded-subprocesses.md)). **ADR-0068 is complete.**
 - 🚧 **Data objects** ([ADR-0053](docs/adr/0053-first-class-data-objects.md)):
   first-class, typed, event-sourced data — not the decoration most engines settle
   for. The foundational slice landed: a modeled `<dataObject>` (its name,
@@ -522,7 +525,7 @@ Making processes wait, react, and time out.
   panel (an escalation-code picker on escalation throw/end/boundary/event-subprocess events —
   keeping the interrupting toggle, unlike errors — plus a central escalations manager). Completes
   the throw/catch event family (message, error, signal, escalation).
-- ✅ **Link events** ([ADR-0133](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
+- ✅ **Link events** ([ADR-0132](docs/adr/0132-link-events.md)): BPMN's **off-page connector** — a
   **link intermediate throw** ("go to X") and a **link intermediate catch** ("arrive at X"), paired
   by **name within one flow scope**, that stand in for a sequence flow so a long or crossing diagram
   stays readable. Reaching the throw is a **goto** to the matching catch, which flows straight on.
@@ -820,8 +823,8 @@ What it takes to run this for real.
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
 - 🔲 Exported-log stream for downstream analytics
-- 🔲 **Instance migration**
-  ([ADR-0162](docs/adr/0162-process-instance-migration.md), designed): move running
+- ✅ **Instance migration**
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
   instances from one deployed version to the next. A deployment is immutable and
   `applyToState` must replay identically live and on recovery (ADR-0019, I4/I6), so a
   model fix reaches instances that are already running only by cancelling and restarting
@@ -835,9 +838,13 @@ What it takes to run this for real.
   would make replay depend on the matching algorithm's code), element instance keys
   preserved so variables, jobs and the scope tree ride through untouched, validation
   that refuses rather than guesses, and history left unrewritten with the replay
-  switching definitions at the migration's log position. Implementation sequence:
-  record encoding and the fold → validation → the plan/migrate endpoints → recovery
-  tests across the boundary → the timeline's two-definition reader → the Operations UI.
+  switching definitions at the migration's log position. That sequence is delivered:
+  record encoding and the fold, validation that refuses rather than guesses, the
+  plan/migrate endpoints and their MCP twins, recovery tests across the boundary, the
+  timeline's two-definition reader, and the Operations UI. A migration also re-indexes
+  the searchable variables its target declares
+  ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md)).
+  **ADR-0162 is complete.**
 - 🚧 Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
   among a few hundred thousand** landed
   ([ADR-0241](docs/adr/0241-finding-an-instance.md)): the

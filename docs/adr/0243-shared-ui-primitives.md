@@ -1,6 +1,7 @@
 # ADR-0243: The views are built from shared parts
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-09-04
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0277: A join synchronizes within its own execution scope
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0104: Token simulation — entering embedded subprocesses
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-07
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0272: One token may not hold the writer forever
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine maintainers
 

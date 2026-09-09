@@ -1,6 +1,7 @@
 # ADR-0167: A released connector ships in the marketplace
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

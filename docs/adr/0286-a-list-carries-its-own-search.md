@@ -1,6 +1,7 @@
 # ADR-0286: A list carries its own search
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-08
 - **Deciders:** Atlas maintainers
 

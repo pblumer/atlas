@@ -1,6 +1,7 @@
 # ADR-0273: A gateway that cannot route parks, it does not complete
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine maintainers
 

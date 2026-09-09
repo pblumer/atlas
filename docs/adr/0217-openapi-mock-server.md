@@ -1,6 +1,7 @@
 # ADR-0217: A mock REST API served from an OpenAPI document
 
 - **Status:** Accepted (amended 2026-09-03 — see the amendment below: what published documents taught it, and reading one made of many files)
+- **Implementation:** Landed
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 

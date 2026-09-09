@@ -1,6 +1,7 @@
 # ADR-0169: A form on the incident — repairing an instance with named fields instead of raw JSON
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0102: Receive tasks
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-07
 - **Deciders:** Atlas engine team
 

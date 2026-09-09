@@ -1,6 +1,7 @@
 # ADR-0094: Singleton message start — at most one live instance per correlation key
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

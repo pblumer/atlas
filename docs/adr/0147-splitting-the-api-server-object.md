@@ -1,6 +1,7 @@
 # ADR-0147: Splitting the api Server object, without weakening the single writer
 
 - **Status:** Accepted (amended 2026-08-19: pilot area corrected, and the API-kernel prerequisite added after measuring it; accepted once the pilot shipped)
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 

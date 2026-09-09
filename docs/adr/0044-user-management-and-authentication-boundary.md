@@ -1,6 +1,7 @@
 # ADR-0044: User management and the authentication boundary
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

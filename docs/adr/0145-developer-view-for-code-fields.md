@@ -1,6 +1,7 @@
 # ADR-0145: A Developer View for code-bearing fields
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-18
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0175: Replicated partition cells for horizontal scale-out
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 

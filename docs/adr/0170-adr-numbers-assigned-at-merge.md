@@ -1,6 +1,7 @@
 # ADR-0170: ADR numbers are assigned at merge, not on a branch
 
 - **Status:** Accepted (amended 2026-08-24: the numbering commit also carries the regenerated What's New feed)
+- **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 

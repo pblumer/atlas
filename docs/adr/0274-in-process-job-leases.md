@@ -1,6 +1,7 @@
 # ADR-0274: The in-process runner claims what it works
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

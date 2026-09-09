@@ -1,6 +1,7 @@
 # ADR-0270: A poll costs a page, not a backlog
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0058: Data output associations — write a value and transition a data object's state
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Patrick Blumer
 

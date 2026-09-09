@@ -1,6 +1,7 @@
 # ADR-0013: Embed the bpmn-js modeler as a vendored asset
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

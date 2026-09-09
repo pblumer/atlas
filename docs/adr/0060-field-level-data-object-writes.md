@@ -1,6 +1,7 @@
 # ADR-0060: Field-level data object writes — set one member of a structured object
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-25
 - **Deciders:** Patrick Blumer
 

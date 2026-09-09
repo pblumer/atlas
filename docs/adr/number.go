@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +46,13 @@ type Record struct {
 	Slug   string // the file name's kebab-case part, stable across numbering
 	Title  string // from the `# ADR-NNNN: title` heading
 	Status string // from the `- **Status:** ...` line
+	// Implementation is the second half of a record's state, from the
+	// `- **Implementation:** ...` line. Status answers "does this decision hold";
+	// Implementation answers "is it built". One field carried both for 295 records
+	// and could answer neither: a decision whose code had shipped still read
+	// `Proposed`, because nothing in the process ever went back to change it.
+	// ADR-draft-two-states-for-a-record says why they are separate rather than merged.
+	Implementation string
 	// OpenQuestion and QuestionChecked are the optional pair a record carries when
 	// its reasoning rests on something nobody could answer: what the question is,
 	// and the YYYY-MM month somebody last looked at it. They come as a pair or not
@@ -64,13 +72,17 @@ var (
 	numberedHeading     = regexp.MustCompile(`(?m)^# ADR-(\d{4}): (.+)$`)
 	draftHeading        = regexp.MustCompile(`(?m)^# ADR-DRAFT: (.+)$`)
 	statusPattern       = regexp.MustCompile(`(?m)^- \*\*Status:\*\* (.+)$`)
+	implPattern         = regexp.MustCompile(`(?m)^- \*\*Implementation:\*\* (.+)$`)
 	// The value runs to the end of the line and onto any lines indented under it,
 	// because these records wrap at prose width and a question truncated at the
 	// margin would be truncated in the very message meant to state it.
 	openQuestionPattern = regexp.MustCompile(`(?m)^- \*\*Open question:\*\* (.+(?:\n[ \t]+\S.*)*)$`)
 	questionCheckedPtrn = regexp.MustCompile(`(?m)^- \*\*Question checked:\*\* (.+)$`)
 	monthPattern        = regexp.MustCompile(`^\d{4}-\d{2}$`)
-	indexRowPattern     = regexp.MustCompile(`^\| \[(\d{4})\]\(([^)]+)\) \| (.*) \| (.+) \|$`)
+	// A cell may not contain a `|`, so each is matched as "not a pipe" rather than
+	// greedily: with three cells after the link, a greedy title would swallow the
+	// status and leave the last cell to be read as both.
+	indexRowPattern = regexp.MustCompile(`^\| \[(\d{4})\]\(([^)]+)\) \| ([^|]*) \| ([^|]+) \| ([^|]+) \|$`)
 
 	// notRecords are the two files in docs/adr that carry no decision.
 	notRecords = map[string]bool{"README.md": true, "template.md": true}
@@ -156,8 +168,77 @@ func parseRecord(name, body string) (Record, error) {
 	} else {
 		problems = append(problems, fmt.Errorf("%s: no `- **Status:** ...` line", name))
 	}
+	if i := implPattern.FindStringSubmatch(body); i != nil {
+		r.Implementation = strings.TrimSpace(i[1])
+	} else {
+		problems = append(problems, fmt.Errorf("%s: no `- **Implementation:** ...` line — "+
+			"say whether the decision is %s, because Status alone cannot", name, strings.Join(implementationWords, ", ")))
+	}
+	problems = append(problems, parseState(name, &r)...)
 	problems = append(problems, parseOpenQuestion(name, body, &r)...)
 	return r, errors.Join(problems...)
+}
+
+// statusWords are the values a record's Status may take, beside the parameterised
+// `Superseded by ADR-NNNN`. The template has listed them since the directory
+// existed; nothing enforced them, and two records drifted to `Draft` — a word that
+// means "not numbered yet" everywhere else in this package, on records that are
+// numbered and whose code has shipped.
+var statusWords = []string{"Proposed", "Accepted", "Deprecated"}
+
+// implementationWords are the values a record's Implementation may take.
+//
+//   - Not started — none of the chosen option is in the tree.
+//   - Partial — some of what the record decided is built and some is not. An
+//     extension the record itself defers is not what makes a record partial;
+//     a piece of the decision that is missing is.
+//   - Landed — the chosen option is in production code with tests.
+//   - Superseded — a later record replaced the decision, so there is nothing here
+//     left to measure.
+var implementationWords = []string{"Not started", "Partial", "Landed", "Superseded"}
+
+// supersededBy matches the one status that carries a parameter.
+var supersededBy = regexp.MustCompile(`^Superseded by ADR-\d{4}$`)
+
+// BaseStatus strips a status's parenthetical. The index deliberately abbreviates
+// "Accepted (amended 2026-08-17: …)" to "Accepted (amended)", so only the status
+// itself — Proposed, Accepted, Superseded by ADR-NNNN, Deprecated — is comparable.
+func BaseStatus(s string) string {
+	if i := strings.Index(s, "("); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
+}
+
+// parseState checks the two state fields against their vocabularies and against
+// each other. The pair exists because one field could not answer both questions it
+// was being asked, so the checks that matter are the ones that keep them from
+// drifting back into one: a record whose code has shipped is a decision that was
+// taken, whatever the process forgot to write down.
+func parseState(name string, r *Record) []error {
+	var problems []error
+	base := BaseStatus(r.Status)
+	if r.Status != "" && !slices.Contains(statusWords, base) && !supersededBy.MatchString(base) {
+		problems = append(problems, fmt.Errorf("%s: status %q is not one of %s or `Superseded by ADR-NNNN` — "+
+			"a parenthetical after the word is fine, a different word is not", name, base, strings.Join(statusWords, ", ")))
+	}
+	if r.Implementation != "" && !slices.Contains(implementationWords, r.Implementation) {
+		problems = append(problems, fmt.Errorf("%s: implementation %q is not one of %s — this field is read by machine, so it carries no parenthetical; "+
+			"what is built and what is not belongs in the record", name, r.Implementation, strings.Join(implementationWords, ", ")))
+	}
+	switch r.Implementation {
+	case "Landed":
+		if base != "Accepted" {
+			problems = append(problems, fmt.Errorf("%s: implementation is Landed but status is %q — "+
+				"code merged against a decision is the decision being taken, so a landed record is Accepted", name, base))
+		}
+	case "Superseded":
+		if !supersededBy.MatchString(base) {
+			problems = append(problems, fmt.Errorf("%s: implementation is Superseded but status is %q — "+
+				"say which record replaced it: `Superseded by ADR-NNNN`", name, base))
+		}
+	}
+	return problems
 }
 
 // parseOpenQuestion reads the optional open-question pair and names every way it
@@ -191,12 +272,13 @@ func parseOpenQuestion(name, body string, r *Record) []error {
 
 // Assignment is one draft becoming a numbered record.
 type Assignment struct {
-	Slug   string
-	Num    int
-	From   string // draft-<slug>.md
-	To     string // NNNN-<slug>.md
-	Title  string
-	Status string
+	Slug           string
+	Num            int
+	From           string // draft-<slug>.md
+	To             string // NNNN-<slug>.md
+	Title          string
+	Status         string
+	Implementation string
 }
 
 // QuestionAge reports how long ago the record's open question was last looked at,
@@ -265,15 +347,15 @@ func AssignNumbers(root string) ([]Assignment, error) {
 	// would leave some records numbered and the rest not, which is a worse state
 	// than the one this run started in.
 	for _, d := range drafts {
-		if strings.Contains(d.Title, "|") || strings.Contains(d.Status, "|") {
-			return nil, fmt.Errorf("%s: a `|` in the title or status would end the index cell early and corrupt every row after it", d.Name)
+		if strings.Contains(d.Title, "|") || strings.Contains(d.Status, "|") || strings.Contains(d.Implementation, "|") {
+			return nil, fmt.Errorf("%s: a `|` in the title, status or implementation would end the index cell early and corrupt every row after it", d.Name)
 		}
 	}
 
 	var assigned []Assignment
 	for _, d := range drafts {
 		next++
-		a := Assignment{Slug: d.Slug, Num: next, From: d.Name, Title: d.Title, Status: d.Status}
+		a := Assignment{Slug: d.Slug, Num: next, From: d.Name, Title: d.Title, Status: d.Status, Implementation: d.Implementation}
 		a.To = fmt.Sprintf("%04d-%s.md", a.Num, a.Slug)
 
 		body, err := os.ReadFile(filepath.Join(dir, a.From))
@@ -382,7 +464,7 @@ func appendIndexRows(readme string, assigned []Assignment) error {
 
 	rows := make([]string, 0, len(assigned))
 	for _, a := range assigned {
-		rows = append(rows, fmt.Sprintf("| [%04d](%s) | %s | %s |", a.Num, a.To, a.Title, a.Status))
+		rows = append(rows, fmt.Sprintf("| [%04d](%s) | %s | %s | %s |", a.Num, a.To, a.Title, a.Status, a.Implementation))
 	}
 	out := make([]string, 0, len(lines)+len(rows))
 	out = append(out, lines[:last+1]...)

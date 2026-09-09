@@ -1,6 +1,7 @@
 # ADR-0213: The mock Active Directory is visible in the Console
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 

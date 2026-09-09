@@ -1,6 +1,7 @@
 # ADR-0249: Cancelled tokens on the runtime overlay, and a deferred choice drawn once
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-04
 - **Deciders:** Atlas engine team
 

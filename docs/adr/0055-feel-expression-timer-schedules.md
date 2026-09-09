@@ -1,6 +1,7 @@
 # ADR-0055: FEEL-expression timer schedules for catch and boundary events
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 

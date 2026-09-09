@@ -1,6 +1,7 @@
 # ADR-0158: A connector reference that explains itself — and an incident you can actually resolve
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

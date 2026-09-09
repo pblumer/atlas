@@ -1,6 +1,7 @@
 # ADR-0052: Message end events
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 

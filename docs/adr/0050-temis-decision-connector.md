@@ -1,6 +1,7 @@
 # ADR-0050: Central DMN decisions via a temis decision connector
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

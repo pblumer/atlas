@@ -1,6 +1,7 @@
 # ADR-0276: A loop's size is checked before it is built
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine maintainers
 

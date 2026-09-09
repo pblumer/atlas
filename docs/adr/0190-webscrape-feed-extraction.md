@@ -1,6 +1,7 @@
 # ADR-0190: Add explicit RSS and Atom extraction to the web-scraping connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

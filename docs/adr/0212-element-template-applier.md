@@ -1,6 +1,7 @@
 # ADR-0212: The element-template applier, and what a template binding means in Atlas
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 

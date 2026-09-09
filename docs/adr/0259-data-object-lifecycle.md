@@ -1,6 +1,7 @@
 # ADR-0259: The data object lifecycle — what the BPMN data state resolves against
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Patrick Blumer
 

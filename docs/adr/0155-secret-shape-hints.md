@@ -1,6 +1,7 @@
 # ADR-0155: The Secrets panel says what a value has to be
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 

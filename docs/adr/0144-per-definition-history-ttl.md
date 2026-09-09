@@ -1,6 +1,7 @@
 # ADR-0144: Per-definition history TTL — retention the model declares
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-18
 - **Deciders:** Atlas engine team
 

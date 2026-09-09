@@ -1,6 +1,7 @@
 # ADR-0129: Remote deployment targets — publish an application to another Atlas server
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-17
 - **Deciders:** Atlas maintainers
 

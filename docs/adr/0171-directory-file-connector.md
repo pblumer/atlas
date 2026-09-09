@@ -1,6 +1,7 @@
 # ADR-0171: A directory-file connector — LDIF and DSML
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
 

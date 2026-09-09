@@ -1,6 +1,7 @@
 # ADR-0073: A principals directory for member and assignee pickers
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-28
 - **Deciders:** Atlas maintainers
 

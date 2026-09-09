@@ -1,6 +1,7 @@
 # ADR-0296: A loop records the element it produced, not the collection so far
 
-- **Status:** Draft
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas engine team
 

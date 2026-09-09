@@ -1,6 +1,7 @@
 # ADR-0201: Atlas Jira connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

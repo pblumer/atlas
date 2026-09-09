@@ -1,6 +1,7 @@
 # ADR-0142: Operational metrics over a Prometheus endpoint
 
 - **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-08-18
 - **Deciders:** Atlas engine team
 

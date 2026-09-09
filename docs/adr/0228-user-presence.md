@@ -1,6 +1,7 @@
 # ADR-0228: User presence in the Console
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

@@ -47,10 +47,11 @@ type BatchStats struct {
 // BatchStats rather than a separate call so it inherits the same durability ordering:
 // a job is counted as created only once the event that created it is on disk.
 //
-// The lease-based worker protocol (ADR-0007) is not built yet, so activations, lease
-// expiries and timeouts have no events to count and are absent rather than reported as
-// a permanent zero — a zero timeout counter on an engine that cannot time out reads as
-// "nothing is timing out", which is true but misleading.
+// The lease-based worker protocol (ADR-0007) *is* built — `JobActivated`, lease epoch
+// fencing and `JobTimedOut` are durable facts — so activations, lease expiries and
+// timeouts are countable and simply are not counted yet. This comment said the opposite
+// for long enough to be quoted back as evidence that the protocol was missing; the
+// counters remain ADR-0142's open item, not a property of the engine.
 type JobStats struct {
 	// Created counts jobs that became available to a worker.
 	Created int

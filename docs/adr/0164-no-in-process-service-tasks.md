@@ -1,6 +1,7 @@
 # ADR-0164: No in-process service tasks — the core loop must never be able to get stuck
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

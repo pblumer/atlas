@@ -1,6 +1,7 @@
 # ADR-0003: Pebble as embedded state store
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

@@ -1,6 +1,7 @@
 # ADR-0056: FEEL cycles, and FEEL on timer start events
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 

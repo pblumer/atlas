@@ -1,6 +1,7 @@
 # ADR-0224: A mockup run is visible, and it carries what the process bound
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

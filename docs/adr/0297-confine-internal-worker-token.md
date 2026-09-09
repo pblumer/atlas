@@ -1,6 +1,7 @@
 # ADR-0297: Confine the internal worker token to the worker protocol
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
 

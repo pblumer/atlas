@@ -1,6 +1,7 @@
 # ADR-0283: Only the end of the active segment may be torn
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

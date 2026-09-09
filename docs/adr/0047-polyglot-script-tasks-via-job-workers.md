@@ -1,6 +1,7 @@
 # ADR-0047: Polyglot script tasks (PowerShell, …) via job workers
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 

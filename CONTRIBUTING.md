@@ -60,9 +60,10 @@ If you're making or changing a significant architectural decision:
 
 1. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`. **Don't pick a number** — the record keeps its `# ADR-DRAFT: Title` heading until it lands on main, and gets its number there. Two branches each taking "the next free number" is how records ended up sharing one, and how one record was renumbered on six consecutive merges.
 2. Fill in context, drivers, options, and consequences honestly — including the trade-offs you're accepting.
-3. Leave the table in [`docs/adr/README.md`](docs/adr/README.md) alone: the row is added with the number. That table is the one line every record in flight would otherwise have to touch, which is exactly what used to conflict.
-4. Cite the record as `ADR-draft-<slug>` in code comments and docs. When the number is assigned, those citations are rewritten with it.
-5. If it replaces an earlier decision, mark the old ADR *Superseded by ADR-XXXX* (don't delete it).
+3. Set both state fields. **Status** says whether the decision holds (*Proposed*, *Accepted*, *Superseded by ADR-XXXX*, *Deprecated*); **Implementation** says whether it is built (*Not started*, *Partial*, *Landed*, *Superseded*). A record that arrives with its code is *Accepted* / *Landed* — merging code against a decision is taking it, and `go test ./docs/adr` refuses *Landed* under any other status. A record that decides something before it is built is *Accepted* / *Not started*. See [`docs/adr/README.md`](docs/adr/README.md#the-two-states-of-a-record).
+4. Leave the table in [`docs/adr/README.md`](docs/adr/README.md) alone: the row is added with the number. That table is the one line every record in flight would otherwise have to touch, which is exactly what used to conflict.
+5. Cite the record as `ADR-draft-<slug>` in code comments and docs. When the number is assigned, those citations are rewritten with it.
+6. If it replaces an earlier decision, mark the old ADR *Superseded by ADR-XXXX* and its implementation *Superseded* (don't delete it).
 
 After the PR merges, a workflow on `main` runs `make adr-number`, which renames the file to `NNNN-<slug>.md`, fixes the heading, adds the index row and rewrites every citation. You don't have to do anything — but you can run `make adr-number` yourself on `main` if you ever need to. A number, once assigned, is never reassigned.
 

@@ -1,6 +1,7 @@
 # ADR-0165: SOAP / Web Services (WSDL) connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0154: Generic LDAP connector
 
-- **Status:** Proposed (amended 2026-08-21 — paging, per-value modify, a
+- **Status:** Accepted (amended 2026-08-21 — paging, per-value modify, a
+- **Implementation:** Landed
   client-certificate bind and connection pooling; see the amendment note below)
 
 > **Amendment (2026-08-21): hardening.** Four of the follow-ups below are done, and
