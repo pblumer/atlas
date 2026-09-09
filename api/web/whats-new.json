@@ -125,6 +125,34 @@
       }
     },
     {
+      "id": "a-worker-type-s-setup-folds-away-once-you-have-set-it-up",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The setup notes fold away once you no longer need them",
+        "de": "Die Einrichtungshinweise lassen sich zuklappen, sobald Sie sie nicht mehr brauchen"
+      },
+      "summary": {
+        "en": "The notes beside a worker type — where its work runs, what has to exist at the provider before it runs at all — sat open above the fields on every task. Useful the first time, in the way ever after: on a narrow panel they fill most of the screen. They are now a section you can fold, with the same chevron as Operation or Failure handling, and folding it stays folded as you move from task to task. It still opens by itself where it helps: when this server has no worker of that type configured yet. Types that configure nothing at all — a REST call, a mockup — start folded, since their notes are worth a single read.",
+        "de": "Die Hinweise neben einem Worker-Typ — wo seine Arbeit läuft, was beim Anbieter vorhanden sein muss, damit sie überhaupt läuft — standen bei jedem Task offen über den Feldern. Beim ersten Mal nützlich, danach im Weg: Auf einem schmalen Panel füllen sie den halben Bildschirm. Jetzt sind sie ein Abschnitt zum Zuklappen, mit demselben Pfeil wie „Operation\" oder „Failure handling\", und zugeklappt bleiben sie es auch beim Wechsel auf den nächsten Task. Von selbst geöffnet wird weiterhin dort, wo es hilft: wenn dieser Server noch keinen Worker dieses Typs konfiguriert hat. Typen, die gar nichts zu konfigurieren haben — ein REST-Aufruf, ein Mockup —, starten zugeklappt, denn ihre Hinweise liest man einmal."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "try": {
+        "label": {
+          "en": "Open a service task",
+          "de": "Service-Task öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "model-authored-scripts-no-longer-inherit-atlas-credentials",
       "version": "Unreleased",
       "date": null,
@@ -320,35 +348,6 @@
           "de": "Service-Task öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "Every worker type now tells you how to set it up",
-        "de": "Jeder Worker-Typ erklärt jetzt selbst, wie er eingerichtet wird"
-      },
-      "summary": {
-        "en": "The hardest part of connecting Jira, Google Sheets or a mail server was never the diagram — it was the half-dozen steps at the provider that nobody mentions: which token to create, which permission to grant, which spreadsheet to share. Pick a worker type on a service task and that is now written beside its fields: whether it needs a configured worker and a credential at all, the steps to get there in order, the mistake this type is usually reported with, and a link straight into the matching chapter of the handbook this server serves itself. The same block greets you on the Console's New worker form, which is where you are actually standing when you configure one.",
-        "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Configure a worker",
-          "de": "Worker konfigurieren"
-        },
-        "route": "#/console/workers"
       }
     }
   ]
