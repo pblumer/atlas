@@ -4,11 +4,14 @@ Atlas draws with, namespaced, under the global AtlasCanvas:
   - AtlasCanvas.archimate — the ArchiMate 3.2 canvas (ADR-0189): the Open Group
     Model Exchange parser, the renderer, and the authoring behaviour loaded on top
     when the caller may edit. Source: src/archimate.js
-  - AtlasCanvas.uml — the two UML canvases (ADR-0237). ClassCanvas draws the
+  - AtlasCanvas.uml — the three UML canvases (ADR-0237, ADR-0259). ClassCanvas draws the
     information model: the renderer and the subset-driven rules provider, editable
     because the model is a working copy with an explicit Save. ObjectCanvas draws
     one instance's object diagram — the run-time twin, read-only because the graph
-    is derived by the server and has no document to write back to.
+    is derived by the server and has no document to write back to. StateCanvas draws
+    a class's lifecycle — the states a business object moves through, and what a BPMN
+    data state resolves against — authored like the class model and held to the rules
+    the server serves beside the relationship matrix.
     Source: src/uml.js
 
   - diagram-js@15.26.0, once, for both of them
@@ -47,6 +50,10 @@ Together 127,585 to 154,041, which is 26,456 bytes. Both replace something Atlas
 would otherwise have written and then maintained: a hand-rolled toolbox that looked
 like neither of the two canvases beside it, and a router that did not route.
 
+The state canvas is the third notation and cost 6,888 bytes — 154,041 to 160,929 —
+which is the renderer arithmetic again rather than the library's: a rounded box, an
+arrow marker, and the one rule that nothing leaves a final state.
+
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
 built against the library, so folding them in would mean building bpmn-js from
@@ -66,4 +73,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-632b4fc4f780fac42074051f8029d045caefca2dd52c41560ecd2293e2ff86cf
+8ddef2803d5ad25bce982a6c3a4d34737e38ffb173659642946ace465dac9c20

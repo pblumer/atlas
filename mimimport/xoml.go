@@ -61,37 +61,76 @@ func (n xnode) displayName() string {
 // the workflow itself, the embedded XOML is located and re-parsed. Any repair
 // the input needed before it would parse is returned as a warning, so a
 // conversion never silently rests on a rewritten document.
-func parseXOML(r io.Reader) (xnode, []string, error) {
+func parseInput(r io.Reader) ([]workflowInput, []string, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return xnode{}, nil, err
+		return nil, nil, err
 	}
 	var warnings []string
 	root, repaired, err := decodeNode(data)
 	if err != nil {
-		return xnode{}, nil, err
+		return nil, nil, err
 	}
 	if repaired {
 		warnings = append(warnings, warnUnquoted)
 	}
 	if isWorkflowRoot(root) {
-		return root, warnings, nil
+		return []workflowInput{{root: root}}, warnings, nil
 	}
-	// Not a workflow root: this is likely an Export-FIMConfig resource graph that
-	// carries the XOML as an attribute value or a nested element's text.
-	if embedded, ok := findEmbeddedXOML(root); ok {
-		inner, innerRepaired, err := decodeNode([]byte(embedded))
+
+	// Not a workflow root: an Export-FIMConfig resource graph, which carries one
+	// WorkflowDefinition per workflow and the XOML as an attribute on each. Taking
+	// only the first is how an export of a whole MIM installation used to arrive as
+	// a single process, the rest gone without a word.
+	found := exportedWorkflows(root)
+	var (
+		out      []workflowInput
+		firstErr error
+	)
+	for _, w := range found {
+		inner, innerRepaired, err := decodeNode([]byte(w.xoml))
 		if err != nil {
-			return xnode{}, nil, fmt.Errorf("embedded XOML did not parse: %w", err)
+			if firstErr == nil {
+				firstErr = fmt.Errorf("embedded XOML did not parse: %w", err)
+			}
+			warnings = append(warnings, "a WorkflowDefinition was skipped because its XOML did not parse: "+
+				sourceLabel(w.source))
+			continue
 		}
 		if innerRepaired && !repaired {
+			repaired = true
 			warnings = append(warnings, warnUnquoted)
 		}
-		return inner, warnings, nil
+		out = append(out, workflowInput{root: inner, source: w.source})
+	}
+	switch {
+	case len(out) > 0:
+		return out, warnings, nil
+	case firstErr != nil:
+		return nil, nil, firstErr
 	}
 	// Fall back to treating whatever we decoded as the workflow body; the caller
 	// still produces a (mostly manual-review) process rather than failing outright.
-	return root, warnings, nil
+	return []workflowInput{{root: root}}, warnings, nil
+}
+
+// workflowInput is one workflow to convert: its root activity and, when it came
+// from an export wrapper, the resource that carried it.
+type workflowInput struct {
+	root   xnode
+	source SourceInfo
+}
+
+// sourceLabel names a resource for a message, falling back to its id.
+func sourceLabel(s SourceInfo) string {
+	switch {
+	case s.DisplayName != "":
+		return s.DisplayName
+	case s.ObjectID != "":
+		return s.ObjectID
+	default:
+		return "unnamed"
+	}
 }
 
 // warnUnquoted is reported when the input only parsed after quoteAttrValues
@@ -262,37 +301,6 @@ func isWorkflowRoot(n xnode) bool {
 		}
 	}
 	return false
-}
-
-// findEmbeddedXOML walks a resource-graph wrapper looking for the workflow
-// markup MIM stores under its "XOML" attribute. It handles the three shapes seen
-// in the wild — a literal <XOML> element, an attribute literally named XOML, and
-// the Export-FIMConfig form where an element names the attribute (AttributeName=
-// "XOML") and carries the escaped value in a <Value> child — and returns the
-// first non-empty candidate, unescaped and CDATA-stripped so it re-parses.
-func findEmbeddedXOML(n xnode) (string, bool) {
-	if strings.EqualFold(n.local(), "XOML") {
-		if s := strings.TrimSpace(n.Inner); s != "" {
-			return cleanEmbedded(s), true
-		}
-	}
-	for _, a := range n.Attrs {
-		if strings.EqualFold(a.Name.Local, "XOML") && strings.TrimSpace(a.Value) != "" {
-			return cleanEmbedded(a.Value), true
-		}
-	}
-	// Export-FIMConfig: <AttributeType AttributeName="XOML"><Value>…</Value>…
-	if v, ok := n.attr("AttributeName", "Name"); ok && strings.EqualFold(strings.TrimSpace(v), "XOML") {
-		if s := valueText(n); s != "" {
-			return cleanEmbedded(s), true
-		}
-	}
-	for _, k := range n.Kids {
-		if s, ok := findEmbeddedXOML(k); ok {
-			return s, true
-		}
-	}
-	return "", false
 }
 
 // valueText returns the payload of a FIM attribute element: the text of its

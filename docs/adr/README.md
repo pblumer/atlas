@@ -33,6 +33,38 @@ one answer removes both. The full argument is in
 A number, once assigned, is never reassigned — that is what makes `(ADR-0168)` in a
 comment safe to write.
 
+### When the record rests on a question you could not answer
+
+Some decisions are right *while* something we do not know stays unknown. ADR-0292 is
+the case that prompted this rule: it renders a MIMWAL table's cells by position
+because the meaning of the columns is established by no reference anyone could find,
+and it would be re-argued the day one turns up. Written like any other record, that
+reads a year later as settled — nothing in it separates "we decided this" from "we
+decided this for now, on a gap in what we know".
+
+So say both, in the front matter:
+
+```
+- **Open question:** MIMWAL's grid column semantics are not established from its own
+  source. The positional cells rest on that gap.
+- **Question checked:** 2026-09
+```
+
+The two come as a pair, and `go test ./docs/adr` insists on it: a question with no
+date cannot go stale, and a date with no question says a thing was checked without
+saying what. The question may wrap onto indented lines. The date is the month
+somebody last **looked at the question**, not the month the record was written, and
+the guard fails once it has stood for a year — the same interval, for the same
+reason, as the Worker Type setup steps of [ADR-0289](0289-worker-type-setup-in-the-panel.md).
+
+The reasoning behind the pair — including why it states a month somebody *looked*
+rather than a deadline somebody *set* — is in ADR-0293.
+
+When the check fires, the fix is never to bump the date. Go and look: if the question
+now has an answer, delete both lines and check whether the decision that rested on the
+gap still holds — that is the case this exists for. If it is still open, write down
+what you learned and date the month you looked.
+
 ## Reading the older records: "connector"
 
 Records written before [ADR-0203](0203-worker-execution-model.md) say *connector*
@@ -345,7 +377,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0289](0289-worker-type-setup-in-the-panel.md) | A Worker Type carries its own setup, in the panel where it is chosen | Proposed |
 | [0290](0290-per-flow-join-counting.md) | A join counts tokens per incoming flow | Proposed |
 | [0291](0291-one-place-for-budgets.md) | One place names every resource budget, and one way sets them | Draft |
-| [0292](0292-mim-import-worksheet.md) | A MIM import hands over its rows as data, and counts them as work | Proposed |
+| [0292](0292-mim-import-worksheet.md) | A MIM import hands over its rows as data, and counts them as work | Accepted |
+| [0293](0293-open-questions-in-records-expire.md) | A record that rests on an open question says so, and the question expires | Proposed |
 
 ## Status values
 
