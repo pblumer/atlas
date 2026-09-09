@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -203,6 +204,47 @@ func TestRunPassesSourceAndVars(t *testing.T) {
 	}
 	if env[srcEnv] != `"Hallo " + $Vorname` {
 		t.Errorf("%s = %q, want the author's source", srcEnv, env[srcEnv])
+	}
+}
+
+// TestRunDoesNotExposeTheWorkerEnvironment is the privilege boundary between the
+// worker and model-authored code. The worker needs ATLAS_TOKEN to lease and complete
+// jobs, but the interpreter it starts must never receive that credential or any
+// other deployment secret inherited by the worker process.
+func TestRunDoesNotExposeTheWorkerEnvironment(t *testing.T) {
+	t.Setenv("ATLAS_TOKEN", "worker-token")
+	t.Setenv("ATLAS_OIDC_CLIENT_SECRET", "oidc-secret")
+	t.Setenv("DATABASE_URL", "postgres://user:password@db/atlas")
+	t.Setenv("PATH", os.Getenv("PATH"))
+
+	var gotEnv []string
+	e := &CmdExec{
+		Lang: Python,
+		run: func(_ context.Context, _ string, _ []string, env []string) ([]byte, error) {
+			gotEnv = append([]string(nil), env...)
+			return []byte(`"ok"`), nil
+		},
+	}
+	if _, err := e.Run(context.Background(), `result = "ok"`, map[string]any{"name": "Anna"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	env := map[string]string{}
+	for _, kv := range gotEnv {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	for _, name := range []string{"ATLAS_TOKEN", "ATLAS_OIDC_CLIENT_SECRET", "DATABASE_URL"} {
+		if value, exposed := env[name]; exposed {
+			t.Errorf("model-authored script received %s=%q", name, value)
+		}
+	}
+	if env[varsEnv] == "" || env[srcEnv] == "" {
+		t.Errorf("script contract missing: %s=%q %s=%q", varsEnv, env[varsEnv], srcEnv, env[srcEnv])
+	}
+	if _, ok := env["PATH"]; !ok {
+		t.Error("PATH was not preserved for interpreter and child-process resolution")
 	}
 }
 

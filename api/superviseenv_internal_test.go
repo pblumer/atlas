@@ -157,11 +157,9 @@ func TestAServerWithNoMailConnectorsHandsOverNothing(t *testing.T) {
 // worker per kind rather than one for all of them, and it is a security property
 // rather than a tidiness one.
 //
-// A script task runs an interpreter that inherits its worker's whole environment
-// (connector/script.CmdExec appends to os.Environ), so a model-authored script on a
-// worker that also holds the mail credential could simply read the SMTP password out
-// of it. Separate processes are what stop that: the secret is rendered only into the
-// environment of the worker that sends mail.
+// A script task runs model-authored code, so defence in depth keeps another Worker
+// Type's credential out of both its rendered environment and its process. The
+// interpreter has its own stricter allowlist in connector/script.CmdExec.
 func TestAScriptWorkerIsNeverGivenTheMailCredential(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	if err := srv.connectors.Save(connector{
@@ -201,15 +199,16 @@ func TestASupervisedWorkerOnAnAuthenticatedServerIsGivenAToken(t *testing.T) {
 	}
 }
 
-// An operator who chose an identity for their workers keeps it: replacing their
-// ATLAS_TOKEN would silently undo that choice.
+// An operator who chose an identity for their workers keeps it. It is rendered
+// explicitly rather than relying on ambient inheritance, because the script worker
+// starts from an allowlisted environment.
 func TestAnOperatorsOwnWorkerTokenIsNotReplaced(t *testing.T) {
 	srv, _ := newValidateServer(t, WithAuth())
 	t.Setenv("ATLAS_TOKEN", "the-operators-own")
 
 	env := envOf(t, srv.superviseEnv(SuperviseSpec{ID: "csv", Connectors: []string{"csv"}})())
-	if _, overridden := env["ATLAS_TOKEN"]; overridden {
-		t.Error("the operator's own ATLAS_TOKEN was overridden")
+	if got := env["ATLAS_TOKEN"]; got != "the-operators-own" {
+		t.Errorf("ATLAS_TOKEN = %q, want the operator's own value", got)
 	}
 }
 

@@ -201,7 +201,10 @@ func TestRuleValidateBounds(t *testing.T) {
 // TestMatcherMatches drives the compiled rule over tasks — the actual filter, on
 // the shapes the editor produces.
 func TestMatcherMatches(t *testing.T) {
-	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	// Generated rules compare against FEEL's built-in now(), so keep their task
+	// timestamps relative to the same real clock. A fixed date eventually makes the
+	// three-day-old instance older than the five-day boundary asserted below.
+	now := time.Now().UTC()
 	base := Task{
 		ProcessID: "kunden-anfrage", TaskName: "Anfrage sichten",
 		CandidateGroups: "kundenservice", Lane: "Team Lead",

@@ -39,10 +39,10 @@ const (
 	// the property that makes the reach of all of them provable by reading one file.
 	apiScopeDeploy = "deploy"
 
-	// apiScopeWorker reaches the four operations an out-of-process worker performs
+	// apiScopeWorker reaches only operations an out-of-process worker performs
 	// and nothing else (ADR-0007/0168). This is the scope that earns the mechanism:
 	// a worker is a long-lived credential on another host, often in another network
-	// zone, and its whole job is four calls.
+	// zone, and its whole job is this small, enumerated protocol.
 	apiScopeWorker = "worker"
 
 	// apiScopeMCP reaches the Model Context Protocol transport and nothing else. It
@@ -95,6 +95,7 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/jobs/{key}/fail",
 		"POST /api/v1/mail/outbox",
 		"POST /api/v1/ad/mock-directory",
+		"POST /api/v1/sql/mock-journal",
 	},
 	// One route, and not one of /api/v1's: the exposition is mounted beside the
 	// probes. A scope is a set of mounted patterns, not of API operations, which is

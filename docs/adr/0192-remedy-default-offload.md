@@ -101,10 +101,10 @@ answers per kind, not per store contents.
 **What follows from the mechanism**, each a real consequence rather than an implementation
 detail:
 
-- **Only the Remedy worker gets the service account.** Provisioning is per kind, so the
-  script worker — which runs model-authored code and inherits its whole environment — is
-  never handed an ITSM credential. This is the property ADR-0182 called the failure that
-  would matter most, and it holds here for the same reason.
+- **Only the Remedy worker gets the service account.** Provisioning is per kind, while
+  the script worker and its interpreters start from explicit environment allowlists.
+  Model-authored code is therefore never handed an ITSM credential. This is the property
+  ADR-0182 called the failure that would matter most, and it holds here for the same reason.
 - **The diagnosis does not move.** The engine still builds its own Remedy registry from the
   store, so a connector that is disabled, endpoint-less or holding a malformed bundle is
   still reported as *configured and broken* rather than *never configured*

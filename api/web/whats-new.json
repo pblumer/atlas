@@ -125,6 +125,28 @@
       }
     },
     {
+      "id": "model-authored-scripts-no-longer-inherit-atlas-credentials",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Scripts no longer receive Atlas credentials",
+        "de": "Scripts erhalten keine Atlas-Zugangsdaten mehr"
+      },
+      "summary": {
+        "en": "Script workers and interpreters now start with restricted environments, and their token can reach only the worker API. Existing scripts remain enabled unless every language is switched off.",
+        "de": "Script-Worker und Interpreter starten neu mit eingeschränkten Umgebungen; ihr Token erreicht nur noch die Worker-API. Bestehende Scripts bleiben aktiv, solange nicht alle Sprachen ausgeschaltet werden."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Security",
+        "Scripts"
+      ]
+    },
+    {
       "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -327,35 +349,6 @@
           "de": "Worker konfigurieren"
         },
         "route": "#/console/workers"
-      }
-    },
-    {
-      "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "A MIM workflow imports as the process it is, not as a straight line",
-        "de": "Ein MIM-Workflow wird als der Prozess importiert, der er ist — nicht als gerade Linie"
-      },
-      "summary": {
-        "en": "Workflows built with the MIMWAL activity library say almost nothing in the elements themselves: a step is conditional because it carries a condition, and repeats because it carries an iteration, not because the workflow contains a branch or a loop. The import used to read only the elements, so twenty conditional steps arrived as twenty unconditional ones — a diagram that looked like your process and did not behave like it. It now reads the conditions and the iterations too, draws them as gateways and loops, and puts each step's queries and assignments on the step in two readable lines instead of leaving them buried in the original markup. The MIM expressions themselves are not translated: each is written onto the model and listed for review, so you can see exactly what is left to fill in.",
-        "de": "Workflows, die mit der MIMWAL-Bibliothek gebaut sind, sagen in den Elementen selbst fast nichts aus: Ein Schritt ist bedingt, weil er eine Bedingung trägt, und er wiederholt sich, weil er eine Iteration trägt — nicht, weil der Workflow eine Verzweigung oder eine Schleife enthielte. Der Import las bisher nur die Elemente, also kamen zwanzig bedingte Schritte als zwanzig unbedingte an: ein Diagramm, das aussah wie Ihr Prozess und sich nicht so verhielt. Jetzt werden Bedingungen und Iterationen mitgelesen, als Gateways und Schleifen gezeichnet, und die Abfragen und Zuweisungen jedes Schritts stehen in zwei lesbaren Zeilen am Schritt statt vergraben im Originalmarkup. Die MIM-Ausdrücke selbst werden nicht übersetzt: Jeder steht am Modell und in der Prüfliste, damit Sie genau sehen, was noch auszufüllen ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ],
-      "try": {
-        "label": {
-          "en": "Import a MIM workflow",
-          "de": "MIM-Workflow importieren"
-        },
-        "route": "#/modeler"
       }
     }
   ]
