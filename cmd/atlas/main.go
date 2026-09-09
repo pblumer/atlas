@@ -521,6 +521,8 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// (limits.TokenSteps / limits.Iterations, ADR-0272 and ADR-0276).
 	proc.SetExecutionBudget(budgets.TokenSteps)
 	proc.SetMaxIterations(int(budgets.Iterations))
+	proc.SetMaxVariable(budgets.Variable)
+	proc.SetMaxCollection(budgets.Collection)
 	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
 	}

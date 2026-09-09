@@ -4010,8 +4010,14 @@ func seedMultiInstance(c *ProcessingContext, bodyKey uint64, ei *model.ElementIn
 		parkOversizedLoop(c, bodyKey, ei, asked)
 		return
 	}
-	if d.OutputCollection >= 0 {
-		writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items)))
+	if d.OutputCollection >= 0 && !writeList(c, bodyKey, cp.Intern(d.OutputCollection), nullList(len(items))) {
+		// The collection did not fit, so it was not written and an incident says so.
+		// Returning is the other half of that refusal: the body stays activated holding
+		// its token, no iteration is seeded, and resolving runs this behaviour again.
+		// Carrying on would seed a loop whose results have nowhere to land, and the
+		// instance would complete as though nothing were wrong — taking the incident
+		// with it (ADR-draft-a-variable-is-a-record).
+		return
 	}
 	if len(items) == 0 {
 		// No iterations: the body completes immediately, taking its outgoing flow.
@@ -4205,7 +4211,15 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 		if err != nil {
 			val = expr.Null
 		}
-		setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val)
+		if !setListElement(c, bodyKey, cp.Intern(d.OutputCollection), idx, val) {
+			// The collection outgrew its budget on this iteration. The iteration's own
+			// work is done and its result is the thing that will not fit, so the
+			// iteration stays where it is with the incident on it rather than
+			// completing: a loop that carried on would drop this result and every later
+			// one, and finish looking successful
+			// (ADR-draft-a-variable-is-a-record).
+			return
+		}
 	}
 	// The completion condition — for a standard loop, the loop condition (ADR-0133) —
 	// is evaluated over this iteration's scope chain (so it can read loopCounter, the
@@ -4286,7 +4300,9 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
 			out := *v
 			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
-			c.AppendVariableEvent(model.IntentVariableCreated, out)
+			// The collection's own budget, not the variable one: it fitted at the body
+			// scope, so refusing it one scope up would park a loop for having finished.
+			c.appendCollection(model.IntentVariableCreated, out)
 		}
 	}
 	dropLocalScope(c, bodyKey)
@@ -4312,12 +4328,51 @@ func nullList(n int) []expr.Value {
 	return items
 }
 
-// writeList writes a FEEL list value (canonical JSON) into scope under name (ADR-0077).
-func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) {
+// writeList writes a FEEL list value (canonical JSON) into scope under name
+// (ADR-0077), unless the serialised collection is past the collection budget — then
+// nothing is written and the element owning the scope is parked with an incident
+// (ADR-draft-a-variable-is-a-record). It reports whether the write happened.
+//
+// The check is on the serialised text rather than before it, and the difference is
+// worth stating: the elements are already in memory, so what this bounds is the
+// canonical copy and everything downstream of it — the event, the log record, the
+// state write, and every later re-serialisation of the same collection. It is not the
+// "before the allocation" the iteration budget manages (ADR-0276), because by the
+// time a list is being written its elements exist; it is the point past which the
+// engine stops making the problem durable.
+func writeList(c *ProcessingContext, scope uint64, name string, elems []expr.Value) bool {
 	kind, b, text := expr.Classify(expr.ListOf(elems...))
-	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+	return c.appendCollection(model.IntentVariableCreated, model.VariableValue{
 		ScopeKey: scope, Name: name, Kind: toVarKind(kind), Bool: b, Text: text,
 	})
+}
+
+// parkOversizedWrite refuses a write whose value is past its budget: nothing is
+// written, and an incident on the element that produced it names the variable and both
+// sizes. Resolving retries the write, so correcting the data — or raising the budget —
+// lets it through, and leaving it refuses again
+// (ADR-draft-a-variable-is-a-record).
+//
+// The element is the scope's own when the scope is one (a loop's body, a container),
+// and otherwise the write's producer, which is the element instance whose processing
+// wrote the value (ADR-0219). One of the two always names something an operator can
+// act on.
+func parkOversizedWrite(c *ProcessingContext, scope uint64, name string, size, ceiling int64) {
+	inc := model.IncidentValue{
+		ElementInstanceKey: scope,
+		RaisedAt:           c.Now(),
+		Message:            c.p.tooLargeVariableMessage(name, size, ceiling),
+		Reason:             model.IncidentVariableTooLarge,
+	}
+	if ei := c.GetElementInstance(scope); ei != nil {
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else if ei := c.GetElementInstance(c.producer); ei != nil {
+		inc.ElementInstanceKey = c.producer
+		inc.ProcessInstanceKey, inc.ElementId = ei.ProcessInstanceKey, ei.ElementId
+	} else {
+		inc.ProcessInstanceKey = scope // an instance-root write: the instance is the subject
+	}
+	c.AppendIncidentEvent(model.IntentIncidentCreated, inc)
 }
 
 // readList reads a stored JSON list variable back into FEEL values; nil if absent or
@@ -4333,13 +4388,16 @@ func readList(c *ProcessingContext, scope uint64, name string) []expr.Value {
 
 // setListElement sets index idx of a stored JSON list variable and writes it back; a
 // no-op if idx is out of range (ADR-0077).
-func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) {
+// It reports whether the collection was written: an index out of range is nothing to
+// write and counts as written, while a collection past its budget is a refusal the
+// caller has to act on.
+func setListElement(c *ProcessingContext, scope uint64, name string, idx int, val expr.Value) bool {
 	elems := readList(c, scope, name)
 	if idx < 0 || idx >= len(elems) {
-		return
+		return true
 	}
 	elems[idx] = val
-	writeList(c, scope, name, elems)
+	return writeList(c, scope, name, elems)
 }
 
 // callActivityBehavior runs a call activity: on activation it starts a separate

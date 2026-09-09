@@ -778,10 +778,17 @@ away.
 | `ATLAS_LIMIT_ARCHIVE` | 1 GiB | A backup being restored, compressed *and* decompressed |
 | `ATLAS_LIMIT_TOKEN_STEPS` | 10000 | How many elements one token may drive in a single run before the engine parks it — the guard against a cycle of automatic elements |
 | `ATLAS_LIMIT_ITERATIONS` | 100000 | How many iterations one multi-instance activity may ask for before the engine refuses it |
+| `ATLAS_LIMIT_VARIABLE` | 1 MiB | How large one process variable's value may be. A variable is a business record; past this it is a document |
+| `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
 
-The last two are counts, not bytes, and they are different guards: a hundred thousand
-iterations are a hundred thousand tokens taking one step each, which the step budget
-is deliberately built not to stop.
+`TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
+hundred thousand iterations are a hundred thousand tokens taking one step each, which
+the step budget is deliberately built not to stop.
+
+A value past `VARIABLE` or `COLLECTION` is not written and not silently dropped: the
+element that produced it is parked with an incident naming the variable and both
+sizes, and resolving it writes the value again — so correcting the data, or raising
+the budget, lets the instance carry on.
 
 ### Endpoints
 
