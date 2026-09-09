@@ -384,6 +384,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0296](0296-a-loop-records-its-element.md) | A loop records the element it produced, not the collection so far | Accepted | Landed |
 | [0297](0297-confine-internal-worker-token.md) | Confine the internal worker token to the worker protocol | Accepted | Landed |
 | [0298](0298-two-states-for-a-record.md) | A record has two states — whether the decision holds, and whether it is built | Accepted | Landed |
+| [0299](0299-worker-type-admission-criteria.md) | What earns a Worker Type — admission criteria for a new kind | Proposed | Not started |
 
 ## The two states of a record
 
