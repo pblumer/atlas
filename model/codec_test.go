@@ -490,7 +490,11 @@ func TestVariableIndexedAppendCompatible(t *testing.T) {
 		ScopeKey: NewKey(1, 5), Name: "identityId", Kind: VarString, Text: "MT-1998",
 		ProducerKey: NewKey(1, 7), Indexed: true,
 	})
-	legacy := full[:len(full)-1] // exactly what the pre-index encoder would have written
+	// Exactly what the pre-index encoder would have written: the record ended after
+	// ProducerKey. Both fields appended since — the Indexed byte and the four-byte
+	// Index — come off, which is why this is not "drop the last byte": a later
+	// appended field would have made that silently strip the wrong one.
+	legacy := full[:len(full)-(1+4)]
 
 	v := VariableValue{Indexed: true} // reused: carries someone else's flag
 	if err := DecodeValueInto(&v, legacy); err != nil {
@@ -562,5 +566,32 @@ func TestVariableIndexDecodeErrors(t *testing.T) {
 				t.Errorf("DecodeValue = %v, want ErrShortBuffer", err)
 			}
 		})
+	}
+}
+
+// TestVariableIndexAppendCompatible: Index is the newest appended field, and a record
+// written before it existed has to read back as -1 — "this write is the whole value".
+// Zero would have been the wrong default: zero is a real index, and a record from
+// before the field would have claimed to set element 0 of a list.
+func TestVariableIndexAppendCompatible(t *testing.T) {
+	full := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "results", Kind: VarString, Text: "x", Index: 7,
+	})
+	legacy := full[:len(full)-4] // ends after the Indexed byte
+
+	v := VariableValue{Index: 7} // reused: carries someone else's index
+	if err := DecodeValueInto(&v, legacy); err != nil {
+		t.Fatalf("DecodeValueInto(legacy): %v", err)
+	}
+	if v.Index != -1 {
+		t.Errorf("Index = %d, want -1 — a record from before the field sets no element", v.Index)
+	}
+
+	var round VariableValue
+	if err := DecodeValueInto(&round, full); err != nil {
+		t.Fatalf("DecodeValueInto(full): %v", err)
+	}
+	if round.Index != 7 {
+		t.Errorf("Index = %d, want 7 round-tripped", round.Index)
 	}
 }
