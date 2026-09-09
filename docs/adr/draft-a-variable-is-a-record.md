@@ -113,11 +113,17 @@ write that makes the problem smaller must always get through.
 - **Negative:** `AppendVariableEvent` now returns a value most of its callers ignore.
   They write engine-derived values — a loop index, a counter — that cannot exceed a
   budget sized for a record, but nothing forces a future caller to think about it.
-- **Follow-ups / risks to watch:** the quadratic re-serialisation, and the write sites
-  not yet guarded at their own level — a worker's job result, a message payload, a
-  call activity's result. Each is refused by the funnel, so no oversized value becomes
-  durable; what each still needs is its own answer to "and then what", the way the
-  loop got one here.
+- **Negative, and stated as a limitation rather than a follow-up:** three write sites
+  refuse the value but do not yet stop what happens next — a message payload, a call
+  activity's result, an io-mapping. Terminating an element clears the incident it
+  carries (`engine/apply.go`), so if such an element completes, the report goes with
+  it and the only remaining evidence is the missing variable. The value is still not
+  written, and nothing oversized becomes durable; what is missing is the *visibility*
+  of the refusal on those paths. The loop and a worker's job result have their answer
+  — the body stays activated, the task stays parked — and the other three need the
+  same, one at a time, each with its own view of what "and then what" means.
+- **Follow-ups / risks to watch:** the quadratic re-serialisation above, and those
+  three sites.
 
 ## Pros and cons of the options
 

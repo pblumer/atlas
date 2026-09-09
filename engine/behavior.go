@@ -764,10 +764,13 @@ func handleJobCompleted(c *ProcessingContext) {
 	// claims, which is the whole of what a service task produces
 	// (ADR-0219).
 	c.producer = job.ElementInstanceKey
+	refused := false
 	for i := range c.cmd.StartVars {
 		v := c.cmd.StartVars[i]
 		v.ScopeKey = resultScope
-		c.AppendVariableEvent(model.IntentVariableCreated, v)
+		if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+			refused = true
+		}
 	}
 
 	// A business rule task's worker evaluates its decision off the processor
@@ -798,6 +801,15 @@ func handleJobCompleted(c *ProcessingContext) {
 	}
 
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil {
+		// A result past the variable budget was refused above, with an incident on this
+		// element. Completing anyway would take that incident with it — terminating an
+		// element clears the one it carries — and the task would look successful while
+		// its result was never written. So the element stays activated: the job is done
+		// and cannot be redone, and resolving the incident is what moves it on
+		// (ADR-draft-a-variable-is-a-record).
+		if refused {
+			return
+		}
 		// An agent-driven ad-hoc's round job is not a step that finishes its element: it
 		// decides the next one. When it comes back naming tools, the container activates
 		// them and stays Activated; only a completion naming none falls through to the

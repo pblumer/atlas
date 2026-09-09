@@ -667,7 +667,17 @@ Seiteneffekte zurückbleiben.
 > entstand, der Loop drehte weiter, die Instanz schloss ab — und nahm den Incident mit.
 > Nichts geschrieben, nichts gemeldet, der Lauf sah erfolgreich aus. Der Trichter
 > meldet sein Urteil deshalb jetzt, und die erzeugenden Stellen handeln danach: der
-> Body bleibt aktiviert, statt Iterationen zu säen, deren Ergebnisse nirgendwo landen.
+> Body bleibt aktiviert, statt Iterationen zu säen, deren Ergebnisse nirgendwo landen,
+> und eine Task, deren Ergebnis nicht passt, bleibt parkiert, statt erfolgreich
+> auszusehen.
+>
+> **Was davon noch offen ist, als Einschränkung und nicht als Fussnote.** Drei
+> Schreibstellen — Nachrichten-Payload, Ergebnis eines Call-Activity, io-Mapping —
+> lehnen den Wert zwar ab, halten aber den Fortgang nicht an. Da das Beenden eines
+> Elements dessen Incident löscht (`engine/apply.go`), geht die Meldung dort mit dem
+> Element verloren, wenn es abschliesst; übrig bliebe nur die fehlende Variable.
+> Geschrieben wird der Wert trotzdem nicht — was fehlt, ist die *Sichtbarkeit* der
+> Ablehnung auf diesen Pfaden.
 >
 > **Nicht mitgemacht:** Komponenten, die im Prozess eines Workers laufen (die
 > Antwort eines Modellanbieters, ein Remedy-Aufruf, die Fehlerausschnitte im

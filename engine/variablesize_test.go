@@ -206,3 +206,38 @@ func TestACollectionUnderItsBudgetIsUnchanged(t *testing.T) {
 		t.Errorf("incidents = %d, want none for an ordinary loop", n)
 	}
 }
+
+// TestATaskWhoseResultDoesNotFitStaysParked is the other half of a refusal, and the
+// half that is easy to leave out. Terminating an element clears the incident it
+// carries (engine/apply.go), so a task that completed after its result was refused
+// would take the only report with it: the job would look successful, and the missing
+// variable would be the sole evidence.
+//
+// The job is done and cannot be redone, so the element stays activated with the
+// incident on it. Resolving is what moves it on.
+func TestATaskWhoseResultDoesNotFitStaysParked(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	p, jobKey, _ := startedJob(t, h)
+	p.SetMaxVariable(8)
+
+	p.CompleteJob(jobKey, model.VariableValue{
+		Name: "result", Kind: model.VarString, Text: strings.Repeat("x", 64)})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	incs := incidents(t, h.store)
+	if len(incs) != 1 {
+		t.Fatalf("incidents = %d, want one — the refusal has to survive the completion", len(incs))
+	}
+	for _, inc := range incs {
+		if inc.Reason != model.IncidentVariableTooLarge {
+			t.Errorf("incident reason = %v, want IncidentVariableTooLarge", inc.Reason)
+		}
+	}
+	// The element is still there holding its token: the instance did not quietly finish.
+	if pi, ei := counts(t, h.store); pi != 1 || ei == 0 {
+		t.Errorf("process=%d element=%d, want the instance and its task still present", pi, ei)
+	}
+}
