@@ -446,7 +446,7 @@ The control-flow basics most real models use.
   [the Jira issue-watch draft](docs/adr/0214-jira-inbound-issue-watch.md).
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
-  own shape ([ADR-draft-openapi-element-templates](docs/adr/draft-openapi-element-templates.md)) —
+  own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
   method fixed, URL filled in (a FEEL expression where the path has parameters), and
   everything the document cannot decide left empty. Applying one to a task waits on the
   applier ([ADR-0212](docs/adr/0212-element-template-applier.md)), so today the output is

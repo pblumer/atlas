@@ -62,7 +62,7 @@ _Changed_ / _Removed_ for each version.
 - **An OpenAPI document can configure the task that calls it.** `atlas openapi-template
   --spec petstore.yaml --out ./packages` writes one element-template package per
   operation, in the shape the repository catalog already uses
-  ([ADR-draft-openapi-element-templates](docs/adr/draft-openapi-element-templates.md)).
+  ([ADR-0300](docs/adr/0300-openapi-element-templates.md)).
 
   It is the reader behind `atlas mock-openapi` pointed the other way: the same document
   that makes an API answer now also fills in the task that calls it. Method is fixed to

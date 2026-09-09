@@ -1,4 +1,4 @@
-# ADR-DRAFT: An OpenAPI document as element templates
+# ADR-0300: An OpenAPI document as element templates
 
 - **Status:** Accepted
 - **Implementation:** Landed

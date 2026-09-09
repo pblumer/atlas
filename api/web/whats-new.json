@@ -101,8 +101,8 @@
         "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0300",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0300-openapi-element-templates.md"
       },
       "tags": [
         "Connectors",
