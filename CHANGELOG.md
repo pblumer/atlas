@@ -65,7 +65,7 @@ _Changed_ / _Removed_ for each version.
   instances only — a finished instance's membership can no longer change through any normal
   path, and reaching into the history family from a command handler was not worth it for a
   strictly historical case.
-  ([ADR-draft-migration-reindexes-searchable-variables](docs/adr/draft-migration-reindexes-searchable-variables.md))
+  ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md))
 
 - **The Modeler can now say what a process is found by.** `atlas:searchable`
   ([ADR-0244](docs/adr/0244-searchable-variables.md)) turns an operator's value search

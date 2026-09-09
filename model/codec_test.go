@@ -483,7 +483,7 @@ func TestVariableIndexedRoundTrip(t *testing.T) {
 // back as not indexed. Such a variable is findable by a content walk, never by a seek,
 // until it is written again — or until its membership is corrected by a
 // VariableIndexed event, which is what a migration and an operator's reindex emit
-// (ADR-draft-migration-reindexes-searchable-variables). Nothing seeds the index at
+// (ADR-0295). Nothing seeds the index at
 // startup: it is folded from the log like every other derived index.
 func TestVariableIndexedAppendCompatible(t *testing.T) {
 	full := AppendValue(nil, &VariableValue{

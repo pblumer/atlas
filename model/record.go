@@ -115,7 +115,7 @@ const (
 
 	// VTVariableIndex is one variable's membership in the value index changing after
 	// the fact: the instance's process now declares that name searchable, or no longer
-	// does (ADR-0244, ADR-draft-migration-reindexes-searchable-variables). It carries no
+	// does (ADR-0244, ADR-0295). It carries no
 	// value — the variable holds that — only the name and the membership, because the
 	// point is that the value did not change. It exists because a variable's membership
 	// is stamped by the version that wrote it (I6), and an instance can change version

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A migration re-indexes what its target declares
+# ADR-0295: A migration re-indexes what its target declares
 
 - **Status:** Accepted
 - **Date:** 2026-09-09

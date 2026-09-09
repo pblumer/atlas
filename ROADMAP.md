@@ -869,7 +869,7 @@ What it takes to run this for real.
   instance to another version's declaration: the migration now emits the membership
   corrections its target implies, and
   `POST /api/v1/processes/{key}/reindex-instances` repairs the instances migrated before
-  it did ([ADR-draft-migration-reindexes-searchable-variables](docs/adr/draft-migration-reindexes-searchable-variables.md)).
+  it did ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md)).
   Remaining, and deliberately so: substring and free text stay in the
   OpenSearch export (ADR-0114) rather than becoming a second engine index.
   The **third way in is the diagram itself**
