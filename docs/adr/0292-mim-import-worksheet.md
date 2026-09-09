@@ -1,4 +1,4 @@
-# ADR-DRAFT: A MIM import hands over its rows as data, and counts them as work
+# ADR-0292: A MIM import hands over its rows as data, and counts them as work
 
 - **Status:** Proposed
 - **Date:** 2026-09-09
