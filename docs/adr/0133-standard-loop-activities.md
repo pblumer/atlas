@@ -1,6 +1,7 @@
 # ADR-0133: Standard loop activities (the ↻ marker)
 
 - **Status:** Accepted (amended 2026-08-17: every activity kind loops; 2026-08-18: a safety ceiling for an unbounded loop)
+- **Implementation:** Landed
 - **Date:** 2026-08-17
 - **Deciders:** Atlas engine team
 

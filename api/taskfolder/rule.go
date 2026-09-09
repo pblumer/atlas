@@ -151,9 +151,9 @@ func Catalog() []FieldSpec {
 			{ID: OpIs, Value: ValueNumber, feel: number("priority", "=")},
 		}},
 		{ID: FieldDue, Ops: []OpSpec{
-			{ID: OpOverdue, Value: ValueNone, feel: literal("dueDate != null and dueDate < now()")},
+			{ID: OpOverdue, Value: ValueNone, feel: literal("dueDate != null and dueDate < scanAt")},
 			{ID: OpWithin, Value: ValueDuration, feel: func(c Condition) string {
-				return "dueDate != null and dueDate < now() + duration(" + feelString(c.Value) + ")"
+				return "dueDate != null and dueDate < scanAt + duration(" + feelString(c.Value) + ")"
 			}},
 			{ID: OpNone, Value: ValueNone, feel: literal("dueDate = null")},
 			{ID: OpAny, Value: ValueNone, feel: literal("dueDate != null")},
@@ -200,7 +200,7 @@ func inList(name string) func(Condition) string {
 // "older than" is the earlier instant, hence `<`.
 func age(op string) func(Condition) string {
 	return func(c Condition) string {
-		return "instanceCreatedAt " + op + " now() - duration(" + feelString(isoDuration(c)) + ")"
+		return "instanceCreatedAt " + op + " scanAt - duration(" + feelString(isoDuration(c)) + ")"
 	}
 }
 
@@ -465,6 +465,14 @@ func (m *Matcher) Match(t Task, u User, now time.Time) bool {
 // bindings builds the evaluation scope for one task. An empty string binds as
 // FEEL null rather than as "", so `assignee = null` means "nobody has claimed it"
 // instead of "somebody is called the empty string".
+//
+// scanAt is the moment the whole scan is judged against, bound as a value
+// rather than left to FEEL's now(), which reads the clock again for every row
+// and would let a task on the edge of a window fall on either side depending on
+// when in the scan it was reached (see the note on expr.DateTime). It is not
+// called "now": FEEL resolves that name to the builtin function even where a
+// binding of that name exists, so `dueDate < now` compares an instant against a
+// function and yields null instead of a boolean.
 func (m *Matcher) bindings(t Task, u User, now time.Time) map[string]expr.Value {
 	lane := make([]any, 0, len(t.LanePath))
 	for _, l := range t.LanePath {
@@ -475,6 +483,7 @@ func (m *Matcher) bindings(t Task, u User, now time.Time) map[string]expr.Value 
 		groups = append(groups, g)
 	}
 	return map[string]expr.Value{
+		"scanAt":            expr.DateTime(now),
 		"processId":         strOrNull(t.ProcessID),
 		"processName":       strOrNull(t.ProcessName),
 		"taskName":          strOrNull(t.TaskName),

@@ -1,6 +1,7 @@
 # ADR-0160: Fix the connector from the incident
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

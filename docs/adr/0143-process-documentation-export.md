@@ -1,6 +1,7 @@
 # ADR-0143: Process documentation export
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-18
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0284: A cancellation sees the children created in its own batch
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

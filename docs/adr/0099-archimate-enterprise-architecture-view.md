@@ -1,6 +1,7 @@
 # ADR-0099: An ArchiMate 3.2 enterprise-architecture view
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas engine team
 

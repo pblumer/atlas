@@ -1,6 +1,7 @@
 # ADR-0196: The MCP transport is authenticated, and acts as its caller
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

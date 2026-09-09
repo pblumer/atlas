@@ -1,6 +1,7 @@
 # ADR-0227: A Jira read is bounded and moves forward
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

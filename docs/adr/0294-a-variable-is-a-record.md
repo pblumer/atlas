@@ -1,6 +1,7 @@
 # ADR-0294: A variable is a record, a collection is a loop's harvest — two budgets
 
-- **Status:** Draft
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas engine team
 

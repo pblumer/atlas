@@ -1,6 +1,7 @@
 # ADR-0007: Job worker protocol
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

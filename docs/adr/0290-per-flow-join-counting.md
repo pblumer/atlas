@@ -1,6 +1,7 @@
 # ADR-0290: A join counts tokens per incoming flow
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-08
 - **Deciders:** Atlas engine maintainers
 

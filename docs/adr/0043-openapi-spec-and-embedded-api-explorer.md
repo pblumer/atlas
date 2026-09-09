@@ -1,6 +1,7 @@
 # ADR-0043: An OpenAPI spec and an embedded API explorer for the HTTP API
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

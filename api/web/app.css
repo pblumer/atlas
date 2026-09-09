@@ -5291,6 +5291,38 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-transition-line { stroke: var(--text); stroke-width: 1.3; }
 .uml-transition-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; }
 
+/* The bar above the run-time overlay: which object is drawn, where it has got to,
+   and — only when more than one object has a machine — which one to draw. */
+.lc-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px 0; font-size: 13px; }
+.lc-of { color: var(--muted); }
+.lc-now { color: var(--muted); }
+.lc-now.none { font-style: italic; }
+.og-pick { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); }
+.og-pick select { font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); max-width: 260px; }
+
+/* The run-time overlay (ADR-0259 §4): the same machine with one instance's own life
+   drawn on it. Marks on the declared notation rather than a notation of their own —
+   a state this datum has been through is still that state, and reading the two on top
+   of each other is the entire point. So: what was never reached recedes, what was
+   reached is filled, and where the datum is now is ringed in the accent, which is the
+   one question somebody opens this to answer. */
+.uml-state.visited .uml-state-box { fill: var(--accent-soft); stroke: var(--accent); }
+.uml-state.current .uml-state-box { stroke: var(--accent); stroke-width: 2.5; }
+.uml-state.current .uml-state-name { fill: var(--accent); }
+.uml-state .uml-state-count { fill: var(--muted); font: 600 10px/1 ui-monospace, monospace; }
+/* An edge the datum actually travelled, against the ones it did not. */
+.uml-transition.taken .uml-transition-line { stroke: var(--accent); stroke-width: 2.2; }
+.uml-transition.taken .uml-transition-label { fill: var(--accent); }
+.uml-transition-by { fill: var(--muted); font: 500 10px/1.3 ui-monospace, monospace; }
+.uml-transition.taken .uml-transition-by { fill: var(--accent); }
+/* A move that was made and never declared. Dashed, because it is what happened and
+   not what was modelled — the run-time twin of the data.illegal-transition check. */
+.uml-transition.undeclared .uml-transition-line {
+  stroke: var(--danger); stroke-width: 1.8; stroke-dasharray: 6 4;
+}
+.uml-transition.undeclared .uml-transition-by { fill: var(--danger); }
+
 /* The palette's marks for this notation. */
 .uml-pi-state::before { content: "▢"; }
 .uml-pi-transition::before { content: "→"; }

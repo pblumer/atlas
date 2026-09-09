@@ -237,9 +237,29 @@ test.describe("the object diagram", () => {
     await page.locator('#tab-data [data-dview="list"]').click();
     await expect(page.locator(".do-table")).toBeVisible();
     await expect(page.locator(".og-canvas")).toHaveCount(0);
-    // The preference is about how a person reads data, not about this instance.
-    const stored = await page.evaluate(() => localStorage.getItem("atlas.replay.datadiagram"));
-    expect(stored).toBe("0");
+    // The preference is about how a person reads data, not about this instance. It
+    // names the reading rather than saying yes-or-no to one of them, because there
+    // are three of them now (ADR-0259 §4).
+    const stored = await page.evaluate(() => localStorage.getItem("atlas.replay.dataview"));
+    expect(stored).toBe("list");
     expect(page.__errors).toEqual([]);
+  });
+
+  test("a reader who already preferred the diagram keeps it", async ({ page }) => {
+    // The preference used to be a boolean, and a third reading cannot be one. Somebody
+    // who had chosen the diagram must not be put back on the list by an upgrade — so
+    // the old key is still read when the new one has nothing to say.
+    await page.evaluate(() => {
+      localStorage.removeItem("atlas.replay.dataview");
+      localStorage.setItem("atlas.replay.datadiagram", "1");
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+    await page.evaluate(() => window.__mount());
+    await page.locator("#rp-tabs button[data-tab='data']").click();
+    await expect(page.locator('#tab-data [data-dview="diagram"]')).toHaveClass(/active/);
+    // Count rather than visibility: the drawing is built here before the tab has been
+    // laid out, so its shapes have no box yet — that it was drawn at all is the claim.
+    await expect(page.locator(".og-node")).toHaveCount(4);
   });
 });

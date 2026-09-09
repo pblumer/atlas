@@ -1,6 +1,7 @@
 # ADR-0186: Embedding a public start form cross-origin (scoped CORS)
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-25
 - **Deciders:** Atlas maintainers
 

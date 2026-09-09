@@ -272,6 +272,25 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_lifecycle",
+			Description: "Read one process instance's data objects against the lifecycles their classes " +
+				"declare: the state machine as modelled, with the states this instance has actually been " +
+				"through, the moves it made and the BPMN element that made each. Answers \"where has this " +
+				"order got to, and what moved it there\" without reading the whole trail. Two fields are " +
+				"the reason to look even when nothing seems wrong — undeclared lists moves the model does " +
+				"not join, and unknown names states it never declared, which is what a process writing " +
+				"[aproved] once looks like from the outside. An object whose class declares no lifecycle " +
+				"is absent rather than empty: a class without one is the normal case.",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/lifecycle"))
+			},
+		},
+		{
 			Name: "atlas_data_objects",
 			Description: "The data-centric index: which instances carry which data, newest first — the " +
 				"landscape read from the data's side rather than the process's. Each row names its " +

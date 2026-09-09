@@ -1,6 +1,7 @@
 # ADR-0268: Task folders are saved filters, stored as rules and generated into FEEL
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

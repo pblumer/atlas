@@ -1,6 +1,7 @@
 # ADR-0202: Atlas holds the AD mockup's starting entries
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

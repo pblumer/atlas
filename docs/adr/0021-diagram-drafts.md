@@ -1,6 +1,7 @@
 # ADR-0021: Diagram drafts, separate from deployments
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

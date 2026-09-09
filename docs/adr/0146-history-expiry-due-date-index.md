@@ -1,6 +1,7 @@
 # ADR-0146: History expiry as a due-date index — retention that scales with what is due
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas engine team
 

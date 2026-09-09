@@ -1,6 +1,7 @@
 # ADR-0114: OpenSearch event exporter — a WAL-tailing sink, off the hot path
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
 

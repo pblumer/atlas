@@ -1,6 +1,7 @@
 # ADR-0008: FEEL expression compilation strategy
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

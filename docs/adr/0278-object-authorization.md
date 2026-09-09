@@ -1,6 +1,7 @@
 # ADR-0278: Filing a deployment into a project is a write on that project
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0214: Jira as an inbound event source — a polled issue watch, deduplicated per issue
 
 - **Status:** Accepted (2026-09-01: implemented — the bridge takes a second source, and a jira watch polls, marks per issue and publishes)
+- **Implementation:** Landed
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 

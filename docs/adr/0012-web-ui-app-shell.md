@@ -1,6 +1,7 @@
 # ADR-0012: A buildless, self-contained web UI app shell
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

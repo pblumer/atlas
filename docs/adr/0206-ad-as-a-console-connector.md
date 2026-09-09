@@ -1,6 +1,7 @@
 # ADR-0206: Active Directory is a connector you configure, not one you write into a model
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0016: Model Context Protocol server as a stdio adapter over the HTTP API
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

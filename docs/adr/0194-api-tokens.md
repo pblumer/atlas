@@ -1,6 +1,7 @@
 # ADR-0194: API tokens — a credential a machine can actually be given
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

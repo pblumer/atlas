@@ -1162,9 +1162,13 @@ export const STATE_HEIGHT = STATE_H;
 
 function stateVisual(parent, shape) {
   const bo = shape.businessObject || {};
+  // visited/current are the run-time overlay (ADR-0259 §4): the same machine, with
+  // the life one instance actually had drawn on it. They are marks on the declared
+  // state rather than a second notation, because the whole point is reading one on
+  // top of the other — a picture of only what happened answers a different question.
   const g = svg("g", {
     class: `uml-state${bo.initial ? " initial" : ""}${bo.final ? " final" : ""}` +
-      `${bo.invalid ? " invalid" : ""}`,
+      `${bo.invalid ? " invalid" : ""}${bo.visited ? " visited" : ""}${bo.current ? " current" : ""}`,
     "data-name": bo.name || "", "data-id": bo.name || "",
   }, parent);
 
@@ -1179,6 +1183,14 @@ function stateVisual(parent, shape) {
   }
   text(g, shorten(bo.name || "unnamed", Math.floor((shape.width - PAD * 2) / CH_NAME)),
     { x: shape.width / 2, y: shape.height / 2 + 5, class: "uml-state-name", "text-anchor": "middle" });
+
+  // How often the datum came back here. Said only from the second time, because "1"
+  // on every visited state is noise, and going round twice is the fact worth seeing.
+  if (bo.entered > 1) {
+    text(g, `\u00d7${bo.entered}`, {
+      x: shape.width - PAD, y: shape.height - 7, class: "uml-state-count", "text-anchor": "end",
+    });
+  }
 
   // The initial mark: UML's filled disc with its arrow, drawn at the state's left
   // edge. It is a mark on the state rather than a node of its own because a
@@ -1224,16 +1236,29 @@ StateRenderer.prototype.drawConnection = function(parent, connection) {
   ensureStateArrow(this.canvas);
   const bo = connection.businessObject || {};
   const wp = connection.waypoints;
-  const g = svg("g", { class: "uml-transition", "data-id": bo.id || "" }, parent);
+  // taken/undeclared are the run-time overlay's two marks on an edge: a move this
+  // instance actually made, and a move it made that the machine does not join — the
+  // second drawn dashed, because it is what happened and not what was modelled.
+  const g = svg("g", {
+    class: `uml-transition${bo.taken ? " taken" : ""}${bo.undeclared ? " undeclared" : ""}`,
+    "data-id": bo.id || "",
+  }, parent);
   const line = svg("polyline", {
     points: wp.map((p) => `${p.x},${p.y}`).join(" "), class: "uml-transition-line",
   }, g);
   line.setAttribute("fill", "none");
   line.setAttribute("marker-end", "url(#uml-state-arrow)");
+  const mid = wp.length > 2 ? wp[Math.floor(wp.length / 2)]
+    : { x: (wp[0].x + wp[1].x) / 2, y: (wp[0].y + wp[1].y) / 2 };
   if (bo.name) {
-    const mid = wp.length > 2 ? wp[Math.floor(wp.length / 2)]
-      : { x: (wp[0].x + wp[1].x) / 2, y: (wp[0].y + wp[1].y) / 2 };
     text(g, bo.name, { x: mid.x, y: mid.y - 6, class: "uml-transition-label", "text-anchor": "middle" });
+  }
+  // The element that made the move — the one thing a class diagram can never say, and
+  // the reason this overlay is worth drawing rather than reading the trail as a list.
+  if (bo.lastBy) {
+    text(g, `${bo.taken > 1 ? `\u00d7${bo.taken} \u00b7 ` : ""}${bo.lastBy}`, {
+      x: mid.x, y: mid.y + (bo.name ? 14 : 8), class: "uml-transition-by", "text-anchor": "middle",
+    });
   }
   return g;
 };

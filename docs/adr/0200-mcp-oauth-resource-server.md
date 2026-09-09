@@ -1,6 +1,7 @@
 # ADR-0200: Atlas as an OAuth resource server, so a hosted MCP client can connect
 
 - **Status:** Accepted (2026-08-27: options 3 and 4 implemented — resource server,
+- **Implementation:** Landed
   authorization server, and dynamic client registration off by default. CIMD is not
   built; option 5 waits on O-02)
 - **Date:** 2026-08-27

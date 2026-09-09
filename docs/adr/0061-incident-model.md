@@ -1,6 +1,7 @@
 # ADR-0061: Incident model — job-failure incidents, raise, resolve, resume
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 

@@ -1,6 +1,7 @@
 # ADR-0291: One place names every resource budget, and one way sets them
 
-- **Status:** Draft
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-08
 - **Deciders:** Atlas engine team
 

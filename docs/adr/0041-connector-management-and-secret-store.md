@@ -1,6 +1,7 @@
 # ADR-0041: Connector management and the secret store
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

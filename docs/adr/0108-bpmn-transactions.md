@@ -1,6 +1,7 @@
 # ADR-0108: BPMN transactions (cancel end event, cancel boundary, transactional compensation)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-07
 - **Deciders:** Atlas engine team
 

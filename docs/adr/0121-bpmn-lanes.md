@@ -1,6 +1,7 @@
 # ADR-0121: BPMN lanes
 
 - **Status:** Accepted (Layer A)
+- **Implementation:** Landed
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
 

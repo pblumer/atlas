@@ -1,6 +1,7 @@
 # ADR-0289: A Worker Type carries its own setup, in the panel where it is chosen
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-08
 - **Deciders:** Atlas maintainers
 

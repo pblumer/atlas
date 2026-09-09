@@ -1,6 +1,7 @@
 # ADR-0242: One route table describes the shell
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-09-04
 - **Deciders:** Atlas maintainers
 

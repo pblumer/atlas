@@ -1,6 +1,7 @@
 # ADR-0215: The Modeler Playground — batch simulation and analysis of a draft
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 

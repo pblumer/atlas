@@ -1,6 +1,7 @@
 # ADR-0211: Panorama's derived landscape mesh and notation projections
 
 - **Status:** Accepted (amended 2026-08-31 — §11 splits P2.5c's P4 dependency per
+- **Implementation:** Landed
   state instead of holding the whole stage behind it; amended 2026-09-01 — §7 lays
   the graph out in a world of its own size rather than in the viewport, and names
   by magnification rather than by node count; amended 2026-09-02 — §7 lets the

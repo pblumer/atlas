@@ -52,7 +52,10 @@ like neither of the two canvases beside it, and a router that did not route.
 
 The state canvas is the third notation and cost 6,888 bytes — 154,041 to 160,929 —
 which is the renderer arithmetic again rather than the library's: a rounded box, an
-arrow marker, and the one rule that nothing leaves a final state.
+arrow marker, and the one rule that nothing leaves a final state. Its run-time
+overlay (ADR-0259 §4) cost 358 more — 160,929 to 161,287 — because it is marks on
+that same notation and not a fourth one: a state a datum has been through is still
+that state, so what it took was two class names and a label.
 
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
@@ -73,4 +76,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-8ddef2803d5ad25bce982a6c3a4d34737e38ffb173659642946ace465dac9c20
+af011c4181836b198c222b0497cc1c1a5a389cd8f1b134e00d34c38329140a23

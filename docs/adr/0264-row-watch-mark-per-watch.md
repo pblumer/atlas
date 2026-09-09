@@ -1,6 +1,7 @@
 # ADR-0264: A row watch's idempotency mark is its own, and the cursor is why that needs no migration
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

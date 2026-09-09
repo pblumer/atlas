@@ -1,6 +1,7 @@
 # ADR-0161: What an element was handed, on the diagram
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

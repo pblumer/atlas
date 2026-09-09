@@ -24,7 +24,7 @@ import (
 // TestOpenQuestionPairIsParsed pins the parse: both lines, or neither, and a date
 // that reads as a month.
 func TestOpenQuestionPairIsParsed(t *testing.T) {
-	const head = "# ADR-0001: T\n\n- **Status:** Accepted\n- **Date:** 2026-01-01\n"
+	const head = "# ADR-0001: T\n\n- **Status:** Accepted\n- **Implementation:** Landed\n- **Date:** 2026-01-01\n"
 
 	tests := []struct {
 		name        string

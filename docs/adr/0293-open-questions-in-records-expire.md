@@ -1,6 +1,7 @@
 # ADR-0293: A record that rests on an open question says so, and the question expires
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0019: Durable deployments via an on-disk sidecar store
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

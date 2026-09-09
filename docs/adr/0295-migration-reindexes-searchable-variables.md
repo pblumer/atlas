@@ -1,6 +1,7 @@
 # ADR-0295: A migration re-indexes what its target declares
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas engine team
 

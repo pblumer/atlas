@@ -1,6 +1,7 @@
 # ADR-0267: The console speaks German first, through a catalogue rather than a rewrite
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

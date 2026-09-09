@@ -1,6 +1,7 @@
 # ADR-0149: A bounded outbound-call budget for every connector
 
 - **Status:** Accepted (amended 2026-08-19 — implicit-TLS submission; see the amendment note below)
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
 

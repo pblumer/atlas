@@ -1,6 +1,7 @@
 # ADR-0280: Recovery proves its prefix or refuses to start
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

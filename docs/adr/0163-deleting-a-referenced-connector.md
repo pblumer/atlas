@@ -1,6 +1,7 @@
 # ADR-0163: Deleting a connector deployed models still reference — and keeping a table inside its card
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

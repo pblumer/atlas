@@ -1,6 +1,7 @@
 # ADR-0282: One inventory of what is on disk, and what a backup owes it
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

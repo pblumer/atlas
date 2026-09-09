@@ -1,6 +1,7 @@
 # ADR-0070: The secret vault is on by default, with a generated key
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-27
 - **Deciders:** Atlas engine team
 

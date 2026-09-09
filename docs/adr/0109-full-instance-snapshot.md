@@ -1,6 +1,7 @@
 # ADR-0109: Whole-instance snapshot — a full backup that includes running instances
 
 - **Status:** Accepted (amended 2026-08-18: the snapshot also carries a recovery checkpoint, so it survives a compacted WAL — option B, layered on as foreseen)
+- **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 

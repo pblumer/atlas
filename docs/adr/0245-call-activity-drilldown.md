@@ -1,6 +1,7 @@
 # ADR-0245: The call activity's "+" is the way into the process it calls
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-04
 - **Deciders:** Atlas web UI
 

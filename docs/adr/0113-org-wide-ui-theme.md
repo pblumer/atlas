@@ -1,6 +1,7 @@
 # ADR-0113: Org-wide UI brand theme
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-11
 - **Deciders:** Atlas maintainers
 

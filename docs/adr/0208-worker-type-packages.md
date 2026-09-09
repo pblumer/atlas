@@ -1,6 +1,7 @@
 # ADR-0208: Worker Type package contract, trust, and distribution
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-28
 - **Deciders:** Atlas maintainers
 

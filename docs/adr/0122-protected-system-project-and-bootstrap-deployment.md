@@ -1,6 +1,7 @@
 # ADR-0122: A protected system project and bootstrap-deployed platform processes
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas maintainers
 

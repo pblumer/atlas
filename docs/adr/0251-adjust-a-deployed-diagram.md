@@ -1,6 +1,7 @@
 # ADR-0251: Adjusting a deployed definition's diagram without redeploying it
 
-- **Status:** Proposed (amended 2026-09-06 — the digest reads an attribute at its
+- **Status:** Accepted (amended 2026-09-06 — the digest reads an attribute at its
+- **Implementation:** Landed
   schema default as absent, and a refusal names the element that differs)
 - **Date:** 2026-09-04
 - **Deciders:** Atlas maintainers

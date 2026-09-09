@@ -1,6 +1,7 @@
 # ADR-0082: Event subprocesses (message- and timer-triggered, interrupting and non-interrupting)
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

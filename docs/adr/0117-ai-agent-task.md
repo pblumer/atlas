@@ -1,6 +1,7 @@
 # ADR-0117: An AI agent task — an LLM agent as a managed connector on the job path
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-12
 - **Deciders:** Atlas engine team
 

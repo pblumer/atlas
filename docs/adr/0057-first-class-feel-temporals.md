@@ -1,6 +1,7 @@
 # ADR-0057: First-class FEEL temporals for timer schedules
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas engine team
 
