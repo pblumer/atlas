@@ -6282,7 +6282,9 @@ atlas worker --connector mssql</code></pre>
           für beliebig viele Zeichen, <code>?</code> für genau eines, also findet <code>*MT-1*</code> alles,
           worin <code>MT-1</code> vorkommt. Willst du nach einem echten Stern oder Fragezeichen suchen,
           schreibe <code>\*</code> oder <code>\?</code>. Ein Prozess, der nichts deklariert, zahlt dafür
-          nichts.</li>
+          nichts. Migrierst du laufende Instanzen auf eine Version mit anderer Deklaration, zieht der
+          Index automatisch nach; für Instanzen, die vor dieser Änderung migriert wurden, gibt es
+          <code>POST /api/v1/processes/{key}/reindex-instances</code>.</li>
         <li data-l="en"><b><a href="/#/operations">Instances</a></b> – all runs, their state, variables and a
           complete timeline per instance. A version can hold hundreds of thousands of instances, so the list
           shows a <b>page</b> ("80 of 150") rather than everything: <b>Load more</b> fetches the next one, and
@@ -6297,7 +6299,10 @@ atlas worker --connector mssql</code></pre>
           <code>MT-10001</code>. Widening is yours to ask for – <code>*</code> stands for any run of
           characters and <code>?</code> for exactly one, so <code>*MT-1*</code> finds anything containing
           <code>MT-1</code>. To search for a real star or question mark, write <code>\*</code> or
-          <code>\?</code>. A process that declares nothing pays nothing for it.</li>
+          <code>\?</code>. A process that declares nothing pays nothing for it. Migrating running instances onto a
+          version with a different declaration brings the index along; for instances migrated before
+          that was true, <code>POST /api/v1/processes/{key}/reindex-instances</code> repairs a
+          version's instances in bounded batches.</li>
         <li data-l="de"><b>Wer sitzt hier?</b> – in der <b>Live-Ansicht</b> einer Version ist das Diagramm
           selbst die Abfrage: <b>klicke auf ein Element</b>, und die Liste rechts zeigt genau die Instanzen,
           deren Token gerade dort steht. Ein Klick auf ein anderes Element wechselt, ein Klick daneben – auf

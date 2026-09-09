@@ -482,6 +482,15 @@ func (c *ProcessingContext) AppendMigrationEvent(v model.ProcessMigrationValue) 
 	c.appendEvent(v.ProcessInstanceKey, model.VTProcessMigration, model.IntentMigrated, inflightValue{migration: v})
 }
 
+// AppendVariableIndexEvent corrects one variable's membership in the value index
+// (ADR-0244). It carries no value: the variable holds that, and the whole point is that
+// the value did not change. Emitted only where an instance's declaration can change
+// under it — a migration, or an operator's reindex — one per variable whose membership
+// actually differs, so an instance already in step produces no events at all.
+func (c *ProcessingContext) AppendVariableIndexEvent(v model.VariableIndexValue) {
+	c.appendEvent(v.ProcessInstanceKey, model.VTVariableIndex, model.IntentVariableIndexed, inflightValue{variableIndex: v})
+}
+
 // AppendCompensableEvent records a compensation-index change: IntentCompensableRecorded
 // retains a completed compensable activity (keyed under its scope in completion order),
 // and IntentCompensableConsumed drops one once it has been compensated (ADR-0103). Both

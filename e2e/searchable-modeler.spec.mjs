@@ -108,3 +108,39 @@ test("a declaration the compiler would refuse warns, and is still stored", async
   expect(await page.evaluate(() => window.__toasts)).toHaveLength(before);
   expect(page.__errors).toEqual([]);
 });
+
+// The failure the declaration otherwise has no way of showing: a name that indexes
+// nothing is accepted by the deploy and answers an empty search forever. The marks
+// under the field say so while it is being typed — red where the model settles it,
+// amber where it only raises the question.
+test("a declaration the model cannot honour is marked, with the reason", async ({ page }) => {
+  await mount(page, "declared");
+  const chip = (name) => page.locator(`#f-psearch-marks .chip`, { hasText: name });
+
+  // identityId is a declared start variable of type string: nothing to say about it.
+  await expect(chip("identityId")).toHaveClass(/^chip$/);
+  await expect(chip("identityId")).toHaveAttribute("title", /start variable · string/);
+
+  // item is written by nothing in this diagram — a question, not a verdict, because a
+  // worker or the variables API can still write it.
+  await expect(chip("item")).toHaveClass(/sv-warn/);
+  await expect(chip("item")).toHaveAttribute("title", /Nothing in this diagram writes/);
+
+  // A structured value can never be indexed, and the model says payload holds one.
+  await page.locator("#f-psearch").fill("identityId, payload");
+  await expect(chip("payload")).toHaveClass(/sv-err/);
+  await expect(chip("payload")).toHaveAttribute("title", /Only text, a number or true\/false is indexed/);
+
+  // The repeated name the deploy refuses is marked on the copy, not on the first one.
+  await page.locator("#f-psearch").fill("identityId, identityId");
+  const chips = page.locator("#f-psearch-marks .chip");
+  await expect(chips).toHaveCount(2);
+  await expect(chips.nth(0)).toHaveClass(/^chip$/);
+  await expect(chips.nth(1)).toHaveClass(/sv-err/);
+  await expect(chips.nth(1)).toHaveAttribute("title", /Named twice/);
+
+  // The marks are painted as the author types, before anything is committed.
+  await page.locator("#f-psearch").fill("");
+  await expect(page.locator("#f-psearch-marks .chip")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});

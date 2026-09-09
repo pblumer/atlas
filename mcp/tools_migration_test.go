@@ -143,3 +143,36 @@ func TestMigrationToolsRefuseAndBatch(t *testing.T) {
 		t.Errorf("migrate with no reason = %q, want an error", text)
 	}
 }
+
+// The repair beside the migration: an operator (or an agent driving one) can bring a
+// version's running instances back in line with what it declares searchable, without
+// having to reason about when that version was deployed. The tool is a plain proxy, so
+// what this covers is that it reaches the endpoint and hands the answer back whole.
+func TestReindexInstancesTool(t *testing.T) {
+	atlas := newAtlas(t)
+	v1 := deployVersion(t, atlas, 1, migrateToolsV1)
+	if _, isErr := toolText(t, result(t, run(t, atlas, callTool(3, "atlas_create_instance", map[string]any{"key": v1}))[0])); isErr {
+		t.Fatal("create_instance failed")
+	}
+
+	text, isErr := toolText(t, result(t, run(t, atlas, callTool(4, "atlas_reindex_instances", map[string]any{
+		"key": v1, "limit": 10,
+	}))[0]))
+	if isErr {
+		t.Fatalf("reindex_instances: %s", text)
+	}
+	var got struct {
+		ProcessDefKey uint64   `json:"processDefKey"`
+		Searchable    []string `json:"searchable"`
+		Submitted     int      `json:"submitted"`
+		Remaining     bool     `json:"remaining"`
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("decode %q: %v", text, err)
+	}
+	// This version declares nothing searchable, so the repair has one instance to visit
+	// and nothing to write for it — which is exactly the shape of a no-op run.
+	if got.ProcessDefKey != v1 || got.Submitted != 1 || got.Remaining || len(got.Searchable) != 0 {
+		t.Errorf("reindex = %+v, want the definition, one instance submitted, nothing remaining, no declaration", got)
+	}
+}

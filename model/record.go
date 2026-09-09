@@ -112,6 +112,16 @@ const (
 	// old log into a different state (invariants I4/I6). Appended last so every prior
 	// value type keeps its numeric value on the log.
 	VTProcessMigration
+
+	// VTVariableIndex is one variable's membership in the value index changing after
+	// the fact: the instance's process now declares that name searchable, or no longer
+	// does (ADR-0244, ADR-draft-migration-reindexes-searchable-variables). It carries no
+	// value — the variable holds that — only the name and the membership, because the
+	// point is that the value did not change. It exists because a variable's membership
+	// is stamped by the version that wrote it (I6), and an instance can change version
+	// under an operator's hand: a migration (ADR-0162) or an explicit reindex. Appended
+	// last so every prior value type keeps its numeric value on the log.
+	VTVariableIndex
 )
 
 func (t ValueType) String() string {
@@ -154,6 +164,8 @@ func (t ValueType) String() string {
 		return "OperatorAction"
 	case VTProcessMigration:
 		return "ProcessMigration"
+	case VTVariableIndex:
+		return "VariableIndex"
 	default:
 		return "ValueType(?)"
 	}
@@ -337,6 +349,22 @@ const (
 	// mapping it rewrites the instance's live records through (ADR-0162). Appended at
 	// the end so every prior intent keeps its numeric value on the log.
 	IntentMigrated
+
+	// IntentVariableReindex is a command-only intent (never persisted as an event), like
+	// IntentMigrating: an operator asks that one instance's variable-index membership be
+	// brought back in line with what its process declares searchable (ADR-0244). Its
+	// handler compares the instance's root-scope variables against the declaration and
+	// emits IntentVariableIndexed for each one whose membership differs — none, on an
+	// instance already in step. Because commands are not replayed (invariant I6), its
+	// numeric value never reaches the log. Appended at the end so every prior intent
+	// keeps its numeric value.
+	IntentVariableReindex
+	// IntentVariableIndexed changes one variable's membership in the value index without
+	// touching its value: the durable fact applyToState folds when a migration or a
+	// reindex moves an instance to a declaration that differs from the one its values
+	// were stamped under. Appended at the end so every prior intent keeps its numeric
+	// value on the log.
+	IntentVariableIndexed
 )
 
 func (i Intent) String() string {
@@ -423,6 +451,10 @@ func (i Intent) String() string {
 		return "Migrating"
 	case IntentMigrated:
 		return "Migrated"
+	case IntentVariableReindex:
+		return "VariableReindex"
+	case IntentVariableIndexed:
+		return "VariableIndexed"
 	default:
 		return "Intent(?)"
 	}

@@ -14,6 +14,44 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A searchable declaration that indexes nothing now says so.** `atlas:searchable` names
+  variables, and nothing checked that the model writes any: a typo, or a name holding
+  JSON, is accepted by the deploy and then answers an empty search forever, with no screen
+  saying why. The field now paints a chip per declared name, read against the same static
+  analysis the Variables panel uses. Red where the model settles it — a repeated name the
+  deploy refuses, or a name the model itself says holds a structured value, which the
+  index cannot hold. Amber where it is a question rather than a verdict: nothing in the
+  diagram writes that name, which is usually a typo but not always, because a worker's
+  output or the variables API can write a name the diagram never mentions. Each chip
+  carries the reason as its tooltip, and they are painted as the name is typed.
+
+- **A migration now re-indexes what its target declares.** [ADR-0244](docs/adr/0244-searchable-variables.md)
+  argued that a declared searchable variable needs no backfill, and for the case it looked
+  at that holds: the attribute postdates every definition that could lack it. It missed the
+  one way an instance changes version after it has written values — migration
+  ([ADR-0162](docs/adr/0162-process-instance-migration.md)). An instance started on a
+  version that declares nothing and migrated onto one that declares `identityId` held a
+  value stamped "not indexed", so the version-scoped search — which for a declared name is
+  answered from the index alone — returned nothing for an instance the engine was holding.
+  A wrong answer, not a slow one, and a silent one.
+
+  A migration now emits one membership correction per variable whose answer differs under
+  the target's declaration, in both directions: a name the target declares and the source
+  did not is added, one it no longer declares is dropped. The comparison happens at command
+  time against the compiled process — the fold cannot ask one anything, which is ADR-0244's
+  own finding — so what reaches the log is the answer, and a replay rebuilds the identical
+  index. A migration between two versions that declare the same names emits nothing.
+
+  For the instances migrated before this,
+  **`POST /api/v1/processes/{key}/reindex-instances`** (admin, `?limit=`, default 500, max
+  5000) queues the same correction for a bounded batch of a definition's running instances
+  and reports what that definition declares. It is idempotent: an instance already in step
+  emits no events at all, so running it twice writes nothing the second time. Running
+  instances only — a finished instance's membership can no longer change through any normal
+  path, and reaching into the history family from a command handler was not worth it for a
+  strictly historical case.
+  ([ADR-draft-migration-reindexes-searchable-variables](docs/adr/draft-migration-reindexes-searchable-variables.md))
+
 - **The Modeler can now say what a process is found by.** `atlas:searchable`
   ([ADR-0244](docs/adr/0244-searchable-variables.md)) turns an operator's value search
   into a seek, but it shipped as an attribute with no field and no moddle property, so

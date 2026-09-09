@@ -12,7 +12,10 @@
          declares the property (bpmn-js drops an attribute it has no property for).
 
          The process declares two names, so the panel has something to show and the
-         round trip has something to lose. -->
+         round trip has something to lose. It also declares two start variables, which is
+         what the marks under the field are read against: identityId is written by the
+         model and typed string, payload is written but holds JSON (which the index cannot
+         hold), and "item" is written by nothing here. -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -29,6 +32,12 @@
       const DECLARED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_searchable" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="identitaet" name="Identität" isExecutable="true" atlas:searchable="identityId,item">
+    <bpmn:extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="identityId" type="string" />
+        <atlas:startVariable name="payload" type="json" />
+      </atlas:startForm>
+    </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1" name="Antrag geht ein"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
     <bpmn:userTask id="Activity_check" name="Prüfen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:userTask>
     <bpmn:endEvent id="End_1" name="Fertig"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>

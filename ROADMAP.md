@@ -861,8 +861,16 @@ What it takes to run this for real.
   trailing `*` asks for a prefix. A process that declares nothing pays one length check
   per variable write and holds no entries. The decision to index a write is stamped onto
   the event at command time, because `applyToState` cannot ask a compiled process
-  anything; no backfill is needed, since the attribute postdates every definition that
-  could lack it. Remaining, and deliberately so: substring and free text stay in the
+  anything; no backfill is needed *within* a version, since the attribute postdates every
+  definition that could lack it. The declaration is authored in the Modeler's process
+  properties (**Searchable variables**), which also marks a declared name the model never
+  writes, or writes as JSON — a declaration that indexes nothing while looking like it
+  works. The one case the "no backfill" reasoning missed is **migration**, which moves an
+  instance to another version's declaration: the migration now emits the membership
+  corrections its target implies, and
+  `POST /api/v1/processes/{key}/reindex-instances` repairs the instances migrated before
+  it did ([ADR-draft-migration-reindexes-searchable-variables](docs/adr/draft-migration-reindexes-searchable-variables.md)).
+  Remaining, and deliberately so: substring and free text stay in the
   OpenSearch export (ADR-0114) rather than becoming a second engine index.
   The **third way in is the diagram itself**
   ([ADR-0261](docs/adr/0261-instances-on-an-element.md)): a
