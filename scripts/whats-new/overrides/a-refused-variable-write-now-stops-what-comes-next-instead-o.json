@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "A value that does not fit now stops the step, instead of only being reported",
+    "de": "Ein Wert, der nicht passt, hält den Schritt jetzt an, statt nur gemeldet zu werden"
+  },
+  "summary": {
+    "en": "A variable has a size limit, and a value past it is refused with an incident naming the variable and both sizes. That was only half the story: ending an element clears the incident it carries, so a step that refused a write and then finished left nothing behind at all — not the value, and not the report. The run looked successful, and the only sign was a variable that was not there. Now the step stops. A message or signal does not complete, a called process does not hand its result back, and an activity does not finish having produced nothing. Resolve the incident and the write is retried, so correcting the data — or raising the limit — lets the instance carry on.",
+    "de": "Eine Variable hat eine Grössengrenze, und ein Wert darüber wird abgelehnt — mit einem Incident, der die Variable und beide Grössen nennt. Das war nur die halbe Geschichte: Wenn ein Element endet, wird sein Incident gelöscht. Ein Schritt, der einen Wert ablehnte und danach fertig wurde, hinterliess also gar nichts — weder den Wert noch die Meldung. Der Lauf sah erfolgreich aus, und das einzige Anzeichen war eine Variable, die fehlte. Jetzt bleibt der Schritt stehen. Eine Nachricht oder ein Signal wird nicht abgeschlossen, ein gerufener Prozess reicht sein Ergebnis nicht zurück, und eine Aktivität wird nicht fertig, ohne etwas erzeugt zu haben. Lösen Sie den Incident auf, wird erneut geschrieben — Daten korrigieren oder die Grenze anheben, und die Instanz läuft weiter."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}
