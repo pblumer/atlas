@@ -564,7 +564,8 @@ Seiteneffekte zurückbleiben.
 
 ### AP6 — Budgets und Entkopplung: F13, F14, F15, F16 (M)
 
-> **Stand: F13, F14 und F15 umgesetzt, F16 teilweise.**
+> **Stand: umgesetzt.** F13, F14, F15 und F16 sind behoben; F16 in beiden
+> Hälften.
 >
 > **F15.** Es fehlte keine Fähigkeit. Der Scan bricht seit jeher ab, wenn der
 > Callback einen Fehler zurückgibt, und die API-Schicht hat mit
@@ -599,13 +600,58 @@ Seiteneffekte zurückbleiben.
 > getestet; der Grenzwert selbst ist erlaubt, sonst wäre es ein Budget von eins
 > weniger.
 >
-> **Was an F16 offen bleibt:** der Bericht verlangt *einheitliche*, konfigurierbare
-> Budgets — Response-Bytes, Script-Ausgabe, Variablengrösse, aktive Arbeit. Die
-> HTTP-seitigen haben je eigene Grenzen (`io.LimitReader` an jedem Request-Body,
-> Dekompressionsdeckel beim Restore); was fehlt, ist *eine* Stelle, die sie alle
-> benennt, und *ein* Weg, sie zu konfigurieren. Diese Vereinheitlichung ist nicht
-> gemacht — und die beiden Engine-Budgets aus AP4 und hier sind ebenfalls nur
-> Setter, nicht Installationseinstellungen.
+> **F16 — die zweite Hälfte.** Der Bericht verlangte *einheitliche, konfigurierbare*
+> Budgets. Es gab neunzig Stellen, die Eingaben begrenzten, dreissig benannte
+> Konstanten neben ihren Handlern und ein paar blanke Literale direkt im Aufruf.
+> Jede einzelne war dort, wo sie stand, vertretbar. Zusammen waren sie keine
+> Richtlinie, weil nichts sagte, was die Menge *ist* — und eine Menge, die niemand
+> aufzählen kann, ist eine Menge, in der niemand ein Loch bemerkt. Genau das hatte
+> der Bericht gefunden.
+>
+> Jetzt gibt es `limits.Limits`: ein Wert, der jedes Budget benennt, gruppiert
+> danach, *was* es hält (`ModelUpload`, `Request`, `Archive`, `TokenSteps`), mit
+> Vorgaben, die exakt die bisherigen Zahlen sind. Namen, Umgebungsvariablen und das
+> Einlesen sind aus der Struktur abgeleitet, nicht danebengeschrieben — eine zweite
+> Liste wäre genau der Fehler, den das Paket beendet. Konfiguriert wird über
+> `ATLAS_LIMIT_*`; ein unlesbarer Wert lässt die Vorgabe stehen und wird beim Start
+> gemeldet, statt eine Grenze zu entfernen. Abschalten geht nicht: «aus» ist der
+> Zustand, gegen den Budgets existieren.
+>
+> Zwei Dinge kamen dabei ans Licht. **Die Ausgabe eines Skripts hatte gar keine
+> Grenze** — `cmd.Output()` sammelt stdout in einen `bytes.Buffer` ohne Deckel, und
+> was ein Skript schreibt, bestimmt der Modellautor. `while true: print(x)` war eine
+> unbegrenzte Allokation auf dem Host, gehalten nur vom 30-Sekunden-Timeout, was bei
+> einem Gigabyte pro Sekunde keine Grenze ist. **Und die beiden Engine-Budgets waren
+> Einstellungen ohne Aufrufer** — `SetExecutionBudget` und `SetMaxIterations`
+> existierten und niemand rief sie. Beides ist behoben.
+>
+> Das Haltbare daran ist nicht die Liste, sondern `TestNoCeilingWithoutAName`: er
+> geht die eigenen Quellen durch und schlägt fehl, sobald eine Eingabegrenze weder
+> aus der Registry liest noch mit Begründung als etwas anderes eingeordnet ist. Nach
+> dem Muster der Store-Registry aus AP3 — er prüft nicht, ob die Liste stimmt,
+> sondern ob überhaupt etwas Unklassifiziertes existiert. Seine erste Fassung lief
+> durch den Baum, ohne eine einzige Datei zu betreten, und meldete «ok»; deshalb
+> zählt er jetzt, wie viel er gefunden hat.
+>
+> **Bewusst nicht gemacht: die Variablengrösse.** Der Bericht führt sie in seiner
+> Liste, und es gibt kein `Variable`-Budget. Jeder Weg, auf dem ein Wert heute in
+> eine Variable *hineinkommt*, ist begrenzt — ein HTTP-Körper, die Skriptausgabe,
+> die Antwort eines Konnektors, und hinter einem berechneten Wert das
+> Iterationsbudget. Was fehlt, ist also Tiefenstaffelung, keine offene Tür. Sie
+> fehlt, weil sie eine Entscheidung braucht, die diese Änderung nicht trifft:
+> `AppendVariableEvent` ist der eine Trichter, durch den jeder Schreibvorgang geht,
+> und er kann nicht fehlschlagen. Dort abzulehnen heisst entweder einen Schreibvorgang
+> still zu verwerfen (schlimmer als eine grosse Variable), oder einen Incident zu
+> erzeugen, während der Aufrufer weiterläuft, als gäbe es den Wert, oder
+> vierundzwanzig Aufrufstellen einen Fehler zu geben. Das ist eine Entscheidung über
+> das Fehlerverhalten und verdient einen eigenen Eintrag.
+>
+> **Nicht mitgemacht:** Komponenten, die im Prozess eines Workers laufen (die
+> Antwort eines Modellanbieters, ein Remedy-Aufruf, die Fehlerausschnitte im
+> Tracing) lesen den *benannten Vorgabewert*, nicht die Konfiguration dieser
+> Installation — die Umgebung des Servers reicht dort nicht hin. Sie haben damit
+> einen Namen an einer Stelle, was die Hälfte ist, die für sie gilt; die Verdrahtung
+> der Worker-Konfiguration ist eine eigene Änderung.
 >
 > **F13.** Der Plan hatte recht mit der Reihenfolge: die Identität *war* die
 > Arbeit, der Mutex stand nur dafür ein. `Claim` least jetzt — Aktivierung unter
@@ -673,10 +719,12 @@ AP0 Harness  ──┬───────────────────�
 Freigabe für dauerhafte geschäftskritische Ausführung frühestens nach AP3 —
 das ist der Punkt, an dem V1 und V2 geschlossen sind.
 
-> **Stand:** AP0 bis AP6 sind umgesetzt. V1, V2 und V3 sind geschlossen und die
-> Freigabeschwelle oben ist erreicht. Die zurückgestellte Zählung je eingehendem
-> Flow aus AP4 ist nachgezogen; offen bleibt allein die Vereinheitlichung der
-> Budgets aus F16.
+> **Stand:** AP0 bis AP6 sind umgesetzt und **alle siebzehn Befunde sind behoben.**
+> V1, V2 und V3 sind geschlossen und die Freigabeschwelle oben ist erreicht. Offen
+> sind nur noch die drei Nachbarlücken, die dieser Plan unterwegs benannt hat und
+> die eigene Befunde verdienen: die Objektlücke an `GET /api/v1/tasks/{key}`, die
+> übrigen instanzbezogenen Lesezugriffe, die über die Rolle statt über die Beziehung
+> geschützt sind, und der bei F07 gefundene Kompensationsdefekt.
 
 ---
 
@@ -767,5 +815,5 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | behoben |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | behoben |
 | F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
-| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | statisch belegt | teilweise |
+| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | `TestNoCeilingWithoutAName`, `TestAScriptsOutputIsBounded` | behoben (ohne Variablengrösse, s. AP6) |
 | F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |

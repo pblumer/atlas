@@ -59,7 +59,7 @@ func (s *Server) handleRegisterOAuthClient(w http.ResponseWriter, r *http.Reques
 		Name         string   `json:"name"`
 		RedirectURIs []string `json:"redirectUris"`
 	}
-	if !decodeJSONBody(w, r, &payload) {
+	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
 	name := strings.TrimSpace(payload.Name)

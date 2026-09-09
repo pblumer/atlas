@@ -22,9 +22,6 @@ import (
 // for is worse than one that says it could not be written.
 
 const (
-	// maxAnswerBytes bounds what is even parsed. A model that loops — the same field a
-	// thousand times — is a real failure mode, and stopping it here costs nothing.
-	maxAnswerBytes = 512 << 10
 	// maxComponents bounds the form itself, nested components included. Well past any
 	// form a person would fill in, and far short of a document that would wedge the
 	// editor.
@@ -66,8 +63,8 @@ var holdsComponents = map[string]bool{"group": true, "dynamiclist": true}
 // SchemaFrom turns a model's answer into a form-js schema the editor can open, under the
 // identity formID names. The returned map is plain JSON values, ready to marshal into a
 // response; every error it returns is written to be shown to the author as it stands.
-func SchemaFrom(answer, formID string) (map[string]any, error) {
-	if len(answer) > maxAnswerBytes {
+func SchemaFrom(answer, formID string, maxAnswer int64) (map[string]any, error) {
+	if int64(len(answer)) > maxAnswer {
 		return nil, fmt.Errorf("the model answered with %d KB, which is not a form anyone fills in; ask for something smaller",
 			len(answer)/1024)
 	}

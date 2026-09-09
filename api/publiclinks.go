@@ -12,10 +12,6 @@ import (
 	"github.com/pblumer/atlas/api/token"
 )
 
-// maxPublicStartBytes caps a public start submission. A start form's data is
-// small; this refuses an oversized anonymous payload (ADR-0029).
-const maxPublicStartBytes = 256 << 10 // 256 KiB
-
 // latestDeploymentByProcessID returns the current (highest-version) deployment
 // for a process id, or nil if none is deployed. Must be called on the run-loop
 // goroutine (it reads the deployment registry).
@@ -53,7 +49,7 @@ func toPublicLinkResp(l publicLink) publicLinkResp {
 // rather than piling up links. 400 if the process has no start form, 404 if it is
 // not deployed. Trusted route (gated with the rest of /api/v1 when auth is on).
 func (s *Server) handleCreatePublicLink(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<10))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Theme))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -276,7 +272,7 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.PathValue("token")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxPublicStartBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Settings))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

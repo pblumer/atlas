@@ -2,6 +2,7 @@ package panorama
 
 import (
 	"errors"
+	"github.com/pblumer/atlas/limits"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -89,7 +90,7 @@ func TestCreateRejectsMalformedRequestsAndAuthorizationFailures(t *testing.T) {
 	t.Run("oversized body", func(t *testing.T) {
 		fx := newServiceFixture(t)
 		request(t, fx.service.HandleCreate, http.MethodPost, "/api/v1/panorama/models",
-			strings.NewReader(strings.Repeat("x", maxJSONBytes+1)), http.StatusRequestEntityTooLarge)
+			strings.NewReader(strings.Repeat("x", int(2*limits.Default().ModelUpload+limits.Default().Request)+1)), http.StatusRequestEntityTooLarge)
 	})
 	t.Run("missing application", func(t *testing.T) {
 		fx := newServiceFixture(t)

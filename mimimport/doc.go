@@ -52,9 +52,40 @@
 //
 // The serialised .NET collections a MIMWAL activity hangs off itself — the
 // queries it runs and the assignments it makes, thousands of characters of
-// Hashtable markup in the source — are rendered as a small table on the
-// activity's documentation, by position: the structure of such a table is
-// mechanical, the meaning of its columns is not (see tables.go).
+// Hashtable markup in the source — are decoded once and rendered three ways: as
+// a small table on the activity's documentation, as <atlas:mimCollection>
+// extension elements on the node, and as one item per row in the Report. All
+// three are by position: the structure of such a table is mechanical, the
+// meaning of its columns is not (see tables.go).
+//
+// # The decomposition is machine-readable, and stays out of the graph
+//
+// A row of an UpdatesTable is a write and a row of a QueriesTable is a read, so
+// it is tempting to import each as its own task. This package does not, and the
+// reason is worth stating: which target system a row writes to is not in the
+// XOML at all — it is in MIM's sync rules and attribute flows — and MIM applies
+// the whole table as one request. Splitting the rows into flow nodes would put a
+// structure into the diagram that the source does not contain, and would carry
+// the untranslated per-activity guard onto every one of them, so a model that
+// looks precise would be exactly as unexecutable as before. Nothing here decides
+// that; the migrator does, knowing the sync rules.
+//
+// What the importer can do without inventing anything is hand over the
+// decomposition: <atlas:mimCollection property="UpdatesTable" kind="table"> with
+// an <atlas:mimRow> per row and an <atlas:mimCell column="…"> per cell, verbatim.
+// A cell says where it sat, never what it does. That is addressable by a tool,
+// checkable against the preserved source, and asserts nothing that was not read
+// out of the markup. The whole argument, including the option this rejects, is in
+// ADR-0292.
+//
+// # The Report is a migration worksheet
+//
+// The Report counts *work*, not BPMN elements. A MIMWAL activity carrying five
+// assignments and a named query is one preserved node and six pieces of work,
+// each of which has to be re-expressed against a real target system, so it
+// contributes six items and the manual-review count says six. A worksheet that
+// counted nodes would report "1 preserved" for a step nobody can migrate in an
+// afternoon, which is the number a plan would then be made with.
 //
 // The conversion reproduces the workflow's *structure and intent*, not MIM's
 // runtime semantics: the authentication/authorization/action request model, the

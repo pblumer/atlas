@@ -39,6 +39,7 @@ import (
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/jobtype"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/mcp"
 	"github.com/pblumer/atlas/mimimport"
@@ -299,6 +300,16 @@ func runServe(args []string) error {
 		Version:     api.Version,
 		SampleRatio: *traceRatio,
 	}
+	// Every resource budget this installation runs with, from one place and one
+	// naming convention (ATLAS_LIMIT_*, see the limits package). A knob that could
+	// not be read leaves its default standing and is said out loud here, because the
+	// alternative — a ceiling quietly missing — is the failure the budgets exist to
+	// prevent, and it would otherwise only show up as the request that ran out of
+	// memory.
+	budgets, badBudgets := limits.FromEnv()
+	for _, complaint := range badBudgets {
+		logging.Warn(logging.LimitIgnored, "ignoring a resource budget from the environment: "+complaint)
+	}
 	// Shut down cleanly on SIGINT/SIGTERM. The signal handling belongs out here with
 	// the rest of the process's lifecycle, so serve is driven by a context and can
 	// be started and stopped by a test.
@@ -310,7 +321,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -387,7 +398,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -504,6 +515,12 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// missing, corrupt, or too-new checkpoint simply falls back to a full replay.
 	engine.BuildVersion = api.Version // metadata recorded in the checkpoints we publish
 	proc := engine.New(1, wl, store, nil)
+	// The engine's two budgets are installation settings, not constants: a cycle of
+	// automatic elements and a multi-instance count that came out of a variable are
+	// both bounded here, and both numbers are estimates somebody may have to move
+	// (limits.TokenSteps / limits.Iterations, ADR-0272 and ADR-0276).
+	proc.SetExecutionBudget(budgets.TokenSteps)
+	proc.SetMaxIterations(int(budgets.Iterations))
 	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
 	}
@@ -627,6 +644,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		}
 		ex := script.New(lang)
 		ex.Timeout = scriptTimeout
+		ex.MaxOutput = budgets.Payload
 		if err := ex.Check(); err != nil {
 			logging.Warn(logging.ScriptWorkerMissing,
 				"script worker enabled but its interpreter was not found on PATH; its script tasks "+
@@ -1448,7 +1466,7 @@ func resetPasswordValue(fromStdin bool) (password string, generated bool, err er
 
 // runImportMIM converts a Microsoft Identity Manager (MIM/FIM) XOML workflow —
 // or an Export-FIMConfig wrapper that embeds one — into Atlas-deployable BPMN
-// 2.0. The BPMN goes to stdout (or --out); a per-node conversion report goes to
+// 2.0. The BPMN goes to stdout (or --out); the conversion worksheet goes to
 // stderr so the lossy points are visible without polluting the model on stdout.
 func runImportMIM(args []string) error {
 	fs := flag.NewFlagSet("import-mim", flag.ExitOnError)
@@ -1460,8 +1478,10 @@ func runImportMIM(args []string) error {
 
 Convert a MIM/FIM workflow (XOML, or an Export-FIMConfig XML that embeds it) into
 BPMN 2.0. With no FILE, or "-", the XOML is read from stdin. Constructs without a
-faithful BPMN counterpart are preserved in <atlas:mimSource> and listed in the
-report; re-check the model in the Modeler before deploying.
+faithful BPMN counterpart are preserved in <atlas:mimSource>, the rows of a MIMWAL
+table are decoded into <atlas:mimCollection> on the same element, and every one of
+them is an item of the report — which counts work, not nodes, so an activity with
+five assignments reports five. Re-check the model in the Modeler before deploying.
 
 An export holding several WorkflowDefinitions converts them all: with --out each
 lands in its own file, numbered after the first.

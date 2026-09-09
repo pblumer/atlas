@@ -28,8 +28,12 @@ func (b *builder) emitBPMN(root xnode) []byte {
 	fmt.Fprintf(&s, `             id=%q targetNamespace=%q>`+"\n", b.claim("defs_"+procID), nsMIM)
 	fmt.Fprintf(&s, `  <process id=%q name=%q isExecutable="true">`+"\n", procID, attr(b.name))
 
+	// The three numbers count worksheet items, not BPMN elements: a MIMWAL
+	// activity with five assignments is one node and six pieces of work, and the
+	// number on the model has to be the one a migration is planned with. The
+	// sentence says so, because "3 erhalten" would otherwise read as three steps.
 	doc := fmt.Sprintf(
-		"Aus MIM/FIM-XOML konvertiert (Wurzel-Aktivität %s). %d nativ, %d erhalten, %d manuell zu prüfen. Nicht übersetzte Konstrukte sind in atlas:mimSource erhalten.",
+		"Aus MIM/FIM-XOML konvertiert (Wurzel-Aktivität %s). Arbeitsblatt: %d nativ, %d erhalten, %d manuell zu prüfen — gezählt werden Positionen, also Knoten und die dekodierten Zeilen ihrer MIMWAL-Tabellen. Nicht übersetzte Konstrukte sind in atlas:mimSource erhalten; die dekodierten Zeilen stehen zusätzlich als atlas:mimCollection am jeweiligen Element.",
 		root.local(), b.report.Count(StatusNative), b.report.Count(StatusPreserved), b.report.Count(StatusManualReview))
 	// What MIM knows about the workflow and the XOML does not say — the phase it
 	// runs in above all — belongs on the process, not only in the import response.
@@ -90,7 +94,8 @@ func (b *builder) emitNode(s *strings.Builder, n bnode) {
 }
 
 // emitExtensions writes an <extensionElements> block combining an optional
-// leading fragment (e.g. a zeebe:taskDefinition) with the preserved XOML source.
+// leading fragment (e.g. a zeebe:taskDefinition), the decoded MIMWAL collections
+// and the preserved XOML source.
 //
 // The source is written as ordinary escaped character data, never inside a
 // CDATA section. CDATA suppresses entity resolution, so an activity whose
@@ -100,13 +105,14 @@ func (b *builder) emitNode(s *strings.Builder, n bnode) {
 // changing the expression. Escaping once here means a consumer that unescapes
 // the element text gets the activity's markup back exactly as MIM wrote it.
 func emitExtensions(s *strings.Builder, n bnode, lead string) {
-	if lead == "" && n.raw == "" {
+	if lead == "" && n.raw == "" && len(n.tables) == 0 {
 		return
 	}
 	s.WriteString("      <extensionElements>\n")
 	if lead != "" {
 		s.WriteString(lead)
 	}
+	emitCollections(s, n.tables)
 	if n.raw != "" {
 		// type and assembly name what the local activity name alone cannot: which
 		// library a MIMWAL and a stock MIM activity of the same name came from,
@@ -122,6 +128,38 @@ func emitExtensions(s *strings.Builder, n bnode, lead string) {
 			attr(n.rawName), qualified, text(n.raw))
 	}
 	s.WriteString("      </extensionElements>\n")
+}
+
+// emitCollections writes the decoded MIMWAL collections of an activity as
+// extension elements, so the rows a reviewer has to work through are addressable
+// by a tool without re-parsing the XOML in atlas:mimSource.
+//
+// The elements state structure and nothing else. A cell says which column it sat
+// in, never what that column means — that is the restraint tables.go documents,
+// and it is the difference between a worksheet and an invented mapping. Cell text
+// is written verbatim (outer whitespace trimmed), because a MIM expression can
+// hold a string literal whose spacing is part of its value; the collapsing that
+// keeps the documentation table on one line is a rendering, not the value.
+//
+// An ArrayList is emitted with kind="list" and one single-cell row per entry, so
+// a consumer walks both shapes the same way.
+func emitCollections(s *strings.Builder, cols []mimCollection) {
+	for _, c := range cols {
+		fmt.Fprintf(s, "        <atlas:mimCollection property=%q kind=%q count=\"%d\">\n",
+			attr(c.property), attr(c.kind), len(c.rows))
+		for _, r := range c.rows {
+			fmt.Fprintf(s, "          <atlas:mimRow index=\"%d\">\n", r.index)
+			for _, cell := range r.cells {
+				fmt.Fprintf(s, "            <atlas:mimCell column=\"%d\">%s</atlas:mimCell>\n",
+					cell.column, text(cell.text))
+			}
+			s.WriteString("          </atlas:mimRow>\n")
+		}
+		for _, n := range c.notes {
+			fmt.Fprintf(s, "          <atlas:mimNote>%s</atlas:mimNote>\n", text(n))
+		}
+		s.WriteString("        </atlas:mimCollection>\n")
+	}
 }
 
 // miPlaceholder is the input collection of an activity whose MIM Iteration was

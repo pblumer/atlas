@@ -49,11 +49,6 @@ const (
 	// a slow peer must not hold an architecture view open.
 	remoteNodeTimeout = 8 * time.Second
 
-	// maxRemoteNodeBytes bounds what a peer can make this server read. A descriptor
-	// is a few hundred bytes; anything approaching this is either not a descriptor
-	// or not friendly, and either way it is not worth buffering.
-	maxRemoteNodeBytes = 64 << 10
-
 	// maxRemoteNodeConcurrency bounds how many peers are asked at once. Unbounded
 	// fan-out turns one architecture view into a burst of connections proportional
 	// to how many targets an operator has configured, which is a load this server
@@ -238,7 +233,7 @@ func (s *Server) fetchRemoteNode(ctx context.Context, peer remoteTarget) (nodeDe
 		// server is down".
 		return nodeDescriptor{}, fmt.Errorf("answered HTTP %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxRemoteNodeBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, s.budgets().Request))
 	if err != nil {
 		return nodeDescriptor{}, fmt.Errorf("reply could not be read: %w", err)
 	}

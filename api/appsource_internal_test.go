@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"github.com/pblumer/atlas/limits"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -292,7 +293,7 @@ func TestSourceArchiveRoundTrip(t *testing.T) {
 		t.Errorf("archiving the same tree twice produced different bytes")
 	}
 
-	out, err := readSourceArchive(bytes.NewReader(buf.Bytes()))
+	out, err := archiveReader().readSourceArchive(bytes.NewReader(buf.Bytes()))
 	if err != nil {
 		t.Fatalf("readSourceArchive: %v", err)
 	}
@@ -307,7 +308,7 @@ func TestSourceArchiveRoundTrip(t *testing.T) {
 }
 
 func TestReadSourceArchiveRefusals(t *testing.T) {
-	if _, err := readSourceArchive(strings.NewReader("not gzip")); err == nil ||
+	if _, err := archiveReader().readSourceArchive(strings.NewReader("not gzip")); err == nil ||
 		!strings.Contains(err.Error(), "gzip") {
 		t.Errorf("plain text: err = %v, want a gzip complaint", err)
 	}
@@ -317,7 +318,7 @@ func TestReadSourceArchiveRefusals(t *testing.T) {
 		t.Fatalf("writeSourceArchive: %v", err)
 	}
 	truncated := buf.Bytes()[:len(buf.Bytes())-20]
-	if _, err := readSourceArchive(bytes.NewReader(truncated)); err == nil {
+	if _, err := archiveReader().readSourceArchive(bytes.NewReader(truncated)); err == nil {
 		t.Errorf("truncated archive was accepted")
 	}
 }
@@ -477,7 +478,7 @@ func TestHandleExportApplicationSourceHTTP(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("export a real application = %d %s, want 200", code, body)
 	}
-	files, err := readSourceArchive(bytes.NewReader(body))
+	files, err := srv.readSourceArchive(bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("the streamed archive is not a readable gzip tar: %v", err)
 	}
@@ -797,7 +798,7 @@ func TestReadSourceArchiveSkipsAndRefuses(t *testing.T) {
 	if err := errors.Join(tw.Close(), gz.Close()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	files, err := readSourceArchive(bytes.NewReader(withDir.Bytes()))
+	files, err := archiveReader().readSourceArchive(bytes.NewReader(withDir.Bytes()))
 	if err != nil {
 		t.Fatalf("readSourceArchive: %v", err)
 	}
@@ -818,7 +819,7 @@ func TestReadSourceArchiveSkipsAndRefuses(t *testing.T) {
 	if err := errors.Join(tw.Close(), gz.Close()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if _, err := readSourceArchive(bytes.NewReader(escaping.Bytes())); err == nil ||
+	if _, err := archiveReader().readSourceArchive(bytes.NewReader(escaping.Bytes())); err == nil ||
 		!strings.Contains(err.Error(), "illegal path") {
 		t.Errorf("escaping path: err = %v, want an illegal-path refusal", err)
 	}
@@ -839,7 +840,7 @@ func TestReadSourceArchiveSkipsAndRefuses(t *testing.T) {
 	if err := errors.Join(tw.Close(), gz.Close()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
-	if _, err := readSourceArchive(bytes.NewReader(many.Bytes())); err == nil ||
+	if _, err := archiveReader().readSourceArchive(bytes.NewReader(many.Bytes())); err == nil ||
 		!strings.Contains(err.Error(), "too many entries") {
 		t.Errorf("oversized archive: err = %v, want a too-many-entries refusal", err)
 	}
@@ -905,3 +906,7 @@ func TestWriteSourceArchiveSurfacesWriteFailure(t *testing.T) {
 		t.Error("archive is empty")
 	}
 }
+
+// archiveReader is a server that exists only for its budgets: readSourceArchive
+// reads an application's own export and needs no other state.
+func archiveReader() *Server { return &Server{limits: limits.Default()} }

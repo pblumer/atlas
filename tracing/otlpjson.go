@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strconv"
@@ -80,7 +81,7 @@ func (e *otlpJSONExporter) ExportSpans(ctx context.Context, spans []sdktrace.Rea
 	// The body is drained so the connection can be reused, and read with a bound so a
 	// misconfigured endpoint answering with something enormous cannot be a memory
 	// problem on a path nobody is watching.
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, limits.Default().ErrorBody))
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("tracing: export to %s: %s: %s", e.url, resp.Status, bytes.TrimSpace(body))
 	}

@@ -289,6 +289,12 @@ var (
 	UserProvisioningUserDisabled = newEvent("user_provisioning.user_disabled")
 )
 
+// Resource budgets (ADR-0291). A budget the environment could
+// not set is the one configuration mistake that must never be silent: what is left
+// standing is a ceiling, and a ceiling nobody knows about is how an installation
+// discovers it at the request that ran out of memory.
+var LimitIgnored = newEvent("limit.ignored")
+
 // Distributed traces (ADR-0142 slice 8b).
 var (
 	TracingEnabled        = newEvent("tracing.enabled")

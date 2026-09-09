@@ -449,13 +449,18 @@ func TestQuoteValueEscapesWhenBothQuotesAppear(t *testing.T) {
 }
 
 // TestEmptyCollectionRendersNothing: a table element with no entries must not
-// leave an empty heading on the activity's documentation.
+// leave an empty heading on the activity's documentation, nor an empty
+// <atlas:mimCollection> on the element.
 func TestEmptyCollectionRendersNothing(t *testing.T) {
 	n, _, err := decodeNode([]byte(`<UpdateResources><UpdateResources.UpdatesTable><ArrayList/></UpdateResources.UpdatesTable></UpdateResources>`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := mimTables(n); got != "" {
-		t.Errorf("mimTables = %q, want empty", got)
+	cols := mimCollections(n)
+	if len(cols) != 0 {
+		t.Errorf("mimCollections = %+v, want none", cols)
+	}
+	if got := renderCollections(cols); got != "" {
+		t.Errorf("renderCollections = %q, want empty", got)
 	}
 }

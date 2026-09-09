@@ -49,7 +49,7 @@ So the honest summary is:
 | Scheduling | Run profiles | BPMN timer start events (cycles supported) |
 | Workflow model | WF/XOML declarative workflows, MPRs, Sets | BPMN 2.x |
 | Extensibility | ECMA 2.0 / rules extensions (.NET) | Out-of-process job workers (ADR-0164/0168) |
-| Migration path | — | `mimimport` converts MIM XOML workflows to BPMN |
+| Migration path | — | `mimimport` converts MIM XOML workflows to BPMN, and reports every decoded read and write as its own worksheet item |
 
 **Answering each MIM connector with a Worker Type is therefore not sufficient**, and
 it is not the only gap: an Atlas process must model the reconciliation logic MIM performs
@@ -113,7 +113,7 @@ a worker, so a database credential never enters the engine (ADR-0164/0170).
 |---|---|---|
 | Windows PowerShell Connector | `script` (ADR-0047) | **Implemented** — plus Python and JavaScript. |
 | Extensible Connectivity 2.0 (ECMA2) | out-of-process job workers (ADR-0164/0168) | **Equivalent, different shape** — Atlas's extensibility seam is a job worker in any language, not a .NET MA assembly. |
-| FIM Service | Atlas itself | n/a — and `mimimport` converts MIM's XOML workflow definitions into Atlas BPMN. |
+| FIM Service | Atlas itself | n/a — and `mimimport` converts MIM's XOML workflow definitions into Atlas BPMN, decoding each MIMWAL table into `atlas:mimCollection` rows on the step and counting every one of them as work still to do. |
 
 ## What Atlas has that MIM does not
 

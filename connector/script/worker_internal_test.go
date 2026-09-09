@@ -303,14 +303,14 @@ func TestRunTimesOut(t *testing.T) {
 // POSIX utility that is always present: it returns the command's stdout, and a
 // missing binary surfaces an error (which leaves a job pending).
 func TestExecCommand(t *testing.T) {
-	out, err := execCommand(context.Background(), "printf", []string{"ok"}, nil)
+	out, err := execCommand(context.Background(), "printf", []string{"ok"}, nil, defaultMaxOutput)
 	if err != nil {
 		t.Fatalf("execCommand: %v", err)
 	}
 	if string(out) != "ok" {
 		t.Errorf("stdout = %q, want ok", out)
 	}
-	if _, err := execCommand(context.Background(), "atlas-no-such-binary-xyz", nil, nil); err == nil {
+	if _, err := execCommand(context.Background(), "atlas-no-such-binary-xyz", nil, nil, defaultMaxOutput); err == nil {
 		t.Error("execCommand of a missing binary succeeded, want an error")
 	}
 }
@@ -321,7 +321,7 @@ func TestExecCommandSurfacesStderr(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	_, err := execCommand(context.Background(), "sh", []string{"-c", "echo boom 1>&2; exit 3"}, nil)
+	_, err := execCommand(context.Background(), "sh", []string{"-c", "echo boom 1>&2; exit 3"}, nil, defaultMaxOutput)
 	if err == nil {
 		t.Fatal("execCommand of a failing command succeeded, want an error")
 	}

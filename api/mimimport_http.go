@@ -95,7 +95,7 @@ type mimConflictResp struct {
 // mimimport_preflight.go for what that impact covers and why it is worth
 // knowing before the fact rather than after.
 func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

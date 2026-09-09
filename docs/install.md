@@ -744,8 +744,44 @@ history.
 | `ATLAS_AGENT_CONNECTORS` | Comma-separated agent model names, each configured by `ATLAS_AGENT_<NAME>_API_KEY` and, optionally, `_ENDPOINT`, `_MODEL`, `_PROTOCOL` (`messages`, the default, or `chat-completions`), `_AUTH` (`x-api-key` or `bearer`), `_THINKING` (`off`), `_MAX_TOKENS` and `_ANSWER_VARIABLE`. A name is what `<atlas:agentConnector connector="…">` refers to, so a container reaches the provider it was modelled against, and `_MODEL` is the **default** a step that names none asks — a task or a container may name its own with `model="…"`, so one name serves a cheap classification and a strong piece of advice ([ADR-0256](adr/0256-the-model-is-authored-the-provider-is-configured.md)). The key is required unless `_ENDPOINT` is set, because a self-hosted endpoint may need none. **Normally you do not set these**: add the model under Console → Workers instead and Atlas supervises a worker for it, picking the model up with no restart ([ADR-0255](adr/0255-agent-models-are-console-workers.md)) — these variables remain the way to configure a worker you start yourself. The same names serve both of the kind's job types: an agent container's round (`io.atlas.ai.agent`) and an ai service task's single call (`io.atlas.ai.task`). Both run **only** on a worker ([ADR-0164](adr/0164-no-in-process-service-tasks.md)/[ADR-0254](adr/0254-agent-rounds-on-a-worker.md)) |
 | `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the credential reference `<REF>` a REST task names. The variable keeps the pre-ADR-0203 spelling |
 | `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker Atlas supervises, prefer the switch in Console → Workers → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
+| `ATLAS_LIMIT_*` | The installation's resource budgets — how much a caller, a called service, or a running process may make this server hold at once. One variable per budget, in bytes (or in steps for the two engine ones): see [Resource budgets](#resource-budgets) below. Normally you do not set these |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no Atlas-specific flag |
 | `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
+
+### Resource budgets
+
+Every ceiling on externally supplied input has a name and a default, and every one
+can be raised or lowered with an environment variable. **Most installations never
+touch these.** They exist because the defaults are estimates, and an estimate you
+cannot move is a number that will be wrong for somebody.
+
+A budget cannot be turned off. A value that is missing, not a positive whole number,
+or too large for its field leaves the default standing and is logged at startup — the
+one configuration mistake that must never be silent is a ceiling that quietly went
+away.
+
+| Variable | Default | What it holds |
+|----------|---------|---------------|
+| `ATLAS_LIMIT_ERROR_BODY` | 4 KiB | How much of a failed response is quoted in the error message |
+| `ATLAS_LIMIT_THEME` | 4 KiB | A UI theme document |
+| `ATLAS_LIMIT_REGISTRATION` | 16 KiB | A self-service handshake: an OAuth client registering itself, a node announcing itself |
+| `ATLAS_LIMIT_REQUEST` | 64 KiB | One ordinary JSON request, or a peer Atlas's answer |
+| `ATLAS_LIMIT_SETTINGS` | 256 KiB | A configuration document a person edits — mock configuration, a script's source |
+| `ATLAS_LIMIT_ASSET` | 512 KiB | A logo, or a generated form answer holding one |
+| `ATLAS_LIMIT_DEFINITION` | 1 MiB | A form, a collaboration payload, the answer of a service a process called |
+| `ATLAS_LIMIT_GENERATED` | 2 MiB | A document this server produced or renders back |
+| `ATLAS_LIMIT_MODEL_UPLOAD` | 4 MiB | A BPMN, DMN or XOML document |
+| `ATLAS_LIMIT_PAYLOAD` | 8 MiB | The largest thing that travels in one piece: a model provider's answer, a script's output |
+| `ATLAS_LIMIT_DATA_UPLOAD` | 16 MiB | A CSV or a playground scenario |
+| `ATLAS_LIMIT_IMPORT` | 24 MiB | A document imported from another tool |
+| `ATLAS_LIMIT_APP_BUNDLE` | 32 MiB | An application's whole source or export |
+| `ATLAS_LIMIT_ARCHIVE` | 1 GiB | A backup being restored, compressed *and* decompressed |
+| `ATLAS_LIMIT_TOKEN_STEPS` | 10000 | How many elements one token may drive in a single run before the engine parks it — the guard against a cycle of automatic elements |
+| `ATLAS_LIMIT_ITERATIONS` | 100000 | How many iterations one multi-instance activity may ask for before the engine refuses it |
+
+The last two are counts, not bytes, and they are different guards: a hundred thousand
+iterations are a hundred thousand tokens taking one step each, which the step budget
+is deliberately built not to stop.
 
 ### Endpoints
 

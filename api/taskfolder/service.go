@@ -2,6 +2,7 @@ package taskfolder
 
 import (
 	"encoding/json"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"net/http"
 	"strings"
@@ -10,10 +11,6 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
 )
-
-// maxBodyBytes caps a folder request. A folder is a name and at most twenty
-// conditions; this is a sanity bound on the JSON body, not a tuning knob.
-const maxBodyBytes = 64 << 10
 
 // maxNameLen bounds a folder's name to what the sidebar can show.
 const maxNameLen = 60
@@ -81,6 +78,12 @@ type Service struct {
 	// newID mints folder ids. Injected so a test can drive the service with
 	// deterministic ids.
 	newID func() (string, error)
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment, so every ceiling in this service is the one operators configured
+	// (ADR-0291).
+	Limits limits.Limits
 }
 
 type cachedMatcher struct {
@@ -98,6 +101,7 @@ func New(loop *runloop.Loop, store *Store, options func(User) Options, count Cou
 		options:  options,
 		count:    count,
 		newID:    newID,
+		Limits:   limits.Default(),
 	}
 }
 
@@ -184,9 +188,9 @@ type folderReq struct {
 
 // decode reads and checks a folder request body, answering the client directly on
 // anything malformed. ok=false means a response has already been written.
-func decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
+func (s *Service) decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
 	var req folderReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return req, false
 	}
@@ -232,7 +236,7 @@ func decode(w http.ResponseWriter, r *http.Request) (folderReq, bool) {
 
 // HandleCreate stores a new folder for the calling identity.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	req, ok := decode(w, r)
+	req, ok := s.decode(w, r)
 	if !ok {
 		return
 	}
@@ -282,7 +286,7 @@ func (s *Service) nextPosition(ownerID string) int {
 
 // HandleUpdate rewrites a folder the caller owns.
 func (s *Service) HandleUpdate(w http.ResponseWriter, r *http.Request) {
-	req, ok := decode(w, r)
+	req, ok := s.decode(w, r)
 	if !ok {
 		return
 	}
@@ -366,7 +370,7 @@ type previewReq struct {
 // rather than a client-side guess over whatever page happened to be loaded.
 func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 	var req previewReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
@@ -483,4 +487,15 @@ func (s *Service) matcher(f Folder) (*Matcher, error) {
 	}
 	s.compiled[f.ID] = cachedMatcher{at: f.UpdatedAt, m: m}
 	return m, nil
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }

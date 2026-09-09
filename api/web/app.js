@@ -3790,9 +3790,11 @@ function mimImpactCard(i) {
 }
 
 // showMIMReport renders the conversion report as a modal: any document-level
-// warning, then per-node status badges (native / preserved / manual-review), the
-// node id, the source activity and a reviewer note, plus a shortcut to open a
-// freshly created draft in the Modeler.
+// warning, then one row per worksheet item with a status badge (native /
+// preserved / manual-review), the node it belongs to, the source activity and a
+// reviewer note, plus a shortcut to open a freshly created draft in the Modeler.
+// Items outnumber nodes — a decoded row of a MIMWAL table is its own item,
+// because it is its own read or write to re-express.
 //
 // An Export-FIMConfig export can hold several workflows, so the report is per
 // draft: one section each, and one "Open" per section rather than a single
@@ -3825,10 +3827,10 @@ function showMIMReport(res) {
       <h3 style="margin:0 0 4px; font-size:14px">${esc(d.name || d.processId)} <code class="muted">${esc(d.processId)}</code></h3>
       ${facts ? `<p class="muted" style="margin:0 0 6px">${facts}</p>` : ""}
       ${replaced}
-      <p class="muted" style="margin:0 0 8px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
+      <p class="muted" style="margin:0 0 8px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review — counted as items of work, so a node carrying a MIMWAL table contributes one per row. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b>, and their decoded rows in <b>atlas:mimCollection</b> — check them before deploying.</p>
       ${warnings}
       <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>
+        <tbody>${rows || `<tr><td colspan="5" class="muted">Nothing to report.</td></tr>`}</tbody></table>
       <p style="margin:8px 0 0"><button class="btn neutral" data-open="${esc(d.processId)}" title="Open this draft in the Modeler">Open in Modeler</button></p>
     </section>`;
   };
