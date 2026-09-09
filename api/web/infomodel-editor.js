@@ -62,6 +62,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     connecting: null,    // {kind, fromId} while a relationship is being drawn
     dirty: false,
     schemaFor: "",       // class whose JSON Schema projection is open
+    // Which class's lifecycle is open on the second sheet, if any (ADR-0259). It is a
+    // mode of this editor rather than a route of its own: same document, same Save,
+    // same dirty flag, with the sheet swapped underneath.
+    lifecycleOf: null,
     // What the panel's member filter is narrowed to, and what the bar's search box
     // is looking for. Both are view state: neither touches the document, and neither
     // survives leaving the class it was typed for.
@@ -80,6 +84,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       <div class="im-bar">
         <a class="btn neutral" href="#/data" title="Back to the information models">← Model</a>
         <b class="im-title" id="im-name">${esc(state.model.name)}</b>
+        <button type="button" class="btn neutral small im-lc-back" id="im-lc-back" hidden
+          title="Back to the class diagram">← <span id="im-lc-of"></span> lifecycle</button>
         <span class="im-rev muted" id="im-rev">r${state.model.revision}</span>
         <span class="im-search">
           <input type="search" id="im-search" placeholder="Find a class or a member…"
@@ -104,6 +110,16 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
           </div>
         </div>
+        <div class="im-canvas" id="im-lc-canvas" hidden>
+          <p class="im-empty-hint" id="im-lc-empty" hidden>No states yet. Add the state an instance
+            is created in — <code>draft</code>, <code>new</code>, <code>erfasst</code> — then the
+            ones it moves to.</p>
+          <div class="im-tools" aria-label="Lifecycle controls">
+            <button type="button" class="icon-btn" data-lc-tool="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="icon-btn" data-lc-tool="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+            <button type="button" class="icon-btn" data-lc-tool="fit" title="Fit the whole lifecycle in the window" aria-label="Fit lifecycle">⊡</button>
+          </div>
+        </div>
         <div class="props-resizer im-resizer" id="im-resizer"
           title="Drag to widen the panel — double-click to reset"></div>
         <div class="im-side" id="im-side"></div>
@@ -112,6 +128,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     </div>`;
 
   const canvasEl = root.querySelector("#im-canvas");
+  const lcCanvasEl = root.querySelector("#im-lc-canvas");
+  const lcEmptyEl = root.querySelector("#im-lc-empty");
+  const lcBackBtn = root.querySelector("#im-lc-back");
   const emptyEl = root.querySelector("#im-empty");
   const sideEl = root.querySelector("#im-side");
   const problemsEl = root.querySelector("#im-problems");
@@ -353,6 +372,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   // ---- rendering -----------------------------------------------------------
   function render() {
+    if (state.lifecycleOf) { syncLifecycle(); renderSide(); renderProblems(); return; }
     syncCanvas();
     renderSide();
     renderProblems();
@@ -360,6 +380,22 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // diagram-js's — so it is told to ask again rather than having a class toggled on it.
     canvas.refreshPalette();
     canvasEl.classList.toggle("connecting", !!state.connecting);
+  }
+
+  function syncLifecycle() {
+    const c = lifecycleClass();
+    if (!c || !lcCanvas) return;
+    applyingSelection = true;
+    try {
+      lcCanvas.sync(c.lifecycle, lifecycleFindings(c));
+      lcEmptyEl.hidden = (c.lifecycle.states || []).length > 0;
+      lcCanvas.select(state.selected ? (state.selected.kind === "state"
+        ? state.selected.id : state.selected.id) : null);
+    } finally {
+      applyingSelection = false;
+    }
+    lcCanvas.refreshPalette();
+    lcCanvasEl.classList.toggle("connecting", !!state.connecting);
   }
 
   // ---- problems ------------------------------------------------------------
@@ -422,8 +458,91 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return (words.length > 1 ? words.map((w) => w[0]).join("") : words[0].slice(0, 2)).toUpperCase();
   };
 
+  // ---- the lifecycle panels -----------------------------------------------
+
+  function lcStates() { return (lifecycleClass()?.lifecycle?.states) || []; }
+  function lcTransitions() { return (lifecycleClass()?.lifecycle?.transitions) || []; }
+
+  function renderLifecycleNothingSelected() {
+    const c = lifecycleClass();
+    const rules = subset.lifecycles || {};
+    paint(`${pheadHTML("LC", "Lifecycle", c ? c.name : "")}
+      <h3>Lifecycle</h3>
+      <p class="im-meaning">${esc(rules.meaning || "")}</p>
+      <p class="im-hint-text">${lcStates().length
+        ? `${lcStates().length} state${lcStates().length === 1 ? "" : "s"},
+           ${lcTransitions().length} transition${lcTransitions().length === 1 ? "" : "s"}.
+           Pick one to edit it.`
+        : "Add the state an instance is created in, then the ones it moves to."}</p>`);
+  }
+
+  function renderStatePanel() {
+    const st = lcStates().find((x) => x.name === state.selected.id);
+    if (!st) return renderLifecycleNothingSelected();
+    paint(`${pheadHTML("ST", "State", st.name,
+      `<button type="button" class="icon-btn" data-act="del-state" title="Delete this state">✕</button>`)}
+      <h3>General</h3>
+      <label class="field"><span>Name</span>
+        <input id="im-st-name" value="${esc(st.name)}" autocomplete="off"/></label>
+      <p class="im-hint-text">This is the string a process writes into the BPMN data state
+        (<code>${esc(st.name)}</code>). Renaming it here renames what every process has to write.</p>
+      <label class="field"><span>Documentation</span>
+        <textarea id="im-st-doc" rows="3">${esc(st.documentation || "")}</textarea></label>
+      <h3>Where it sits in the life</h3>
+      <label class="field im-check"><input type="checkbox" id="im-st-initial"
+        ${st.initial ? "checked" : ""}/> <span>Instances are created in this state</span></label>
+      <p class="im-hint-text">Exactly one state carries this. Marking another moves it.</p>
+      <label class="field im-check"><input type="checkbox" id="im-st-final"
+        ${st.final ? "checked" : ""}/> <span>Nothing leaves this state</span></label>
+      ${st.final ? "" : `<p class="im-hint-text">A final state ends the life: no transition may
+        start at one.</p>`}`);
+  }
+
+  // The ends of a transition, offered rather than only drawn. A transition names its
+  // ends by state name because the name is the identity — the string a process writes —
+  // so this is the same closed list the canvas draws between.
+  //
+  // `noFinal` disables the states nothing leaves rather than hiding them: hiding them
+  // would say they do not exist, and the reason they cannot be picked is the point.
+  function stateOptionsHTML(current, noFinal) {
+    const states = lcStates();
+    return states.map((s) => {
+      const blocked = noFinal && s.final && s.name !== current;
+      return `<option value="${esc(s.name)}"${s.name === current ? " selected" : ""}${
+        blocked ? " disabled" : ""}>${esc(s.name)}${s.initial ? " · start" : ""}${
+        s.final ? " · final" : ""}</option>`;
+    }).join("") + (states.some((s) => s.name === current) ? ""
+      : `<option value="${esc(current)}" selected>${esc(current)} — no such state</option>`);
+  }
+
+  function renderTransitionPanel() {
+    const t = lcTransitions().find((x) => x.id === state.selected.id);
+    if (!t) return renderLifecycleNothingSelected();
+    paint(`${pheadHTML("TR", "Transition", `${t.from} → ${t.to}`,
+      `<button type="button" class="icon-btn" data-act="del-transition" title="Delete this transition">✕</button>`)}
+      <p class="im-reading">${esc(t.from)} → ${esc(t.to)}</p>
+      <h3>General</h3>
+      <label class="field"><span>Name</span>
+        <input id="im-tr-name" value="${esc(t.name || "")}" placeholder="approve" autocomplete="off"/></label>
+      <label class="field"><span>From</span>
+        <select id="im-tr-from">${stateOptionsHTML(t.from, true)}</select></label>
+      <label class="field"><span>To</span>
+        <select id="im-tr-to">${stateOptionsHTML(t.to, false)}</select></label>
+      <p class="im-hint-text">Drawing a transition is the quick way; these are the way to
+        re-aim one that is already there, without deleting it and losing its name. A state
+        nothing leaves cannot be a <b>From</b>, which is the same rule the drawing enforces.</p>
+      <p class="im-hint-text">The name is documentation only. What <em>causes</em> this transition is
+        the element in the process that writes the state — a condition here would be a second place
+        deciding what happens, and the first is the sequence flow.</p>`);
+  }
+
   function renderSide() {
     if (state.schemaFor) return renderSchema();
+    if (state.lifecycleOf) {
+      if (state.selected && state.selected.kind === "state") return renderStatePanel();
+      if (state.selected && state.selected.kind === "transition") return renderTransitionPanel();
+      return renderLifecycleNothingSelected();
+    }
     if (state.multi.length > 1) return renderManySelected();
     if (!state.selected) return renderNothingSelected();
     if (state.selected.kind === "store") {
@@ -605,6 +724,19 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             same one — <code>Order#ORD-1</code> in this process and in the next. It is the part BPMN has no
             equivalent for, and what a data store and a cross-process lookup will resolve against.</p>` : ""}
           <button type="button" class="btn ghost small" data-act="schema">View JSON Schema</button>
+          ${kind.hasIdentity ? `
+          <h3>Lifecycle</h3>
+          <p class="im-meaning">The states instances of this class move through, and what a BPMN
+            data state resolves against. Only a business object has one: a value type is equal to
+            any other with the same contents, so there is no <em>this one, later</em> to track.</p>
+          ${(c.lifecycle && (c.lifecycle.states || []).length)
+            ? `<p class="im-hint-text">${(c.lifecycle.states || []).length} state${(c.lifecycle.states || []).length === 1 ? "" : "s"}, ${(c.lifecycle.transitions || []).length} transition${(c.lifecycle.transitions || []).length === 1 ? "" : "s"}.</p>`
+            : `<p class="im-hint-text">None declared, which is the normal case: a class without one
+               behaves exactly as it always has, and the states its processes write are simply not
+               checked against anything.</p>`}
+          <div class="field-actions">
+            <button type="button" class="btn ghost small" data-act="open-lifecycle" data-class-id="${esc(c.id)}">${(c.lifecycle && (c.lifecycle.states || []).length) ? "Open lifecycle" : "Draw a lifecycle"}</button>
+          </div>` : ""}
         ` : `
           <h3>Literals</h3>
           <div class="field-actions">
@@ -679,17 +811,37 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const kind = kindOf(a.kind) || { label: a.kind, rule: "" };
     const allow = allowed(from.stereotype, to.stereotype);
     const findings = state.validation.findings.filter((f) => f.associationId === a.id);
-    const endFields = (side, end, otherName) => `
+    // Which class an end is on. Drawing is how a relationship is made; it was also the
+    // only way to change one, so an end aimed at the wrong class meant deleting the
+    // line and drawing it again — losing its name, its roles and its multiplicities.
+    //
+    // A class this kind of relationship cannot reach is disabled with the reason on it,
+    // exactly as Kind above disables a kind these two classes cannot have. It is the
+    // same fact read from the same matrix, from the other side.
+    const endClassHTML = (side, end) => `
+      <label class="field"><span>Class</span>
+        <select class="im-end-in" data-side="${side}" data-f="classId">
+          ${state.model.classes.map((x) => {
+            const pair = side === "from" ? allowed(x.stereotype, to.stereotype)
+              : allowed(from.stereotype, x.stereotype);
+            const blocked = x.id !== end.classId && !pair.includes(a.kind);
+            return `<option value="${esc(x.id)}"${x.id === end.classId ? " selected" : ""}${
+              blocked ? " disabled" : ""}>${esc(x.name)}${blocked ? ` — no ${esc(kind.label.toLowerCase())} from here` : ""}</option>`;
+          }).join("")}
+        </select></label>`;
+
+    const endFields = (side, end, otherName, roles) => `
       <fieldset class="im-end">
         <legend>${esc(side === "from" ? from.name : to.name)}</legend>
-        <label class="field"><span>Role</span>
+        ${endClassHTML(side, end)}
+        ${roles ? `<label class="field"><span>Role</span>
           <input class="im-end-in" data-side="${side}" data-f="role" value="${esc(end.role || "")}"
             placeholder="how ${esc(otherName)} refers to it"/></label>
         <label class="field"><span>Multiplicity</span>
           <select class="im-end-in" data-side="${side}" data-f="multiplicity">
             <option value=""${end.multiplicity ? "" : " selected"}>unsaid</option>
             ${subset.multiplicities.map((m) => `<option value="${esc(m.multiplicity)}"${m.multiplicity === end.multiplicity ? " selected" : ""}>${esc(m.multiplicity)} — ${esc(m.label)}</option>`).join("")}
-          </select></label>
+          </select></label>` : ""}
       </fieldset>`;
 
     paint(`
@@ -713,7 +865,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         ${a.kind === "generalization"
           ? `<p class="im-hint-text">A generalization has no roles or multiplicities: “is a kind of” is not a
              counted relationship. ${esc(to.name)} is the general class.</p>`
-          : endFields("from", a.from, to.name) + endFields("to", a.to, from.name)}
+          : ""}
+        ${endFields("from", a.from, to.name, a.kind !== "generalization")
+          + endFields("to", a.to, from.name, a.kind !== "generalization")}
 
         ${findings.length ? `
           <h3>Problems</h3>
@@ -741,8 +895,77 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // release of a click on another class, the node the press landed on is gone by the
   // time the release happens, the browser synthesizes no click at all, and the class
   // a person just clicked is silently not selected.
+  // The lifecycle panel's fields, handled before the class panel's: they are the only
+  // ones on screen while a lifecycle is open, and a renamed state has to carry its
+  // transitions with it, which nothing else here has to do.
+  function onLifecycleEdit(target) {
+    const c = lifecycleClass();
+    if (!c) return false;
+    if (target.id === "im-st-name") {
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      const next = target.value;
+      if (!st || next === st.name) return true;
+      // A transition names its ends by state name, because the name is the identity —
+      // it is the string a process writes. So a rename moves the transitions with it,
+      // or the document refers to a state that is no longer there.
+      for (const t of c.lifecycle.transitions) {
+        if (t.from === st.name) t.from = next;
+        if (t.to === st.name) t.to = next;
+      }
+      st.name = next;
+      state.selected = { kind: "state", id: next };
+      markDirty(); render();
+      return true;
+    }
+    if (target.id === "im-st-doc") {
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      if (st) { st.documentation = target.value; markDirty(); }
+      return true;
+    }
+    if (target.id === "im-st-initial") {
+      // Exactly one state is where instances are created, so marking one unmarks the
+      // rest rather than letting the save be refused for saying two things.
+      for (const x of c.lifecycle.states) x.initial = false;
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      if (st) st.initial = target.checked;
+      markDirty(); render();
+      return true;
+    }
+    if (target.id === "im-st-final") {
+      const st = c.lifecycle.states.find((x) => x.name === state.selected.id);
+      if (st) {
+        st.final = target.checked;
+        // "Final" and "leaves" are the two saying opposite things. Marking a state
+        // final drops the transitions out of it rather than saving a document the
+        // server would refuse — and the drawing shows exactly what was dropped.
+        if (st.final) {
+          c.lifecycle.transitions = c.lifecycle.transitions.filter((t) => t.from !== st.name);
+        }
+      }
+      markDirty(); render();
+      return true;
+    }
+    if (target.id === "im-tr-name") {
+      const t = c.lifecycle.transitions.find((x) => x.id === state.selected.id);
+      if (t) { t.name = target.value; markDirty(); syncLifecycle(); }
+      return true;
+    }
+    if (target.id === "im-tr-from" || target.id === "im-tr-to") {
+      const t = c.lifecycle.transitions.find((x) => x.id === state.selected.id);
+      if (t) {
+        t[target.id === "im-tr-from" ? "from" : "to"] = target.value;
+        // A full render and not just a sync: the panel's heading is the two ends, and
+        // the line has to be redrawn between the states it now joins.
+        markDirty(); render();
+      }
+      return true;
+    }
+    return false;
+  }
+
   function onSideEdit(e) {
     const target = e.target;
+    if (state.lifecycleOf && onLifecycleEdit(target)) return;
     // The filter is not an edit: it changes what is on screen, not what is in the
     // document. Handling it here and returning is what keeps the caret in the field
     // — every path below ends in a render, and a render rebuilds this panel.
@@ -858,11 +1081,50 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       const end = a[target.dataset.side];
       if ((end[target.dataset.f] || "") === target.value) return;
       end[target.dataset.f] = target.value;
-      markDirty(); syncCanvas();
+      // Moving an end to another class changes what the panel is about — its heading,
+      // its legends, and which kinds the two of them can have — so it takes a full
+      // render where a role or a multiplicity only redraws the line.
+      markDirty();
+      if (target.dataset.f === "classId") render(); else syncCanvas();
     }
   }
 
+  function onLifecycleClick(e) {
+    const c = lifecycleClass();
+    if (!c) return false;
+    if (e.target.closest('[data-act="del-state"]')) {
+      const name = state.selected.id;
+      c.lifecycle.states = c.lifecycle.states.filter((x) => x.name !== name);
+      // A transition with an end that is gone is not a transition. Removing them with
+      // the state is what keeps the document one the server accepts.
+      c.lifecycle.transitions = c.lifecycle.transitions.filter((t) => t.from !== name && t.to !== name);
+      // Somebody has to be where instances start, and the server refuses a lifecycle
+      // with nobody. If the deleted state was it, the first survivor takes it.
+      if (c.lifecycle.states.length && !c.lifecycle.states.some((x) => x.initial)) {
+        c.lifecycle.states[0].initial = true;
+      }
+      state.selected = null;
+      markDirty(); render();
+      return true;
+    }
+    if (e.target.closest('[data-act="del-transition"]')) {
+      c.lifecycle.transitions = c.lifecycle.transitions.filter((t) => t.id !== state.selected.id);
+      state.selected = null;
+      markDirty(); render();
+      return true;
+    }
+    return false;
+  }
+
   function onSideClick(e) {
+    if (state.lifecycleOf && onLifecycleClick(e)) return;
+    // The way in: a business object's panel offers its lifecycle, because that is the
+    // only kind that has one — an identity that persists through states.
+    const open = e.target.closest('[data-act="open-lifecycle"]');
+    if (open && sideEl.contains(open)) {
+      openLifecycle(open.dataset.classId);
+      return;
+    }
     // A line in the "several selected" list narrows the selection to that one, which
     // is also what puts it back on the canvas — the round trip is the same one a
     // click on the drawing takes.
@@ -1091,6 +1353,173 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const cols = 4;
     const n = state.model.classes.length;
     return { x: 40 + (n % cols) * (BOX_STEP + 60), y: 40 + Math.floor(n / cols) * 220 };
+  }
+
+  // ---- the lifecycle sheet ------------------------------------------------
+  //
+  // A lifecycle belongs to a class, so it is opened *from* one rather than being a
+  // place of its own: the same document, the same Save, the same dirty flag, with the
+  // sheet swapped underneath. A second route would have meant a second editor around
+  // one model, and two Save buttons that could disagree about which revision they
+  // are writing.
+  //
+  // The canvas is built the first time a lifecycle is opened. Most sessions never
+  // open one — a lifecycle is opt-in per class — and diagram-js is not free.
+  let lcCanvas = null;
+
+  const lifecycleClass = () =>
+    state.lifecycleOf ? classById(state.lifecycleOf) : null;
+
+  function openLifecycle(classId) {
+    const c = classById(classId);
+    if (!c) return;
+    // A class carries no lifecycle until somebody opens one. The empty shape is put
+    // there now rather than on the first state, so the canvas has a document to draw
+    // and the panel a thing to edit.
+    if (!c.lifecycle) c.lifecycle = { states: [], transitions: [] };
+    state.lifecycleOf = classId;
+    state.connecting = null;
+    state.selected = null;
+    state.multi = [];
+    if (!lcCanvas) {
+      lcCanvas = new uml.StateCanvas(lcCanvasEl, {
+        rules: subset.lifecycles || {},
+        paletteEntries: lifecyclePaletteEntries,
+        onSelection: (bo) => onLifecycleSelection(bo),
+        onElementClick: (bo) => onLifecycleClickElement(bo),
+        onChange: () => { absorbStateMoves(); },
+      });
+    }
+    lcCanvasEl.hidden = false;
+    canvasEl.hidden = true;
+    lcBackBtn.hidden = false;
+    root.querySelector("#im-lc-of").textContent = c.name;
+    lcCanvas.render(c.lifecycle, lifecycleFindings(c));
+    render();
+  }
+
+  function closeLifecycle() {
+    state.lifecycleOf = null;
+    state.selected = null;
+    state.multi = [];
+    state.connecting = null;
+    lcCanvasEl.hidden = true;
+    canvasEl.hidden = false;
+    lcBackBtn.hidden = true;
+    render();
+  }
+
+  lcBackBtn.addEventListener("click", closeLifecycle);
+  lcCanvasEl.querySelector('[data-lc-tool="zoom-in"]').addEventListener("click", () => lcCanvas?.zoom(1.2));
+  lcCanvasEl.querySelector('[data-lc-tool="zoom-out"]').addEventListener("click", () => lcCanvas?.zoom(1 / 1.2));
+  lcCanvasEl.querySelector('[data-lc-tool="fit"]').addEventListener("click", () => lcCanvas?.fit());
+
+  // The server locates a lifecycle finding on the class and names the state or the
+  // transition inside it, so the sheet can mark the one that is wrong.
+  const lifecycleFindings = (c) =>
+    (state.validation.findings || []).filter((f) => f.classId === c.id && (f.state || f.transition));
+
+  function absorbStateMoves() {
+    const c = lifecycleClass();
+    if (!c || !lcCanvas) return;
+    const moves = lcCanvas.moved();
+    if (!moves.length) return;
+    for (const m of moves) {
+      const st = (c.lifecycle.states || []).find((x) => x.name === m.name);
+      if (!st) continue;
+      st.x = m.x;
+      st.y = m.y;
+    }
+    markDirty();
+  }
+
+  function addState() {
+    const c = lifecycleClass();
+    if (!c) return;
+    const states = c.lifecycle.states;
+    // A name has to be unique — a process writes a state by that string and nothing
+    // else — so a new one is numbered until it is.
+    let name = "new";
+    for (let n = 2; states.some((x) => x.name === name); n++) name = `new${n}`;
+    // Where the reader is looking, rather than on a grid the sheet may have been
+    // scrolled away from: a state dropped outside the window reads as a palette that
+    // did nothing.
+    const spot = lcCanvas ? lcCanvas.spotFor(states.length) : { x: 40, y: 40 };
+    states.push({
+      name,
+      // The first state is where instances start. Marking it here rather than leaving
+      // it to the author is what keeps the document valid while it is being drawn:
+      // the server refuses a lifecycle with no initial state, so a canvas that let
+      // you add one and then refused to save it would be a trap.
+      initial: states.length === 0,
+      x: spot.x, y: spot.y,
+    });
+    state.selected = { kind: "state", id: name };
+    state.connecting = null;
+    markDirty(); render();
+  }
+
+  function armTransition() {
+    state.connecting = state.connecting && state.connecting.kind === "transition"
+      ? null : { kind: "transition", fromId: null };
+    render();
+  }
+
+  function lifecyclePaletteEntries() {
+    return [
+      { id: "lasso", group: "tools", title: "Select several at once: draw a box around them.",
+        onClick: (event) => lcCanvas?.marquee(event) },
+      { id: "sep-lc", group: "tools", separator: true },
+      { id: "state", group: "elements",
+        title: "State — one stage in this class's life. Its name is what a process writes into " +
+          "the BPMN data state, so it is the name that has to match.",
+        onClick: () => addState() },
+      { id: "transition", group: "relations",
+        title: "Transition — a move this class's instances may make. What causes it is the " +
+          "element in the process that writes the state; this only says it is allowed.",
+        active: !!state.connecting && state.connecting.kind === "transition",
+        onClick: () => armTransition() },
+    ];
+  }
+
+  // Two clicks make a transition, the way two clicks make a relationship on the class
+  // sheet: the first names where it starts, the second where it goes.
+  //
+  // It hangs off the *click* and not off the selection, which is the difference that
+  // makes it work. A state just added is already the selected one, and it is the one
+  // a person reaches for first — a selection-driven gesture hears nothing there,
+  // because nothing changed, and quietly loses its own first half.
+  function onLifecycleClickElement(bo) {
+    if (applyingSelection || !state.connecting) return;
+    const c = lifecycleClass();
+    if (!c || !bo || bo.element !== "state") return;
+    if (!state.connecting.fromId) {
+      state.connecting.fromId = bo.name;
+      renderSide();
+      return;
+    }
+    const from = state.connecting.fromId;
+    const to = bo.name;
+    state.connecting = null;
+    // Drawing the same move twice is a no-op rather than a second arrow: two
+    // transitions between one pair say nothing the one already says.
+    if (!c.lifecycle.transitions.some((t) => t.from === from && t.to === to)) {
+      c.lifecycle.transitions.push({
+        id: `t-${Math.random().toString(36).slice(2, 10)}`, from, to, name: "",
+      });
+      markDirty();
+    }
+    state.selected = null;
+    render();
+  }
+
+  function onLifecycleSelection(bo) {
+    if (applyingSelection || state.connecting) return;
+    state.selected = bo && bo.element
+      ? { kind: bo.element, id: bo.element === "state" ? bo.name : bo.id }
+      : null;
+    state.multi = [];
+    renderSide();
   }
 
   // ---- the palette --------------------------------------------------------

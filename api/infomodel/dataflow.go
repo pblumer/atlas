@@ -64,6 +64,16 @@ const (
 	// RuleDataStoreUnbound marks a store that is modeled but has no Worker behind it,
 	// so nothing can actually reach what it holds.
 	RuleDataStoreUnbound = "data.store-unbound"
+
+	// RuleDataUnknownState: a process moves an object into a state its class's
+	// lifecycle does not declare (ADR-0259). The typo check, and the one that finds
+	// something on the first application it runs against.
+	RuleDataUnknownState = "data.unknown-state"
+
+	// RuleDataIllegalTransition: both states are declared and no transition joins
+	// them. Deliberately conservative — see checkLifecycles for what it stays quiet
+	// about, and why that is the right direction to be wrong in.
+	RuleDataIllegalTransition = "data.illegal-transition"
 )
 
 // Vocabulary is what an application's information models say, flattened for
@@ -216,6 +226,7 @@ func CheckDataFlow(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler.P
 	ps = append(ps, checkMemberWrites(cp, vocab)...)
 	ps = append(ps, checkReadOrder(cp)...)
 	ps = append(ps, checkDataStores(cp, vocab)...)
+	ps = append(ps, checkLifecycles(cp, vocab)...)
 	sort.SliceStable(ps, func(a, b int) bool {
 		if ps[a].Element != ps[b].Element {
 			return ps[a].Element < ps[b].Element
@@ -391,6 +402,133 @@ func checkReadOrder(cp *compiler.CompiledProcess) []compiler.Problem {
 // plus the two containment edges a token also travels: into a scope's start events,
 // and onto an activity's boundary events.
 //
+// checkLifecycles resolves every data state this process writes against the lifecycle
+// its object's class declares (ADR-0259 §3).
+//
+// It is the data state's half of what checkDeclaredTypes does for itemSubjectRef, and
+// it is silent in the same ways: a class with no lifecycle says nothing (the normal
+// case), an object with no resolvable class says nothing, and everything it does say
+// is a warning — a lifecycle is routinely drawn after the process that writes it.
+//
+// **What it deliberately does not report.** Knowing which state an object can be in
+// *before* a write means reading the graph, and a per-process one can only
+// over-approximate: the predecessors of a write are the object's seeded state plus the
+// target of every other write that can reach it. Over-approximating makes this
+// quieter, never louder — more candidate predecessors means more chances that one of
+// them legally reaches the target, and one is enough to stay silent. That is the right
+// direction to be wrong in: a false warning about a model somebody drew correctly
+// costs more than a missed one.
+//
+// A transition made in *another* process — an order left "approved" by one and picked
+// up by the next — is out of reach of this graph entirely, and is not guessed at.
+//
+// ADR-0259's third check, data.unreachable-state, is not here. It asks whether *any*
+// process in the application writes a declared state, and this function is handed one
+// process; asking it per process would warn about every state that belongs to a
+// different one, which is worse than not asking at all. It needs the application's
+// whole set of deployed processes, and is a follow-up rather than a smaller version
+// of itself.
+func checkLifecycles(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler.Problem {
+	if !vocab.Modeled() {
+		return nil
+	}
+	var ps []compiler.Problem
+	reaches := reachability(cp)
+
+	for _, do := range cp.DataObjects() {
+		name := cp.Intern(do.Name)
+		class, ok := vocab.Class(cp.Intern(do.ItemType))
+		if !ok || class.Lifecycle == nil {
+			continue // untyped, unmodeled, or a class that declares no lifecycle
+		}
+		declared := map[string]bool{}
+		for _, st := range class.Lifecycle.States {
+			declared[st.Name] = true
+		}
+		unknown := func(state, where string) bool {
+			if state == "" || declared[state] {
+				return false
+			}
+			ps = append(ps, compiler.Problem{
+				Severity: compiler.SeverityWarning, Rule: RuleDataUnknownState,
+				Message: fmt.Sprintf("Data object %q %s the state %q, which is not one of the states %s declares. Add it to the lifecycle, or correct the spelling — a data state is matched by that string and nothing else.", name, where, state, class.Name),
+			})
+			return true
+		}
+
+		seeded := cp.Intern(do.InitialState)
+		unknown(seeded, "is created in")
+
+		// Every write of this object, with the node that makes it, so a write's
+		// possible predecessors can be read off the graph.
+		type write struct {
+			node  int32
+			state string
+		}
+		var writes []write
+		for id := int32(0); int(id) < cp.NodeCount(); id++ {
+			for _, a := range cp.DataOutputAssociations(id) {
+				if cp.Intern(a.DataObject) != name || a.TargetState < 0 {
+					continue
+				}
+				writes = append(writes, write{node: id, state: cp.Intern(a.TargetState)})
+			}
+		}
+
+		allowed := map[string]bool{}
+		for _, t := range class.Lifecycle.Transitions {
+			allowed[t.From+">"+t.To] = true
+		}
+
+		for _, w := range writes {
+			// An undeclared target is already reported as unknown. Complaining that no
+			// transition reaches a state which is not there would be one defect said
+			// twice, in a way that reads as two.
+			if unknown(w.state, "is moved into") {
+				continue
+			}
+			from := []string{}
+			if declared[seeded] {
+				from = append(from, seeded)
+			}
+			for _, other := range writes {
+				if other.node == w.node || !reaches[other.node][w.node] || !declared[other.state] {
+					continue
+				}
+				from = append(from, other.state)
+			}
+			if len(from) == 0 {
+				continue // nothing says where it came from, so nothing to say about the move
+			}
+			legal := false
+			for _, f := range from {
+				if allowed[f+">"+w.state] {
+					legal = true
+					break
+				}
+			}
+			if legal {
+				continue
+			}
+			sort.Strings(from)
+			ps = append(ps, compiler.Problem{
+				Severity: compiler.SeverityWarning, Rule: RuleDataIllegalTransition,
+				Message: fmt.Sprintf("Data object %q is moved to %q, and %s declares no transition to it from %s. Draw the transition, or write a state that follows.", name, w.state, class.Name, strings.Join(quoted(from), " or ")),
+			})
+		}
+	}
+	return ps
+}
+
+// quoted renders state names for a message.
+func quoted(in []string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = fmt.Sprintf("%q", s)
+	}
+	return out
+}
+
 // Paths are of length one or more, so a node reaches itself only when it sits on a
 // cycle — which is exactly what distinguishes a loop's writer (it does precede the
 // next round's read) from an activity's own output association (it does not precede

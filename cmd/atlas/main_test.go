@@ -70,3 +70,17 @@ func TestEnvIntOr(t *testing.T) {
 		})
 	}
 }
+
+// TestNumberedPath covers how an export of several workflows lands beside the
+// file --out names: the first keeps that name, the rest are numbered.
+func TestNumberedPath(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"onboarding.bpmn", "onboarding-2.bpmn"},
+		{"/tmp/a/b.xml", "/tmp/a/b-2.xml"},
+		{"noext", "noext-2"},
+	} {
+		if got := numberedPath(tc.in, 2); got != tc.want {
+			t.Errorf("numberedPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

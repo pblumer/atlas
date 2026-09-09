@@ -2,6 +2,80 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "a-class-says-which-states-its-instances-move-through-and-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A business object can now say which states it moves through",
+        "de": "Ein Geschäftsobjekt sagt jetzt selbst, welche Zustände es durchläuft"
+      },
+      "summary": {
+        "en": "BPMN lets a data object carry a state — order [received] → [approved] — but never said which states exist or which may follow which, so it was a string somebody typed and got right from memory. A business object in your information model can now declare its own lifecycle: the states it moves through, where instances start, where they end. Draw it once and the Modeler offers those states instead of an empty box, the Problems panel says when a process writes one that does not exist, and the class a data object is is picked from a list rather than remembered.",
+        "de": "BPMN erlaubt einem Datenobjekt einen Zustand — Bestellung [erfasst] → [freigegeben] —, hat aber nie gesagt, welche Zustände es gibt und welcher auf welchen folgen darf: Es war eine Zeichenkette, die jemand aus dem Gedächtnis richtig tippen musste. Ein Geschäftsobjekt im Informationsmodell kann jetzt seinen eigenen Lebenszyklus erklären: die Zustände, die es durchläuft, wo Instanzen beginnen und wo sie enden. Einmal gezeichnet, bietet der Modeler genau diese Zustände an statt eines leeren Feldes, die Problemliste meldet einen Zustand, den es nicht gibt, und die Klasse eines Datenobjekts wird aus einer Liste gewählt statt erinnert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, pick an information model and click a business object on the canvas.",
+          "In its panel, under Lifecycle, choose \"Draw a lifecycle\".",
+          "Add states from the palette on the left; the first one is marked as where instances start. Mark the ones nothing leaves as final.",
+          "Click the transition tool, then two states in turn, to draw the move from one to the other. Save.",
+          "Open a process in the Modeler, select a data object, and set its Type to that class — its Data state is now a list of exactly those states."
+        ],
+        "de": [
+          "Unter Daten ein Informationsmodell öffnen und auf der Zeichenfläche ein Geschäftsobjekt anklicken.",
+          "Im Panel unter Lebenszyklus auf „Lebenszyklus zeichnen“ klicken.",
+          "Zustände über die Palette links hinzufügen; der erste ist als Startzustand markiert. Zustände, die nichts mehr verlässt, als final markieren.",
+          "Das Übergangs-Werkzeug wählen und nacheinander zwei Zustände anklicken, um den Übergang zu zeichnen. Speichern.",
+          "Im Modeler einen Prozess öffnen, ein Datenobjekt auswählen und als Typ diese Klasse setzen — der Datenzustand ist nun eine Liste genau dieser Zustände."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
+      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The handbook's worker runbooks are dated too",
+        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
+      },
+      "summary": {
+        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
+        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
+      },
+      "link": {
+        "label": "ADR-0289",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
+      },
+      "tags": [
+        "Handbook",
+        "Workers"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the runbooks",
+          "de": "Zu den Runbooks"
+        },
+        "route": "#/console"
+      }
+    },
+    {
       "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
       "version": "Unreleased",
       "date": null,
@@ -22,6 +96,35 @@
         "Modeler",
         "Import"
       ]
+    },
+    {
+      "id": "a-mim-import-asks-before-it-lands-on-something-and-says-what",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A MIM import asks before it overwrites, and shows what is at stake",
+        "de": "Der MIM-Import fragt vor dem Überschreiben — und zeigt, was auf dem Spiel steht"
+      },
+      "summary": {
+        "en": "Importing a workflow onto a name Atlas already knows used to replace what was there without asking. Now the import stops first and shows you what it found: the draft it would replace and when it was last saved, and — when a process of that name is already deployed — which version, how many instances are running on it, and exactly which of its steps the imported model no longer has. Those last ones are the running instances that could not be moved to the new model later, listed by name instead of turning up when you try. Nothing is written until you say to overwrite. An export containing several workflows now imports all of them, one draft each, instead of only the first.",
+        "de": "Ein Import auf einen Namen, den Atlas bereits kennt, ersetzte das Vorhandene bisher ohne Rückfrage. Jetzt hält der Import vorher an und zeigt, was er vorgefunden hat: den Entwurf, der ersetzt würde, samt letztem Speicherzeitpunkt — und falls unter diesem Namen bereits ein Prozess deployt ist, welche Version, wie viele Instanzen darauf laufen und welche seiner Schritte im importierten Modell fehlen. Genau diese laufenden Instanzen liessen sich später nicht auf das neue Modell übernehmen; sie stehen jetzt namentlich da, statt erst beim Versuch aufzutauchen. Geschrieben wird nichts, bevor Sie das Überschreiben bestätigen. Ein Export mit mehreren Workflows wird nun vollständig importiert, je ein Entwurf, statt nur der erste."
+      },
+      "link": {
+        "label": "ADR-0222",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0222-artifact-id-renames.md"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
     },
     {
       "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
@@ -208,6 +311,28 @@
       ]
     },
     {
+      "id": "four-ways-a-mim-workflow-s-own-logic-went-missing",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Four ways an imported MIM workflow lost its own logic",
+        "de": "Vier Wege, auf denen ein importierter MIM-Workflow seine eigene Logik verlor"
+      },
+      "summary": {
+        "en": "Each of these produced a diagram that looked finished and described something the workflow does not do. A branch condition written the way MIM actually writes it was read as an extra step, and the condition itself went unread. The last branch of a decision was always made the fallback, so its own condition was dropped — which turned the commonest MIM pattern, a single conditional branch, into a step that always runs. A conditioned activity group, which repeats and runs each child only when its condition holds, became a flat list of steps that run once. And an export straight out of MIM was not recognised at all, so the whole file arrived as a row of empty placeholders. All four now come through, with anything that still needs a human decision listed in the import report.",
+        "de": "Jeder dieser Fälle erzeugte ein Diagramm, das fertig aussah und etwas beschrieb, was der Workflow nicht tut. Eine Verzweigungsbedingung in der Schreibweise, die MIM tatsächlich verwendet, wurde als zusätzlicher Schritt gelesen — die Bedingung selbst blieb ungelesen. Der letzte Zweig einer Entscheidung wurde immer zum Rückfallpfad, seine eigene Bedingung fiel weg; damit wurde das häufigste MIM-Muster, ein einzelner bedingter Zweig, zu einem Schritt, der immer läuft. Eine bedingte Aktivitätsgruppe, die sich wiederholt und jedes Kind nur bei erfüllter Bedingung ausführt, wurde zu einer flachen Liste einmalig ausgeführter Schritte. Und ein Export direkt aus MIM wurde gar nicht erkannt, sodass die ganze Datei als Reihe leerer Platzhalter ankam. Alle vier kommen jetzt an; was noch eine menschliche Entscheidung braucht, steht im Importbericht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ]
+    },
+    {
       "id": "the-replay-s-data-object-list-keeps-its-search-and-an-open-s",
       "version": "Unreleased",
       "date": null,
@@ -234,158 +359,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "an-incident-that-says-no-worker-registered-as-x-can-now-crea",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Create the missing Worker from the incident itself",
-        "de": "Den fehlenden Worker direkt am Incident anlegen"
-      },
-      "summary": {
-        "en": "A task parked on \"no worker registered as X\" says what is wrong with it — nobody has configured X — and until now the only thing on offer was a link to the Console, where you had to remember the name and the Worker Type, create it, navigate back and resolve. The incident now creates it: the same Worker dialog opens with the name and the Worker Type the model states, already filled in and not yours to mistype, and \"Add & retry\" writes it and hands the parked task one more attempt.",
-        "de": "Eine Aufgabe, die auf «no worker registered as X» geparkt ist, nennt ihr Problem bereits — niemand hat X konfiguriert. Angeboten wurde bisher nur ein Link in die Konsole: Name und Worker Type merken, anlegen, zurücknavigieren, auflösen. Jetzt entsteht der Worker am Incident selbst. Es öffnet sich derselbe Worker-Dialog, mit Name und Worker Type aus dem Modell bereits eingetragen und nicht vertippbar, und «Add & retry» legt ihn an und gibt der geparkten Aufgabe einen weiteren Versuch."
-      },
-      "link": {
-        "label": "ADR-0160",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
-      },
-      "tags": [
-        "Operations",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Incidents, or the live diagram of the stuck instance.",
-          "On an incident whose chip reads \"— not configured\", click ⚙ Create worker…",
-          "Fill in what it takes to reach the target — endpoint, credential reference, provider. The name and the Worker Type are already set.",
-          "Press \"Add & retry\" to create it and retry the parked task in one step, or \"Add worker\" to create it and leave the incident open."
-        ],
-        "de": [
-          "Betrieb › Incidents öffnen, oder das Live-Diagramm der hängenden Instanz.",
-          "Bei einem Incident, dessen Chip «— not configured» zeigt, auf ⚙ Create worker… klicken.",
-          "Eintragen, was zum Erreichen des Ziels nötig ist — Endpunkt, Credential-Referenz, Provider. Name und Worker Type stehen bereits fest.",
-          "«Add & retry» legt den Worker an und wiederholt die geparkte Aufgabe in einem Schritt; «Add worker» legt ihn an und lässt den Incident offen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "publishing-an-application-runs-the-deploy-time-preflight-tha",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Publishing an application warns you about what will not run",
-        "de": "Beim Publizieren einer Application wird gewarnt, was nicht laufen wird"
-      },
-      "summary": {
-        "en": "Deploying a single diagram has warned since 0.3 that it names a Worker nobody configured, or a data object typed against a vocabulary that does not carry it. Publishing a whole application said nothing at all — which is the route most applications reach a server through, so the first anybody heard of the problem was the first task to park. Publish and release import now run the same checks and report them.",
-        "de": "Beim Deployen eines einzelnen Diagramms wird seit 0.3 gewarnt, wenn es einen Worker nennt, den niemand konfiguriert hat, oder ein Datenobjekt gegen ein Vokabular typisiert, das ihn nicht kennt. Beim Publizieren einer ganzen Application blieb es still — und das ist der Weg, über den die meisten Applications auf einen Server gelangen. Das Problem zeigte sich damit erst an der ersten geparkten Aufgabe. Publish und Release-Import führen jetzt dieselben Prüfungen aus und melden sie."
-      },
-      "link": {
-        "label": "ADR-0287",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0287-create-the-worker-from-the-incident.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers",
-        "Validation"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and select the application.",
-          "Press Publish.",
-          "Anything that deployed but will not run as written is listed afterwards — the deploy is not refused for it, since publishing before the Workers exist is legitimate."
-        ],
-        "de": [
-          "Modeler öffnen und die Application auswählen.",
-          "Auf Publish drücken.",
-          "Was deployt wurde, aber so nicht laufen wird, erscheint danach als Liste — abgelehnt wird der Deploy deswegen nicht, denn ein Publizieren vor dem Einrichten der Worker ist legitim."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-mim-importer-reads-the-workflows-mim-actually-writes",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Importing a real MIM workflow works, and the diagram is readable",
-        "de": "Der Import eines echten MIM-Workflows funktioniert — und das Diagramm ist lesbar"
-      },
-      "summary": {
-        "en": "Three things stood between the importer and a workflow exported from a real MIM installation. The file would not load at all, because MIM writes part of its header in a way strict XML readers reject. Every step was labelled with an internal designer name such as actionActivity6 instead of the name its author gave it, which made the imported diagram unreadable. And the original definition kept alongside each step was altered as it was stored, so quotation marks inside a MIM expression came back as stray characters. All three are fixed: such a file imports, the steps carry their real names, and what is kept beside them is what MIM wrote.",
-        "de": "Drei Dinge standen zwischen dem Importer und einem Workflow aus einer echten MIM-Installation. Die Datei liess sich gar nicht laden, weil MIM einen Teil des Kopfs so schreibt, wie strenge XML-Leser ihn ablehnen. Jeder Schritt trug einen internen Entwurfsnamen wie actionActivity6 statt des Namens, den sein Autor vergeben hat — das machte das importierte Diagramm unlesbar. Und die neben jedem Schritt aufbewahrte Originaldefinition wurde beim Speichern verändert, sodass Anführungszeichen in MIM-Ausdrücken als Zeichenfolge zurückkamen. Alle drei sind behoben: Eine solche Datei wird importiert, die Schritte tragen ihre echten Namen, und was neben ihnen aufbewahrt wird, ist das, was MIM geschrieben hat."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ]
-    },
-    {
-      "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "A process can post in Discord",
-        "de": "Ein Prozess kann in Discord schreiben"
-      },
-      "summary": {
-        "en": "A running process regularly has something to say to people, and e-mail is the wrong shape for a team that works in a chat channel. A process step can now send a message to a Discord channel, edit or delete one, read a message, list a channel, and open a thread — picked from a list in the Modeler instead of assembled as a REST call. What Discord answers goes into a variable, so a later step can address =sent.id to edit that same message or hang a thread under it. The bot token lives under Workers and is resolved by name, so the model never carries it. There is deliberately no reply-in-thread operation: in Discord a thread is itself a channel, so a reply is send-message addressing =thread.id.",
-        "de": "Ein laufender Prozess hat regelmässig etwas mitzuteilen, und E-Mail ist die falsche Form für ein Team, das in einem Chat-Kanal arbeitet. Ein Prozessschritt kann jetzt eine Nachricht in einen Discord-Kanal senden, sie bearbeiten oder löschen, eine Nachricht lesen, einen Kanal auflisten und einen Thread öffnen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Was Discord zurückgibt, landet in einer Variable: ein späterer Schritt spricht =gesendet.id an, um dieselbe Nachricht zu ändern oder einen Thread darunter zu hängen. Das Bot-Token liegt beim Worker und wird über den Namen aufgelöst, das Modell trägt es nie. Eine eigene Operation „im Thread antworten\" gibt es bewusst nicht: In Discord ist ein Thread selbst ein Kanal, eine Antwort ist also send-message an =faden.id."
-      },
-      "link": {
-        "label": "ADR-0258",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0258-discord-worker.md"
-      },
-      "tags": [
-        "Workers",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "In Discord's developer portal, create an application, add a bot, and copy its token. Invite the bot to your server with at least View Channel and Send Messages.",
-          "Under Console › Workers, add a Worker of kind discord and store the token as {\"botToken\": \"…\"} — without the word Bot in front, Atlas adds that itself.",
-          "In the Modeler, drop a service task, pick Discord, and choose Send message. Fill in the channel id and the text; the fx toggle makes either a FEEL expression over the instance's variables.",
-          "For the channel id, enable Developer Mode in Discord (User Settings › Advanced), then right-click the channel and choose Copy Channel ID.",
-          "If the channel is private, server-wide permissions do not reach it: add the bot to the channel itself under Edit Channel › Permissions, and set the rights to the green tick rather than leaving them grey."
-        ],
-        "de": [
-          "Legen Sie im Discord-Entwicklerportal eine Anwendung an, fügen Sie einen Bot hinzu und kopieren Sie dessen Token. Laden Sie den Bot mit mindestens „Kanal ansehen\" und „Nachrichten senden\" auf Ihren Server ein.",
-          "Legen Sie unter Console › Workers einen Worker der Art discord an und hinterlegen Sie das Token als {\"botToken\": \"…\"} — ohne das Wort Bot davor, das ergänzt Atlas selbst.",
-          "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie Discord und dann „Nachricht senden\". Tragen Sie Kanal-ID und Text ein; der fx-Schalter macht aus beidem eine FEEL-Expression über die Variablen der Instanz.",
-          "Für die Kanal-ID schalten Sie in Discord den Entwicklermodus ein (Einstellungen › Erweitert), dann Rechtsklick auf den Kanal › „Kanal-ID kopieren\".",
-          "Ist der Kanal privat, greifen serverweite Rechte dort nicht: Fügen Sie den Bot unter „Kanal bearbeiten › Berechtigungen\" dem Kanal selbst hinzu und setzen Sie die Rechte auf das grüne Häkchen statt sie grau zu lassen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console/workers"
       }
     }
   ]

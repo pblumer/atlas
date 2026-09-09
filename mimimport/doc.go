@@ -40,11 +40,15 @@
 //
 // Conditionality is part of that structure even where MIM does not express it as
 // control flow: an activity of the MIMWAL library runs only when its
-// ActivityExecutionCondition holds, so such an activity is wrapped in an
-// exclusive split with a bypass, and one carrying an Iteration becomes a
-// sequential multi-instance activity. Neither expression is translated — see
-// emitGuard and miPlaceholder for why — but both are documented on the model and
-// flagged in the Report.
+// ActivityExecutionCondition holds, and a ConditionedActivityGroup's child runs
+// on the passes where its WhenCondition holds, so such an activity is wrapped in
+// an exclusive split with a bypass; one carrying an Iteration becomes a
+// sequential multi-instance activity, and the group itself the repeat-until loop
+// it is. An IfElseBranchActivity usually carries its condition as a WF property
+// element rather than an attribute, which is read as the condition it is rather
+// than as a step in the flow. No expression is translated — see emitGuard and
+// miPlaceholder for why — but each is documented on the model and flagged in the
+// Report.
 //
 // The serialised .NET collections a MIMWAL activity hangs off itself — the
 // queries it runs and the assignments it makes, thousands of characters of
@@ -71,7 +75,8 @@
 // an <atlas:mimRow> per row and an <atlas:mimCell column="…"> per cell, verbatim.
 // A cell says where it sat, never what it does. That is addressable by a tool,
 // checkable against the preserved source, and asserts nothing that was not read
-// out of the markup.
+// out of the markup. The whole argument, including the option this rejects, is in
+// ADR-0292.
 //
 // # The Report is a migration worksheet
 //

@@ -65,10 +65,79 @@ type Class struct {
 	// It is the part BPMN has no equivalent for, and every cross-process capability
 	// rests on it. Empty for a class whose instances have no identity of their own.
 	Identity []string `json:"identity,omitempty"`
+	// Lifecycle is the states this class's instances move through, and what a BPMN
+	// data state resolves against (ADR-0259). It sits here beside the business key
+	// because both are facts about a business object that BPMN has no field for, and
+	// because a lifecycle scoped to one process would reproduce the very problem the
+	// information model exists to solve.
+	//
+	// nil is the normal case and means silence everywhere: a class without one is
+	// exactly as it was before this existed.
+	Lifecycle *Lifecycle `json:"lifecycle,omitempty"`
 	// X and Y place the class on the canvas. Layout is part of the document because
 	// a diagram a person arranged is a diagram they can read again.
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
+}
+
+// Lifecycle is the state machine a business object moves through, and the thing a
+// BPMN data state resolves against (ADR-0259).
+//
+// BPMN's `<dataObjectReference>` carries a data state — the `[received]`, `[approved]`
+// in square brackets under the box — and says nothing whatever about what states exist
+// or which may follow which. It is the second opaque slot beside `itemSubjectRef`, and
+// this is what fills it: a class declares the states its instances can be in, and a
+// deploy resolves every state a process writes against that declaration.
+//
+// It is *not* an «enumeration» attribute. An enumeration is a closed set of values
+// something is typed as; a lifecycle is a set of stages with an order between them,
+// and the order is most of what it says. "An order may be cancelled, but not once it
+// has shipped" is a lifecycle, and is not expressible as a type.
+//
+// Nothing executes it. Atlas runs BPMN; a lifecycle constrains data that BPMN moves,
+// and is resolved at deploy exactly as a class name is (ADR-0259 §5).
+type Lifecycle struct {
+	States      []LifecycleState      `json:"states"`
+	Transitions []LifecycleTransition `json:"transitions"`
+}
+
+// LifecycleState is one stage in a class's life.
+//
+// Its Name is its identity, deliberately, where an association names its ends by a
+// stable id. The name here *is* what a process writes: a `<dataState name="approved">`
+// matches it by that string, so an id beside it would be a second identity for one
+// thing, and renaming a state is renaming what every process has to write. The same
+// reasoning makes Class.Identity name attributes and DataStore.Class name a class.
+type LifecycleState struct {
+	Name          string `json:"name"`
+	Documentation string `json:"documentation,omitempty"`
+	// Initial marks where an instance starts. Exactly one state carries it: a machine
+	// with no start says nothing about what an object is when it is created, and one
+	// with two says two contradictory things.
+	Initial bool `json:"initial,omitempty"`
+	// Final marks a state nothing leaves. Any number of them, including none — an
+	// order ends either shipped or cancelled, and a long-lived record may end nowhere.
+	Final bool `json:"final,omitempty"`
+	// X and Y place the state on the canvas, for the reason a class carries them: a
+	// diagram somebody arranged is a diagram they can read again.
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// LifecycleTransition is one move a class's instances may make between its states.
+//
+// Its Name is documentation and nothing more. What *causes* a transition is the BPMN
+// element that writes the state, and that fact lives in the process — a condition here
+// would be a second place where something decides what happens, and the first is the
+// sequence flow (ADR-0259 §5).
+type LifecycleTransition struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+	// From and To are state names within this lifecycle. A transition to the state it
+	// starts from is a self-loop and is allowed: a record can be revised without
+	// leaving the stage it is in.
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // Attribute is one typed member of a class.

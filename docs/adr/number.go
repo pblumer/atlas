@@ -33,6 +33,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Record is one decision record on disk. A record still in flight has Num 0 and
@@ -44,6 +45,14 @@ type Record struct {
 	Slug   string // the file name's kebab-case part, stable across numbering
 	Title  string // from the `# ADR-NNNN: title` heading
 	Status string // from the `- **Status:** ...` line
+	// OpenQuestion and QuestionChecked are the optional pair a record carries when
+	// its reasoning rests on something nobody could answer: what the question is,
+	// and the YYYY-MM month somebody last looked at it. They come as a pair or not
+	// at all — a question with no date cannot go stale and would quietly read as
+	// settled, a date with no question says a thing was checked without saying what
+	// — and a guard test fails once a date has stood for a year.
+	OpenQuestion    string
+	QuestionChecked string
 }
 
 // IsDraft reports whether this record is still waiting for a number.
@@ -55,6 +64,12 @@ var (
 	numberedHeading     = regexp.MustCompile(`(?m)^# ADR-(\d{4}): (.+)$`)
 	draftHeading        = regexp.MustCompile(`(?m)^# ADR-DRAFT: (.+)$`)
 	statusPattern       = regexp.MustCompile(`(?m)^- \*\*Status:\*\* (.+)$`)
+	// The value runs to the end of the line and onto any lines indented under it,
+	// because these records wrap at prose width and a question truncated at the
+	// margin would be truncated in the very message meant to state it.
+	openQuestionPattern = regexp.MustCompile(`(?m)^- \*\*Open question:\*\* (.+(?:\n[ \t]+\S.*)*)$`)
+	questionCheckedPtrn = regexp.MustCompile(`(?m)^- \*\*Question checked:\*\* (.+)$`)
+	monthPattern        = regexp.MustCompile(`^\d{4}-\d{2}$`)
 	indexRowPattern     = regexp.MustCompile(`^\| \[(\d{4})\]\(([^)]+)\) \| (.*) \| (.+) \|$`)
 
 	// notRecords are the two files in docs/adr that carry no decision.
@@ -141,7 +156,37 @@ func parseRecord(name, body string) (Record, error) {
 	} else {
 		problems = append(problems, fmt.Errorf("%s: no `- **Status:** ...` line", name))
 	}
+	problems = append(problems, parseOpenQuestion(name, body, &r)...)
 	return r, errors.Join(problems...)
+}
+
+// parseOpenQuestion reads the optional open-question pair and names every way it
+// is half-written. The pair is what keeps a decision taken on a gap in what we
+// know from reading, a year later, as one taken on knowledge: it states the gap
+// and the month somebody last looked at it, and the freshness guard in
+// openquestion_test.go fails once that month is a year old.
+func parseOpenQuestion(name, body string, r *Record) []error {
+	if q := openQuestionPattern.FindStringSubmatch(body); q != nil {
+		r.OpenQuestion = unwrap(q[1])
+	}
+	if c := questionCheckedPtrn.FindStringSubmatch(body); c != nil {
+		r.QuestionChecked = strings.TrimSpace(c[1])
+	}
+	var problems []error
+	switch {
+	case r.OpenQuestion == "" && r.QuestionChecked == "":
+		return nil // the ordinary record: nothing unresolved to declare
+	case r.QuestionChecked == "":
+		problems = append(problems, fmt.Errorf("%s: states an open question but no `- **Question checked:** YYYY-MM` line — "+
+			"a question with no date cannot go stale, so it would read as settled the moment nobody remembers it was open", name))
+	case r.OpenQuestion == "":
+		problems = append(problems, fmt.Errorf("%s: dates a question check but has no `- **Open question:** ...` line — "+
+			"a date alone says a thing was checked without saying what", name))
+	}
+	if r.QuestionChecked != "" && !monthPattern.MatchString(r.QuestionChecked) {
+		problems = append(problems, fmt.Errorf("%s: `- **Question checked:** %s` is not a YYYY-MM month", name, r.QuestionChecked))
+	}
+	return problems
 }
 
 // Assignment is one draft becoming a numbered record.
@@ -152,6 +197,31 @@ type Assignment struct {
 	To     string // NNNN-<slug>.md
 	Title  string
 	Status string
+}
+
+// QuestionAge reports how long ago the record's open question was last looked at,
+// relative to now, and whether there was a month to read at all. A negative age is
+// a date in the future — a typo, and the one that would make a freshness check
+// quieter rather than louder, so the guard can fail on it rather than wait it out.
+//
+// The month is taken at its first day: a check stated as "2026-09" is treated as
+// having happened on 1 September, which ages it slightly faster than it happened.
+// That is the safe direction for a freshness rule.
+func (r Record) QuestionAge(now time.Time) (time.Duration, bool) {
+	if r.QuestionChecked == "" {
+		return 0, false
+	}
+	checked, err := time.Parse("2006-01", r.QuestionChecked)
+	if err != nil {
+		return 0, false // parseRecord reports an unreadable month; this only declines to age it
+	}
+	return now.Sub(checked), true
+}
+
+// unwrap joins a field's continuation lines back into one, collapsing the
+// indentation the record wrapped it with.
+func unwrap(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // AssignNumbers gives every draft under root/docs/adr the next free number and

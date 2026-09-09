@@ -136,9 +136,12 @@ the failure it is usually reported with, the anchor of its handbook card in
 none — and a `checked` date saying when you last walked those steps at the provider. The
 properties panel, the Console's create form and the worker dialog all render it, so it is
 written once. `go test ./api -run SetupDoc` refuses a type that ships without it, a link
-into a card that no longer exists, or steps unread for over a year (ADR-0289). When that
-last one fails, open the provider and walk the steps: bumping the date without re-reading
-tells the next reader they were verified when they were not.
+into a card that no longer exists, or steps unread for over a year (ADR-0289). The
+handbook card carries that date too — `<p class="checked" data-checked="YYYY-MM">`, in
+both languages — and must agree with the entry's, since the two are one instruction at
+two lengths. When the freshness check fails, open the provider and walk the steps:
+bumping the date without re-reading tells the next reader they were verified when they
+were not.
 
 **Say Worker, not connector, in anything new you write.** [ADR-0203](docs/adr/0203-worker-execution-model.md)
 splits the old word into three: a **Worker Type** is a capability (`jira`, `mail`,
@@ -190,7 +193,7 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 3. **Check the invariants** above against your plan *before* writing code.
 4. **Work test-first (TDD is the default — [ADR-0018](docs/adr/0018-test-driven-development.md)).** Write a failing test that states the intended behavior, watch it fail for the right reason, then write the minimum code to make it pass, then refactor with the test as a safety net. Anything touching persistence or the processor needs a recovery/replay test written up front (process some commands, simulate restart, replay the log, assert state matches). A bug fix starts with a failing regression test. See *Testing conventions* for the narrow, stated exceptions.
 5. **Run the full check sequence** (see Commands) until green, including `-race`.
-6. **If you changed an architectural decision**, write a new ADR instead of silently diverging — and **do not give it a number**. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`, keep its `# ADR-DRAFT: Title` heading, and add **no** row to [`docs/adr/README.md`](docs/adr/README.md). The number is assigned when the record lands on main, by a workflow that runs `make adr-number` there; picking one on a branch is how two records end up sharing it, and how a record gets renumbered on every merge. Cite the record as `ADR-draft-<slug>` (or link `draft-<slug>.md`) from code and docs — the numbering rewrites those citations along with the file name and adds the index row. `go test ./docs/adr` guards all of it and runs in the normal test sweep. See [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) for the whole flow.
+6. **If you changed an architectural decision**, write a new ADR instead of silently diverging — and **do not give it a number**. Copy [`docs/adr/template.md`](docs/adr/template.md) to `docs/adr/draft-<slug>.md`, keep its `# ADR-DRAFT: Title` heading, and add **no** row to [`docs/adr/README.md`](docs/adr/README.md). If the record is right only while something you could not settle stays unknown, say so in its front matter with an `Open question` and a `Question checked` month — `go test ./docs/adr` then insists somebody looks at that question once a year, so the gap cannot quietly become settled truth (see [`docs/adr/README.md`](docs/adr/README.md#when-the-record-rests-on-a-question-you-could-not-answer)). The number is assigned when the record lands on main, by a workflow that runs `make adr-number` there; picking one on a branch is how two records end up sharing it, and how a record gets renumbered on every merge. Cite the record as `ADR-draft-<slug>` (or link `draft-<slug>.md`) from code and docs — the numbering rewrites those citations along with the file name and adds the index row. `go test ./docs/adr` guards all of it and runs in the normal test sweep. See [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) for the whole flow.
 
 ## Testing conventions
 
