@@ -185,6 +185,51 @@ func TestAnOutputCollectionIsRefusedAtItsOwnBudget(t *testing.T) {
 	}
 }
 
+// TestALoopThatOutgrewItsBudgetStaysParked covers the collection budget at the one
+// moment the assembled list exists: the promotion.
+//
+// The seed and the promotion are different sizes, and after the rounds stopped
+// carrying the collection they are the only two measurements there are. Here the seed
+// fits easily — three nulls — and what the loop assembled does not. Before this, that
+// refusal was raised and then thrown away: the body completed anyway, taking the
+// incident with it and dropping the collection with the scope that held it, so a loop
+// that ran every iteration finished looking successful with nothing to show.
+//
+// Now the body stays activated holding its token, and resolving promotes the same
+// collection again — so raising the budget releases it and leaving it parks it again.
+func TestALoopThatOutgrewItsBudgetStaysParked(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := bigResultLoop(t, 3)
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	// Between the two: "[null,null,null]" is 16 bytes and passes the seed, while three
+	// results of two hundred bytes do not. Each element is far inside the per-variable
+	// budget, so only the collection's own ceiling can be the reason.
+	p.SetMaxCollection(100)
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v — an oversized collection must not take the batch down", err)
+	}
+
+	incs := incidents(t, h.store)
+	if len(incs) == 0 {
+		t.Fatal("a loop promoted more than its budget allows without an incident")
+	}
+	for _, inc := range incs {
+		if inc.Reason != model.IncidentVariableTooLarge {
+			t.Errorf("incident reason = %v, want IncidentVariableTooLarge", inc.Reason)
+		}
+	}
+	if got := varText(t, h.store, model.NewKey(1, 1), "results"); got != "" {
+		t.Errorf("results = %q at the enclosing scope, want nothing — the refused collection was promoted anyway", got)
+	}
+}
+
 // TestACollectionUnderItsBudgetIsUnchanged guards the common case the two budgets must
 // not disturb: an ordinary loop collects its results and completes.
 func TestACollectionUnderItsBudgetIsUnchanged(t *testing.T) {

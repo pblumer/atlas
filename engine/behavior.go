@@ -678,8 +678,13 @@ func handleElementCompleting(c *ProcessingContext) {
 	// A completing multi-instance body promotes its assembled output collection to the
 	// enclosing scope and drops its own locals before it takes its outgoing flow, so
 	// downstream FEEL sees the collected list (ADR-0077).
-	if ei.MultiInstance == miBody {
-		promoteMultiInstanceOutput(c, c.cmd.Key, ei)
+	if ei.MultiInstance == miBody && !promoteMultiInstanceOutput(c, c.cmd.Key, ei) {
+		// The collection the loop assembled is past its budget, so it was not promoted
+		// and an incident says so. Completing the body would clear that incident and drop
+		// the collection with the scope that holds it, leaving a loop that ran every
+		// iteration and produced nothing (ADR-0294). The body stays
+		// activated holding its token; resolving promotes the same collection again.
+		return
 	}
 	// A tool of an agent-driven ad-hoc contributes its result to the container's
 	// collection while its own scope is still readable — before OnCompleting drops it
@@ -4380,7 +4385,11 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 // enclosing scope and drops the body's own locals (the collection plus any per-
 // iteration scratch), so only the assembled list escapes (ADR-0077). A no-op for a loop
 // with no output collection beyond the scope drop.
-func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) {
+//
+// It reports whether everything it had to promote fitted. A refusal leaves the body's
+// scope standing — it is where the collection is — so resolving the incident promotes
+// again over the same value.
+func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
 	if d.Standard {
@@ -4388,26 +4397,41 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 		// result, held at the body scope so each round could read the previous one's work
 		// (ADR-0133). Promoting all of it to the enclosing scope makes a looping activity
 		// leave behind exactly what the same activity would have left running once.
+		fits := true
 		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
 			if v.Name == LoopCounterVariable {
 				return // the parked-run bookkeeping of parkRunawayLoop, not the loop's work
 			}
 			v.ScopeKey = ei.FlowScopeKey
-			c.AppendVariableEvent(model.IntentVariableCreated, v)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+				fits = false
+			}
 		})
+		if !fits {
+			return false
+		}
 		dropLocalScope(c, bodyKey)
-		return
+		return true
 	}
 	if d.OutputCollection >= 0 {
 		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
 			out := *v
 			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
-			// The collection's own budget, not the variable one: it fitted at the body
-			// scope, so refusing it one scope up would park a loop for having finished.
-			c.appendCollection(model.IntentVariableCreated, out)
+			// The collection's own budget, not the variable one: what a legitimate loop
+			// accumulates at the iteration ceiling is a different question from what one
+			// business record may weigh (ADR-0294).
+			//
+			// This is the one place the collection is measured. The rounds that filled it
+			// carried an element each and were measured against the variable budget, so
+			// the assembled list has not been weighed since the loop was seeded — and it
+			// is what the enclosing scope is about to hold.
+			if !c.appendCollection(model.IntentVariableCreated, out) {
+				return false
+			}
 		}
 	}
 	dropLocalScope(c, bodyKey)
+	return true
 }
 
 // iterationIndex reads an inner iteration's 0-based index from its loopCounter (1-based).
