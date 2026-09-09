@@ -22,6 +22,12 @@ This document describes the architecture of Atlas, a durable, high-throughput BP
 
 ---
 
+> **What you may depend on** is stated separately, in
+> [the runtime contract](runtime-contract.md): which behaviour is public and versioned,
+> which structures are implementation details, and how a BPMN feature Atlas *draws* is
+> told apart from one Atlas *executes* ([ADR-0176](adr/0176-standards-boundary-and-runtime-contract.md)).
+> This document explains how the system works; that one says what is promised.
+
 ## Design philosophy
 
 Atlas is built on four convictions, each of which shapes the whole system. They are not independent features bolted together — they reinforce one another.
