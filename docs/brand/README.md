@@ -21,6 +21,10 @@ box), use the tile-less `atlas-glyph.svg`, which inherits `currentColor`.
 `favicon.svg` is the same drawing pushed heavier — a larger peak and a thicker
 cross — because at 16px the shipped weights close up.
 
+**The wordmark is set lowercase.** The social card spells the name `atlas`.
+Keep it that way wherever the name is set as a wordmark. `ATLAS` in the
+codebase is only an environment-variable prefix and is never the mark.
+
 ## Files
 
 | File | What it is |
