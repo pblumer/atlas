@@ -201,6 +201,12 @@ func TestRuleValidateBounds(t *testing.T) {
 // TestMatcherMatches drives the compiled rule over tasks — the actual filter, on
 // the shapes the editor produces.
 func TestMatcherMatches(t *testing.T) {
+	// A fixed date, because Match is handed the moment it judges against and now
+	// actually decides: the generated rules read the bound scanAt rather than
+	// calling the clock, so every case below is a fixed point. While they still
+	// called now() this anchor decided nothing, and the wall clock eventually
+	// carried the three-day-old instance past the five-day boundary asserted
+	// below — which is how that defect surfaced.
 	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	base := Task{
 		ProcessID: "kunden-anfrage", TaskName: "Anfrage sichten",

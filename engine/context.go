@@ -410,6 +410,26 @@ func (c *ProcessingContext) appendCollection(intent model.Intent, v model.Variab
 	return c.appendVariable(intent, v, c.p.collectionCeiling())
 }
 
+// appendVariableElement records that one element of a list variable became this
+// value, rather than recording the list. It is what a multi-instance activity emits
+// per finished iteration, and it is the whole of the fix for a cost that grew with
+// the square of the iteration count: the record is the size of one result, not of the
+// collection so far (ADR-0296).
+//
+// The collection's own ceiling is not checked here, because this write does not carry
+// the collection. What bounds it is that each element is checked against the variable
+// budget and the loop's iteration count is bounded (ADR-0276) — the product of the two
+// is the ceiling the collection actually has, and it is now the only one that can be
+// exceeded without anything noticing. Said plainly in the record rather than papered
+// over: this is the one guarantee the change gives up.
+func (c *ProcessingContext) appendVariableElement(v model.VariableValue) bool {
+	v.ProducerKey = c.producer
+	v.Indexed = c.indexesVariable(v.ScopeKey, v.Name)
+	c.appendEvent(v.ScopeKey, model.VTVariable, model.IntentVariableElementSet, inflightValue{variable: v})
+	c.markConditionDirty(v.ScopeKey)
+	return true
+}
+
 // appendVariable is the shared tail of both: a value past ceiling is not written and
 // not silently dropped — an incident names the variable and both sizes, and resolving
 // retries. Deleting is never refused: a delete carries no value, and refusing to

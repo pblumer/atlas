@@ -20,6 +20,42 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
+// TestScriptWorkerRegistersOnlyEnabledLanguages keeps the server's per-language
+// switches effective after script execution moved to a supervised worker. A worker
+// asked to serve Python must not also lease PowerShell or JavaScript jobs.
+func TestScriptWorkerRegistersOnlyEnabledLanguages(t *testing.T) {
+	built, err := worker.BuiltinConnectors(func(name string) string {
+		if name == "ATLAS_SCRIPT_LANGUAGES" {
+			return "python"
+		}
+		return ""
+	}, "script")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	if len(built.Handlers) != 1 {
+		t.Fatalf("script handlers = %d, want exactly one", len(built.Handlers))
+	}
+	if _, ok := built.Handlers[compiler.PythonJobType]; !ok {
+		t.Errorf("Python handler missing: %v", built.Handlers)
+	}
+	for _, disabled := range []string{compiler.PwshJobType, compiler.JsJobType} {
+		if _, ok := built.Handlers[disabled]; ok {
+			t.Errorf("disabled script handler %q was registered", disabled)
+		}
+	}
+
+	_, err = worker.BuiltinConnectors(func(name string) string {
+		if name == "ATLAS_SCRIPT_LANGUAGES" {
+			return "ruby"
+		}
+		return ""
+	}, "script")
+	if err == nil || !strings.Contains(err.Error(), "ruby") {
+		t.Fatalf("unknown script language error = %v, want it to name ruby", err)
+	}
+}
+
 const jobWorkerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">

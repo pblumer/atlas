@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -266,6 +267,18 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// (ADR-0048). Derived only from the event header (timestamp/position)
 			// and the variable value, so replay rebuilds it identically (I4).
 			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
+		case model.IntentVariableElementSet:
+			// One element of a list, named rather than carried: the fold reads the
+			// collection, sets the element and writes it back
+			// (ADR-0296). It is a function of the batch's
+			// own state and of the event, so replay reaches the same list (I4).
+			//
+			// No snapshot. A loop's half-filled collection is scratch at the body scope
+			// until the loop promotes it, and the promotion writes the whole value with
+			// a snapshot of its own — the same reasoning that keeps the dropping of an
+			// activity-local scope out of the instance's variable timeline. Snapshotting
+			// each round is what made the timeline grow with the square of the count.
+			return setVariableElement(tx, &v.variable)
 		case model.IntentVariableDeleted:
 			// Dropping an activity-local scope on completion (ADR-0068). The delete is
 			// idempotent and carries no snapshot: the local was scratch state, so its
@@ -419,4 +432,27 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		}
 	}
 	return nil
+}
+
+// setVariableElement folds IntentVariableElementSet: element v.Index of the list
+// variable at (v.ScopeKey, v.Name) becomes v's own value. A collection that is absent
+// or not a list, or an index outside it, is a no-op rather than an error — the same
+// tolerance setListElement had when it did this work in the behaviour, and the reason
+// is unchanged: the loop that seeds the collection and the loop that fills it are the
+// same loop, so a mismatch here is a bug to find in a test rather than a reason to
+// stop a partition.
+func setVariableElement(tx *stateTx, v *model.VariableValue) error {
+	cur, err := tx.GetVariable(v.ScopeKey, v.Name)
+	if err != nil || cur == nil || cur.Kind != model.VarJSON {
+		return err
+	}
+	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, cur.Text))
+	if !ok || v.Index < 0 || int(v.Index) >= len(elems) {
+		return nil
+	}
+	elems[v.Index] = expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text)
+	kind, b, text := expr.Classify(expr.ListOf(elems...))
+	next := *cur
+	next.Kind, next.Bool, next.Text = model.VarKind(kind), b, text
+	return tx.PutVariable(&next)
 }

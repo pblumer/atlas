@@ -371,16 +371,15 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 	if tok, ok := bearerToken(r); ok {
 		if s.internalToken != "" &&
 			subtle.ConstantTimeCompare([]byte(tok), []byte(s.internalToken)) == 1 {
-			// The server's own credential, handed to the processes it supervises
-			// (superviseenv.go). It carries the legacy roles — everything a signed-in
-			// account could do before roles existed, and still not admin — because that
-			// is exactly what it could do the day before this shipped, and a supervised
-			// worker that stops leasing jobs on upgrade is the outage this whole record
-			// set out not to cause.
+			// The server's own credential is handed to supervised workers. The roles
+			// satisfy the worker routes' role checks; the fail-closed worker scope is
+			// what prevents this machine credential from reaching the product API if a
+			// child process leaks it.
 			return &httpapi.Principal{
 				UserID:   servicePrincipalName,
 				Username: servicePrincipalName,
 				Roles:    legacyRoles(),
+				Scope:    apiScopeWorker,
 			}
 		}
 		// A deploy token identifies a peer Atlas publishing here (ADR-0129). The
