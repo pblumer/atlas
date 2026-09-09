@@ -98,6 +98,35 @@
       ]
     },
     {
+      "id": "a-mim-import-asks-before-it-lands-on-something-and-says-what",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A MIM import asks before it overwrites, and shows what is at stake",
+        "de": "Der MIM-Import fragt vor dem Überschreiben — und zeigt, was auf dem Spiel steht"
+      },
+      "summary": {
+        "en": "Importing a workflow onto a name Atlas already knows used to replace what was there without asking. Now the import stops first and shows you what it found: the draft it would replace and when it was last saved, and — when a process of that name is already deployed — which version, how many instances are running on it, and exactly which of its steps the imported model no longer has. Those last ones are the running instances that could not be moved to the new model later, listed by name instead of turning up when you try. Nothing is written until you say to overwrite. An export containing several workflows now imports all of them, one draft each, instead of only the first.",
+        "de": "Ein Import auf einen Namen, den Atlas bereits kennt, ersetzte das Vorhandene bisher ohne Rückfrage. Jetzt hält der Import vorher an und zeigt, was er vorgefunden hat: den Entwurf, der ersetzt würde, samt letztem Speicherzeitpunkt — und falls unter diesem Namen bereits ein Prozess deployt ist, welche Version, wie viele Instanzen darauf laufen und welche seiner Schritte im importierten Modell fehlen. Genau diese laufenden Instanzen liessen sich später nicht auf das neue Modell übernehmen; sie stehen jetzt namentlich da, statt erst beim Versuch aufzutauchen. Geschrieben wird nichts, bevor Sie das Überschreiben bestätigen. Ein Export mit mehreren Workflows wird nun vollständig importiert, je ein Entwurf, statt nur der erste."
+      },
+      "link": {
+        "label": "ADR-0222",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0222-artifact-id-renames.md"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
       "version": "Unreleased",
       "date": null,
@@ -282,6 +311,28 @@
       ]
     },
     {
+      "id": "four-ways-a-mim-workflow-s-own-logic-went-missing",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Four ways an imported MIM workflow lost its own logic",
+        "de": "Vier Wege, auf denen ein importierter MIM-Workflow seine eigene Logik verlor"
+      },
+      "summary": {
+        "en": "Each of these produced a diagram that looked finished and described something the workflow does not do. A branch condition written the way MIM actually writes it was read as an extra step, and the condition itself went unread. The last branch of a decision was always made the fallback, so its own condition was dropped — which turned the commonest MIM pattern, a single conditional branch, into a step that always runs. A conditioned activity group, which repeats and runs each child only when its condition holds, became a flat list of steps that run once. And an export straight out of MIM was not recognised at all, so the whole file arrived as a row of empty placeholders. All four now come through, with anything that still needs a human decision listed in the import report.",
+        "de": "Jeder dieser Fälle erzeugte ein Diagramm, das fertig aussah und etwas beschrieb, was der Workflow nicht tut. Eine Verzweigungsbedingung in der Schreibweise, die MIM tatsächlich verwendet, wurde als zusätzlicher Schritt gelesen — die Bedingung selbst blieb ungelesen. Der letzte Zweig einer Entscheidung wurde immer zum Rückfallpfad, seine eigene Bedingung fiel weg; damit wurde das häufigste MIM-Muster, ein einzelner bedingter Zweig, zu einem Schritt, der immer läuft. Eine bedingte Aktivitätsgruppe, die sich wiederholt und jedes Kind nur bei erfüllter Bedingung ausführt, wurde zu einer flachen Liste einmalig ausgeführter Schritte. Und ein Export direkt aus MIM wurde gar nicht erkannt, sodass die ganze Datei als Reihe leerer Platzhalter ankam. Alle vier kommen jetzt an; was noch eine menschliche Entscheidung braucht, steht im Importbericht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ]
+    },
+    {
       "id": "the-replay-s-data-object-list-keeps-its-search-and-an-open-s",
       "version": "Unreleased",
       "date": null,
@@ -308,91 +359,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "an-incident-that-says-no-worker-registered-as-x-can-now-crea",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Create the missing Worker from the incident itself",
-        "de": "Den fehlenden Worker direkt am Incident anlegen"
-      },
-      "summary": {
-        "en": "A task parked on \"no worker registered as X\" says what is wrong with it — nobody has configured X — and until now the only thing on offer was a link to the Console, where you had to remember the name and the Worker Type, create it, navigate back and resolve. The incident now creates it: the same Worker dialog opens with the name and the Worker Type the model states, already filled in and not yours to mistype, and \"Add & retry\" writes it and hands the parked task one more attempt.",
-        "de": "Eine Aufgabe, die auf «no worker registered as X» geparkt ist, nennt ihr Problem bereits — niemand hat X konfiguriert. Angeboten wurde bisher nur ein Link in die Konsole: Name und Worker Type merken, anlegen, zurücknavigieren, auflösen. Jetzt entsteht der Worker am Incident selbst. Es öffnet sich derselbe Worker-Dialog, mit Name und Worker Type aus dem Modell bereits eingetragen und nicht vertippbar, und «Add & retry» legt ihn an und gibt der geparkten Aufgabe einen weiteren Versuch."
-      },
-      "link": {
-        "label": "ADR-0160",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
-      },
-      "tags": [
-        "Operations",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Incidents, or the live diagram of the stuck instance.",
-          "On an incident whose chip reads \"— not configured\", click ⚙ Create worker…",
-          "Fill in what it takes to reach the target — endpoint, credential reference, provider. The name and the Worker Type are already set.",
-          "Press \"Add & retry\" to create it and retry the parked task in one step, or \"Add worker\" to create it and leave the incident open."
-        ],
-        "de": [
-          "Betrieb › Incidents öffnen, oder das Live-Diagramm der hängenden Instanz.",
-          "Bei einem Incident, dessen Chip «— not configured» zeigt, auf ⚙ Create worker… klicken.",
-          "Eintragen, was zum Erreichen des Ziels nötig ist — Endpunkt, Credential-Referenz, Provider. Name und Worker Type stehen bereits fest.",
-          "«Add & retry» legt den Worker an und wiederholt die geparkte Aufgabe in einem Schritt; «Add worker» legt ihn an und lässt den Incident offen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
-      }
-    },
-    {
-      "id": "publishing-an-application-runs-the-deploy-time-preflight-tha",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Publishing an application warns you about what will not run",
-        "de": "Beim Publizieren einer Application wird gewarnt, was nicht laufen wird"
-      },
-      "summary": {
-        "en": "Deploying a single diagram has warned since 0.3 that it names a Worker nobody configured, or a data object typed against a vocabulary that does not carry it. Publishing a whole application said nothing at all — which is the route most applications reach a server through, so the first anybody heard of the problem was the first task to park. Publish and release import now run the same checks and report them.",
-        "de": "Beim Deployen eines einzelnen Diagramms wird seit 0.3 gewarnt, wenn es einen Worker nennt, den niemand konfiguriert hat, oder ein Datenobjekt gegen ein Vokabular typisiert, das ihn nicht kennt. Beim Publizieren einer ganzen Application blieb es still — und das ist der Weg, über den die meisten Applications auf einen Server gelangen. Das Problem zeigte sich damit erst an der ersten geparkten Aufgabe. Publish und Release-Import führen jetzt dieselben Prüfungen aus und melden sie."
-      },
-      "link": {
-        "label": "ADR-0287",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0287-create-the-worker-from-the-incident.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers",
-        "Validation"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and select the application.",
-          "Press Publish.",
-          "Anything that deployed but will not run as written is listed afterwards — the deploy is not refused for it, since publishing before the Workers exist is legitimate."
-        ],
-        "de": [
-          "Modeler öffnen und die Application auswählen.",
-          "Auf Publish drücken.",
-          "Was deployt wurde, aber so nicht laufen wird, erscheint danach als Liste — abgelehnt wird der Deploy deswegen nicht, denn ein Publizieren vor dem Einrichten der Worker ist legitim."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

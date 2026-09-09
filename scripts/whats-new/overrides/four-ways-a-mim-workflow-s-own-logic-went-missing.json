@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Modeler",
+    "Import"
+  ],
+  "title": {
+    "en": "Four ways an imported MIM workflow lost its own logic",
+    "de": "Vier Wege, auf denen ein importierter MIM-Workflow seine eigene Logik verlor"
+  },
+  "summary": {
+    "en": "Each of these produced a diagram that looked finished and described something the workflow does not do. A branch condition written the way MIM actually writes it was read as an extra step, and the condition itself went unread. The last branch of a decision was always made the fallback, so its own condition was dropped — which turned the commonest MIM pattern, a single conditional branch, into a step that always runs. A conditioned activity group, which repeats and runs each child only when its condition holds, became a flat list of steps that run once. And an export straight out of MIM was not recognised at all, so the whole file arrived as a row of empty placeholders. All four now come through, with anything that still needs a human decision listed in the import report.",
+    "de": "Jeder dieser Fälle erzeugte ein Diagramm, das fertig aussah und etwas beschrieb, was der Workflow nicht tut. Eine Verzweigungsbedingung in der Schreibweise, die MIM tatsächlich verwendet, wurde als zusätzlicher Schritt gelesen — die Bedingung selbst blieb ungelesen. Der letzte Zweig einer Entscheidung wurde immer zum Rückfallpfad, seine eigene Bedingung fiel weg; damit wurde das häufigste MIM-Muster, ein einzelner bedingter Zweig, zu einem Schritt, der immer läuft. Eine bedingte Aktivitätsgruppe, die sich wiederholt und jedes Kind nur bei erfüllter Bedingung ausführt, wurde zu einer flachen Liste einmalig ausgeführter Schritte. Und ein Export direkt aus MIM wurde gar nicht erkannt, sodass die ganze Datei als Reihe leerer Platzhalter ankam. Alle vier kommen jetzt an; was noch eine menschliche Entscheidung braucht, steht im Importbericht."
+  }
+}
