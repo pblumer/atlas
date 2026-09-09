@@ -3701,9 +3701,11 @@ async function importMIM(projectId, reload) {
 }
 
 // showMIMReport renders the conversion report as a modal: any document-level
-// warning, then per-node status badges (native / preserved / manual-review), the
-// node id, the source activity and a reviewer note, plus a shortcut to open the
-// freshly created draft in the Modeler.
+// warning, then one row per worksheet item with a status badge (native /
+// preserved / manual-review), the node it belongs to, the source activity and a
+// reviewer note, plus a shortcut to open the freshly created draft in the
+// Modeler. Items outnumber nodes — a decoded row of a MIMWAL table is its own
+// item, because it is its own read or write to re-express.
 function showMIMReport(res) {
   const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
   // Document-level warnings belong to no node — an input the converter had to
@@ -3722,11 +3724,11 @@ function showMIMReport(res) {
     <div class="modal" role="dialog" aria-modal="true" aria-label="MIM import report" style="max-width:860px">
       <div class="modal-head"><h2>MIM import — ${esc(res.name || res.processId)}</h2></div>
       <div class="modal-body">
-        <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b> — check them before deploying.</p>
+        <p class="muted" style="margin:0 0 10px">${r.native} native · ${r.preserved} preserved · ${r.manualReview} to review — counted as items of work, so a node carrying a MIMWAL table contributes one per row. Preserved and review nodes keep their original XOML in the element's <b>atlas:mimSource</b>, and their decoded rows in <b>atlas:mimCollection</b> — check them before deploying.</p>
         ${warnings}
         <div style="max-height:52vh; overflow:auto">
           <table><thead><tr><th>Status</th><th>Node</th><th>Kind</th><th>Activity</th><th>Note</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="5" class="muted">No nodes.</td></tr>`}</tbody></table>
+            <tbody>${rows || `<tr><td colspan="5" class="muted">Nothing to report.</td></tr>`}</tbody></table>
         </div>
       </div>
       <div class="modal-foot">

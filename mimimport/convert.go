@@ -24,7 +24,9 @@ const (
 	StatusManualReview Status = "manual-review"
 )
 
-// Note is one entry in a conversion Report.
+// Note is one item of a conversion Report: a produced node, or one piece of work
+// inside it — a decoded row of a MIMWAL collection is its own item, because it is
+// its own read or write to re-express.
 type Note struct {
 	NodeID   string // BPMN id of the produced element
 	Activity string // XOML activity local name it came from
@@ -33,7 +35,10 @@ type Note struct {
 	Detail   string // what a reviewer should know (why preserved / what to check)
 }
 
-// Report is the per-node ledger of a conversion.
+// Report is the migration worksheet of a conversion: every produced node and,
+// inside a node, every decoded row of the MIMWAL collections it carries. The
+// counts are therefore counts of *work*, not of BPMN elements — which is the
+// number a migration is planned with.
 type Report struct {
 	ProcessID string
 	Notes     []Note
@@ -42,7 +47,7 @@ type Report struct {
 	Warnings []string
 }
 
-// Count returns how many notes carry the given status.
+// Count returns how many items carry the given status.
 func (r Report) Count(s Status) int {
 	n := 0
 	for _, note := range r.Notes {
@@ -54,7 +59,7 @@ func (r Report) Count(s Status) int {
 }
 
 // String renders the report as a stable, human-readable summary (one line per
-// node) suitable for stderr or a CLI log.
+// item) suitable for stderr or a CLI log.
 func (r Report) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "process %s: %d native, %d preserved, %d manual-review\n",
@@ -178,15 +183,16 @@ type bnode struct {
 	id      string
 	kind    string // startEvent,endEvent,userTask,serviceTask,task,exclusiveGateway,parallelGateway
 	name    string
-	srcID   string // preferred id, derived from the activity's x:Name
-	def     string // default outgoing flow id (gateways only)
-	jobType string // serviceTask job type
-	doc     string // documentation note
-	iterate string // MIM Iteration expression: the activity is multi-instance
-	rawName string // originating XOML activity local name
-	rawType string // its fully qualified .NET type, when the namespace names one
-	rawAsm  string // the assembly that type lives in
-	raw     string // original XOML markup, preserved verbatim
+	srcID   string          // preferred id, derived from the activity's x:Name
+	def     string          // default outgoing flow id (gateways only)
+	jobType string          // serviceTask job type
+	doc     string          // documentation note
+	iterate string          // MIM Iteration expression: the activity is multi-instance
+	tables  []mimCollection // decoded MIMWAL collections, emitted as atlas:mimCollection
+	rawName string          // originating XOML activity local name
+	rawType string          // its fully qualified .NET type, when the namespace names one
+	rawAsm  string          // the assembly that type lives in
+	raw     string          // original XOML markup, preserved verbatim
 }
 
 type bflow struct {
@@ -460,14 +466,20 @@ func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	if iterated {
 		doc += " — MIM Iteration: " + iter
 	}
-	if tables := mimTables(n); tables != "" {
-		doc += "\n" + tables
+	// One decode feeds all three renderings of a MIMWAL collection: the readable
+	// table on the documentation, the addressable elements on the node, and the
+	// per-row items of the worksheet.
+	tables := mimCollections(n)
+	if rendered := renderCollections(tables); rendered != "" {
+		doc += "\n" + rendered
 	}
 	leaf := b.preserve(n)
 	leaf.id = leafID
 	leaf.kind, leaf.name, leaf.jobType, leaf.doc, leaf.iterate = kind, n.displayName(), jobType, doc, iter
+	leaf.tables = tables
 	id := b.addNode(leaf)
 	b.note(Note{NodeID: id, Activity: n.local(), Kind: kind, Status: status, Detail: detail})
+	b.noteCollections(id, n.local(), kind, tables)
 	if iterated {
 		b.note(Note{NodeID: id, Activity: n.local(), Kind: "multiInstanceLoopCharacteristics", Status: StatusManualReview,
 			Detail: "MIM Iteration not translated to FEEL; the placeholder collection runs the activity once: " + iter})
@@ -477,6 +489,29 @@ func (b *builder) emitLeaf(n xnode) (entry, exit string) {
 	}
 	b.emitGuard(n, split, merge, id, guard)
 	return split, merge
+}
+
+// noteCollections adds one worksheet item per decoded row of a MIMWAL
+// collection, plus one per decoded finding.
+//
+// This is what makes the report a migration worksheet rather than a node
+// inventory. An UpdateResources carrying five assignments and a named query is
+// one node — "preserved", one line — and six pieces of work: each row is a read
+// or a write that has to be re-expressed against a real target system, and the
+// count a reviewer plans with has to say six. An item names its collection, its
+// index and its cells; it says nothing about what a column means, because
+// nothing here knows (see tables.go).
+func (b *builder) noteCollections(nodeID, activity, kind string, cols []mimCollection) {
+	for _, c := range cols {
+		for _, r := range c.rows {
+			b.note(Note{NodeID: nodeID, Activity: activity, Kind: kind, Status: StatusManualReview,
+				Detail: c.label(r) + ": " + cellsOneLine(r)})
+		}
+		for _, n := range c.notes {
+			b.note(Note{NodeID: nodeID, Activity: activity, Kind: kind, Status: StatusManualReview,
+				Detail: c.property + ": " + n})
+		}
+	}
 }
 
 // iteration returns a MIMWAL activity's Iteration expression, if it carries one.
