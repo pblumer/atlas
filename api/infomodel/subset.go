@@ -345,12 +345,57 @@ type Subset struct {
 	Primitives       []PrimitiveType      `json:"primitives"`
 	Multiplicities   []MultiplicityOption `json:"multiplicities"`
 	StoreModes       []StoreMode          `json:"storeModes"`
+	// Lifecycles is the state machine a class may carry (ADR-0259).
+	Lifecycles LifecycleRules `json:"lifecycles"`
 	// Matrix is AllowAssociation precomputed for every stereotype pair, so the canvas
 	// can grey out a connection while it is being dragged without a round trip. Keyed
 	// "from>to".
 	Matrix map[string][]string `json:"matrix"`
 	Limits []SubsetLimit       `json:"limits"`
 }
+
+// LifecycleRules is what the state canvas may draw, served rather than restated
+// (ADR-0259 §2). The canvas refuses mid-drag exactly what the write path refuses, in
+// the server's own words — which is the arrangement the class canvas already has for
+// its relationship matrix, and the reason a refusal can say "UML allows this, this
+// build does not" rather than pretending the standard forbids it.
+type LifecycleRules struct {
+	// Stereotypes that may carry one. Only a business object has an identity that
+	// persists through states; a value type is equal to any other with the same
+	// contents, and an enumeration is a set of values rather than a thing that moves
+	// through them.
+	Stereotypes []string `json:"stereotypes"`
+	// Exactly one state is where an instance is created, and any number are where
+	// instances end. Served rather than assumed, because "one start" is a rule the
+	// canvas has to enforce while drawing and not only report afterwards.
+	InitialStates int `json:"initialStates"`
+	// SelfTransitions says a state may transition to itself: a record can be revised
+	// without leaving the stage it is in.
+	SelfTransitions bool `json:"selfTransitions"`
+	// LeavesFinal says whether a transition may start at a final state. It may not —
+	// "final" and "leaves" are the two saying opposite things.
+	LeavesFinal bool `json:"leavesFinal"`
+	// Guards says whether a transition may carry a condition. It may not, and the
+	// reason travels with the answer: what causes a transition is the BPMN element
+	// that writes the state, and a condition here would be a second place deciding
+	// what happens.
+	Guards  bool   `json:"guards"`
+	Meaning string `json:"meaning"`
+}
+
+var lifecycleRules = LifecycleRules{
+	Stereotypes:     []string{StereotypeBusinessObject},
+	InitialStates:   1,
+	SelfTransitions: true,
+	LeavesFinal:     false,
+	Guards:          false,
+	Meaning: "The states a business object moves through, and what a BPMN data state resolves " +
+		"against. A deploy checks every state a process writes against this declaration; nothing " +
+		"here executes — what causes a transition is the element in the process that writes it.",
+}
+
+// Lifecycles reports the rules a state machine is held to.
+func Lifecycles() LifecycleRules { return lifecycleRules }
 
 // SubsetLimit is one thing this build does not author, and why. Stating them is
 // what keeps "we do not do this yet" apart from "this is not a thing".
@@ -360,6 +405,19 @@ type SubsetLimit struct {
 }
 
 var subsetLimits = []SubsetLimit{
+	{
+		Area: "Guards, triggers and actions on a lifecycle transition",
+		Reason: "A transition says a move is allowed, not what makes it happen: the element in the " +
+			"process that writes the state is what causes it, and that fact belongs to the process. " +
+			"A condition here would be a second place deciding what happens, and the first is the " +
+			"sequence flow.",
+	},
+	{
+		Area: "Composite and orthogonal states, history and regions",
+		Reason: "A lifecycle here is a flat set of stages with moves between them, because that is " +
+			"what a BPMN data state can carry — one name. Nesting would say something the slot a " +
+			"process writes cannot express.",
+	},
 	{
 		Area: "Interfaces, operations and visibility",
 		Reason: "A process information model describes the records a process moves, not the " +
@@ -407,6 +465,7 @@ func AuthoringSubset() Subset {
 		Primitives:       primitives,
 		Multiplicities:   multiplicities,
 		StoreModes:       storeModes,
+		Lifecycles:       lifecycleRules,
 		Matrix:           matrix,
 		Limits:           subsetLimits,
 	}

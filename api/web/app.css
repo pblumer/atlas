@@ -5256,6 +5256,31 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-edge .uml-edge-line { stroke: var(--text); stroke-width: 1.4; fill: none; }
 .uml-edge.generalization .uml-edge-line { stroke-width: 1.2; }
 .uml-edge-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; text-anchor: middle; }
+
+/* The state canvas: a class's lifecycle (ADR-0259). The third notation on the shared
+   bundle, and the run-up to the one BPMN slot the class diagram does not answer.
+
+   Every state carries a name here, where UML's initial and final pseudostates carry
+   none — the name is the string a process writes into the data state, so a state
+   nothing can name is a state nothing can reach. The disc and the ring are therefore
+   marks on a named box rather than shapes of their own. */
+.uml-state .uml-state-box { fill: var(--class-fill); stroke: var(--border); stroke-width: 1; }
+.uml-state .uml-state-name { fill: var(--text); font: 600 13px/1.4 system-ui, sans-serif; }
+/* Nothing leaves a final state, which UML says with a second ring. */
+.uml-state .uml-state-final { fill: none; stroke: var(--border); stroke-width: 1; }
+/* Where an instance is created: UML's filled disc and its arrow, at the left edge. */
+.uml-state .uml-state-start { fill: var(--text); stroke: none; }
+.uml-state .uml-state-start-arrow { stroke: var(--text); stroke-width: 1.4; fill: none; }
+.uml-state.invalid .uml-state-box { stroke: #d93025; stroke-dasharray: 4 3; }
+
+/* A transition is directed and an association is not, which is the whole reason one
+   carries an arrowhead and the other does not. */
+.uml-transition-line { stroke: var(--text); stroke-width: 1.3; }
+.uml-transition-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; }
+
+/* The palette's marks for this notation. */
+.uml-pi-state::before { content: "▢"; }
+.uml-pi-transition::before { content: "→"; }
 .uml-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
 
 /* A store is kept visibly unlike a class, because it is not one: a cylinder, joined

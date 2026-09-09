@@ -410,3 +410,125 @@ func TestCheckDataFlowStoresNeedAVocabulary(t *testing.T) {
 		t.Errorf("an unmodelled application produced %+v", ps)
 	}
 }
+
+// --- lifecycles (ADR-0259) -------------------------------------------------
+//
+// The data state a process writes resolves against the class's lifecycle exactly as
+// its itemSubjectRef resolves against a class. Both checks are warnings and neither
+// refuses a deploy: a model is routinely drawn before the vocabulary it names exists.
+
+// lifecycleVocabulary is the sales model with a lifecycle on Order.
+func lifecycleVocabulary(t *testing.T, lc *Lifecycle) *Vocabulary {
+	t.Helper()
+	m := orderModel()
+	for i := range m.Classes {
+		if m.Classes[i].Name == "Order" {
+			m.Classes[i].Lifecycle = lc
+		}
+	}
+	if res := Validate(m); !res.Valid {
+		t.Fatalf("fixture model is invalid: %v", findingCodes(res))
+	}
+	return NewVocabulary([]Model{m})
+}
+
+// The fixture seeds `order` in "received" and writes it to "approved".
+func receivedToApproved() *Lifecycle {
+	return &Lifecycle{
+		States: []LifecycleState{
+			{Name: "received", Initial: true}, {Name: "approved"}, {Name: "shipped", Final: true},
+		},
+		Transitions: []LifecycleTransition{
+			{ID: "t1", From: "received", To: "approved"},
+			{ID: "t2", From: "approved", To: "shipped"},
+		},
+	}
+}
+
+func TestCheckDataFlowLifecycleClean(t *testing.T) {
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, receivedToApproved()))
+	by := problemsByRule(ps)
+	for _, rule := range []string{RuleDataUnknownState, RuleDataIllegalTransition} {
+		if len(by[rule]) != 0 {
+			t.Errorf("%s on a lifecycle the process obeys: %+v", rule, by[rule])
+		}
+	}
+}
+
+// A class with no lifecycle is the normal case: the data state stays the free string
+// BPMN made it, and nothing is said about it.
+func TestCheckDataFlowWithoutALifecycleSaysNothingAboutStates(t *testing.T) {
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), salesVocabulary(t))
+	by := problemsByRule(ps)
+	if len(by[RuleDataUnknownState])+len(by[RuleDataIllegalTransition]) != 0 {
+		t.Errorf("a class with no lifecycle drew a state finding: %+v", ps)
+	}
+}
+
+// The typo check, and the one that will find something on the first real application.
+func TestCheckDataFlowUnknownState(t *testing.T) {
+	lc := receivedToApproved()
+	lc.States[1].Name = "Approved" // the process writes "approved"
+	lc.Transitions[0].To, lc.Transitions[1].From = "Approved", "Approved"
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc))
+	by := problemsByRule(ps)
+	if len(by[RuleDataUnknownState]) != 1 {
+		t.Fatalf("want one unknown-state, got %+v", by[RuleDataUnknownState])
+	}
+	p := by[RuleDataUnknownState][0]
+	if p.Severity != compiler.SeverityWarning {
+		t.Errorf("severity = %v, want a warning — a lifecycle is drawn after the process", p.Severity)
+	}
+	// It has to name the state, or the reader is left diffing two lists by eye.
+	if !strings.Contains(p.Message, "approved") || !strings.Contains(p.Message, "Order") {
+		t.Errorf("message names neither the state nor the class: %q", p.Message)
+	}
+}
+
+// The object's seeded state is resolved too: an object created in a state the class
+// does not declare is the same defect one step earlier.
+func TestCheckDataFlowUnknownInitialState(t *testing.T) {
+	lc := receivedToApproved()
+	lc.States[0].Name = "neu" // the process seeds "received"
+	lc.Transitions[0].From = "neu"
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc))
+	found := false
+	for _, p := range problemsByRule(ps)[RuleDataUnknownState] {
+		if strings.Contains(p.Message, "received") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the seeded state was not resolved: %+v", ps)
+	}
+}
+
+// A move the lifecycle does not allow, where it does declare both ends.
+func TestCheckDataFlowIllegalTransition(t *testing.T) {
+	lc := receivedToApproved()
+	lc.Transitions = []LifecycleTransition{{ID: "t2", From: "approved", To: "shipped"}}
+	ps := CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc))
+	by := problemsByRule(ps)
+	if len(by[RuleDataIllegalTransition]) != 1 {
+		t.Fatalf("want one illegal-transition, got %+v", by[RuleDataIllegalTransition])
+	}
+	p := by[RuleDataIllegalTransition][0]
+	if p.Severity != compiler.SeverityWarning {
+		t.Errorf("severity = %v, want a warning", p.Severity)
+	}
+	if !strings.Contains(p.Message, "received") || !strings.Contains(p.Message, "approved") {
+		t.Errorf("the message names neither end of the move it refuses: %q", p.Message)
+	}
+}
+
+// A state the lifecycle does not declare is reported once, as unknown — not twice,
+// with a second complaint that no transition reaches the thing that is not there.
+func TestCheckDataFlowUnknownStateIsNotAlsoAnIllegalTransition(t *testing.T) {
+	lc := receivedToApproved()
+	lc.States = lc.States[:1] // only "received" survives
+	lc.Transitions = nil
+	by := problemsByRule(CheckDataFlow(writerProcess(t, "Order", ""), lifecycleVocabulary(t, lc)))
+	if len(by[RuleDataIllegalTransition]) != 0 {
+		t.Errorf("an undeclared state was reported twice: %+v", by[RuleDataIllegalTransition])
+	}
+}

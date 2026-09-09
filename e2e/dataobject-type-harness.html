@@ -40,7 +40,7 @@
   </bpmn:itemDefinition>
   <bpmn:process id="sales" name="Sales" isExecutable="true">
     <bpmn:dataObject id="DO_order" name="order" itemSubjectRef="Order"/>
-    <bpmn:dataObjectReference id="Ref_order" name="order" dataObjectRef="DO_order"/>
+    <bpmn:dataObjectReference id="Ref_order" name="order" dataObjectRef="DO_order"><bpmn:dataState name="approved"/></bpmn:dataObjectReference>
     <bpmn:dataObject id="DO_claim" name="claim" itemSubjectRef="Claim"/>
     <bpmn:dataObjectReference id="Ref_claim" name="claim" dataObjectRef="DO_claim"/>
     <bpmn:dataObject id="DO_note" name="note"/>
@@ -69,7 +69,9 @@
 </bpmn:definitions>`;
 
       // The vocabulary the Type field points at: a class with a business key and one
-      // without, so the card has both readings to show.
+      // without, so the card has both readings to show — and a lifecycle on one of them,
+      // because the Data state field offers what its class declares (ADR-0259) and can
+      // only be shown to do that against a class that declares something.
       const MODEL = {
         id: "m1", name: "Sales data", documentation: "", revision: 3, associations: [], stores: [],
         classes: [
@@ -77,7 +79,18 @@
             attributes: [
               { name: "id", type: "string", multiplicity: "1" },
               { name: "total", type: "number", multiplicity: "0..1" },
-            ] },
+            ],
+            lifecycle: {
+              states: [
+                { name: "received", initial: true, x: 0, y: 0 },
+                { name: "approved", x: 0, y: 80 },
+                { name: "shipped", final: true, x: 0, y: 160 },
+              ],
+              transitions: [
+                { id: "t1", name: "approve", from: "received", to: "approved" },
+                { id: "t2", name: "ship", from: "approved", to: "shipped" },
+              ],
+            } },
           { id: "c2", name: "Customer", stereotype: "businessObject", identity: [],
             attributes: [{ name: "name", type: "string", multiplicity: "1" }] },
         ],

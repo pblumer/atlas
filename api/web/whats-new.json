@@ -2,6 +2,51 @@
   "generatedAt": "2026-09-08",
   "entries": [
     {
+      "id": "a-class-says-which-states-its-instances-move-through-and-the",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A business object can now say which states it moves through",
+        "de": "Ein Geschäftsobjekt sagt jetzt selbst, welche Zustände es durchläuft"
+      },
+      "summary": {
+        "en": "BPMN lets a data object carry a state — order [received] → [approved] — but never said which states exist or which may follow which, so it was a string somebody typed and got right from memory. A business object in your information model can now declare its own lifecycle: the states it moves through, where instances start, where they end. Draw it once and the Modeler offers those states instead of an empty box, the Problems panel says when a process writes one that does not exist, and the class a data object is is picked from a list rather than remembered.",
+        "de": "BPMN erlaubt einem Datenobjekt einen Zustand — Bestellung [erfasst] → [freigegeben] —, hat aber nie gesagt, welche Zustände es gibt und welcher auf welchen folgen darf: Es war eine Zeichenkette, die jemand aus dem Gedächtnis richtig tippen musste. Ein Geschäftsobjekt im Informationsmodell kann jetzt seinen eigenen Lebenszyklus erklären: die Zustände, die es durchläuft, wo Instanzen beginnen und wo sie enden. Einmal gezeichnet, bietet der Modeler genau diese Zustände an statt eines leeren Feldes, die Problemliste meldet einen Zustand, den es nicht gibt, und die Klasse eines Datenobjekts wird aus einer Liste gewählt statt erinnert."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, pick an information model and click a business object on the canvas.",
+          "In its panel, under Lifecycle, choose \"Draw a lifecycle\".",
+          "Add states from the palette on the left; the first one is marked as where instances start. Mark the ones nothing leaves as final.",
+          "Click the transition tool, then two states in turn, to draw the move from one to the other. Save.",
+          "Open a process in the Modeler, select a data object, and set its Type to that class — its Data state is now a list of exactly those states."
+        ],
+        "de": [
+          "Unter Daten ein Informationsmodell öffnen und auf der Zeichenfläche ein Geschäftsobjekt anklicken.",
+          "Im Panel unter Lebenszyklus auf „Lebenszyklus zeichnen“ klicken.",
+          "Zustände über die Palette links hinzufügen; der erste ist als Startzustand markiert. Zustände, die nichts mehr verlässt, als final markieren.",
+          "Das Übergangs-Werkzeug wählen und nacheinander zwei Zustände anklicken, um den Übergang zu zeichnen. Speichern.",
+          "Im Modeler einen Prozess öffnen, ein Datenobjekt auswählen und als Typ diese Klasse setzen — der Datenzustand ist nun eine Liste genau dieser Zustände."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
       "version": "Unreleased",
       "date": null,
@@ -314,49 +359,6 @@
           "de": "Operations öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "an-incident-that-says-no-worker-registered-as-x-can-now-crea",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Create the missing Worker from the incident itself",
-        "de": "Den fehlenden Worker direkt am Incident anlegen"
-      },
-      "summary": {
-        "en": "A task parked on \"no worker registered as X\" says what is wrong with it — nobody has configured X — and until now the only thing on offer was a link to the Console, where you had to remember the name and the Worker Type, create it, navigate back and resolve. The incident now creates it: the same Worker dialog opens with the name and the Worker Type the model states, already filled in and not yours to mistype, and \"Add & retry\" writes it and hands the parked task one more attempt.",
-        "de": "Eine Aufgabe, die auf «no worker registered as X» geparkt ist, nennt ihr Problem bereits — niemand hat X konfiguriert. Angeboten wurde bisher nur ein Link in die Konsole: Name und Worker Type merken, anlegen, zurücknavigieren, auflösen. Jetzt entsteht der Worker am Incident selbst. Es öffnet sich derselbe Worker-Dialog, mit Name und Worker Type aus dem Modell bereits eingetragen und nicht vertippbar, und «Add & retry» legt ihn an und gibt der geparkten Aufgabe einen weiteren Versuch."
-      },
-      "link": {
-        "label": "ADR-0160",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0160-fix-the-connector-from-the-incident.md"
-      },
-      "tags": [
-        "Operations",
-        "Workers"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations › Incidents, or the live diagram of the stuck instance.",
-          "On an incident whose chip reads \"— not configured\", click ⚙ Create worker…",
-          "Fill in what it takes to reach the target — endpoint, credential reference, provider. The name and the Worker Type are already set.",
-          "Press \"Add & retry\" to create it and retry the parked task in one step, or \"Add worker\" to create it and leave the incident open."
-        ],
-        "de": [
-          "Betrieb › Incidents öffnen, oder das Live-Diagramm der hängenden Instanz.",
-          "Bei einem Incident, dessen Chip «— not configured» zeigt, auf ⚙ Create worker… klicken.",
-          "Eintragen, was zum Erreichen des Ziels nötig ist — Endpunkt, Credential-Referenz, Provider. Name und Worker Type stehen bereits fest.",
-          "«Add & retry» legt den Worker an und wiederholt die geparkte Aufgabe in einem Schritt; «Add worker» legt ihn an und lässt den Incident offen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Incidents",
-          "de": "Incidents öffnen"
-        },
-        "route": "#/operations/incidents"
       }
     }
   ]
