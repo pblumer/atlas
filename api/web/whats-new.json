@@ -138,8 +138,8 @@
         "de": "Script-Worker und Interpreter starten neu mit eingeschränkten Umgebungen; ihr Token erreicht nur noch die Worker-API. Bestehende Scripts bleiben aktiv, solange nicht alle Sprachen ausgeschaltet werden."
       },
       "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "label": "ADR-0297",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0297-confine-internal-worker-token.md"
       },
       "tags": [
         "Security",

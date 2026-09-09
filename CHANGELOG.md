@@ -94,7 +94,7 @@ _Changed_ / _Removed_ for each version.
   cannot read processes, instances or tasks. The existing PowerShell, Python and
   JavaScript switches now reach the supervised worker as well; disabling all three parks
   script jobs without starting an arbitrary-code worker.
-  ([ADR-draft-confine-internal-worker-token](docs/adr/draft-confine-internal-worker-token.md))
+  ([ADR-0297](docs/adr/0297-confine-internal-worker-token.md))
 
 ## [0.6.0] — 2026-09-09
 
