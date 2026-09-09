@@ -1,6 +1,7 @@
 # ADR-0006: Partition routing and cross-partition communication
 
 - **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

@@ -1,6 +1,7 @@
 # ADR-0153: SCIM 2.0 provisioning connector
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0184: Grant audit log
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-25
 - **Deciders:** Pat, Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0064: Timer FEEL-failure incidents — park and raise instead of firing immediately
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-25
 - **Deciders:** Atlas engine team
 

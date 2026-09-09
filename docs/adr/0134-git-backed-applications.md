@@ -1,6 +1,7 @@
 # ADR-0134: Git-backed applications — a repository as an application's source of truth
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-17
 - **Deciders:** Atlas maintainers
 

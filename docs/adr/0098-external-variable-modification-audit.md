@@ -1,6 +1,7 @@
 # ADR-0098: Audit trail for external variable modifications
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 

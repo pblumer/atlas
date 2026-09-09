@@ -1,6 +1,7 @@
 # ADR-0197: A throttle on the login, and a security audit trail
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-26
 - **Deciders:** Atlas maintainers
 

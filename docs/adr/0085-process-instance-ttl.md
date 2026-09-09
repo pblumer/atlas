@@ -1,6 +1,7 @@
 # ADR-0085: Process-instance TTL — self-cleaning via the due-timer index
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

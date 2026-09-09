@@ -1,6 +1,7 @@
 # ADR-0265: Signing in does not wait for the run loop
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine team
 

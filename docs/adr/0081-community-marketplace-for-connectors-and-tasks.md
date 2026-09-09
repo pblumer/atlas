@@ -1,6 +1,7 @@
 # ADR-0081: A community marketplace for connectors, service tasks, and script tasks
 
 - **Status:** Proposed
+- **Implementation:** Partial
 - **Date:** 2026-07-29
 - **Deciders:** Atlas maintainers
 

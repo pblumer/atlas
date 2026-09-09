@@ -1,6 +1,7 @@
 # ADR-0018: Test-driven development as the default workflow
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Core team
 

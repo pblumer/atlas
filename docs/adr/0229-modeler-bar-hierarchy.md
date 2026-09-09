@@ -1,6 +1,7 @@
 # ADR-0229: The Modeler's editor bar carries two acts and a menu
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Modeler UI
 

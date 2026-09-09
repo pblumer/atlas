@@ -1,6 +1,7 @@
 # ADR-0168: Moving a connector onto a worker — where the task detail travels, and where the credential lives
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 

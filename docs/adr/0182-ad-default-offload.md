@@ -1,6 +1,7 @@
 # ADR-0182: Active Directory runs on a worker by default
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-25
 - **Deciders:** Atlas maintainers
 

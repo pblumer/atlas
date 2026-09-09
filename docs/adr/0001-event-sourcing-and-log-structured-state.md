@@ -1,6 +1,7 @@
 # ADR-0001: Event sourcing and log-structured state
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-06-11
 - **Deciders:** Core team
 

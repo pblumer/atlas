@@ -1,6 +1,7 @@
 # ADR-0096: Token simulation — event triggers, inclusive gateways, and an auto-decide mode
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-06
 - **Deciders:** Atlas maintainers
 

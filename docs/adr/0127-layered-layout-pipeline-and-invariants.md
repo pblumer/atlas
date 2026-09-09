@@ -1,6 +1,7 @@
 # ADR-0127: A layered layout pipeline and executable layout invariants
 
 - **Status:** Accepted (amended 2026-08-17 and 2026-08-18 — phases 2 and 3 were each measured before
+- **Implementation:** Landed
   being built, and each mostly dropped in favour of a smaller fix; see the amendment notes below).
   Invariant gate and phases 0–3 in place, phases 2 and 3 *as amended*
 - **Date:** 2026-08-17

@@ -1,6 +1,7 @@
 # ADR-0092: One-click clio credential provisioning
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

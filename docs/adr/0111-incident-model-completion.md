@@ -1,6 +1,7 @@
 # ADR-0111: Completing the incident model — retry backoff and timer-FEEL failure incidents
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
 

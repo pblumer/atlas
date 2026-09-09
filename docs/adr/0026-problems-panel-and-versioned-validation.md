@@ -1,6 +1,7 @@
 # ADR-0026: A Problems panel with validation targeted at an engine version
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

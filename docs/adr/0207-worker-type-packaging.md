@@ -1,6 +1,7 @@
 # ADR-0207: Package Worker Types as signed external runtime artifacts
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-28
 - **Deciders:** Atlas maintainers
 

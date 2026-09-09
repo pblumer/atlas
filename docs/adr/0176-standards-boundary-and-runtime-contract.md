@@ -1,6 +1,7 @@
 # ADR-0176: Standards boundary and the Atlas runtime contract
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-24
 - **Deciders:** Atlas maintainers
 

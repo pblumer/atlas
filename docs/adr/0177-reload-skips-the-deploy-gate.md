@@ -1,6 +1,7 @@
 # ADR-0177: Reload skips the deploy-time validation gate
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-24
 - **Deciders:** Atlas maintainers
 

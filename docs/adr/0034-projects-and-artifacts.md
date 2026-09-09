@@ -1,6 +1,7 @@
 # ADR-0034: Projects as containers for heterogeneous artifacts
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0086: Gateway conditions resolve over the scope chain
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas maintainers
 

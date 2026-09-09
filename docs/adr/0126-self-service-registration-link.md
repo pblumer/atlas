@@ -1,6 +1,7 @@
 # ADR-0126: Self-service registration link on the login screen
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas maintainers
 

@@ -1,6 +1,7 @@
 # ADR-0187: Database change events — captured in the database, read on a worker, deduplicated in the engine
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-25
 - **Deciders:** Atlas maintainers
 

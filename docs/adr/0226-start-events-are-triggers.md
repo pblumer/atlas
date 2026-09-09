@@ -1,6 +1,7 @@
 # ADR-0226: A start event is a trigger, and the one that fires is the one that starts
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-02
 - **Deciders:** Atlas maintainers
 

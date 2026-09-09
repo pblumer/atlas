@@ -1,6 +1,7 @@
 # ADR-0120: Mockup (engine-simulated) service tasks
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas engine team
 

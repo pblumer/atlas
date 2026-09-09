@@ -1,6 +1,7 @@
 # ADR-0266: The runtime counts leave the run loop, and take the write paths with them
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas engine team
 

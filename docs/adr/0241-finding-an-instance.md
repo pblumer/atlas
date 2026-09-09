@@ -1,6 +1,7 @@
 # ADR-0241: Finding an instance — a key lookup and a per-definition index
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-03
 - **Deciders:** Atlas engine team
 

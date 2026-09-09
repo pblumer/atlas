@@ -2,6 +2,9 @@
 
 <!--
 Copy this file to docs/adr/draft-<slug>.md and leave the heading as ADR-DRAFT.
+Status says whether the decision holds; Implementation says whether it is built.
+A new record is normally Proposed / Not started. `Landed` requires `Accepted`:
+see README.md § The two states of a record.
 Do not pick a number and do not add a row to README.md's index: the number is
 assigned when the record lands on main (`make adr-number`), which also fixes the
 heading, adds the index row, and rewrites every ADR-draft-<slug> citation. See
@@ -9,6 +12,7 @@ README.md § Writing a record.
 -->
 
 - **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Deprecated
+- **Implementation:** Not started | Partial | Landed | Superseded
 - **Date:** YYYY-MM-DD
 - **Deciders:** names/roles
 - **Open question:** what this record could not settle, if anything — delete this line and the next when there is nothing

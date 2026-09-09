@@ -1,6 +1,7 @@
 # ADR-0011: Single-binary distribution with an embedded web viewer and editor
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Atlas maintainers
 

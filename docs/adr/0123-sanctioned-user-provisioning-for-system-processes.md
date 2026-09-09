@@ -1,6 +1,7 @@
 # ADR-0123: A sanctioned automated user-provisioning path for system processes
 
 - **Status:** Accepted (amended 2026-08-14 — the shipped default flipped from opt-in to opt-out; see the amendment note below)
+- **Implementation:** Landed
 - **Date:** 2026-08-13
 - **Deciders:** Atlas maintainers
 

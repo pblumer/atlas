@@ -1,6 +1,7 @@
 # ADR-0216: Mockups are one view, not one per kind
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 

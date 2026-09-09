@@ -1,6 +1,7 @@
 # ADR-0204: Hosted apps — user HTML/JS served from an isolated origin
 
 - **Status:** Proposed
+- **Implementation:** Not started
 - **Date:** 2026-08-27
 - **Deciders:** Atlas maintainers
 

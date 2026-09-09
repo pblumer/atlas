@@ -1,6 +1,7 @@
 # ADR-0255: An agent model is a Console Worker — the one field that is not a secret
 
 - **Status:** Accepted (amended 2026-09-07: the model named on the Worker is the *default*; a task or an agent container may name its own — [ADR-0256](0256-the-model-is-authored-the-provider-is-configured.md))
+- **Implementation:** Landed
 - **Date:** 2026-09-06
 - **Deciders:** Atlas engine team
 

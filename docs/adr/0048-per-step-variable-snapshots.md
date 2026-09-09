@@ -1,6 +1,7 @@
 # ADR-0048: Per-step variable snapshots in the single-process replay
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-24
 - **Deciders:** Atlas maintainers
 

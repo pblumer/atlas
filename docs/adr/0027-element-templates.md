@@ -1,6 +1,7 @@
 # ADR-0027: Element templates for pre-configured, reusable elements
 
 - **Status:** Proposed
+- **Implementation:** Partial
 - **Date:** 2026-07-23
 - **Deciders:** Atlas maintainers
 

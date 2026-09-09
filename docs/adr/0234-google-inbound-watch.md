@@ -1,6 +1,7 @@
 # ADR-0234: Google Sheets and Drive as inbound event sources — a polled row watch and a polled folder watch
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-03
 - **Deciders:** Atlas maintainers
 

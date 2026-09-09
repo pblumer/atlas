@@ -1,6 +1,7 @@
 # ADR-0148: Org-wide brand logo
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-19
 - **Deciders:** Atlas maintainers
 

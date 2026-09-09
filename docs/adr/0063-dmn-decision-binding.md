@@ -1,6 +1,7 @@
 # ADR-0063: DMN decision binding (latest vs deployment)
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-25
 - **Deciders:** Atlas maintainers
 

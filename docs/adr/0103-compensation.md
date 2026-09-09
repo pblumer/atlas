@@ -1,6 +1,7 @@
 # ADR-0103: Compensation and compensation handlers
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-07
 - **Deciders:** Atlas engine team
 

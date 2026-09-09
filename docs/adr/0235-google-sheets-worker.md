@@ -1,6 +1,7 @@
 # ADR-0235: Google Sheets as a Worker Type — a spreadsheet is a process data source
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-03
 - **Deciders:** Atlas maintainers
 

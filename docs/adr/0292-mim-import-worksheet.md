@@ -1,6 +1,7 @@
 # ADR-0292: A MIM import hands over its rows as data, and counts them as work
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
 - **Open question:** MIMWAL's grid column semantics are not established from its own

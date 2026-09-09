@@ -1,6 +1,7 @@
 # ADR-0281: A role change takes effect on the next request, not the next login
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-09-07
 - **Deciders:** Atlas maintainers
 

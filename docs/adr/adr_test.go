@@ -143,8 +143,11 @@ func TestADRIndexMatchesDirectory(t *testing.T) {
 			t.Errorf("README row for ADR-%04d has title %q, but %s declares %q — the index carries the record's title, not a summary of it",
 				a.Num, r.title, a.Name, a.Title)
 		}
-		if got, want := baseStatus(r.status), baseStatus(a.Status); got != want {
+		if got, want := BaseStatus(r.status), BaseStatus(a.Status); got != want {
 			t.Errorf("README row for ADR-%04d says status %q, but %s says %q", a.Num, got, a.Name, want)
+		}
+		if r.implementation != a.Implementation {
+			t.Errorf("README row for ADR-%04d says implementation %q, but %s says %q", a.Num, r.implementation, a.Name, a.Implementation)
 		}
 		delete(indexed, a.Num)
 	}
@@ -204,17 +207,18 @@ func indexRows(t *testing.T, readme string) []indexRow {
 		if err != nil {
 			t.Fatalf("index row %q: %v", line, err)
 		}
-		rows = append(rows, indexRow{num: num, link: m[2], title: m[3], status: m[4]})
+		rows = append(rows, indexRow{num: num, link: m[2], title: m[3], status: m[4], implementation: m[5]})
 	}
 	return rows
 }
 
 // indexRow is one row of README.md's index table.
 type indexRow struct {
-	num    int
-	link   string
-	title  string
-	status string
+	num            int
+	link           string
+	title          string
+	status         string
+	implementation string
 }
 
 // TestADRReferencesResolve checks that every link between records points at a file
@@ -307,16 +311,6 @@ func TestCitationsResolveAcrossTheRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("walk repository: %v", err)
 	}
-}
-
-// baseStatus strips a status's parenthetical. The index deliberately abbreviates
-// "Accepted (amended 2026-08-17: …)" to "Accepted (amended)", so only the status
-// word itself — Proposed, Accepted, Superseded, Deprecated — is comparable.
-func baseStatus(s string) string {
-	if i := strings.Index(s, "("); i >= 0 {
-		s = s[:i]
-	}
-	return strings.TrimSpace(s)
 }
 
 // mustRel is only ever called with a path the walk produced under root.

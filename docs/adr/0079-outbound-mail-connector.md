@@ -1,6 +1,7 @@
 # ADR-0079: An outbound mail connector (SMTP first)
 
 - **Status:** Accepted (amended)
+- **Implementation:** Landed
 - **Date:** 2026-07-29
 - **Deciders:** Atlas engine team
 

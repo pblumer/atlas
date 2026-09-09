@@ -1,6 +1,7 @@
 # ADR-0071: Sharing scopes — private and shared access boundaries for design-time work
 
 - **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-07-28
 - **Deciders:** Atlas maintainers
 

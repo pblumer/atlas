@@ -1,6 +1,7 @@
 # ADR-0191: TLS 1.3 in the binary — an optional listener with operator-supplied certificates
 
 - **Status:** Accepted (2026-08-31: implemented — the optional TLS 1.3 listener, the
+- **Implementation:** Landed
   plaintext loopback hop, and `--tls-ca` for the client side, which is how the first
   of the three questions below was answered; see the acceptance note)
 - **Date:** 2026-08-26
