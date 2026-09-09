@@ -1,6 +1,6 @@
 # ADR-0018: Test-driven development as the default workflow
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-09 — the floor stands at 94% for now; see the amendment below)
 - **Implementation:** Landed
 - **Date:** 2026-07-22
 - **Deciders:** Core team
@@ -47,6 +47,41 @@ We deliberately did **not** adopt option 3 (a hard per-change coverage-delta gat
 - **Positive:** Behavior is pinned before it exists, so tests describe intent rather than implementation. Recovery and error paths get first-class coverage because they are written first. The 95% floor makes coverage regressions a visible CI failure instead of silent drift. New contributors have an unambiguous answer to "when do I write the test?".
 - **Negative / trade-offs accepted:** Slightly more up-front effort per change, and occasional friction when a genuinely untestable-without-refactor path meets the coverage floor — handled by the stated-exception escape hatch, not by lowering the bar silently. A repo-wide floor can hide a poorly-covered new package behind well-covered old ones; reviewers still check that *new* code carries its own tests.
 - **Follow-ups / risks to watch:** Wire the 95% floor into CI as an explicit check. Watch for coverage theatre in review — a covered line with no meaningful assertion is worse than an honest gap. Revisit the floor if it ever pushes contributors toward contrived tests instead of better design.
+
+## Amendment (2026-09-09): the floor stands at 94%, and the number it checks was wrong
+
+Two things came to light together, and only one of them is about the floor.
+
+**The measurement was not reproducible.** `check-coverage.sh` summed every line of the
+merged coverage profile, and a merged profile may list the same block more than once —
+so those statements were counted twice on both sides of the ratio. It is not
+hypothetical: two runs over an unchanged tree reported 95.0062% (39610/41692) and
+95.0132% (39706/41790), the entire difference being 36 blocks of one package appearing
+twice in the second profile. Counted per block, both runs report 95.0062%. The script
+now keys its sums by block, which is the arithmetic this record always meant.
+
+**The margin is two statements.** With the number stable, the repository sits at
+95.0062% — two covered statements above its own floor, out of 41692. That is not a
+floor any more. The next merge that brings a handful of uncovered lines turns `make
+cover` red, and it does so on whichever change happens to be next rather than on the
+one that spent the margin; the pressure that creates is to write something that
+executes the lines and asserts nothing, which is precisely the coverage theatre the
+decision above rejects. This record's own follow-up anticipated it: *revisit the floor
+if it ever pushes contributors toward contrived tests instead of better design.*
+
+So the floor is 94% until the gap is closed — about 420 statements of headroom, enough
+that a failure again means somebody actually dropped the net rather than that they
+merged on the wrong day.
+
+**What has not changed:** test-driven development is still the default, tests are still
+written first, and 95% is still what this repository intends to hold. The floor is the
+alarm, not the target, and an alarm that fires on the innocent gets ignored.
+
+**What raises it back:** the uncovered blocks are not spread evenly — `api/` carries
+roughly 300 of them, ahead of `engine/` (50) and `playground/` (40). When the repo-wide
+number holds comfortably above 95% again — say thirty statements of margin, sustained
+across a few merges — the floor goes back to 95 in one line, and this amendment records
+that it was always meant to.
 
 ## Pros and cons of the options
 
