@@ -25,6 +25,9 @@ cross — because at 16px the shipped weights close up.
 Keep it that way wherever the name is set as a wordmark. `ATLAS` in the
 codebase is only an environment-variable prefix and is never the mark.
 
+**The card is set in English.** It is read wherever the repository link is
+pasted, so the copy stays in English even where the surrounding docs are not.
+
 ## Files
 
 | File | What it is |
