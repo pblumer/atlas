@@ -454,7 +454,7 @@ func TestFolderFiltersOnInstanceAge(t *testing.T) {
 	// for both tasks and "more than a day" for neither.
 	fresh := createFolder(t, ts, `{"name":"Frisch","rule":{"match":"all","conditions":[`+
 		`{"field":"instanceAge","op":"newerThan","value":"1","unit":"d"}]}}`)
-	if fresh.FEEL != `instanceCreatedAt > now() - duration("P1D")` {
+	if fresh.FEEL != `instanceCreatedAt > scanAt - duration("P1D")` {
 		t.Errorf("generated FEEL = %q", fresh.FEEL)
 	}
 	got, _ := listTasks(t, ts, "/api/v1/tasks?folder="+fresh.ID)
@@ -472,7 +472,7 @@ func TestFolderFiltersOnInstanceAge(t *testing.T) {
 	// An hours-based bound generates the other duration form and reads the same way.
 	hours := createFolder(t, ts, `{"name":"Letzte Stunde","rule":{"match":"all","conditions":[`+
 		`{"field":"instanceAge","op":"newerThan","value":"1","unit":"h"}]}}`)
-	if hours.FEEL != `instanceCreatedAt > now() - duration("PT1H")` {
+	if hours.FEEL != `instanceCreatedAt > scanAt - duration("PT1H")` {
 		t.Errorf("hours FEEL = %q", hours.FEEL)
 	}
 	code, body := doReq(t, ts, http.MethodGet, "/api/v1/task-folders/counts", "", "")
