@@ -137,6 +137,11 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"update dmnref (authorizeArtifact source)", "PATCH", "/api/v1/dmnrefs/r1", `{"name":"X"}`},
 		{"create dmnref (authorizeTargetProject)", "POST", "/api/v1/dmnrefs", `{"name":"N","modelRef":"m","projectId":"pdir"}`},
 		{"create draft (authorizeTargetProject)", "POST", "/api/v1/drafts?projectId=pdir", scopeBPMN("newp")},
+		// A XOML import is a draft save with a converter in front of it, so it goes
+		// through the same authorization and fails the same way when the project it
+		// files into cannot be read (ADR-0071).
+		{"import MIM (authorizeTargetProject)", "POST", "/api/v1/imports/mim?name=newmim&projectId=pdir",
+			`<SequentialWorkflow><NotificationActivity Description="Notify"/></SequentialWorkflow>`},
 		{"move draft into target (authorizeTargetProject)", "PATCH", "/api/v1/drafts/d2", `{"projectId":"pdir"}`},
 		// Opening a Playground sandbox on a draft reads that draft, so it goes through
 		// the same authorization — and fails the same way when the project cannot be
@@ -170,6 +175,8 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 	}{
 		{"delete draft get error", "DELETE", "/api/v1/drafts/ddir", ""},
 		{"save draft existing-read error", "POST", "/api/v1/drafts", scopeBPMN("ddir")},
+		{"import MIM existing-read error", "POST", "/api/v1/imports/mim?name=ddir",
+			`<SequentialWorkflow><NotificationActivity Description="Notify"/></SequentialWorkflow>`},
 		{"move draft get error", "PATCH", "/api/v1/drafts/ddir", `{"projectId":""}`},
 		{"delete dmnref get error", "DELETE", "/api/v1/dmnrefs/rdir", ""},
 		{"update dmnref get error", "PATCH", "/api/v1/dmnrefs/rdir", `{"name":"x"}`},

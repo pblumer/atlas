@@ -446,7 +446,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a draft", tag: "Drafts", role: RoleModeler, status: http.StatusNoContent}},
 
 		{"POST", "/api/v1/imports/mim", s.handleImportMIM, apiOp{
-			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report)", tag: "Drafts", role: RoleModeler,
+			summary: "Import a MIM/FIM XOML workflow as a BPMN draft (with a per-node conversion report). ?projectId= files the draft into that application and needs editor on it; omitting it leaves a draft that already exists in the application it is in. ?from= (empty) says this is a new draft, so an import onto a process id another draft already holds is refused with 409 rather than replacing it (ADR-0222); omit it for the plain upsert-by-id an agent wants", tag: "Drafts", role: RoleModeler,
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 

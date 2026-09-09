@@ -32,7 +32,11 @@ const APPLICATIONS = [
 
 // installMock answers the console's surface and records every write, so a test can
 // prove which application the import named — the whole point of the dialog.
-function installMock(page) {
+//
+// taken makes the server answer as it does when the process id is already held: the
+// import that says it is a new draft is refused, the one that omits ?from= — the
+// deliberate replacement — is accepted (ADR-0222).
+function installMock(page, { taken = false } = {}) {
   const posts = [];
   page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -45,6 +49,11 @@ function installMock(page) {
       return route.fulfill({ json: APPLICATIONS });
     }
     if (url.pathname.endsWith("/api/v1/imports/mim")) {
+      if (taken && url.searchParams.has("from")) {
+        return route.fulfill({ status: 409, json: {
+          error: 'another draft already uses the process id "mim_301"',
+        } });
+      }
       return route.fulfill({ json: {
         processId: "mim_301", name: "301", savedAt: 1,
         report: { native: 1, preserved: 0, manualReview: 0, notes: [] },
@@ -148,4 +157,35 @@ test("an import started inside an application asks nothing and files itself ther
     .toContain("projectId=app-1");
   // The application is already known here, so no dialog was in the way of it.
   await expect(page.locator("#pick-opt")).toHaveCount(0);
+});
+
+test("a XOML import over a draft already held asks before replacing it", async ({ page }) => {
+  const posts = installMock(page, { taken: true });
+  await openOverview(page);
+  page.on("dialog", (d) => d.accept());
+  await startImport(page, "import-mim", xomlFile);
+  await page.locator("#pick-opt").selectOption({ label: "Sven's Stuff" });
+  await page.locator("[data-ok]").click();
+
+  // Two requests: the one that claimed a free id and was refused, then the
+  // replacement the author confirmed — which is the one that omits ?from=.
+  await expect.poll(() => posts.filter((p) => p.includes("/imports/mim")).length, { timeout: 10000 }).toBe(2);
+  const [claim, replace] = posts.filter((p) => p.includes("/imports/mim"));
+  expect(claim).toContain("from=");
+  expect(replace).not.toContain("from=");
+  expect(replace).toContain("projectId=app-1");
+});
+
+test("declining that question keeps the draft that was already there", async ({ page }) => {
+  const posts = installMock(page, { taken: true });
+  await openOverview(page);
+  page.on("dialog", (d) => d.dismiss());
+  await startImport(page, "import-mim", xomlFile);
+  await page.locator("#pick-opt").selectOption({ label: "Sven's Stuff" });
+  await page.locator("[data-ok]").click();
+
+  // The refused claim is the only request: nothing was replaced, and the author is
+  // told that rather than left to read an error and guess what became of the draft.
+  await expect(page.locator("#toast")).toContainText("cancelled");
+  expect(posts.filter((p) => p.includes("/imports/mim")).length).toBe(1);
 });

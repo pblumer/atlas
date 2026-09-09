@@ -213,6 +213,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A XOML import files its draft under the same rules a draft save does.** The
+  MIM/FIM import is a draft save with a converter in front of it, and the two had
+  drifted: it wrote where a plain save could not, and three things followed from
+  that.
+
+  **It replaced a draft it happened to land on, without asking.** A converted
+  workflow is keyed by its process id like any other draft, so importing a file
+  whose id something already held simply overwrote it — the surprise
+  [ADR-0222](docs/adr/0222-artifact-id-renames.md) removed from the
+  "Import file…" path, left standing on this one. It now uses the same protocol:
+  the import says it is a new draft, an id another draft already holds comes back
+  409, and the Modeler offers the replacement by name — "A draft with this
+  workflow's process id already exists. Replace it with this file?" — instead of
+  performing it unasked.
+
+  **A re-import carried the draft out of its application.** Naming no application
+  was read as "file it under none", so a corrected export imported from anywhere
+  that does not know an application moved the draft it replaced into *Not
+  assigned*. Only an explicit `?projectId=` moves an artifact now; omitting it
+  leaves a draft where it is, exactly as a draft save has always behaved. The same
+  gap reached the protected system application
+  ([ADR-0122](docs/adr/0122-protected-system-project-and-bootstrap-deployment.md)):
+  a workflow whose process id matched a platform process replaced it and carried it
+  out on the way. Both ends are checked now — writing into a protected application,
+  and taking a draft out of one.
+
+  **Filing into an application asked nothing.** The import checked only that the
+  application existed, so it was the one door into a private application that did
+  not ask for editor on it, and the draft it created carried no creator — which is
+  the "legacy artifact, no recorded creator" case, and made every ungrouped import
+  readable and writable by the whole server rather than personal to whoever ran it
+  ([ADR-0071](docs/adr/0071-sharing-scopes.md)).
+
 - **The replay's data-object list keeps its search, and an open state trail stays with
   its row.** Showing every list's filter row by default
   ([ADR-0286](docs/adr/0286-a-list-carries-its-own-search.md)) reached one list that was

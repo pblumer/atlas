@@ -2,8 +2,10 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -47,9 +49,20 @@ type mimImportResp struct {
 // per-node conversion report.
 //
 // It never deploys: the model lands as a draft the author reviews and deploys
-// deliberately, exactly like the "Import file…" path (handleSaveDraft). An
-// optional ?name= overrides the process name and ?projectId= files the draft
-// under a project (same validation as a normal draft save).
+// deliberately, exactly like the "Import file…" path (handleSaveDraft) — and it now
+// files that draft under the same rules, because an import is a draft save with a
+// converter in front of it and the two drifting apart is what let this one write
+// where a plain save could not.
+//
+// An optional ?name= overrides the process name. An optional ?projectId= files the
+// draft into that application, which needs editor on it like every other write to
+// one (ADR-0071); *omitting* it does not mean "file it under none" — a re-import of
+// a workflow already held leaves that draft in the application it is in, since only
+// an explicit target moves an artifact. An optional ?from= says this import is a new
+// draft rather than a deliberate replacement, so the process id it lands on has to
+// be free and one another draft already holds is refused with 409 instead of
+// silently overwriting it (ADR-0222); omitting it keeps the plain upsert-by-id the
+// MCP tools and scripted callers rely on.
 func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
 	if err != nil {
@@ -74,26 +87,92 @@ func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
 	}
 
 	projectID := r.URL.Query().Get("projectId")
-	rec := draft{ProcessID: pid, Name: name, ProjectID: projectID, SavedAt: time.Now().Unix(), XML: string(res.BPMN)}
+	hasProjectParam := r.URL.Query().Has("projectId")
+	claiming := r.URL.Query().Has("from") && strings.TrimSpace(r.URL.Query().Get("from")) != pid
+	takenMsg := fmt.Sprintf(
+		"another draft already uses the process id %q — import it as a replacement, or rename the workflow", pid)
+
+	// existing is the draft this import lands on. It decides three things: whether
+	// the id is free, which application the draft keeps when the request names none,
+	// and who owns it.
+	var (
+		existing draft
+		existed  bool
+		getErr   error
+	)
+	s.do(func() { existing, existed, getErr = s.drafts.Get(pid) })
+	if getErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read draft: "+getErr.Error())
+		return
+	}
+	if claiming && existed {
+		httpapi.Error(w, http.StatusConflict, takenMsg)
+		return
+	}
+	// Replacing a draft is a write to whatever governs it today (ADR-0071).
+	if existed {
+		if code, msg := s.authorizeArtifact(r, existing.ProjectID, existing.OwnerID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	destProjectID := existing.ProjectID
+	if hasProjectParam {
+		destProjectID = projectID
+	}
+	if destProjectID != "" && (hasProjectParam || !existed) {
+		if code, msg := s.authorizeTargetProject(r, destProjectID, ScopeRoleEditor); code != 0 {
+			httpapi.Error(w, code, msg)
+			return
+		}
+	}
+	// Preserve the original creator on a replacement; stamp the importer on a new
+	// draft, so an ungrouped import is that person's personal space (ADR-0071) rather
+	// than the ownerless, open artifact an empty creator means.
+	ownerID := existing.OwnerID
+	if !existed {
+		ownerID = s.artifactOwnerOnCreate(r)
+	}
+
+	rec := draft{
+		ProcessID: pid, Name: name, ProjectID: destProjectID, OwnerID: ownerID,
+		SavedAt: time.Now().Unix(), XML: string(res.BPMN),
+	}
 	var (
 		saveErr, projErr error
-		unknownProject   bool
 		protectedProject bool
+		taken            bool
 	)
 	s.do(func() {
-		if projectID != "" {
-			proj, ok, e := s.projects.Get(projectID)
+		// A protected system project's content is platform-managed (ADR-0122), and
+		// effectiveRole grants admins and owners a role on it, so this is the backstop
+		// the scope check defers to — at both ends: writing into one, and carrying a
+		// draft out of one, which naming no application would otherwise do.
+		checked := ""
+		for _, id := range [...]string{existing.ProjectID, rec.ProjectID} {
+			if id == "" || id == checked {
+				continue
+			}
+			checked = id
+			proj, ok, e := s.projects.Get(id)
 			if e != nil {
 				projErr = e
 				return
 			}
-			if !ok {
-				unknownProject = true
+			if ok && proj.Protected {
+				protectedProject = true
 				return
 			}
-			// A protected system project's content is platform-managed (ADR-0122).
-			if proj.Protected {
-				protectedProject = true
+		}
+		// Re-check the id inside the writer's turn: the read above happened in an
+		// earlier turn, so a concurrent save could have claimed it since. Losing that
+		// race must refuse, not overwrite.
+		if claiming {
+			if _, ok, e := s.drafts.Get(pid); e != nil {
+				projErr = e
+				return
+			} else if ok {
+				taken = true
 				return
 			}
 		}
@@ -102,10 +181,10 @@ func (s *Server) handleImportMIM(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case projErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read project: "+projErr.Error())
-	case unknownProject:
-		httpapi.Error(w, http.StatusBadRequest, "unknown project id")
 	case protectedProject:
 		httpapi.Error(w, http.StatusForbidden, "protected system project cannot be modified")
+	case taken:
+		httpapi.Error(w, http.StatusConflict, takenMsg)
 	case saveErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "save draft: "+saveErr.Error())
 	default:

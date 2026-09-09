@@ -3739,11 +3739,25 @@ async function importMIM(projectId, reload) {
   let text;
   try { text = await file.text(); } catch (e) { toast("Import failed: " + e.message, "err"); return; }
   const base = file.name.replace(/\.[^.]+$/, "");
-  const path = "/api/v1/imports/mim?name=" + encodeURIComponent(base) +
-    (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
+  // "from" empty says this is a new draft, so a process id something already holds
+  // comes back 409 instead of quietly replacing that draft (ADR-0222) — the same
+  // protocol the BPMN import above uses, because picking a file and finding the
+  // workflow you already had gone is the same surprise either way. Importing a
+  // corrected export over the one you have is a real intent, so it is offered by
+  // name rather than refused; it is just never what happens unasked.
+  const importPath = (from) => {
+    const q = ["name=" + encodeURIComponent(base)];
+    if (from !== null) q.push("from=" + encodeURIComponent(from));
+    if (projectId) q.push("projectId=" + encodeURIComponent(projectId));
+    return "/api/v1/imports/mim?" + q.join("&");
+  };
   let res;
-  try { res = await api("POST", path, text, true); }
-  catch (e) { toast("MIM import failed: " + e.message, "err"); return; }
+  try {
+    res = await saveOrConfirmOverwrite(
+      (from) => api("POST", importPath(from), text, true),
+      "A draft with this workflow's process id already exists. Replace it with this file?");
+  } catch (e) { toast("MIM import failed: " + e.message, "err"); return; }
+  if (!res) { toast("Import cancelled — the draft you already had was kept"); return; }
   const r = res.report || { native: 0, preserved: 0, manualReview: 0, notes: [] };
   toast(`Imported “${res.name || res.processId}” — ${r.native} native, ${r.preserved} preserved, ${r.manualReview} to review`, "ok");
   if (reload) await reload();
