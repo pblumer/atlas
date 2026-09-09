@@ -483,7 +483,7 @@ func TestASeedLargerThanASettingIsStoredRatherThanTruncated(t *testing.T) {
 // JSON. A truncating reader is what made this the wrong error before.
 func TestAnOversizedSeedIsRefusedAsTooLargeNotAsBadJSON(t *testing.T) {
 	srv, _ := newValidateServer(t)
-	body, _ := json.Marshal(map[string]any{"enabled": true, "seed": strings.Repeat("x", maxADMockBytes+1)})
+	body, _ := json.Marshal(map[string]any{"enabled": true, "seed": strings.Repeat("x", int(srv.limits.Settings)+1)})
 	code, resp := serveInternal(t, srv, http.MethodPut, "/api/v1/settings/ad-mock", string(body), "application/json")
 	if code != http.StatusBadRequest {
 		t.Fatalf("status = %d (%s), want 400", code, resp)

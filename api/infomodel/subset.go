@@ -404,7 +404,7 @@ type SubsetLimit struct {
 	Reason string `json:"reason"`
 }
 
-var limits = []SubsetLimit{
+var subsetLimits = []SubsetLimit{
 	{
 		Area: "Guards, triggers and actions on a lifecycle transition",
 		Reason: "A transition says a move is allowed, not what makes it happen: the element in the " +
@@ -467,6 +467,6 @@ func AuthoringSubset() Subset {
 		StoreModes:       storeModes,
 		Lifecycles:       lifecycleRules,
 		Matrix:           matrix,
-		Limits:           limits,
+		Limits:           subsetLimits,
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/opensearch"
 	"github.com/pblumer/atlas/promquery"
@@ -204,7 +205,7 @@ func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) e
 		false, // metrics
 		logging.FormatText, tracing.Config{}, superviseFlag{}, nil, nil,
 		true, // inProcessConnectors: no worker subprocesses out of a test binary
-		"", api.HistoryScopeAll, "")
+		"", api.HistoryScopeAll, "", limits.Default())
 }
 
 // freeAddr picks a loopback address nothing is listening on. --addr cannot be port

@@ -47,6 +47,28 @@
       }
     },
     {
+      "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A MIM import says how much work it is, and hands over the rows",
+        "de": "Ein MIM-Import sagt, wie viel Arbeit er ist — und übergibt die Zeilen"
+      },
+      "summary": {
+        "en": "A single step of a MIM workflow often carries a whole table of reads and writes inside it — the queries it runs and the values it assigns. Until now the import reported such a step as one line, so a workflow that is days of work could read as a handful of items. It is now counted the way it has to be worked through: every row of those tables is its own entry in the import report, with the row's own content beside it. The rows also travel with the model as structured data on the step itself, so they can be listed, checked off and processed by other tools rather than read out of the original definition by hand. What the import deliberately does not do is guess: it never claims which system a row writes to, and it does not split a step into several boxes in the diagram, because that decision needs the synchronisation rules that live in MIM and not in the workflow.",
+        "de": "Ein einzelner Schritt eines MIM-Workflows enthält oft eine ganze Tabelle von Lese- und Schreibvorgängen — die Abfragen, die er ausführt, und die Werte, die er setzt. Bisher meldete der Import einen solchen Schritt als eine Zeile, sodass ein Workflow von mehreren Tagen Arbeit wie eine Handvoll Positionen aussehen konnte. Gezählt wird jetzt so, wie er abgearbeitet werden muss: Jede Zeile dieser Tabellen ist eine eigene Position im Importbericht, mit ihrem Inhalt daneben. Die Zeilen reisen zudem als strukturierte Daten am Schritt selbst mit, sodass sie sich auflisten, abhaken und von anderen Werkzeugen verarbeiten lassen, statt sie von Hand aus der Originaldefinition zu lesen. Was der Import bewusst nicht tut, ist raten: Er behauptet nie, in welches System eine Zeile schreibt, und er zerlegt einen Schritt nicht in mehrere Kästchen im Diagramm — diese Entscheidung braucht die Synchronisationsregeln, die in MIM liegen und nicht im Workflow."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Import"
+      ]
+    },
+    {
       "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
       "version": "Unreleased",
       "date": null,
@@ -365,51 +387,6 @@
         "Modeler",
         "Import"
       ]
-    },
-    {
-      "id": "discord-is-a-worker-type-a-process-can-speak-in-the-channel-",
-      "version": "0.5.0",
-      "date": "2026-09-08",
-      "category": "Added",
-      "title": {
-        "en": "A process can post in Discord",
-        "de": "Ein Prozess kann in Discord schreiben"
-      },
-      "summary": {
-        "en": "A running process regularly has something to say to people, and e-mail is the wrong shape for a team that works in a chat channel. A process step can now send a message to a Discord channel, edit or delete one, read a message, list a channel, and open a thread — picked from a list in the Modeler instead of assembled as a REST call. What Discord answers goes into a variable, so a later step can address =sent.id to edit that same message or hang a thread under it. The bot token lives under Workers and is resolved by name, so the model never carries it. There is deliberately no reply-in-thread operation: in Discord a thread is itself a channel, so a reply is send-message addressing =thread.id.",
-        "de": "Ein laufender Prozess hat regelmässig etwas mitzuteilen, und E-Mail ist die falsche Form für ein Team, das in einem Chat-Kanal arbeitet. Ein Prozessschritt kann jetzt eine Nachricht in einen Discord-Kanal senden, sie bearbeiten oder löschen, eine Nachricht lesen, einen Kanal auflisten und einen Thread öffnen — im Modeler aus einer Liste gewählt statt als REST-Aufruf zusammengebaut. Was Discord zurückgibt, landet in einer Variable: ein späterer Schritt spricht =gesendet.id an, um dieselbe Nachricht zu ändern oder einen Thread darunter zu hängen. Das Bot-Token liegt beim Worker und wird über den Namen aufgelöst, das Modell trägt es nie. Eine eigene Operation „im Thread antworten\" gibt es bewusst nicht: In Discord ist ein Thread selbst ein Kanal, eine Antwort ist also send-message an =faden.id."
-      },
-      "link": {
-        "label": "ADR-0258",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0258-discord-worker.md"
-      },
-      "tags": [
-        "Workers",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "In Discord's developer portal, create an application, add a bot, and copy its token. Invite the bot to your server with at least View Channel and Send Messages.",
-          "Under Console › Workers, add a Worker of kind discord and store the token as {\"botToken\": \"…\"} — without the word Bot in front, Atlas adds that itself.",
-          "In the Modeler, drop a service task, pick Discord, and choose Send message. Fill in the channel id and the text; the fx toggle makes either a FEEL expression over the instance's variables.",
-          "For the channel id, enable Developer Mode in Discord (User Settings › Advanced), then right-click the channel and choose Copy Channel ID.",
-          "If the channel is private, server-wide permissions do not reach it: add the bot to the channel itself under Edit Channel › Permissions, and set the rights to the green tick rather than leaving them grey."
-        ],
-        "de": [
-          "Legen Sie im Discord-Entwicklerportal eine Anwendung an, fügen Sie einen Bot hinzu und kopieren Sie dessen Token. Laden Sie den Bot mit mindestens „Kanal ansehen\" und „Nachrichten senden\" auf Ihren Server ein.",
-          "Legen Sie unter Console › Workers einen Worker der Art discord an und hinterlegen Sie das Token als {\"botToken\": \"…\"} — ohne das Wort Bot davor, das ergänzt Atlas selbst.",
-          "Ziehen Sie im Modeler einen Service-Task auf, wählen Sie Discord und dann „Nachricht senden\". Tragen Sie Kanal-ID und Text ein; der fx-Schalter macht aus beidem eine FEEL-Expression über die Variablen der Instanz.",
-          "Für die Kanal-ID schalten Sie in Discord den Entwicklermodus ein (Einstellungen › Erweitert), dann Rechtsklick auf den Kanal › „Kanal-ID kopieren\".",
-          "Ist der Kanal privat, greifen serverweite Rechte dort nicht: Fügen Sie den Bot unter „Kanal bearbeiten › Berechtigungen\" dem Kanal selbst hinzu und setzen Sie die Rechte auf das grüne Häkchen statt sie grau zu lassen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/console/workers"
-      }
     }
   ]
 }

@@ -2,6 +2,7 @@ package formgen
 
 import (
 	"encoding/json"
+	"github.com/pblumer/atlas/limits"
 	"strings"
 	"testing"
 )
@@ -34,7 +35,7 @@ func TestSchemaFromReadsTheDocumentOutOfWhateverItCameWrappedIn(t *testing.T) {
 		{"chatty", "Hier ist das Formular:\n\n{\"type\":\"default\",\"components\":[{\"type\":\"textfield\",\"key\":\"name\",\"label\":\"Name\"}]}\n\nSag Bescheid, wenn du Felder ergänzen willst."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := SchemaFrom(tc.answer, "urlaub")
+			got, err := SchemaFrom(tc.answer, "urlaub", limits.Default().Asset)
 			if err != nil {
 				t.Fatalf("SchemaFrom: %v", err)
 			}
@@ -49,7 +50,7 @@ func TestSchemaFromReadsTheDocumentOutOfWhateverItCameWrappedIn(t *testing.T) {
 // form under an id a user task may bind, and a generated document that renamed it would
 // silently unbind that task on the next save (ADR-0222).
 func TestSchemaFromKeepsTheFormsOwnIdentity(t *testing.T) {
-	got, err := SchemaFrom(`{"type":"custom","id":"was-das-modell-sich-ausdachte","components":[]}`, "urlaub-pruefen")
+	got, err := SchemaFrom(`{"type":"custom","id":"was-das-modell-sich-ausdachte","components":[]}`, "urlaub-pruefen", limits.Default().Asset)
 	if err != nil {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
@@ -69,7 +70,7 @@ func TestSchemaFromGivesEveryInputAUsableKey(t *testing.T) {
 		{"type":"textfield","label":"Vorname des Antragstellers"},
 		{"type":"textfield","label":"Vorname des Antragstellers"},
 		{"type":"checkbox"}
-	]}`, "f")
+	]}`, "f", limits.Default().Asset)
 	if err != nil {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
@@ -92,7 +93,7 @@ func TestSchemaFromGivesEveryInputAUsableKey(t *testing.T) {
 // process outline was handed to the model for: naming a field the way the process
 // already names that datum.
 func TestSchemaFromLeavesAuthoredKeysAlone(t *testing.T) {
-	got, err := SchemaFrom(`{"components":[{"type":"number","key":"urlaubstage","label":"Tage"}]}`, "f")
+	got, err := SchemaFrom(`{"components":[{"type":"number","key":"urlaubstage","label":"Tage"}]}`, "f", limits.Default().Asset)
 	if err != nil {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestSchemaFromLeavesAuthoredKeysAlone(t *testing.T) {
 func TestSchemaFromWalksIntoGroups(t *testing.T) {
 	got, err := SchemaFrom(`{"components":[
 		{"type":"group","label":"Adresse","components":[{"type":"textfield","label":"Straße"}]}
-	]}`, "f")
+	]}`, "f", limits.Default().Asset)
 	if err != nil {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestSchemaFromWalksIntoGroups(t *testing.T) {
 // a form quietly missing the field the author asked for is worse than one that says it
 // could not be written.
 func TestSchemaFromRefusesWhatATaskFormCannotRender(t *testing.T) {
-	_, err := SchemaFrom(`{"components":[{"type":"iframe","url":"https://example.invalid"}]}`, "f")
+	_, err := SchemaFrom(`{"components":[{"type":"iframe","url":"https://example.invalid"}]}`, "f", limits.Default().Asset)
 	if err == nil {
 		t.Fatal("an iframe was accepted into a generated form")
 	}
@@ -146,7 +147,7 @@ func TestSchemaFromRefusesWhatIsNotAForm(t *testing.T) {
 		{"truncated", `{"type":"default","components":[{"type":"textfi`, "no JSON"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := SchemaFrom(tc.answer, "f")
+			_, err := SchemaFrom(tc.answer, "f", limits.Default().Asset)
 			if err == nil {
 				t.Fatalf("%s was accepted", tc.name)
 			}
@@ -170,7 +171,7 @@ func TestSchemaFromRefusesARunawayDocument(t *testing.T) {
 		b.WriteString(`{"type":"textfield","key":"feld","label":"Ein ziemlich langes Label für ein Feld"}`)
 	}
 	b.WriteString(`]}`)
-	if _, err := SchemaFrom(b.String(), "f"); err == nil {
+	if _, err := SchemaFrom(b.String(), "f", limits.Default().Asset); err == nil {
 		t.Fatal("a runaway document was accepted")
 	}
 }
@@ -179,7 +180,7 @@ func TestSchemaFromRefusesARunawayDocument(t *testing.T) {
 // round trip it is about to make.
 func TestSchemaFromProducesSomethingSerializable(t *testing.T) {
 	got, err := SchemaFrom(`{"components":[{"type":"text","text":"# Urlaubsantrag"},
-		{"type":"select","key":"art","label":"Art","values":[{"label":"Erholung","value":"erholung"}]}]}`, "urlaub")
+		{"type":"select","key":"art","label":"Art","values":[{"label":"Erholung","value":"erholung"}]}]}`, "urlaub", limits.Default().Asset)
 	if err != nil {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestADerivedKeyIsBounded(t *testing.T) {
 // A model that opens a fence and never closes it has still written the document; the
 // fence is punctuation, not structure.
 func TestAnUnclosedFenceStillYieldsTheDocument(t *testing.T) {
-	got, err := SchemaFrom("```json\n{\"components\":[{\"type\":\"text\",\"text\":\"hi\"}]}", "f")
+	got, err := SchemaFrom("```json\n{\"components\":[{\"type\":\"text\",\"text\":\"hi\"}]}", "f", limits.Default().Asset)
 	if err != nil {
 		t.Fatalf("SchemaFrom: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestTheComponentCapCountsNestedComponents(t *testing.T) {
 		b.WriteString(`{"type":"textfield","label":"Feld"}`)
 	}
 	b.WriteString(`]}]}`)
-	_, err := SchemaFrom(b.String(), "f")
+	_, err := SchemaFrom(b.String(), "f", limits.Default().Asset)
 	if err == nil || !strings.Contains(err.Error(), "components") {
 		t.Fatalf("err = %v, want the cap to hold inside a group too", err)
 	}
@@ -251,7 +252,7 @@ func TestTheComponentCapCountsNestedComponents(t *testing.T) {
 // An error from inside a group has to say where it is, or the author is left hunting
 // through a document they did not write.
 func TestAFailureInsideAGroupSaysWhereItIs(t *testing.T) {
-	_, err := SchemaFrom(`{"components":[{"type":"group","components":[{"type":"iframe"}]}]}`, "f")
+	_, err := SchemaFrom(`{"components":[{"type":"group","components":[{"type":"iframe"}]}]}`, "f", limits.Default().Asset)
 	if err == nil || !strings.Contains(err.Error(), "component 1 → component 1") {
 		t.Fatalf("err = %v, want the path to the component it refused", err)
 	}

@@ -47,14 +47,6 @@ import (
 	"github.com/pblumer/atlas/api/infomodel"
 )
 
-// maxXMLBytes caps a deployment body. BPMN models are small; this is a sanity
-// bound, not a tuning knob.
-const maxXMLBytes = 4 << 20 // 4 MiB
-
-// maxFeelBytes caps a FEEL validation body. Expressions are tiny; this is a
-// sanity bound.
-const maxFeelBytes = 64 << 10 // 64 KiB
-
 // deployedProcess is one process registered by a deployment. A collaboration
 // deploys several (one per executable pool); a plain model deploys one.
 type deployedProcess struct {
@@ -619,7 +611,7 @@ type validateFeelResp struct {
 // (ADR-0008).
 func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 	var req validateFeelReq
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes)).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request)).Decode(&req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
@@ -656,7 +648,7 @@ type evalFeelResp struct {
 // scope: no engine state is read or written, so it runs off the single-writer
 // loop and never touches the processor hot path (ADR-0008).
 func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxFeelBytes))
+	dec := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request))
 	dec.UseNumber() // keep numbers exact (json.Number) for FEEL's decimals
 	var req evalFeelReq
 	if err := dec.Decode(&req); err != nil {
@@ -741,7 +733,7 @@ func feelKindName(k expr.ValueKind) string {
 // are the diagram's counterpart of the message events that link them at runtime
 // (ADR-0023).
 func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -1090,7 +1082,7 @@ func (s *Server) handleUpdateProcessDiagram(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -1223,7 +1215,7 @@ func (s *Server) handleUpdateProcessDiagram(w http.ResponseWriter, r *http.Reque
 // be regenerated (unparseable, or nodeless) comes back unchanged; only a missing or
 // unreadable body is a 4xx, matching the deploy and validate endpoints.
 func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -2437,7 +2429,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -2666,7 +2658,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "invalid instance key")
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -3444,7 +3436,7 @@ type publishMessageResp struct {
 // a message that matches nothing is accepted as a no-op (no buffering yet,
 // ADR-0020). Body: {"name","correlationKey","variables":{…}}.
 func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -3678,7 +3670,7 @@ type terminateInstancesResp struct {
 // they are atomic with the scan/lookups; filter mode's Limit bounds that turn.
 func (s *Server) handleTerminateInstances(w http.ResponseWriter, r *http.Request) {
 	var req terminateInstancesReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	switch {
@@ -4206,7 +4198,7 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req failJobReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	var (
@@ -4575,7 +4567,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req resolveIncidentReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	retries := req.Retries
@@ -4968,7 +4960,7 @@ type draftResp struct {
 // the author to wonder whose arrangement they are looking at. A save from the Modeler
 // always carries DI, so this never touches one.
 func (s *Server) handleSaveDraft(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -5189,7 +5181,7 @@ func (s *Server) handleListDrafts(w http.ResponseWriter, r *http.Request) {
 // non-empty projectId must name an existing project (ADR-0034).
 func (s *Server) handleMoveDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return

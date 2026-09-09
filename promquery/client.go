@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pblumer/atlas/limits"
 	"io"
 	"math"
 	"net/http"
@@ -34,11 +35,6 @@ import (
 	"strings"
 	"time"
 )
-
-// maxResponseBytes bounds a query response. Every query here is an aggregate over
-// a bounded number of steps, so a correct answer is small; a large body means a
-// store answering something other than what was asked.
-const maxResponseBytes = 1 << 20
 
 // ErrQueryRefused is returned when the store answered and declined — credentials,
 // or a permission on its side. Callers separate it from a transport failure
@@ -148,12 +144,12 @@ func (c *HTTPClient) QueryRange(ctx context.Context, expr string, from, to, step
 		return nil, fmt.Errorf("promquery: store returned HTTP %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limits.Default().Definition+1))
 	if err != nil {
 		return nil, fmt.Errorf("promquery: read response: %w", err)
 	}
-	if len(body) > maxResponseBytes {
-		return nil, fmt.Errorf("promquery: response exceeds %d bytes", maxResponseBytes)
+	if int64(len(body)) > limits.Default().Definition {
+		return nil, fmt.Errorf("promquery: response exceeds %d bytes", limits.Default().Definition)
 	}
 
 	var parsed rangeResponse

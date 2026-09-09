@@ -605,7 +605,7 @@ func (s *Server) connectorProblem(kind, name string) string {
 // handleCreateConnector creates a managed worker and rebuilds the
 // runtime registry so a central decision referencing it starts resolving at once.
 func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -742,7 +742,7 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 // credential reference, or enabled state) and rebuilds the registry.
 func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -918,7 +918,7 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	connID := r.PathValue("id")
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxXMLBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -1050,7 +1050,7 @@ func (s *Server) handleMailOutbox(w http.ResponseWriter, r *http.Request) {
 // the outbox holds its own lock.
 func (s *Server) handleDeliverMailOutbox(w http.ResponseWriter, r *http.Request) {
 	var m mail.OutboxMessage
-	if err := json.NewDecoder(io.LimitReader(r.Body, maxOutboxPost)).Decode(&m); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Generated)).Decode(&m); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid outbox message: "+err.Error())
 		return
 	}
@@ -1068,10 +1068,6 @@ func (s *Server) handleDeliverMailOutbox(w http.ResponseWriter, r *http.Request)
 	s.mailOutbox.Add(m)
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// maxOutboxPost bounds one delivered preview message. The outbox clips each stored
-// field anyway; this stops a body being read into memory before that happens.
-const maxOutboxPost = 2 << 20
 
 // handleClearMailOutbox empties the preview outbox. Nothing here was ever sent and
 // nothing survives a restart, so clearing it destroys no record of anything —
@@ -1117,7 +1113,7 @@ type connectorTestReq struct {
 // never does (I3).
 func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 	var req connectorTestReq
-	if !decodeJSONBody(w, r, &req) {
+	if !s.decodeJSONBody(w, r, &req) {
 		return
 	}
 	if req.Kind == "" {

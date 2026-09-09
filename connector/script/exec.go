@@ -37,6 +37,15 @@ const (
 // a token parked in silence is worse than a job that fails visibly.
 const defaultTimeout = 30 * time.Second
 
+// defaultMaxOutput bounds a script's stdout when MaxOutput is unset. Eight megabytes
+// is far past any result a process variable can usefully hold and far below what
+// hurts this host.
+const defaultMaxOutput int64 = 8 << 20
+
+// maxStderr bounds what is kept of a failing interpreter's diagnostics. It is a
+// quotation in an error message, not a stream to preserve.
+const maxStderr int64 = 32 << 10
+
 // Lang describes how to run one scripting language: the reserved job type its
 // worker subscribes to, the default interpreter binary, the interpreter arguments
 // that run a bootstrap program, and that bootstrap. The bootstrap is a fixed
@@ -99,6 +108,9 @@ type CmdExec struct {
 	Lang    Lang          // language spec
 	Bin     string        // interpreter override; empty means Lang.Bin
 	Timeout time.Duration // per-script wall-clock limit; <= 0 means defaultTimeout
+	// MaxOutput bounds what one script may write to stdout, in bytes; <= 0 means
+	// defaultMaxOutput. The server sets it from the installation's budgets.
+	MaxOutput int64
 	// run executes name with args and env and returns stdout. It defaults to
 	// os/exec; tests substitute a deterministic fake so they need no interpreter.
 	run func(ctx context.Context, name string, args, env []string) ([]byte, error)
@@ -121,6 +133,13 @@ func (e *CmdExec) timeout() time.Duration {
 	return defaultTimeout
 }
 
+func (e *CmdExec) maxOutput() int64 {
+	if e.MaxOutput > 0 {
+		return e.MaxOutput
+	}
+	return defaultMaxOutput
+}
+
 // Check reports whether the interpreter is resolvable on PATH. The server calls it
 // once at startup so an operator whose host lacks the interpreter sees a clear
 // warning, rather than watching script tasks park silently.
@@ -133,7 +152,10 @@ func (e *CmdExec) runner() func(context.Context, string, []string, []string) ([]
 	if e.run != nil {
 		return e.run
 	}
-	return execCommand
+	max := e.maxOutput()
+	return func(ctx context.Context, name string, args, env []string) ([]byte, error) {
+		return execCommand(ctx, name, args, env, max)
+	}
 }
 
 // Run passes the source and the variables to the interpreter's bootstrap via the
@@ -166,18 +188,64 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 // non-zero exit it surfaces the interpreter's stderr (e.g. a Python traceback or a
 // PowerShell error), which is what makes the result useful for debugging a script
 // rather than just reporting "exit status 1".
-func execCommand(ctx context.Context, name string, args, env []string) ([]byte, error) {
+//
+// It does not use cmd.Output(), which collects stdout into a bytes.Buffer with no
+// ceiling: a script's output is written by code the author controls, so `while true:
+// print(x)` is an unbounded allocation on this host, bounded only by the timeout —
+// which is far too long to matter at a gigabyte a second. Both streams are collected
+// through [capped] instead, so what a runaway script costs is the budget, once.
+// The process is left to finish or hit its deadline; the bytes past the ceiling are
+// dropped as they arrive, never held.
+func execCommand(ctx context.Context, name string, args, env []string, max int64) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
-	out, err := cmd.Output()
+	// stderr is quoted into an error message, so it needs far less room than the
+	// result — the same reasoning os/exec applies when it caps ExitError.Stderr.
+	stdout, stderr := &capped{max: max}, &capped{max: maxStderr}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	err := cmd.Run()
+	if stdout.dropped {
+		return nil, fmt.Errorf("script: output exceeded %d bytes", max)
+	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
-		if msg := strings.TrimSpace(string(ee.Stderr)); msg != "" {
-			return out, fmt.Errorf("%w: %s", err, msg)
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return stdout.Bytes(), fmt.Errorf("%w: %s", err, msg)
 		}
 	}
-	return out, err
+	return stdout.Bytes(), err
 }
+
+// capped is a buffer that stops growing at max and remembers that it did.
+// Writing past the ceiling is not an error: returning one would close the pipe and
+// turn a too-chatty script into a write failure whose message says nothing about the
+// budget. The caller reads [capped.dropped] and says what actually happened.
+//
+// The bytes.Buffer is a *field* and not embedded, which is the whole reason this
+// type works. os/exec hands a non-*os.File writer to io.Copy, and io.Copy prefers a
+// destination's ReadFrom — which an embedded bytes.Buffer would promote, so every
+// byte would land in the buffer without Write ever being called and the ceiling
+// would silently do nothing. It read as a cap and was not one.
+type capped struct {
+	buf     bytes.Buffer
+	max     int64
+	dropped bool
+}
+
+func (c *capped) Write(p []byte) (int, error) {
+	if room := c.max - int64(c.buf.Len()); room > 0 {
+		if int64(len(p)) <= room {
+			return c.buf.Write(p)
+		}
+		c.buf.Write(p[:room])
+	}
+	c.dropped = true
+	return len(p), nil // accepted and discarded: the writer must not see a broken pipe
+}
+
+func (c *capped) Bytes() []byte  { return c.buf.Bytes() }
+func (c *capped) String() string { return c.buf.String() }
+func (c *capped) Len() int       { return c.buf.Len() }
 
 // parseOutput decodes an interpreter's stdout as the script's result. Empty output
 // is a null result; numbers keep their exact decimal text (UseNumber) so they

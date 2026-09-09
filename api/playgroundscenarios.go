@@ -11,12 +11,6 @@ import (
 	apiplayground "github.com/pblumer/atlas/api/playground"
 )
 
-// maxScenarioBytes caps a stored scenario. The dataset rides inside it, and a
-// scenario is meant to be a reproducible input rather than a data warehouse: this
-// is the same ceiling a CSV upload gets, so the two ways of giving the Playground
-// a dataset agree about how much is too much.
-const maxScenarioBytes = 16 << 20 // 16 MiB
-
 // scenarioMeta is a scenario's listing entry — everything but the spec and the
 // baseline, so a list stays small however large the datasets inside it are.
 type scenarioMeta struct {
@@ -44,7 +38,7 @@ func scenarioMetaOf(s playgroundScenario) scenarioMeta {
 // element is the sandbox's answer to give when the scenario runs, and deciding it
 // twice is how the two answers start disagreeing.
 func (s *Server) handleSaveScenario(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxScenarioBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().DataUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
@@ -196,7 +190,7 @@ func (s *Server) handleSaveScenarioBaseline(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxScenarioBytes))
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().DataUpload))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
 		return
