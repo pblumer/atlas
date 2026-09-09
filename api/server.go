@@ -1658,6 +1658,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			if len(spec.Connectors) > 0 {
 				args = append(args, "--connector", strings.Join(spec.Connectors, ","))
 			}
+			if len(spec.ScriptLanguages) > 0 {
+				args = append(args, "--script-languages", strings.Join(spec.ScriptLanguages, ","))
+			}
 			s.supervisor.add(spec, args, s.superviseEnv(spec))
 		}
 		s.supervisor.start()
