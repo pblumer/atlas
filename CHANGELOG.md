@@ -14,6 +14,40 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A class says which states its instances move through, and the Modeler offers
+  them.** BPMN puts a data state under a data object — `order [received]` →
+  `[approved]` — and says nothing whatever about which states exist or which may
+  follow which. Atlas parsed it, interned it onto the compiled model, persisted every
+  transition of it with attribution and drew it on the object diagram, and still
+  nothing declared what was legal: the state was a string somebody typed, and
+  `[aproved]` was written once and then never matched anything again.
+
+  A «businessObject» may now carry a **lifecycle**: named states, one of them where
+  instances start, any number of them final, and transitions between them. It is drawn
+  the way the class model is drawn — the same canvas, the same palette, the same one
+  Save — reached from the class's own panel, because the class is what owns it. Only a
+  business object has one: a value type is equal to any other with the same contents,
+  so there is no *this one, later* to track. A class without one is the normal case and
+  is silent everywhere.
+
+  The Modeler reads it. A data object's **Type** is a list of the classes the
+  application models, grouped by the model they live in and carrying each one's
+  business key — the fact that tells two similarly named classes apart — instead of a
+  text field with an invisible `<datalist>` behind it. Its **Data state** is a list of
+  the states that class declares, marking where instances start and where they end.
+  Both keep a way to name something the vocabulary has not heard of yet, because a
+  diagram is routinely drawn before the model it names exists, and a state or a class
+  nothing declares is reported in the Problems panel rather than refused at deploy.
+  Two new data-flow checks say when a process writes a state its class does not
+  declare, and when it moves an object between two states the lifecycle does not join.
+
+  The information model editor gained the same treatment where it was still missing:
+  a transition's two ends and a relationship's two ends are lists now, so an end aimed
+  at the wrong state or the wrong class is corrected in place instead of being deleted
+  and drawn again — which used to take its name, its roles and its multiplicities with
+  it. A class a relationship cannot reach, or a state nothing leaves, is shown disabled
+  with the reason on it rather than hidden (ADR-0259).
+
 - **The handbook's worker runbooks say when they were last checked, too.** The panel's
   short setup steps started carrying that date; the handbook's long-form cards — which
   name the same menus in the same products, at more length — did not, so the more

@@ -51,6 +51,20 @@ const (
 	CodeStoreClassNotStorable    = "store-class-not-storable"
 	CodeStoreClassHasNoKey       = "store-class-has-no-key"
 	CodeStoreUnknownMode         = "store-unknown-mode"
+
+	// Lifecycles (ADR-0259). A lifecycle on disk has to be one a deploy can resolve
+	// against: every state a transition names exists, one state is where an instance
+	// starts, and no two states answer to the same name — a process writes a state by
+	// that string and by nothing else.
+	CodeLifecycleNotAllowed        = "lifecycle-not-allowed"
+	CodeLifecycleEmpty             = "lifecycle-empty"
+	CodeMissingStateName           = "missing-state-name"
+	CodeDuplicateStateName         = "duplicate-state-name"
+	CodeNoInitialState             = "no-initial-state"
+	CodeManyInitialStates          = "many-initial-states"
+	CodeUnknownTransitionState     = "unknown-transition-state"
+	CodeDuplicateTransitionID      = "duplicate-transition-id"
+	CodeTransitionLeavesFinalState = "transition-leaves-final-state"
 )
 
 // Finding is one thing wrong with a model, located precisely enough that the
@@ -65,6 +79,11 @@ type Finding struct {
 	AssociationID string `json:"associationId,omitempty"`
 	StoreID       string `json:"storeId,omitempty"`
 	Attribute     string `json:"attribute,omitempty"`
+	// State and Transition locate a finding inside a class's lifecycle, the way
+	// Attribute locates one inside its members — so the state canvas can mark the
+	// state or the arrow that is wrong instead of colouring the whole class.
+	State      string `json:"state,omitempty"`
+	Transition string `json:"transition,omitempty"`
 }
 
 // ValidationResult is the whole verdict. Findings are ordered by where they are, so
@@ -164,6 +183,99 @@ func validateClass(c *Class, classByName map[string]*Class, add func(Finding)) {
 	}
 
 	validateIdentity(c, kind, add)
+	validateLifecycle(c, kind, add)
+}
+
+// validateLifecycle holds a class's state machine to what a deploy can resolve
+// against (ADR-0259).
+//
+// Every rule here refuses a *write*, which is the reason each of them is about
+// coherence rather than completeness: a lifecycle being drawn is half-finished nearly
+// all the time — a state with no transitions yet, an arrow to a state about to be
+// renamed — and a validator that refused those would be a canvas nobody could draw
+// on. What it refuses is a document that says something contradictory, or that names
+// a state which is not there.
+func validateLifecycle(c *Class, kind StereotypeKind, add func(Finding)) {
+	if c.Lifecycle == nil {
+		return // the normal case, and the one this must leave completely alone
+	}
+	// Only a business object has a life to have stages in. A value type is equal to
+	// any other with the same contents — there is no "this one, later" to track — and
+	// an enumeration is a set of values rather than a thing that moves through them.
+	if !kind.HasIdentity {
+		add(Finding{Code: CodeLifecycleNotAllowed, Reason: RefusedByNotation, ClassID: c.ID,
+			Message: fmt.Sprintf("%s is a %s, which has no lifecycle: only a business object "+
+				"has an identity that persists through states.", c.Name, strings.ToLower(kind.Label))})
+		return
+	}
+	if len(c.Lifecycle.States) == 0 {
+		add(Finding{Code: CodeLifecycleEmpty, Reason: RefusedByNotation, ClassID: c.ID,
+			Message: fmt.Sprintf("%s declares a lifecycle with no states. Remove the lifecycle, "+
+				"or give it the state its instances start in.", c.Name)})
+		return
+	}
+
+	states := map[string]*LifecycleState{}
+	initial := 0
+	for i := range c.Lifecycle.States {
+		st := &c.Lifecycle.States[i]
+		if strings.TrimSpace(st.Name) == "" {
+			add(Finding{Code: CodeMissingStateName, Reason: RefusedByNotation, ClassID: c.ID,
+				Message: fmt.Sprintf("%s has a state with no name. The name is what a process "+
+					"writes into the data state, so a state without one can never be reached.", c.Name)})
+			continue
+		}
+		if states[st.Name] != nil {
+			add(Finding{Code: CodeDuplicateStateName, Reason: RefusedByNotation, ClassID: c.ID,
+				State: st.Name,
+				Message: fmt.Sprintf("%s declares the state %q twice. A process names a state by "+
+					"that string alone, so two of them are one state said twice.", c.Name, st.Name)})
+			continue
+		}
+		states[st.Name] = st
+		if st.Initial {
+			initial++
+		}
+	}
+
+	switch {
+	case initial == 0:
+		add(Finding{Code: CodeNoInitialState, Reason: RefusedByNotation, ClassID: c.ID,
+			Message: fmt.Sprintf("%s's lifecycle says nowhere to start. Mark the state an "+
+				"instance is in when it is created.", c.Name)})
+	case initial > 1:
+		add(Finding{Code: CodeManyInitialStates, Reason: RefusedByNotation, ClassID: c.ID,
+			Message: fmt.Sprintf("%s's lifecycle has %d starting states. An instance is created "+
+				"in exactly one.", c.Name, initial)})
+	}
+
+	seenID := map[string]bool{}
+	for _, t := range c.Lifecycle.Transitions {
+		if seenID[t.ID] {
+			add(Finding{Code: CodeDuplicateTransitionID, Reason: RefusedByNotation, ClassID: c.ID,
+				Transition: t.ID,
+				Message:    fmt.Sprintf("%s has two transitions under the id %q.", c.Name, t.ID)})
+			continue
+		}
+		seenID[t.ID] = true
+		for _, end := range []string{t.From, t.To} {
+			if states[end] == nil {
+				add(Finding{Code: CodeUnknownTransitionState, Reason: RefusedByNotation,
+					ClassID: c.ID, Transition: t.ID, State: end,
+					Message: fmt.Sprintf("%s has a transition to or from %q, which is not one of "+
+						"its states.", c.Name, end)})
+			}
+		}
+		// A final state is one nothing leaves. A transition out of one is not a
+		// stricter reading of "final" — it is the two saying opposite things, and
+		// there is no way to tell which the author meant.
+		if from := states[t.From]; from != nil && from.Final {
+			add(Finding{Code: CodeTransitionLeavesFinalState, Reason: RefusedByNotation,
+				ClassID: c.ID, Transition: t.ID, State: t.From,
+				Message: fmt.Sprintf("%s leaves %q, which is marked as a final state. Either it "+
+					"is where instances end, or this transition leaves it.", c.Name, t.From)})
+		}
+	}
 }
 
 func validateAttributes(c *Class, classByName map[string]*Class, add func(Finding)) {

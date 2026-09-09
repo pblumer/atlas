@@ -1127,3 +1127,371 @@ export class ObjectCanvas {
     this.diagram.destroy();
   }
 }
+
+// ---------------------------------------------------------------------------
+// The state canvas: a class's lifecycle, drawn (ADR-0259).
+//
+// The third notation on this bundle, and the one that answers the second opaque slot
+// in BPMN's data model. A class diagram says what an order *is*; this says where in
+// its life it has got to, and it is what a `<dataState name="approved">` resolves
+// against.
+//
+// It is authored, not derived — a lifecycle is a working copy with an explicit Save,
+// like the class model it belongs to and unlike the object diagram beside it. So this
+// canvas creates, connects, moves and deletes locally, and its rules refuse at the
+// point of drawing what the server refuses at the point of writing.
+//
+// The notation is UML's, with one deliberate departure. UML draws an initial
+// pseudostate as a bare filled disc and a final state as a bullseye, both nameless.
+// Here every state must carry a name — the name is the string a process writes, and a
+// state nothing can name is a state nothing can reach — so a named rounded rectangle
+// is the shape for all of them, with the disc and the ring as *marks* on it rather
+// than as shapes of their own. That keeps the notation's two readings ("this is where
+// it starts", "nothing leaves this") without inventing a state that has no name.
+
+const STATE_W = 150;
+const STATE_H = 46;
+const STATE_MIN_W = 110;
+
+// stateWidth sizes a state to its name, the way a class sizes to its members.
+export function stateWidth(state) {
+  const name = (state && state.name) || "unnamed";
+  return Math.round(Math.min(280, Math.max(STATE_MIN_W, name.length * CH_NAME + PAD * 4)));
+}
+export const STATE_HEIGHT = STATE_H;
+
+function stateVisual(parent, shape) {
+  const bo = shape.businessObject || {};
+  const g = svg("g", {
+    class: `uml-state${bo.initial ? " initial" : ""}${bo.final ? " final" : ""}` +
+      `${bo.invalid ? " invalid" : ""}`,
+    "data-name": bo.name || "", "data-id": bo.name || "",
+  }, parent);
+
+  svg("rect", { x: 0, y: 0, width: shape.width, height: shape.height, rx: 12, class: "uml-state-box" }, g);
+  // A final state is one nothing leaves, and UML says that with a second ring. Inset
+  // rather than outset so the mark cannot collide with a neighbouring state.
+  if (bo.final) {
+    svg("rect", {
+      x: 4, y: 4, width: shape.width - 8, height: shape.height - 8, rx: 9,
+      class: "uml-state-final",
+    }, g);
+  }
+  text(g, shorten(bo.name || "unnamed", Math.floor((shape.width - PAD * 2) / CH_NAME)),
+    { x: shape.width / 2, y: shape.height / 2 + 5, class: "uml-state-name", "text-anchor": "middle" });
+
+  // The initial mark: UML's filled disc with its arrow, drawn at the state's left
+  // edge. It is a mark on the state rather than a node of its own because a
+  // pseudostate has no name, and everything on this canvas is named.
+  if (bo.initial) {
+    svg("circle", { cx: -26, cy: shape.height / 2, r: 6, class: "uml-state-start" }, g);
+    svg("path", {
+      d: `M-19,${shape.height / 2} L-4,${shape.height / 2}`, class: "uml-state-start-arrow",
+      "marker-end": "url(#uml-state-arrow)",
+    }, g);
+  }
+  return g;
+}
+
+// The arrowhead every transition carries. One marker in the defs, referenced by all
+// of them — the notation's own open arrow, which is what says a transition is
+// directed and a class association is not.
+function ensureStateArrow(canvas) {
+  const defs = canvas._svg.querySelector("defs") || svg("defs", {}, canvas._svg);
+  if (defs.querySelector("#uml-state-arrow")) return;
+  const marker = svg("marker", {
+    id: "uml-state-arrow", markerWidth: 12, markerHeight: 12, refX: 10, refY: 5,
+    orient: "auto", markerUnits: "userSpaceOnUse",
+  }, defs);
+  svg("path", { d: "M0,0 L10,5 L0,10", fill: "none", stroke: "var(--text)", "stroke-width": 1.4 }, marker);
+}
+
+function StateRenderer(eventBus, canvas) {
+  BaseRenderer.call(this, eventBus, 1500);
+  this.canvas = canvas;
+}
+inherits(StateRenderer, BaseRenderer);
+StateRenderer.$inject = ["eventBus", "canvas"];
+
+StateRenderer.prototype.canRender = (element) => /^uml:(state|transition)/.test(element.type || "");
+
+StateRenderer.prototype.drawShape = function(parent, shape) {
+  ensureStateArrow(this.canvas);
+  return stateVisual(parent, shape);
+};
+
+StateRenderer.prototype.drawConnection = function(parent, connection) {
+  ensureStateArrow(this.canvas);
+  const bo = connection.businessObject || {};
+  const wp = connection.waypoints;
+  const g = svg("g", { class: "uml-transition", "data-id": bo.id || "" }, parent);
+  const line = svg("polyline", {
+    points: wp.map((p) => `${p.x},${p.y}`).join(" "), class: "uml-transition-line",
+  }, g);
+  line.setAttribute("fill", "none");
+  line.setAttribute("marker-end", "url(#uml-state-arrow)");
+  if (bo.name) {
+    const mid = wp.length > 2 ? wp[Math.floor(wp.length / 2)]
+      : { x: (wp[0].x + wp[1].x) / 2, y: (wp[0].y + wp[1].y) / 2 };
+    text(g, bo.name, { x: mid.x, y: mid.y - 6, class: "uml-transition-label", "text-anchor": "middle" });
+  }
+  return g;
+};
+
+StateRenderer.prototype.getShapePath = function(shape) {
+  return `M${shape.x},${shape.y} l${shape.width},0 l0,${shape.height} l-${shape.width},0 z`;
+};
+
+const StateRendererModule = {
+  __init__: ["stateRenderer"],
+  stateRenderer: ["type", StateRenderer],
+};
+
+// StateRules answers from the served rules (ADR-0259 §2), the way the class canvas's
+// provider answers from the served relationship matrix. Nothing about what is legal
+// is decided here.
+function StateRules(eventBus, stateSubset) {
+  this.rules = stateSubset || {};
+  RuleProvider.call(this, eventBus);
+}
+inherits(StateRules, RuleProvider);
+StateRules.$inject = ["eventBus", "config.lifecycleRules"];
+
+StateRules.prototype.init = function() {
+  this.addRule("elements.move", ({ shapes, target }) => {
+    if (!shapes || !shapes.length) return false;
+    if (target && target.parent) return false; // containment is a claim, not an arrangement
+    return shapes.every((s) => s.type === "uml:state");
+  });
+  this.addRule("connection.create", ({ source, target }) => {
+    if (!source || !target) return false;
+    if (source.type !== "uml:state" || target.type !== "uml:state") return false;
+    // A self-loop is a record revised without leaving its stage — allowed, and said
+    // by the server rather than assumed here.
+    if (source === target && this.rules.selfTransitions === false) return false;
+    // "Final" and "leaves" are the two saying opposite things, so the canvas refuses
+    // it while the line is being drawn rather than letting the save discover it.
+    if ((source.businessObject || {}).final && !this.rules.leavesFinal) return false;
+    return true;
+  });
+  this.addRule("shape.resize", () => false); // a state is as wide as its name makes it
+};
+
+const StateRulesModule = {
+  __depends__: [RulesModule],
+  __init__: ["stateRules"],
+  stateRules: ["type", StateRules],
+};
+
+const STATE_MODULES = [
+  StateRendererModule, SelectionModule, MoveCanvasModule, ZoomScrollModule, OutlineModule,
+  ModelingModule, MoveModule, StateRulesModule, LassoToolModule,
+  KeyboardModule, KeyboardMoveSelectionModule, PaletteProviderModule,
+];
+
+export class StateCanvas {
+  constructor(container, options = {}) {
+    this.editable = options.editable !== false;
+    this.diagram = new Diagram({
+      canvas: { container },
+      lifecycleRules: options.rules || {},
+      umlPalette: { entries: options.paletteEntries || (() => []) },
+      modules: this.editable
+        ? STATE_MODULES
+        : [StateRendererModule, SelectionModule, MoveCanvasModule, ZoomScrollModule, OutlineModule],
+    });
+    this.canvas = this.diagram.get("canvas");
+    this.factory = this.diagram.get("elementFactory");
+    this.selection = this.diagram.get("selection");
+    this.graphics = this.diagram.get("graphicsFactory");
+    this.shapes = new Map();
+    this.connections = new Map();
+    this.origin = new Map();
+
+    const eventBus = this.diagram.get("eventBus");
+    eventBus.on("selection.changed", (e) => {
+      const all = (e.newSelection || []).map((el) => el.businessObject).filter(Boolean);
+      options.onSelection?.(all[0] || null, all);
+    });
+    // A click, reported separately from a change of selection — because drawing a
+    // transition is two clicks, and the first of them very often lands on the state
+    // that is already selected. Selection would say nothing there (it did not
+    // change), so a gesture built on it silently swallows its own first half: the
+    // state just added is the selected one, and it is exactly the one a person
+    // reaches for first.
+    eventBus.on("element.click", (e) => {
+      options.onElementClick?.((e.element && e.element.businessObject) || null);
+    });
+    if (this.editable) {
+      this.commandStack = this.diagram.get("commandStack");
+      eventBus.on(["commandStack.changed"], () => options.onChange?.());
+      const palette = () => this.diagram.get("palette");
+      eventBus.on(["lasso.selection.init", "lasso.init"], () => options.onTool?.("marquee"));
+      eventBus.on(["lasso.selection.cleanup", "lasso.cleanup"], () => {
+        options.onTool?.(null);
+        palette().updateToolHighlight("");
+      });
+    }
+  }
+
+  // moved reports every state whose position differs from the document it was drawn
+  // from — the same contract the class canvas has, and for the same reason: dragging
+  // a state away and back is not a change, and an accumulating list would save a
+  // revision that moved nothing.
+  moved() {
+    const out = [];
+    for (const [name, origin] of this.origin) {
+      const shape = this.shapes.get(name);
+      if (!shape) continue;
+      const x = Math.round(shape.x);
+      const y = Math.round(shape.y);
+      if (x === origin.x && y === origin.y) continue;
+      out.push({ name, x, y });
+    }
+    return out;
+  }
+
+  refreshPalette() {
+    if (this.editable) this.diagram.get("palette")._rebuild();
+  }
+  marquee(event) {
+    if (this.editable) this.diagram.get("lassoTool").activateSelection(event);
+  }
+
+  // spotFor places the next state where the reader is looking, not on a grid the
+  // sheet may have been scrolled away from. A palette that drops a state outside the
+  // window reads as a palette that did nothing — and nothing re-fits on an edit,
+  // because a diagram that jumps every time you add to it is worse than one you
+  // occasionally have to pan.
+  //
+  // `taken` are the states already placed; the offset walks a short diagonal so the
+  // second and third do not land under the first.
+  spotFor(taken = 0) {
+    const box = this.canvas.viewbox();
+    // Two columns, clustered on the middle of what is on screen. A short diagonal was
+    // the first attempt and put the second state on top of the first — near enough to
+    // look deliberate, close enough that a click could only ever reach the one drawn
+    // last. States are laid out so they do not touch.
+    const col = taken % 2;
+    const row = Math.floor(taken / 2);
+    return {
+      x: Math.round(box.x + box.width / 2 - STATE_W - 20 + col * (STATE_W + 40)),
+      y: Math.round(box.y + box.height / 2 - STATE_H + row * (STATE_H + 34)),
+    };
+  }
+  undo() { if (this.commandStack?.canUndo()) this.commandStack.undo(); }
+  redo() { if (this.commandStack?.canRedo()) this.commandStack.redo(); }
+  canUndo() { return Boolean(this.commandStack?.canUndo()); }
+  canRedo() { return Boolean(this.commandStack?.canRedo()); }
+
+  // sync reconciles in place, for the reason the class canvas does: the panel
+  // re-renders on every keystroke, and a redraw would take the viewport, the
+  // selection and the undo stack with it each time a state is renamed.
+  sync(lifecycle, findings = []) {
+    if (this.drawing) return;
+    if (!this.root) { this.render(lifecycle, findings); return; }
+    this.reconcile(lifecycle, findings);
+  }
+
+  reconcile(lifecycle, findings = []) {
+    const lc = lifecycle || { states: [], transitions: [] };
+    const bad = new Set(findings.map((f) => f.state).filter(Boolean));
+    const wanted = new Map();
+    for (const st of lc.states || []) wanted.set(st.name, st);
+
+    for (const [name, shape] of [...this.shapes]) {
+      if (wanted.has(name)) continue;
+      this.canvas.removeShape(shape);
+      this.shapes.delete(name);
+      this.origin.delete(name);
+    }
+    for (const [name, st] of wanted) {
+      const bo = { element: "state", ...st, invalid: bad.has(name) };
+      const width = stateWidth(st);
+      let shape = this.shapes.get(name);
+      if (shape) {
+        shape.businessObject = bo;
+        shape.width = width;
+        const origin = this.origin.get(name);
+        if (origin && shape.x === origin.x && shape.y === origin.y) {
+          shape.x = st.x;
+          shape.y = st.y;
+        }
+        this.origin.set(name, { x: st.x, y: st.y });
+        this.graphics.update("shape", shape, this.canvas.getGraphics(shape));
+      } else {
+        shape = this.factory.createShape({
+          id: `state-${name}`, type: "uml:state",
+          x: st.x, y: st.y, width, height: STATE_H, businessObject: bo,
+        });
+        this.canvas.addShape(shape, this.root);
+        this.shapes.set(name, shape);
+        this.origin.set(name, { x: st.x, y: st.y });
+      }
+    }
+
+    for (const [id, conn] of [...this.connections]) {
+      this.canvas.removeConnection(conn);
+      this.connections.delete(id);
+    }
+    let drawn = 0;
+    for (const t of lc.transitions || []) {
+      const source = this.shapes.get(t.from);
+      const target = this.shapes.get(t.to);
+      if (!source || !target) continue;
+      const conn = this.factory.createConnection({
+        id: t.id, type: "uml:transition", source, target,
+        waypoints: route(source, target, drawn++),
+        businessObject: { element: "transition", ...t },
+      });
+      this.canvas.addConnection(conn, this.root, drawn - 1);
+      this.connections.set(t.id, conn);
+    }
+  }
+
+  render(lifecycle, findings = []) {
+    if (this.drawing) return;
+    this.drawing = true;
+    try {
+      for (const conn of this.connections.values()) this.canvas.removeConnection(conn);
+      for (const shape of this.shapes.values()) this.canvas.removeShape(shape);
+      this.shapes = new Map();
+      this.connections = new Map();
+      this.origin = new Map();
+      if (this.root) this.canvas.removeRootElement(this.root);
+      const root = this.factory.createRoot({ id: "root-lifecycle" });
+      this.root = root;
+      this.canvas.setRootElement(root);
+      this.reconcile(lifecycle, findings);
+      this.selection.select(null);
+      this.commandStack?.clear();
+      requestAnimationFrame(() => { if (!this.destroyed) this.fit(); });
+    } finally {
+      this.drawing = false;
+    }
+  }
+
+  select(id) {
+    const one = this.shapes.get(id) || this.connections.get(id) || null;
+    this.selection.select(one);
+  }
+
+  fit() {
+    this.canvas.zoom("fit-viewport", "auto");
+    const box = this.canvas.viewbox();
+    if (!box.inner.width || !box.inner.height) return;
+    const gutter = this.editable ? PALETTE_ROOM : 0;
+    const usable = Math.max(160, box.outer.width - gutter);
+    const room = Math.min(usable / box.inner.width, box.outer.height / box.inner.height);
+    this.canvas.zoom(Math.min(room * FIT_MARGIN, MAX_FIT), "auto");
+    this.canvas.scroll({ dx: gutter / 2, dy: 0 });
+  }
+  zoom(delta) {
+    const now = this.canvas.zoom();
+    this.canvas.zoom(Math.max(0.2, Math.min(4, now * delta)), "auto");
+  }
+  destroy() {
+    this.destroyed = true;
+    this.diagram.destroy();
+  }
+}

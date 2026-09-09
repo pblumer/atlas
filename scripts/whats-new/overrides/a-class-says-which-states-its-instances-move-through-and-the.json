@@ -1,0 +1,31 @@
+{
+  "tags": ["Data", "Modeler"],
+  "title": {
+    "en": "A business object can now say which states it moves through",
+    "de": "Ein Geschäftsobjekt sagt jetzt selbst, welche Zustände es durchläuft"
+  },
+  "summary": {
+    "en": "BPMN lets a data object carry a state — order [received] → [approved] — but never said which states exist or which may follow which, so it was a string somebody typed and got right from memory. A business object in your information model can now declare its own lifecycle: the states it moves through, where instances start, where they end. Draw it once and the Modeler offers those states instead of an empty box, the Problems panel says when a process writes one that does not exist, and the class a data object is is picked from a list rather than remembered.",
+    "de": "BPMN erlaubt einem Datenobjekt einen Zustand — Bestellung [erfasst] → [freigegeben] —, hat aber nie gesagt, welche Zustände es gibt und welcher auf welchen folgen darf: Es war eine Zeichenkette, die jemand aus dem Gedächtnis richtig tippen musste. Ein Geschäftsobjekt im Informationsmodell kann jetzt seinen eigenen Lebenszyklus erklären: die Zustände, die es durchläuft, wo Instanzen beginnen und wo sie enden. Einmal gezeichnet, bietet der Modeler genau diese Zustände an statt eines leeren Feldes, die Problemliste meldet einen Zustand, den es nicht gibt, und die Klasse eines Datenobjekts wird aus einer Liste gewählt statt erinnert."
+  },
+  "tutorial": {
+    "en": [
+      "Open Data, pick an information model and click a business object on the canvas.",
+      "In its panel, under Lifecycle, choose \"Draw a lifecycle\".",
+      "Add states from the palette on the left; the first one is marked as where instances start. Mark the ones nothing leaves as final.",
+      "Click the transition tool, then two states in turn, to draw the move from one to the other. Save.",
+      "Open a process in the Modeler, select a data object, and set its Type to that class — its Data state is now a list of exactly those states."
+    ],
+    "de": [
+      "Unter Daten ein Informationsmodell öffnen und auf der Zeichenfläche ein Geschäftsobjekt anklicken.",
+      "Im Panel unter Lebenszyklus auf „Lebenszyklus zeichnen“ klicken.",
+      "Zustände über die Palette links hinzufügen; der erste ist als Startzustand markiert. Zustände, die nichts mehr verlässt, als final markieren.",
+      "Das Übergangs-Werkzeug wählen und nacheinander zwei Zustände anklicken, um den Übergang zu zeichnen. Speichern.",
+      "Im Modeler einen Prozess öffnen, ein Datenobjekt auswählen und als Typ diese Klasse setzen — der Datenzustand ist nun eine Liste genau dieser Zustände."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open Data", "de": "Daten öffnen" },
+    "route": "#/data"
+  }
+}
