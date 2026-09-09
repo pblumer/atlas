@@ -6272,7 +6272,9 @@ atlas worker --connector mssql</code></pre>
           und das Suchfeld über der Liste findet gezielt eine – gib einen <b>Instanzschlüssel</b> ein (das ist
           ein einzelner Lesezugriff, egal wie viele Instanzen es gibt) oder <code>name=wert</code> für eine
           Suche über die Prozessvariablen dieser Version. Damit die Wertsuche ebenfalls ein einzelner
-          Zugriff wird, sagt das Modell, wonach gesucht werden soll:
+          Zugriff wird, sagt das Modell, wonach gesucht werden soll: im Modeller trägst du die Namen
+          in den Prozess-Eigenschaften unter <b>Searchable variables</b> ein — nichts auswählen, Gruppe
+          <b>Process</b> — und das Modell erhält
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. Für eine so deklarierte
           Variable beantwortet der Index die Suche; alles andere liest die Instanzen der Version durch. Was
           du eingibst, wird dabei <b>vollständig</b> verglichen: <code>kdnr=MT-100</code> findet
@@ -6286,7 +6288,9 @@ atlas worker --connector mssql</code></pre>
           shows a <b>page</b> ("80 of 150") rather than everything: <b>Load more</b> fetches the next one, and
           the search box above the list finds a specific one – type an <b>instance key</b> (one read, whatever
           the instance count) or <code>name=value</code> to search this version's process variables. To make
-          the value search one read too, the model says what it wants to be found by:
+          the value search one read too, the model says what it wants to be found by: in the Modeler you type
+          the names into the process properties under <b>Searchable variables</b> — select nothing, group
+          <b>Process</b> — and the model gets
           <code>&lt;bpmn:process atlas:searchable="identityId,item"&gt;</code>. For a variable declared that
           way the index answers the search; anything else reads through the version's instances. Either way
           what you type is matched <b>whole</b>: <code>kdnr=MT-100</code> finds <code>MT-100</code> and not

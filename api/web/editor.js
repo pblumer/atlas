@@ -283,6 +283,25 @@ const isValidTtl = (s) => {
   return parts.some((p) => p !== undefined && Number(p) > 0); // must be strictly positive
 };
 
+// searchableProblem mirrors the compiler's reading of atlas:searchable (ADR-0244;
+// compiler/parse.go): a comma-separated list of variable names, forgiving about
+// spacing, in which a nameless entry or a repeated name fails the deploy rather
+// than silently indexing nothing. Returns the warning to show, or "" when the
+// declaration is one the deploy will accept. Like isValidTtl it only warns while
+// authoring; the deploy is the authority.
+const searchableProblem = (s) => {
+  const raw = String(s || "").trim();
+  if (!raw) return "";
+  const seen = new Set();
+  for (const part of raw.split(",")) {
+    const name = part.trim();
+    if (!name) return "Searchable variables: an entry has no name — check for a doubled or trailing comma";
+    if (seen.has(name)) return `Searchable variables: "${name}" is named twice`;
+    seen.add(name);
+  }
+  return "";
+};
+
 // --- Variable presentation (shared by the live and replay views) ---
 //
 // Operators inspect an instance's variables, which can be whole JSON structures.
@@ -6040,6 +6059,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
           <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
           <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
+          <label class="field"><span>Searchable variables</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
+          <p class="muted" style="font-size:12px">The variable names this process wants to be <b>found by</b>, comma-separated. A declared name is answered from a value index, so searching <code>identityId=MT-1998</code> over this version in Operations costs the number of matches instead of a read through every instance &mdash; and a trailing <code>*</code> asks for a prefix. Indexed is a variable at the instance's <b>top level</b> whose value is text, a number or true/false and stays under 256 bytes; a JSON structure or a variable local to one activity is not. A declared name is matched <b>exactly</b>, upper and lower case included, while an undeclared one keeps the read-through search it always had. Declaring nothing costs nothing, so name the one or two business keys you actually search by &mdash; a status that thousands of instances share is a poor declaration. It applies to instances started after the next deploy.</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -6080,6 +6101,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
           if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
           try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
+        });
+        body.querySelector("#f-psearch").addEventListener("change", (e) => {
+          const v = (e.target.value || "").trim();
+          // Same discipline as the TTLs: warn about a declaration the compiler will
+          // refuse (ADR-0244), but store what was typed rather than dropping it.
+          const problem = searchableProblem(v);
+          if (problem) toast(problem, "err");
+          try { modeling.updateProperties(rootEl, { searchable: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-pexec").addEventListener("change", (e) => {
           try { modeling.updateProperties(rootEl, { isExecutable: e.target.checked }); } catch { /* ignore */ }

@@ -522,7 +522,8 @@
       "properties": [
         { "name": "versionTag", "type": "String", "isAttr": true },
         { "name": "instanceTtl", "type": "String", "isAttr": true },
-        { "name": "historyTtl", "type": "String", "isAttr": true }
+        { "name": "historyTtl", "type": "String", "isAttr": true },
+        { "name": "searchable", "type": "String", "isAttr": true }
       ]
     }
   ]

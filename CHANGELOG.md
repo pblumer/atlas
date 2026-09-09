@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Modeler can now say what a process is found by.** `atlas:searchable`
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)) turns an operator's value search
+  into a seek, but it shipped as an attribute with no field and no moddle property, so
+  the only way to declare a searchable variable was to hand-edit the exported XML
+  outside the tool. The process properties now carry a **Searchable variables** field
+  beside the two TTLs, validated the way they are: a nameless entry or a name given
+  twice is what the deploy refuses, so the panel says so while authoring and still
+  stores what was typed rather than dropping the author's value.
+
+  What was missing was never the round trip — moddle keeps an attribute it has no
+  property for in `$attrs` and writes it back, so a hand-authored declaration was
+  invisible rather than lost. It was that nothing could *read or write* it: the panel
+  reads `rootBo.searchable` and writes through `updateProperties`, and both go through
+  moddle's properties. A drift test now fails for any future `<bpmn:process>` attribute
+  the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
+  ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
+
 - **A MIM import now hands over a worksheet, not a node inventory.** The serialised
   .NET collections a MIMWAL activity carries — the named queries it runs and the
   assignments it makes — were already decoded into a readable table on the step's
