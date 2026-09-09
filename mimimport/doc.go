@@ -71,7 +71,8 @@
 // an <atlas:mimRow> per row and an <atlas:mimCell column="…"> per cell, verbatim.
 // A cell says where it sat, never what it does. That is addressable by a tool,
 // checkable against the preserved source, and asserts nothing that was not read
-// out of the markup.
+// out of the markup. The whole argument, including the option this rejects, is in
+// ADR-0292.
 //
 // # The Report is a migration worksheet
 //

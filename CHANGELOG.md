@@ -48,6 +48,16 @@ _Changed_ / _Removed_ for each version.
   it. A class a relationship cannot reach, or a state nothing leaves, is shown disabled
   with the reason on it rather than hidden (ADR-0259).
 
+- **The handbook's worker runbooks say when they were last checked, too.** The panel's
+  short setup steps started carrying that date; the handbook's long-form cards — which
+  name the same menus in the same products, at more length — did not, so the more
+  detailed of the two was the one with nothing to say about its own age. Each of the 23
+  runbook cards now closes with the month it was last walked, in both languages, and a
+  test fails when a card has stood unread for a year, is dated in the future, or claims a
+  different month than the panel entry for the same Worker Type. They are one instruction
+  at two lengths: dating them apart is how one gets re-read while the other quietly does
+  not (ADR-0289).
+
 - **A MIM import now hands over a worksheet, not a node inventory.** The serialised
   .NET collections a MIMWAL activity carries — the named queries it runs and the
   assignments it makes — were already decoded into a readable table on the step's

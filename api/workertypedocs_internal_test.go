@@ -315,3 +315,111 @@ func TestSetupDocsAreRecentlyChecked(t *testing.T) {
 			len(stale), strings.Join(stale, ", "))
 	}
 }
+
+// The handbook's runbook cards are the long form of the same instructions, read by the
+// same person on the same evening, and they name the same menus in the same products. So
+// they carry the same date and the same limit: a card that has stood unread for a year
+// is as misleading as a panel entry that has, and it is the more detailed of the two.
+//
+// Only the cards. The three per-product anchors inside the SQL card (runbook-mssql and
+// its siblings) are deep-link targets within one card, not runbooks of their own, and
+// dating them separately would claim three checks where one was made.
+var (
+	handbookCardRe    = regexp.MustCompile(`<div class="card" id="(runbook-[a-z]+)">`)
+	handbookCheckedRe = regexp.MustCompile(`data-checked="(\d{4})-(\d{2})"`)
+)
+
+// handbookRunbookCards cuts the handbook into its runbook cards, keyed by anchor. A card
+// runs to the start of the next one, which is enough to see what it carries without
+// teaching the test to parse HTML.
+func handbookRunbookCards(t *testing.T) map[string]string {
+	t.Helper()
+	body, err := fs.ReadFile(webFS, "web/handbuch.html")
+	if err != nil {
+		t.Fatalf("read handbuch.html: %v", err)
+	}
+	src := string(body)
+	locs := handbookCardRe.FindAllStringSubmatchIndex(src, -1)
+	if len(locs) < 20 {
+		t.Fatalf("found only %d runbook cards in handbuch.html; the markup must have changed", len(locs))
+	}
+	out := make(map[string]string, len(locs))
+	for i, loc := range locs {
+		end := len(src)
+		if i+1 < len(locs) {
+			end = locs[i+1][0]
+		}
+		out[src[loc[2]:loc[3]]] = src[loc[0]:end]
+	}
+	return out
+}
+
+func TestHandbookRunbooksAreRecentlyChecked(t *testing.T) {
+	now := time.Now()
+	var missing, stale, ahead []string
+	for id, card := range handbookRunbookCards(t) {
+		m := handbookCheckedRe.FindStringSubmatch(card)
+		if m == nil {
+			missing = append(missing, id)
+			continue
+		}
+		checked, err := time.Parse("2006-01", m[1]+"-"+m[2])
+		if err != nil {
+			missing = append(missing, fmt.Sprintf("%s (unreadable date %q)", id, m[1]+"-"+m[2]))
+			continue
+		}
+		if checked.After(now) {
+			ahead = append(ahead, fmt.Sprintf("%s (%s-%s)", id, m[1], m[2]))
+			continue
+		}
+		if now.Sub(checked) > setupDocMaxAge {
+			stale = append(stale, fmt.Sprintf("%s (last checked %s-%s)", id, m[1], m[2]))
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		t.Errorf("%d handbook runbook card(s) carry no check date: %s\n\n"+
+			"Close the card with `<p class=\"checked\" data-checked=\"YYYY-MM\">` naming the month "+
+			"you last walked it, in both languages like every other line in that file.",
+			len(missing), strings.Join(missing, ", "))
+	}
+	if len(ahead) > 0 {
+		sort.Strings(ahead)
+		t.Errorf("%d handbook runbook card(s) are dated in the future: %s", len(ahead), strings.Join(ahead, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Errorf("%d handbook runbook card(s) have not been checked in over a year: %s\n\n"+
+			"Walk each one at the provider and correct what has moved, then date what you read. "+
+			"The panel entry for the same Worker Type is the short form of the same instructions — "+
+			"check them together, they go stale together.",
+			len(stale), strings.Join(stale, ", "))
+	}
+}
+
+// A card and its panel entry are one instruction in two lengths. Dating them apart is
+// how one gets re-read and the other quietly does not — so the anchor that already ties
+// them together ties their dates together too.
+func TestAPanelEntryAndItsHandbookCardAgreeOnTheDate(t *testing.T) {
+	cards := handbookRunbookCards(t)
+	var drifted []string
+	for id, doc := range parseWorkerTypeDocs(t) {
+		card, ok := cards[doc.anchor]
+		if !ok || doc.checked == "" {
+			continue // the anchor guard and the date guard report those
+		}
+		m := handbookCheckedRe.FindStringSubmatch(card)
+		if m == nil {
+			continue // TestHandbookRunbooksAreRecentlyChecked reports it
+		}
+		if got := m[1] + "-" + m[2]; got != doc.checked {
+			drifted = append(drifted, fmt.Sprintf("%s: panel %s, handbook #%s %s", id, doc.checked, doc.anchor, got))
+		}
+	}
+	if len(drifted) > 0 {
+		sort.Strings(drifted)
+		t.Errorf("%d Worker Type(s) whose panel entry and handbook card claim different check dates: %s\n\n"+
+			"They are the same instructions at two lengths. Whichever was actually re-read, date both from it.",
+			len(drifted), strings.Join(drifted, ", "))
+	}
+}

@@ -345,6 +345,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0289](0289-worker-type-setup-in-the-panel.md) | A Worker Type carries its own setup, in the panel where it is chosen | Proposed |
 | [0290](0290-per-flow-join-counting.md) | A join counts tokens per incoming flow | Proposed |
 | [0291](0291-one-place-for-budgets.md) | One place names every resource budget, and one way sets them | Draft |
+| [0292](0292-mim-import-worksheet.md) | A MIM import hands over its rows as data, and counts them as work | Proposed |
 
 ## Status values
 

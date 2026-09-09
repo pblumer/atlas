@@ -82,6 +82,13 @@ kbd{font-family:ui-monospace,monospace;font-size:.82em;background:var(--card);
 
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
+/* When a runbook was last read against the real thing. A runbook names menu paths in
+   somebody else's product, which is what makes it useful and what will quietly stop
+   being true; nothing here can notice that, so the reader is handed the one fact that
+   lets them judge it. Quieter than the steps it qualifies — it is a caveat, not an
+   instruction — and separated by a rule so it does not read as a further step. */
+.card .checked{margin:14px 0 0;padding-top:9px;border-top:1px solid var(--border);
+  color:var(--muted);font-size:12.5px;line-height:1.5}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
 .steps{counter-reset:step;list-style:none;padding:0;max-width:none}
 .steps>li{counter-increment:step;position:relative;padding:14px 16px 14px 56px;margin:12px 0;
@@ -5124,6 +5131,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en"><b>Receiving events</b> (a new row, a new file in a folder) is configured on the same worker
           under <i>⇄ Events</i> – Atlas polls, once a minute by default; nothing from outside has to reach this
           server.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-entra">
@@ -5189,6 +5197,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <code>docs/entra-permissions.md</code>. Examples: <a href="#bsp-entra-team-onboarding">Team onboarding</a>,
           <a href="#bsp-entra-rezertifizierung">Recertification</a>,
           <a href="#bsp-entra-delta-sync">Delta sync</a>.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-jira">
@@ -5233,6 +5242,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en"><b>Receiving events:</b> on the worker under <i>Events</i> – JQL, watch kind, message name. The
           JQL has to narrow (Jira Cloud refuses an unbounded query with HTTP&nbsp;400) and must carry no
           <code>ORDER BY</code>. Example: <a href="#bsp-jira-ticket-eingang">Incoming tickets</a>.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-mail">
@@ -5265,6 +5275,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en"><b>Before the first real send:</b> check that the sender address is actually allowed to send
           (SPF/DKIM), and send the first batch to yourself. An automation sending two hundred wrong emails is faster
           than any correction.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-ad">
@@ -5301,6 +5312,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           voraussetzt – das ist keine Umständlichkeit, sondern die Struktur von LDAP.</p>
         <p data-l="en"><b>A DN is not business data.</b> Expect every assignment to require a search first – that is
           not clumsiness, it is the structure of LDAP.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-sql">
@@ -5370,6 +5382,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           answers in memory; what a run asked for is listed under
           <a href="/#/operations/sql-mock">Operations ▸ Mock database</a>. Example:
           <a href="#bsp-mssql-eintrittsmeldung">Joiner notification</a>.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-sharepoint">
@@ -5392,6 +5405,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           is missing" but "this app has no access to <i>this</i> site". Graph has a <b>site-specific</b> permission for
           SharePoint (<code>Sites.Selected</code>), where a site is granted individually – it is the frugal variant and
           the reason the same app works on one site and not on the next.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-remedy">
@@ -5405,6 +5419,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <code>{"username": "…", "password": "…"}</code>. A technical AR System user with exactly the forms the
           processes work on. Clarify with your ITSM team beforehand which fields a ticket is required to carry in your
           installation – that is installation-specific and the most common cause of a rejected call.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-temis">
@@ -5429,6 +5444,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <li data-l="de">Im Business-Rule-Task die Bindung <b>temis</b> wählen und den Worker-Namen nennen.</li>
           <li data-l="en">In the business rule task choose the <b>temis</b> binding and name the worker.</li>
         </ol>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-clio">
@@ -5451,6 +5467,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             gateway: a query on a subject nothing has written answers "no state" – which is not the same as "not
             reachable".</li>
         </ol>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-discord">
@@ -5490,6 +5507,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en"><b>The trap:</b> a missing channel grant comes back as code <code>50001</code>,
           <i>Missing Access</i> – not as a rejected token. Check the channel's permissions before you reset the
           token.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <div class="card" id="runbook-ai">
@@ -5528,6 +5546,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en"><b>Why this never runs inside the engine:</b> a model call takes seconds to minutes and can
           hang. Atlas therefore supervises a worker instance of its own for this type and picks up a changed model on
           save, with no restart.</p>
+        <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
       </div>
 
       <h3 class="rz-group"><span data-l="de">Typen ohne Konfiguration</span><span data-l="en">Types with nothing to configure</span></h3>
@@ -5546,6 +5565,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p class="lead" data-l="en">Calls a REST API and stores the answer in a variable. URL, method, headers and
             body live in the task. <b>Credentials still belong in the vault:</b> an API key belongs in the task as a
             reference, not as a value – otherwise it sits in the model, in the export and in every version.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-webscrape">
           <b data-l="de">Web-Scraping</b><b data-l="en">Web scraping</b>
@@ -5556,6 +5576,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p class="lead" data-l="en">Reads a page by CSS selector or pulls an RSS/Atom feed as a structured list.
             Atlas offloads this type by default and starts the worker instance itself. Examples:
             <a href="#bsp-blick-schlagzeilen">Headlines</a>, <a href="#bsp-hypothekarzinsen">Mortgage rates</a>.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-csv">
           <b>CSV</b>
@@ -5563,6 +5584,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             im Modell. Beispiel: <a href="#bsp-pruefe-datensaetze">Datensätze prüfen</a>.</p>
           <p class="lead" data-l="en">Turns a CSV file into a list of objects. The column description lives in the
             model. Example: <a href="#bsp-pruefe-datensaetze">Check records</a>.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-script">
           <b data-l="de">Skript (PowerShell, Python, JavaScript)</b><b data-l="en">Script (PowerShell, Python, JavaScript)</b>
@@ -5576,6 +5598,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             responsibility – validate inputs, keep credentials out of the script text, and treat the machine the
             worker runs on as a production system. Reach for it when no specialised type exists; not because it is
             quicker to write.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-ldap">
           <b>LDAP</b>
@@ -5591,6 +5614,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <code>ldap://</code> with STARTTLS. For Active&nbsp;Directory take the specialised type – it knows the
             quirks a generic call leaves to you. <b>Careful:</b> a search without permission answers "nothing found"
             rather than failing.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-scim">
           <b>SCIM</b>
@@ -5606,6 +5630,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <i>Bearer token</i>). Start with a <b>search</b> rather than a create: a filter such as
             <code>userName eq "arno"</code> proves the token and the base URL without writing anything – but note
             that an unentitled search answers "no resources" instead of failing.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-soap">
           <b data-l="de">SOAP / Web Services</b><b data-l="en">SOAP / web services</b>
@@ -5621,6 +5646,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             around it. <b>The most common search in the wrong place:</b> a wrong or missing <code>SOAPAction</code>
             header is answered by most stacks with a fault about the <i>body</i>. When the body looks right, check
             the action first.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-ldif">
           <b data-l="de">Verzeichnisdatei (LDIF/DSML)</b><b data-l="en">Directory file (LDIF/DSML)</b>
@@ -5634,6 +5660,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             bytes is how a malformed file becomes a plausible-looking empty result. Entries carry the same
             <code>{dn, attributes}</code> shape an LDAP search returns, so a directory can be written straight to a
             file.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-jobworker">
           <b data-l="de">Job-Worker – dein eigener Prozess</b><b data-l="en">Job worker – a process of your own</b>
@@ -5653,6 +5680,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             a non-zero exit fails it carrying stderr as the message. <b>A token sitting on the task with no
             incident</b> means nobody is leasing that job type – the job waits correctly, the worker is what is
             missing.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-userprov">
           <b data-l="de">Benutzerbereitstellung (Atlas-Logins)</b><b data-l="en">User provisioning (Atlas logins)</b>
@@ -5671,6 +5699,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             switches it off. Always put a <b>human approval step</b> in front of it where an administrator decides
             the roles and the initial password – never a public start form. The password arrives as a FEEL reference
             (<code>=initialpasswort</code>), so none is written into the model.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
         <div class="card" id="runbook-mockup">
           <b data-l="de">Mockup – gar kein Worker</b><b data-l="en">Mockup – no worker at all</b>
@@ -5681,6 +5710,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p class="lead" data-l="en">Not a worker type but a mode of the service task: the engine acts the foreign
             system itself, with a response time, a scripted answer and a failure rate. The best first step for any task
             whose counterpart does not exist yet. Example: <a href="#bsp-bonitaet-mockup">Credit check</a>.</p>
+          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026 – stimmt etwas davon nicht mehr mit dem überein, was du vor dir siehst, ist dieser Abschnitt veraltet und nicht du.</span><span data-l="en">Last checked September 2026 – if any of this no longer matches what is in front of you, this section is out of date, not you.</span></p>
         </div>
       </div>
     </section>
