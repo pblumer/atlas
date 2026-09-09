@@ -463,11 +463,11 @@ func setVariableElement(tx *stateTx, v *model.VariableValue) error {
 			return err
 		}
 	}
-	if v.Index < 0 || v.Index >= parts {
-		return nil
-	}
+	// One guard, because the two refusals are the same answer: this write names no slot
+	// of this collection. An index outside it is the tolerance the fold has always had,
+	// and a value with no JSON image is a shape FromStored cannot produce today.
 	frag, ok := expr.ToJSON(expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text))
-	if !ok {
+	if !ok || v.Index < 0 || v.Index >= parts {
 		return nil
 	}
 	return tx.PutVariableElement(v.ScopeKey, v.Name, v.Index, frag)
@@ -509,8 +509,5 @@ func beginCollection(tx *stateTx, scope uint64, name string) (int32, error) {
 	}
 	stub := *cur
 	stub.Kind, stub.Bool, stub.Text, stub.Parts = model.VarJSON, false, "", int32(len(elems))
-	if err := tx.PutVariable(&stub); err != nil {
-		return 0, err
-	}
-	return stub.Parts, nil
+	return stub.Parts, tx.PutVariable(&stub)
 }

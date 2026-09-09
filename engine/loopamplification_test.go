@@ -127,6 +127,49 @@ func TestALoopRecordsOneResultPerRound(t *testing.T) {
 	}
 }
 
+// TestTheConditionSeesTheCollectionAsItFills is the guard on the form itself. A loop's
+// completion condition is evaluated over the body's scope chain, so it can read the
+// collection *while it is being filled* — and that collection is now a stub with its
+// elements held apart, assembled on every read. If the assembly were wrong, or skipped
+// on the path FEEL takes, the condition would read nulls where results already are and
+// the loop would run to the end of its list.
+//
+// It stops after the second round instead, and the promoted list shows exactly two
+// filled slots: the rounds that ran, and nulls where the loop decided not to.
+func TestTheConditionSeesTheCollectionAsItFills(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+
+	b := compiler.NewBuilder(1, "mi-condition", 1)
+	start := b.AddStartEvent()
+	setup := b.AddScriptTask(mustCompile(t, "[1,2,3,4]"), "items")
+	work := b.AddScriptTask(mustCompile(t, "item * 10"), "result")
+	b.SetMultiInstance(work, true /*sequential*/, "item", "results",
+		mustCompile(t, "items"), nil, mustCompile(t, "result"),
+		mustCompile(t, "results[1] != null and results[2] != null"))
+	end := b.AddEndEvent()
+	b.Connect(start, setup)
+	b.Connect(setup, work)
+	b.Connect(work, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	if got, want := varText(t, h.store, model.NewKey(1, 1), "results"), "[10,20,null,null]"; got != want {
+		t.Errorf("results = %s, want %s — the condition did not read the collection as it filled", got, want)
+	}
+}
+
 // TestALoopKeepsOneCopyOfItsCollection is the same guard for the state store, and it
 // is a separate test because for a while the two answers differed. Naming the element
 // in the log left the fold still putting the assembled collection back under one key

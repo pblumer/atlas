@@ -62,11 +62,60 @@ func TestSettingAnElementToleratesACollectionThatIsNotThere(t *testing.T) {
 		t.Errorf("list = %v, want it untouched by an out-of-range index", v)
 	}
 
+	// Structured, and still not a list: a JSON object of the same name. It reaches
+	// further into the fold than the scalar above — the kind check lets it through, and
+	// what turns it away is that it has no elements to move.
+	if err := tx.PutVariable(&model.VariableValue{
+		ScopeKey: scope, Name: "object", Kind: model.VarJSON, Text: `{"a":1}`, Index: -1,
+	}); err != nil {
+		t.Fatalf("PutVariable: %v", err)
+	}
+	if err := set("object", 0); err != nil {
+		t.Errorf("setting an element of a JSON object: %v", err)
+	}
+	if v, err := tx.GetVariable(scope, "object"); err != nil || v == nil || v.Text != `{"a":1}` {
+		t.Errorf("object = %v, want it untouched", v)
+	}
+
 	// And the case that does apply.
 	if err := set("list", 1); err != nil {
 		t.Fatalf("setting element 1: %v", err)
 	}
 	if v, err := tx.GetVariable(scope, "list"); err != nil || v == nil || v.Text != `[null,"v"]` {
 		t.Errorf("list = %v, want the second element set", v)
+	}
+}
+
+// TestAListThatAlreadyHasElementsKeepsThemWhenItBecomesACollection covers the move a
+// loop never asks for. Seeding writes nulls, so in a run the conversion has nothing to
+// carry across — but the fold is written against a list, not against a loop's list, and
+// a list that arrived some other way must not lose what it holds when one element of it
+// is set.
+func TestAListThatAlreadyHasElementsKeepsThemWhenItBecomesACollection(t *testing.T) {
+	store, err := state.Open(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatalf("state.Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	tx := store.NewTransaction()
+	defer func() { _ = tx.Close() }()
+
+	const scope = 42
+	if err := tx.PutVariable(&model.VariableValue{
+		ScopeKey: scope, Name: "list", Kind: model.VarJSON, Text: `[1,"two",null,true]`, Index: -1,
+	}); err != nil {
+		t.Fatalf("PutVariable: %v", err)
+	}
+	if err := setVariableElement(tx, &model.VariableValue{
+		ScopeKey: scope, Name: "list", Index: 2, Kind: model.VarString, Text: "filled",
+	}); err != nil {
+		t.Fatalf("setVariableElement: %v", err)
+	}
+	v, err := tx.GetVariable(scope, "list")
+	if err != nil || v == nil {
+		t.Fatalf("GetVariable: %v (%v)", err, v)
+	}
+	if want := `[1,"two","filled",true]`; v.Text != want {
+		t.Errorf("list = %s, want %s — the elements it already held did not survive the move", v.Text, want)
 	}
 }

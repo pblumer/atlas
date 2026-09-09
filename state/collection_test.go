@@ -151,6 +151,45 @@ func TestAnOrdinaryVariableIsUnaffected(t *testing.T) {
 	}
 }
 
+// CollectionParts is what the fold asks before it writes an element, and the point is
+// what it does *not* do: reading the collection back to add to it is the cost this form
+// exists to remove, so asking how long it is must not assemble it.
+//
+// The two answers that are not "yes" have to stay distinguishable, because the fold
+// treats them the same way and for different reasons: an ordinary list is one it turns
+// into a collection, and an absent variable is one it leaves alone.
+func TestCollectionPartsAnswersWithoutAssembling(t *testing.T) {
+	s := openStore(t)
+	const scope = 10
+	seedCollection(t, s, scope, "results", 4, map[int32]string{0: `"a"`})
+	commit(t, s, func(tx *state.Tx) error {
+		return tx.PutVariable(&model.VariableValue{
+			ScopeKey: scope, Name: "ticket", Kind: model.VarString, Text: "PAT-9",
+		})
+	})
+
+	tx := s.NewTransaction()
+	defer tx.Close()
+	for _, tc := range []struct {
+		name      string
+		wantParts int32
+		wantHeld  bool
+	}{
+		{"results", 4, true},
+		{"ticket", 0, false},
+		{"nothing-of-that-name", 0, false},
+	} {
+		parts, held, err := tx.CollectionParts(scope, tc.name)
+		if err != nil {
+			t.Fatalf("CollectionParts(%q): %v", tc.name, err)
+		}
+		if parts != tc.wantParts || held != tc.wantHeld {
+			t.Errorf("CollectionParts(%q) = (%d, %v), want (%d, %v)",
+				tc.name, parts, held, tc.wantParts, tc.wantHeld)
+		}
+	}
+}
+
 func textOf(v *model.VariableValue) string {
 	if v == nil {
 		return "<absent>"

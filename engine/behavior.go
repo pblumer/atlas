@@ -4392,28 +4392,21 @@ func finishMultiInstanceIteration(c *ProcessingContext, key uint64, ei *model.El
 func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.MultiInstance(cp.Node(ei.ElementId).MultiInstance)
-	if d.Standard {
+	fits := true
+	switch {
+	case d.Standard:
 		// A standard loop has no output collection: what its iterations wrote *is* its
 		// result, held at the body scope so each round could read the previous one's work
 		// (ADR-0133). Promoting all of it to the enclosing scope makes a looping activity
 		// leave behind exactly what the same activity would have left running once.
-		fits := true
 		c.VariablesOfScope(bodyKey, func(v model.VariableValue) {
 			if v.Name == LoopCounterVariable {
 				return // the parked-run bookkeeping of parkRunawayLoop, not the loop's work
 			}
 			v.ScopeKey = ei.FlowScopeKey
-			if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
-				fits = false
-			}
+			fits = c.AppendVariableEvent(model.IntentVariableCreated, v) && fits
 		})
-		if !fits {
-			return false
-		}
-		dropLocalScope(c, bodyKey)
-		return true
-	}
-	if d.OutputCollection >= 0 {
+	case d.OutputCollection >= 0:
 		if v := c.GetVariable(bodyKey, cp.Intern(d.OutputCollection)); v != nil {
 			out := *v
 			out.ScopeKey = ei.FlowScopeKey // promote to the parent scope
@@ -4425,10 +4418,11 @@ func promoteMultiInstanceOutput(c *ProcessingContext, bodyKey uint64, ei *model.
 			// carried an element each and were measured against the variable budget, so
 			// the assembled list has not been weighed since the loop was seeded — and it
 			// is what the enclosing scope is about to hold.
-			if !c.appendCollection(model.IntentVariableCreated, out) {
-				return false
-			}
+			fits = c.appendCollection(model.IntentVariableCreated, out)
 		}
+	}
+	if !fits {
+		return false
 	}
 	dropLocalScope(c, bodyKey)
 	return true
