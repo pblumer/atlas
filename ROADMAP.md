@@ -1552,6 +1552,98 @@ dataset of up to 50 000 cases":
 
 ---
 
+## Milestone B — Business architecture: capabilities & value streams 🔲
+
+A parallel track: give Atlas a place for what an organisation must be able to do,
+above the processes that do it. The method is the business architecture of *Enterprise
+Process Orchestration* (Ruecker/Strauch, Wiley 2025) — value streams, strategic
+end-to-end processes, and business capabilities as a flat, tagged list stated
+independently of their implementation. Atlas holds every process and none of that, so
+a deployed process can be found by its name and by nothing else: not by the capability
+it realises, not by who owns that capability in the business, and not by what would
+stall without it.
+
+The whole milestone is **design-time**. It emits no events, participates in no replay,
+and `applyToState` never sees it. The reasoning, the options weighed and what is
+deliberately refused are in
+[ADR-draft-business-capabilities-and-value-streams](docs/adr/draft-business-capabilities-and-value-streams.md);
+the method and how to work it with Atlas as it stands are in
+[`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md).
+
+- ✅ **B0 — The method, written down.** The five levels mapped onto what Atlas has and
+  has not, the conventions that make the method workable before any of the below
+  exists (an application per capability, the capability definition in the process's own
+  `<bpmn:documentation>`, a required capability as a service task rather than a call
+  activity), and the measurement patterns with the Atlas fact each one actually
+  produces.
+- 🔲 **B1 — The capability record.** A new `api/capability` area service
+  ([ADR-0147](docs/adr/0147-splitting-the-api-server-object.md)) over its own
+  `sidecar.NewStore`, holding scope, inputs, outputs, business owner, resources,
+  realisations, required capabilities, KPIs, SLAs, tags and a lifecycle state — with
+  **no parent field**, because the flat list is the method rather than a preference.
+  The business owner is free text with an optional principal: the person accountable
+  for a capability frequently has no account. Registered in
+  [`api/storeregistry.go`](api/storeregistry.go) as design-time, so a design-time
+  export carries the map.
+- 🔲 **B2 — The value stream record.** Ordered stages, each naming the capabilities
+  that perform it, with the stream's own KPIs. The method's own inconsistency is
+  accepted rather than engineered away: an end-to-end process spans several stages
+  *and* is itself a capability, so a stage names capabilities and an end-to-end
+  capability is named by every stage it spans.
+- 🔲 **B3 — Realisation, resolved at read time.** A capability's realisations point
+  outward by portable key ([ADR-0134](docs/adr/0134-git-backed-applications.md)) in one
+  of four kinds — `process`, `worker`, `system`, `manual` — because the two that are
+  not Atlas resources are the normal state of a capability before the work starts.
+  Everything mutable (does the application exist, is it deployed, at which version, how
+  many instances are live) is resolved when the record is read and stored nowhere:
+  [ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md) §4's
+  discipline, for its reason.
+- 🔲 **B4 — The gap report.** The reverse direction, computed rather than stored, the
+  way [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md) computes its overlay:
+  capabilities realised by nothing (the manual work, made visible), realisations
+  pointing at what no longer exists, deployed processes no capability claims, stages
+  with no capability, `requires` naming no capability, and a call activity crossing
+  into another capability's process that the caller never declared. A comparison, never
+  a merge — a declared dependency with no call is the normal case, since the method's
+  black box is usually a REST call. Reads run off the run loop
+  ([ADR-0239](docs/adr/0239-off-loop-queries.md)); nothing that grows with the instance
+  population runs on it.
+- 🔲 **B5 — The milestone event compiles.** A **none intermediate throw event** — an
+  event whose only job is to leave a trace in the engine's history — is the method's
+  milestone marker, and today the compiler refuses it (*"only message, signal,
+  compensation, escalation, and link events are supported yet"*). It compiles to a
+  pass-through node, which the link throw event already does. Small, and it is what
+  makes "identity verification started" a readable business state where no task sits.
+- 🔲 **B6 — Panorama meets the registry.** Binding keys `atlas.capabilityKey` on an
+  ArchiMate `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing
+  and the registry are the same architecture seen twice rather than two architectures.
+  ArchiMate's `ValueStream` type is already accepted by Panorama's validator and only
+  missing from its authorable palette.
+- 🔲 **B7 — Measurement.** Compute a capability's declared KPIs and SLAs from the data
+  Atlas already keeps: outcome distribution from the per-element visit counters
+  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) over distinctly named end
+  events, timeout rates from the termination counters, cycle time and per-phase
+  duration from the instance timeline, and slicing by `atlas:searchable` variables
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)). This slice carries the draft
+  record's open question, and it has to be answered by measurement rather than by
+  argument: whether that is computable at the instance volumes this is aimed at
+  *without* the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)),
+  which not every installation runs. Until it is answered, a KPI in the record is a
+  declaration and the API must not imply otherwise.
+- 🔲 **B8 — The Console surface.** A capability list that is worth opening: filter by
+  tag, sort by realisation state, and the gap report as the landing view rather than a
+  report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
+
+Deliberately out of scope: business areas (Level 1) and integration capabilities
+(Level 5) as record kinds of their own — the first is a tag, and the second is what a
+Worker Type already is ([ADR-0203](docs/adr/0203-worker-execution-model.md)). Importing
+an industry reference model (BIAN, ACORD, eTOM) maps its levels onto tags and is a
+later slice; doing it inside B1 would drag the hierarchy question into the record that
+exists to settle it. No approval workflow: `state` is a field somebody sets, and Atlas
+is the engine an organisation would model such a workflow *in*.
+
+---
+
 ## Explicit non-goals (for now)
 
 - **A *bespoke* graphical BPMN modeler.** Atlas ships a viewer/editor by embedding

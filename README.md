@@ -146,6 +146,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
   - [Processor](docs/architecture/processor.md)
   - [Data model](docs/architecture/data-model.md)
   - [Enterprise architecture (ArchiMate 3.2)](docs/architecture/enterprise-architecture.md) — a layered view across the business, application, technology, and motivation layers
+  - [Business architecture](docs/architecture/business-architecture.md) — capabilities, value streams, and how to work that way with Atlas: what it supports today, and what the measurement patterns actually record
   - [Glossary](docs/architecture/glossary.md)
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
 - **[Runtime contract](docs/runtime-contract.md)** — what you may depend on, what is an implementation detail, and how Atlas labels standard versus Atlas-defined behaviour

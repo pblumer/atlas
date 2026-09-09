@@ -8,6 +8,8 @@ Terms used throughout Atlas's documentation and code.
 
 **Boundary event** — An event attached to an activity that can interrupt (or run alongside) it: a timeout, an error, a message. Compiled as a `Span` on the enclosing scope.
 
+**Business capability** — What an organisation must be able to do, stated independently of how it is done: *underwrite a loan*, *verify an identity*. Carries a scope, an input and output contract, a business owner, the resources it draws on, and the KPIs and SLAs it is held to. Kept as a flat, tagged list rather than a hierarchy, and realised by an executable process, a purchased system, a Worker, or manual work — interchangeably, over its life. Atlas has no capability record today; the method and the conventions that work without one are in [`business-architecture.md`](business-architecture.md), and the proposed record is [ADR-draft-business-capabilities-and-value-streams](../adr/draft-business-capabilities-and-value-streams.md). Not to be confused with a **Worker Type**, which is a *technical* capability.
+
 **Command** — An intention to do something, submitted to a partition. May be rejected. Not persisted. Turned into events by the processor.
 
 **Connector** *(legacy)* — The pre-ADR-0203 word for what is now a **Worker Type** or a **Worker**, depending on where it stood — which is why it was replaced. It survives in contracts that cannot change without breaking deployed models: the `connector/` package paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the `ATLAS_*_CONNECTORS` variables and the `/api/v1/connectors` routes (aliased by `/api/v1/configured-workers`).
@@ -61,6 +63,8 @@ Terms used throughout Atlas's documentation and code.
 **Struct-of-arrays** — The layout where topology (incoming/outgoing flows) lives in shared contiguous arrays indexed by offset+count, rather than per-node slices.
 
 **Token** — Conceptually, the thread of control moving through a BPMN model. In Atlas, represented by active element instances rather than allocated objects.
+
+**Value stream** — The high-level, ordered activity an organisation performs to meet a customer need, from the inside-out view (the customer journey is the same path seen from outside). Stable across variants and deviations from the happy path, and typically spanning several teams. Its stages name the business capabilities that perform them. A strategic end-to-end process is a burst of activity *inside* a value stream, and is itself a business capability — so the two levels do not nest cleanly, which the method accepts rather than engineers away. See [`business-architecture.md`](business-architecture.md).
 
 **ValueType** — Part of the record discriminator. Which kind of entity a record concerns (ElementInstance, Job, Timer, Message, ...).
 
