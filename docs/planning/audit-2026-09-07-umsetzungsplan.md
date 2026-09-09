@@ -671,13 +671,17 @@ Seiteneffekte zurückbleiben.
 > und eine Task, deren Ergebnis nicht passt, bleibt parkiert, statt erfolgreich
 > auszusehen.
 >
-> **Was davon noch offen ist, als Einschränkung und nicht als Fussnote.** Drei
-> Schreibstellen — Nachrichten-Payload, Ergebnis eines Call-Activity, io-Mapping —
-> lehnen den Wert zwar ab, halten aber den Fortgang nicht an. Da das Beenden eines
-> Elements dessen Incident löscht (`engine/apply.go`), geht die Meldung dort mit dem
-> Element verloren, wenn es abschliesst; übrig bliebe nur die fehlende Variable.
-> Geschrieben wird der Wert trotzdem nicht — was fehlt, ist die *Sichtbarkeit* der
-> Ablehnung auf diesen Pfaden.
+> **Jede Schreibstelle hat jetzt ihre eigene Antwort auf «und dann?».** Es waren fünf,
+> nicht drei: Nachricht und Signal sind zwei Stellen, und die io-Mappings haben Ein-
+> und Ausgang. Der Loop-Body bleibt aktiviert; eine Task bleibt parkiert, weil der Job
+> getan ist und sich nicht wiederholen lässt; ein Nachrichten- oder Signal-Catch
+> schliesst nicht ab, weil die Subscription schon korreliert ist und beides nicht
+> zweimal zugestellt wird; ein Call-Activity nimmt seine Arbeit nicht wieder auf ohne
+> das Ergebnis, für das es gerufen hat, denn das Kind ist schon fort; ein
+> Ausgangs-Mapping lässt seine Aktivität nicht fertig aussehen, ohne etwas
+> hochgereicht zu haben, und behält ihren lokalen Scope, weil dort das Rohergebnis
+> liegt, das es liest; ein Eingangs-Mapping hält das Verhalten an, bevor es läuft,
+> statt einem Worker einen Job ohne das zu geben, was das Modell zugesagt hat.
 >
 > **Nicht mitgemacht:** Komponenten, die im Prozess eines Workers laufen (die
 > Antwort eines Modellanbieters, ein Remedy-Aufruf, die Fehlerausschnitte im

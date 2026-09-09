@@ -531,8 +531,15 @@ func runElementBehavior(c *ProcessingContext, key uint64, ei *model.ElementInsta
 	// isEventSubTrigger.
 	if !isEventSubTrigger(ei) {
 		applyDataInputAssociations(c, ei)
-		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) {
-			applyInputMappings(c, key, ei)
+		if hasIOMappings(c.process(ei.ProcessDefKey), ei.ElementId) && !applyInputMappings(c, key, ei) {
+			// An input past the budget was refused with an incident on this element.
+			// Running the behaviour anyway would work from an input that is not there —
+			// a worker would be handed a job missing what the model said to give it — and
+			// completing later would clear the incident with the element. So the element
+			// stays activated, exactly as the execution budget leaves one (ADR-0272), and
+			// resolving re-runs this activation
+			// (ADR-0294).
+			return
 		}
 	}
 	c.p.behavior(ei.BpmnElementType).OnActivated(c, key, ei)
@@ -639,8 +646,15 @@ func handleElementCompleting(c *ProcessingContext) {
 		// Re-evaluating them over the body scope — which holds no round's raw result —
 		// evaluated to null, and wrote that null into the enclosing scope, fabricating
 		// a variable no run produced and overwriting any real value of that name.
-		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody {
-			applyOutputMappings(c, c.cmd.Key, ei)
+		if c.process(ei.ProcessDefKey).Node(ei.ElementId).Type != compiler.TypeCallActivity && ei.MultiInstance != miBody &&
+			!applyOutputMappings(c, c.cmd.Key, ei) {
+			// An output past the budget was refused with an incident on this element.
+			// Completing it would clear that incident and drop the result the mapping was
+			// meant to promote, leaving an activity that looks finished and produced
+			// nothing (ADR-0294). The local scope is not dropped
+			// either: it still holds the raw result the mapping reads, and resolving
+			// re-runs this completion over it.
+			return
 		}
 		// A loop's element instances drop their own scope further down this same
 		// command, and it must not happen before the loop has read it: an iteration's
@@ -2006,11 +2020,15 @@ func ioResultScope(cp *compiler.CompiledProcess, elementKey uint64, ei *model.El
 // scope, so a later input can read an earlier one and unmapped names resolve to the
 // enclosing scope. The value is frozen into a VariableCreated event, so replay
 // re-applies it rather than re-evaluating (invariants I4/I6).
-func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+func applyInputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
+	fits := true
 	for _, m := range cp.IOInputs(ei.ElementId) {
-		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key))
+		if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, key)) {
+			fits = false
+		}
 	}
+	return fits
 }
 
 // evalMapping evaluates one I/O mapping's FEEL source over the scope chain from
@@ -2039,12 +2057,16 @@ func evalMapping(c *ProcessingContext, cp *compiler.CompiledProcess, m compiler.
 // evaluated here (command processing) and frozen into VariableCreated events, so
 // replay re-applies them without re-evaluating (I4/I6). The raw result and input
 // locals are removed separately by dropLocalScope.
-func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+func applyOutputMappings(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) bool {
 	cp := c.process(ei.ProcessDefKey)
+	fits := true
 	for _, m := range cp.IOOutputs(ei.ElementId) {
 		// Evaluate over the local scope chain (key), promote to the parent (flow) scope.
-		c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey))
+		if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, cp, m, key, ei.FlowScopeKey)) {
+			fits = false
+		}
 	}
+	return fits
 }
 
 // dropLocalScope deletes every variable in an activity's local scope when it
@@ -2498,13 +2520,21 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		// attributed to the element that received it and not to whatever published the
 		// message.
 		c.producer = m.elKey
+		fits := true
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
 		}
 		c.producer = prevProducer
-		if ei := c.GetElementInstance(m.elKey); ei != nil {
+		// A payload past the budget was refused with an incident on this catch event.
+		// Completing it anyway would clear that incident with the element and let the
+		// instance carry on as though the message had been received in full — the
+		// subscription is already correlated, so the message will not come again
+		// (ADR-0294).
+		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
@@ -2643,13 +2673,21 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		// production, not the broadcaster's, and the producer of the command that got
 		// here is put back afterwards (ADR-0219).
 		c.producer = m.elKey
+		fits := true
 		for j := range vars {
 			vv := vars[j]
 			vv.ScopeKey = m.sub.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, vv)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
 		}
 		c.producer = prevProducer
-		if ei := c.GetElementInstance(m.elKey); ei != nil {
+		// A payload past the budget was refused with an incident on this catch event.
+		// Completing it anyway would clear that incident with the element and let the
+		// instance carry on as though the signal had been received in full — and a
+		// broadcast is not replayed for a subscriber that missed it
+		// (ADR-0294).
+		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
@@ -4519,20 +4557,32 @@ func resumeCaller(c *ProcessingContext, childScope, callerKey uint64) {
 	// than deferred: a closure would allocate on the command path (I1).
 	prevProducer := c.producer
 	c.producer = callerKey
+	fits := true
 	if detail.PropagateAllChild {
 		// All child variables merge into the caller's instance scope.
 		c.VariablesOfScope(childScope, func(v model.VariableValue) {
 			v.ScopeKey = caller.ProcessInstanceKey
-			c.AppendVariableEvent(model.IntentVariableCreated, v)
+			if !c.AppendVariableEvent(model.IntentVariableCreated, v) {
+				fits = false
+			}
 		})
 	} else {
 		// Only the output mappings escape: each source is FEEL over the child's
 		// variables, promoted to the caller's instance scope.
 		for _, m := range callerCp.IOOutputs(caller.ElementId) {
-			c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey))
+			if !c.AppendVariableEvent(model.IntentVariableCreated, evalMapping(c, callerCp, m, childScope, caller.ProcessInstanceKey)) {
+				fits = false
+			}
 		}
 	}
 	c.producer = prevProducer
+	// A result past the budget was refused with an incident on the call activity.
+	// Resuming it anyway would clear that incident with the element and let the caller
+	// carry on without the result it called for — and the child is already gone, so
+	// nothing would produce it again (ADR-0294).
+	if !fits {
+		return
+	}
 	c.AppendElementCommand(callerKey, model.IntentCompleting, *caller)
 }
 

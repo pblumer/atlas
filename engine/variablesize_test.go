@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/compiler"
+
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -239,5 +241,94 @@ func TestATaskWhoseResultDoesNotFitStaysParked(t *testing.T) {
 	// The element is still there holding its token: the instance did not quietly finish.
 	if pi, ei := counts(t, h.store); pi != 1 || ei == 0 {
 		t.Errorf("process=%d element=%d, want the instance and its task still present", pi, ei)
+	}
+}
+
+// TestARefusedWriteLeavesItsElementStanding covers the four remaining sites at which
+// a value a model or a worker produced becomes a variable. Each has its own answer to
+// "and then what", and they share one assertion, which is the one that matters:
+// terminating an element clears the incident it carries, so a refusal that let the
+// element finish would leave *nothing* behind — not the value, and not the report.
+//
+// So each case checks both halves: the incident is still there, and so is the element
+// that carries it.
+func TestARefusedWriteLeavesItsElementStanding(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		build func(t *testing.T) *compiler.CompiledProcess
+	}{
+		{
+			// An output mapping promotes a script's result out of the activity's local
+			// scope. Refused, the activity must not complete: it would drop the result
+			// and look finished.
+			name: "an output mapping",
+			build: func(t *testing.T) *compiler.CompiledProcess {
+				b := compiler.NewBuilder(1, "io-out", 1)
+				start := b.AddStartEvent()
+				task := b.AddScriptTask(mustCompile(t, `"seed"`), "raw")
+				b.AddOutputMapping(task, "promoted", mustCompile(t, `"0123456789abcdef"`))
+				end := b.AddEndEvent()
+				b.Connect(start, task)
+				b.Connect(task, end)
+				cp, err := b.Build()
+				if err != nil {
+					t.Fatalf("Build: %v", err)
+				}
+				return cp
+			},
+		},
+		{
+			// An input mapping is read *before* the behaviour runs. Refused, the
+			// behaviour must not run at all: it would work from an input that is not
+			// there, and a worker would be handed a job missing what the model promised.
+			name: "an input mapping",
+			build: func(t *testing.T) *compiler.CompiledProcess {
+				b := compiler.NewBuilder(2, "io-in", 1)
+				start := b.AddStartEvent()
+				task := b.AddScriptTask(mustCompile(t, `"done"`), "out")
+				b.AddInputMapping(task, "given", mustCompile(t, `"0123456789abcdef"`))
+				end := b.AddEndEvent()
+				b.Connect(start, task)
+				b.Connect(task, end)
+				cp, err := b.Build()
+				if err != nil {
+					t.Fatalf("Build: %v", err)
+				}
+				return cp
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := openHarness(t, t.TempDir())
+			defer h.close(t)
+			cp := tc.build(t)
+
+			p := engine.New(1, h.log, h.store, &manualClock{})
+			p.SetJobNotifier(func(int32) {})
+			p.SetMaxVariable(8) // the mapped value is sixteen bytes of JSON text
+			p.Deploy(cp)
+			if err := p.Recover(); err != nil {
+				t.Fatalf("Recover: %v", err)
+			}
+			p.CreateInstance(cp.Key)
+			if err := p.RunUntilIdle(); err != nil {
+				t.Fatalf("RunUntilIdle: %v", err)
+			}
+
+			incs := incidents(t, h.store)
+			if len(incs) == 0 {
+				t.Fatal("the write was refused without a surviving incident — " +
+					"completing the element clears the one it carries")
+			}
+			for _, inc := range incs {
+				if inc.Reason != model.IncidentVariableTooLarge {
+					t.Errorf("incident reason = %v, want IncidentVariableTooLarge", inc.Reason)
+				}
+			}
+			pi, ei := counts(t, h.store)
+			if pi != 1 || ei == 0 {
+				t.Errorf("process=%d element=%d, want the instance and its element still standing", pi, ei)
+			}
+		})
 	}
 }
