@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -300,5 +301,56 @@ func TestImportMIMRefusesTwoWorkflowsOnOneID(t *testing.T) {
 	// Nothing was written.
 	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/drafts/Onboarding/xml", "", ""); code == http.StatusOK {
 		t.Error("a refused import must write nothing")
+	}
+}
+
+// TestImportMIMReportsWhatRunningInstancesWouldLose covers the two halves of the
+// cost of a later deploy together: the elements a running instance stands on, and
+// the process data it carries. dataObjectBPMN parks its instance on an hour-long
+// timer, so the instance is still active when the import asks.
+func TestImportMIMReportsWhatRunningInstancesWouldLose(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", dataObjectBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy status=%d body=%s", code, body)
+	}
+	var deploy struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &deploy); err != nil {
+		t.Fatalf("decode deploy: %v", err)
+	}
+	if code, b := doReq(t, ts, http.MethodPost,
+		"/api/v1/processes/"+strconv.FormatUint(deploy.Key, 10)+"/instances", "{}", "application/json"); code != http.StatusOK {
+		t.Fatalf("create instance: status=%d body=%s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/imports/mim?name=withdata", mimXOML, "application/xml")
+	if code != http.StatusConflict {
+		t.Fatalf("import status=%d, want 409; body=%s", code, body)
+	}
+	var conflict mimConflict
+	if err := json.Unmarshal(body, &conflict); err != nil {
+		t.Fatalf("decode conflict: %v (%s)", err, body)
+	}
+	d := conflict.Impacts[0].Deployed
+	if d == nil {
+		t.Fatalf("the deployed version must be reported: %s", body)
+	}
+	if d.ActiveInstances != 1 {
+		t.Errorf("activeInstances = %d, want 1", d.ActiveInstances)
+	}
+	if len(d.DroppedElements) == 0 {
+		t.Errorf("the elements the instance stands on must be named: %+v", d)
+	}
+	// A MIM workflow declares no data objects, so both of the deployed version's
+	// have nowhere to go — the second under the id Atlas names it by, since the
+	// model gave it no name.
+	if len(d.DroppedDataObjects) != 2 || d.DroppedDataObjects[0] != "order" {
+		t.Errorf("droppedDataObjects = %v, want both, order first", d.DroppedDataObjects)
+	}
+	// The one line a caller might show on its own says the instances are at risk.
+	if !strings.Contains(conflict.Reason, "running instance(s) stand on elements") {
+		t.Errorf("reason should name the risk: %q", conflict.Reason)
 	}
 }

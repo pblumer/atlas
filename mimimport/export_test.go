@@ -307,3 +307,155 @@ func TestConditionedActivityGroupIsALoop(t *testing.T) {
 		t.Errorf("the UntilCondition must be reported, got %s", res.Report.String())
 	}
 }
+
+// TestSourceLabelNamesAResource covers the fallbacks a skipped WorkflowDefinition
+// is named by: a resource without a DisplayName is still worth naming.
+func TestSourceLabelNamesAResource(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   SourceInfo
+		want string
+	}{
+		{"display name wins", SourceInfo{DisplayName: "Joiner", ObjectID: "urn:1"}, "Joiner"},
+		{"object id when unnamed", SourceInfo{ObjectID: "urn:1"}, "urn:1"},
+		{"nothing to go on", SourceInfo{}, "unnamed"},
+	} {
+		if got := sourceLabel(tc.in); got != tc.want {
+			t.Errorf("%s: sourceLabel = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestSourceDescribeSaysNothingAboutNothing: raw XOML has no resource around it,
+// and the process documentation must not gain an empty sentence for it.
+func TestSourceDescribeSaysNothingAboutNothing(t *testing.T) {
+	if got := (SourceInfo{}).describe(); got != "" {
+		t.Errorf("describe() = %q, want empty", got)
+	}
+	if got := (SourceInfo{DisplayName: "Joiner"}).describe(); got != "" {
+		t.Errorf("a name alone is the process name, not a fact to restate: %q", got)
+	}
+	if got := (SourceInfo{RequestPhase: "Action"}).describe(); got != "Anforderungsphase: Action." {
+		t.Errorf("describe() = %q", got)
+	}
+}
+
+// TestConditionTextReadsEveryShape covers how WF writes a condition: a rule it
+// refers to, an inline expression on an attribute, and the element's own text.
+func TestConditionTextReadsEveryShape(t *testing.T) {
+	for _, tc := range []struct {
+		name, xml, want string
+		ok              bool
+	}{
+		{"declarative rule reference", `<Branch.Condition><RuleConditionReference ConditionName="R1"/></Branch.Condition>`, "rule R1", true},
+		{"code condition expression", `<Branch.Condition><CodeCondition Expression="a &gt; b"/></Branch.Condition>`, "a > b", true},
+		{"inline text", `<Branch.Condition>x = 1</Branch.Condition>`, "x = 1", true},
+		{"markup with no name or text", `<Branch.Condition><Odd><Deeper/></Odd></Branch.Condition>`, "<Odd><Deeper/></Odd>", true},
+		{"empty", `<Branch.Condition></Branch.Condition>`, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, _, err := decodeNode([]byte(tc.xml))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, ok := conditionText(n)
+			if ok != tc.ok || got != tc.want {
+				t.Errorf("conditionText = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+// TestAttributeEntryReadsEveryShape covers the three ways FIMAutomation writes an
+// attribute, and the element that is none of them.
+func TestAttributeEntryReadsEveryShape(t *testing.T) {
+	for _, tc := range []struct {
+		name, xml, wantName, wantValue string
+		ok                             bool
+	}{
+		{"name as an attribute", `<AttributeType AttributeName="XOML"><Value>x</Value></AttributeType>`, "XOML", "x", true},
+		{"name as a child element", `<Attr><AttributeName>XOML</AttributeName><Value>x</Value></Attr>`, "XOML", "x", true},
+		{"name is the element", `<XOML>x</XOML>`, "XOML", "x", true},
+		{"nothing to read", `<Empty></Empty>`, "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, _, err := decodeNode([]byte(tc.xml))
+			if err != nil {
+				t.Fatal(err)
+			}
+			name, value, ok := attributeEntry(n)
+			if ok != tc.ok || name != tc.wantName || value != tc.wantValue {
+				t.Errorf("attributeEntry = (%q, %q, %v), want (%q, %q, %v)",
+					name, value, ok, tc.wantName, tc.wantValue, tc.ok)
+			}
+		})
+	}
+}
+
+// TestExportWithNoWorkflowFallsBack: a wrapper carrying no XOML at all is still
+// converted as best it can be, rather than failing the upload.
+func TestExportWithNoWorkflowFallsBack(t *testing.T) {
+	res, err := Convert(strings.NewReader(`<Results><ExportObject><Nothing>here</Nothing></ExportObject></Results>`), "F")
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	validate(t, res.BPMN)
+}
+
+// TestEveryWorkflowUnparseableIsAnError: when nothing in an export could be read,
+// the caller gets the parser's reason rather than an empty success.
+func TestEveryWorkflowUnparseableIsAnError(t *testing.T) {
+	export := fimExport(map[string]string{"DisplayName": "Kaputt", "XOML": `<SequentialWorkflow`})
+	if _, err := ConvertAll(strings.NewReader(export), ""); err == nil {
+		t.Error("an export whose every workflow is broken must fail")
+	}
+}
+
+// TestEmptyLoopsStayWellFormed covers the bodies that have nothing in them: a
+// group or a while with no child activities still has to be a loop a compiler
+// accepts, and says so rather than producing a dangling gateway.
+func TestEmptyLoopsStayWellFormed(t *testing.T) {
+	for _, tc := range []struct{ name, src, want string }{
+		{"conditioned activity group", `<SequentialWorkflow><ConditionedActivityGroup ActivityDisplayName="Leer"/></SequentialWorkflow>`,
+			"ConditionedActivityGroup has no child activities"},
+		{"while", `<SequentialWorkflow><WhileActivity ActivityDisplayName="Leer"/></SequentialWorkflow>`,
+			"empty while body"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res, err := Convert(strings.NewReader(tc.src), "E")
+			if err != nil {
+				t.Fatalf("Convert: %v", err)
+			}
+			validate(t, res.BPMN)
+			var flagged bool
+			for _, n := range res.Report.Notes {
+				if strings.Contains(n.Detail, tc.want) {
+					flagged = true
+				}
+			}
+			if !flagged {
+				t.Errorf("an empty body must be reported, got %s", res.Report.String())
+			}
+		})
+	}
+}
+
+// TestQuoteValueEscapesWhenBothQuotesAppear covers the last resort of the repair
+// pass: a bare value holding both a quote and an apostrophe.
+func TestQuoteValueEscapesWhenBothQuotesAppear(t *testing.T) {
+	if got := string(quoteValue([]byte(`a"b'c`))); got != `"a&quot;b'c"` {
+		t.Errorf("quoteValue = %s", got)
+	}
+}
+
+// TestEmptyCollectionRendersNothing: a table element with no entries must not
+// leave an empty heading on the activity's documentation.
+func TestEmptyCollectionRendersNothing(t *testing.T) {
+	n, _, err := decodeNode([]byte(`<UpdateResources><UpdateResources.UpdatesTable><ArrayList/></UpdateResources.UpdatesTable></UpdateResources>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := mimTables(n); got != "" {
+		t.Errorf("mimTables = %q, want empty", got)
+	}
+}
