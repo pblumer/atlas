@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "an-openapi-document-can-configure-the-task-that-calls-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Turn an API's operations into ready-made task settings",
+        "de": "Aus den Operationen einer API fertige Task-Einstellungen machen"
+      },
+      "summary": {
+        "en": "Configuring a REST task means reading the API's documentation and typing what it says: the method, the address, which values the process has to supply. Atlas can now read that file for you and write out one ready-made setting sheet per operation — the method already chosen, the address already filled in, and a note saying which values your process needs to hold. What the file cannot decide, such as which login to use, is deliberately left blank rather than guessed. One honest catch: nothing in Atlas can apply these sheets to a task yet, so for now they are files to keep or to hand on — the command tells you so when it writes them.",
+        "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ]
+    },
+    {
       "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
       "version": "Unreleased",
       "date": null,
@@ -336,35 +358,6 @@
         "Modeler",
         "Import"
       ]
-    },
-    {
-      "id": "a-mim-import-asks-before-it-lands-on-something-and-says-what",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "A MIM import asks before it overwrites, and shows what is at stake",
-        "de": "Der MIM-Import fragt vor dem Überschreiben — und zeigt, was auf dem Spiel steht"
-      },
-      "summary": {
-        "en": "Importing a workflow onto a name Atlas already knows used to replace what was there without asking. Now the import stops first and shows you what it found: the draft it would replace and when it was last saved, and — when a process of that name is already deployed — which version, how many instances are running on it, and exactly which of its steps the imported model no longer has. Those last ones are the running instances that could not be moved to the new model later, listed by name instead of turning up when you try. Nothing is written until you say to overwrite. An export containing several workflows now imports all of them, one draft each, instead of only the first.",
-        "de": "Ein Import auf einen Namen, den Atlas bereits kennt, ersetzte das Vorhandene bisher ohne Rückfrage. Jetzt hält der Import vorher an und zeigt, was er vorgefunden hat: den Entwurf, der ersetzt würde, samt letztem Speicherzeitpunkt — und falls unter diesem Namen bereits ein Prozess deployt ist, welche Version, wie viele Instanzen darauf laufen und welche seiner Schritte im importierten Modell fehlen. Genau diese laufenden Instanzen liessen sich später nicht auf das neue Modell übernehmen; sie stehen jetzt namentlich da, statt erst beim Versuch aufzutauchen. Geschrieben wird nichts, bevor Sie das Überschreiben bestätigen. Ein Export mit mehreren Workflows wird nun vollständig importiert, je ein Entwurf, statt nur der erste."
-      },
-      "link": {
-        "label": "ADR-0222",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0222-artifact-id-renames.md"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }
