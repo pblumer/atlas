@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
+      "version": "0.6.0",
+      "date": "2026-09-09",
+      "category": "Added",
+      "title": {
+        "en": "Every size limit has a name, and one way to change it",
+        "de": "Jede Obergrenze hat einen Namen — und einen Weg, sie zu ändern"
+      },
+      "summary": {
+        "en": "Atlas caps what it accepts from outside in about ninety places — how large an upload may be, how many rows a query may return, how much output a script may produce. Each cap was sensible on its own, but nobody could list them, and a list nobody can read is a list nobody notices a hole in. They now sit in one place with the numbers they always had, and each can be raised or lowered with an ATLAS_LIMIT_ environment variable. A value that is missing or nonsensical leaves the default in place and says so when the server starts, and no limit can be switched off entirely. One honest gap: workers running as their own process use the standard values rather than what you configured on the server, because the server's settings do not reach them.",
+        "de": "Atlas begrenzt an rund neunzig Stellen, was es von aussen annimmt — wie gross ein Upload sein darf, wie viele Zeilen eine Abfrage liefern darf, wie viel ein Skript ausgeben darf. Jede Grenze war für sich sinnvoll, aber niemand konnte sie aufzählen — und eine Liste, die niemand lesen kann, ist eine Liste, in der niemand eine Lücke bemerkt. Sie stehen jetzt an einer Stelle, mit genau den Zahlen, die sie immer hatten, und jede lässt sich über eine Umgebungsvariable ATLAS_LIMIT_ anheben oder senken. Ein fehlender oder unsinniger Wert lässt die Voreinstellung stehen und wird beim Start protokolliert; abschalten lässt sich keine Grenze. Eine ehrliche Lücke: Worker, die als eigener Prozess laufen, verwenden die Standardwerte statt Ihrer Serverkonfiguration, weil die Einstellungen des Servers sie nicht erreichen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
+      },
+      "tags": [
+        "Operations",
+        "Configuration"
+      ]
+    },
+    {
       "id": "a-class-says-which-states-its-instances-move-through-and-the",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -214,6 +236,35 @@
       }
     },
     {
+      "id": "a-join-counts-tokens-per-incoming-sequence-flow",
+      "version": "0.6.0",
+      "date": "2026-09-09",
+      "category": "Changed",
+      "title": {
+        "en": "A parallel join now waits for every branch, as BPMN says it must",
+        "de": "Ein paralleler Join wartet jetzt auf jeden Zweig — so, wie BPMN es verlangt"
+      },
+      "summary": {
+        "en": "A parallel join is supposed to wait until a token has arrived over each of its incoming connections. Atlas counted tokens on the join rather than per connection, so two tokens arriving over the same branch could satisfy it while another branch had not arrived at all — and it then swallowed the extra token on its way through. That is not an exotic case: a fork whose branches rejoin through an exclusive merge produces it. The join now waits for one token on each incoming connection and takes exactly one from each. Please look at models that fork and rejoin: where such a join used to continue quietly with a branch missing, it now stops and waits, which shows up in Operations as a stuck token you can see and terminate rather than as a process that ran to the end on incomplete work.",
+        "de": "Ein paralleler Join soll warten, bis über jede seiner eingehenden Verbindungen ein Token eingetroffen ist. Atlas zählte die Tokens am Join statt je Verbindung — zwei Tokens über denselben Zweig konnten ihn also auslösen, während ein anderer Zweig noch gar nicht angekommen war, und das überzählige Token verschwand beim Durchlauf. Das ist kein exotischer Fall: Eine Verzweigung, deren Äste über ein exklusives Gateway wieder zusammenlaufen, erzeugt ihn. Der Join wartet jetzt auf ein Token je eingehender Verbindung und nimmt aus jeder genau eines. Bitte sehen Sie Modelle durch, die verzweigen und wieder zusammenführen: Wo ein solcher Join bisher still weiterlief, obwohl ein Zweig fehlte, bleibt er nun stehen — sichtbar in Operations als hängendes Token, das Sie beenden können, statt als Prozess, der auf unvollständiger Arbeit bis zum Ende lief."
+      },
+      "link": {
+        "label": "ADR-0024",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0024-parallel-gateway-join.md"
+      },
+      "tags": [
+        "Engine",
+        "BPMN"
+      ],
+      "try": {
+        "label": {
+          "en": "Check your models",
+          "de": "Modelle prüfen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -309,57 +360,6 @@
         "Modeler",
         "Import"
       ]
-    },
-    {
-      "id": "four-ways-a-mim-workflow-s-own-logic-went-missing",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Fixed",
-      "title": {
-        "en": "Four ways an imported MIM workflow lost its own logic",
-        "de": "Vier Wege, auf denen ein importierter MIM-Workflow seine eigene Logik verlor"
-      },
-      "summary": {
-        "en": "Each of these produced a diagram that looked finished and described something the workflow does not do. A branch condition written the way MIM actually writes it was read as an extra step, and the condition itself went unread. The last branch of a decision was always made the fallback, so its own condition was dropped — which turned the commonest MIM pattern, a single conditional branch, into a step that always runs. A conditioned activity group, which repeats and runs each child only when its condition holds, became a flat list of steps that run once. And an export straight out of MIM was not recognised at all, so the whole file arrived as a row of empty placeholders. All four now come through, with anything that still needs a human decision listed in the import report.",
-        "de": "Jeder dieser Fälle erzeugte ein Diagramm, das fertig aussah und etwas beschrieb, was der Workflow nicht tut. Eine Verzweigungsbedingung in der Schreibweise, die MIM tatsächlich verwendet, wurde als zusätzlicher Schritt gelesen — die Bedingung selbst blieb ungelesen. Der letzte Zweig einer Entscheidung wurde immer zum Rückfallpfad, seine eigene Bedingung fiel weg; damit wurde das häufigste MIM-Muster, ein einzelner bedingter Zweig, zu einem Schritt, der immer läuft. Eine bedingte Aktivitätsgruppe, die sich wiederholt und jedes Kind nur bei erfüllter Bedingung ausführt, wurde zu einer flachen Liste einmalig ausgeführter Schritte. Und ein Export direkt aus MIM wurde gar nicht erkannt, sodass die ganze Datei als Reihe leerer Platzhalter ankam. Alle vier kommen jetzt an; was noch eine menschliche Entscheidung braucht, steht im Importbericht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Modeler",
-        "Import"
-      ]
-    },
-    {
-      "id": "the-replay-s-data-object-list-keeps-its-search-and-an-open-s",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Fixed",
-      "title": {
-        "en": "The Data tab's search survives a click, and an open trail stays put",
-        "de": "Die Suche in der Registerkarte «Daten» überlebt einen Klick, und ein offener Verlauf bleibt an seiner Zeile"
-      },
-      "summary": {
-        "en": "In the replay of a single instance, the Data tab lists what the instance is carrying. Its search boxes appeared when you opened the view and disappeared again as soon as you clicked an element on the diagram — so it looked as though the search had broken rather than as though there was none. They stay now. And the state trail a row opens into stays with that row: sorting the list no longer drags it under a different object, and filtering no longer makes it vanish under a row that is still there.",
-        "de": "In der Wiedergabe einer einzelnen Instanz zeigt die Registerkarte «Daten», was die Instanz mit sich führt. Die Suchfelder erschienen beim Öffnen der Ansicht und verschwanden wieder, sobald Sie ein Element im Diagramm anklickten — es sah also aus, als sei die Suche kaputt, und nicht, als gäbe es keine. Sie bleiben jetzt. Und der Zustandsverlauf, den eine Zeile aufklappt, bleibt bei dieser Zeile: Beim Sortieren rutscht er nicht mehr unter ein anderes Objekt, und beim Filtern verschwindet er nicht mehr unter einer Zeile, die stehen bleibt."
-      },
-      "link": {
-        "label": "ADR-0286",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0286-a-list-carries-its-own-search.md"
-      },
-      "tags": [
-        "Operations",
-        "Data"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }
