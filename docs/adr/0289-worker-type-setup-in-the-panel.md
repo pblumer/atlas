@@ -88,8 +88,10 @@ types.
   conventions otherwise forbid, and deliberately so: a freshness check that can only fail
   when somebody edits the file would never fire, because the file not being edited is the
   condition it exists to catch. The accepted cost is that it will one day turn CI red on
-  an unrelated change. The handbook's runbook cards carry no such date yet and rot the
-  same way.
+  an unrelated change. The handbook's runbook cards carry the same date and the same
+  limit, and `TestAPanelEntryAndItsHandbookCardAgreeOnTheDate` holds the two to one
+  answer — they are the same instructions at two lengths, and dating them apart is how
+  one gets re-read while the other quietly does not.
 
 ## Pros and cons of the options
 

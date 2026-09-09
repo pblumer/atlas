@@ -11,6 +11,8 @@ README.md § Writing a record.
 - **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Deprecated
 - **Date:** YYYY-MM-DD
 - **Deciders:** names/roles
+- **Open question:** what this record could not settle, if anything — delete this line and the next when there is nothing
+- **Question checked:** YYYY-MM (the month somebody last looked at that question)
 
 ## Context and problem statement
 

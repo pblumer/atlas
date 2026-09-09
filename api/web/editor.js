@@ -5859,16 +5859,35 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   let vocab = { classes: [], models: [], loaded: false };
   const classNamed = (name) => vocab.classes.find((c) => c.name === name) || null;
 
-  // A <datalist> is invisible: nothing on the field says a vocabulary exists at all,
-  // so the one link this whole feature turns on was made by remembering a class name
-  // and typing it correctly. The picker says what has been modelled, and each option
-  // carries the business key — the fact that tells two similarly named classes apart,
-  // and the thing somebody is actually trying to recall.
+  // The value the last entry of a picker carries. It is never written to the model:
+  // choosing it opens a text field and waits for a name, which is what keeps ADR-0230's
+  // rule alive — a diagram is routinely drawn before the vocabulary it names exists, so
+  // naming a class, or a state, that nothing declares yet has to stay possible.
+  // It is told apart by a marker on the option and not by its value, because every
+  // value a class or a state could plausibly be named is a value somebody will one day
+  // name one.
+  const OTHER = `value="" data-other="1"`;
+  const choseOther = (sel) => !!(sel.selectedOptions[0] && sel.selectedOptions[0].dataset.other);
+  // A value the list does not contain keeps an option of its own rather than being
+  // dropped on sight: reading a document must never quietly rewrite it. The reason it
+  // is off the list rides along, because that is the whole point of showing it.
+  const strayOptionHTML = (current, listed, why) => (current && !listed
+    ? `<option value="${esc(current)}" selected>${esc(current)} — ${esc(why)}</option>` : "");
+  // A text field revealed by choosing "another…", so the escape is a field and not the
+  // whole control.
+  const otherFieldHTML = (id, label, placeholder) =>
+    `<label class="field" id="${id}-field" hidden><span>${esc(label)}</span>
+      <input type="text" id="${id}" value="" placeholder="${esc(placeholder)}" spellcheck="false"/></label>`;
+
+  // The one link this whole feature turns on was made by remembering a class name and
+  // typing it correctly: the vocabulary sat in an invisible <datalist>, and nothing on
+  // the field said one existed. It is a list now — the same question the information
+  // model's own editor asks with a <select> (an attribute's type, a data store's class),
+  // asked the same way here.
   //
-  // It fills the field rather than being the field. The value stays free text because
-  // it has to (ADR-0230): a diagram is routinely drawn before its vocabulary exists.
-  function classPickerHTML(current) {
-    if (!vocab.classes.length) return "";
+  // Each option carries the business key, because that is the fact that tells two
+  // similarly named classes apart, and the thing somebody is actually trying to recall.
+  function classSelectHTML(current) {
     const byModel = new Map();
     for (const c of vocab.classes) {
       if (!byModel.has(c.modelId)) byModel.set(c.modelId, { name: c.modelName, classes: [] });
@@ -5880,9 +5899,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         return `<option value="${esc(c.name)}"${c.name === current ? " selected" : ""}>${esc(c.name)}${
           key ? ` · key ${esc(key)}` : ""}</option>`;
       }).join("")}</optgroup>`).join("");
-    return `<div class="field-actions">
-      <select id="f-itemtype-pick" title="The classes this application models">
-        <option value="">Pick from the information model…</option>${groups}</select></div>`;
+    return `<select id="f-itemtype" title="The classes this application models">
+      <option value=""${current ? "" : " selected"}>— none —</option>
+      ${groups}${strayOptionHTML(current, vocab.classes.some((c) => c.name === current), "not modelled yet")}
+      <option ${OTHER}>Another class, not modelled yet…</option>
+    </select>`;
   }
 
   // What the type points at, drawn rather than named. A class name read back as text
@@ -6282,18 +6303,35 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       }
       const known = classNamed(itemType);
       const unresolved = itemType && vocab.loaded && !known;
+      // The states a data state may name are the ones its class declares (ADR-0259).
+      // Until a class carried a lifecycle there was nothing to list and the field could
+      // only be free text — which is how `order [aproved]` gets written once and then
+      // never matches anything again. Where a lifecycle exists the states are a closed
+      // set of facts about that class, so they are offered as one.
+      const declared = (known && known.lifecycle && known.lifecycle.states) || [];
       html += `<h3>Data object</h3>
         <label class="field"><span>Type <span class="muted">(the class this datum is)</span></span>
-          <input type="text" id="f-itemtype" list="f-itemtype-list" value="${esc(itemType)}" placeholder="Order"/></label>
-        <datalist id="f-itemtype-list">${vocab.classes.map((c) => `<option value="${esc(c.name)}"></option>`).join("")}</datalist>
-        ${classPickerHTML(itemType)}
+          ${vocab.classes.length ? classSelectHTML(itemType)
+            : `<input type="text" id="f-itemtype" value="${esc(itemType)}" placeholder="Order"/>`}</label>
+        ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", "Class name", "Order") : ""}
         ${known ? classCardHTML(known) : ""}
         ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
           application yet — the Problems panel lists it, and a deploy is not refused for it.
           ${vocab.models.length ? `<button type="button" class="btn ghost small" id="f-itemtype-create"
             data-name="${esc(itemType)}">+ Model it now</button>` : ""}</p>` : ""}
         <label class="field"><span>Data state</span>
-          <input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/></label>
+          ${declared.length ? `<select id="f-datastate" title="The states ${esc(known.name)} declares">
+              <option value=""${stateName ? "" : " selected"}>— none —</option>
+              ${declared.map((s) => `<option value="${esc(s.name)}"${s.name === stateName ? " selected" : ""}>${
+                esc(s.name)}${s.initial ? " · start" : ""}${s.final ? " · final" : ""}</option>`).join("")}
+              ${strayOptionHTML(stateName, declared.some((s) => s.name === stateName), `not a state of ${known.name}`)}
+              <option ${OTHER}>Another state, not declared yet…</option>
+            </select>`
+            : `<input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/>`}</label>
+        ${declared.length ? otherFieldHTML("f-datastate-other", "State name", "received") : ""}
+        ${declared.length ? `<p class="muted" style="font-size:12px">These are the states
+          <b>${esc(known.name)}</b> declares in its lifecycle — <a href="#/data/m/${encodeURIComponent(known.modelId)}"
+          target="_blank" rel="noopener">open it ↗</a> to add one.</p>` : ""}
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
         ${pointsTo}
         <p class="muted" style="font-size:12px">The <b>Type</b> is the class this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
@@ -6837,6 +6875,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       });
     }
 
+    // Choosing the last entry of a picker shows the field that takes the name it has
+    // never heard of, and puts the caret in it: the escape has to be one gesture, or
+    // it is not an escape.
+    const reveal = (id) => {
+      const field = body.querySelector(`#${id}-field`);
+      const input = body.querySelector(`#${id}`);
+      if (!field || !input) return;
+      field.hidden = false;
+      input.value = "";
+      input.focus();
+    };
+
     // The type lives on the underlying <dataObject>, not on the reference — the same
     // place the compiler reads it from, and the same reason the name is written
     // through to it above: the reference is a view of the object, not the object.
@@ -6849,18 +6899,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       show(element); // re-render so the class card, or the note, appears or clears
     };
     if (fitemtype && bo.dataObjectRef) {
-      fitemtype.addEventListener("change", (e) => setItemType((e.target.value || "").trim()));
+      fitemtype.addEventListener("change", (e) => {
+        // "Another class…" is not a class called anything: it opens the field below and
+        // waits, so picking from the list and naming something the list has never heard
+        // of end in the same one write rather than two paths that can come to differ.
+        if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal("f-itemtype-other");
+        setItemType((e.target.value || "").trim());
+      });
     }
-    // The picker fills the field and then goes through the same one write, so picking
-    // a class and typing its name are the same edit rather than two paths that can
-    // come to differ.
-    const ftypepick = body.querySelector("#f-itemtype-pick");
-    if (ftypepick && bo.dataObjectRef) {
-      ftypepick.addEventListener("change", (e) => {
-        const v = e.target.value;
-        if (!v) return;
-        if (fitemtype) fitemtype.value = v;
-        setItemType(v);
+    const fitemother = body.querySelector("#f-itemtype-other");
+    if (fitemother && bo.dataObjectRef) {
+      // Blurring it empty leaves the type as it was. Reaching for the escape and
+      // changing your mind is not the same gesture as clearing the field.
+      fitemother.addEventListener("change", (e) => {
+        const v = (e.target.value || "").trim();
+        if (v) setItemType(v); else show(element);
       });
     }
 
@@ -6917,19 +6970,31 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       });
     }
 
+    const setDataState = (v) => {
+      try {
+        let ds;
+        if (v) {
+          ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
+          ds.$parent = bo;
+        }
+        // Setting dataState to undefined clears the [state] label.
+        modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
+      } catch { /* stale */ }
+    };
     const fdatastate = body.querySelector("#f-datastate");
     if (fdatastate) {
       fdatastate.addEventListener("change", (e) => {
+        if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal("f-datastate-other");
+        setDataState((e.target.value || "").trim());
+      });
+    }
+    const fdsother = body.querySelector("#f-datastate-other");
+    if (fdsother) {
+      fdsother.addEventListener("change", (e) => {
         const v = (e.target.value || "").trim();
-        try {
-          let ds;
-          if (v) {
-            ds = modeler.get("moddle").create("bpmn:DataState", { name: v });
-            ds.$parent = bo;
-          }
-          // Setting dataState to undefined clears the [state] label.
-          modeling.updateModdleProperties(element, bo, { dataState: ds || undefined });
-        } catch { /* stale */ }
+        // Re-rendered rather than left as typed, so a state the class does not declare
+        // shows up in the list saying so, instead of only in the Problems panel.
+        if (v) { setDataState(v); show(element); } else { show(element); }
       });
     }
     const fcollection = body.querySelector("#f-collection");

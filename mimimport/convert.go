@@ -43,8 +43,13 @@ type Report struct {
 	ProcessID string
 	Notes     []Note
 	// Warnings are document-level observations that belong to no single node —
-	// today, that the input had to be repaired before it would parse.
+	// that the input had to be repaired before it would parse, or that it carried
+	// workflows this Result does not cover.
 	Warnings []string
+	// Source is the WorkflowDefinition resource the workflow came from, when the
+	// input was an export rather than raw XOML. Its fields are what MIM knows
+	// about a workflow and the XOML does not say.
+	Source SourceInfo
 }
 
 // Count returns how many items carry the given status.
@@ -112,19 +117,63 @@ type Result struct {
 //
 // name, when non-empty, overrides the process name derived from the workflow.
 func Convert(r io.Reader, name string) (Result, error) {
-	root, warnings, err := parseXOML(r)
+	all, err := ConvertAll(r, name)
 	if err != nil {
 		return Result{}, err
 	}
+	first := all[0]
+	if len(all) > 1 {
+		names := make([]string, 0, len(all)-1)
+		for _, res := range all[1:] {
+			names = append(names, res.Report.ProcessID)
+		}
+		first.Report.Warnings = append(first.Report.Warnings, fmt.Sprintf(
+			"the input carries %d workflows and only the first was converted; the others are %s — use ConvertAll to get them all",
+			len(all), strings.Join(names, ", ")))
+	}
+	return first, nil
+}
 
+// ConvertAll is Convert for an input that may carry more than one workflow: an
+// Export-FIMConfig export holds one WorkflowDefinition per workflow, and a export
+// of a whole MIM installation holds all of them. It returns one Result per
+// workflow, in document order, and never an empty slice without an error.
+//
+// name overrides the process name only when the input carries a single workflow.
+// With several, each takes the name of its own WorkflowDefinition resource,
+// because one name cannot stand for all of them.
+func ConvertAll(r io.Reader, name string) ([]Result, error) {
+	inputs, warnings, err := parseInput(r)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Result, 0, len(inputs))
+	for _, in := range inputs {
+		override := name
+		if len(inputs) > 1 {
+			override = ""
+		}
+		out = append(out, convertOne(in, override, warnings))
+	}
+	return out, nil
+}
+
+// convertOne converts a single workflow root into a deployable process.
+func convertOne(in workflowInput, name string, warnings []string) Result {
 	wfName := name
 	if wfName == "" {
-		wfName = root.displayName()
+		// The resource's DisplayName is the workflow's only human name; the XOML root
+		// carries a class name at best.
+		wfName = in.source.DisplayName
+	}
+	if wfName == "" {
+		wfName = in.root.displayName()
 	}
 
-	b := newBuilder(wfName, namespaces(root))
+	b := newBuilder(wfName, namespaces(in.root))
 	b.report.Warnings = warnings
-	body := workflowBody(root)
+	b.report.Source = in.source
+	body := workflowBody(in.root)
 	entry, exit := b.emitSequence(body)
 
 	start := b.addNode(bnode{kind: "startEvent", name: "Start"})
@@ -136,8 +185,8 @@ func Convert(r io.Reader, name string) (Result, error) {
 		b.addFlow(exit, end, "", "")
 	}
 
-	bpmn := b.emitBPMN(root)
-	return Result{BPMN: bpmn, Report: b.report}, nil
+	bpmn := b.emitBPMN(in.root)
+	return Result{BPMN: bpmn, Report: b.report}
 }
 
 // workflowBody returns the ordered activities that make up a workflow root. A
@@ -168,9 +217,23 @@ func activityChildren(n xnode) []xnode {
 	return out
 }
 
+// isMetadata reports whether a child element carries data about its parent
+// rather than being a step in the flow.
+//
+// The general rule is the dotted name: XAML writes a property as
+// <Type.Property>, so <ns0:IfElseBranchActivity.Condition> is the branch's
+// condition, not an activity inside it. Reading it as one is how a branch used
+// to gain a step the workflow does not have — a plain task named
+// "IfElseBranchActivity.Condition" wired into the middle of the branch — while
+// the condition it holds went unread. The named cases below are the same thing
+// written without the dot, which WF also accepts.
 func isMetadata(local string) bool {
+	if _, isProperty := propertyName(local); isProperty {
+		return true
+	}
 	switch strings.ToLower(local) {
 	case "condition", "codecondition", "ruleconditionreference",
+		"declarativeruleconditionreference", "rulecondition",
 		"workflowparameterbindingcollection", "workflowparameterbinding", "bind":
 		return true
 	}
@@ -327,8 +390,8 @@ func (b *builder) emit(n xnode) (entry, exit string) {
 		return b.emitParallel(n)
 	case "whileactivity", "while", "whileloopactivity":
 		return b.emitWhile(n)
-	case "conditionedactivitygroup":
-		return b.emitSequence(activityChildren(n))
+	case "conditionedactivitygroup", "conditionedactivitygroupactivity":
+		return b.emitCAG(n)
 	default:
 		return b.emitLeaf(n)
 	}
@@ -352,10 +415,19 @@ func (b *builder) emitSequence(kids []xnode) (entry, exit string) {
 	return entry, exit
 }
 
-// emitIfElse turns an IfElseActivity into an exclusive split/join. The last
-// branch (or the first one without a condition) becomes the gateway default;
-// every other branch gets a placeholder FEEL condition, with the original WF
-// condition preserved for review.
+// emitIfElse turns an IfElseActivity into an exclusive split/join. A branch that
+// carries no condition is the else, and becomes the gateway default; every
+// conditional branch gets a placeholder FEEL condition, with the WF condition
+// preserved for review. When every branch is conditional the default is a bypass
+// straight to the join, because that is what WF does when none of them holds.
+//
+// The last branch used to be made the default whatever it carried, which had two
+// costs: a condition on that branch was dropped without a note, and an
+// IfElseActivity with a single conditional branch — the common "if X then do Y"
+// — became an unconditional path with its condition gone and the node reported
+// native. Nothing here translates a condition, so the model still has to be
+// finished by hand; what it no longer does is claim a route the source does not
+// have.
 func (b *builder) emitIfElse(n xnode) (string, string) {
 	splitNode := b.preserve(n)
 	splitNode.kind, splitNode.name = "exclusiveGateway", n.displayName()
@@ -365,9 +437,11 @@ func (b *builder) emitIfElse(n xnode) (string, string) {
 	b.note(Note{NodeID: split, Activity: n.local(), Kind: "exclusiveGateway", Status: StatusNative,
 		Detail: fmt.Sprintf("if/else split, %d branch(es)", len(branches))})
 
-	for i, br := range branches {
+	defaulted := false
+	for _, br := range branches {
+		cond, conditional := branchCondition(br)
+		isDefault := !conditional && !defaulted
 		be, bx := b.emitSequence(activityChildren(br))
-		isDefault := i == len(branches)-1
 		var flowID string
 		if be == "" { // empty branch: connect split straight to join
 			flowID = b.addFlow(split, join, branchName(br, isDefault), placeholderCond(isDefault))
@@ -375,14 +449,68 @@ func (b *builder) emitIfElse(n xnode) (string, string) {
 			flowID = b.addFlow(split, be, branchName(br, isDefault), placeholderCond(isDefault))
 			b.addFlow(bx, join, "", "")
 		}
-		if isDefault {
+		switch {
+		case isDefault:
 			b.setDefault(split, flowID)
-		} else if cond, ok := branchCondition(br); ok {
+			defaulted = true
+		case conditional:
 			b.note(Note{NodeID: flowID, Activity: br.local(), Kind: "conditionExpression", Status: StatusManualReview,
 				Detail: "WF condition not translated to FEEL: " + cond})
+		default:
+			// A second unconditional branch: WF would run the first, so this one is
+			// unreachable until somebody says what distinguishes them.
+			b.note(Note{NodeID: flowID, Activity: br.local(), Kind: "conditionExpression", Status: StatusManualReview,
+				Detail: "branch carries no condition, and an earlier branch is already the default — decide which one applies"})
 		}
 	}
+	if !defaulted {
+		// Every branch is conditional. An exclusive gateway needs a way out when none
+		// holds, and WF's own answer is to do nothing, so the default skips the lot.
+		b.setDefault(split, b.addFlow(split, join, "keine Bedingung trifft zu", ""))
+	}
 	return split, join
+}
+
+// emitCAG turns a ConditionedActivityGroup into the repeat-until loop it is: WF
+// runs the group's children — each one on the passes where its own WhenCondition
+// holds — over and over until the group's UntilCondition becomes true.
+//
+// It used to be flattened into a plain sequence, which dropped the group element
+// itself, its markup, its UntilCondition and every child's WhenCondition without
+// a single note. That is not a simplification: repetition and per-child
+// conditionality are the whole difference between a CAG and a sequence, so a
+// sequence is a different process. The children's conditions now come back
+// through the same guard path as a MIMWAL activity's; the loop is here.
+//
+// The UntilCondition is not translated, and the placeholder leaves the loop after
+// one pass — so the generated process still does what the flattened sequence did,
+// while the model shows that it repeats.
+func (b *builder) emitCAG(n xnode) (string, string) {
+	decideNode := b.preserve(n)
+	decideNode.kind, decideNode.name = "exclusiveGateway", n.displayName()
+	decide := b.addNode(decideNode)
+	out := b.addNode(bnode{kind: "exclusiveGateway", srcID: decide + "_exit"})
+
+	be, bx := b.emitSequence(activityChildren(n))
+	if be == "" { // an empty group still has to be a well-formed loop
+		bodyNode := b.preserve(n)
+		bodyNode.kind, bodyNode.name = "task", "Gruppeninhalt"
+		id := b.addNode(bodyNode)
+		b.note(Note{NodeID: id, Activity: n.local(), Kind: "task", Status: StatusManualReview,
+			Detail: "ConditionedActivityGroup has no child activities"})
+		be, bx = id, id
+	}
+	// Repeat-until, so the body comes first and the decision follows it.
+	b.addFlow(bx, decide, "", "")
+	b.addFlow(decide, be, "nochmal", placeholderCond(false))
+	b.setDefault(decide, b.addFlow(decide, out, "fertig", ""))
+
+	detail := "ConditionedActivityGroup: a repeat-until loop; its UntilCondition is not translated to FEEL, and the placeholder leaves after one pass"
+	if cond, ok := namedCondition(n, "UntilCondition"); ok {
+		detail += " — " + cond
+	}
+	b.note(Note{NodeID: decide, Activity: n.local(), Kind: "exclusiveGateway", Status: StatusManualReview, Detail: detail})
+	return be, out
 }
 
 // emitParallel turns a ParallelActivity into a parallel split/join. Each child
@@ -534,12 +662,12 @@ func iteration(n xnode) (string, bool) {
 // no IfElseActivity in it at all. Reading only the control-flow elements would
 // therefore model such a workflow as an unconditional chain.
 func executionCondition(n xnode) (string, bool) {
-	v, ok := n.attr("ActivityExecutionCondition")
-	if !ok {
-		return "", false
+	if c, ok := namedCondition(n, "ActivityExecutionCondition"); ok {
+		return c, true
 	}
-	v = strings.TrimSpace(v)
-	return v, v != ""
+	// A ConditionedActivityGroup guards its children the same way, under WF's own
+	// name for it: the child runs on the pass where its WhenCondition holds.
+	return namedCondition(n, "WhenCondition")
 }
 
 // addGuardGateways reserves the split and merge of a guarded activity ahead of
@@ -611,16 +739,49 @@ func classifyLeaf(local string) (kind, jobType string, status Status, detail str
 
 // branchCondition returns the human-readable WF condition of an IfElse branch or
 // While activity, if one is present.
-func branchCondition(n xnode) (string, bool) {
-	if v, ok := n.attr("Condition"); ok && strings.TrimSpace(v) != "" {
+func branchCondition(n xnode) (string, bool) { return namedCondition(n, "Condition") }
+
+// namedCondition returns the condition an activity carries under the given
+// property name, wherever WF happened to put it: an attribute, a property
+// element (<IfElseBranchActivity.Condition>, the usual form), or a bare child of
+// that name.
+func namedCondition(n xnode, name string) (string, bool) {
+	if v, ok := n.attr(name); ok && strings.TrimSpace(v) != "" {
 		return strings.TrimSpace(v), true
 	}
 	for _, k := range n.Kids {
-		if strings.EqualFold(k.local(), "Condition") {
-			if s := strings.TrimSpace(k.Inner); s != "" {
-				return s, true
-			}
+		local := k.local()
+		if p, isProperty := propertyName(local); isProperty {
+			local = p
 		}
+		if !strings.EqualFold(local, name) {
+			continue
+		}
+		if c, ok := conditionText(k); ok {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// conditionText renders a condition element as something a reviewer can read: the
+// inline expression when the condition is written out, and otherwise the name of
+// the declarative rule it refers to — which is all the XOML holds, the rule
+// itself living in the workflow's separate rules definition.
+func conditionText(k xnode) (string, bool) {
+	for _, ref := range append([]xnode{k}, k.Kids...) {
+		if v, ok := ref.attr("ConditionName"); ok && strings.TrimSpace(v) != "" {
+			return "rule " + strings.TrimSpace(v), true
+		}
+		if v, ok := ref.attr("Expression"); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v), true
+		}
+	}
+	if s := strings.TrimSpace(k.Text); s != "" {
+		return s, true
+	}
+	if s := strings.TrimSpace(k.Inner); s != "" {
+		return s, true
 	}
 	return "", false
 }
