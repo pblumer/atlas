@@ -28,7 +28,7 @@
   </g>
 
   <!-- Wordmark + copy -->
-  <text x="486" y="266" fill="#EEF1F5" font-size="98" font-weight="800" letter-spacing="14">atlas</text>
+  <text x="486" y="266" fill="#EEF1F5" font-size="110" font-weight="800" letter-spacing="14">atlas</text>
   <text x="489" y="330" fill="#C7CFDA" font-size="30" font-weight="500">Eine durable, blitzschnelle BPMN&#8202;2.x</text>
   <text x="489" y="372" fill="#C7CFDA" font-size="30" font-weight="500">Workflow-Engine in Go.</text>
   <text x="489" y="430" fill="#6BA6FF" font-size="21" font-family="monospace" letter-spacing="1">event-sourced · single-writer · group-commit</text>
