@@ -84,6 +84,62 @@ _Changed_ / _Removed_ for each version.
   the compiler reads that `atlas-moddle.json` does not declare, so the next one cannot
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
+## [0.6.0] — 2026-09-09
+
+**This release is about arriving from somewhere else.** A Microsoft Identity Manager
+workflow now imports as the process it *is* rather than as the elements it is made of.
+MIMWAL states conditionality and iteration in attributes instead of in branch and loop
+elements, so twenty guarded steps used to arrive as an unconditional chain — a diagram
+that looked like your process and did not behave like it. Conditions become gateways and
+iterations become multi-instance loops; each activity's queries and assignments are
+carried over as addressable rows and **counted as the work they are**, so the number a
+migration is planned with is the honest one; and an import that would land on an id
+somebody already holds now refuses with the impact spelled out — which deployed version,
+how many instances are running on it, which of its elements the incoming model still has.
+
+**The second half is for the empty installation.** Every Worker Type selectable on a
+service task now carries its own setup where the type is chosen: whether it needs a
+configured Worker and a credential at all, the steps at the provider in order, the
+failure it is usually reported with, and a link into the handbook this server serves
+itself. The Console's *New worker* form shows the same thing, which is where an operator
+actually stands. Both the short form and the handbook's long one say **when they were
+last read against the real thing**, and a test says so when they have not been — these
+steps name menus in somebody else's product, and nothing here can notice when that
+product is rearranged.
+
+**And the class canvas grew up.** An imported Active Directory schema — sixty classes,
+forty-character attribute names — showed three faults at once: boxes that were 200px
+whatever was written in them, relationships drawn as straight lines through whatever
+stood between their ends, and several of them landing exactly on top of each other so a
+click could only ever reach the last one drawn. Boxes size themselves now, lines are
+routed at right angles by the same router a sequence flow gets, and the palette is
+diagram-js's own — the one the process modeler already puts down its left edge.
+
+**One thing to read before upgrading.** A parallel or inclusive join now counts tokens
+**per incoming sequence flow**, as BPMN 2.0.2 §13.4 requires and as Atlas did not. The
+change moves in the direction of *less* progress: a model that relied on a join firing on
+two tokens arriving over one branch now parks there instead — a deadlock you can see and
+terminate, where the old behaviour continued silently and swallowed the surplus. No API,
+no stored format and no default changes; this one is worth checking your models against.
+
+### Added
+
+- **One place names every resource budget, and one way sets them.** Atlas bounded
+  external input in about ninety places: thirty-odd named constants declared next to the
+  handler that used them, plus a scattering of bare literals written straight into the
+  call. Each was defensible where it stood; together they were not a policy, because
+  nothing said what the set *was* — and a set nobody can enumerate is a set nobody
+  notices a hole in. `limits.Limits` is that set, grouped by what a budget holds rather
+  than by which handler reads it, with defaults that are exactly the numbers the code
+  already carried. Names, environment variables and parsing are derived from the struct
+  itself, because a second list to keep in step is the failure this ends rather than one
+  to repeat. Configure with `ATLAS_LIMIT_*`; a value that is missing, not positive, or
+  too large for its field leaves the default standing and says so at startup. **There is
+  no way to turn a budget off.** One limit stated plainly: components running inside a
+  worker's process — a model provider's answer, a Remedy call, the error snippets in
+  tracing — read the named default rather than this installation's configured value,
+  because the server's environment does not reach them.
+
 - **A class says which states its instances move through, and the Modeler offers
   them.** BPMN puts a data state under a data object — `order [received]` →
   `[approved]` — and says nothing whatever about which states exist or which may
@@ -250,6 +306,29 @@ _Changed_ / _Removed_ for each version.
   single expression to fill in.
 
 ### Changed
+
+- **A join counts tokens per incoming sequence flow.** This is the semantic debt
+  [ADR-0024](docs/adr/0024-parallel-gateway-join.md) wrote down and accepted:
+  no token-count-per-flow, so a single incoming flow feeding two tokens was not
+  distinguished from two flows feeding one each. That is not the rare case it was taken
+  for — a fork whose branches rejoin through an exclusive merge produces it — and the
+  consequence was the one thing a parallel join exists to prevent: it fired while a
+  branch had not arrived, then consumed every token on the node, so the surplus vanished
+  with it.
+
+  A parallel gateway now activates when there is at least one token on **each** incoming
+  sequence flow and consumes exactly one from each, as OMG BPMN 2.0.2 §13.4 states.
+  Every waiting token already recorded the flow it arrived on, so the correct rule needs
+  no new state, no new event and no extra scan — only a different question asked of the
+  same walk. The inclusive join had the same defect in its own idiom: it fires when
+  nothing more can arrive, so its surplus is resolved then and there rather than parked
+  waiting for an arrival that cannot come, and its continuation is now a fresh token, as
+  the parallel join's already was.
+
+  **Behaviour moves in the direction of less progress.** A model that relied on a join
+  firing on two tokens from one branch now parks — a deadlocked join, visible in
+  Operations and terminable, where before it continued silently. Worth a look at any
+  model that forks and rejoins through an exclusive merge.
 
 - **The class canvas got its toolbox, and its boxes stopped overflowing.** Three
   things about the drawing were wrong on any model larger than the examples, and an
@@ -461,6 +540,23 @@ _Changed_ / _Removed_ for each version.
     `Iteration` and `ConflictFilter` it appeared in. Preserved markup is now
     written as escaped character data, and re-parses to the activity's original
     attribute values.
+
+### Security
+
+- **A script task's output had no ceiling.** The worker collected a script's stdout with
+  `cmd.Output()`, which grows a buffer to whatever arrives — and a script's output is
+  written by code the model author controls. `while true: print(x)` was an unbounded
+  allocation on the machine the worker runs on, held back only by the 30-second timeout,
+  which at a gigabyte a second is not a bound. Both streams now go through a bounded
+  reader. The bound is one of the budgets above, so it has a name and can be raised.
+
+  Two things the fix had to survive, recorded because each looked correct and was not:
+  the first bounded reader embedded a `bytes.Buffer`, which promotes `ReadFrom` — and
+  `io.Copy` prefers it, so every byte landed in the buffer without `Write` ever being
+  called, and the ceiling looked like a cap while being none. And the test meant to prove
+  every budget is enumerated walked no files at all, because the root entry is named
+  `..` and its own skip-dotted-directories rule matched it; it reported success. It now
+  counts what it found and fails below forty.
 
 ## [0.5.0] — 2026-09-08
 
@@ -6703,7 +6799,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pblumer/atlas/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pblumer/atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pblumer/atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/pblumer/atlas/compare/v0.2.0...v0.3.0

@@ -633,18 +633,51 @@ Seiteneffekte zurückbleiben.
 > durch den Baum, ohne eine einzige Datei zu betreten, und meldete «ok»; deshalb
 > zählt er jetzt, wie viel er gefunden hat.
 >
-> **Bewusst nicht gemacht: die Variablengrösse.** Der Bericht führt sie in seiner
-> Liste, und es gibt kein `Variable`-Budget. Jeder Weg, auf dem ein Wert heute in
-> eine Variable *hineinkommt*, ist begrenzt — ein HTTP-Körper, die Skriptausgabe,
-> die Antwort eines Konnektors, und hinter einem berechneten Wert das
-> Iterationsbudget. Was fehlt, ist also Tiefenstaffelung, keine offene Tür. Sie
-> fehlt, weil sie eine Entscheidung braucht, die diese Änderung nicht trifft:
-> `AppendVariableEvent` ist der eine Trichter, durch den jeder Schreibvorgang geht,
-> und er kann nicht fehlschlagen. Dort abzulehnen heisst entweder einen Schreibvorgang
-> still zu verwerfen (schlimmer als eine grosse Variable), oder einen Incident zu
-> erzeugen, während der Aufrufer weiterläuft, als gäbe es den Wert, oder
-> vierundzwanzig Aufrufstellen einen Fehler zu geben. Das ist eine Entscheidung über
-> das Fehlerverhalten und verdient einen eigenen Eintrag.
+> **Die Variablengrösse — nachgezogen.** Sie stand in der Liste des Berichts und war
+> als Einzige offen geblieben, weil sie eine Entscheidung brauchte, die die
+> Vereinheitlichung nicht traf: was beim Ablehnen passiert. Jetzt zwei Budgets, und
+> zwar bewusst zwei (ADR-0294). `Variable` fragt, was *ein
+> fachlicher Datensatz* wiegen darf — ein Kunde, eine Bestellung, die Eingaben einer
+> Entscheidung —, dafür ist ein Megabyte reichlich. `Collection` fragt, was ein
+> legitimer Loop an der Iterationsdecke *ansammeln* darf, und das ist eine andere
+> Grössenordnung: hunderttausend bescheidene Ergebnisse sind zweistellige Megabytes.
+> Eine Zahl kann beides nicht: auf Datensatzmass gesetzt hören gewöhnliche Loops auf
+> durchzulaufen, auf Sammlungsmass gesetzt ist sie für einen Datensatz gar keine
+> Grenze mehr — also genau der Zustand, den sie ersetzt.
+>
+> **Aus einem harten Fehler wird ein auflösbarer.** Vorher lief ein zu grosser Wert
+> bis ins WAL und scheiterte dort an der 64-MiB-Grenze je Datensatz — das bricht den
+> Batch ab, die Instanz stand mit einem Fehler, den niemand auflösen konnte. Jetzt ist
+> es ein Incident auf dem Element, das den Wert erzeugt hat, mit Namen und beiden
+> Grössen; Auflösen schreibt erneut.
+>
+> **Was beim Schreiben des ADR auffiel.** `finishMultiInstanceIteration` ruft je
+> beendeter Iteration `setListElement`: ganze Sammlung lesen, ein Element setzen,
+> ganze Sammlung zurückschreiben. Für N Iterationen also N vollständige Kopien,
+> geparst, serialisiert und **dauerhaft**. Der Bytesaufwand wächst **quadratisch** mit
+> der Iterationszahl. `Collection` bemisst die Speicherspitze und ist ausdrücklich
+> *keine* Schranke dagegen: um bei hunderttausend Iterationen unter zehn Gigabyte zu
+> bleiben, dürfte die Sammlung 200 KB nicht überschreiten — weniger, als eine einzelne
+> Variable darf. Ein Budget, das die Verstärkung sicher machte, wäre unbrauchbar. Die
+> Verstärkung ist ein eigener Defekt mit eigener Korrektur und ist benannt, damit sie
+> nicht wieder gefunden werden muss.
+>
+> **Und ein Fehlermodus, den eine Sonde fand, kein Review.** Die erste lauffähige
+> Fassung lehnte im Trichter ab und liess den Aufrufer weiterlaufen: der Incident
+> entstand, der Loop drehte weiter, die Instanz schloss ab — und nahm den Incident mit.
+> Nichts geschrieben, nichts gemeldet, der Lauf sah erfolgreich aus. Der Trichter
+> meldet sein Urteil deshalb jetzt, und die erzeugenden Stellen handeln danach: der
+> Body bleibt aktiviert, statt Iterationen zu säen, deren Ergebnisse nirgendwo landen,
+> und eine Task, deren Ergebnis nicht passt, bleibt parkiert, statt erfolgreich
+> auszusehen.
+>
+> **Was davon noch offen ist, als Einschränkung und nicht als Fussnote.** Drei
+> Schreibstellen — Nachrichten-Payload, Ergebnis eines Call-Activity, io-Mapping —
+> lehnen den Wert zwar ab, halten aber den Fortgang nicht an. Da das Beenden eines
+> Elements dessen Incident löscht (`engine/apply.go`), geht die Meldung dort mit dem
+> Element verloren, wenn es abschliesst; übrig bliebe nur die fehlende Variable.
+> Geschrieben wird der Wert trotzdem nicht — was fehlt, ist die *Sichtbarkeit* der
+> Ablehnung auf diesen Pfaden.
 >
 > **Nicht mitgemacht:** Komponenten, die im Prozess eines Workers laufen (die
 > Antwort eines Modellanbieters, ein Remedy-Aufruf, die Fehlerausschnitte im
@@ -815,5 +848,5 @@ dafür, dass F07 und F08 mit einer *Begründung im Code* danebenlagen.
 | F13 | P2 | Langsame Worker blockieren unabhängige Requests | AP6 | `TestAuditSlowWorkerDoesNotBlockIndependentMutation` | behoben |
 | F14 | P2 | Erreichbarkeit am Inclusive-Join neu aufgebaut | AP6 | `TestAuditReachabilityAllocations` | behoben |
 | F15 | P2 | Job-Polling scannt die ganze Warteschlange | AP6 | statisch belegt | behoben |
-| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | `TestNoCeilingWithoutAName`, `TestAScriptsOutputIsBounded` | behoben (ohne Variablengrösse, s. AP6) |
+| F16 | P2 | Ressourcenbudgets unvollständig | AP6 | `TestNoCeilingWithoutAName`, `TestAScriptsOutputIsBounded`, `TestAVariableIsRefusedAtItsBudget` | behoben |
 | F17 | P2 | Keine expliziten Lese-/Idle-Timeouts | AP1 | statisch belegt | behoben |

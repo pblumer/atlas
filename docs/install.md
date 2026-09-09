@@ -61,9 +61,9 @@ way: `/metrics`, `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.5.0/atlas_0.5.0_linux_amd64.tar.gz
-tar -xzf atlas_0.5.0_linux_amd64.tar.gz
-./atlas_0.5.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.6.0/atlas_0.6.0_linux_amd64.tar.gz
+tar -xzf atlas_0.6.0_linux_amd64.tar.gz
+./atlas_0.6.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.5.0
+VERSION=0.6.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.5.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.6.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -587,7 +587,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.5.0'
+$Version = '0.6.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -603,7 +603,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.5.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.6.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -619,7 +619,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.5.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.6.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -778,10 +778,17 @@ away.
 | `ATLAS_LIMIT_ARCHIVE` | 1 GiB | A backup being restored, compressed *and* decompressed |
 | `ATLAS_LIMIT_TOKEN_STEPS` | 10000 | How many elements one token may drive in a single run before the engine parks it — the guard against a cycle of automatic elements |
 | `ATLAS_LIMIT_ITERATIONS` | 100000 | How many iterations one multi-instance activity may ask for before the engine refuses it |
+| `ATLAS_LIMIT_VARIABLE` | 1 MiB | How large one process variable's value may be. A variable is a business record; past this it is a document |
+| `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
 
-The last two are counts, not bytes, and they are different guards: a hundred thousand
-iterations are a hundred thousand tokens taking one step each, which the step budget
-is deliberately built not to stop.
+`TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
+hundred thousand iterations are a hundred thousand tokens taking one step each, which
+the step budget is deliberately built not to stop.
+
+A value past `VARIABLE` or `COLLECTION` is not written and not silently dropped: the
+element that produced it is parked with an incident naming the variable and both
+sizes, and resolving it writes the value again — so correcting the data, or raising
+the budget, lets the instance carry on.
 
 ### Endpoints
 

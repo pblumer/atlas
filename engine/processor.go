@@ -131,6 +131,12 @@ type Processor struct {
 	// maxIterations is how many iterations one multi-instance activity may ask for
 	// before the engine refuses it. Set with SetMaxIterations.
 	maxIterations int
+	// maxVariable and maxCollection are how large one variable's value, and a
+	// multi-instance activity's assembled output collection, may be. Two numbers
+	// because they bound different things — see engine/budget.go. Set with
+	// SetMaxVariable and SetMaxCollection.
+	maxVariable   int64
+	maxCollection int64
 
 	// condDirty collects the process instances whose variables changed this batch, so the
 	// batch loop can schedule a conditional re-check for each (ADR-0137). Reused, not

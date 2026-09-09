@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-08",
+  "generatedAt": "2026-09-09",
   "entries": [
     {
       "id": "the-deploy-says-when-a-searchable-declaration-cannot-be-hono",
@@ -125,9 +125,31 @@
       }
     },
     {
+      "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
+      "version": "0.6.0",
+      "date": "2026-09-09",
+      "category": "Added",
+      "title": {
+        "en": "Every size limit has a name, and one way to change it",
+        "de": "Jede Obergrenze hat einen Namen — und einen Weg, sie zu ändern"
+      },
+      "summary": {
+        "en": "Atlas caps what it accepts from outside in about ninety places — how large an upload may be, how many rows a query may return, how much output a script may produce. Each cap was sensible on its own, but nobody could list them, and a list nobody can read is a list nobody notices a hole in. They now sit in one place with the numbers they always had, and each can be raised or lowered with an ATLAS_LIMIT_ environment variable. A value that is missing or nonsensical leaves the default in place and says so when the server starts, and no limit can be switched off entirely. One honest gap: workers running as their own process use the standard values rather than what you configured on the server, because the server's settings do not reach them.",
+        "de": "Atlas begrenzt an rund neunzig Stellen, was es von aussen annimmt — wie gross ein Upload sein darf, wie viele Zeilen eine Abfrage liefern darf, wie viel ein Skript ausgeben darf. Jede Grenze war für sich sinnvoll, aber niemand konnte sie aufzählen — und eine Liste, die niemand lesen kann, ist eine Liste, in der niemand eine Lücke bemerkt. Sie stehen jetzt an einer Stelle, mit genau den Zahlen, die sie immer hatten, und jede lässt sich über eine Umgebungsvariable ATLAS_LIMIT_ anheben oder senken. Ein fehlender oder unsinniger Wert lässt die Voreinstellung stehen und wird beim Start protokolliert; abschalten lässt sich keine Grenze. Eine ehrliche Lücke: Worker, die als eigener Prozess laufen, verwenden die Standardwerte statt Ihrer Serverkonfiguration, weil die Einstellungen des Servers sie nicht erreichen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
+      },
+      "tags": [
+        "Operations",
+        "Configuration"
+      ]
+    },
+    {
       "id": "a-class-says-which-states-its-instances-move-through-and-the",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A business object can now say which states it moves through",
@@ -139,7 +161,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Data",
@@ -171,8 +193,8 @@
     },
     {
       "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "The handbook's worker runbooks are dated too",
@@ -200,8 +222,8 @@
     },
     {
       "id": "a-mim-import-now-hands-over-a-worksheet-not-a-node-inventory",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A MIM import says how much work it is, and hands over the rows",
@@ -213,7 +235,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Modeler",
@@ -222,8 +244,8 @@
     },
     {
       "id": "a-mim-import-asks-before-it-lands-on-something-and-says-what",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A MIM import asks before it overwrites, and shows what is at stake",
@@ -251,8 +273,8 @@
     },
     {
       "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "Setup instructions now tell you how old they are",
@@ -280,8 +302,8 @@
     },
     {
       "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "Every worker type now tells you how to set it up",
@@ -309,8 +331,8 @@
     },
     {
       "id": "mim-and-mimwal-workflows-import-as-what-they-mean-not-as-wha",
-      "version": "Unreleased",
-      "date": null,
+      "version": "0.6.0",
+      "date": "2026-09-09",
       "category": "Added",
       "title": {
         "en": "A MIM workflow imports as the process it is, not as a straight line",
@@ -322,7 +344,7 @@
       },
       "link": {
         "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
       },
       "tags": [
         "Modeler",
@@ -334,35 +356,6 @@
           "de": "MIM-Workflow importieren"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-class-canvas-got-its-toolbox-and-its-boxes-stopped-overf",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The class diagram reads properly on a real model",
-        "de": "Das Klassendiagramm ist auch bei einem echten Modell lesbar"
-      },
-      "summary": {
-        "en": "Data › Model draws your information model. On anything larger than a handful of classes it did not hold together: attribute names ran out over the edges of their boxes, relationships were drawn as straight lines across everything between their ends, and several lines into the same class landed exactly on top of one another. Boxes now grow to fit what is written in them, lines turn at right angles like the process modeler's, and lines going the same way are spread apart. The tools for drawing have moved off the title bar into a palette down the left edge — the same one the process and decision modelers use.",
-        "de": "Unter «Daten › Modell» wird Ihr Informationsmodell gezeichnet. Bei mehr als einer Handvoll Klassen hielt das nicht stand: Attributnamen liefen über den Rand ihrer Kästchen hinaus, Beziehungen wurden als gerade Linien quer über alles Dazwischenliegende gezogen, und mehrere Linien zur selben Klasse lagen exakt übereinander. Kästchen wachsen jetzt mit ihrem Inhalt, Linien knicken rechtwinklig wie im Prozess-Modeler, und gleichlaufende Linien werden auseinandergezogen. Die Zeichenwerkzeuge sind aus der Titelleiste in eine Palette am linken Rand gewandert — dieselbe, die Prozess- und Entscheidungs-Modeler verwenden."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

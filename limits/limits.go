@@ -114,6 +114,27 @@ type Limits struct {
 	// for the other: a hundred thousand iterations are a hundred thousand tokens
 	// taking one step each, which TokenSteps is deliberately built not to stop.
 	Iterations int32
+
+	// Variable is how large one process variable's value may be. A variable is a
+	// business record — a customer, an order, the inputs of a decision. Anything
+	// larger than this is a document, and a document does not belong in a token's
+	// scope, where every touch rewrites the whole of it into the log
+	// (ADR-0294).
+	Variable int64
+
+	// Collection is how large a multi-instance activity's assembled output collection
+	// may be. It is a *separate* budget from Variable, and larger, because the two
+	// bound different things: Variable asks what one record may weigh, Collection what
+	// a legitimate loop at the iteration ceiling may accumulate. One number cannot do
+	// both — the collection would have to be small enough to be no ceiling for a
+	// record, or the record large enough to be no ceiling at all.
+	//
+	// It bounds the peak held in memory. It is deliberately *not* a bound on what the
+	// loop writes: the collection is re-serialised once per iteration, so the bytes
+	// written grow with the square of the iteration count, and a budget small enough
+	// to make that safe would be smaller than Variable. That is a defect with its own
+	// fix, not a number to hide in.
+	Collection int64
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -137,6 +158,8 @@ func Default() Limits {
 		Archive:      1 << 30,
 		TokenSteps:   10_000,
 		Iterations:   100_000,
+		Variable:     1 << 20,
+		Collection:   16 << 20,
 	}
 }
 

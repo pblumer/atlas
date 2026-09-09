@@ -206,6 +206,12 @@ func TestProcessBatchRecordTooLarge(t *testing.T) {
 	if err := p.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
+	// The variable budget now sits in front of this path and refuses such a value
+	// with a resumable incident (ADR-0294), which is the
+	// better answer and not the one under test here. Raised out of the way, so the
+	// WAL's own cap — the last line, where the failure is an aborted batch rather
+	// than an incident — is still reached and still covered.
+	p.SetMaxVariable(128 << 20)
 	// A start variable larger than the WAL's 64 MiB per-record limit: its
 	// VariableCreated event cannot be appended.
 	huge := strings.Repeat("a", (64<<20)+64)
