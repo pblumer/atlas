@@ -4269,6 +4269,58 @@ function placementNoticeHTML(id, context) {
   return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
 }
 
+// WORKER_TYPE_INFO_GROUP is the title the setup section carries in the panel, and the
+// key its collapsed state is remembered under. One title for every Worker Type on
+// purpose: "I do not want to read this" is a statement about the section, not about
+// Jira in particular, and the other groups behave the same way.
+const WORKER_TYPE_INFO_GROUP = "Setup";
+
+// workerTypeInfoHTML wraps what a Worker Type says about itself — where its work runs,
+// and what has to exist before it runs at all — in a collapsible group.
+//
+// It used to stand open above the fields, which is right the first time and wrong every
+// time after: on a 270px panel it is most of a screen, and an author who has already
+// configured this type is scrolling past it to reach the field they came for. It is a
+// group now, with the same chevron as Operation or Failure handling, and it starts
+// folded unless this server has no Worker of the type configured — the case the section
+// was written for. An explicit toggle wins over that and is remembered for the session,
+// as with every other group.
+//
+// `fields` is the kind's field list, from which "does this type name a configured
+// Worker at all" follows: a type whose task carries no `connector` field configures
+// nothing, so its setup is a one-time read and starts folded.
+// `context` picks the placement notice's wording, or is null where the caller has
+// already placed that notice itself and only the setup belongs in the group.
+function workerTypeInfoHTML(id, fields, context = "workerType") {
+  const inner = (context ? placementNoticeHTML(id, context) : "") + workerTypeDocHTML(id);
+  if (!inner) return "";
+  const namesAWorker = (fields || []).some((f) => f.key === "connector");
+  const open = namesAWorker && !configuredKinds.has(id);
+  return `<div class="io-group wt-group" data-group="${esc(WORKER_TYPE_INFO_GROUP)}"
+       data-standalone-group="1" data-open-default="${open ? "1" : "0"}">
+    <div class="io-group-head" title="What this Worker Type needs before a task of it runs">
+      <span class="io-group-title">${esc(WORKER_TYPE_INFO_GROUP)}</span>
+      <span class="io-group-chevron" aria-hidden="true">&#9662;</span>
+    </div>
+    <div class="io-group-body">${inner}</div>
+  </div>`;
+}
+
+// wireWorkerTypeInfo gives that group its collapse behaviour. It runs after every
+// render, beside groupifyPanel, because the panel is rebuilt on each selection and the
+// group is standalone markup that groupifyPanel deliberately leaves alone.
+function wireWorkerTypeInfo(body, ctl) {
+  for (const group of body.querySelectorAll(".wt-group")) {
+    if (group.dataset.wired === "1") continue;
+    group.dataset.wired = "1";
+    ctl.setDefault(WORKER_TYPE_INFO_GROUP, group.dataset.openDefault === "1");
+    group.classList.toggle("collapsed", ctl.isCollapsed(WORKER_TYPE_INFO_GROUP));
+    group.querySelector(".io-group-head").addEventListener("click", () => {
+      ctl.onToggle(WORKER_TYPE_INFO_GROUP, group.classList.toggle("collapsed"));
+    });
+  }
+}
+
 // stKindHeadingHTML renders the heading above the chosen kind's fields.
 //
 // When the kind supplies its own field groups (Mail provider, Message, Failure handling…)
@@ -4302,7 +4354,7 @@ function serviceTaskKindHTML(bo) {
   return `<h3>Worker type</h3>
     <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
-    ${stKindHeadingHTML(cur)}${placementNoticeHTML(cur.id, "workerType")}${workerTypeDocHTML(cur.id)}${stKindFieldsHTML(cur, ext)}`;
+    ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, cur.fields)}${stKindFieldsHTML(cur, ext)}`;
 }
 
 // SEND_MESSAGE_KIND is the send task's Message kind (ADR-0112): a correlating throw in task
@@ -4344,8 +4396,8 @@ function sendTaskKindHTML(modeler, bo) {
       "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
   }
   const ext = findExt(bo, cur.ext) || {};
-  return picker + stKindHeadingHTML(cur) + placementNoticeHTML(cur.id, "workerType") +
-    workerTypeDocHTML(cur.id) + stKindFieldsHTML(cur, ext);
+  return picker + stKindHeadingHTML(cur) + workerTypeInfoHTML(cur.id, cur.fields) +
+    stKindFieldsHTML(cur, ext);
 }
 
 // applyServiceTaskKind switches a service task to a catalog kind by writing that
@@ -5982,7 +6034,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   const panelObserver = new MutationObserver(() => {
     if (groupifying) return;
     groupifying = true;
-    try { groupifyPanel(body, groupCtl); } finally { groupifying = false; }
+    try {
+      groupifyPanel(body, groupCtl);
+      wireWorkerTypeInfo(body, groupCtl);
+    } finally { groupifying = false; }
   });
   panelObserver.observe(body, { childList: true });
 
@@ -6460,9 +6515,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
-            // The same setup block the Worker Type panel carries: a temis Worker is
-            // configured exactly like the rest, and this is the other place it is chosen.
-            html += workerTypeDocHTML("temis");
+            // The same setup block the Worker Type panel carries, and collapsible for
+            // the same reason: a temis Worker is configured exactly like the rest, and
+            // this is the other place it is chosen. The placement notice above stays
+            // where it is — it belongs to the Evaluation field it sits under, and it is
+            // one paragraph rather than a screen.
+            html += workerTypeInfoHTML("temis", [{ key: "connector" }], null);
             html += `<label class="field"><span>Worker</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>

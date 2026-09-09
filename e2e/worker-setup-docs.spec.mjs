@@ -25,8 +25,49 @@ test.beforeEach(async ({ page }) => {
   await page.locator('[data-tab="implement"]').click();
 });
 
+// The setup section is a collapsible group like Operation or Failure handling. It opens
+// by itself only for a type this server has no Worker configured for; the harness's mock
+// answers with none, so a type that names a Worker starts open and the others start
+// folded. openSetup makes a test independent of which case it is looking at.
+async function openSetup(page) {
+  const group = page.locator(".wt-group");
+  if (await group.evaluate((el) => el.classList.contains("collapsed"))) {
+    await group.locator(".io-group-head").click();
+  }
+}
+
+test("the setup section is a group that folds away", async ({ page }) => {
+  await page.evaluate(() => window.__select("Activity_mail"));
+  const group = page.locator(".wt-group");
+  await expect(group).toBeVisible();
+  // Mail names a configured Worker and the harness has none, so it opens on its own:
+  // the case the section was written for.
+  await expect(group).not.toHaveClass(/collapsed/);
+  await expect(page.locator(".wtdoc-needs")).toBeVisible();
+
+  await group.locator(".io-group-head").click();
+  await expect(group).toHaveClass(/collapsed/);
+  await expect(page.locator(".wtdoc-needs")).toBeHidden();
+
+  // The choice outlives the re-render a new selection causes — it is a statement about
+  // the section, not about this one task.
+  await page.evaluate(() => window.__select("Activity_sql"));
+  await expect(page.locator(".wt-group")).toHaveClass(/collapsed/);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a type that configures nothing starts folded", async ({ page }) => {
+  // User provisioning names no configured Worker: its setup is a one-time read, so it
+  // does not take the panel on every selection.
+  await page.evaluate(() => window.__select("Activity_login"));
+  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await expect(page.locator(".wt-group")).toHaveClass(/collapsed/);
+  expect(page.__errors).toEqual([]);
+});
+
 test("a Worker Type that needs an account says so, and links to its own handbook card", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_mail"));
+  await openSetup(page);
   const doc = page.locator(".wtdoc");
   await expect(doc).toBeVisible();
   // The one line someone who has configured nothing has to read: whether this needs a
@@ -42,6 +83,7 @@ test("a Worker Type that needs an account says so, and links to its own handbook
 
 test("the steps are behind the fold, and open on demand", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_sql"));
+  await openSetup(page);
   const steps = page.locator(".wtdoc-steps li");
   // Folded: the panel is 270px wide, and an author who already has the worker is here
   // for the fields.
@@ -58,6 +100,7 @@ test("the steps are behind the fold, and open on demand", async ({ page }) => {
 // were last read against it — inside the fold, with the steps they qualify.
 test("the steps say when they were last checked against the provider", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_mail"));
+  await openSetup(page);
   const checked = page.locator(".wtdoc-checked");
   await expect(checked).toBeHidden();
   await page.locator(".wtdoc-more > summary").click();
@@ -71,6 +114,8 @@ test("the steps say when they were last checked against the provider", async ({ 
 
 test("a type that needs nothing says that, instead of showing nothing", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_login"));
+  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await openSetup(page);
   // User provisioning acts on this server's own login store: no Worker record, no
   // credential. An empty panel there would read exactly like a type whose setup nobody
   // wrote down.
@@ -81,8 +126,10 @@ test("a type that needs nothing says that, instead of showing nothing", async ({
 
 test("switching the Worker Type switches the setup with it", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_rest"));
+  await openSetup(page);
   await expect(page.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-rest");
   await page.evaluate(() => window.__select("Activity_mail"));
+  await openSetup(page);
   await expect(page.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-mail");
   // One block per panel: a stale one left behind would be setup instructions for the
   // type the author just moved away from.
@@ -93,6 +140,7 @@ test("switching the Worker Type switches the setup with it", async ({ page }) =>
 test("the business rule task's temis binding carries its setup too", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_rule_temis"));
   await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await openSetup(page);
   await expect(page.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-temis");
   // The embedded binding configures no worker, so it gets no setup block: there is
   // nothing outside Atlas to do.

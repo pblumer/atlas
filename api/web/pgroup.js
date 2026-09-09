@@ -97,6 +97,12 @@ export function groupController(body, defaultOpen = ["General"]) {
   return {
     isCollapsed: (title) => choice.has(title) ? choice.get(title) : !(everything || open.has(title)),
     onToggle: (title, col) => choice.set(title, col),
+    // setDefault states which way a group starts when the author has not toggled it —
+    // a default that depends on what is on screen rather than on the panel's fixed
+    // list. The Worker Type's Setup section is why: it starts open on a server with no
+    // Worker of that type configured, which is the case it was written for, and folded
+    // away once there is one. An explicit toggle still wins, here as everywhere.
+    setDefault: (title, isOpen) => { if (isOpen) open.add(title); else open.delete(title); },
     // Expand or collapse every group now on screen — the <h3> sections and any
     // standalone group that renders its own header — and record each, so a re-render
     // keeps what was chosen.
