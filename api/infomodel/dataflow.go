@@ -74,6 +74,12 @@ const (
 	// them. Deliberately conservative — see checkLifecycles for what it stays quiet
 	// about, and why that is the right direction to be wrong in.
 	RuleDataIllegalTransition = "data.illegal-transition"
+
+	// RuleDataUnreachableState: a class declares a state that nothing the application
+	// deploys ever writes. Reported by CheckApplication rather than by CheckDataFlow,
+	// because it is the one lifecycle question a single compiled process cannot answer
+	// — see unreachablestate.go.
+	RuleDataUnreachableState = "data.unreachable-state"
 )
 
 // Vocabulary is what an application's information models say, flattened for

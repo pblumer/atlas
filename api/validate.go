@@ -71,7 +71,14 @@ func (s *Server) handleValidate(w http.ResponseWriter, r *http.Request) {
 // that will write a datum has been drawn. The author is told at deploy rather than
 // by the first token to read a null.
 func dataFlowWarnings(cp *compiler.CompiledProcess, vocab *infomodel.Vocabulary) []string {
-	problems := infomodel.CheckDataFlow(cp, vocab)
+	return renderProblems(infomodel.CheckDataFlow(cp, vocab))
+}
+
+// renderProblems turns findings into the deploy response's one-line strings. A
+// finding that names no element — `data.unreachable-state` is about the model rather
+// than about any element of any process — reads as its own sentence rather than being
+// prefixed with an empty name.
+func renderProblems(problems []compiler.Problem) []string {
 	if len(problems) == 0 {
 		return nil
 	}
@@ -106,10 +113,23 @@ func (s *Server) dataFlowProblems(r io.Reader, applicationID string) []compiler.
 		return nil // best-effort: the compiler's own findings still stand
 	}
 	var out []compiler.Problem
+	drafted := make([]*compiler.CompiledProcess, 0, len(deployables))
 	for _, d := range deployables {
 		out = append(out, infomodel.CheckDataFlow(d.Process, vocab)...)
+		drafted = append(drafted, d.Process)
 	}
-	return out
+	// The application read with the drafts *added to* what is deployed, so adding the
+	// write that reaches a state clears the finding while it is being drawn.
+	//
+	// It is a union and not a replacement: a draft that *removes* the only write
+	// reaching a state stays silent here, because the deployed version still writes
+	// it and the application still reaches it today. The finding appears at deploy,
+	// which is when it becomes true. Superseding a draft's own deployed predecessor
+	// would need the BPMN process id off the compiled process, which it does not
+	// carry — worth doing if this silence is ever felt, and not guessed at now.
+	var app []*compiler.CompiledProcess
+	s.do(func() { app = s.applicationProcessesOnLoop(applicationID, drafted...) })
+	return append(out, infomodel.CheckApplication(app, vocab)...)
 }
 
 // deployWarningsOnLoop is the deploy-time preflight, in one place so every deploy
@@ -144,6 +164,45 @@ func (s *Server) deployWarningsOnLoop(deployed []deployedProcess, applicationID 
 		if vocabErr == nil {
 			out = append(out, dataFlowWarnings(dep.cp, vocab)...)
 		}
+	}
+	// And once for the application, not once per process: whether a declared state is
+	// ever reached is a question the set answers and no member of it can. The models
+	// deployed in this call are already in the registry by the time this runs, so they
+	// count themselves.
+	if vocabErr == nil {
+		out = append(out, renderProblems(infomodel.CheckApplication(
+			s.applicationProcessesOnLoop(applicationID), vocab))...)
+	}
+	return out
+}
+
+// applicationProcessesOnLoop is the application as it actually runs: the newest
+// version of each of its processes, minus the ones somebody has deactivated.
+//
+// It is what `data.unreachable-state` is asked against (ADR-0259 §3), and the three
+// words in that sentence are all load-bearing. *Newest version*, because a state only
+// v1 wrote is not one this application reaches any more. *Not deactivated*, because a
+// process that cannot start an instance writes nothing. *Of this application*,
+// because a lifecycle belongs to one application's information model and another's
+// processes say nothing about it.
+//
+// `also` are processes not in the registry yet — the ones being deployed or dry-run
+// right now — so the process that finally cancels an order clears the finding as it
+// arrives rather than one deploy later.
+func (s *Server) applicationProcessesOnLoop(applicationID string, also ...*compiler.CompiledProcess) []*compiler.CompiledProcess {
+	out := append([]*compiler.CompiledProcess{}, also...)
+	if applicationID == "" {
+		return out // a process deployed outside an application has no vocabulary either
+	}
+	for _, key := range s.order {
+		d, ok := s.deployments[key]
+		if !ok || d.cp == nil || d.inactive || d.ProjectID != applicationID {
+			continue
+		}
+		if d.Version != s.versions[d.ProcessID] {
+			continue
+		}
+		out = append(out, d.cp)
 	}
 	return out
 }

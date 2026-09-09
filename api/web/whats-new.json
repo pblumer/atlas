@@ -2,6 +2,49 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas now tells you when a state nothing ever reaches",
+        "de": "Atlas sagt jetzt, wenn ein Zustand nie erreicht wird"
+      },
+      "summary": {
+        "en": "If a class says an order can be cancelled and no process in the application ever cancels one, you now hear about it — at deploy and in the Modeler's Problems panel. Either a process is missing or the model is describing a plan rather than what is built, and both are worth knowing. It is a note, never a refusal, and it stays quiet about a class no process handles yet: drawing a lifecycle before the process that writes it is the normal way round.",
+        "de": "Wenn eine Klasse sagt, eine Bestellung könne storniert werden, aber kein Prozess der Anwendung storniert je eine, erfahren Sie das jetzt — beim Deploy und in der Problemliste des Modelers. Entweder fehlt ein Prozess, oder das Modell beschreibt einen Plan statt des Gebauten; beides ist wissenswert. Es ist ein Hinweis, nie eine Ablehnung, und über eine Klasse, die noch kein Prozess anfasst, schweigt es: einen Lebenszyklus vor dem Prozess zu zeichnen, der ihn schreibt, ist die normale Reihenfolge."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, pick your information model, and give a business object a lifecycle with more states than your processes currently write.",
+          "Open a process of the same application in the Modeler.",
+          "The Problems panel names the class and every state nothing reaches, in one line.",
+          "Add the data association that writes that state — or a process that does — and the line goes away."
+        ],
+        "de": [
+          "Unter Daten das Informationsmodell öffnen und einem Geschäftsobjekt einen Lebenszyklus mit mehr Zuständen geben, als die Prozesse derzeit schreiben.",
+          "Einen Prozess derselben Anwendung im Modeler öffnen.",
+          "Die Problemliste nennt die Klasse und jeden nie erreichten Zustand in einer Zeile.",
+          "Die Datenzuweisung ergänzen, die diesen Zustand schreibt — oder den fehlenden Prozess —, und die Zeile verschwindet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
       "version": "Unreleased",
       "date": null,
@@ -334,35 +377,6 @@
         "label": {
           "en": "Open the Modeler",
           "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-worker-type-s-setup-steps-say-when-they-were-last-checked",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "Setup instructions now tell you how old they are",
-        "de": "Die Einrichtungsanleitungen sagen jetzt, wie alt sie sind"
-      },
-      "summary": {
-        "en": "The steps shown beside a worker type walk you through someone else's product — which menu to open at Google, which button to press at Atlassian. Those menus get rearranged, and nothing in Atlas can notice: the instructions would keep looking authoritative while quietly sending you in a circle, and you would have no way to tell whether you or the text was wrong. Each set of steps now says which month it was last walked through for real, right underneath them, and states plainly that where the provider has moved something since, the provider is right. A check inside Atlas flags any instructions that have gone a year without being re-read.",
-        "de": "Die Schritte neben einem Worker-Typ führen durch das Produkt eines anderen Anbieters — welches Menü bei Google zu öffnen ist, welche Schaltfläche bei Atlassian zu drücken. Diese Menüs werden umgebaut, und Atlas kann das nicht bemerken: Die Anleitung sähe weiterhin verbindlich aus und schickte Sie still im Kreis, ohne dass Sie beurteilen könnten, ob Sie oder der Text falsch liegen. Jede Anleitung nennt jetzt direkt darunter den Monat, in dem sie zuletzt tatsächlich durchgegangen wurde, und sagt klar: Wo der Anbieter seither etwas verschoben hat, hat der Anbieter recht. Eine Prüfung in Atlas meldet Anleitungen, die ein Jahr lang nicht mehr nachgelesen wurden."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Open a service task",
-          "de": "Service-Task öffnen"
         },
         "route": "#/modeler"
       }
