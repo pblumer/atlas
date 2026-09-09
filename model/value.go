@@ -432,6 +432,22 @@ type VariableValue struct {
 	// the size of one result (ADR-0296).
 	Index int32
 
+	// Parts says this variable's value is a list of Parts elements held one key per
+	// element, and that Text is empty. Zero — which is every variable outside a loop's
+	// accumulating output collection, and every record written before this field
+	// existed — means the value is right here in Text.
+	//
+	// Naming the element in the *log* (see Index) stopped the log growing with the
+	// square of the iteration count, but the fold still put the whole collection back
+	// under one key per round, so the store went on absorbing those bytes. Holding the
+	// elements apart is what makes a round cost one element in the store too
+	// (ADR-draft-a-collection-under-construction).
+	//
+	// No reader of a variable ever sees this form: the read paths assemble the list
+	// and hand back an ordinary record. It exists between the fold that fills a
+	// collection and the promotion that lifts it, and nowhere else.
+	Parts int32
+
 	// Indexed says this write belongs in the variable value index: its process
 	// declared the name searchable (atlas:searchable) and the write is at the
 	// instance's root scope.
@@ -500,7 +516,8 @@ func (v *VariableValue) encode(dst []byte) []byte {
 	} else {
 		dst = append(dst, 0)
 	}
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.Index+1))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.Index+1))
+	return binary.LittleEndian.AppendUint32(dst, uint32(v.Parts))
 }
 
 func (v *VariableValue) decode(src []byte) error {
@@ -539,6 +556,12 @@ func (v *VariableValue) decode(src []byte) error {
 	v.Index = -1
 	if len(tail) >= 13 {
 		v.Index = int32(binary.LittleEndian.Uint32(tail[9:])) - 1
+	}
+	// Parts is appended last and needs no such shift: zero is both what a record
+	// written before it existed reads, and what it means — the value is in Text.
+	v.Parts = 0
+	if len(tail) >= 17 {
+		v.Parts = int32(binary.LittleEndian.Uint32(tail[13:]))
 	}
 	return nil
 }

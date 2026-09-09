@@ -268,9 +268,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// and the variable value, so replay rebuilds it identically (I4).
 			return tx.RecordVariableSnapshot(h.Timestamp, h.Position, &v.variable)
 		case model.IntentVariableElementSet:
-			// One element of a list, named rather than carried: the fold reads the
-			// collection, sets the element and writes it back
-			// (ADR-0296). It is a function of the batch's
+			// One element of a list, named rather than carried: the fold writes that
+			// element under its own key and leaves the collection alone (ADR-0296, then
+			// ADR-draft-a-collection-under-construction). It is a function of the batch's
 			// own state and of the event, so replay reaches the same list (I4).
 			//
 			// No snapshot. A loop's half-filled collection is scratch at the body scope
@@ -441,18 +441,76 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 // is unchanged: the loop that seeds the collection and the loop that fills it are the
 // same loop, so a mismatch here is a bug to find in a test rather than a reason to
 // stop a partition.
+//
+// It writes one key: the element's own canonical JSON, under its own key
+// (ADR-draft-a-collection-under-construction). It does not read the collection, and
+// that is the whole difference. Reading it back to set one element is what made a
+// round cost the collection so far — in the store, after naming the element had
+// already taken that cost out of the log.
+//
+// It is still a function of the batch's state and the event alone, so replay reaches
+// the same list (I4).
 func setVariableElement(tx *stateTx, v *model.VariableValue) error {
-	cur, err := tx.GetVariable(v.ScopeKey, v.Name)
-	if err != nil || cur == nil || cur.Kind != model.VarJSON {
+	parts, held, err := tx.CollectionParts(v.ScopeKey, v.Name)
+	if err != nil {
 		return err
 	}
-	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, cur.Text))
-	if !ok || v.Index < 0 || int(v.Index) >= len(elems) {
+	if !held {
+		// The first element of this run: the collection is still the seeded list, so it
+		// moves into the element family once. Every round after this one skips straight
+		// to the write below.
+		if parts, err = beginCollection(tx, v.ScopeKey, v.Name); err != nil || parts == 0 {
+			return err
+		}
+	}
+	if v.Index < 0 || v.Index >= parts {
 		return nil
 	}
-	elems[v.Index] = expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text)
-	kind, b, text := expr.Classify(expr.ListOf(elems...))
-	next := *cur
-	next.Kind, next.Bool, next.Text = model.VarKind(kind), b, text
-	return tx.PutVariable(&next)
+	frag, ok := expr.ToJSON(expr.FromStored(toExprKind(v.Kind), v.Bool, v.Text))
+	if !ok {
+		return nil
+	}
+	return tx.PutVariableElement(v.ScopeKey, v.Name, v.Index, frag)
+}
+
+// beginCollection moves a seeded list variable into the element family and leaves the
+// record as a stub naming its length. It reports how long the list is, or zero if the
+// variable is not one a loop can fill — absent, not a list, or empty, each of which
+// leaves everything exactly as it was.
+//
+// It runs once per loop, not once per round, and the elements it writes are the ones
+// the seed put there. A loop seeds nulls, so in practice it writes none; a list that
+// arrived some other way keeps every element it had.
+//
+// The clear is what makes a resolved loop honest: a parked loop that is resolved seeds
+// its collection again, and the elements of the run before must not survive into the
+// new one.
+func beginCollection(tx *stateTx, scope uint64, name string) (int32, error) {
+	cur, err := tx.GetVariable(scope, name)
+	if err != nil || cur == nil || cur.Kind != model.VarJSON {
+		return 0, err
+	}
+	elems, ok := expr.AsList(expr.FromStored(expr.KindJSON, false, cur.Text))
+	if !ok || len(elems) == 0 {
+		return 0, nil
+	}
+	if err := tx.ClearVariableElements(scope, name); err != nil {
+		return 0, err
+	}
+	for i, e := range elems {
+		kind, _, _ := expr.Classify(e)
+		frag, ok := expr.ToJSON(e)
+		if kind == expr.KindNull || !ok {
+			continue // an unwritten slot: the assembly reads an absent element as null
+		}
+		if err := tx.PutVariableElement(scope, name, int32(i), frag); err != nil {
+			return 0, err
+		}
+	}
+	stub := *cur
+	stub.Kind, stub.Bool, stub.Text, stub.Parts = model.VarJSON, false, "", int32(len(elems))
+	if err := tx.PutVariable(&stub); err != nil {
+		return 0, err
+	}
+	return stub.Parts, nil
 }

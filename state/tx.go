@@ -454,6 +454,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		variableAuditScopePrefix(piKey),
 		decisionEvaluationScopePrefix(piKey),
 		variablePrefix(piKey),
+		variableElementScopePrefix(piKey),
 		dataObjectPrefix(piKey),
 		dataObjectSnapshotScopePrefix(piKey),
 		compensableScopePrefix(piKey),
@@ -894,14 +895,28 @@ func (t *Tx) DeleteVariable(scope uint64, name string) error {
 	if err := t.reindexVariable(scope, name, nil); err != nil {
 		return err
 	}
+	// A collection under construction keeps its value in the element family, and the
+	// record here is only the stub saying so — so dropping the record has to drop the
+	// elements with it, or a scope tearing down would leave them behind for good.
+	// Unconditional rather than read-then-decide: the prefix is empty for every
+	// variable that is not a collection, so this is an iterator that finds nothing,
+	// against a read that would have to happen every time to learn the same.
+	if err := t.ClearVariableElements(scope, name); err != nil {
+		return err
+	}
 	return t.b.Delete(keyVariable(scope, name), nil)
 }
 
-// GetVariable returns a scope's variable by name, or nil if absent.
+// GetVariable returns a scope's variable by name, or nil if absent. A collection
+// under construction is assembled here, so the caller gets the list and never the
+// stub that stands for it.
 func (t *Tx) GetVariable(scope uint64, name string) (*model.VariableValue, error) {
 	var v model.VariableValue
 	ok, err := t.readInto(keyVariable(scope, name), &v)
 	if err != nil || !ok {
+		return nil, err
+	}
+	if err := assembleCollection(t.b, &v); err != nil {
 		return nil, err
 	}
 	return &v, nil
@@ -923,11 +938,45 @@ func (t *Tx) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) erro
 		if err := model.DecodeValueInto(&v, iter.Value()); err != nil {
 			return err
 		}
+		if err := assembleCollection(t.b, &v); err != nil {
+			return err
+		}
 		if err := fn(&v); err != nil {
 			return err
 		}
 	}
 	return iter.Error()
+}
+
+// PutVariableElement writes one element of a collection under construction: the
+// element's canonical JSON under its own key. This is the write whose size is one
+// result rather than the collection so far, and it is the whole reason the form
+// exists (ADR-draft-a-collection-under-construction).
+func (t *Tx) PutVariableElement(scope uint64, name string, index int32, elemJSON string) error {
+	return t.b.Set(keyVariableElement(scope, name, index), []byte(elemJSON), nil)
+}
+
+// CollectionParts reports how many elements a collection under construction holds,
+// and whether the variable is one at all — without assembling it.
+//
+// Not assembling is the point. The fold that fills a collection must not read the
+// collection to add to it: doing so would put back as CPU exactly the per-round cost
+// this form exists to remove (ADR-draft-a-collection-under-construction).
+func (t *Tx) CollectionParts(scope uint64, name string) (int32, bool, error) {
+	var v model.VariableValue
+	ok, err := t.readInto(keyVariable(scope, name), &v)
+	if err != nil || !ok {
+		return 0, false, err
+	}
+	return v.Parts, v.Parts > 0, nil
+}
+
+// ClearVariableElements drops every element held for a collection. A loop that is
+// parked and then resolved seeds its collection again, and the elements of the run
+// before it must not survive into the new one — they would reappear the moment the
+// record became a stub again.
+func (t *Tx) ClearVariableElements(scope uint64, name string) error {
+	return t.deletePrefix(variableElementPrefix(scope, name))
 }
 
 // --- DataObject ---

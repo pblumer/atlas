@@ -433,6 +433,23 @@ func TestVariableProducerRoundTrip(t *testing.T) {
 	}
 }
 
+// The widths of the fields appended to a variable record, in the order they were
+// appended. A legacy record is the full encoding with every field appended *after* the
+// one it ended at taken off, and the tests below say that as a sum of these rather
+// than as a hand-counted offset.
+//
+// Counting by hand is what went wrong before: the pre-attribution case took eight
+// bytes off and called them the producer key, but by then two more fields sat behind
+// it, so it was really stripping those two and three bytes of the key — and it passed,
+// because a producer key three bytes short is also not eight bytes long. The next
+// appended field breaks this sum instead of quietly shifting what a case removes.
+const (
+	varProducerBytes = 8 // ProducerKey
+	varIndexedBytes  = 1 // Indexed
+	varIndexBytes    = 4 // Index
+	varPartsBytes    = 4 // Parts
+)
+
 // TestVariableProducerAppendCompatible pins the on-disk compatibility of that field:
 // a record written before it exists ends after the text, and must decode as "no
 // element is known to have written this" rather than failing the read of history that
@@ -441,7 +458,7 @@ func TestVariableProducerAppendCompatible(t *testing.T) {
 	full := AppendValue(nil, &VariableValue{
 		ScopeKey: NewKey(1, 5), Name: "tickets", Kind: VarNumber, Text: "4", ProducerKey: NewKey(1, 7),
 	})
-	legacy := full[:len(full)-8] // exactly what the old encoder would have written
+	legacy := full[:len(full)-(varProducerBytes+varIndexedBytes+varIndexBytes+varPartsBytes)]
 
 	v := VariableValue{ProducerKey: NewKey(1, 99)} // reused: carries someone else's producer
 	if err := DecodeValueInto(&v, legacy); err != nil {
@@ -491,10 +508,8 @@ func TestVariableIndexedAppendCompatible(t *testing.T) {
 		ProducerKey: NewKey(1, 7), Indexed: true,
 	})
 	// Exactly what the pre-index encoder would have written: the record ended after
-	// ProducerKey. Both fields appended since — the Indexed byte and the four-byte
-	// Index — come off, which is why this is not "drop the last byte": a later
-	// appended field would have made that silently strip the wrong one.
-	legacy := full[:len(full)-(1+4)]
+	// ProducerKey, so every field appended since comes off.
+	legacy := full[:len(full)-(varIndexedBytes+varIndexBytes+varPartsBytes)]
 
 	v := VariableValue{Indexed: true} // reused: carries someone else's flag
 	if err := DecodeValueInto(&v, legacy); err != nil {
@@ -577,7 +592,7 @@ func TestVariableIndexAppendCompatible(t *testing.T) {
 	full := AppendValue(nil, &VariableValue{
 		ScopeKey: NewKey(1, 5), Name: "results", Kind: VarString, Text: "x", Index: 7,
 	})
-	legacy := full[:len(full)-4] // ends after the Indexed byte
+	legacy := full[:len(full)-(varIndexBytes+varPartsBytes)] // ends after the Indexed byte
 
 	v := VariableValue{Index: 7} // reused: carries someone else's index
 	if err := DecodeValueInto(&v, legacy); err != nil {
@@ -593,5 +608,39 @@ func TestVariableIndexAppendCompatible(t *testing.T) {
 	}
 	if round.Index != 7 {
 		t.Errorf("Index = %d, want 7 round-tripped", round.Index)
+	}
+}
+
+// TestVariablePartsAppendCompatible: Parts says a variable's value is held one key per
+// element rather than in Text (ADR-draft-a-collection-under-construction). A record
+// written before the field existed reads back as zero, and zero is exactly right —
+// such a record carries its whole value in Text, which is what zero means.
+//
+// This is the one appended field that needed no shifting, and the reason is worth
+// keeping: Index had to be stored one higher because its "absent" and its zero are
+// different things. A part count's are the same thing.
+func TestVariablePartsAppendCompatible(t *testing.T) {
+	full := AppendValue(nil, &VariableValue{
+		ScopeKey: NewKey(1, 5), Name: "results", Kind: VarJSON, Index: 3, Parts: 12,
+	})
+	legacy := full[:len(full)-varPartsBytes] // ends after Index
+
+	v := VariableValue{Parts: 12} // reused: carries someone else's part count
+	if err := DecodeValueInto(&v, legacy); err != nil {
+		t.Fatalf("DecodeValueInto(legacy): %v", err)
+	}
+	if v.Parts != 0 {
+		t.Errorf("Parts = %d, want 0 — a record from before the field holds its value in Text", v.Parts)
+	}
+	if v.Index != 3 || v.Name != "results" {
+		t.Errorf("value = %+v, want the older record's fields read back intact", v)
+	}
+
+	var round VariableValue
+	if err := DecodeValueInto(&round, full); err != nil {
+		t.Fatalf("DecodeValueInto(full): %v", err)
+	}
+	if round.Parts != 12 || round.Index != 3 {
+		t.Errorf("round-tripped Parts/Index = %d/%d, want 12/3", round.Parts, round.Index)
 	}
 }

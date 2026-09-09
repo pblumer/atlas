@@ -1510,18 +1510,28 @@ func (q queries) ProcessInstance(key uint64) (*model.ProcessInstanceValue, bool,
 // surface an instance's variables to operators.
 func (q queries) VariablesOfScope(scope uint64, fn func(v *model.VariableValue) error) error {
 	return q.scanPrefix(variablePrefix(scope), func(_, raw []byte) error {
-		return decodeVariable(raw, fn)
+		return decodeVariable(q.r, raw, fn)
 	})
 }
 
 // decodeVariable turns raw variable bytes into a value for fn. Shared with a
 // [ReadView] for the same reason as decodeElementInstance.
-func decodeVariable(raw []byte, fn func(v *model.VariableValue) error) error {
+//
+// A collection under construction is assembled here, which is why this needs the
+// reader it was scanned from: the stub says how long the list is, and the elements
+// are a second read away (ADR-draft-a-collection-under-construction). Every caller of
+// this — an operator's variable view, a connector's payload, a FEEL scope built off
+// the committed store — therefore sees the list, and the stub reaches none of them.
+func decodeVariable(r iterReader, raw []byte, fn func(v *model.VariableValue) error) error {
 	v, err := model.DecodeValue(model.VTVariable, raw)
 	if err != nil {
 		return err
 	}
-	return fn(v.(*model.VariableValue))
+	vv := v.(*model.VariableValue)
+	if err := assembleCollection(r, vv); err != nil {
+		return err
+	}
+	return fn(vv)
 }
 
 // VisibleVariablesOfScope calls fn with every variable *visible* at the given

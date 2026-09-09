@@ -52,6 +52,7 @@ const (
 	cfElementTermination     columnFamily = 0x27 // elTerm:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
+	cfVariableElement        columnFamily = 0x2A // varEl:<scopeKey>:<name>:0x00:<index> → canonical JSON of one element
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -486,6 +487,39 @@ func variablePrefix(scope uint64) []byte {
 // variable-length component, so a scope's variables are one prefix scan.
 func keyVariable(scope uint64, name string) []byte {
 	return append(variablePrefix(scope), name...)
+}
+
+// variableElementScopePrefix covers every collection element held under a scope. It
+// is what a scope teardown and an instance purge delete, alongside the variables
+// themselves.
+func variableElementScopePrefix(scope uint64) []byte {
+	return appendBE64([]byte{byte(cfVariableElement)}, scope)
+}
+
+// variableElementPrefix is the scan prefix for one collection's elements: the scope,
+// the variable's name, and a terminator.
+//
+// The terminator is what keeps two collections apart. Unlike a variable key, whose
+// name is trailing, this key has to carry the index *after* the name — so without a
+// separator the elements of "a" and of "ab" would share a prefix and each scan would
+// answer with the other's. It is safe as a separator for the same reason the value
+// index relies on it: a NUL cannot appear in a BPMN variable name.
+func variableElementPrefix(scope uint64, name string) []byte {
+	return append(append(variableElementScopePrefix(scope), name...), 0)
+}
+
+// keyVariableElement keys one element of a collection under construction. The index is
+// big-endian and last, so a prefix scan yields the elements in list order and a reader
+// can tell from the key alone which slot it just read.
+func keyVariableElement(scope uint64, name string, index int32) []byte {
+	return appendBE32(variableElementPrefix(scope, name), uint32(index))
+}
+
+// elementIndexFromKey reads the slot off a [keyVariableElement]. The scan that
+// assembles a collection needs it to place what it reads, and to leave a gap where an
+// iteration has not written yet.
+func elementIndexFromKey(k []byte) int32 {
+	return int32(binary.BigEndian.Uint32(k[len(k)-4:]))
 }
 
 func dataObjectPrefix(scope uint64) []byte {
