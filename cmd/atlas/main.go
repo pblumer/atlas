@@ -1448,7 +1448,7 @@ func resetPasswordValue(fromStdin bool) (password string, generated bool, err er
 
 // runImportMIM converts a Microsoft Identity Manager (MIM/FIM) XOML workflow —
 // or an Export-FIMConfig wrapper that embeds one — into Atlas-deployable BPMN
-// 2.0. The BPMN goes to stdout (or --out); a per-node conversion report goes to
+// 2.0. The BPMN goes to stdout (or --out); the conversion worksheet goes to
 // stderr so the lossy points are visible without polluting the model on stdout.
 func runImportMIM(args []string) error {
 	fs := flag.NewFlagSet("import-mim", flag.ExitOnError)
@@ -1460,8 +1460,10 @@ func runImportMIM(args []string) error {
 
 Convert a MIM/FIM workflow (XOML, or an Export-FIMConfig XML that embeds it) into
 BPMN 2.0. With no FILE, or "-", the XOML is read from stdin. Constructs without a
-faithful BPMN counterpart are preserved in <atlas:mimSource> and listed in the
-report; re-check the model in the Modeler before deploying.
+faithful BPMN counterpart are preserved in <atlas:mimSource>, the rows of a MIMWAL
+table are decoded into <atlas:mimCollection> on the same element, and every one of
+them is an item of the report — which counts work, not nodes, so an activity with
+five assignments reports five. Re-check the model in the Modeler before deploying.
 
 Examples:
   atlas import-mim workflow.xoml > workflow.bpmn

@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Modeler",
+    "Import"
+  ],
+  "title": {
+    "en": "A MIM import says how much work it is, and hands over the rows",
+    "de": "Ein MIM-Import sagt, wie viel Arbeit er ist — und übergibt die Zeilen"
+  },
+  "summary": {
+    "en": "A single step of a MIM workflow often carries a whole table of reads and writes inside it — the queries it runs and the values it assigns. Until now the import reported such a step as one line, so a workflow that is days of work could read as a handful of items. It is now counted the way it has to be worked through: every row of those tables is its own entry in the import report, with the row's own content beside it. The rows also travel with the model as structured data on the step itself, so they can be listed, checked off and processed by other tools rather than read out of the original definition by hand. What the import deliberately does not do is guess: it never claims which system a row writes to, and it does not split a step into several boxes in the diagram, because that decision needs the synchronisation rules that live in MIM and not in the workflow.",
+    "de": "Ein einzelner Schritt eines MIM-Workflows enthält oft eine ganze Tabelle von Lese- und Schreibvorgängen — die Abfragen, die er ausführt, und die Werte, die er setzt. Bisher meldete der Import einen solchen Schritt als eine Zeile, sodass ein Workflow von mehreren Tagen Arbeit wie eine Handvoll Positionen aussehen konnte. Gezählt wird jetzt so, wie er abgearbeitet werden muss: Jede Zeile dieser Tabellen ist eine eigene Position im Importbericht, mit ihrem Inhalt daneben. Die Zeilen reisen zudem als strukturierte Daten am Schritt selbst mit, sodass sie sich auflisten, abhaken und von anderen Werkzeugen verarbeiten lassen, statt sie von Hand aus der Originaldefinition zu lesen. Was der Import bewusst nicht tut, ist raten: Er behauptet nie, in welches System eine Zeile schreibt, und er zerlegt einen Schritt nicht in mehrere Kästchen im Diagramm — diese Entscheidung braucht die Synchronisationsregeln, die in MIM liegen und nicht im Workflow."
+  }
+}
