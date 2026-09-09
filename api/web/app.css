@@ -3806,6 +3806,11 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    recipe. The steps carry markup of their own (code spans, bold), so they are styled
    here rather than inheriting the flat .muted hint. */
 .wtdoc { margin: 0 0 10px; }
+/* Inside the Setup group the two blocks are the group's whole body, so the notice loses
+   the top margin it needs when it stands alone and the doc block loses the bottom one:
+   the group's own padding does that job, and doubling it reads as a gap nobody chose. */
+.wt-group .stkind-notice { margin-top: 0; }
+.wt-group .wtdoc { margin-bottom: 0; }
 .wtdoc-needs {
   margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px 6px 0 0;
   border-bottom: none; background: var(--surface); font-size: 12.5px; line-height: 1.5;

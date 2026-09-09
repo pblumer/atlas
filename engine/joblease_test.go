@@ -319,3 +319,77 @@ func TestALeaseSurvivesARestart(t *testing.T) {
 		t.Fatalf("after restart and expiry: activatable=%v, want the job %d offered again", got, jobKey)
 	}
 }
+
+// TestLeaseTransitionsAreCounted is the throughput view of the lease protocol
+// (ADR-0007) reaching the metrics it was missing (ADR-0142).
+//
+// The two counters this pins are the ones a created/completed/failed triple cannot
+// stand in for. An *activation* is the only evidence that workers are pulling at all:
+// a queue that is filling with jobs nobody has taken looks, in the created counter
+// alone, exactly like a queue that is being worked through. A *lease timeout* is the
+// only evidence that a worker took a job and then vanished, which the failure counter
+// never sees, because a worker that dies reports nothing.
+//
+// They are counted from committed records for the same reason every other job counter
+// is: `applyToState` runs again on replay (invariant I4), so a counter incremented
+// there would be inflated by every recovery.
+func TestLeaseTransitionsAreCounted(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	clk := &fixedClock{t: 1_000}
+
+	cp, jobType := linearProcess(t)
+	p := engine.New(1, h.log, h.store, clk)
+	rec := &recorder{}
+	p.SetMetrics(rec)
+	p.SetJobNotifier(func(int32) {})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	jobKey := singleActivatableJob(t, h.store, jobType)
+
+	if got := rec.jobTotals(); got.Activated != 0 || got.TimedOut != 0 {
+		t.Fatalf("before any worker pulled: activated=%d timedOut=%d, want 0 and 0", got.Activated, got.TimedOut)
+	}
+
+	const lease = int64(60e9)
+	p.ActivateJob(jobKey, "worker-1", lease)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle (activate): %v", err)
+	}
+	if got := rec.jobTotals(); got.Activated != 1 {
+		t.Errorf("after one worker leased the job: activated=%d, want 1", got.Activated)
+	}
+
+	// A lease that has not elapsed is not a timeout. Counting the timer rather than its
+	// firing would report every leased job as lost.
+	clk.t = 1_000 + lease - 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers (early): %v", err)
+	}
+	if got := rec.jobTotals(); got.TimedOut != 0 {
+		t.Errorf("while the lease still held: timedOut=%d, want 0", got.TimedOut)
+	}
+
+	clk.t = 1_000 + lease + 1
+	if err := p.TickTimers(); err != nil {
+		t.Fatalf("TickTimers (due): %v", err)
+	}
+	got := rec.jobTotals()
+	if got.TimedOut != 1 {
+		t.Errorf("after the lease elapsed: timedOut=%d, want 1", got.TimedOut)
+	}
+	// The job came back and was never created a second time: a timeout returns work,
+	// it does not manufacture it.
+	if got.Created != 1 {
+		t.Errorf("created=%d across the whole run, want 1 — a returned job is not a new one", got.Created)
+	}
+	if got.Completed != 0 || got.Failed != 0 || got.Canceled != 0 {
+		t.Errorf("nothing finished: %+v", got)
+	}
+}

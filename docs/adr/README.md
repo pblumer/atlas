@@ -227,7 +227,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout | Accepted | Landed |
 | [0140](0140-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Accepted | Landed |
 | [0141](0141-sharepoint-connector.md) | A SharePoint connector (create list item, via Microsoft Graph) | Accepted | Landed |
-| [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Partial |
+| [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Landed |
 | [0143](0143-process-documentation-export.md) | Process documentation export | Accepted | Landed |
 | [0144](0144-per-definition-history-ttl.md) | Per-definition history TTL — retention the model declares | Accepted | Landed |
 | [0145](0145-developer-view-for-code-fields.md) | A Developer View for code-bearing fields | Accepted | Landed |
@@ -252,7 +252,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0164](0164-no-in-process-service-tasks.md) | No in-process service tasks — the core loop must never be able to get stuck | Accepted | Landed |
 | [0165](0165-soap-connector.md) | SOAP / Web Services (WSDL) connector | Accepted | Landed |
 | [0166](0166-active-directory-connector.md) | Active Directory connector | Accepted | Landed |
-| [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Proposed | Not started |
+| [0167](0167-released-connectors-ship-in-the-marketplace.md) | A released connector ships in the marketplace | Accepted | Partial |
 | [0168](0168-connector-work-on-a-worker.md) | Moving a connector onto a worker — where the task detail travels, and where the credential lives | Accepted | Landed |
 | [0169](0169-incident-repair-forms.md) | A form on the incident — repairing an instance with named fields instead of raw JSON | Accepted | Landed |
 | [0170](0170-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted | Landed |
@@ -261,7 +261,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0173](0173-generic-sql-connector.md) | Three SQL connectors, and the first kinds born on a worker | Accepted | Landed |
 | [0174](0174-connector-payloads-are-the-input-mapping.md) | A connector task's input mappings are its outbound payload | Accepted | Landed |
 | [0175](0175-replicated-partition-cells.md) | Replicated partition cells for horizontal scale-out | Proposed | Not started |
-| [0176](0176-standards-boundary-and-runtime-contract.md) | Standards boundary and the Atlas runtime contract | Proposed | Not started |
+| [0176](0176-standards-boundary-and-runtime-contract.md) | Standards boundary and the Atlas runtime contract | Accepted | Landed |
 | [0177](0177-reload-skips-the-deploy-gate.md) | Reload skips the deploy-time validation gate | Accepted | Landed |
 | [0178](0178-responsibility-metadata-raci.md) | Responsibility metadata — RACI on the element, with R derived from the assignment | Proposed | Not started |
 | [0179](0179-worker-job-history-in-clio.md) | A worker's job history lives in clio, not in Atlas | Accepted | Landed |

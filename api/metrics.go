@@ -43,6 +43,7 @@ type durabilityCollector struct {
 	recoverySeconds  *prometheus.Desc
 	recoveryReplayed *prometheus.Desc
 	openJobs         *prometheus.Desc
+	openIncidents    *prometheus.Desc
 	pendingTimers    *prometheus.Desc
 	subscriptions    *prometheus.Desc
 	exporterPosition *prometheus.Desc
@@ -75,6 +76,7 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 		recoveryReplayed: d("recovery_replayed_records",
 			"Records startup recovery read from the log; a checkpoint lets it skip whole segments (ADR-0131)."),
 		openJobs:      d("open_jobs", "Jobs currently waiting for a worker."),
+		openIncidents: d("open_incidents", "Tokens parked on an unresolved incident, waiting for an operator (ADR-0061)."),
 		pendingTimers: d("pending_timers", "Timers currently waiting to fire."),
 		subscriptions: d("message_subscriptions", "Message subscriptions currently waiting to correlate."),
 		exporterPosition: d("exporter_position",
@@ -99,6 +101,7 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.recoverySeconds
 	ch <- c.recoveryReplayed
 	ch <- c.openJobs
+	ch <- c.openIncidents
 	ch <- c.pendingTimers
 	ch <- c.subscriptions
 	// The exporter descriptors are deliberately absent: they are only collected when an
@@ -177,12 +180,24 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	// What is currently open and waiting, from the engine-wide counters applyToState
-	// maintains (ADR-0142 slice 4). Incidents are absent on purpose: they are also
-	// removed by the unconditional delete that runs when any element terminates, with no
-	// event of its own to count, so a counter for them would need a read on the engine's
-	// hottest path. See the ADR.
+	// maintains (ADR-0142 slice 4).
 	if n, err := s.store.OpenJobs(); err == nil {
 		gauge(c.openJobs, float64(n))
+	}
+	// Incidents are the one open-work number that is *counted* at scrape time rather
+	// than read from a maintained total, and the asymmetry is the decision, not an
+	// oversight. An incident leaves state two ways — resolved by an operator, and
+	// dropped with the element instance it sits on when a cancel or an interrupting
+	// boundary event terminates that element — and only the first announces itself with
+	// an event. A maintained counter would therefore drift downward-blind, reporting
+	// parked work that is long gone, and the fix would be a read on the engine's hottest
+	// path. The scan cannot drift, because it counts the keys that are actually there.
+	//
+	// It is affordable precisely where a scan usually is not: the family holds one key
+	// per stuck token, and that population is what an operator is expected to keep near
+	// zero. A scrape costs what is broken, not what is running.
+	if n, err := s.store.IncidentCount(); err == nil {
+		gauge(c.openIncidents, float64(n))
 	}
 	if n, err := s.store.PendingTimers(); err == nil {
 		gauge(c.pendingTimers, float64(n))
@@ -254,14 +269,15 @@ type engineMetrics struct {
 	syncFailures   prometheus.Counter
 	commitFailures prometheus.Counter
 	queueDepth     prometheus.Gauge
-	// Job lifecycle (ADR-0142 slice 5). Four pre-resolved counters rather than one
-	// labelled by outcome: the values would be a closed enum and so allowed, but a
-	// label lookup per batch is exactly what rule 1 forbids, and four fields cost
-	// nothing.
-	jobsCreated   prometheus.Counter
-	jobsCompleted prometheus.Counter
-	jobsFailed    prometheus.Counter
-	jobsCanceled  prometheus.Counter
+	// Job lifecycle (ADR-0142 slice 5). Pre-resolved counters rather than one labelled
+	// by outcome: the values would be a closed enum and so allowed, but a label lookup
+	// per batch is exactly what rule 1 forbids, and a field each costs nothing.
+	jobsCreated      prometheus.Counter
+	jobsActivated    prometheus.Counter
+	jobsCompleted    prometheus.Counter
+	jobsFailed       prometheus.Counter
+	jobsLeaseTimeout prometheus.Counter
+	jobsCanceled     prometheus.Counter
 }
 
 func newEngineMetrics() *engineMetrics {
@@ -287,12 +303,14 @@ func newEngineMetrics() *engineMetrics {
 			prometheus.ExponentialBuckets(0.0001, 2, 15)),
 		commitSeconds: histogram("state_commit_seconds", "Duration of making a batch's state visible.",
 			prometheus.ExponentialBuckets(0.0001, 2, 15)),
-		syncFailures:   counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
-		commitFailures: counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
-		jobsCreated:    counter("jobs_created_total", "Jobs that became available to a worker."),
-		jobsCompleted:  counter("jobs_completed_total", "Jobs a worker finished successfully."),
-		jobsFailed:     counter("jobs_failed_total", "Worker-reported job failures; one with retries left is retried, one without parks with an incident (ADR-0061)."),
-		jobsCanceled:   counter("jobs_canceled_total", "Jobs removed without being worked — their element was interrupted, terminated, or its instance cancelled."),
+		syncFailures:     counter("wal_sync_failures_total", "Batches whose group-commit fsync failed; nothing they wrote is durable."),
+		commitFailures:   counter("state_commit_failures_total", "Batches whose events are durable but whose state commit failed."),
+		jobsCreated:      counter("jobs_created_total", "Jobs that became available to a worker."),
+		jobsActivated:    counter("jobs_activated_total", "Leases taken: a worker pulled a job and holds it (ADR-0007). Flat against a rising created count means nothing is pulling."),
+		jobsCompleted:    counter("jobs_completed_total", "Jobs a worker finished successfully."),
+		jobsFailed:       counter("jobs_failed_total", "Worker-reported job failures; one with retries left is retried, one without parks with an incident (ADR-0061)."),
+		jobsLeaseTimeout: counter("jobs_lease_timeouts_total", "Leases that elapsed with no report, returning the job to the index — the only trace of a worker that took work and vanished, which the failure counter never sees."),
+		jobsCanceled:     counter("jobs_canceled_total", "Jobs removed without being worked — their element was interrupted, terminated, or its instance cancelled."),
 		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: metrics.Namespace, Name: "command_queue_depth",
 			Help: "Commands queued for the partition writer after the last batch, including its follow-ups.",
@@ -304,7 +322,8 @@ func (m *engineMetrics) collectors() []prometheus.Collector {
 	return []prometheus.Collector{
 		m.batches, m.commands, m.events, m.batchEvents, m.syncSeconds,
 		m.commitSeconds, m.syncFailures, m.commitFailures, m.queueDepth,
-		m.jobsCreated, m.jobsCompleted, m.jobsFailed, m.jobsCanceled,
+		m.jobsCreated, m.jobsActivated, m.jobsCompleted, m.jobsFailed,
+		m.jobsLeaseTimeout, m.jobsCanceled,
 	}
 }
 
@@ -321,8 +340,10 @@ func (m *engineMetrics) BatchCommitted(s engine.BatchStats) {
 	// Job transitions the batch made durable. Adding zero is free and keeps the branch
 	// count down, so these are unconditional.
 	m.jobsCreated.Add(float64(s.Jobs.Created))
+	m.jobsActivated.Add(float64(s.Jobs.Activated))
 	m.jobsCompleted.Add(float64(s.Jobs.Completed))
 	m.jobsFailed.Add(float64(s.Jobs.Failed))
+	m.jobsLeaseTimeout.Add(float64(s.Jobs.TimedOut))
 	m.jobsCanceled.Add(float64(s.Jobs.Canceled))
 	if s.Events == 0 {
 		return

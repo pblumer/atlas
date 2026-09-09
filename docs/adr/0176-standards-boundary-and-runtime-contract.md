@@ -1,7 +1,7 @@
 # ADR-0176: Standards boundary and the Atlas runtime contract
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-08-24
 - **Deciders:** Atlas maintainers
 
@@ -193,8 +193,10 @@ Atlas contract at an adapter or compile-time boundary and documents semantic gap
   itself and stay aligned across OpenAPI, MCP and SDKs. Atlas-specific behavior still
   requires adapters for users migrating from another engine; standards at the model
   layer do not make runtime operations portable automatically.
-- **Follow-ups / risks to watch:** publish a compact `docs/runtime-contract.md` before
-  the 1.0 stability commitment; add contract-version and compatibility information to
+- **Follow-ups / risks to watch:** ~~publish a compact `docs/runtime-contract.md` before
+  the 1.0 stability commitment~~ — published 2026-09-09 at
+  [`docs/runtime-contract.md`](../runtime-contract.md), linked from the README and the
+  architecture overview; add contract-version and compatibility information to
   the API metadata; define stable event-export schemas before advertising them as a
   public integration surface; evaluate CloudEvents and XES only as off-path mappings;
   and add a documentation/conformance matrix that labels standard, compatibility and

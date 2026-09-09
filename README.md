@@ -148,6 +148,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
   - [Enterprise architecture (ArchiMate 3.2)](docs/architecture/enterprise-architecture.md) — a layered view across the business, application, technology, and motivation layers
   - [Glossary](docs/architecture/glossary.md)
   - [Invariants](docs/architecture/invariants.md) — the rules the engine's correctness depends on
+- **[Runtime contract](docs/runtime-contract.md)** — what you may depend on, what is an implementation detail, and how Atlas labels standard versus Atlas-defined behaviour
 - **[Architecture Decision Records](docs/adr/)** — *why* things are the way they are
 - **[Conformance suite](conformance/)** — what BPMN Atlas covers, and the oracles that prove it
 - **[Benchmarks](benchmarks/)** — the performance harness and its published baseline

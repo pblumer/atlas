@@ -1,7 +1,7 @@
 # ADR-0167: A released connector ships in the marketplace
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
 
@@ -119,6 +119,27 @@ rides ADR-0081 forward unchanged when the remote registry (its follow-up B) land
 "published" then means "in the registry", the same rule against a wider surface. This ADR
 stays `Proposed` until ADR-0081's catalog and the enforcing test are both in place; it is
 the policy that turns "we have a gallery" into "the gallery is complete by construction".
+
+> **Both conditions met, 2026-09-09 — with the mandate ratcheted rather than absolute.**
+> ADR-0081's bundled catalog exists, and the enforcing test now does too, in
+> `api/releasedkinds_internal_test.go`, against the registry in `api/releasedkinds.go`.
+> The registry is checked against `compiler.ReservedJobTypes`, so a kind cannot come
+> into existence without a row saying what decided it, what class it is, and which
+> package advertises it.
+>
+> One thing is weaker than this record asked for, deliberately. Sixteen released
+> connector kinds have no package today, and enforcing the mandate outright would mean a
+> red build until all sixteen exist. They cannot be written responsibly in bulk: a
+> package carries a kind's property schema, and a wrong schema produces a task the
+> engine ignores — worse than a visibly absent package. So the count is pinned in the
+> source and may only fall. A new kind still cannot ship without a package, and the
+> sixteen cannot be forgotten, because a test names them.
+>
+> The **cheap path** this record chose — generating a package from the compiled
+> catalog's title, description, icon and property schema — turned out to rest on
+> something that does not exist. There is no server-side catalog carrying those
+> metadata; they live in the Modeler's JavaScript. Building that catalog is the real
+> prerequisite for closing the sixteen, and it is a change of its own.
 
 ### Consequences
 
