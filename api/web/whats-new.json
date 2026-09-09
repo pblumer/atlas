@@ -88,6 +88,28 @@
       }
     },
     {
+      "id": "an-openapi-document-can-configure-the-task-that-calls-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Turn an API's operations into ready-made task settings",
+        "de": "Aus den Operationen einer API fertige Task-Einstellungen machen"
+      },
+      "summary": {
+        "en": "Configuring a REST task means reading the API's documentation and typing what it says: the method, the address, which values the process has to supply. Atlas can now read that file for you and write out one ready-made setting sheet per operation — the method already chosen, the address already filled in, and a note saying which values your process needs to hold. What the file cannot decide, such as which login to use, is deliberately left blank rather than guessed. One honest catch: nothing in Atlas can apply these sheets to a task yet, so for now they are files to keep or to hand on — the command tells you so when it writes them.",
+        "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ]
+    },
+    {
       "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
       "version": "Unreleased",
       "date": null,
@@ -370,35 +392,6 @@
           "de": "Daten öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "The handbook's worker runbooks are dated too",
-        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
-      },
-      "summary": {
-        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
-        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Handbook",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the runbooks",
-          "de": "Zu den Runbooks"
-        },
-        "route": "#/console"
       }
     }
   ]

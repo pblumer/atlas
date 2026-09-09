@@ -59,6 +59,31 @@ _Changed_ / _Removed_ for each version.
   before its processes, which is the normal order of work rather than a defect
   (`data.unreachable-state`, ADR-0259).
 
+- **An OpenAPI document can configure the task that calls it.** `atlas openapi-template
+  --spec petstore.yaml --out ./packages` writes one element-template package per
+  operation, in the shape the repository catalog already uses
+  ([ADR-draft-openapi-element-templates](docs/adr/draft-openapi-element-templates.md)).
+
+  It is the reader behind `atlas mock-openapi` pointed the other way: the same document
+  that makes an API answer now also fills in the task that calls it. Method is fixed to
+  the operation's; the URL is the document's server plus the path, literal where there
+  is nothing to substitute and a FEEL expression where there is —
+  `="https://api.digitalocean.com/v2/droplets/" + string(droplet_id)` — with the
+  description naming each variable the process must hold. A URL that carries no host is
+  called out, including the relative-server case (`/api/v3`) that looks filled in and is
+  not.
+
+  What the document cannot decide stays empty: headers, authentication and the
+  credential reference. Security schemes are deliberately not mapped onto Atlas's auth
+  types, because the useful ones need a token endpoint and a client id that live on the
+  server, and a guess there is a wrong answer wearing a filled-in field.
+
+  **What you can do with the result today is limited, and the command says so where it
+  writes them.** Applying a template to a task is
+  [ADR-0212](docs/adr/0212-element-template-applier.md), which is not built, and a
+  running server's catalog is compiled in — so these are files to commit or to keep,
+  not to install.
+
 - **An instance's data objects are drawn on the lifecycle their class declares.** The
   state trail was already on disk — every durable write, with the element that made it
   — and the state machine was already in the information model. Nothing read them

@@ -11,10 +11,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,6 +38,7 @@ import (
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
 	"github.com/pblumer/atlas/connector/rest/openapimock"
+	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/jobtype"
@@ -103,6 +106,10 @@ func main() {
 		if err := runMockOpenAPI(args); err != nil {
 			fatal("atlas mock-openapi", err)
 		}
+	case "openapi-template":
+		if err := runOpenAPITemplate(args, os.Stdout); err != nil {
+			fatal("atlas openapi-template", err)
+		}
 	case "playground":
 		if err := runPlaygroundScenario(args, os.Stdout); err != nil {
 			// A run that happened and did not meet its expectations leaves its own
@@ -157,6 +164,7 @@ Usage:
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker
   atlas mock-openapi   [flags]      Serve a mock REST API from an OpenAPI document
+  atlas openapi-template [flags]    Generate element templates from an OpenAPI document
   atlas playground     [flags]      Run a saved Playground scenario and exit on its verdict
   atlas version                     Print the version and build metadata
 
@@ -1605,4 +1613,67 @@ func fatal(command string, err error) {
 	logging.Error(logging.CommandFailed, command+" failed",
 		slog.String("command", command), slog.String("error", err.Error()))
 	os.Exit(1)
+}
+
+// runOpenAPITemplate writes one element-template package per operation of an OpenAPI
+// document, in the shape the repository catalog uses (ADR-0027/0081). It is the reader
+// behind `atlas mock-openapi` pointed the other way: the same file that makes the API
+// answer also configures the task that calls it.
+//
+// What it writes cannot be applied to a task yet — the applier is ADR-0212, proposed
+// and not started — and cannot be loaded into a running server, whose catalog is
+// compiled in. The banner says so, because a directory of files nobody can use is worth
+// one line of explanation at the moment it appears.
+func runOpenAPITemplate(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("openapi-template", flag.ExitOnError)
+	specPath := fs.String("spec", "", "path to the OpenAPI 3 document (JSON or YAML) to generate from — required")
+	outDir := fs.String("out", "", "directory to write the packages into, created if missing — required")
+	specRoot := fs.String("spec-root", "", "directory the document's $refs to other files may read (default: the document's own directory)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*specPath) == "" {
+		return errors.New("--spec is required: the OpenAPI document to generate from")
+	}
+	if strings.TrimSpace(*outDir) == "" {
+		return errors.New("--out is required: the directory to write the packages into")
+	}
+	root := *specRoot
+	if strings.TrimSpace(root) == "" {
+		root = filepath.Dir(*specPath)
+	}
+	spec, err := openapimock.LoadFileUnder(*specPath, root)
+	if err != nil {
+		return err
+	}
+	packages := openapitemplate.Packages(spec)
+	if len(packages) == 0 {
+		return fmt.Errorf("%s describes no operations", *specPath)
+	}
+	if err := os.MkdirAll(*outDir, 0o750); err != nil {
+		return err
+	}
+	for _, pkg := range packages {
+		// Encoded rather than marshalled, with HTML escaping off: the default turns
+		// the engineCompat ">=0.9" into "\u003e=0.9", which is valid JSON and wrong
+		// beside the hand-written packages these sit next to and are read with.
+		var body bytes.Buffer
+		enc := json.NewEncoder(&body)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(pkg); err != nil {
+			return fmt.Errorf("render %s: %w", pkg.ID, err)
+		}
+		path := filepath.Join(*outDir, pkg.Filename())
+		if err := os.WriteFile(path, body.Bytes(), 0o600); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(out, "atlas openapi-template: %s — %s written to %s\n",
+		spec.Name(), plural(len(packages), "package"), *outDir)
+	fmt.Fprintln(out, "  each one configures a REST connector task for one operation: method fixed, URL filled in,")
+	fmt.Fprintln(out, "  headers, authentication and the credential reference left for you.")
+	fmt.Fprintln(out, "  applying one to a task is ADR-0212, which is not built yet, and a running server's catalog")
+	fmt.Fprintln(out, "  is compiled in — so these are files to commit or to keep, not to install.")
+	return nil
 }
