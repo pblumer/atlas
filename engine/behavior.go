@@ -2158,13 +2158,19 @@ func (scriptTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mode
 	}
 
 	kind, b, text := expr.Classify(result)
-	c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
+	if !c.AppendVariableEvent(model.IntentVariableCreated, model.VariableValue{
 		ScopeKey: ioResultScope(cp, key, ei),
 		Name:     detail.ResultVar,
 		Kind:     toVarKind(kind),
 		Bool:     b,
 		Text:     text,
-	})
+	}) {
+		// A result past the variable budget was refused with an incident on this task.
+		// Completing it would clear that incident with the element and leave a script
+		// that looks to have run and produced nothing (ADR-0294). The task stays
+		// activated; resolving re-runs it, which re-evaluates the expression.
+		return
+	}
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 

@@ -126,3 +126,42 @@ func TestTheCollectedAnswerIsUnchanged(t *testing.T) {
 		t.Errorf("results = %q, want [10,20,30] — input order, one element per round", got)
 	}
 }
+
+// TestAnIterationResultTooLargeParksItsRound is where this change meets the budgets
+// of ADR-0294. Each round's result is now measured on its own, against the budget for
+// one variable — it *is* one business record — while the collection it joins has its
+// own, larger ceiling. Refusing here rather than after assembling the list means the
+// incident names the element that produced the value.
+//
+// And, as everywhere else, the refusal stops the round: an iteration that completed
+// would take the incident with it and the loop would finish looking successful, minus
+// one result.
+func TestAnIterationResultTooLargeParksItsRound(t *testing.T) {
+	h := openHarness(t, t.TempDir())
+	defer h.close(t)
+	cp := bigResultLoop(t, 3) // each round produces about two hundred bytes
+
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.SetMaxVariable(64) // below one round's result, far below the collection
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v — a refused result must not take the batch down", err)
+	}
+
+	incs := incidents(t, h.store)
+	if len(incs) == 0 {
+		t.Fatal("an oversized round result was collected without an incident")
+	}
+	for _, inc := range incs {
+		if inc.Reason != model.IncidentVariableTooLarge {
+			t.Errorf("incident reason = %v, want IncidentVariableTooLarge", inc.Reason)
+		}
+	}
+	if pi, _ := counts(t, h.store); pi != 1 {
+		t.Errorf("process instances = %d, want the instance still standing", pi)
+	}
+}
