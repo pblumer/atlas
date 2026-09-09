@@ -1221,9 +1221,10 @@ func splitConnectorList(v string) []string {
 // attributed to the worker's --id rather than to the principal, so the Workers view
 // still says which worker did what.
 //
-// An operator who set ATLAS_TOKEN themselves keeps it: they have chosen an identity
-// for their workers, and silently replacing it would undo that choice. **That value
-// must be one this server accepts** — an API token, ideally scoped `worker`
+// An operator who set ATLAS_TOKEN themselves keeps it: workerTokenEnv renders that
+// value explicitly, which lets the script worker avoid inheriting the rest of the
+// server environment. **That value must be one this server accepts** — an API token,
+// ideally scoped `worker`
 // (ADR-0194). It could not be, until API tokens existed: the supervisor
 // honoured the variable while principalFor compared a bearer only against the
 // internal token, so setting it handed every supervised worker a credential that was
@@ -1259,8 +1260,8 @@ func (s *Server) workerTokenEnv() []string {
 	if !s.authEnabled || s.internalToken == "" {
 		return nil
 	}
-	if strings.TrimSpace(os.Getenv("ATLAS_TOKEN")) != "" {
-		return nil
+	if token := strings.TrimSpace(os.Getenv("ATLAS_TOKEN")); token != "" {
+		return []string{"ATLAS_TOKEN=" + token}
 	}
 	return []string{"ATLAS_TOKEN=" + s.internalToken}
 }

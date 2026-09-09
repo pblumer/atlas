@@ -71,7 +71,7 @@ func TestAPITokenAuthenticatesAMachine(t *testing.T) {
 
 // TestWorkerScopeReachesOnlyAWorkersOperations is the scope earning its place: a
 // worker is a long-lived credential on another host, often in another network zone,
-// and its whole job is four calls.
+// and its whole job is the small, enumerated worker protocol.
 func TestWorkerScopeReachesOnlyAWorkersOperations(t *testing.T) {
 	ts, admin := apiTokenServer(t)
 	secret, _ := mint(t, admin, ts, `{"name":"a worker","scope":"worker","expiresInDays":30}`)
@@ -82,6 +82,9 @@ func TestWorkerScopeReachesOnlyAWorkersOperations(t *testing.T) {
 		`{"jobType":"nothing","worker":"w1","maxJobs":1}`, secret)
 	if code == http.StatusUnauthorized || code == http.StatusForbidden {
 		t.Errorf("a worker token leasing jobs = %d (%s), want the handler's own answer", code, body)
+	}
+	if code, _ := bearerReq(t, ts, http.MethodPost, "/api/v1/sql/mock-journal", `{}`, secret); code == http.StatusForbidden {
+		t.Error("a worker token was blocked from reporting its SQL mock journal")
 	}
 
 	// Outside it: refused, and told why.

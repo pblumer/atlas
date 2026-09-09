@@ -170,6 +170,28 @@
       }
     },
     {
+      "id": "model-authored-scripts-no-longer-inherit-atlas-credentials",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Security",
+      "title": {
+        "en": "Scripts no longer receive Atlas credentials",
+        "de": "Scripts erhalten keine Atlas-Zugangsdaten mehr"
+      },
+      "summary": {
+        "en": "Script workers and interpreters now start with restricted environments, and their token can reach only the worker API. Existing scripts remain enabled unless every language is switched off.",
+        "de": "Script-Worker und Interpreter starten neu mit eingeschränkten Umgebungen; ihr Token erreicht nur noch die Worker-API. Bestehende Scripts bleiben aktiv, solange nicht alle Sprachen ausgeschaltet werden."
+      },
+      "link": {
+        "label": "ADR-0297",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0297-confine-internal-worker-token.md"
+      },
+      "tags": [
+        "Security",
+        "Scripts"
+      ]
+    },
+    {
       "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
       "version": "0.6.0",
       "date": "2026-09-09",
@@ -343,35 +365,6 @@
           "de": "Service-Task öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "every-worker-type-says-how-it-is-set-up-where-it-is-chosen",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "Every worker type now tells you how to set it up",
-        "de": "Jeder Worker-Typ erklärt jetzt selbst, wie er eingerichtet wird"
-      },
-      "summary": {
-        "en": "The hardest part of connecting Jira, Google Sheets or a mail server was never the diagram — it was the half-dozen steps at the provider that nobody mentions: which token to create, which permission to grant, which spreadsheet to share. Pick a worker type on a service task and that is now written beside its fields: whether it needs a configured worker and a credential at all, the steps to get there in order, the mistake this type is usually reported with, and a link straight into the matching chapter of the handbook this server serves itself. The same block greets you on the Console's New worker form, which is where you are actually standing when you configure one.",
-        "de": "Das Schwierigste beim Anbinden von Jira, Google Sheets oder eines Mailservers war nie das Diagramm, sondern das halbe Dutzend Schritte beim Anbieter, die niemand erwähnt: welches Token zu erzeugen ist, welche Berechtigung erteilt werden muss, welche Tabelle freizugeben ist. Wählen Sie an einem Service-Task einen Worker-Typ, steht genau das jetzt neben seinen Feldern: ob er überhaupt einen konfigurierten Worker und ein Credential braucht, die Schritte dorthin der Reihe nach, der Fehler, mit dem dieser Typ üblicherweise gemeldet wird, und ein Link direkt in das passende Kapitel des Handbuchs, das dieser Server selbst ausliefert. Derselbe Block steht im Formular „New worker\" der Konsole — dort, wo Sie beim Einrichten tatsächlich stehen."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Modeler",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Configure a worker",
-          "de": "Worker konfigurieren"
-        },
-        "route": "#/console/workers"
       }
     }
   ]

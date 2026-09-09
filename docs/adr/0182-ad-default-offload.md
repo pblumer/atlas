@@ -89,10 +89,10 @@ reads "first move your secrets, or every joiner fails" is option 1 with extra st
 **What follows from the mechanism**, and is worth stating because each is a real
 consequence rather than an implementation detail:
 
-- **Only the AD worker gets them.** Provisioning is per kind, so the script worker —
-  which runs model-authored code and inherits its whole environment — is never handed
-  a directory service account. There is a test for exactly that, because it is the
-  failure that would matter most.
+- **Only the AD worker gets them.** Provisioning is per kind, while the script worker
+  and its interpreters start from explicit environment allowlists. Model-authored
+  code is therefore never handed a directory service account. There is a test for
+  exactly that, because it is the failure that would matter most.
 - **A deploy can restart the AD worker.** A model naming a reference the worker is not
   holding yet triggers a refresh, and refresh restarts a child only when its rendered
   environment actually changed. So a first AD deploy cycles the worker once; an

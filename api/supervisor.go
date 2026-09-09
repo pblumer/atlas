@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,6 +53,19 @@ const (
 	childLogLines = 200
 )
 
+// scriptWorkerEnvNames is the runtime environment a supervised script worker may
+// inherit from the server. That worker hosts model-authored code, so unlike other
+// workers it receives no arbitrary deployment variables. Its configured worker
+// credential is added separately by superviseEnv and confined to that protocol.
+var scriptWorkerEnvNames = []string{
+	"PATH",
+	"HOME", "USERPROFILE",
+	"TMPDIR", "TMP", "TEMP",
+	"LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ",
+	"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
+	"PSModulePath",
+}
+
 // SuperviseSpec is one supervised worker as configured: what to call it and which
 // job types it serves. Both come from the server's command line.
 type SuperviseSpec struct {
@@ -60,6 +74,9 @@ type SuperviseSpec struct {
 	// Workers are built-in Worker Types this worker serves (--connector on the
 	// child). A worker may serve these, model-authored job types, or both.
 	Connectors []string
+	// ScriptLanguages is the enabled subset passed to a script worker. It stays
+	// empty for every other Worker Type and never carries request-supplied data.
+	ScriptLanguages []string
 }
 
 // childStatus is one supervised worker as the console sees it.
@@ -78,10 +95,10 @@ type childStatus struct {
 type child struct {
 	spec SuperviseSpec
 	args []string
-	// env adds to the environment the child inherits, evaluated at every spawn so a
-	// worker added in the Console is picked up by pressing Restart rather than by
-	// restarting Atlas. nil means the child inherits this process's environment
-	// unchanged, which is every worker an operator configured by hand.
+	// env adds to the child's base environment, evaluated at every spawn so a worker
+	// added in the Console is picked up by pressing Restart rather than by restarting
+	// Atlas. The script kind has an allowlisted base; other kinds inherit the server's
+	// environment for backwards compatibility.
 	env func() []string
 
 	mu       sync.Mutex
@@ -210,16 +227,15 @@ func (s *supervisor) supervise(c *child) {
 // a restart to be asked for. It returns nil when the exit was expected.
 func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 	cmd := exec.Command(s.exe, c.args...)
-	// The child inherits this process's environment and is handed the configuration
-	// for the Worker Types it serves on top of it. Reading it here rather than at
-	// registration is what makes the console's Restart button pick up a worker
-	// added since the server started.
+	// A script worker starts from a small environment because it hosts model-authored
+	// code. Other workers preserve the historical inherited environment. Reading it
+	// here rather than at registration is what makes the console's Restart button
+	// pick up an operator change and a worker added since the server started.
 	var extra []string
 	if c.env != nil {
-		if extra = c.env(); len(extra) > 0 {
-			cmd.Env = append(os.Environ(), extra...)
-		}
+		extra = c.env()
 	}
+	cmd.Env = append(workerBaseEnvironment(c.spec), extra...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		c.set(func() { c.state = "failed"; c.lastExit = err.Error() })
@@ -260,6 +276,30 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 		<-exited
 		return c.finish(nil, true)
 	}
+}
+
+// workerBaseEnvironment preserves backwards compatibility for ordinary workers
+// while putting the model-authored script kind behind an allowlist. Building a new
+// slice is intentional: filtering a copy by known secret names would expose the
+// next credential whose name Atlas does not yet know.
+func workerBaseEnvironment(spec SuperviseSpec) []string {
+	isScript := false
+	for _, kind := range spec.Connectors {
+		if strings.TrimSpace(kind) == "script" {
+			isScript = true
+			break
+		}
+	}
+	if !isScript {
+		return os.Environ()
+	}
+	env := make([]string, 0, len(scriptWorkerEnvNames))
+	for _, name := range scriptWorkerEnvNames {
+		if value, ok := os.LookupEnv(name); ok {
+			env = append(env, name+"="+value)
+		}
+	}
+	return env
 }
 
 // exitNothingToServe is the status `atlas worker` leaves when it holds no handler at

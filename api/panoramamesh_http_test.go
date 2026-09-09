@@ -215,9 +215,10 @@ func TestPanoramaMeshShowsAnUnconfiguredWorker(t *testing.T) {
 // derivation alone: the endpoint reaches the store, and must not reach the wire.
 func TestPanoramaMeshNeverCarriesAWorkerEndpoint(t *testing.T) {
 	ts := newTestServer(t)
+	const endpoint = "smtp://mesh-secret-canary.invalid:45987"
 
 	code, body := doReq(t, ts, http.MethodPost, "/api/v1/configured-workers",
-		`{"name":"ops-mail","kind":"mail","endpoint":"smtp://internal-relay.corp.example:587","sender":"ops@example.test"}`, "application/json")
+		`{"name":"ops-mail","kind":"mail","endpoint":"`+endpoint+`","sender":"ops@example.test"}`, "application/json")
 	if code != http.StatusOK && code != http.StatusCreated {
 		t.Fatalf("create worker status = %d, body = %s", code, body)
 	}
@@ -229,7 +230,10 @@ func TestPanoramaMeshNeverCarriesAWorkerEndpoint(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("mesh status = %d, body = %s", code, raw)
 	}
-	for _, leak := range []string{"internal-relay", "corp.example", "smtp://", "587"} {
+	// Search for a canary tied specifically to the endpoint. A bare port such as
+	// "587" can occur in the unrelated observedAt Unix timestamp and made this
+	// disclosure test fail depending on the second in which it ran.
+	for _, leak := range []string{endpoint, "mesh-secret-canary.invalid"} {
 		if strings.Contains(string(raw), leak) {
 			t.Errorf("mesh payload leaks %q: %s", leak, raw)
 		}

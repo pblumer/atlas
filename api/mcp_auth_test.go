@@ -14,9 +14,9 @@ import (
 
 // TestInternalTokenAuthenticatesRequests exercises the real New() path: under
 // --auth an internal token is minted, resolves to a non-admin service principal,
-// and lets a request carrying no cookie through the gated API (ADR-0049). It is
-// the credential a supervised worker is handed at spawn; the MCP transport no
-// longer uses it (see mcp_transport_test.go).
+// and confines that request to the worker protocol. It is the credential a
+// supervised worker is handed at spawn; the MCP transport no longer uses it as a
+// bearer (see mcp_transport_test.go).
 func TestInternalTokenAuthenticatesRequests(t *testing.T) {
 	t.Setenv("ATLAS_ADMIN_USERNAME", "root")
 	t.Setenv("ATLAS_ADMIN_PASSWORD", "rootpassword")
@@ -67,9 +67,14 @@ func TestInternalTokenAuthenticatesRequests(t *testing.T) {
 	if code := do("GET", "/api/v1/processes", ""); code != http.StatusUnauthorized {
 		t.Fatalf("no credential: want 401, got %d", code)
 	}
-	// The internal token authenticates the gated API.
-	if code := do("GET", "/api/v1/processes", token); code != http.StatusOK {
-		t.Fatalf("internal token: want 200, got %d", code)
+	// The token authenticates a worker call. The empty body reaches the handler and
+	// is rejected as malformed rather than being rejected by auth.
+	if code := do("POST", "/api/v1/jobs/activate", token); code == http.StatusUnauthorized || code == http.StatusForbidden {
+		t.Fatalf("internal token on worker protocol: got %d", code)
+	}
+	// A leaked worker credential cannot read process or instance data.
+	if code := do("GET", "/api/v1/processes", token); code != http.StatusForbidden {
+		t.Fatalf("internal token on product API: want 403, got %d", code)
 	}
 	// A wrong token does not.
 	if code := do("GET", "/api/v1/processes", "wrong"); code != http.StatusUnauthorized {

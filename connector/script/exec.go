@@ -21,6 +21,10 @@ import (
 const (
 	varsEnv = "ATLAS_VARS"   // instance variables, as a JSON object
 	srcEnv  = "ATLAS_SCRIPT" // the author's script source
+	// LanguagesEnv limits the language handlers registered by an out-of-process
+	// script worker. Empty keeps the standalone worker's backwards-compatible
+	// default of serving every language.
+	LanguagesEnv = "ATLAS_SCRIPT_LANGUAGES"
 )
 
 // defaultTimeout bounds a single script's wall-clock runtime when Timeout is unset.
@@ -46,6 +50,20 @@ const defaultMaxOutput int64 = 8 << 20
 // quotation in an error message, not a stream to preserve.
 const maxStderr int64 = 32 << 10
 
+// interpreterEnvNames is the small, non-secret part of the worker environment a
+// general-purpose interpreter may need to start and resolve ordinary runtime
+// dependencies. In particular it excludes every Atlas credential and arbitrary
+// deployment variables: model-authored code has no reason to inherit the identity
+// its worker uses to call Atlas.
+var interpreterEnvNames = []string{
+	"PATH",
+	"HOME", "USERPROFILE",
+	"TMPDIR", "TMP", "TEMP",
+	"LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ",
+	"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
+	"PSModulePath",
+}
+
 // Lang describes how to run one scripting language: the reserved job type its
 // worker subscribes to, the default interpreter binary, the interpreter arguments
 // that run a bootstrap program, and that bootstrap. The bootstrap is a fixed
@@ -54,28 +72,29 @@ const maxStderr int64 = 32 << 10
 // JSON on stdout (empty output = null). Each language keeps its own idiomatic
 // result convention (see the bootstraps).
 type Lang struct {
-	Name    string // model/UI name, e.g. "python"
-	JobType int32  // reserved job-type index (compiler.*JobTypeIndex)
-	Bin     string // default interpreter binary
-	Args    func(bootstrap string) []string
-	Wrap    string // the bootstrap program
+	Name        string // model/UI name, e.g. "python"
+	JobTypeName string // reserved job-type name (compiler.*JobType)
+	JobType     int32  // reserved job-type index (compiler.*JobTypeIndex)
+	Bin         string // default interpreter binary
+	Args        func(bootstrap string) []string
+	Wrap        string // the bootstrap program
 }
 
 // The three supported languages. Adding one is a new Lang here plus its reserved
 // job type in the compiler — the worker, engine behavior, and recovery are shared.
 var (
 	PowerShell = Lang{
-		Name: "powershell", JobType: compiler.PwshJobTypeIndex, Bin: "pwsh",
+		Name: "powershell", JobTypeName: compiler.PwshJobType, JobType: compiler.PwshJobTypeIndex, Bin: "pwsh",
 		Args: func(b string) []string { return []string{"-NoProfile", "-NonInteractive", "-Command", b} },
 		Wrap: powershellBootstrap,
 	}
 	Python = Lang{
-		Name: "python", JobType: compiler.PythonJobTypeIndex, Bin: "python3",
+		Name: "python", JobTypeName: compiler.PythonJobType, JobType: compiler.PythonJobTypeIndex, Bin: "python3",
 		Args: func(b string) []string { return []string{"-c", b} },
 		Wrap: pythonBootstrap,
 	}
 	JavaScript = Lang{
-		Name: "javascript", JobType: compiler.JsJobTypeIndex, Bin: "node",
+		Name: "javascript", JobTypeName: compiler.JsJobType, JobType: compiler.JsJobTypeIndex, Bin: "node",
 		Args: func(b string) []string { return []string{"-e", b} },
 		Wrap: javascriptBootstrap,
 	}
@@ -102,8 +121,9 @@ func LangByName(name string) (Lang, bool) {
 // -NonInteractive (or the language equivalent), the instance's variables and the
 // source arrive as environment values (not interpolated), each run is bounded by
 // Timeout (the process is killed at the deadline), and it runs in the worker's
-// trust domain — never with the engine's credentials. The eventual isolation
-// boundary is an external worker in the customer's environment.
+// trust domain. Run gives the interpreter an allowlisted runtime environment, never
+// the worker's Atlas token or deployment secrets. The eventual isolation boundary
+// is an external worker in the customer's environment.
 type CmdExec struct {
 	Lang    Lang          // language spec
 	Bin     string        // interpreter override; empty means Lang.Bin
@@ -171,7 +191,7 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 		return nil, fmt.Errorf("script: encode variables: %w", err)
 	}
 	args := e.Lang.Args(e.Lang.Wrap)
-	env := append(os.Environ(), varsEnv+"="+string(varsJSON), srcEnv+"="+source)
+	env := interpreterEnvironment(string(varsJSON), source)
 	ctx, cancel := context.WithTimeout(ctx, e.timeout())
 	defer cancel()
 	out, err := e.runner()(ctx, e.bin(), args, env)
@@ -182,6 +202,19 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 		return nil, fmt.Errorf("script: run %s: %w", e.Lang.Name, err)
 	}
 	return parseOutput(out)
+}
+
+// interpreterEnvironment creates a new environment instead of filtering a copy of
+// os.Environ. An allowlist stays safe when an operator introduces a newly named
+// credential; a denylist would expose it until Atlas learned that name.
+func interpreterEnvironment(varsJSON, source string) []string {
+	env := make([]string, 0, len(interpreterEnvNames)+2)
+	for _, name := range interpreterEnvNames {
+		if value, ok := os.LookupEnv(name); ok {
+			env = append(env, name+"="+value)
+		}
+	}
+	return append(env, varsEnv+"="+varsJSON, srcEnv+"="+source)
 }
 
 // execCommand is the default runner: the only part that touches os/exec. On a

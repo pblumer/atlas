@@ -96,15 +96,23 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		case "script":
 			// One handler per language, because a worker subscribes per job type: a
 			// Python worker and a PowerShell worker are simply two workers, each on a
-			// machine that has that interpreter installed. Nothing to configure — what
-			// this worker contributes is the interpreter, not a credential.
-			for name, lang := range map[string]script.Lang{
-				compiler.PwshJobType:   script.PowerShell,
-				compiler.PythonJobType: script.Python,
-				compiler.JsJobType:     script.JavaScript,
-			} {
+			// machine that has that interpreter installed. A supervised worker receives
+			// the languages enabled on atlas serve; an external worker with no filter
+			// keeps the historical default of serving all three.
+			langs := script.Langs
+			if configured := splitAndTrim(env(script.LanguagesEnv)); len(configured) > 0 {
+				langs = make([]script.Lang, 0, len(configured))
+				for _, name := range configured {
+					lang, ok := script.LangByName(name)
+					if !ok {
+						return Connectors{}, fmt.Errorf("worker: unknown script language %q", name)
+					}
+					langs = append(langs, lang)
+				}
+			}
+			for _, lang := range langs {
 				exec := script.New(lang)
-				built.Handlers[name] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				built.Handlers[lang.JobTypeName] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 					return runScript(ctx, j, exec)
 				})
 			}
