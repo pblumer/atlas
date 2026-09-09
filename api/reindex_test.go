@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -156,5 +157,72 @@ func TestReindexInstancesRefusals(t *testing.T) {
 				t.Errorf("status = %d, want %d (%s)", code, tc.want, body)
 			}
 		})
+	}
+}
+
+// searchableTypoBPMN declares its inputs and then asks to be searchable by a name it
+// does not have — the typo that otherwise costs an operator an empty search and no
+// explanation.
+const searchableTypoBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:atlas="http://atlas/schema/1.0"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="typo" isExecutable="true" atlas:searchable="identityId,itme">
+    <extensionElements>
+      <atlas:startForm>
+        <atlas:startVariable name="identityId" type="string"/>
+      </atlas:startForm>
+    </extensionElements>
+    <startEvent id="start"/>
+    <userTask id="review" name="Review">
+      <extensionElements>
+        <zeebe:assignmentDefinition assignee="editor" candidateGroups="reviewers"/>
+      </extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="review"/>
+    <sequenceFlow id="f2" sourceRef="review" targetRef="end"/>
+  </process>
+</definitions>`
+
+// The deploy answers with the reading the Modeler gives while the name is typed, because
+// a model deployed from a pipeline or over the API never passes through the Modeler. It
+// is a warning, never a refusal: the deploy succeeds and the key comes back.
+func TestDeployWarnsAboutASearchableNameNothingWrites(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", searchableTypoBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var resp struct {
+		Key      uint64   `json:"key"`
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if resp.Key == 0 {
+		t.Fatal("the deploy was refused; this finding must never block one")
+	}
+	joined := strings.Join(resp.Warnings, "\n")
+	if !strings.Contains(joined, `"itme"`) || !strings.Contains(joined, "nothing in the model produces that name") {
+		t.Errorf("warnings do not carry the typo: %v", resp.Warnings)
+	}
+	if strings.Contains(joined, `"identityId"`) {
+		t.Errorf("the declared start variable was warned about too: %v", resp.Warnings)
+	}
+
+	// And a model whose declaration the diagram honours deploys silently.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments", searchableBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy clean: status=%d body=%s", code, body)
+	}
+	resp.Warnings = nil
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode clean: %v (%s)", err, body)
+	}
+	for _, w := range resp.Warnings {
+		if strings.Contains(w, "searchable") {
+			t.Errorf("a model that states no inputs was warned about its declaration: %q", w)
+		}
 	}
 }

@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
+  such a name while it is typed, but a model deployed from a pipeline or over the API
+  never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:
+  the search then stays empty forever with nothing saying why. The deploy response now
+  carries the same reading, beside the worker and namespace warnings it already gives —
+  never a refusal, because a model is routinely deployed before the rest of its world
+  exists. It reads the model's own bytes rather than the compiled process, so it counts
+  writers generically, by attribute: every Worker Type, script and decision writes into a
+  `resultVariable`, including the kinds added after this was written. A name the model
+  itself declares as a JSON start variable is reported for any process, because the
+  declaration settles it. A name nothing in the model produces is reported only where the
+  model has stated its inputs — it declares start variables and links no form, whose
+  fields are a separate resource this cannot read — and the sentence says plainly that a
+  worker's own output or a write through the variables API makes it fine.
+
 - **A searchable declaration that indexes nothing now says so.** `atlas:searchable` names
   variables, and nothing checked that the model writes any: a typo, or a name holding
   JSON, is accepted by the deploy and then answers an empty search forever, with no screen

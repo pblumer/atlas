@@ -246,6 +246,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		// Off the loop, over the bytes the publisher sent and nothing else (I3).
 		for _, a := range req.Artifacts {
 			warnings = append(warnings, foreignAtlasNamespaceWarnings([]byte(a.XML))...)
+			warnings = append(warnings, searchableDeclarationWarnings([]byte(a.XML))...)
 		}
 		httpapi.JSON(w, http.StatusOK, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: true,
