@@ -516,16 +516,27 @@ export function heatPeak(graph, heat, at = Date.now()) {
 
 // radiusForHeat sizes a node by whatever the chosen weighting counts on it.
 //
-// Area carries the count, not radius: doubling a radius quadruples the ink, so a
-// radius drawn straight from the number reads as four times the quantity it stands
-// for. Taking the square root is what makes "twice as much" look like twice as much,
-// and it is the standard the eye is actually calibrated against on a bubble chart.
+// The radius rises from the floor with the *square root* of the share, which is the
+// whole of the encoding:
+//
+//	r = HEAT_FLOOR + HEAT_SPAN * sqrt(value / peak)
+//
+// The root, because a circle's area goes up with the square of its radius: a radius
+// drawn straight from the number would read as four times the quantity at twice the
+// count. Taking the root is what makes "twice as much" look like twice as much, and it
+// is the standard the eye is calibrated against on a bubble chart.
+//
+// What is exactly proportional to the share is therefore ((r - floor) / span)², and
+// **not** the visible area above the floor — those differ, and the difference is not
+// small: at a quarter of the peak's tally the ring above the floor is about 0.36 of
+// the ring at the peak, not 0.25. An earlier version of this comment and of the key
+// claimed the second, which was a precise statement that did not survive arithmetic;
+// the test named for it now pins the law the code actually implements.
 //
 // Exact proportionality and a visible minimum cannot both hold — one of them has to
-// give at zero — and the minimum wins here, because a landscape is read for the
-// nodes on it as well as for the numbers. So the honest statement of the encoding is
-// the one the key makes: the floor is a node, and the area *above* the floor is the
-// share of the largest node's tally.
+// give at zero — and the minimum wins here, because a landscape is read for the nodes
+// on it as well as for the numbers. The floor is what breaks it, deliberately, and the
+// key says growth starts *from* a floor rather than implying it starts from nothing.
 //
 // A node with no tally at all — a worker, a decision, a deployment target, a draft,
 // a placeholder — sits on the floor rather than being sized as a zero, and that is
@@ -2018,9 +2029,12 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
   // would read its absence as "not measured", which is the one thing it does not mean.
   if (heat) {
     notes.push(peak > 0
-      ? `<p class="mesh-note"><b>${heat.heading}</b> The area above the smallest node is
-         that node's share of ${heat.peakPhrase(peak)}. ${heat.floorNote} Kind is still
-         carried by shape and colour.</p>`
+      ? `<p class="mesh-note"><b>${heat.heading}</b> A node grows from the floor with the
+         <b>square root</b> of its share of ${heat.peakPhrase(peak)} — the root rather
+         than the number itself, because a circle's area goes up with the square of its
+         radius, so a radius taken straight from the count would read as far more than
+         it stands for. ${heat.floorNote} Kind is still carried by shape and
+         colour.</p>`
       : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
          colour.</p>`);
     notes.push(`<p class="mesh-note">${heat.absent}</p>`);

@@ -147,26 +147,61 @@ for (const heat of HEATS) {
     expect(band[band.length - 1]).toBeGreaterThan(band[0] * 3);
   });
 
-  // Area carries the quantity, not radius. Doubling a radius quadruples the ink, so a
-  // radius taken straight from the number would draw four times the quantity it
-  // stands for — the encoding error that makes a bubble chart lie.
-  test(`the ${heat} area above the floor is the share of the peak`, async ({ page }) => {
-    const [floor, quarter, whole] = await page.evaluate(([h, now, src]) => {
+  // The law the key states, checked as the law rather than as a sample of it:
+  //
+  //	r = floor + span * sqrt(share)   so   ((r - floor) / span)^2 == share
+  //
+  // The square root is the point. A circle's area goes up with the square of its
+  // radius, so a radius taken straight from the number would draw four times the
+  // quantity at twice the count — the encoding error that makes a bubble chart lie.
+  //
+  // This is asserted over the whole range and not at one point, because it is what the
+  // picture *tells the reader it is doing*: the legend and the export stamp both spell
+  // the relation out, and a sentence a reader can check is a sentence a test has to
+  // hold the code to.
+  test(`the ${heat} radius rises with the square root of the share`, async ({ page }) => {
+    const shares = [0.01, 0.04, 0.09, 0.25, 0.5, 0.64, 1];
+    const radii = await page.evaluate(([h, now, src, ss]) => {
       const NOW_MS = now;
       const nodeFor = eval(src);
-      return [0, 25, 100].map((n) => window.radiusForHeat(nodeFor(h, n), 100, h, now));
+      const at = (v) => window.radiusForHeat(nodeFor(h, v), 10000, h, now);
+      return { floor: at(0), peak: at(10000), each: ss.map((x) => at(x * 10000)) };
+    }, [heat, NOW, NODE_FOR, shares]);
+
+    const span = radii.peak - radii.floor;
+    shares.forEach((share, i) => {
+      const rose = (radii.each[i] - radii.floor) / span;
+      expect(rose * rose, `at a share of ${share}`).toBeCloseTo(share, 6);
+    });
+  });
+
+  // The claim this once made instead, kept as a test so it cannot come back. "The area
+  // above the floor is the node's share" reads well and is false: the floor offsets the
+  // relation, so the ring above the floor at a quarter of the peak's tally is about
+  // 0.36 of the ring at the peak, not 0.25. It went into the legend, the export stamp,
+  // the record and the changelog before arithmetic caught it.
+  test(`the ${heat} weighting does not claim the ring above the floor is the share`, async ({ page }) => {
+    const ring = await page.evaluate(([h, now, src]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      const area = (r) => Math.PI * r * r;
+      const at = (v) => area(window.radiusForHeat(nodeFor(h, v), 100, h, now));
+      const floor = at(0);
+      return (at(25) - floor) / (at(100) - floor);
     }, [heat, NOW, NODE_FOR]);
 
-    // A quarter of the peak's tally is half of the peak's span above the floor, which
-    // is what "area is proportional" means once the floor is subtracted.
-    expect((quarter - floor) / (whole - floor)).toBeCloseTo(0.5, 6);
+    expect(ring).toBeGreaterThan(0.3);
+    expect(ring, "if this is 0.25 the encoding changed and the key must be rewritten")
+      .not.toBeCloseTo(0.25, 2);
+  });
 
-    // And a tally past the reference — a stale saved reference, or a node arriving
-    // between two reads — must not draw a circle that swallows the picture.
-    const beyond = await page.evaluate(([h, now, src]) => {
+  // A tally past the reference — a stale saved reference, or a node arriving between
+  // two reads — must not draw a circle that swallows the picture.
+  test(`nothing on the ${heat} weighting is drawn larger than the reference`, async ({ page }) => {
+    const [whole, beyond] = await page.evaluate(([h, now, src]) => {
       const NOW_MS = now;
       const nodeFor = eval(src);
-      return window.radiusForHeat(nodeFor(h, 10000), 100, h, now);
+      return [100, 10000].map((v) => window.radiusForHeat(nodeFor(h, v), 100, h, now));
     }, [heat, NOW, NODE_FOR]);
     expect(beyond).toBe(whole);
   });
