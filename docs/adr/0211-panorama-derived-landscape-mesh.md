@@ -50,7 +50,8 @@
   ways of *drawing* rather than only vocabularies: the running tally leaves its
   checkbox for an entry in that list and sizes the nodes by how much is running on
   them, and the incident count is offered beside it as the same choice about a
-  different quantity)
+  different quantity; §6's ranking column follows whichever weighting is chosen, with
+  the blast radius kept as the second number on a row)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1256,6 +1257,23 @@ open that door.
 >   is untouched — an element's type does not change because the picture was sized by
 >   load — so these entries export no document, and the constraints above about
 >   authoring and round trips have nothing to bind.
+>
+> **The ranking beside the picture follows the weighting.** §6's ranking answers "where
+> is the risk" by blast radius, with nothing selected. With a weighting on, the canvas
+> ranks the estate by a tally while that column ranked it by radius, so the largest
+> circle and the first row were routinely different nodes — two orderings on one
+> screen, with nothing on it to say they answer different questions. The column now
+> ranks by the tally the picture is drawn with, and it is not a re-listing of the
+> picture: a circle gives neither the exact number (nobody reads 41 against 38 off two
+> areas) nor the name, which at a zoomed-out magnification is not painted at all.
+>
+> §6's radius survives as the *second* number on each row, measured by the same
+> direction and depth controls as everything else in this column, and that is the part
+> that turns a count into a priority: forty incidents on a leaf process is a contained
+> problem, twelve on something two hundred things need is an outage. Rows with nothing
+> to count are absent rather than listed as zeroes, and a landscape with none of them
+> says so as an answer — on the incident weighting that sentence is the good news, and
+> an empty column would have buried it.
 >
 > The entries are defined in the browser, beside the shapes, rather than in the served
 > table. That is the same split the amendment above draws and not an exception to it:

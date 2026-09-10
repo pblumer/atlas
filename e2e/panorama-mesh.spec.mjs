@@ -2650,6 +2650,9 @@ const parkedMesh = {
   edges: [
     { from: "application:a1", to: "process:1", kind: "contains" },
     { from: "application:a1", to: "process:2", kind: "contains" },
+    // Dunning calls Invoice, so the worst-parked process is also one something else
+    // needs — which is what makes the reach beside its count worth printing.
+    { from: "process:2", to: "process:1", kind: "calls" },
     { from: "process:1", to: "worker:c1", kind: "uses" },
   ],
   restricted: 0,
@@ -2709,6 +2712,58 @@ test("an estate with nothing parked draws flat, and says that is the finding", a
   expect(radii[0]).toBeGreaterThan(8);
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
   await expect(page.locator(".mesh-legend")).toContainText("nothing on this landscape is parked at all");
+});
+
+// The column beside the picture ranks by whatever the picture is sized by. Two
+// orderings on one screen — the largest circle and the first row being different
+// nodes — is a contradiction nothing on screen resolves.
+test("the ranking beside the picture follows the weighting", async ({ page }) => {
+  installMock(page, parkedMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const rank = page.locator(".mesh-rank");
+  // With no weighting it is the blast ranking it has always been.
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
+
+  await page.selectOption("#mesh-notation", "incidents");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Most parked");
+  await expect(rank.locator(".mesh-rank-who")).toHaveText(["Invoice", "Dunning"]);
+  // The exact number, which two areas cannot give — and the reach beside it, which is
+  // what turns a count into a priority.
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("41 incident(s)");
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("1 node(s)");
+
+  // The other weighting is the other ordering, and it is the reverse one here: the
+  // busiest process is not the worst one, which is the whole reason there are two.
+  await page.selectOption("#mesh-notation", "instances");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Busiest");
+  await expect(rank.locator(".mesh-rank-who")).toHaveText(["Dunning", "Invoice"]);
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("120 running");
+
+  // A row is still the way to the node, like every other list in this column.
+  await rank.locator(".mesh-rank-go").first().click();
+  await expect(page.locator(".mesh-panel-head")).toContainText("Dunning");
+
+  // And leaving the weighting puts the blast ranking back.
+  await page.selectOption("#mesh-notation", "atlas");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
+});
+
+// An estate with nothing parked has nothing to rank, and that is the finding rather
+// than an empty column — the same argument the flat canvas makes.
+test("a ranking with nothing to count says so as an answer", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "incidents");
+  const rank = page.locator(".mesh-rank");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Most parked");
+  await expect(rank).toContainText("nothing to rank");
+  await expect(rank.locator(".mesh-rank-go")).toHaveCount(0);
 });
 
 // The weightings exclude the projections and each other rather than combining, and

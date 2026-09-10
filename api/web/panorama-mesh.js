@@ -274,7 +274,10 @@ const HEATS = {
     // optional chain rather than defaulting: "no instances" and "cannot have
     // instances" are different facts and neither is a zero to be drawn.
     of: (node) => node?.runtime?.running,
-    caption: (n) => `${fmtCount(n)} running`,
+    // The word after the number, wherever the number is written: under a name on the
+    // canvas, and in the ranking row beside the picture. Held once, so the two cannot
+    // end up calling one tally different things.
+    unit: "running",
     // What size means, in one sentence, for the key and for whoever has to read the
     // picture after it has been pasted somewhere with no key beside it.
     heading: "Size is load here, not structure.",
@@ -288,6 +291,12 @@ const HEATS = {
     // Why a node can be sizeable and still carry no number under its name.
     absent: `Running instances are drawn under the names that have any. A process with
       none carries no number; select it to see the zero, and what it has finished.`,
+    // What the column beside the picture calls this ordering, and what it says when
+    // there is nothing to order.
+    rankHeading: "Busiest",
+    rankSub: "how much each one is running",
+    rankEmpty: `Nothing is running on this landscape, so there is nothing to rank by
+      load. The blast-radius ranking is on the derived drawing.`,
   },
   incidents: {
     key: "incidents", label: "Incidents (heatmap)", short: "Incidents",
@@ -295,7 +304,7 @@ const HEATS = {
     // carry one — an incident belongs to a token — and a collapsed application
     // carries the sum of the processes it stands for.
     of: (node) => node?.incidents,
-    caption: (n) => `${fmtCount(n)} incident(s)`,
+    unit: "incident(s)",
     heading: "Size is trouble here, not structure.",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding
       <b>${fmtCount(peak)}</b>`,
@@ -309,6 +318,10 @@ const HEATS = {
     absent: `Open incidents are drawn under the names that have any. A node with none
       carries no number, and a kind that cannot hold one — a worker, a decision — never
       does: an incident belongs to a token, and only a process has tokens.`,
+    rankHeading: "Most parked",
+    rankSub: "how much is stuck on each",
+    rankEmpty: `Nothing on this landscape is parked, so there is nothing to rank. That
+      is the answer rather than an empty list — and it is the one worth having.`,
   },
 };
 
@@ -1525,6 +1538,58 @@ export function blastRanking(graph, { direction = "dependents", depth = Infinity
   return rows.slice(0, limit);
 }
 
+// heatRanking answers, in a list, the question the heat weighting asks of the
+// picture: which nodes carry the most of whatever is being drawn.
+//
+// It exists because the picture and the column beside it were answering different
+// questions at once. With a weighting on, the canvas ranks the estate by a tally
+// while the list ranked it by blast radius, so the largest circle and the first row
+// were routinely different nodes — and a reader has no way to tell that two orderings
+// on one screen are deliberate rather than a contradiction.
+//
+// It is not a re-listing of the picture. Two things a circle cannot give: the exact
+// number — nobody reads 41 against 38 off two areas — and the name, which at a
+// zoomed-out magnification is not painted at all (see LABEL_TIERS).
+//
+// Each row also carries the reach the blast ranking would have measured, and that is
+// what turns a count into a priority: forty incidents on a leaf process is a contained
+// problem, twelve on something two hundred things need is an outage. It follows the
+// same direction and depth controls as everything else in this column, so the two
+// numbers on one row were measured the way the panel measures them.
+//
+// The walk runs only for the rows that survived the cut, which is why the tie-break is
+// severity rather than reach: ranking *by* reach would mean walking from every node to
+// order rows most of which are then thrown away, and the ordering the reader came for
+// is the tally.
+export function heatRanking(graph, heat, { direction = "dependents", depth = Infinity, limit = 6 } = {}) {
+  const read = heatReader(heat);
+  if (!read) return [];
+  const rows = [];
+  for (const node of graph.nodes) {
+    const value = Number(read(node));
+    // Only where there is something to rank. A "most parked" list padded out with
+    // zeroes is a list whose first rows are the answer and whose rest is noise — and
+    // on a healthy estate it would be nothing but noise.
+    if (!Number.isFinite(value) || value <= 0) continue;
+    rows.push({ id: node.id, name: node.name, kind: node.kind, severity: node.severity, value });
+  }
+  rows.sort((a, b) =>
+    (b.value - a.value) ||
+    ((SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0)) ||
+    String(a.name || a.id).localeCompare(String(b.name || b.id)));
+  const top = rows.slice(0, limit);
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const index = edgeIndex(graph);
+  for (const row of top) {
+    const walked = walkImpact(index, byId, [row.id], { direction, depth, edges: false });
+    row.total = walked.hops.size - 1;
+    // A walk stopped at a permission boundary produces a floor rather than a total,
+    // and the row says so rather than printing a number it cannot stand behind.
+    row.complete = walked.truncatedBy.length === 0;
+  }
+  return top;
+}
+
 // windowOverlap is the arithmetic a maintenance window needs and a count cannot give.
 //
 // The question behind it is not "what does each of these break" but "what does the
@@ -2077,7 +2142,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 
       <g class="mesh-caption" data-room="${(r + 8).toFixed(1)}">
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
-      ${counted ? `<text class="mesh-runs mesh-runs-${esc(heat.key)}" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${esc(heat.caption(counted))}</tspan></text>` : ""}
+      ${counted ? `<text class="mesh-runs mesh-runs-${esc(heat.key)}" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${fmtCount(counted)} ${esc(heat.unit)}</tspan></text>` : ""}
       </g>
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
@@ -2107,39 +2172,68 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 
 // It follows the direction and depth controls rather than fixing its own, so this
 // list and the panel are always answering the same question. Two blast-radius
 // numbers on one page that were measured differently would be worse than one.
-function rankingHTML(graph, direction, depth) {
-  const rows = blastRanking(graph, { direction, depth });
-  const heading = direction === "dependencies" ? "Most dependent"
-    : direction === "both" ? "Most entangled" : "Biggest blast radius";
+//
+// And it follows the *weighting* for the same reason one step up: with a heat on, the
+// canvas ranks the estate by a tally, and a column beside it ranking by blast radius
+// would be a second ordering nobody asked for. The reach then becomes the second
+// number on a row rather than the first — see heatRanking.
+function rankingHTML(graph, direction, depth, heat = null) {
+  const reach = depth === Infinity ? "any" : depth;
   const sub = direction === "dependencies" ? "how much each one needs to work"
     : direction === "both" ? "how much each one is connected to"
     : "how much stops if this one does";
-  const reach = depth === Infinity ? "any" : depth;
+  const who = (r) => esc(r.name ||
+    String((KIND[r.kind] || {}).label || r.kind || r.id).split(" — ")[0]);
+  const shell = (heading, body) => `<div class="mesh-rank">
+    <div class="mesh-rank-head">${heading}</div>${body}</div>`;
+
+  // With a weighting on, the list ranks by the same quantity the canvas sizes by.
+  // Anything else puts two orderings on one screen and leaves the reader to work out
+  // that they are deliberate.
+  if (heat) {
+    const rows = heatRanking(graph, heat, { direction, depth });
+    if (!rows.length) {
+      // On the incident weighting this is the good news, and it has to read as an
+      // answer rather than as an empty list — the same argument the flat canvas makes.
+      return shell(`<b>${esc(heat.rankHeading)}</b>`,
+        `<p class="mesh-note">${heat.rankEmpty}</p>`);
+    }
+    return shell(
+      `<b>${esc(heat.rankHeading)}</b>
+       <span class="muted">${esc(heat.rankSub)}, and ${esc(sub)}, within
+         ${esc(reach)} hop(s)</span>`,
+      `<ol class="mesh-rank-list">${rows.map((r) => `<li>
+        <button type="button" class="mesh-rank-go mesh-sev-${esc(r.severity || "unknown")}"
+          data-finding="${esc(r.id)}">
+          <span class="mesh-rank-who">${who(r)}</span>
+          <span class="mesh-rank-count"><b>${fmtCount(r.value)}</b> ${esc(heat.unit)}<span
+            class="muted"> · ${r.complete ? "" : "at least "}${r.total} node(s)</span></span>
+        </button></li>`).join("")}</ol>`);
+  }
+
+  const rows = blastRanking(graph, { direction, depth });
+  const heading = direction === "dependencies" ? "Most dependent"
+    : direction === "both" ? "Most entangled" : "Biggest blast radius";
 
   if (!rows.length) {
     // Said as a fact about the edges rather than as reassurance: a landscape whose
     // processes call nothing has no blast radius to rank, and that is not the same
     // as a safe one.
-    return `<div class="mesh-rank">
-      <div class="mesh-rank-head"><b>${esc(heading)}</b></div>
-      <p class="mesh-note">Nothing here depends on anything else within ${esc(reach)}
+    return shell(`<b>${esc(heading)}</b>`,
+      `<p class="mesh-note">Nothing here depends on anything else within ${esc(reach)}
       hop(s), so there is no radius to rank. Containment is not counted: an
-      application holds its processes, it does not depend on them.</p></div>`;
+      application holds its processes, it does not depend on them.</p>`);
   }
-  return `<div class="mesh-rank">
-    <div class="mesh-rank-head">
-      <b>${esc(heading)}</b>
-      <span class="muted">${esc(sub)}, within ${esc(reach)} hop(s)</span>
-    </div>
-    <ol class="mesh-rank-list">${rows.map((r) => `<li>
+  return shell(
+    `<b>${esc(heading)}</b>
+     <span class="muted">${esc(sub)}, within ${esc(reach)} hop(s)</span>`,
+    `<ol class="mesh-rank-list">${rows.map((r) => `<li>
       <button type="button" class="mesh-rank-go mesh-sev-${esc(r.severity || "unknown")}"
         data-finding="${esc(r.id)}">
-        <span class="mesh-rank-who">${esc(r.name ||
-          String((KIND[r.kind] || {}).label || r.kind || r.id).split(" — ")[0])}</span>
+        <span class="mesh-rank-who">${who(r)}</span>
         <span class="mesh-rank-count">${r.complete ? "" : "at least "}<b>${r.total}</b>
           node(s)<span class="muted"> · ${r.direct} direct</span></span>
-      </button></li>`).join("")}</ol>
-  </div>`;
+      </button></li>`).join("")}</ol>`);
 }
 
 // findingsHTML lists every node with something wrong with it, worst first.
@@ -2962,7 +3056,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function paintRanking() {
     rankingSlot.innerHTML = rankingHTML(
       shown, dirSelect.value,
-      depthHops());
+      depthHops(), weighted());
   }
 
   // refresh answers the impact question about the current selection and shows the

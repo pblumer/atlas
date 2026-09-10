@@ -223,7 +223,18 @@ _Changed_ / _Removed_ for each version.
   into the worst thing on the estate — and it is named in the key and in the export's
   stamp, because an area with no stated reference is a decoration rather than a
   quantity. A saved view stored while the counts were a switch reopens as the weighting
-  it stood for (ADR-0211 §8).
+  it stood for.
+
+  **The ranking column follows the weighting too.** It ranks by blast radius on the
+  derived drawing, as it always has; with a heatmap on it ranks by the same tally the
+  canvas is sized by, so the largest circle and the first row are the same node.
+  Two orderings on one screen, with nothing on it saying they answer different
+  questions, is a contradiction a reader cannot resolve. It is not a re-listing of the
+  picture: a circle gives neither the exact number — nobody reads 41 against 38 off two
+  areas — nor the name, which zoomed out is not painted at all. The blast radius stays
+  as the second number on each row, which is what turns a count into a priority: forty
+  incidents on a leaf process is a contained problem, twelve on something two hundred
+  things need is an outage (ADR-0211 §6, §8).
 
 - **A Worker Type's setup folds away once you have set it up.** The section that says
   where a type's work runs and what has to exist at the provider stood open above the
