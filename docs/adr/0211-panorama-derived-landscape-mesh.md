@@ -53,7 +53,8 @@
   the same choice about different quantities; §6's ranking column follows whichever
   weighting is chosen, with the blast radius kept as the second number on a row;
   amended 2026-09-10 — §7's picture states when it was read and re-reads itself on a
-  cadence paced by what the derive costs)
+  cadence paced by what the derive costs, and the server reads its structure once for
+  every reader while reading each one's health and visibility afresh)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1134,6 +1135,64 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > the server for a picture nobody is looking at for as long as the tab is open. What it
 > checks is the card, not the element the router handed the view — that one is the
 > router's and outlives every route it holds.
+
+> **Amendment (2026-09-10): the structure is read once for everybody; the health is
+> read for each of them.**
+> The amendment above made every open Starmap a reader that comes back. That turns a
+> cost this section was already careful about into one that scales with the audience:
+> a landscape is derived on the run loop — the single writer (I3) — and reading one
+> costs a directory listing and a JSON decode per record across four sidecar stores,
+> plus a walk of every compiled process. One reader paid it; twenty tabs paid it
+> twenty times, and twenty tabs is one operations team with the view open, competing
+> for the loop that executes process instances.
+>
+> The answer is a cache, and the whole of its design is **what it is allowed to
+> hold**. It holds structure — the applications, the deployed processes and what each
+> calls, the workers, the drafts, the peers — for thirty seconds. It holds nothing
+> else, and the two exclusions are the load-bearing part:
+>
+> - **Health is never cached.** Which processes have work parked, how much, how long
+>   it has been standing, how many instances are live, which workers have polled: all
+>   read fresh on every request. They are the answer an operator opens this view for,
+>   and they are engine point reads rather than disk — bounded by design
+>   (`maxStatusIncidentScan`) and cheap beside a directory listing. A status view that
+>   made trouble wait out a timer would be saving the wrong cost, and a reload that
+>   could not tell the truth is worse than a slow one.
+> - **Visibility is never cached.** Every `CanView` is decided on the request, from
+>   the request. A cache holding a *filtered* landscape would be one principal's view
+>   served to another the moment a key collided or a scope changed, and there is no
+>   cache key that makes that safe — so the shape removes the question rather than
+>   answering it. The reading carries the *inputs* a decision is made from, and never
+>   a decision.
+>
+> Thirty seconds is the view's own re-read floor, and that is not a coincidence: a TTL
+> shorter than the poll bounds nothing, because readers do not poll in step — twenty of
+> them at random phases would miss a five-second entry almost every time. At the floor,
+> the cost of the structure stops depending on how many people are looking, which is
+> the property worth having.
+>
+> The cache is loop-owned state, like the deployment registry, so it needs no lock —
+> and the loop is also the single-flight: two readers arriving together are two turns,
+> and the second finds what the first left.
+>
+> Its only key is whether drafts were asked for, because that is the only thing that
+> changes what is *read* rather than who may see it.
+>
+> **Invalidation is narrow on purpose.** A deployment arriving or being removed, a call
+> override written or dropped, a deployment target created or deleted: those are the
+> changes a person makes and then immediately goes looking for *on this picture*, and
+> they drop the reading at once. Everything else — a new application, a new worker —
+> appears within the TTL. That is a deliberate refusal of a general invalidation
+> protocol: a protocol every future writer has to remember is one that a future writer
+> forgets, and the landscape it produces is silently wrong, where a TTL everybody is
+> subject to cannot be forgotten.
+>
+> And the staleness that remains is *stated*. The landscape carries the moment its
+> structure was read, and the answer is dated by it — the oldest fact in it, not the
+> youngest — so the freshness line the amendment above put on the picture tells the
+> truth about a cached answer as much as a fresh one. A reader is never told a picture
+> is current when it is not, which is the condition under which caching a view like
+> this is honest at all.
 
 ### 8. C4 is a read-only projection, not a theme
 

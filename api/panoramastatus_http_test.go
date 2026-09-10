@@ -146,6 +146,10 @@ func TestMeshReportsParkedWorkAsDegradedAndAttributesIt(t *testing.T) {
 		t.Fatalf("fail job: status=%d body=%s", code, body)
 	}
 
+	// The same read as before, and it must not be the same answer. The Starmap caches
+	// what this server *is* and never how it is doing (ADR-0211 §7), so a finding
+	// raised a moment ago is on the picture a moment later — a status view that made
+	// trouble wait out a timer would be saving the wrong cost.
 	g := getMeshStatus(t, ts)
 	after := statusNode(t, g, processID)
 	if after.State != "degraded" || after.Severity != "attention" {

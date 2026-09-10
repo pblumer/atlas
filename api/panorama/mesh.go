@@ -258,6 +258,16 @@ type Landscape struct {
 	// knows it, and it must reach the payload: without it a process the scan never
 	// reached would be published as healthy on no evidence at all.
 	PartialStatus bool
+	// ObservedAt is when these facts were read off the server, in Unix seconds, and
+	// zero from a collector that does not date its work.
+	//
+	// It is on the landscape rather than only in [Options] because a collector may
+	// answer from something it read earlier: the facts are what is dated, and a
+	// picture stamped with the moment it was *served* would claim a freshness nobody
+	// measured — the undated "all green" of §10, with a timestamp on it, which is
+	// worse than none. A collector that reads afresh every time sets it to now and
+	// nothing changes.
+	ObservedAt int64
 }
 
 // ModelElement is one bound ArchiMate element: what the architect called it, and
