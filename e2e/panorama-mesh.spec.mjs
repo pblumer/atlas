@@ -2112,8 +2112,10 @@ test("the landscape can be downloaded as an ArchiMate model", async ({ page }) =
   expect(download.suggestedFilename()).toMatch(/^atlas-starmap.*\.xml$/);
 });
 
-// The picker offers what the server says it can draw. A vocabulary the browser
-// invented would be one the exported document knows nothing about.
+// The picker offers what the server says it can draw, after the two ways of drawing
+// that are the browser's own. A *vocabulary* the browser invented would be one the
+// exported document knows nothing about; a weighting it invented is a rendering
+// decision the server has no opinion on (ADR-0211 §8).
 test("the notations on offer are the ones the server serves", async ({ page }) => {
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
@@ -2121,7 +2123,7 @@ test("the notations on offer are the ones the server serves", async ({ page }) =
 
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "archimate-3.2", "c4-projection"]);
+  expect(offered).toEqual(["atlas", "instances", "archimate-3.2", "c4-projection"]);
 });
 
 // And a landscape whose mapping cannot be read still draws. The projection is
@@ -2138,10 +2140,12 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
 
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await expect(page.locator(".mesh-node")).toHaveCount(graph.nodes.length);
-  // Only the vocabulary that cannot be wrong about which vocabulary it is in.
+  // The vocabulary that cannot be wrong about which vocabulary it is in, and the
+  // weighting that never needed the server to name anything: it is drawn from the
+  // tallies already in the mesh payload.
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas"]);
+  expect(offered).toEqual(["atlas", "instances"]);
 });
 
 // Going into a node, as a control rather than only as a gesture. A double-click is
@@ -2543,8 +2547,10 @@ test("the view's previous URL still lands on it", async ({ page }) => {
 });
 
 // How much is running, on the picture (ADR-0083's summary columns, on the Starmap).
-// Off by default and asked for by name: it is a second number under every name, and
-// a structural picture that always carried it would be a status board with arrows.
+// Off by default and asked for by name — a structural picture that always carried it
+// would be a status board with arrows — and asked for in the notation picker, because
+// what it changes is how the landscape is drawn: the nodes are sized by load instead
+// of by connectivity, and the numbers come with them (ADR-0211 §8).
 const runningMesh = {
   nodes: [
     { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
@@ -2570,7 +2576,7 @@ test("the count on the canvas is asked for, and only where there is one", async 
   // Off by default: the structural picture is what this view is for.
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
 
-  await page.getByLabel("Instances").check();
+  await page.selectOption("#mesh-notation", "instances");
   // On the busy process, and on nothing else. An idle one carries no number — on a
   // landscape of four hundred, "0 running" four hundred times hides the eleven
   // numbers somebody turned this on to find.
@@ -2579,8 +2585,74 @@ test("the count on the canvas is asked for, and only where there is one", async 
   // And the legend says what the absence means, so it is not read as "not measured".
   await expect(page.locator(".mesh-legend")).toContainText("carries no number");
 
-  await page.getByLabel("Instances").uncheck();
+  await page.selectOption("#mesh-notation", "atlas");
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
+});
+
+// The weighting itself: size stops being structure and becomes load. This is the
+// whole of what the entry is for, so it is checked on the drawn radii rather than
+// only on the arithmetic beside them.
+test("on the instance weighting a node is sized by what is running on it", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // data-r is the radius the layout reserved, which is the number every other part
+  // of the picture reads back — so it is the honest thing to assert against.
+  const radius = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+
+  // Structurally, an application is the largest thing on the picture and a worker
+  // among the smallest. That is the reading this weighting deliberately replaces.
+  expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
+
+  await page.selectOption("#mesh-notation", "instances");
+
+  const busy = await radius("process:1");
+  const idle = await radius("process:2");
+  const worker = await radius("worker:c1");
+  const app = await radius("application:a1");
+
+  // The only node running anything is the largest, ahead of the application that
+  // holds it: on this picture size is load, and an application's load sits on the
+  // processes inside it.
+  expect(busy).toBeGreaterThan(app);
+  expect(busy).toBeGreaterThan(idle * 1.5);
+  // And nothing has vanished. Everything with nothing running sits on one floor,
+  // which is a node somebody can see and click rather than a gap.
+  expect(idle).toBe(worker);
+  expect(idle).toBe(app);
+  expect(idle).toBeGreaterThan(8);
+
+  // The key says what size means here, and names the reference the areas are
+  // measured against — an area with no unit is a decoration.
+  await expect(page.locator(".mesh-legend")).toContainText("Size is load here, not structure");
+  await expect(page.locator(".mesh-legend")).toContainText("12");
+
+  // Switching back is switching back: the structural reading returns intact.
+  await page.selectOption("#mesh-notation", "atlas");
+  expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
+});
+
+// The weighting excludes the projections rather than combining with them, and that
+// is the point of putting it in the list: size is one channel, so a picture cannot
+// mean connectivity and load at once.
+test("choosing a projection gives up the instance weighting", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "instances");
+  await expect(page.locator(".mesh-runs")).toHaveCount(1);
+  // No vocabulary is claimed: it is Atlas's own landscape, sized differently.
+  await expect(page.locator(".mesh-type")).toHaveCount(0);
+  await expect(page.locator(".mesh-projection")).toHaveCount(0);
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+  await expect(page.locator(".mesh-projection")).toBeVisible();
 });
 
 // A number a real server produces: the counts on this view come from the same engine
@@ -2598,7 +2670,7 @@ test("a large count is grouped in thousands, on the canvas and in the panel", as
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
-  await page.getByLabel("Instances").check();
+  await page.selectOption("#mesh-notation", "instances");
   const runs = page.locator('[data-node-id="process:1"] .mesh-runs');
   // textContent rather than a whitespace-normalizing matcher: the separator is the
   // point, and normalization would accept a plain space just as happily.

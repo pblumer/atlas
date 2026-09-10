@@ -46,7 +46,10 @@
   the kind fills are drawn at a weight and a strength the canvas can carry, measured
   against WCAG 2.1's 3:1 for a graphical object; amended 2026-09-07 — a double-click
   goes inside, and for a process and a decision the inside is their Operations view
-  rather than a smaller starmap around them)
+  rather than a smaller starmap around them; amended 2026-09-10 — §8's picker offers
+  ways of *drawing* rather than only vocabularies: the running tally leaves its
+  checkbox for an entry in that list, and sizes the nodes by how much is running on
+  them)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1189,6 +1192,52 @@ open that door.
 > that offers what another surface contradicts is a promise the server breaks. Each
 > row carries both what a person is shown and the notation's own machine token, since
 > the two readers need different halves of one fact.
+
+> **Amendment (2026-09-10): the running tally becomes a way of drawing the landscape,
+> and sizes it.**
+> The instance counts were a checkbox beside the picker — an overlay ticked onto
+> whatever was being drawn. That is this section's own failure mode approached from
+> the other side. Not a renderer toggle wearing a notation's clothes, but a rendering
+> decision left *outside* the one control that owns rendering decisions, and offering
+> a combination with no reading: size on this landscape is a single channel and it
+> already carried connectivity (§7), so a picture with the box ticked had radii
+> meaning structure while its labels meant load. The one question somebody turns the
+> counts on to ask — *where is the work* — was the one the picture could not answer.
+>
+> So the tally becomes an entry in the picker (`instances`), and the picker becomes
+> what it had already grown into: **how this landscape is drawn**, of which "in whose
+> vocabulary" is one case. Choosing it is choosing what size means, which is why it
+> excludes the projections rather than combining with them.
+>
+> - **Size is load, and nothing else.** A node's area above the floor is its share of
+>   the busiest node on the landscape. Area rather than radius, because doubling a
+>   radius quadruples the ink: a radius taken straight from the count reads as four
+>   times the load it stands for. Kind is unaffected — it was never carried by size
+>   alone, and shape and colour still carry it (§4).
+> - **There is a floor, and it is load-bearing.** Every node keeps a minimum radius,
+>   whatever its tally. A size that were purely the count would draw the idle half of
+>   an estate at nothing, and a picture with its context deleted cannot distinguish
+>   "nothing running here" from "not on this server". Exact proportionality and a
+>   visible minimum cannot both hold at zero; the minimum wins, and the key states
+>   the encoding it wins against rather than implying one that is not there.
+> - **The reference is the whole landscape, and it is named.** The busiest node is
+>   the reference, taken before the filter and the drilldown, so narrowing to two
+>   nodes cannot swell the smaller of them into the largest thing Atlas runs. A
+>   constant would not do here as `DEGREE_FULL` does for connectivity: twelve
+>   dependencies is a lot on every Atlas ever deployed, and "a lot of instances" is
+>   three on one server and forty thousand on the next. The price is that a radius
+>   means something only against a stated reference, so the legend and the export
+>   stamp both state it — an area with no unit is a decoration.
+> - **It claims nothing about vocabulary.** It is not a projection: it declares no
+>   mapping, has no loss list, and every node keeps Atlas's own name for itself. The
+>   ArchiMate document is untouched — an element's type does not change because the
+>   picture was sized by load — so this entry exports no document and the constraints
+>   above about authoring and round trips have nothing to bind.
+>
+> The entry is defined in the browser, beside the shapes, rather than in the served
+> table. That is the same split the amendment above draws and not an exception to it:
+> what a node is **called** is the server's fact, and how large it is **drawn** is the
+> renderer's.
 
 ### 9. Placement in the shell
 

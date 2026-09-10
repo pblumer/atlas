@@ -119,9 +119,11 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     // so that everything reading it, the frame anchor included, keeps meaning one
     // thing; a window carries its members here instead.
     picked: Array.isArray(picked) && picked.length > 1 ? [...picked] : null,
-    // Whether the picture was carrying running-instance counts. It changes what the
-    // nodes say and how much room the layout gives them, so a view that reopened
-    // without it would reopen a different picture.
+    // Whether the picture was sized by how much is running on it. The notation above
+    // now carries that — it is an entry in the same list (ADR-0211 §8) — and this
+    // stays beside it for two readers that ask the question directly: the summary
+    // line under a saved view's name, and a view stored while the counts were still a
+    // switch of their own, which reopens as the weighting it stood for.
     instances: Boolean(instances),
     // Whether saved-but-undeployed diagrams were on the picture. It is the one
     // setting whose restoration costs a fetch — the drafts are not in the payload

@@ -29,6 +29,8 @@
 // nothing about having dropped them; the narrowing, by contrast, is a question
 // somebody asked, so it is kept and named in the stamp.
 
+import { fmtCount } from "./numfmt.js";
+
 // EXPORT_WIDTH is the exported picture's width in pixels. Everything else — the
 // height, the stamp's type sizes — is derived from it, so one number decides how
 // large the artifact is.
@@ -147,6 +149,19 @@ export function stampLines(meta = {}) {
       `one at a time they come to ${plan.sum}.` });
   }
   if (meta.instances) {
+    // Size means load in this file, and the reference it is measured against has to
+    // travel with it. On screen the key is beside the picture; a file pasted into a
+    // ticket has no key, and a reader who took these radii for the structural ones
+    // would read the estate exactly backwards.
+    lines.push({ text: meta.peak > 0
+      ? `Size is load here, not structure: the area above the smallest node is that ` +
+        `node's share of the busiest one on this landscape, which is running ` +
+        `${fmtCount(meta.peak)}. Anything with no running instances of its own sits at ` +
+        `the floor — a worker, a decision, and an application too, whose load is on the ` +
+        `processes it holds. Kind is still carried by shape and colour.`
+      : `Size is load here, not structure — and nothing was running on this landscape, ` +
+        `so every node is drawn at the same floor. Kind is still carried by shape and ` +
+        `colour.` });
     lines.push({ text: `Running instances are drawn under the names that have any, as ` +
       `observed above. A process with none carries no number.` });
   }

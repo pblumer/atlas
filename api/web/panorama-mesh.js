@@ -232,19 +232,46 @@ const NOTATION_SHAPES = {
 // wrong about which vocabulary it is in.
 const DERIVED_NOTATION = {
   id: "atlas", label: "Atlas (derived)", short: "Atlas",
-  projection: false, mappingVersion: 0, types: {}, loss: [],
+  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: "degree",
 };
 
-let notations = { atlas: DERIVED_NOTATION };
+// The same landscape, sized by how much is running on it.
+//
+// It sits in the notation picker rather than beside it as a switch, and that is a
+// claim worth making explicitly: it is not a second vocabulary — it says nothing
+// about what a node is *called* — but it is the same kind of choice. A notation
+// decides how the picture is drawn; so does this. And it is mutually exclusive with
+// the projections for a reason the picture cannot argue its way out of: size is one
+// channel, and it can carry connectivity or load, never both. A checkbox beside the
+// picker offered exactly the combination that has no reading — an ArchiMate
+// landscape whose radii mean two things at once — and a list of four entries, one of
+// which is chosen, is the honest shape of "pick what size means here".
+//
+// What it costs: on this weighting a node's size no longer says what kind of thing
+// it is or how much hangs off it. Shape and colour still carry the kind, and the key
+// says so. What it buys is the one question the structural picture cannot answer at
+// a glance — where the work actually is.
+const INSTANCE_NOTATION = {
+  id: "instances", label: "Instances (heatmap)", short: "Instances",
+  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: "instances",
+};
+
+// Both of the local entries are held here rather than fetched, by the split this
+// file already keeps: what a node is *called* is the server's table (ADR-0211 §8),
+// and how big it is drawn is this side's business, exactly like NOTATION_SHAPES.
+let notations = { atlas: DERIVED_NOTATION, instances: INSTANCE_NOTATION };
 
 // useNotations takes what the server serves and adds this side's shapes to it. An
 // entry with no shapes is still usable — every kind falls back to its derived
 // outline — so a notation the server learns about before this file does degrades to
 // a vocabulary change rather than to a blank canvas.
 export function useNotations(served) {
-  const next = { atlas: DERIVED_NOTATION };
+  const next = { atlas: DERIVED_NOTATION, instances: INSTANCE_NOTATION };
   for (const notation of Array.isArray(served) ? served : []) {
-    if (!notation?.id || notation.id === "atlas") continue;
+    // The two locally-defined entries win over a served row of the same id. They are
+    // rendering decisions rather than vocabularies, and a server that grew a word for
+    // either must not be able to turn the instance weighting into a projection.
+    if (!notation?.id || next[notation.id]) continue;
     const shapes = NOTATION_SHAPES[notation.id] || {};
     next[notation.id] = {
       id: notation.id,
@@ -283,6 +310,15 @@ export function typeIn(kind, notation) {
   return notationOf(notation?.id ?? notation).types[kind] || null;
 }
 
+// weighsInstances is whether this way of drawing sizes its nodes by how much is
+// running on them. One predicate rather than a flag carried beside the notation:
+// three things need the answer — the radius, the number under the name, and the
+// margin the layout reserves for it — and a picture where two of them disagreed
+// would draw counts a node has no room for.
+export function weighsInstances(notation) {
+  return notationOf(notation?.id ?? notation).weigh === "instances";
+}
+
 // DEGREE_FULL is the number of dependencies at which a node is drawn at the top of
 // its band. It is a fixed reference rather than the busiest node in this particular
 // graph, and that is the point: normalising against the graph would make the same
@@ -303,6 +339,67 @@ export function radiusFor(node, degree) {
   const style = KIND[node.kind] || KIND.process;
   const reach = Math.log2(1 + Math.max(0, degree || 0)) / Math.log2(1 + DEGREE_FULL);
   return style.r + (style.grow || 0) * Math.min(1, reach);
+}
+
+// INSTANCE_FLOOR is the radius every node keeps on the instance weighting, whatever
+// its tally — and it is the whole reason the weighting is usable at all.
+//
+// A size that were *only* the count would draw an idle process at nothing, and a
+// landscape whose idle half is invisible is not a picture of where the load is: it
+// is a picture with the context deleted, and a reader cannot tell "nothing running
+// here" from "not on this server". So the floor is a node that is unmistakably a
+// node — at the size a worker is drawn on the structural picture — and the count is
+// what is added on top of it.
+const INSTANCE_FLOOR = 11;
+// INSTANCE_SPAN is how much radius the busiest node earns above the floor. Getting on
+// for three times the floor, which puts the busiest node past the largest thing the
+// structural picture ever draws: the two ends of the estate are then told apart at a
+// glance rather than by measurement, which is the whole of what this weighting is for.
+const INSTANCE_SPAN = 30;
+
+// instancePeak is the busiest tally on a landscape, and the reference every node on
+// it is drawn against.
+//
+// Taken from the *whole* landscape rather than from whatever is currently on screen,
+// and that is deliberate: filtering to two nodes must not make the smaller of them
+// swell into the largest thing ever drawn. It is the same objection DEGREE_FULL
+// answers with a constant, answered differently because the quantity is different —
+// twelve dependencies is a lot on every Atlas ever deployed, and "a lot of running
+// instances" is three on one server and forty thousand on the next. A constant here
+// would draw one estate as uniformly idle and the next as uniformly saturated.
+//
+// The price is that a radius means something only against a stated reference, so the
+// key and the export stamp state it. A picture that did not say what its largest node
+// stands for would be a quantity with no unit.
+export function instancePeak(graph) {
+  let peak = 0;
+  for (const node of graph?.nodes || []) {
+    const running = node?.runtime?.running;
+    if (typeof running === "number" && running > peak) peak = running;
+  }
+  return peak;
+}
+
+// radiusForInstances sizes a node by how much is running on it.
+//
+// Area carries the count, not radius: doubling a radius quadruples the ink, so a
+// radius drawn straight from the number reads as four times the load it stands for.
+// Taking the square root is what makes "twice as much work" look like twice as much,
+// and it is the standard the eye is actually calibrated against on a bubble chart.
+//
+// Exact proportionality and a visible minimum cannot both hold — one of them has to
+// give at zero — and the minimum wins here, because a landscape is read for the
+// nodes on it as well as for the numbers. So the honest statement of the encoding is
+// the one the key makes: the floor is a node, and the area *above* the floor is the
+// share of the busiest node's load.
+//
+// A node with no tally at all — a worker, a decision, a deployment target, a draft,
+// a placeholder — sits on the floor rather than being sized as a zero, and that is
+// the same fact: nothing is running there because nothing can be.
+export function radiusForInstances(node, peak) {
+  const running = Math.max(0, node?.runtime?.running || 0);
+  if (!(peak > 0) || running <= 0) return INSTANCE_FLOOR;
+  return INSTANCE_FLOOR + INSTANCE_SPAN * Math.min(1, Math.sqrt(running / peak));
 }
 
 // A target is not part of the dependency graph — no edge is derived to it, because
@@ -1695,8 +1792,9 @@ function legendEntries(graph, notation) {
   return entries;
 }
 
-function legendHTML(graph, layoutMs, notation, instances = false) {
+function legendHTML(graph, layoutMs, notation, peak = 0) {
   const spoken = notationOf(notation?.id ?? notation);
+  const instances = weighsInstances(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
     <svg width="16" height="16" aria-hidden="true">${entry.mark}</svg>${esc(entry.label)}</span>`;
   const entries = legendEntries(graph, spoken);
@@ -1719,6 +1817,20 @@ function legendHTML(graph, layoutMs, notation, instances = false) {
   // running carries no number, and a reader who did not know that would read its
   // absence as "not measured" — which is the one thing it does not mean.
   if (instances) {
+    // What size means on this picture, said before anything else the key says: a
+    // reader who takes the radii for the structural ones would read the estate
+    // backwards. The reference is named, because an area is a quantity and a quantity
+    // with no unit is a decoration.
+    notes.push(peak > 0
+      ? `<p class="mesh-note"><b>Size is load here, not structure.</b> The area above the
+         smallest node is that node's share of the busiest one on this landscape, which
+         is running <b>${fmtCount(peak)}</b>. Anything with no running instances of its
+         own sits at the floor — a worker, a decision, and an application too, whose
+         load is on the processes it holds — so nothing drops off the picture. Kind is
+         still carried by shape and colour.</p>`
+      : `<p class="mesh-note"><b>Size is load here, not structure</b> — and nothing is
+         running on this landscape at all, so every node is drawn at the same floor.
+         Kind is still carried by shape and colour.</p>`);
     notes.push(`<p class="mesh-note">Running instances are drawn under the names that
       have any. A process with none carries no number; select it to see the zero, and
       what it has finished.</p>`);
@@ -1789,8 +1901,12 @@ function legendHTML(graph, layoutMs, notation, instances = false) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances = false } = {}) {
+function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 } = {}) {
   const spoken = notationOf(notation?.id ?? notation);
+  // Read off the notation rather than passed in beside it: the counts under the names
+  // and the radii they hang from are one decision, and two arguments that could
+  // disagree would eventually draw a number a node has no room for.
+  const instances = weighsInstances(spoken);
   // A projected node carries a second line under its name, so the margin the layout
   // reserves has to carry it too — otherwise the type annotation is the one thing
   // that ends up outside the frame.
@@ -1810,7 +1926,13 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
   // radius, and the world budget, the separation pass and the circle all read it
   // back off the node (see radiusOf) rather than working it out again.
   const degree = degreesOf(graph);
-  const nodes = graph.nodes.map((n) => ({ ...n, r: radiusFor(n, degree.get(n.id)) }));
+  // Which quantity the radius is spending itself on. Connectivity by default —
+  // structure is what this view is for — or the running tally, when that is the
+  // question being asked of it. Never both: one channel, one meaning.
+  const nodes = graph.nodes.map((n) => ({
+    ...n,
+    r: instances ? radiusForInstances(n, peak) : radiusFor(n, degree.get(n.id)),
+  }));
   // The graph is laid out in a world of its own size, not in the viewport. The
   // frame only decides that world's shape, so the opening view fills the window
   // without letterboxing.
@@ -2342,19 +2464,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            one a way back to it. "All" is the first station, so leaving is a step
            like any other rather than a separate escape hatch. -->
       <nav id="mesh-drill-trail" class="mesh-trail" aria-label="Where you are" hidden></nav>
-      <!-- Which vocabulary the picture is drawn in. Beside the picture rather than in
-           the side column, because it changes the drawing rather than the answer
-           about it (ADR-0211 §8). -->
+      <!-- How the picture is drawn. Beside the picture rather than in the side column,
+           because it changes the drawing rather than the answer about it (ADR-0211
+           §8) — and it is one list rather than a list plus a switch, because every
+           entry on it spends the same channels on a different question and only one
+           of them can be answered at a time. -->
       <label class="mesh-notation" for="mesh-notation">Notation</label>
-      <select id="mesh-notation" class="mesh-notation-pick">${notationsAvailable()
+      <select id="mesh-notation" class="mesh-notation-pick"
+        title="How this landscape is drawn: Atlas's own kinds, sized by how much is running, or projected into another vocabulary">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
-      <!-- How much is running, on the picture rather than only in the panel. Off by
-           default and asked for by name: it is a second number on every node, and a
-           structural picture that always carried it would be a status board that
-           happens to have arrows. -->
-      <label class="mesh-toggle" title="Show how many instances are running, on the processes that have any">
-        <input id="mesh-instances" type="checkbox"/> Instances
-      </label>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:
            the drafts are not in the payload until they are wanted, because an estate
@@ -2465,7 +2583,6 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const zoomOut = document.getElementById("mesh-zoom-out");
   const zoomFit = document.getElementById("mesh-zoom-fit");
   const release = document.getElementById("mesh-release");
-  const instancesToggle = document.getElementById("mesh-instances");
   const draftsToggle = document.getElementById("mesh-drafts");
   // Set from what was actually fetched rather than left at its markup default, so the
   // control agrees with the picture on the first frame as well as on every later one.
@@ -2503,6 +2620,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const viewName = document.getElementById("mesh-view-name");
   const viewNote = document.getElementById("mesh-view-note");
   const notationPick = document.getElementById("mesh-notation");
+  // Whether the picture currently sizes its nodes by load, and against what. Asked
+  // of the picker rather than remembered beside it, so the canvas, the key, the
+  // saved view and the export stamp cannot end up describing different pictures.
+  const weighted = () => weighsInstances(notationPick.value);
   const exportSvgBtn = document.getElementById("mesh-export-svg");
   const exportModelBtn = document.getElementById("mesh-export-archimate");
   const exportPngBtn = document.getElementById("mesh-export-png");
@@ -2708,8 +2829,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
     const spoken = notationOf(notationPick.value);
     laidOut = frame;
+    // The reference the radii are drawn against comes from the whole landscape, not
+    // from what the filter has left on screen: narrowing to two nodes must not make
+    // the smaller of them swell into the busiest thing Atlas runs.
+    const peak = weighsInstances(spoken) ? instancePeak(graph) : 0;
     const painted = renderGraph(shown, 0, frame, {
-      pinned, from, notation: spoken, instances: instancesToggle.checked,
+      pinned, from, notation: spoken, peak,
     });
     const { ms, svg } = painted;
     world = painted.world;
@@ -2727,7 +2852,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, instancesToggle.checked);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // Matches and context counted apart. "5 of 101" over a picture where only one
@@ -3396,7 +3521,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // rather than left to be inferred: a reader who receives a picture with counts
       // on some nodes and not others has no way to tell "nothing running" from "this
       // export was taken with counts off".
-      instances: instancesToggle.checked,
+      instances: weighted(),
+      // What a radius stands for in this file. On screen the key says it beside the
+      // picture; a file that has been pasted into a ticket has no key beside it, and
+      // an area with no stated reference is a quantity nobody can read back.
+      peak: weighted() ? instancePeak(graph) : 0,
       drafts: draftsToggle.checked,
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({
@@ -3449,10 +3578,6 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
   // except the outlines.
   notationPick.addEventListener("change", paint);
-  // A repaint rather than a class toggle: the count is a line under every name, so
-  // switching it on changes how much room a node needs and therefore the layout that
-  // reserves it (see the margin in renderGraph).
-  instancesToggle.addEventListener("change", paint);
 
   // Drafts are the one switch that changes the *landscape* rather than the drawing of
   // it, so it is answered by the server. Two things reach for it — the switch, and a
@@ -3538,7 +3663,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function viewSummary(v) {
     const parts = [];
     if (v.term) parts.push(`filter “${v.term}”`);
-    if (v.instances) parts.push("with instance counts");
+    if (v.instances) parts.push("sized by running instances");
     if (v.drafts) parts.push("with drafts");
     if (v.trail?.length) parts.push(`${v.trail.length} step(s) in`);
     if (v.picked?.length) parts.push(`a window of ${v.picked.length} node(s)`);
@@ -3575,9 +3700,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
-    // A view saved before the counts existed carries none, and false is the picture
-    // it was looking at.
-    instancesToggle.checked = Boolean(v.instances);
+    // A view saved while the counts were a switch beside the picker carries them as
+    // their own flag, and the derived drawing as its notation. That combination no
+    // longer exists, and the picture it stands for is this one — so it is restored as
+    // the weighting rather than dropped. A view saved in a projection keeps the
+    // projection: the counts were the lesser half of what it was named for, and
+    // silently replacing ArchiMate with a heatmap would reopen a different question.
+    if (v.instances && notationPick.value === "atlas") notationPick.value = "instances";
     // The walk, before the paint that draws it: the picture a view saved is the one
     // cut from the last station, so restoring the path is part of restoring the
     // picture rather than something done to it afterwards. Stations whose nodes are
@@ -3655,7 +3784,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       notation: notationPick.value,
       selected: only(),
       picked,
-      instances: instancesToggle.checked,
+      // Kept in the stored view even though the notation now carries it. A view is
+      // read back by older builds and by the summary line beside its name, and both
+      // ask this question directly.
+      instances: weighted(),
       drafts: draftsToggle.checked,
       trail,
       frameView,

@@ -3986,9 +3986,10 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* Export sits at the end of the head, pushed away from the search box: it acts on
    the picture as a whole, and a button that saves a file should not be adjacent to
    the one that narrows what would be in it. */
-/* Which vocabulary the picture is drawn in (ADR-0211 §8). Beside the picture, not
-   in the answer column: it changes the drawing rather than what is being said about
-   it. */
+/* How the picture is drawn (ADR-0211 §8) — Atlas's own kinds, the same landscape
+   sized by how much is running on it, or a projection into another vocabulary.
+   Beside the picture, not in the answer column: it changes the drawing rather than
+   what is being said about it. */
 .mesh-notation { margin-left: auto; font-size: 13px; color: var(--muted); }
 .mesh-notation-pick {
   /* Sized by its longest option, not by the row. Every select on this page inherits
@@ -4009,20 +4010,21 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    rather than the muted grey, because unlike the type it is a number that changes. */
 .mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
 .mesh-application .mesh-runs { font-size: 15px; }
-/* A switch beside the notation picker that adds something to the picture. There are
-   two — the running counts and the drafts — and they wear the same clothes: to the
-   reader they are one gesture, "also show me this", and two switches side by side
-   that looked different would suggest they did different kinds of thing. They are
-   not the same underneath (the counts redraw what is here, the drafts re-ask the
-   server), and that difference belongs in the wait below, not in the styling. */
+/* A switch beside the notation picker that adds something to the picture. There is
+   one left — the drafts — since the running counts became a way of drawing the
+   landscape rather than an overlay on it, and moved into the picker: a switch and a
+   list entry are different gestures, and "also show me this" is only the first of
+   them. The class stays general because the next thing genuinely added to a picture
+   belongs here rather than in the list. */
 .mesh-toggle {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer;
 }
 .mesh-toggle input { margin: 0; cursor: pointer; }
 /* Disabled while an answer is being fetched — the drafts switch re-asks the server
-   rather than re-drawing what is already here — and it says so by going dim, so a
-   second click during the wait is not silently swallowed. */
+   rather than re-drawing what is already here, which is exactly why it stayed a
+   switch — and it says so by going dim, so a second click during the wait is not
+   silently swallowed. */
 .mesh-toggle input:disabled { cursor: progress; }
 .mesh-toggle:has(input:disabled) { opacity: 0.55; cursor: progress; }
 /* What the projection drops. Collapsed by default and never absent: a projection
