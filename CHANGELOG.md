@@ -14,6 +14,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Removing someone from an application now takes their Starmap away on their next
+  request.** The Starmap holds a 30-second reading of what this server is, so that
+  twenty people with the view open cost the engine one reading rather than twenty. It
+  decided who may see what on every request — but from that held reading, and the held
+  reading included the application records themselves. An application's members are
+  written on the application, so re-deciding against a record that is half a minute old
+  gives the answer from half a minute ago: somebody removed from an application, an
+  application sealed to private, an ownership transfer, an application deleted — in
+  each case the person who just lost access kept receiving that application's processes
+  for the rest of the window. What they received is the material the Starmap otherwise
+  replaces with an anonymous placeholder: process names and ids, the call graph,
+  running and finished instance counts, incident counts and ages, and the incident
+  sites with their raw worker error text. The view's own auto-refresh reached the
+  window without anybody doing anything, since an open tab re-polls on its own.
+
+  The two stores a sharing scope lives in — applications and workers — are now read on
+  every request, exactly as every other listing on this server reads them. Only
+  structure that carries no scope stays cached, so the reason the cache exists is
+  intact: the draft store with its diagrams and the walk of every deployed process are
+  the expensive part, and they are untouched.
+
+  Two things get better with it. An application or a worker you create or delete now
+  appears on the Starmap at once instead of within half a minute. And which configured
+  worker a task's `connector="…"` name points at is resolved per request, so a worker
+  deleted a moment ago is no longer pointed at (ADR-0211 §7).
+
+- **A Starmap left open against a server that is down asks once every five minutes
+  again, not six times a minute.** The view backs off when the server will not answer,
+  and the back-off was measured from the last *successful* read. During an outage there
+  is no successful read, so the measured age only grew: past the five-minute ceiling
+  every ten-second tick counted as due, and the view a page was left open on hammered a
+  server that was already in trouble. It is measured from the last *attempt* now.
+  The freshness line still counts from the last success, which is the number it is
+  about — a failed attempt must never let a stale picture claim to be current.
+
+- **Switching Drafts on the Starmap while it happens to be refreshing no longer undoes
+  itself.** The view re-reads the landscape on its own, and that read and the Drafts
+  switch's read could be in flight at the same time. If the automatic one landed second
+  it overwrote the picture and put the switch back, with nothing said — the drafts
+  appeared and then vanished under the hand that had just asked for them. The
+  reader's answer wins now: an automatic read that lands after they asked for a
+  different landscape is dropped, and the timer does not start one while the switch's
+  own request is still running.
+
 - **A diagram filed under no application no longer answers with silence.** A process
   deployed outside an application has no application, so it has no information model,
   so nothing about its data can be resolved — and until now the Modeler said so

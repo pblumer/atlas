@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Panorama"
+  ],
+  "title": {
+    "en": "The Drafts switch on the Starmap stays where you put it",
+    "de": "Der Drafts-Schalter der Starmap bleibt, wo Sie ihn hinstellen"
+  },
+  "summary": {
+    "en": "The Starmap re-reads the landscape on its own while you have it open. That read and the one the Drafts switch makes could be in flight at the same time, and if the automatic one happened to land second it overwrote the picture and put the switch back — the drafts appeared and then vanished again under the hand that had just asked for them, with nothing said about why. Your answer wins now: an automatic read that arrives after you have asked for a different landscape is dropped rather than applied, and the timer does not start one while the switch's own request is still running.",
+    "de": "Die Starmap liest die Landschaft von selbst nach, solange sie offen ist. Dieses Lesen und das des Drafts-Schalters konnten gleichzeitig unterwegs sein, und traf das automatische zufällig als Zweites ein, überschrieb es das Bild und stellte den Schalter zurück — die Drafts erschienen und verschwanden wieder unter der Hand, die sie gerade angefordert hatte, ohne jeden Hinweis. Jetzt gewinnt Ihre Antwort: Ein automatisches Lesen, das eintrifft, nachdem Sie eine andere Landschaft angefordert haben, wird verworfen statt angewendet, und der Zeitgeber startet keines, solange die Anfrage des Schalters noch läuft."
+  }
+}

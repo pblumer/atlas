@@ -143,14 +143,83 @@ func TestTheLandscapeIsFilteredForEveryCaller(t *testing.T) {
 		t.Error("the owner lost sight of their own application to another caller's answer")
 	}
 
-	// And the held reading itself says nothing about either of them: it carries the
-	// inputs a decision is made from — the projects and each thing's owner — and never
-	// a decision, which is what makes sharing it safe at all.
-	facts, err := srv.landscapeFacts(false, time.Now())
-	if err != nil {
-		t.Fatalf("landscapeFacts: %v", err)
+}
+
+// TestARevokedMemberLosesTheLandscapeOnTheNextRequest is the property the test above
+// cannot reach, and the one a cache is most dangerous to.
+//
+// Filtering two *concurrent* callers apart proves the decision is made per request. It
+// says nothing about what the decision is made *from* — and an access decision read
+// off a record that is half a minute old returns the answer from half a minute ago.
+// project.effectiveRole answers from the project's own Members, Visibility and
+// OwnerID, so a cache holding the project record would keep a removed member inside
+// the application for the rest of its TTL: their session is still valid, their role is
+// still modeler, and the mesh is the one endpoint that aggregates the whole estate.
+//
+// The revocation is written straight to the store rather than through the handler,
+// and deliberately: it is the strongest form of the claim. It holds for a record
+// changed by a handler that forgot to invalidate, by a handler nobody has written
+// yet, or by something outside this server entirely — none of which a hook could
+// cover.
+func TestARevokedMemberLosesTheLandscapeOnTheNextRequest(t *testing.T) {
+	srv, done := bootAPIWithModels(t, t.TempDir(), false)
+	defer done()
+	srv.authEnabled = true
+
+	owner := &httpapi.Principal{UserID: "usr_owner", Username: "owner"}
+	member := &httpapi.Principal{UserID: "usr_member", Username: "member"}
+
+	shared := project{
+		ID: "app1", Name: "Billing", OwnerID: owner.UserID,
+		Visibility: VisibilityShared,
+		Members: []projectMember{{
+			Ref:  principalRef{Type: PrincipalTypeUser, ID: member.UserID},
+			Role: ScopeRoleViewer,
+		}},
 	}
-	if facts.projs["app1"].OwnerID != owner.UserID {
-		t.Errorf("the reading carries no owner for app1, so the filter has nothing to read")
+	if err := srv.projects.Save(shared); err != nil {
+		t.Fatalf("save project: %v", err)
+	}
+	srv.forgetLandscape()
+
+	sees := func(p *httpapi.Principal) bool {
+		t.Helper()
+		r := httptest.NewRequest(http.MethodGet, "/api/v1/panorama/mesh", nil)
+		r = r.WithContext(httpapi.WithPrincipal(r.Context(), p))
+		land, _, err := srv.collectLandscape(r)
+		if err != nil {
+			t.Fatalf("collectLandscape: %v", err)
+		}
+		for _, a := range land.Applications {
+			if a.ID == "app1" {
+				return a.CanView
+			}
+		}
+		t.Fatal("the application is not on the landscape at all")
+		return false
+	}
+
+	// The member reads it, which warms the structural reading.
+	if !sees(member) {
+		t.Fatal("a viewer member cannot see the application they are a member of")
+	}
+
+	// Revoked, and nothing is told to forget anything.
+	revoked := shared
+	revoked.Members = nil
+	if err := srv.projects.Save(revoked); err != nil {
+		t.Fatalf("save project: %v", err)
+	}
+
+	// The very next request, well inside the TTL. Nothing about the structure has
+	// changed, so the reading is deliberately still warm — which is exactly the case
+	// that used to answer from the membership list as it stood before the revoke.
+	if sees(member) {
+		t.Error("a revoked member still sees the application on their next request")
+	}
+	// And the owner is unaffected, so the check is a revocation rather than a landscape
+	// that simply stopped answering.
+	if !sees(owner) {
+		t.Error("the owner lost their own application")
 	}
 }

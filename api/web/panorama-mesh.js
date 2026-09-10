@@ -2880,11 +2880,21 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const root = document.getElementById("mesh-root");
   const liveToggle = document.getElementById("mesh-live");
   const observed = document.getElementById("mesh-observed");
-  // What the freshness line and the cadence below are computed from: when this
-  // landscape last arrived, what it cost to derive, and whether the last attempt
-  // failed. Seeded from the fetch that opened the view, so the first tick reasons
-  // about a real request rather than about nothing.
+  // What the freshness line and the cadence below are computed from. Seeded from the
+  // fetch that opened the view, so the first tick reasons about a real request rather
+  // than about nothing.
+  //
+  // Two clocks, and they are two because they answer different questions. `fetchedAt`
+  // is when the picture on screen was *read*, and only a success moves it — it is what
+  // the freshness sentence falls back to, so a failed attempt advancing it would have
+  // a stale picture claiming to be current, which is the one thing this line exists to
+  // prevent. `attemptedAt` is when the last attempt *ended*, success or not, and it is
+  // what the cadence measures from: without it a sustained outage never advances the
+  // clock at all, so the elapsed time grows past the ceiling and stays there, and the
+  // back-off refreshEvery promises turns into a retry on every tick — the opposite of
+  // what it is for.
   let fetchedAt = Date.now();
+  let attemptedAt = fetchedAt;
   let derivedMs = fetchMs;
   let failing = false;
   let refreshing = false;
@@ -3913,21 +3923,35 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // It leaves the drafts control alone: dimming it every half minute would make the
   // one thing on this row that *is* waiting for the server indistinguishable from the
   // thing that merely does so on its own.
+  // Reports whether it took: a silent answer that arrived too late is dropped rather
+  // than applied, so the caller knows not to repaint.
   async function loadLandscape(wantDrafts, { silent = false } = {}) {
     if (!silent) draftsToggle.disabled = true;
     const started = performance.now();
+    let arrived;
     try {
-      graph = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
+      arrived = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
     } finally {
       if (!silent) draftsToggle.disabled = false;
     }
+    // The reader asked for a different landscape while this one was in flight. A
+    // timer's answer is to a question nobody is asking any more: applying it would put
+    // the drafts back on the picture and flick the switch under the hand that had just
+    // moved it, with nothing said. Their answer is on its way; this one is dropped.
+    //
+    // The other order — the switch's fetch in flight when the timer fires — is refused
+    // at the tick, where the disabled switch already says a load is running.
+    if (silent && draftsToggle.checked !== wantDrafts) return false;
+    graph = arrived;
     // What this landscape costs to derive, measured every time rather than once at
     // open: an estate grows, and the cadence below is a fraction of the cost.
     derivedMs = performance.now() - started;
     fetchedAt = Date.now();
+    attemptedAt = fetchedAt;
     failing = false;
     draftsToggle.checked = wantDrafts;
     trail = trail.filter((id) => graph.nodes.some((n) => n.id === id));
+    return true;
   }
 
   // A failed fetch puts the checkbox back. The picture did not change, so a control
@@ -4333,7 +4357,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // paced by refreshEvery.
   const TICK = 10_000;
   const refreshDue = () =>
-    Date.now() - fetchedAt >= refreshEvery(derivedMs, { failing });
+    Date.now() - attemptedAt >= refreshEvery(derivedMs, { failing });
 
   // sayObserved writes when this landscape was read, and whether the last attempt to
   // re-read it failed. Both, because they are different facts: a picture can be four
@@ -4362,8 +4386,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (refreshing) return;
     refreshing = true;
     try {
-      await loadLandscape(draftsToggle.checked, { silent: true });
-      paint();
+      if (await loadLandscape(draftsToggle.checked, { silent: true })) paint();
     } catch {
       // The picture stands. A landscape that blanked itself because one request
       // failed would have thrown away a true answer for an error, and the freshness
@@ -4371,6 +4394,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       failing = true;
     } finally {
       refreshing = false;
+      // The attempt is over either way, and the next one is paced from here. On a
+      // success loadLandscape has already said so; this is the failure's own record,
+      // and the reason a server that is down is asked once per ceiling rather than
+      // once per tick.
+      attemptedAt = Date.now();
       sayObserved();
     }
   }
@@ -4392,6 +4420,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // running while the picture did not.
     if (document.visibilityState === "hidden") return;
     if (!liveToggle.checked || !refreshDue()) return;
+    // The drafts switch is mid-fetch: it is disabled for exactly as long as its own
+    // request is in flight. Starting a second landscape read across it is how the two
+    // answers end up racing to overwrite each other.
+    if (draftsToggle.disabled) return;
     // Never under the reader's hand. A re-layout in the middle of a drag or a pan
     // takes the picture out from under the gesture that is moving it.
     if (moving || panning) return;

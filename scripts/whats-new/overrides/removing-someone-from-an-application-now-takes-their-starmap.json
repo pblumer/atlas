@@ -1,0 +1,26 @@
+{
+  "tags": [
+    "Panorama",
+    "Security"
+  ],
+  "title": {
+    "en": "Removing someone from an application takes effect on the Starmap at once",
+    "de": "Wer aus einer Applikation entfernt wird, verliert die Starmap sofort"
+  },
+  "summary": {
+    "en": "The Starmap holds a short reading of what this server is, so that twenty people with the view open cost the engine one reading rather than twenty. It decided who may see what on every request — but from that held reading, and the reading included the application records themselves. An application's members are written on the application, so re-deciding against a record half a minute old gave the answer from half a minute ago. Somebody you removed from an application, an application you sealed to private, an ownership transfer, an application you deleted: in each case the person who had just lost access kept receiving that application's processes for the rest of the window — process names and ids, what calls what, running and finished instance counts, incident counts and ages, and the incident details with their raw error text from workers. That is the material the Starmap otherwise replaces with an anonymous placeholder, and the view's own automatic refresh reached the window without anybody doing anything, because an open tab re-reads on its own. The two stores a sharing scope lives in — applications and workers — are now read on every request, exactly as every other list on this server reads them, so a change of access takes effect on the next request as it does everywhere else. Only structure that carries no sharing scope is still held briefly, so the reason for holding it is intact. Two things get better with it: an application or a worker you create or delete now appears on the Starmap at once instead of within half a minute, and a task pointing at a worker you have just deleted stops pointing at it.",
+    "de": "Die Starmap hält kurz fest, was dieser Server ist, damit zwanzig geöffnete Ansichten die Engine einmal statt zwanzigmal kosten. Wer was sehen darf, wurde bei jeder Anfrage neu entschieden — aber anhand dieses festgehaltenen Standes, und der enthielt die Applikations-Datensätze selbst. Die Mitglieder einer Applikation stehen an der Applikation; eine Entscheidung gegen einen eine halbe Minute alten Datensatz liefert also die Antwort von vor einer halben Minute. Wen Sie aus einer Applikation entfernt, welche Applikation Sie auf privat gestellt, übertragen oder gelöscht haben: Die betroffene Person erhielt die Prozesse dieser Applikation für den Rest des Fensters weiter — Prozessnamen und -IDs, wer wen aufruft, laufende und abgeschlossene Instanzzahlen, Incident-Zahlen und -Alter sowie die Incident-Details mit den unveränderten Fehlermeldungen aus Workern. Genau dieses Material ersetzt die Starmap sonst durch einen anonymen Platzhalter, und die automatische Aktualisierung der Ansicht erreichte das Fenster von selbst, weil ein offener Tab eigenständig nachliest. Die beiden Ablagen, in denen eine Freigabe lebt — Applikationen und Worker —, werden jetzt bei jeder Anfrage gelesen, genau wie jede andere Liste dieses Servers es tut; eine Zugriffsänderung wirkt damit ab der nächsten Anfrage, wie überall sonst. Festgehalten wird nur noch Struktur ohne Freigabe, der Grund für das Festhalten bleibt also bestehen. Zwei Dinge werden dabei besser: Eine Applikation oder ein Worker, die Sie anlegen oder löschen, erscheinen auf der Starmap jetzt sofort statt innerhalb einer halben Minute, und ein Task, der auf einen soeben gelöschten Worker zeigte, zeigt nicht mehr darauf."
+  },
+  "tutorial": {
+    "en": [
+      "Nothing to configure — the change is in how the Starmap answers.",
+      "If you have removed anyone from an application recently and want to be sure: open the application under Applications, check its members, and the Starmap will match on its next read.",
+      "If you administer this server, note that a person's session and role are unaffected — only their view of applications and workers changes, and only in the direction of less."
+    ],
+    "de": [
+      "Nichts einzurichten — die Änderung betrifft, wie die Starmap antwortet.",
+      "Falls Sie kürzlich jemanden aus einer Applikation entfernt haben und sichergehen wollen: Applikation unter Applications öffnen, Mitglieder prüfen — die Starmap stimmt ab dem nächsten Lesen damit überein.",
+      "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
+    ]
+  }
+}

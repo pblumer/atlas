@@ -54,7 +54,9 @@
   weighting is chosen, with the blast radius kept as the second number on a row;
   amended 2026-09-10 — §7's picture states when it was read and re-reads itself on a
   cadence paced by what the derive costs, and the server reads its structure once for
-  every reader while reading each one's health and visibility afresh)
+  every reader while reading each one's health and visibility afresh; amended
+  2026-09-10 — §7's cache holds nothing a visibility decision reads either, so a
+  revocation takes effect on the next request as it does everywhere else)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1193,6 +1195,58 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > truth about a cached answer as much as a fresh one. A reader is never told a picture
 > is current when it is not, which is the condition under which caching a view like
 > this is honest at all.
+
+> **Amendment (2026-09-10): "visibility is never cached" was half a rule, and the
+> missing half was the one that mattered.**
+> The amendment above claimed the split made a leak impossible because every `CanView`
+> is decided on the request. That is true and it was not enough, which a security
+> review of the merged change established. Deciding per request buys nothing if the
+> record the decision *reads* is half a minute old: `project.effectiveRole` answers
+> from the project's own `Members`, `Visibility` and `OwnerID`, so re-running the
+> function against a held record returns the answer from before a revocation. The
+> reading held `projs` and the worker records — the inputs to every decision — and so
+> a member removed from an application kept receiving its processes, their call graph,
+> their instance counts and their incident sites, including raw worker error text, for
+> the remainder of the TTL. The auto-refresh made that window reach itself: an open
+> tab re-polls on its own.
+>
+> That was a real deviation, not a trade-off. Every other listing on this server reads
+> the project store inside its own request turn, and the auth layer states the property
+> in as many words: a change takes effect "on their next request without a re-login".
+> This view is not the place to make an exception, and the previous amendment named
+> "a scope changed" as the thing the split was supposed to make impossible.
+>
+> **The rule is now the whole rule: nothing a visibility decision reads is cached
+> either.** The project store and the worker store are read per request, in
+> `collectLandscape`, exactly as every other listing reads them. What stays cached is
+> structure that carries no scope: the deployed processes and what each calls, the
+> drafts, the overrides, the peers, the targets.
+>
+> Two consequences worth stating, because they are improvements rather than costs:
+>
+> - **An application or a worker created or deleted now appears on the next request**,
+>   not within the TTL. The earlier amendment listed that lag as an accepted cost; it
+>   was a symptom of the same defect and it is gone.
+> - **Which configured worker a task's `connector="…"` name resolves to is decided per
+>   request too.** The *reference* is structure and stays cached; the *resolution*
+>   reads a store that carries a sharing scope, so an id resolved half a minute ago
+>   could name a worker since deleted or re-scoped.
+>
+> The alternative — a `forgetLandscape()` hook on all eight scope-writing handlers —
+> was rejected on this section's own argument, turned around: a protocol every future
+> writer has to remember is one a future writer forgets, and while forgetting a
+> *correctness* hook draws a stale picture, forgetting an *authorization* hook is a
+> hole. It would also still miss a record changed outside those handlers. Reading the
+> two stores per request removes the class rather than one instance of it, and they are
+> the two cheapest of the five — the draft store with its XML and the walk of every
+> compiled process, which are what the cache exists for, are untouched.
+>
+> The lesson for the test, which is the part most worth carrying: the original test
+> proved two *concurrent* principals were filtered apart, and that is a property a
+> cache of decision inputs satisfies perfectly while leaking. What catches this is a
+> revocation — warm the reading as a member, change the record, and require the very
+> next request to refuse — and it is asserted against a record written directly rather
+> than through a handler, because that also covers the handler nobody has written yet.
 
 ### 8. C4 is a read-only projection, not a theme
 
