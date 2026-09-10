@@ -2123,7 +2123,7 @@ test("the notations on offer are the ones the server serves", async ({ page }) =
 
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "instances", "archimate-3.2", "c4-projection"]);
+  expect(offered).toEqual(["atlas", "instances", "incidents", "archimate-3.2", "c4-projection"]);
 });
 
 // And a landscape whose mapping cannot be read still draws. The projection is
@@ -2140,12 +2140,12 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
 
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await expect(page.locator(".mesh-node")).toHaveCount(graph.nodes.length);
-  // The vocabulary that cannot be wrong about which vocabulary it is in, and the
-  // weighting that never needed the server to name anything: it is drawn from the
+  // The vocabulary that cannot be wrong about which vocabulary it is in, and the two
+  // weightings that never needed the server to name anything: they are drawn from
   // tallies already in the mesh payload.
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "instances"]);
+  expect(offered).toEqual(["atlas", "instances", "incidents"]);
 });
 
 // Going into a node, as a control rather than only as a gesture. A double-click is
@@ -2635,9 +2635,85 @@ test("on the instance weighting a node is sized by what is running on it", async
   expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
 });
 
-// The weighting excludes the projections rather than combining with them, and that
-// is the point of putting it in the list: size is one channel, so a picture cannot
-// mean connectivity and load at once.
+// The other question the same channel can answer, and the one somebody opening a
+// landscape in the morning actually has: not where the work is, but where it is
+// stuck. The severity badges already say *which* nodes have a finding; what they
+// cannot say is how much is parked behind each, and a process holding four hundred
+// stuck tokens wears the same badge as one holding a single retry.
+const parkedMesh = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+    { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 1, severity: "critical", state: "degraded", incidents: 41, runtime: { running: 3, finished: 10 } },
+    { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1, severity: "attention", state: "degraded", incidents: 2, runtime: { running: 120, finished: 7 } },
+    { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+  ],
+  edges: [
+    { from: "application:a1", to: "process:1", kind: "contains" },
+    { from: "application:a1", to: "process:2", kind: "contains" },
+    { from: "process:1", to: "worker:c1", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
+
+test("on the incident weighting a node is sized by what is parked on it", async ({ page }) => {
+  installMock(page, parkedMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const radius = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+
+  await page.selectOption("#mesh-notation", "incidents");
+
+  // The badly parked process is the largest thing on the picture — ahead of the one
+  // that is busier but healthy, which is the whole distinction the badges cannot draw.
+  const parked = await radius("process:1");
+  const nearlyFine = await radius("process:2");
+  expect(parked).toBeGreaterThan(nearlyFine * 1.5);
+  expect(nearlyFine).toBeGreaterThan(await radius("worker:c1"));
+
+  // The numbers under the names are incidents now, not instances: one question at a
+  // time, and the canvas says which.
+  await expect(page.locator('[data-node-id="process:1"] .mesh-runs'))
+    .toHaveText("41 incident(s)");
+  await expect(page.locator('[data-node-id="process:2"] .mesh-runs'))
+    .toHaveText("2 incident(s)");
+  await expect(page.locator(".mesh-runs")).toHaveCount(2);
+  await expect(page.locator(".mesh-legend")).toContainText("Size is trouble here, not structure");
+
+  // And the two weightings are alternatives rather than layers. On the instance
+  // picture the busier-but-healthy process is the larger one, which is the opposite
+  // ranking — the same nodes, a different question.
+  await page.selectOption("#mesh-notation", "instances");
+  expect(await radius("process:2")).toBeGreaterThan(await radius("process:1"));
+  await expect(page.locator('[data-node-id="process:2"] .mesh-runs')).toHaveText("120 running");
+  await expect(page.locator(".mesh-legend")).toContainText("Size is load here, not structure");
+});
+
+// A healthy estate is the case a trouble picture has to get right: flat is the
+// answer, not a missing one, and the key says so rather than leaving a reader to
+// wonder whether anything was measured at all.
+test("an estate with nothing parked draws flat, and says that is the finding", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "incidents");
+
+  const radii = await page.locator(".mesh-node .mesh-body").evaluateAll(
+    (els) => els.map((el) => Number(el.getAttribute("data-r"))));
+  expect(new Set(radii).size).toBe(1);
+  expect(radii[0]).toBeGreaterThan(8);
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+  await expect(page.locator(".mesh-legend")).toContainText("nothing on this landscape is parked at all");
+});
+
+// The weightings exclude the projections and each other rather than combining, and
+// that is the point of putting them in the list: size is one channel, so a picture
+// cannot mean connectivity and load at once.
 test("choosing a projection gives up the instance weighting", async ({ page }) => {
   installMock(page, runningMesh);
   await page.setViewportSize({ width: 1400, height: 900 });

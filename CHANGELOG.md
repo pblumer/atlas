@@ -185,31 +185,42 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
-- **The Starmap's instance counts became a way of drawing the landscape, and now size
-  it.** The counts were a checkbox beside the Notation picker — an overlay ticked onto
+- **The Starmap can be sized by what is running on it, or by what is stuck on it.** The
+  instance counts were a checkbox beside the Notation picker — an overlay ticked onto
   whatever was on screen — and that offered a picture with no reading. Size on the
   Starmap is one channel and it already carried connectivity, so a landscape with the
   box ticked had radii meaning structure while its labels meant load, and the one
   question somebody ticks it to ask, *where is the work*, was the one it could not
   answer.
 
-  The checkbox is gone. **Instances (heatmap)** is an entry in the Notation picker
-  instead, beside *Atlas (derived)* and the two projections, because every entry there
-  decides how the landscape is drawn and only one of them can be chosen at a time.
-  Pick it and a node's size is what is running on it: the area above the smallest node
-  is that node's share of the busiest process on the landscape. Area rather than
-  radius, because doubling a radius quadruples the ink — a circle drawn straight from
-  the number reads as four times the load it stands for.
+  The checkbox is gone. The Notation picker now offers two **heatmaps** beside *Atlas
+  (derived)* and the two projections, because every entry there decides how the
+  landscape is drawn and only one of them can be chosen at a time:
+
+  - **Instances (heatmap)** — *where is the work.* A node's size is what is running on
+    it: capacity, reading a load test, finding the process actually carrying the estate.
+  - **Incidents (heatmap)** — *where is it stuck.* A node's size is how many unresolved
+    incidents the engine holds against it. The severity badges already said **which**
+    nodes have a finding; what they could not say is how much is parked behind each,
+    and a process holding four hundred stuck tokens wore the same badge as one holding
+    a single retry. The badge stays the classification; the size is now the magnitude.
+
+  On either, the area above the smallest node is that node's share of the largest node
+  on the landscape. Area rather than radius, because doubling a radius quadruples the
+  ink — a circle drawn straight from the number reads as four times the quantity it
+  stands for.
 
   Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
   idle process, a worker, a decision and an application whose load sits on the processes
-  it holds are all still nodes somebody can see and click, and "nothing running here"
-  stays distinguishable from "not on this server". Kind is unaffected — it was never
+  it holds are all still nodes somebody can see and click, and "nothing here" stays
+  distinguishable from "not on this server". On the incident picture that also makes the
+  good news legible — a flat landscape is the answer, and the key says so rather than
+  leaving you to wonder whether anything was measured. Kind is unaffected: it was never
   carried by size alone, and shape and colour still carry it.
 
-  The reference is the busiest node on the **whole** landscape rather than on what the
+  The reference is the largest node on the **whole** landscape rather than on what the
   filter has left on screen, so narrowing to two nodes cannot swell the smaller of them
-  into the largest thing Atlas runs — and it is named in the key and in the export's
+  into the worst thing on the estate — and it is named in the key and in the export's
   stamp, because an area with no stated reference is a decoration rather than a
   quantity. A saved view stored while the counts were a switch reopens as the weighting
   it stood for (ADR-0211 §8).

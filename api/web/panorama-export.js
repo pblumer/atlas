@@ -102,6 +102,40 @@ export function exportName(extension, at = new Date()) {
   return `atlas-starmap-${stamp}.${extension}`;
 }
 
+// HEAT_STAMPS is what each heat weighting (ADR-0211 §8) says about itself in a file.
+//
+// A copy of the sentences the key writes on screen, and deliberately a copy rather
+// than an import: this module is the artifact's own vocabulary — it renders a picture
+// that has left the app, and it must not acquire a dependency on the view that drew
+// it. The two are checked against the same expectations in e2e.
+const HEAT_STAMPS = {
+  instances: {
+    heading: "Size is load here, not structure:",
+    peakPhrase: (peak) => `the busiest one on this landscape, which is running ` +
+      `${fmtCount(peak)}`,
+    floorNote: `Anything with no running instances of its own sits at the floor — a ` +
+      `worker, a decision, and an application too, whose load is on the processes it ` +
+      `holds.`,
+    quiet: `Size is load here, not structure — and nothing was running on this ` +
+      `landscape, so every node is drawn at the same floor.`,
+    absent: `Running instances are drawn under the names that have any, as observed ` +
+      `above. A process with none carries no number.`,
+  },
+  incidents: {
+    heading: "Size is trouble here, not structure:",
+    peakPhrase: (peak) => `the worst one on this landscape, which is holding ` +
+      `${fmtCount(peak)}`,
+    floorNote: `Everything with nothing parked on it sits at the floor, so a healthy ` +
+      `estate reads as a flat one and the exceptions are the only things that stand up.`,
+    quiet: `Size is trouble here, not structure — and nothing on this landscape was ` +
+      `parked at all, so every node is drawn at the same floor. That is the answer, ` +
+      `not a missing one.`,
+    absent: `Open incidents are drawn under the names that have any, as observed ` +
+      `above. A node with none carries no number, and a kind that cannot hold one — a ` +
+      `worker, a decision — never does.`,
+  },
+};
+
 // stampLines is what §10 requires rendered into the artifact, in the order somebody
 // reads it: what this is, when and where it came from, and then everything it is
 // not showing.
@@ -148,22 +182,21 @@ export function stampLines(meta = {}) {
         ? "are needed by them" : "depend on them"} within ${plan.hops} hop(s); ` +
       `one at a time they come to ${plan.sum}.` });
   }
-  if (meta.instances) {
-    // Size means load in this file, and the reference it is measured against has to
-    // travel with it. On screen the key is beside the picture; a file pasted into a
-    // ticket has no key, and a reader who took these radii for the structural ones
-    // would read the estate exactly backwards.
+  // Size means a quantity in this file rather than structure, and the reference it is
+  // measured against has to travel with it. On screen the key is beside the picture;
+  // a file pasted into a ticket has no key, and a reader who took these radii for the
+  // structural ones would read the estate exactly backwards.
+  //
+  // `heat` names the weighting; `instances` is what a picture exported before there
+  // was more than one of them carries, and it still means the same thing.
+  const heat = HEAT_STAMPS[meta.heat] || (meta.instances ? HEAT_STAMPS.instances : null);
+  if (heat) {
     lines.push({ text: meta.peak > 0
-      ? `Size is load here, not structure: the area above the smallest node is that ` +
-        `node's share of the busiest one on this landscape, which is running ` +
-        `${fmtCount(meta.peak)}. Anything with no running instances of its own sits at ` +
-        `the floor — a worker, a decision, and an application too, whose load is on the ` +
-        `processes it holds. Kind is still carried by shape and colour.`
-      : `Size is load here, not structure — and nothing was running on this landscape, ` +
-        `so every node is drawn at the same floor. Kind is still carried by shape and ` +
-        `colour.` });
-    lines.push({ text: `Running instances are drawn under the names that have any, as ` +
-      `observed above. A process with none carries no number.` });
+      ? `${heat.heading} The area above the smallest node is that node's share of ` +
+        `${heat.peakPhrase(meta.peak)}. ${heat.floorNote} Kind is still carried by ` +
+        `shape and colour.`
+      : `${heat.quiet} Kind is still carried by shape and colour.` });
+    lines.push({ text: heat.absent });
   }
   // Whether saved-but-undeployed diagrams are in this file, by the same argument the
   // instance counts make: a reader receiving a picture with no drafts on it cannot

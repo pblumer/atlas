@@ -62,94 +62,130 @@ test("growth is bounded rather than unbounded", async ({ page }) => {
   expect(busy).toBeGreaterThan((await radius(page, "process", 0)) * 1.2);
 });
 
-// Sizing by load instead of by structure (ADR-0211 §8's instance weighting). Same
+// Sizing by a quantity instead of by structure (ADR-0211 §8's heat weightings). Same
 // argument as the band test above: this is a claim about every tally a node could
 // carry, so it is checked as arithmetic over the whole range rather than sampled
 // from whatever a rendered fixture happens to contain.
+//
+// Both weightings are checked, and by the same table rather than by two copies of
+// one test: they differ only in what they read off a node, and a property that held
+// for one of them and not the other would be a picture nobody could trust to mean
+// the same thing twice.
 const TALLIES = [0, 1, 2, 5, 25, 100, 999, 50002];
+const HEATS = [
+  { heat: "instances", node: (n) => ({ kind: "process", runtime: { running: n } }) },
+  { heat: "incidents", node: (n) => ({ kind: "process", incidents: n }) },
+];
 
 // The property the whole weighting rests on, and the one a reader would notice first
-// if it were missing: nothing disappears. An idle process is still unmistakably a
-// node, so "nothing running here" is a thing the picture can say rather than a gap
+// if it were missing: nothing disappears. A quiet process is still unmistakably a
+// node, so "nothing here" is a thing the picture can say rather than a gap
 // indistinguishable from "not on this server".
-test("every node keeps a floor, whatever is running on it", async ({ page }) => {
-  const sizes = await page.evaluate((tallies) => ({
-    // Against the busiest tally the fixture has, so the smallest share is the
-    // smallest one this scale can produce.
-    weighted: tallies.map((running) => window.radiusForInstances(
-      { kind: "process", runtime: { running } }, Math.max(...tallies))),
-    // The kinds that run nothing at all — not zero of something, but nothing that
-    // could be counted — and a node whose payload carries no tally at all.
-    idle: ["worker", "decision", "target", "restricted", "unresolved", "draft"]
-      .map((kind) => window.radiusForInstances({ kind }, 100)),
-    // And a landscape where nothing at all is running: no reference to divide by,
-    // and the picture must still be a picture.
-    quiet: window.radiusForInstances({ kind: "process", runtime: { running: 0 } }, 0),
-  }), TALLIES);
+for (const { heat, node } of HEATS) {
+  test(`every node keeps a floor on the ${heat} weighting`, async ({ page }) => {
+    const sizes = await page.evaluate(([tallies, h]) => ({
+      // Against the largest tally the fixture has, so the smallest share is the
+      // smallest one this scale can produce.
+      weighted: tallies.map((n) => window.radiusForHeat(
+        h === "instances" ? { kind: "process", runtime: { running: n } }
+          : { kind: "process", incidents: n },
+        Math.max(...tallies), h)),
+      // The kinds that count nothing at all — not zero of something, but nothing
+      // that could be counted — and a node whose payload carries no tally at all.
+      quiet: ["worker", "decision", "target", "restricted", "unresolved", "draft"]
+        .map((kind) => window.radiusForHeat({ kind }, 100, h)),
+      // And a landscape where nothing at all is counted: no reference to divide by,
+      // and the picture must still be a picture.
+      flat: window.radiusForHeat({ kind: "process" }, 0, h),
+      // A weighting this build has never heard of — a saved view from a later one —
+      // falls back rather than drawing every node at nothing.
+      unknown: window.radiusForHeat({ kind: "process" }, 100, "something-new"),
+    }), [TALLIES, heat]);
 
-  const floor = sizes.weighted[0];
-  expect(floor).toBeGreaterThan(8);
-  for (const r of [...sizes.idle, sizes.quiet]) expect(r).toBe(floor);
-  for (const r of sizes.weighted) expect(r).toBeGreaterThanOrEqual(floor);
-});
+    const floor = sizes.weighted[0];
+    expect(floor).toBeGreaterThan(8);
+    for (const r of [...sizes.quiet, sizes.flat, sizes.unknown]) expect(r).toBe(floor);
+    for (const r of sizes.weighted) expect(r).toBeGreaterThanOrEqual(floor);
 
-// More running is never smaller, and the busiest node is visibly the busiest — the
-// whole point of asking for this weighting is to find it without reading a number.
-test("load moves a node up, and the busiest is unmistakable", async ({ page }) => {
-  const band = await page.evaluate((tallies) => tallies.map((running) =>
-    window.radiusForInstances({ kind: "process", runtime: { running } }, Math.max(...tallies))),
-  TALLIES);
+    // A node measured by the *other* weighting's field sits at the floor too: the
+    // radii on one picture answer one question, and never half of another.
+    const crossed = await page.evaluate(([h, other]) => window.radiusForHeat(
+      other === "instances" ? { kind: "process", runtime: { running: 500 } }
+        : { kind: "process", incidents: 500 },
+      500, h), [heat, heat === "instances" ? "incidents" : "instances"]);
+    expect(crossed).toBe(floor);
+  });
 
-  for (let i = 1; i < band.length; i++) {
-    expect(band[i], `at ${TALLIES[i]} running`).toBeGreaterThanOrEqual(band[i - 1]);
-  }
-  // Not larger by a rounding error: the peak is several times the floor, so the two
-  // ends of the estate are told apart at a glance rather than by measurement.
-  expect(band[band.length - 1]).toBeGreaterThan(band[0] * 3);
-});
+  // More is never smaller, and the largest node is visibly the largest — the whole
+  // point of asking for a weighting is to find it without reading a number.
+  test(`${heat} move a node up, and the worst is unmistakable`, async ({ page }) => {
+    const band = await page.evaluate(([tallies, h]) => tallies.map((n) =>
+      window.radiusForHeat(
+        h === "instances" ? { kind: "process", runtime: { running: n } }
+          : { kind: "process", incidents: n },
+        Math.max(...tallies), h)), [TALLIES, heat]);
 
-// Area carries the count, not radius. Doubling a radius quadruples the ink, so a
-// radius taken straight from the number would draw four times the load it stands
-// for — which is the encoding error that makes a bubble chart lie.
-test("the area above the floor is the share of the peak", async ({ page }) => {
-  const [floor, quarter, whole] = await page.evaluate(() => [0, 25, 100].map((running) =>
-    window.radiusForInstances({ kind: "process", runtime: { running } }, 100)));
+    for (let i = 1; i < band.length; i++) {
+      expect(band[i], `at ${TALLIES[i]}`).toBeGreaterThanOrEqual(band[i - 1]);
+    }
+    // Not larger by a rounding error: the peak is several times the floor, so the two
+    // ends of the estate are told apart at a glance rather than by measurement.
+    expect(band[band.length - 1]).toBeGreaterThan(band[0] * 3);
+  });
 
-  // A quarter of the peak's load is half of the peak's span above the floor, which
-  // is what "area is proportional" means once the floor is subtracted.
-  expect((quarter - floor) / (whole - floor)).toBeCloseTo(0.5, 6);
-});
+  // Area carries the count, not radius. Doubling a radius quadruples the ink, so a
+  // radius taken straight from the number would draw four times the quantity it
+  // stands for — the encoding error that makes a bubble chart lie.
+  test(`the ${heat} area above the floor is the share of the peak`, async ({ page }) => {
+    const [floor, quarter, whole] = await page.evaluate(([h]) => [0, 25, 100].map((n) =>
+      window.radiusForHeat(
+        h === "instances" ? { kind: "process", runtime: { running: n } }
+          : { kind: "process", incidents: n }, 100, h)), [heat]);
 
-// A tally past the reference cannot happen on a landscape whose reference is its own
-// busiest node — but a stale saved reference, or a node arriving between two reads,
-// must not draw a circle that swallows the picture.
-test("nothing is drawn larger than the reference", async ({ page }) => {
-  const [peak, beyond] = await page.evaluate(() => [100, 10000].map((running) =>
-    window.radiusForInstances({ kind: "process", runtime: { running } }, 100)));
-  expect(beyond).toBe(peak);
-});
+    // A quarter of the peak's tally is half of the peak's span above the floor, which
+    // is what "area is proportional" means once the floor is subtracted.
+    expect((quarter - floor) / (whole - floor)).toBeCloseTo(0.5, 6);
 
-// The reference is the busiest node on the landscape. Taken from the whole of it
-// rather than from what is on screen — see the call site — but the arithmetic is
-// here: a payload with no tallies at all has no reference, and says so as zero
-// rather than as one.
-test("the reference is the busiest tally, and absent when there is none", async ({ page }) => {
-  const peaks = await page.evaluate(() => ({
-    busiest: window.instancePeak({ nodes: [
-      { id: "p1", runtime: { running: 12 } },
+    // And a tally past the reference — a stale saved reference, or a node arriving
+    // between two reads — must not draw a circle that swallows the picture.
+    const beyond = await page.evaluate(([h]) => window.radiusForHeat(
+      h === "instances" ? { kind: "process", runtime: { running: 10000 } }
+        : { kind: "process", incidents: 10000 }, 100, h), [heat]);
+    expect(beyond).toBe(whole);
+  });
+}
+
+// The reference is the largest node on the landscape, per weighting. Taken from the
+// whole of it rather than from what is on screen — see the call site — but the
+// arithmetic is here: a payload with no tallies at all has no reference, and says so
+// as zero rather than as one.
+test("the reference is the largest tally of whichever quantity is being drawn", async ({ page }) => {
+  const peaks = await page.evaluate(() => {
+    const graph = { nodes: [
+      { id: "p1", runtime: { running: 12 }, incidents: 3 },
       { id: "p2", runtime: { running: 50002 } },
+      { id: "p3", incidents: 41 },
       { id: "w", kind: "worker" },
-    ] }),
-    idle: window.instancePeak({ nodes: [
-      { id: "p1", runtime: { running: 0, finished: 7 } },
-      { id: "w", kind: "worker" },
-    ] }),
-    empty: window.instancePeak({ nodes: [] }),
-    // A payload this build does not recognise is still a payload it has to survive.
-    malformed: window.instancePeak(null),
-  }));
+    ] };
+    return {
+      running: window.heatPeak(graph, "instances"),
+      parked: window.heatPeak(graph, "incidents"),
+      // A healthy estate has no incidents, and zero is the answer rather than a
+      // missing one — the picture it produces is flat, and flat is the finding.
+      healthy: window.heatPeak({ nodes: [{ id: "p1", runtime: { running: 9 } }] }, "incidents"),
+      empty: window.heatPeak({ nodes: [] }, "instances"),
+      // A payload this build does not recognise, and a weighting it does not know:
+      // both are survivable rather than fatal.
+      malformed: window.heatPeak(null, "instances"),
+      unknown: window.heatPeak(graph, "something-new"),
+      none: window.heatPeak(graph, null),
+    };
+  });
 
-  expect(peaks).toEqual({ busiest: 50002, idle: 0, empty: 0, malformed: 0 });
+  expect(peaks).toEqual({
+    running: 50002, parked: 41, healthy: 0, empty: 0,
+    malformed: 0, unknown: 0, none: 0,
+  });
 });
 
 // An unknown kind is drawn as a process rather than as nothing: a node with no size
