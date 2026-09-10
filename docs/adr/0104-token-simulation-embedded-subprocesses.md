@@ -82,6 +82,12 @@ What stays flat, on purpose (fall through to the old pass-over behaviour):
   modelling independent instances.
 - **Follow-ups / risks to watch:** multi-instance subprocesses that visibly run the body N
   times; per-entry scope instances if a diagram ever needs them.
+- **Superseded since (the epoch bump):** the coarse abort above is gone. Terminate end events
+  (ADR-0116) made it load-bearing rather than merely coarse: a terminate *inside* a subprocess
+  must end that scope while the enclosing flow runs on, and a global abort would have silently
+  swallowed any token in flight outside it. Each scope now carries a teardown generation, and a
+  travelling token carries the generation of the scope it lands in, so a scope teardown — a
+  terminate end or an interrupting boundary — aborts exactly its own dots.
 
 ## Relationships
 

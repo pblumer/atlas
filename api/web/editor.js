@@ -1225,7 +1225,12 @@ function wireTokenSim(root, modeler) {
   // event is parked, ready to be fired.
   modeler.get("eventBus").on("atlasSim.changed", (s) => {
     playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
-    statsEl.textContent = `${s.live} live · ${s.completed} completed`;
+    // "terminated" only appears once something has actually been terminated — a terminate
+    // end event or an interrupting handler killing tokens. Otherwise the tokens would just
+    // vanish from the diagram with no count saying where they went.
+    statsEl.textContent =
+      `${s.live} live · ${s.completed} completed` +
+      (s.terminated ? ` · ${s.terminated} terminated` : "");
     hintEl.textContent = s.deciding
       ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
       : s.waiting

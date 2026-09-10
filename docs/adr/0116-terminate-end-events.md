@@ -174,8 +174,15 @@ and (c) dropping the compiler rejection and the Modeler's `UNSUPPORTED_EVENT_DEF
   cost of keeping "abort" and "cancel-with-compensation" explicitly separate.
 - **Follow-ups / risks to watch:** a terminate inside a **call activity's** child process ends the
   child and resumes the caller through the existing `completeScope`→`resumeCaller` path (ADR-0076) —
-  covered by the root-scope case, but worth an explicit test; **terminate on a token-simulation**
-  (Play mode, ADR-0030) should mirror the engine's scoped teardown if/when simulation grows to it.
+  covered by the root-scope case, but worth an explicit test.
+- **Done since:** the **Design-view token simulation** (ADR-0078/0096/0104) mirrors the scoped
+  teardown. It had walked a terminate end as a plain end — completing the one token that arrived and
+  leaving every other branch running — which is precisely the "silently wrong" reading option 3 was
+  rejected for, shown to the person the simulation exists to teach. `_terminate` in
+  `api/web/token-simulation.js` now ends the enclosing scope: at the root the whole simulated
+  instance, inside an embedded subprocess that subprocess only, after which the parent token
+  continues on its outgoing flow. The killed tokens are counted separately from the completed ones
+  in the simulation toolbar, so badges never merely vanish.
 
 ## Pros and cons of the options
 

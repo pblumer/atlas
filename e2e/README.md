@@ -96,6 +96,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`terminate.spec.mjs`** ([ADR-0116](../docs/adr/0116-terminate-end-events.md)): the
+  **terminate end event** — the one end that is about the tokens it does *not* own. At the
+  process **root** it kills every other branch, the running subprocess and the token inside
+  it, leaving one completion and three terminated; **inside a subprocess** it ends that scope
+  only, so the parked inner branch dies and the outer token continues to the far end. Walking
+  it as a plain end leaves the other branches running, which is what these two guard.
 - **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Backup** view — the nav entry
   opens it, both the design-time backup and the whole-instance **full snapshot** expose their
   `.tar.gz` download links and restore controls, and each restore flow validates an empty

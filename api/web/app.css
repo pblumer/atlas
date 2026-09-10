@@ -3189,6 +3189,12 @@ tr[hidden] { display: none; }
   stroke: var(--ok) !important; stroke-width: 3px !important;
   animation: atlas-pulse 0.65s ease-out;
 }
+/* A terminate end event firing: the abort pulse. Deliberately not the green "a token passed
+   through" flash — this end stopped the scope and killed the other tokens in it. */
+.djs-element.atlas-sim-abort .djs-visual > :nth-child(1) {
+  stroke: var(--danger) !important; stroke-width: 3.5px !important;
+  animation: atlas-pulse 0.9s ease-out;
+}
 /* The flow a token is travelling right now: accent stroke with marching ants. */
 .djs-connection.atlas-sim-flow .djs-visual > :nth-child(1) {
   stroke: var(--accent) !important; stroke-width: 2.5px !important;

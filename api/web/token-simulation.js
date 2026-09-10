@@ -57,6 +57,12 @@ const isThrow = (el) =>
   (el.type === "bpmn:IntermediateThrowEvent" && (isMessageEvent(el) || isSignalEvent(el))) ||
   (isEnd(el) && (isMessageEvent(el) || isSignalEvent(el)));
 
+// A terminate end event is the BPMN "abort" end (ADR-0116): reaching it ends the enclosing
+// flow scope *at once*, taking every other live token in that scope with it — where a plain
+// end event completes only the one token that arrived. Getting this wrong is not a cosmetic
+// difference: the whole point of the element is that the other branches stop.
+const isTerminateEnd = (el) => isEnd(el) && hasDef(el, "bpmn:TerminateEventDefinition");
+
 // A catch-like target can receive a thrown message/signal dot — a catch event, a boundary
 // event, or a start event (a message can begin a new instance). A throw is never a target.
 const isCatchLike = (el) => isCatch(el) || isBoundary(el) || isStart(el);
@@ -203,8 +209,15 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   // normal move/pump; the scope completes — releasing the held token onward — once no token
   // remains inside it (quiescence, the same idea as the OR-join).
   this._scopes = new Map();
+  // scopeGen: a per-scope teardown generation. Aborting a running animation is otherwise
+  // all-or-nothing (the global _epoch below), which is right for a reset or a terminate at
+  // the process root but wrong for a *scoped* teardown: cancelling a subprocess must not
+  // abort a dot flying in the enclosing flow. A token travelling to a target inside scope S
+  // carries S's generation, so bumping it aborts exactly the dots inside S.
+  this._scopeGen = new Map();
   this._reach = new Map(); // memoised "can `from` reach `to`?" over sequence flows
   this._completed = 0; // tokens that reached an end event / ran off the graph
+  this._terminated = 0; // tokens killed by a terminate end event / an interrupting handler
 
   this._overlayIds = []; // token/join/fire badges we own, so we clear only ours
   this._startIds = []; // "spawn" affordance overlays on start events
@@ -361,8 +374,10 @@ TokenSimulation.prototype.reset = function () {
   this._joinWait.clear();
   this._inflight.clear();
   this._miRemaining.clear();
-  this._scopes.clear();
+  this._clearAllScopes();
+  this._scopeGen.clear();
   this._completed = 0;
+  this._terminated = 0;
   this._clearAllDeciding();
   this._render();
   this._notify();
@@ -378,6 +393,7 @@ TokenSimulation.prototype.stats = function () {
     auto: this._auto,
     live,
     completed: this._completed,
+    terminated: this._terminated,
     deciding: this._deciding.size > 0,
     waiting: this._hasPendingTrigger(),
   };
@@ -525,6 +541,14 @@ TokenSimulation.prototype._emit = function (el) {
       return;
     }
     this._miRemaining.delete(el.id); // last instance — fall through and leave the activity
+  }
+  // A terminate end does not "move on" — it ends the enclosing scope, so the token leaves
+  // the element and the scope goes with it (a token can rest here after being spawned onto
+  // it or hand-advanced; one that arrives along a flow is handled in _arrive).
+  if (isTerminateEnd(el)) {
+    this._rest(el.id, -1);
+    this._terminate(el);
+    return;
   }
   if (isThrow(el)) this._throwEvent(el);
   const outs = outFlows(el);
@@ -679,9 +703,11 @@ TokenSimulation.prototype._fireBoundary = function (b) {
   const interrupting = b.businessObject.cancelActivity !== false;
   if (interrupting) {
     if (this._scopes.has(host.id)) {
-      // Cancel the whole running subprocess: its inner tokens go with it. The epoch bump
-      // aborts in-flight dots (consistent with an interrupting event subprocess).
-      this._epoch++;
+      // Cancel the whole running subprocess: its inner tokens go with it, and its dots are
+      // aborted per scope, so a token flying in the enclosing flow is left alone. One held
+      // token leaves through the boundary below; any other entered token dies with the scope.
+      const held = (this._scopes.get(host.id) || {}).count || 1;
+      this._terminated += this._tokensInScope(host) + Math.max(0, held - 1);
       this._teardownScope(host);
     } else {
       this._rest(host.id, -1);
@@ -710,11 +736,12 @@ TokenSimulation.prototype._fireEventSub = function (start) {
   if ((this._resting.get(start.id) || 0) > 0) return; // already running
   if (isInterruptingSub(start)) {
     this._epoch++; // abort in-flight dots — the scope is being torn down
+    this._terminated += this._totalLive();
     this._resting.clear();
     this._joinWait.clear();
     this._inflight.clear();
     this._miRemaining.clear();
-    this._scopes.clear();
+    this._clearAllScopes();
     this._clearAllDeciding();
   }
   this._flash(start);
@@ -726,14 +753,22 @@ TokenSimulation.prototype._travel = function (flow) {
   const target = flow.target;
   if (!target || !flow.waypoints || flow.waypoints.length < 2) return;
   const epoch = this._epoch;
+  // A token flying *into* a scope belongs to that scope; one flying toward the subprocess
+  // shape itself still belongs to the enclosing flow. Carrying the generation of the scope
+  // it lands in is what lets a scoped teardown abort this dot without touching the others.
+  const scope = this._scopeOf(target);
+  const scopeId = scope ? scope.id : null;
+  const gen = scopeId ? this._scopeGen.get(scopeId) || 0 : 0;
+  const aborted = () =>
+    this._epoch !== epoch || (scopeId !== null && (this._scopeGen.get(scopeId) || 0) !== gen);
   this._addMarker(flow.id, "atlas-sim-flow");
   this._inflight.set(target.id, (this._inflight.get(target.id) || 0) + 1);
-  this._animateDot(flow.waypoints, () => this._epoch !== epoch, "atlas-sim-dot").then(() => {
+  this._animateDot(flow.waypoints, aborted, "atlas-sim-dot").then(() => {
     this._removeMarker(flow.id, "atlas-sim-flow");
     const n = (this._inflight.get(target.id) || 0) - 1;
     if (n > 0) this._inflight.set(target.id, n);
     else this._inflight.delete(target.id);
-    if (this._epoch !== epoch) return; // superseded by a reset
+    if (aborted()) return; // superseded by a reset, or by the scope being torn down
     this._arrive(target, flow);
   });
 };
@@ -769,6 +804,10 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
     return;
   }
   if (isEnd(target)) {
+    if (isTerminateEnd(target)) {
+      this._terminate(target);
+      return;
+    }
     if (isThrow(target)) this._throwEvent(target);
     this._creditCompletion(target);
     this._flash(target);
@@ -995,12 +1034,43 @@ TokenSimulation.prototype._completeScope = function (sub) {
   for (let i = 0; i < count; i++) for (const f of outs) this._travel(f);
 };
 
-// _teardownScope cancels a running subprocess outright (an interrupting boundary fired):
-// every token inside it, its held token, inner joins, deciding gateways, and any nested
-// scope go away. In-flight dots are aborted by the caller's epoch bump.
-TokenSimulation.prototype._teardownScope = function (sub) {
+// _abortScope invalidates the dots still flying *inside* a scope (and inside any scope
+// nested in it), so tearing that scope down does not have to bump the global epoch — which
+// would also abort dots belonging to the enclosing flow, silently losing tokens that the
+// teardown must not touch.
+TokenSimulation.prototype._abortScope = function (subId) {
+  const bump = (id) => this._scopeGen.set(id, (this._scopeGen.get(id) || 0) + 1);
+  bump(subId);
+  for (const sid of this._scopes.keys()) if (this._within(sid, subId)) bump(sid);
+};
+
+// _tokensInScope counts the live tokens inside a subprocess — resting on an inner element,
+// flying toward one, or parked in an inner join. It is _scopeLive's counting twin: what a
+// teardown of that scope takes with it. The subprocess's own held token is not "inside".
+TokenSimulation.prototype._tokensInScope = function (sub) {
+  let n = 0;
+  for (const [id, c] of this._resting) {
+    if (c > 0 && id !== sub.id && this._within(id, sub.id)) n += c;
+  }
+  for (const [id, c] of this._inflight) {
+    if (c > 0 && this._within(id, sub.id)) n += c;
+  }
+  for (const [gwId, w] of this._joinWait) {
+    if (!this._within(gwId, sub.id)) continue;
+    for (const c of w.values()) n += c;
+  }
+  return n;
+};
+
+// _clearScopeContents removes every token *inside* a subprocess — resting, flying, parked in
+// an inner join, deciding at an inner gateway, counting repetitions, or held by a nested
+// scope. The subprocess's own held token and its scope record are deliberately left alone:
+// the caller decides what becomes of them — a terminate end completes the scope normally so
+// the held token continues, an interrupting boundary tears it down with everything else.
+TokenSimulation.prototype._clearScopeContents = function (sub) {
+  this._abortScope(sub.id);
   for (const id of Array.from(this._resting.keys())) {
-    if (id === sub.id || this._within(id, sub.id)) this._resting.delete(id);
+    if (id !== sub.id && this._within(id, sub.id)) this._resting.delete(id);
   }
   for (const gwId of Array.from(this._joinWait.keys())) {
     if (this._within(gwId, sub.id)) this._joinWait.delete(gwId);
@@ -1009,12 +1079,69 @@ TokenSimulation.prototype._teardownScope = function (sub) {
     if (this._within(gwId, sub.id)) this._clearDeciding(gwId);
   }
   for (const sid of Array.from(this._scopes.keys())) {
-    if (sid === sub.id || this._within(sid, sub.id)) this._scopes.delete(sid);
+    if (sid === sub.id || !this._within(sid, sub.id)) continue;
+    this._scopes.delete(sid);
+    this._removeMarker(sid, "atlas-sim-scope"); // a nested scope stops running with its parent
   }
   for (const id of Array.from(this._miRemaining.keys())) {
     if (this._within(id, sub.id)) this._miRemaining.delete(id);
   }
+};
+
+// _teardownScope cancels a running subprocess outright (an interrupting boundary fired):
+// everything inside it goes, and so do its held token, its scope record, and its highlight.
+TokenSimulation.prototype._teardownScope = function (sub) {
+  this._clearScopeContents(sub);
+  this._resting.delete(sub.id);
+  this._scopes.delete(sub.id);
   this._removeMarker(sub.id, "atlas-sim-scope");
+};
+
+// _clearAllScopes drops every running scope and the "running" highlight that goes with it —
+// the whole process is being torn down (a reset, an interrupting event subprocess, or a
+// terminate end at the process root). Clearing the map alone would leave the tint behind on
+// a subprocess that is no longer running.
+TokenSimulation.prototype._clearAllScopes = function () {
+  for (const sid of this._scopes.keys()) this._removeMarker(sid, "atlas-sim-scope");
+  this._scopes.clear();
+};
+
+// _terminate runs a terminate end event — the BPMN "abort" end (ADR-0116), and the one end
+// event that is about the tokens it does *not* own. It ends the enclosing flow scope at
+// once: every other live token in that scope goes with it, wherever it sits — resting, in
+// flight, parked in a join, deciding at a gateway, counting repetitions, or inside a nested
+// subprocess. Then the scope completes. At the process root that ends the simulated
+// instance; inside an embedded subprocess it completes that subprocess, so the parent token
+// continues on the subprocess's outgoing flow and the rest of the process runs on. This
+// mirrors the engine's terminateEndEventBehavior, and like the engine it runs no
+// compensation and no event handling (BPMN 13.4.6).
+//
+// The simulation is flat outside embedded subprocesses, so a terminate inside an event
+// subprocess reads as process-scoped — the same simplification _fireEventSub makes.
+TokenSimulation.prototype._terminate = function (el) {
+  this._flashAbort(el);
+  const scope = this._scopeOf(el);
+  if (scope) {
+    this._terminated += this._tokensInScope(scope);
+    this._clearScopeContents(scope);
+    this._render();
+    this._notify();
+    this._completeScope(scope); // the held token(s) leave on the subprocess's outgoing flow
+    this._settleJoins();
+    this._settleScopes();
+    return;
+  }
+  this._epoch++; // at the root nothing survives — abort every dot still in flight
+  this._terminated += this._totalLive();
+  this._resting.clear();
+  this._joinWait.clear();
+  this._inflight.clear();
+  this._miRemaining.clear();
+  this._clearAllScopes();
+  this._clearAllDeciding();
+  this._completed++; // the token that reached the terminate end is the one completion
+  this._render();
+  this._notify();
 };
 
 // _pump auto-advances the flow while playing: on each tick it moves one eligible token and
@@ -1265,6 +1392,14 @@ TokenSimulation.prototype._clearStartAffordances = function () {
 TokenSimulation.prototype._flash = function (el) {
   this._addMarker(el.id, "atlas-sim-hit");
   setTimeout(() => this._removeMarker(el.id, "atlas-sim-hit"), 650);
+};
+
+// _flashAbort pulses a terminate end event in the danger colour. The green _flash reads as
+// "a token passed through here"; this end did something else — it stopped the scope and took
+// the other tokens with it, and the badges that just vanished should have a visible cause.
+TokenSimulation.prototype._flashAbort = function (el) {
+  this._addMarker(el.id, "atlas-sim-abort");
+  setTimeout(() => this._removeMarker(el.id, "atlas-sim-abort"), 900);
 };
 
 // _ping pulses a catch-like element that a thrown message/signal just reached — the visual

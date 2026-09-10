@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The token simulation's terminate end event now actually terminates.** A terminate
+  end is the one end event that is about the tokens it does *not* own: reaching it ends
+  the enclosing flow scope and takes every other token in that scope with it. The
+  Design-view simulation walked it as a plain end — it completed the token that arrived
+  and left the other branches running, waiting on their events, for ever. The engine has
+  done the right thing since [ADR-0116](docs/adr/0116-terminate-end-events.md); the
+  teaching aid taught the opposite of it, which is worse than teaching nothing.
+
+  It now ends the scope the way the engine does. At the process root the whole simulated
+  instance stops: every token resting, flying, parked in a join, deciding at a gateway or
+  running inside a subprocess goes, and the subprocess loses its "running" tint with it.
+  Inside an embedded subprocess only that subprocess ends — the parent token leaves on
+  its outgoing flow and the rest of the process runs on. Killed tokens are counted
+  beside the completed ones in the simulation bar (`… · 3 terminated`), so a badge that
+  disappears has a visible cause, and the terminate end pulses in the danger colour
+  rather than the green "a token passed through here".
+
+  Tearing a scope down is now precise about which animations it aborts. It used to abort
+  every dot in flight anywhere on the diagram, so an interrupting boundary event on a
+  subprocess could quietly swallow a token travelling in the enclosing flow; each scope
+  now carries its own generation and only its own dots stop.
+
 - **A diagram filed under no application no longer answers with silence.** A process
   deployed outside an application has no application, so it has no information model,
   so nothing about its data can be resolved — and until now the Modeler said so
