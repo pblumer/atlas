@@ -3221,6 +3221,18 @@ tr[hidden] { display: none; }
    so it never reads as a control-flow token (which is accent-blue). */
 .atlas-sim-msg-dot { fill: var(--warn); stroke: #fff; stroke-width: 1.5px; }
 
+/* A thrown error / raised escalation, flying from the throw to the one handler that catches
+   it. Red rather than warm: this is a fault, and it goes to exactly one place. */
+.atlas-sim-fault-dot { fill: var(--danger); stroke: #fff; stroke-width: 1.5px; }
+
+/* An error no handler caught: the token is parked here, the way the engine parks the instance
+   on an incident. The dashed outline stays until the run is reset — this is not a completion,
+   and nothing about it should look like one. */
+.djs-element.atlas-sim-incident .djs-visual > :nth-child(1) {
+  stroke: var(--danger) !important; stroke-width: 3.5px !important;
+  stroke-dasharray: 5 3 !important;
+}
+
 /* "Fire this event" affordance on a parked catch / an armed boundary event. */
 .atlas-sim-fire {
   display: inline-flex; align-items: center; justify-content: center;

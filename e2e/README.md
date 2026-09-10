@@ -96,6 +96,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`fault-events.spec.mjs`** ([ADR-0089](../docs/adr/0089-error-events.md),
+  [ADR-0125](../docs/adr/0125-escalation-events.md)): **errors and escalations**, which hand a
+  path to a handler rather than completing it. An **error end** inside a subprocess throws to the
+  boundary on it, which interrupts: the parked inner branch dies and the flow leaves on the
+  recovery path, not through the subprocess's normal exit. A **non-interrupting escalation end**
+  starts its handler beside the subprocess, which keeps running with its parked branch — nothing
+  is killed. An **error nobody catches** parks its token where the engine parks the instance, so
+  the run reports an incident and never drains, rather than a completed process.
 - **`terminate.spec.mjs`** ([ADR-0116](../docs/adr/0116-terminate-end-events.md)): the
   **terminate end event** — the one end that is about the tokens it does *not* own. At the
   process **root** it kills every other branch, the running subprocess and the token inside

@@ -314,6 +314,14 @@ model routes to an escalation throw.
   record it. (4) **Same-scope tie-break** (a boundary and an event subprocess both match at one scope)
   follows the ADR-0089 rule (event subprocess nearer); pin it with a test. (5) **Escalation vs. a
   simultaneously-firing timer/message boundary** needs an explicit ordering test, as errors do.
+- **Done since:** the **Design-view token simulation** (ADR-0078 and its increments) raises escalations
+  rather than swallowing them. An escalation end and an escalation intermediate throw had both walked
+  as plain elements: nothing was raised, and a modelled non-interrupting handler — the whole point of
+  escalation — never ran. Both now raise to the nearest matching handler over the same walk the error
+  end uses, and the two twists this ADR is about are what the simulation shows: a non-interrupting
+  catch starts its handler *beside* the still-running scope and the raising token carries on, while an
+  interrupting one takes the scope with it; an escalation nobody catches is benign, and the throw's own
+  flow semantics simply apply.
 
 ## Pros and cons of the options
 

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Defs_esc" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- Escalation end inside a subprocess, caught by a NON-interrupting escalation boundary
+       on that subprocess (ADR-0125). The defining difference from an error: the handler runs
+       alongside — the subprocess and the branch parked inside it keep running — and the
+       raising token simply ends its own path. -->
+  <bpmn:escalation id="Esc1" name="Delay" escalationCode="X1" />
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:startEvent id="Start"><bpmn:outgoing>s1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:subProcess id="Sub">
+      <bpmn:incoming>s1</bpmn:incoming>
+      <bpmn:outgoing>s2</bpmn:outgoing>
+      <bpmn:startEvent id="InnerStart"><bpmn:outgoing>i1</bpmn:outgoing></bpmn:startEvent>
+      <bpmn:parallelGateway id="InnerGw">
+        <bpmn:incoming>i1</bpmn:incoming>
+        <bpmn:outgoing>ia</bpmn:outgoing>
+        <bpmn:outgoing>ib</bpmn:outgoing>
+      </bpmn:parallelGateway>
+      <bpmn:task id="InnerTaskA"><bpmn:incoming>ia</bpmn:incoming><bpmn:outgoing>ia2</bpmn:outgoing></bpmn:task>
+      <bpmn:endEvent id="EscEnd">
+        <bpmn:incoming>ia2</bpmn:incoming>
+        <bpmn:escalationEventDefinition id="EscDef" escalationRef="Esc1" />
+      </bpmn:endEvent>
+      <bpmn:intermediateCatchEvent id="InnerCatch">
+        <bpmn:incoming>ib</bpmn:incoming>
+        <bpmn:outgoing>ib2</bpmn:outgoing>
+        <bpmn:timerEventDefinition id="TimerInner" />
+      </bpmn:intermediateCatchEvent>
+      <bpmn:endEvent id="InnerEnd"><bpmn:incoming>ib2</bpmn:incoming></bpmn:endEvent>
+      <bpmn:sequenceFlow id="i1" sourceRef="InnerStart" targetRef="InnerGw" />
+      <bpmn:sequenceFlow id="ia" sourceRef="InnerGw" targetRef="InnerTaskA" />
+      <bpmn:sequenceFlow id="ia2" sourceRef="InnerTaskA" targetRef="EscEnd" />
+      <bpmn:sequenceFlow id="ib" sourceRef="InnerGw" targetRef="InnerCatch" />
+      <bpmn:sequenceFlow id="ib2" sourceRef="InnerCatch" targetRef="InnerEnd" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="EscB" attachedToRef="Sub" cancelActivity="false">
+      <bpmn:outgoing>r1</bpmn:outgoing>
+      <bpmn:escalationEventDefinition id="EscBDef" escalationRef="Esc1" />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Notify"><bpmn:incoming>r1</bpmn:incoming><bpmn:outgoing>r2</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="EndNotified"><bpmn:incoming>r2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="EndOk"><bpmn:incoming>s2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="s1" sourceRef="Start" targetRef="Sub" />
+    <bpmn:sequenceFlow id="s2" sourceRef="Sub" targetRef="EndOk" />
+    <bpmn:sequenceFlow id="r1" sourceRef="EscB" targetRef="Notify" />
+    <bpmn:sequenceFlow id="r2" sourceRef="Recover" targetRef="EndNotified" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diag">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="P">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="120" y="242" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_di" bpmnElement="Sub" isExpanded="true"><dc:Bounds x="210" y="120" width="520" height="280" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InnerStart_di" bpmnElement="InnerStart"><dc:Bounds x="240" y="242" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InnerGw_di" bpmnElement="InnerGw"><dc:Bounds x="320" y="235" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InnerTaskA_di" bpmnElement="InnerTaskA"><dc:Bounds x="430" y="150" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EscEnd_di" bpmnElement="EscEnd"><dc:Bounds x="600" y="172" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InnerCatch_di" bpmnElement="InnerCatch"><dc:Bounds x="460" y="312" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="InnerEnd_di" bpmnElement="InnerEnd"><dc:Bounds x="600" y="312" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EscB_di" bpmnElement="EscB"><dc:Bounds x="452" y="382" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Notify_di" bpmnElement="Notify"><dc:Bounds x="420" y="470" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndNotified_di" bpmnElement="EndNotified"><dc:Bounds x="600" y="492" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndOk_di" bpmnElement="EndOk"><dc:Bounds x="790" y="242" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="156" y="260" /><di:waypoint x="210" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="i1_di" bpmnElement="i1"><di:waypoint x="276" y="260" /><di:waypoint x="320" y="260" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ia_di" bpmnElement="ia"><di:waypoint x="345" y="235" /><di:waypoint x="345" y="190" /><di:waypoint x="430" y="190" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ia2_di" bpmnElement="ia2"><di:waypoint x="530" y="190" /><di:waypoint x="600" y="190" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ib_di" bpmnElement="ib"><di:waypoint x="345" y="285" /><di:waypoint x="345" y="330" /><di:waypoint x="460" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="ib2_di" bpmnElement="ib2"><di:waypoint x="496" y="330" /><di:waypoint x="600" y="330" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r1_di" bpmnElement="r1"><di:waypoint x="470" y="418" /><di:waypoint x="470" y="470" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="r2_di" bpmnElement="r2"><di:waypoint x="520" y="510" /><di:waypoint x="600" y="510" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="730" y="260" /><di:waypoint x="790" y="260" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

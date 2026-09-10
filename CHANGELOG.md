@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The token simulation now throws errors and escalations instead of swallowing them.**
+  Both are *faults*: they do not complete a path, they hand it to the nearest enclosing
+  handler. The Design-view simulation knew neither definition, so an error end and an
+  escalation end were walked as plain end events. The modelled boundary never fired, the
+  recovery path never lit up, and a non-interrupting escalation handler — the entire point
+  of the element — never ran. Worst of the three: an error at the process root was counted
+  as a **completed process**, where the engine raises an incident and parks the instance.
+  A clean bill that was never earned looks exactly like one that was.
+
+  Both now travel the way [ADR-0089](docs/adr/0089-error-events.md) and
+  [ADR-0125](docs/adr/0125-escalation-events.md) specify. The fault leaves the throw as a
+  red dot and flies to the one handler that catches it, found by the same walk the engine
+  does: nearest enclosing scope outward, an event subprocess declared in a scope before a
+  boundary on it, matching by code with a code-less catch as the catch-all. An error catch
+  interrupts, so the scope below it is torn down and the flow leaves through the handler.
+  An escalation catch may be non-interrupting, in which case the handler runs beside the
+  still-running subprocess and the raising token carries on; an escalation nobody catches is
+  benign and simply ends its path. An escalation intermediate throw raises and continues,
+  which it never did before.
+
+  An error that reaches no handler parks its token on the throw, outlined in red and
+  counted in the simulation bar as an incident, with the bar saying what the engine would
+  do. Nothing about it is allowed to look like a completion.
+
+  One consequence beyond the two end events: an **interrupting event subprocess** is now
+  scoped to the subprocess it is declared in rather than to the whole process. Routing a
+  fault to a handler made the difference load-bearing, and the scope machinery to say which
+  tokens it takes was already there.
+
 - **The token simulation's terminate end event now actually terminates.** A terminate
   end is the one end event that is about the tokens it does *not* own: reaching it ends
   the enclosing flow scope and takes every other token in that scope with it. The

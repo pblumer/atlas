@@ -1225,19 +1225,22 @@ function wireTokenSim(root, modeler) {
   // event is parked, ready to be fired.
   modeler.get("eventBus").on("atlasSim.changed", (s) => {
     playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
-    // "terminated" only appears once something has actually been terminated — a terminate
-    // end event or an interrupting handler killing tokens. Otherwise the tokens would just
-    // vanish from the diagram with no count saying where they went.
+    // "terminated" and "incidents" only appear once there is something to report — tokens a
+    // terminate end or an interrupting handler killed, and errors that reached no handler.
+    // Otherwise tokens would vanish, or stop dead, with no count saying what became of them.
     statsEl.textContent =
       `${s.live} live · ${s.completed} completed` +
-      (s.terminated ? ` · ${s.terminated} terminated` : "");
-    hintEl.textContent = s.deciding
-      ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
-      : s.waiting
-        ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
-        : s.live === 0
-          ? "Click a start event ▶ to drop a token, then Play."
-          : "";
+      (s.terminated ? ` · ${s.terminated} terminated` : "") +
+      (s.incidents ? ` · ${s.incidents} incident${s.incidents > 1 ? "s" : ""}` : "");
+    hintEl.textContent = s.incidents
+      ? "An error reached no handler. The engine raises an incident and the instance parks there — it does not complete."
+      : s.deciding
+        ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
+        : s.waiting
+          ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
+          : s.live === 0
+            ? "Click a start event ▶ to drop a token, then Play."
+            : "";
   });
   // Seed the initial control state (counts at zero, opening hint).
   sim.setSpeed(Number(speedSel.value));

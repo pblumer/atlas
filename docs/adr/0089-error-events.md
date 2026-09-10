@@ -343,6 +343,16 @@ decision (I6); it runs only live (a throw is a command), never during replay.
   need explicit ordering tests. Signal-vs-error is deliberately opposite (broadcast vs nearest);
   a future `bpmn:escalation` (non-interrupting, propagating) is a third variant deferred with
   compensation.
+- **Done since:** the **Design-view token simulation** (ADR-0078 and its increments) throws errors
+  instead of completing them. It had walked an error end as a plain end event — the token completed,
+  the modelled boundary never fired, and an error at the process root was reported as a *completed
+  process*, which is the one reading the diagram must not give. It now runs the same walk this ADR
+  specifies: nearest enclosing scope outward, an error event subprocess declared in a scope before a
+  boundary on it, code equality with a code-less catch-all, the catch always interrupting. An error
+  no handler catches parks its token where the engine parks the instance, marked as an incident and
+  counted as one in the simulation bar. It is a walk over the diagram, not the engine's scope chain:
+  it sees only the subprocesses the simulation actually entered, and a call activity's child is a
+  diagram it does not have.
 
 ## Pros and cons of the options
 

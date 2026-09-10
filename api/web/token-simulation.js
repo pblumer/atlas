@@ -63,6 +63,37 @@ const isThrow = (el) =>
 // difference: the whole point of the element is that the other branches stop.
 const isTerminateEnd = (el) => isEnd(el) && hasDef(el, "bpmn:TerminateEventDefinition");
 
+// Errors (ADR-0089) and escalations (ADR-0125) are *faults*: they are not broadcast the way a
+// message or signal is, they travel structurally up the scope chain to the nearest enclosing
+// handler. The two are siblings that differ in exactly two places, and the simulation has to
+// keep them apart: an error catch always interrupts and an uncaught error is a failure (the
+// engine raises an incident and the instance parks), while an escalation catch may run
+// alongside and an uncaught escalation is benign.
+const ERROR_DEF = "bpmn:ErrorEventDefinition";
+const ESCALATION_DEF = "bpmn:EscalationEventDefinition";
+const isErrorEnd = (el) => isEnd(el) && hasDef(el, ERROR_DEF);
+const isEscalationEnd = (el) => isEnd(el) && hasDef(el, ESCALATION_DEF);
+// BPMN has no error intermediate throw — an error can only be thrown by an end event — but an
+// escalation has one, and it raises and then carries on down its outgoing flow.
+const isEscalationThrow = (el) =>
+  el.type === "bpmn:IntermediateThrowEvent" && hasDef(el, ESCALATION_DEF);
+const isFaultThrow = (el) => isErrorEnd(el) || isEscalationEnd(el) || isEscalationThrow(el);
+
+// faultCode reads the code a fault throw and a fault catch are matched on. BPMN keeps it on
+// the referenced <error>/<escalation>, not on the event, and a reference to nothing — or no
+// reference at all — is the empty code. This is what the compiler resolves too, so a diagram
+// that matches here matches when it runs.
+const faultCode = (el, defType) => {
+  const d = eventDefs(el).find((x) => x.$type === defType);
+  if (!d) return "";
+  const ref = defType === ERROR_DEF ? d.errorRef : d.escalationRef;
+  if (!ref) return "";
+  return (defType === ERROR_DEF ? ref.errorCode : ref.escalationCode) || "";
+};
+// A catch carrying no code at all is a catch-all; otherwise the codes must be equal. Same rule
+// as the engine's errorCodeMatches.
+const codeCatches = (catchCode, thrown) => catchCode === "" || catchCode === thrown;
+
 // A catch-like target can receive a thrown message/signal dot — a catch event, a boundary
 // event, or a start event (a message can begin a new instance). A throw is never a target.
 const isCatchLike = (el) => isCatch(el) || isBoundary(el) || isStart(el);
@@ -120,6 +151,11 @@ const isProcessStart = (el) => isStart(el) && !isEventSubStart(el);
 // An interrupting event-subprocess start terminates its enclosing scope when it fires; a
 // non-interrupting one runs alongside (ADR-0082).
 const isInterruptingSub = (el) => el.businessObject && el.businessObject.isInterrupting !== false;
+// isInterruptingCatch answers the same question for either kind of fault handler — a boundary
+// event says so with cancelActivity, an event-subprocess start with isInterrupting — because a
+// caught escalation behaves completely differently depending on the answer.
+const isInterruptingCatch = (el) =>
+  isBoundary(el) ? el.businessObject.cancelActivity !== false : isInterruptingSub(el);
 
 // An embedded subprocess (or transaction) holds a nested flow the token descends into. An
 // *event* subprocess is not one of these — it is a handler triggered by its event, not
@@ -215,6 +251,14 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   // abort a dot flying in the enclosing flow. A token travelling to a target inside scope S
   // carries S's generation, so bumping it aborts exactly the dots inside S.
   this._scopeGen = new Map();
+  // throwing: elements whose thrown error/escalation is travelling to its handler. The token
+  // waits on the element until the fault lands, so the scope it is leaving cannot quiesce and
+  // complete out from under it, and nothing may move that token in the meantime.
+  this._throwing = new Set();
+  // incidents: error ends whose error no handler caught. The engine raises an incident and
+  // parks the instance there (ADR-0089/0061); the simulation parks the token the same way,
+  // because the one reading it must not be given is "the process completed".
+  this._incidents = new Set();
   this._reach = new Map(); // memoised "can `from` reach `to`?" over sequence flows
   this._completed = 0; // tokens that reached an end event / ran off the graph
   this._terminated = 0; // tokens killed by a terminate end event / an interrupting handler
@@ -345,7 +389,7 @@ TokenSimulation.prototype.pause = function () {
 TokenSimulation.prototype.step = function () {
   if (!this._active) return;
   for (const [id, n] of this._resting) {
-    if (n <= 0 || this._scopes.has(id)) continue;
+    if (n <= 0 || this._scopes.has(id) || this._isHeld(id)) continue;
     const el = this._registry.get(id);
     if (el && !needsChoice(el) && !needsTrigger(el)) {
       this._emit(el);
@@ -353,7 +397,7 @@ TokenSimulation.prototype.step = function () {
     }
   }
   for (const [id, n] of this._resting) {
-    if (n <= 0 || this._scopes.has(id)) continue;
+    if (n <= 0 || this._scopes.has(id) || this._isHeld(id)) continue;
     const el = this._registry.get(id);
     if (el && needsTrigger(el)) {
       this._fireTrigger(el);
@@ -376,6 +420,8 @@ TokenSimulation.prototype.reset = function () {
   this._miRemaining.clear();
   this._clearAllScopes();
   this._scopeGen.clear();
+  this._throwing.clear();
+  this._clearIncidents();
   this._completed = 0;
   this._terminated = 0;
   this._clearAllDeciding();
@@ -394,6 +440,7 @@ TokenSimulation.prototype.stats = function () {
     live,
     completed: this._completed,
     terminated: this._terminated,
+    incidents: this._incidents.size,
     deciding: this._deciding.size > 0,
     waiting: this._hasPendingTrigger(),
   };
@@ -524,6 +571,7 @@ TokenSimulation.prototype._land = function (el) {
 TokenSimulation.prototype._emit = function (el) {
   if ((this._resting.get(el.id) || 0) <= 0) return;
   if (this._scopes.has(el.id)) return; // a running subprocess's held token waits for quiescence
+  if (this._isHeld(el.id)) return; // a fault is travelling from here, or parked here uncaught
   // Multi-instance: consume one instance per move, keeping the token on the activity until
   // the last instance is done — so a step / Play visibly counts the body running N times.
   if (isRepeating(el)) {
@@ -550,7 +598,19 @@ TokenSimulation.prototype._emit = function (el) {
     this._terminate(el);
     return;
   }
+  // A fault throw hands its token to a handler rather than moving it on: an error end throws
+  // to the nearest catch and never completes, an escalation end/throw raises and then carries
+  // on unless an interrupting catch takes the scope. The token stays put while the fault
+  // travels, so _throwFault owns it from here.
+  if (this._throwFault(el)) return;
   if (isThrow(el)) this._throwEvent(el);
+  this._departFrom(el);
+};
+
+// _departFrom consumes one token resting on an element and moves it on: onto every outgoing
+// flow, or — with none — off the graph as a completion. It is the tail that every "the token
+// leaves here" path shares, whether the token simply moved on or first raised an escalation.
+TokenSimulation.prototype._departFrom = function (el) {
   const outs = outFlows(el);
   this._rest(el.id, -1);
   if (outs.length === 0) {
@@ -735,14 +795,24 @@ TokenSimulation.prototype._fireBoundary = function (b) {
 TokenSimulation.prototype._fireEventSub = function (start) {
   if ((this._resting.get(start.id) || 0) > 0) return; // already running
   if (isInterruptingSub(start)) {
-    this._epoch++; // abort in-flight dots — the scope is being torn down
-    this._terminated += this._totalLive();
-    this._resting.clear();
-    this._joinWait.clear();
-    this._inflight.clear();
-    this._miRemaining.clear();
-    this._clearAllScopes();
-    this._clearAllDeciding();
+    // The handler pre-empts the scope it is *declared in* — the enclosing subprocess when it
+    // sits in one, otherwise the whole process. That scope itself keeps running: the handler
+    // runs inside it, which is why its contents go but its own held token does not.
+    const scope = this._scopeOf(start);
+    if (scope) {
+      this._terminated += this._tokensInScope(scope);
+      this._clearScopeContents(scope);
+    } else {
+      this._epoch++; // abort in-flight dots — the whole process is being torn down
+      this._terminated += this._totalLive();
+      this._resting.clear();
+      this._joinWait.clear();
+      this._inflight.clear();
+      this._miRemaining.clear();
+      this._clearAllScopes();
+      this._clearAllDeciding();
+      this._clearIncidents();
+    }
   }
   this._flash(start);
   this.spawnAt(start);
@@ -806,6 +876,15 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
   if (isEnd(target)) {
     if (isTerminateEnd(target)) {
       this._terminate(target);
+      return;
+    }
+    // A fault end holds its token while the fault travels to its handler, so — unlike every
+    // other end event — it comes to rest first and only then throws.
+    if (isErrorEnd(target) || isEscalationEnd(target)) {
+      this._rest(target.id, 1);
+      this._render();
+      this._notify();
+      this._throwFault(target);
       return;
     }
     if (isThrow(target)) this._throwEvent(target);
@@ -1086,6 +1165,12 @@ TokenSimulation.prototype._clearScopeContents = function (sub) {
   for (const id of Array.from(this._miRemaining.keys())) {
     if (this._within(id, sub.id)) this._miRemaining.delete(id);
   }
+  for (const id of Array.from(this._incidents)) {
+    if (this._within(id, sub.id)) {
+      this._incidents.delete(id); // the parked incident goes with the scope it was parked in
+      this._removeMarker(id, "atlas-sim-incident");
+    }
+  }
 };
 
 // _teardownScope cancels a running subprocess outright (an interrupting boundary fired):
@@ -1095,6 +1180,160 @@ TokenSimulation.prototype._teardownScope = function (sub) {
   this._resting.delete(sub.id);
   this._scopes.delete(sub.id);
   this._removeMarker(sub.id, "atlas-sim-scope");
+};
+
+// --- Faults: errors and escalations -------------------------------------------------
+
+// _isHeld reports whether a token resting here must not be moved by a click, a step or the
+// pump: a fault it threw is still travelling to its handler, or an uncaught error has parked
+// it. Both are tokens the run no longer owns — moving one would throw the fault twice.
+TokenSimulation.prototype._isHeld = function (id) {
+  return this._throwing.has(id) || this._incidents.has(id);
+};
+
+// _throwFault raises the fault an element carries and reports whether it took the token over.
+// The token must already rest on the element: it waits there while the fault travels, which is
+// what stops the scope it belongs to from quiescing and completing underneath it.
+TokenSimulation.prototype._throwFault = function (el) {
+  if (isErrorEnd(el)) {
+    this._throwError(el);
+    return true;
+  }
+  if (isEscalationEnd(el) || isEscalationThrow(el)) {
+    this._throwEscalation(el);
+    return true;
+  }
+  return false;
+};
+
+// _throwError runs an error end event (ADR-0089). An error end does not complete its path: it
+// throws a coded error that travels up the live scope chain to the nearest matching error
+// boundary or error event subprocess. That catch is *always* interrupting — the scope below it
+// is torn down and the flow leaves through the handler. When nothing catches it the engine
+// raises an incident and parks the instance, so the token parks here too, marked — because
+// "the process completed" is the one reading of an uncaught error that must never be given.
+TokenSimulation.prototype._throwError = function (el) {
+  const handler = this._findHandler(el, ERROR_DEF, faultCode(el, ERROR_DEF));
+  if (!handler) {
+    this._incidents.add(el.id);
+    this._addMarker(el.id, "atlas-sim-incident");
+    this._flashAbort(el);
+    this._render();
+    this._notify();
+    return;
+  }
+  this._flashAbort(el);
+  this._sendFault(el, handler, () => {
+    this._rest(el.id, -1); // the throwing token goes with the scope the catch tears down
+    this._fireCatch(handler);
+  });
+};
+
+// _throwEscalation runs an escalation end event or escalation intermediate throw (ADR-0125) —
+// the error's benign sibling. It raises a coded escalation to the nearest matching handler and
+// differs from an error in exactly the two ways that define escalation: the catch may be
+// NON-interrupting, in which case the handler runs alongside and the raising token carries on
+// as if nothing had happened; and an escalation nobody catches is not a failure — the throw's
+// own flow semantics simply apply. Either way _departFrom is what "carries on" means: an end
+// event runs off the graph, an intermediate throw takes its outgoing flow.
+TokenSimulation.prototype._throwEscalation = function (el) {
+  const handler = this._findHandler(el, ESCALATION_DEF, faultCode(el, ESCALATION_DEF));
+  if (!handler) {
+    this._departFrom(el); // uncaught is benign: the token carries on
+    return;
+  }
+  const interrupting = isInterruptingCatch(handler);
+  this._sendFault(el, handler, () => {
+    if (interrupting) {
+      this._rest(el.id, -1); // an interrupting catch tears this token's scope down with it
+      this._fireCatch(handler);
+      return;
+    }
+    this._fireCatch(handler); // the handler runs beside the scope, which keeps going
+    this._departFrom(el);
+  });
+};
+
+// _sendFault animates the fault from a throw to the handler that catches it, then hands over.
+// Unlike a message/signal dot — a broadcast to every same-named catch — this one goes to
+// exactly one element: the nearest enclosing handler the scope walk found. If the throwing
+// token is gone by the time it lands, the throw was torn down mid-flight and nothing happens.
+TokenSimulation.prototype._sendFault = function (from, to, onArrive) {
+  this._throwing.add(from.id);
+  const epoch = this._epoch;
+  this._render();
+  this._notify();
+  this._animateDot(
+    [centerOf(from), centerOf(to)],
+    () => this._epoch !== epoch,
+    "atlas-sim-fault-dot",
+  ).then(() => {
+    this._throwing.delete(from.id);
+    if (this._epoch !== epoch || !this._active) return;
+    if ((this._resting.get(from.id) || 0) <= 0) return; // superseded by a teardown
+    this._ping(to);
+    onArrive();
+  });
+};
+
+// _fireCatch runs the handler a fault reached — a boundary event on the scope it left, or an
+// event subprocess declared in one. Both already know how to fire interrupting or not.
+TokenSimulation.prototype._fireCatch = function (handler) {
+  if (isBoundary(handler)) this._fireBoundary(handler);
+  else this._fireEventSub(handler);
+};
+
+// _findHandler walks outward from a fault throw to the handler that catches it, mirroring the
+// engine's scope walk: at each enclosing scope an event subprocess declared *in* that scope
+// catches before a boundary *on* it (the event sub catches the fault inside the scope, the
+// boundary catches it leaving), and the process root's own event subprocesses are checked last.
+// The nearest match wins; nothing matching means uncaught.
+TokenSimulation.prototype._findHandler = function (el, defType, code) {
+  for (const scope of this._scopeChainOf(el)) {
+    const sub = this._eventSubIn(scope, defType, code);
+    if (sub) return sub;
+    const boundary = this._boundaryOn(scope, defType, code);
+    if (boundary) return boundary;
+  }
+  return this._eventSubIn(null, defType, code); // the process root's own handlers
+};
+
+// _scopeChainOf lists the running subprocess scopes enclosing an element, nearest first. It is
+// the simulation's stand-in for the engine's FlowScopeKey chain; the process root is the null
+// at the end of it, and is handled by the caller.
+TokenSimulation.prototype._scopeChainOf = function (el) {
+  const chain = [];
+  for (let cur = this._scopeOf(el); cur; cur = this._scopeOf(cur)) chain.push(cur);
+  return chain;
+};
+
+// _eventSubIn finds an event-subprocess trigger declared directly in `scope` (null for the
+// process root) that catches this fault. One already holding a token is running, not armed.
+TokenSimulation.prototype._eventSubIn = function (scope, defType, code) {
+  const wanted = scope ? scope.id : null;
+  for (const start of this._eventSubStarts) {
+    if (!hasDef(start, defType) || !codeCatches(faultCode(start, defType), code)) continue;
+    const own = this._scopeOf(start);
+    if ((own ? own.id : null) !== wanted) continue;
+    if ((this._resting.get(start.id) || 0) > 0) continue;
+    return start;
+  }
+  return null;
+};
+
+// _boundaryOn finds a boundary event on a scope's subprocess shape that catches this fault.
+TokenSimulation.prototype._boundaryOn = function (scope, defType, code) {
+  for (const b of this._boundaries.get(scope.id) || []) {
+    if (hasDef(b, defType) && codeCatches(faultCode(b, defType), code)) return b;
+  }
+  return null;
+};
+
+// _clearIncidents drops every parked incident and its marking — the tokens they belonged to
+// are gone (a reset, or a teardown that took them).
+TokenSimulation.prototype._clearIncidents = function () {
+  for (const id of this._incidents) this._removeMarker(id, "atlas-sim-incident");
+  this._incidents.clear();
 };
 
 // _clearAllScopes drops every running scope and the "running" highlight that goes with it —
@@ -1139,6 +1378,7 @@ TokenSimulation.prototype._terminate = function (el) {
   this._miRemaining.clear();
   this._clearAllScopes();
   this._clearAllDeciding();
+  this._clearIncidents();
   this._completed++; // the token that reached the terminate end is the one completion
   this._render();
   this._notify();
@@ -1165,6 +1405,7 @@ TokenSimulation.prototype._advanceOne = function () {
   for (const [id, n] of Array.from(this._resting)) {
     if (n <= 0) continue;
     if (this._scopes.has(id)) continue; // a running subprocess's held token never pumps
+    if (this._isHeld(id)) continue; // a fault in flight, or an error parked on an incident
     const el = this._registry.get(id);
     if (!el) continue;
     if (needsChoice(el)) {
@@ -1193,6 +1434,7 @@ TokenSimulation.prototype._anyPumpable = function () {
   for (const [id, n] of this._resting) {
     if (n <= 0) continue;
     if (this._scopes.has(id)) continue; // held subprocess token — not movable on its own
+    if (this._isHeld(id)) continue; // a fault in flight, or an error parked on an incident
     const el = this._registry.get(id);
     if (!el) continue;
     if (needsChoice(el) || needsTrigger(el)) {
@@ -1316,19 +1558,35 @@ TokenSimulation.prototype._triggerGlyph = function (el) {
   if (isTimerEvent(el)) return "&#9203;"; // hourglass
   if (isMessageEvent(el)) return "&#9993;"; // envelope
   if (isSignalEvent(el)) return "&#9889;"; // spark
+  if (hasDef(el, ERROR_DEF)) return "&#9888;"; // warning sign
+  if (hasDef(el, ESCALATION_DEF)) return "&#8599;"; // up-right arrow — raised up the chain
   return "&#9654;"; // receive task / conditional — a plain "go"
 };
 
+// _faultKind names what a handler catches, for the affordance titles. A fault handler is
+// normally reached by a throw rather than a click, but the affordance stays: firing it by hand
+// is how a person asks "and what if this fails here?".
+const eventKindOf = (el) =>
+  isTimerEvent(el)
+    ? "timer"
+    : isMessageEvent(el)
+      ? "message"
+      : isSignalEvent(el)
+        ? "signal"
+        : hasDef(el, ERROR_DEF)
+          ? "error"
+          : hasDef(el, ESCALATION_DEF)
+            ? "escalation"
+            : "event";
+
 TokenSimulation.prototype._boundaryTitle = function (b) {
-  const kind = isTimerEvent(b) ? "timer" : isMessageEvent(b) ? "message" : isSignalEvent(b) ? "signal" : "event";
-  const mode = b.businessObject.cancelActivity !== false ? "interrupting" : "non-interrupting";
-  return `Fire this ${mode} ${kind} boundary event`;
+  const mode = isInterruptingCatch(b) ? "interrupting" : "non-interrupting";
+  return `Fire this ${mode} ${eventKindOf(b)} boundary event`;
 };
 
 TokenSimulation.prototype._eventSubTitle = function (start) {
-  const kind = isTimerEvent(start) ? "timer" : isMessageEvent(start) ? "message" : isSignalEvent(start) ? "signal" : "event";
   const mode = isInterruptingSub(start) ? "interrupting" : "non-interrupting";
-  return `Trigger this ${mode} ${kind} event subprocess`;
+  return `Trigger this ${mode} ${eventKindOf(start)} event subprocess`;
 };
 
 // _drawFire adds a clickable "fire this event" affordance on an element. Like the spawn

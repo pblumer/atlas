@@ -75,6 +75,13 @@ evaluate; the fixed count exists only to make the marker's meaning legible.
 - **Follow-ups / risks to watch:** if the fixed multi-instance count or the process-wide
   event-sub scope ever misleads, prefer labelling or narrowing over modelling real scopes and
   collections in the browser. A user-set instance count is a small, safe future increment.
+- **Superseded since (the process-wide event-sub scope):** an interrupting event subprocess is
+  now scoped to the subprocess it is declared in, not to the whole process. Routing thrown
+  errors and escalations to their handlers (ADR-0089/0125) made the difference load-bearing: an
+  error event subprocess inside a subprocess must pre-empt *that* subprocess and leave the rest
+  of the process running, and the scope machinery of ADR-0104 was already there to say which
+  tokens that is. A handler declared at the process root still takes the whole process, as
+  before.
 
 ## Pros and cons of the options
 
