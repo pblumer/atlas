@@ -361,10 +361,10 @@ _Changed_ / _Removed_ for each version.
   The panel states the exact age for whichever node is selected (**"Oldest still parked
   5 d ago"**), which is the number a circle cannot give.
 
-  On either, the area above the smallest node is that node's share of the largest node
-  on the landscape. Area rather than radius, because doubling a radius quadruples the
-  ink — a circle drawn straight from the number reads as four times the quantity it
-  stands for.
+  On any of them a node grows from a floor with the **square root** of its share of the
+  largest node on the landscape. The root rather than the number itself, because a
+  circle's area goes up with the square of its radius: a circle drawn straight from the
+  count would read as four times the quantity at twice the number.
 
   Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
   idle process, a worker, a decision and an application whose load sits on the processes

@@ -205,9 +205,10 @@ export function stampLines(meta = {}) {
   const heat = HEAT_STAMPS[meta.heat] || (meta.instances ? HEAT_STAMPS.instances : null);
   if (heat) {
     lines.push({ text: meta.peak > 0
-      ? `${heat.heading} The area above the smallest node is that node's share of ` +
-        `${heat.peakPhrase(meta.peak)}. ${heat.floorNote} Kind is still carried by ` +
-        `shape and colour.`
+      ? `${heat.heading} A node grows from the floor with the square root of its ` +
+        `share of ${heat.peakPhrase(meta.peak)} — the root rather than the number ` +
+        `itself, because a circle's area goes up with the square of its radius. ` +
+        `${heat.floorNote} Kind is still carried by shape and colour.`
       : `${heat.quiet} Kind is still carried by shape and colour.` });
     lines.push({ text: heat.absent });
   }

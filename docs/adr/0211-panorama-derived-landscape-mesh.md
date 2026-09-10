@@ -1428,11 +1428,19 @@ open that door.
 > All three obey the same rules, and they are one implementation rather than three, so
 > that a reader cannot be shown pictures that mean subtly different things:
 >
-> - **Size is the quantity, and nothing else.** A node's area above the floor is its
->   share of the largest node on the landscape. Area rather than radius, because
->   doubling a radius quadruples the ink: a radius taken straight from the count reads
->   as four times the quantity it stands for. Kind is unaffected — it was never carried
+> - **Size is the quantity, and nothing else.** A node's radius rises from the floor
+>   with the **square root** of its share of the largest node on the landscape —
+>   `r = floor + span · √(value ÷ peak)`. The root, because a circle's area goes up
+>   with the square of its radius: a radius taken straight from the count reads as four
+>   times the quantity at twice the number. Kind is unaffected — it was never carried
 >   by size alone, and shape and colour still carry it (§4).
+>
+>   Stated that way rather than as "the area above the floor is the share", which is
+>   what this record and the key first said and which does not survive arithmetic: the
+>   floor offsets the relation, so at a quarter of the peak's tally the ring above the
+>   floor is about 0.36 of the ring at the peak, not 0.25. What is exactly proportional
+>   to the share is `((r − floor) ÷ span)²`. The rule below is where the discrepancy
+>   comes from and it is deliberate; the claim about it was not.
 > - **There is a floor, and it is load-bearing.** Every node keeps a minimum radius,
 >   whatever its tally. A size that were purely the count would draw the quiet half of
 >   an estate at nothing, and a picture with its context deleted cannot distinguish
