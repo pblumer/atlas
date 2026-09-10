@@ -9,7 +9,7 @@ import (
 )
 
 // Deriving the information model from the processes that use it
-// (ADR-draft-derive-the-model-from-the-processes).
+// (ADR-0301).
 //
 // ADR-0230 and ADR-0259 both run one way: a person models the vocabulary, and the
 // processes are checked against it. Neither priced what that costs before the first

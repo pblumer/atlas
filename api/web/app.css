@@ -5318,7 +5318,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-transition-label { fill: var(--text); font: 600 11px/1.4 system-ui, sans-serif; }
 
 /* The derived model — what an application's processes imply, read without anyone
-   having modelled anything (ADR-draft-derive-the-model-from-the-processes). It is
+   having modelled anything (ADR-0301). It is
    evidence rather than a document, so it is deliberately quieter than the authored
    model's canvas: no palette, no accent, and its qualifications above the drawing
    rather than under it, because a derived picture mistaken for a complete one is

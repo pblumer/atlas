@@ -1,6 +1,6 @@
 // The "as built" reading: what an application's processes imply about its data, drawn
 // without anyone having modelled anything
-// (ADR-draft-derive-the-model-from-the-processes, §3).
+// (ADR-0301, §3).
 //
 // The half these tests care most about is not the drawing — it is what the drawing
 // admits it cannot see. A derived picture mistaken for a complete one is worse than no

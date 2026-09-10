@@ -8,7 +8,7 @@ import (
 )
 
 // Deriving the information model from the processes that use it
-// (ADR-draft-derive-the-model-from-the-processes, §1 and §2).
+// (ADR-0301, §1 and §2).
 //
 // The derived model is what is *built*: read off the data objects, the writes and the
 // graph. What a person models by hand is a different statement — a target, not yet

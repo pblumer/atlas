@@ -9,7 +9,7 @@ import (
 )
 
 // The derived information model, end to end
-// (ADR-draft-derive-the-model-from-the-processes, §3).
+// (ADR-0301, §3).
 //
 // The derived model is what is *built* — read off the application's processes. What a
 // person models by hand is a different statement, a target, and nothing here writes

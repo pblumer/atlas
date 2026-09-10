@@ -1,6 +1,6 @@
 // The derived information model — what an application's processes imply about its
 // data, read without anyone having modelled anything
-// (ADR-draft-derive-the-model-from-the-processes, §3).
+// (ADR-0301, §3).
 //
 // This is the *as built* reading. The model somebody authors under Data is a
 // different statement — a target, not yet reality — and nothing here writes into it.

@@ -3040,7 +3040,7 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 }
 
 // handleDerivedModel answers what the application's processes imply about its data,
-// without anyone having modelled it (ADR-draft-derive-the-model-from-the-processes).
+// without anyone having modelled it (ADR-0301).
 //
 // The derived model is what is *built*. What a person authors under Data is a
 // different statement — a target, not yet reality — and this reads the first without

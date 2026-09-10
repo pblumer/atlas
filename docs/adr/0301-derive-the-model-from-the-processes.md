@@ -1,4 +1,4 @@
-# ADR-DRAFT: Derive the information model from the processes that use it
+# ADR-0301: Derive the information model from the processes that use it
 
 - **Status:** Accepted
 - **Implementation:** Landed

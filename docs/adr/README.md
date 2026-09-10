@@ -386,6 +386,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0298](0298-two-states-for-a-record.md) | A record has two states — whether the decision holds, and whether it is built | Accepted | Landed |
 | [0299](0299-worker-type-admission-criteria.md) | What earns a Worker Type — admission criteria for a new kind | Proposed | Not started |
 | [0300](0300-openapi-element-templates.md) | An OpenAPI document as element templates | Accepted | Landed |
+| [0301](0301-derive-the-model-from-the-processes.md) | Derive the information model from the processes that use it | Accepted | Landed |
 
 ## The two states of a record
 

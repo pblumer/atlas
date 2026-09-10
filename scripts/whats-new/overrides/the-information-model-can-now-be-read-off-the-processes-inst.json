@@ -28,6 +28,6 @@
   },
   "link": {
     "label": "ADR draft",
-    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-derive-the-model-from-the-processes.md"
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
   }
 }

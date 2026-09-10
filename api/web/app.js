@@ -8266,7 +8266,7 @@ async function viewDataInstances() {
 
 // viewDerivedModel opens the *as built* reading of one application: the classes,
 // members and states its processes imply, with nothing modelled by hand
-// (ADR-draft-derive-the-model-from-the-processes). It is the counterpart of
+// (ADR-0301). It is the counterpart of
 // viewInfoModel, not a mode of it — the two are different statements about the same
 // subject, and keeping them apart is the whole point.
 async function viewDerivedModel(applicationId) {
