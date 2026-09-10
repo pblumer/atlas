@@ -1654,6 +1654,27 @@ the method and how to work it with Atlas as it stands are in
   no local ids to remap and no positional identity to preserve, so the document is the
   records as they stand. Importing *another tool's* model — ArchiMate Open Exchange, or a
   BIAN/eTOM reference model onto tags — is a separate slice again.
+- 🔲 **B10 — A record says when somebody last confirmed it.** Every finding the gap
+  report raises today is a fact Atlas checked. The half of a capability it cannot check
+  is the half anybody acts on: who owns it, what it is and is not responsible for, and
+  what it has promised. Those decay silently, and a map whose realisations are green
+  and whose owners left two years ago is worse than no map.
+  [ADR-draft-a-capability-says-when-it-was-last-confirmed](docs/adr/draft-a-capability-says-when-it-was-last-confirmed.md)
+  is the third instance in this tree of the shape ADR-0289 and
+  [ADR-0293](docs/adr/0293-open-questions-in-records-expire.md) already use — a
+  backward-looking date saying somebody *looked*, never a forward promise somebody
+  *made* — with the one difference that forces its own record: both of those are
+  build-time tests over content here, and this is runtime data in a customer's
+  installation that no test will ever fail over.
+  `confirmedAt` / `confirmedBy` / `confirmationNote` on both records, set by an
+  explicit confirmation and by **no** edit, because a save that refreshed the date
+  would let a typo fix assert that every SLA had been re-read. No bulk confirm, for the
+  same reason. The horizon is one installation setting defaulting to twelve months —
+  configurable, unlike its two precedents, because the reviewers are somebody else's
+  business architects rather than this repository's contributors. It surfaces as a
+  ninth finding, as `?stale=true` beside `?realized=false` (the review backlog beside
+  the automation one), and on the coverage read — and it never withholds a stale
+  record, which would make the map least useful exactly when it needs attention.
 
 Deliberately out of scope: business areas (Level 1) and integration capabilities
 (Level 5) as record kinds of their own — the first is a tag, and the second is what a

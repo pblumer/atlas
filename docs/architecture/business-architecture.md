@@ -238,6 +238,11 @@ accountable for **how it performs**. They are frequently different people, and t
 business owner often has no Atlas account at all — which is why that field is free text
 with an optional account link rather than a principal.
 
+Free text is also why nothing checks it. The owner is the field that decays fastest and
+the one Atlas can least verify, and today the record carries no trace of when anybody
+last stood behind it. Until the confirmation date lands, treat an owner you did not
+write yourself as a lead rather than a fact.
+
 ### Name the outcome, not the shape
 
 Name end events for what happened in business terms — `verified`, `rejected`,
@@ -375,6 +380,14 @@ outside your sharing scope is reported as restricted, never as missing.
   [Modelling for measurement](#modelling-for-measurement) — but whether it can be
   aggregated at the instance volumes this is aimed at, without the OpenSearch exporter,
   is the open question the decision record carries.
+- **A confirmation date.** The gap report checks the realisation, because Atlas can see
+  deployments. It cannot check the owner, the scope or the SLAs — the half of a record
+  anybody acts on — so today those are taken on trust and decay silently. The planned
+  answer is the shape this repository already uses twice: a backward-looking date saying
+  somebody looked, an explicit confirmation that no ordinary edit can set, a horizon
+  defaulting to twelve months, and a ninth finding plus a `?stale=true` review backlog
+  beside the automation one. See
+  [ADR-draft-a-capability-says-when-it-was-last-confirmed](../adr/draft-a-capability-says-when-it-was-last-confirmed.md).
 - **Document-level exchange** of the map on its own, with a dry-run import.
 - **The milestone event** — see [the gap above](#the-milestone-gap).
 - **Panorama binding keys**, so an ArchiMate `Capability` on a drawing names a registry

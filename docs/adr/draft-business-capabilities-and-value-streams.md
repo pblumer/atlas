@@ -334,7 +334,12 @@ Stated so the gaps are decisions rather than omissions:
   The realisation edge lives outside the model, so exporting an application to git
   carries the process and not the capability that claims it — until the extension
   point below is built.
-- **Follow-ups / risks to watch.** The model-side declaration (option 2) as a
+- **Follow-ups / risks to watch.** The half of a record Atlas cannot check — the owner,
+  the scope, the SLAs — is taken on trust and decays silently, which is the failure that
+  turns a capability map into the documentation-only landscape the method warns about.
+  [ADR-draft-a-capability-says-when-it-was-last-confirmed](draft-a-capability-says-when-it-was-last-confirmed.md)
+  is the planned answer, and it is the one follow-up that decides whether this registry
+  stays true rather than merely complete. Beyond it: the model-side declaration (option 2) as a
   *secondary* source the registry reads: an `atlas:capability` attribute would let a
   delivery team state the claim where they already work, and let it travel with the
   model. It is deliberately not in this record because it needs the compiler to carry
