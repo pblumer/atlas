@@ -3747,16 +3747,35 @@ test("nothing is left stranded at the edge of the picture", async ({ page }) => 
 // The count is always polled rather than read straight after a runFor. Advancing the
 // fake clock fires the timer and returns; the request the timer started is answered on
 // real time, so a bare read of the counter asks the question a moment too early.
-function installLiveMock(page, first) {
-  const state = { mesh: first, reads: 0, fail: false };
+function installLiveMock(page, first, drafted = null) {
+  const state = {
+    mesh: first, drafted, reads: 0, fail: false,
+    // A landscape read the test can hold open, so the two things that can be in
+    // flight at once — the timer's read and the Drafts switch's — can be made to
+    // land in the order that used to lose one of them.
+    hold: false, inFlight: 0, release: () => {},
+  };
+  let gate = null;
+  state.holdReads = () => {
+    state.hold = true;
+    gate = new Promise((resolve) => { state.release = () => { state.hold = false; resolve(); }; });
+  };
   page.route("**/api/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
-    if (path === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
-    if (path === "/api/v1/panorama/mesh") {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (url.pathname === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    if (url.pathname === "/api/v1/panorama/mesh") {
       state.reads++;
+      const wantsDrafts = url.searchParams.get("drafts") === "1";
+      // Only the plain read is ever held: the switch's own request has to be able to
+      // answer while the timer's is still waiting, which is the whole scenario.
+      if (state.hold && !wantsDrafts) {
+        state.inFlight++;
+        await gate;
+        state.inFlight--;
+      }
       if (state.fail) return route.fulfill({ status: 503, json: { error: "down" } });
-      return route.fulfill({ json: state.mesh });
+      return route.fulfill({ json: wantsDrafts && state.drafted ? state.drafted : state.mesh });
     }
     return route.fulfill({ json: [] });
   });
@@ -3899,4 +3918,73 @@ test("leaving the view stops the asking", async ({ page }) => {
 
   await page.clock.runFor(10 * 60_000);
   await expect.poll(() => server.reads).toBe(onLeaving);
+});
+
+// The back-off refreshEvery promises has to be measured from the last *attempt*, not
+// from the last success. Measured from the last success, a sustained outage never
+// advances the clock at all: the elapsed time grows past the ceiling and stays there,
+// so every tick is due and a server that is down is asked six times a minute — which
+// is the opposite of what backing off means, and exactly what it must not do.
+test("a server that stays down is asked at the ceiling, not on every tick", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  server.fail = true;
+  // Past the floor: one attempt, which fails.
+  await page.clock.runFor(35_000);
+  await expect(page.locator("#mesh-observed")).toContainText("could not re-read");
+  const afterFirstFailure = server.reads;
+  expect(afterFirstFailure).toBe(2);
+
+  // Ten minutes of outage. The ceiling is five, so this is two more attempts at most —
+  // where measuring from the last success would have produced one per ten-second tick.
+  await page.clock.runFor(10 * 60_000);
+  const attempts = server.reads - afterFirstFailure;
+  expect(attempts).toBeGreaterThan(0);
+  expect(attempts, "a down server must not be polled once per tick").toBeLessThanOrEqual(3);
+
+  // And it recovers: the next attempt after the server comes back puts the picture
+  // and the sentence right.
+  server.fail = false;
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(6 * 60_000);
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  await expect(page.locator("#mesh-observed")).not.toContainText("could not re-read");
+});
+
+// Two landscape reads can be in flight at once — the timer's and the Drafts switch's —
+// and the reader's is the one that counts. A timer answer that lands after the reader
+// has asked for a different landscape is an answer to a question nobody is asking any
+// more: applied, it puts the old picture back and flicks the switch under the hand
+// that just moved it, with nothing said.
+test("a re-read that lands after the reader changed their mind is dropped", async ({ page }) => {
+  await page.clock.install();
+  const withDraft = {
+    ...observedMesh(oneNode),
+    nodes: [...oneNode, { id: "draft:refund", kind: "draft", name: "Refund", provenance: "derived", processId: "refund", state: "unbound", severity: "unknown" }],
+  };
+  const server = installLiveMock(page, observedMesh(oneNode), withDraft);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+
+  // Hold the next plain read open, then let the timer start one.
+  server.holdReads();
+  await page.clock.runFor(35_000);
+  await expect.poll(() => server.inFlight).toBe(1);
+
+  // While it hangs, the reader asks for drafts. That request is not held, so it
+  // answers and the picture gains the draft.
+  await page.locator("#mesh-drafts").check();
+  await expect(page.locator('[data-node-id="draft:refund"]')).toBeVisible();
+
+  // Now the timer's answer finally lands. It is for the landscape without drafts.
+  server.release();
+  await page.clock.runFor(10_000);
+
+  // The reader's picture stands, and so does their switch.
+  await expect(page.locator('[data-node-id="draft:refund"]')).toBeVisible();
+  await expect(page.locator("#mesh-drafts")).toBeChecked();
 });

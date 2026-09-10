@@ -61,23 +61,37 @@ const meshCacheTTL = 30 * time.Second
 //     directory listing. A status view that made trouble wait out a TTL would be
 //     saving the wrong cost, and a reload that could not tell the truth is worse than
 //     a slow one.
-//   - **Visibility is never cached.** Every CanView is decided on the request, from
-//     the request, in collectLandscape below. A cache holding a *filtered* landscape
-//     would be one principal's view served to another the moment a key collided or a
-//     scope changed, and there is no cache key that makes that safe — so nothing
-//     here holds one.
+//
+//   - **Visibility is never cached — and neither is anything a visibility decision
+//     reads.** That second half is the one this originally got wrong, and it is worth
+//     stating rather than implying. Deciding CanView per request is not enough if the
+//     record the decision reads is half a minute old: project.effectiveRole answers
+//     from the project's own OwnerID, Visibility and Members, so re-running the
+//     function against a stale record returns the pre-revocation answer. A member
+//     removed from an application, an application sealed to private, an ownership
+//     transfer, a project deleted — each of those changes only the *record*, and none
+//     of them has any business being remembered here. So the project store and the
+//     worker store are read per request (see collectLandscape), and this holds
+//     neither.
+//
+//     The alternative — a forgetLandscape() hook on all eight scope-writing handlers
+//     — was rejected on the argument forgetLandscape's own comment makes: a protocol
+//     every future writer has to remember is one a future writer forgets. Forgetting
+//     a *correctness* hook draws a stale picture; forgetting an *authorization* hook
+//     is a hole. And it would still miss a record changed out of band. The two stores
+//     it costs back are the two cheap ones; what the cache exists for — the draft
+//     store with its XML, the walk of every compiled process, the override and target
+//     stores — is untouched.
 //
 // The owner of each thing is carried beside it rather than on the landscape types,
 // because an owner id is not the landscape's business: everything on a
-// [panorama.Application] is a candidate for the wire.
+// [panorama.Application] is a candidate for the wire. What each owner *means* is
+// resolved against the records the request reads for itself.
 type meshFacts struct {
 	// at is when this structure was read. It dates the answer built from it — the
 	// oldest fact in that answer, which is what a freshness stamp has to be.
 	at        time.Time
-	projs     map[string]project
 	overrides map[string]callOverride
-	workers   []connector
-	byName    map[string]connector
 	decisions []panorama.Decision
 	procs     []structuralProcess
 	drafts    []structuralDraft
@@ -95,8 +109,12 @@ type structuralProcess struct {
 	projectID  string
 	deployedBy string
 	calls      []panorama.Call
-	workers    []panorama.WorkerUse
-	decisions  []string
+	// workers names the connector each task asks for, and deliberately leaves
+	// TargetID unset: which record that name resolves to is a question about the
+	// worker store, which the request reads for itself, and an id resolved here could
+	// name a worker that has since been deleted or re-scoped.
+	workers   []panorama.WorkerUse
+	decisions []string
 }
 
 // structuralDraft is one saved-but-undeployed diagram, and who governs it.
@@ -126,8 +144,13 @@ type meshCollection struct {
 // is one every future writer has to remember, and the writer who forgets it produces
 // a landscape that is silently wrong; a TTL everybody is subject to cannot be
 // forgotten. These get a hook because they are the changes a person makes and then
-// immediately goes looking for on the picture. A new application or worker appears
-// within the TTL, and the picture says how old it is while it waits.
+// immediately goes looking for on the picture.
+//
+// Nothing about *who may see what* depends on this being called, and that is the
+// point: a scope change needs no hook here because nothing scope-bearing is held (see
+// [meshFacts]). An application or a worker created or deleted shows up on the next
+// request for the same reason. What still waits out the TTL is structure alone — and
+// the picture says how old it is while it waits.
 func (s *Server) forgetLandscape() {
 	s.landscapes = meshCollection{}
 }
@@ -165,10 +188,6 @@ func (s *Server) landscapeFacts(withDrafts bool, now time.Time) (*meshFacts, err
 // state, so one node per process id at its current version, which is also what keeps
 // a server with a long deploy history inside the size budget.
 func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, error) {
-	projs, err := s.projectsByID()
-	if err != nil {
-		return nil, err
-	}
 	overrides, err := s.callOverrides.LoadAll()
 	if err != nil {
 		return nil, err
@@ -178,22 +197,7 @@ func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, erro
 		ovByPID[rec.CalledProcessID] = rec
 	}
 
-	// Configured workers still live in the worker store, whose record still spells
-	// the Worker Type Kind — names ADR-0203 leaves in place until the packages move.
-	// What the mesh emits is Worker vocabulary.
-	confWorkers, err := s.connectors.LoadAll()
-	if err != nil {
-		return nil, err
-	}
-	byName := make(map[string]connector, len(confWorkers))
-	for _, w := range confWorkers {
-		byName[w.Name] = w
-	}
-
-	facts := &meshFacts{
-		at: now, projs: projs, overrides: ovByPID,
-		workers: confWorkers, byName: byName,
-	}
+	facts := &meshFacts{at: now, overrides: ovByPID}
 
 	// Deployed decisions are engine-wide rather than owned by any application
 	// (ADR-0034), so there is no scope to apply and CanView is simply true. Saying
@@ -212,7 +216,7 @@ func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, erro
 		proc := structuralProcess{
 			key: d.Key, processID: d.ProcessID, name: d.Name, version: d.Version,
 			projectID: d.ProjectID, deployedBy: d.DeployedBy,
-			workers:   workerUses(d.cp, byName),
+			workers:   workerRefs(d.cp),
 			decisions: d.cp.BusinessRuleDecisions(),
 		}
 		for _, ref := range d.cp.CallActivities() {
@@ -311,11 +315,41 @@ func (s *Server) readStructure(withDrafts bool, now time.Time) (*meshFacts, erro
 // It invents no visibility rule. Applications defer to their sharing scope
 // (ADR-0071), a deployment to its project falling back to its deployer, a draft to
 // its project falling back to its owner, and a worker to connectorRole — exactly the
-// rules every other listing applies.
+// rules every other listing applies, over records read exactly as every other listing
+// reads them: now.
 func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama.ReachOut, error) {
 	facts, err := s.landscapeFacts(r.URL.Query().Get("drafts") == "1", time.Now())
 	if err != nil {
 		return panorama.Landscape{}, nil, err
+	}
+
+	// The two stores a sharing scope lives in, read for this request and no other.
+	//
+	// This is the whole of the authorization guarantee. Deciding CanView per request
+	// buys nothing if the record the decision reads is half a minute old:
+	// project.effectiveRole answers from the project's own Members, Visibility and
+	// OwnerID, so a member removed a moment ago would still resolve to viewer. Every
+	// other listing on this server reads these two the same way, in its own request
+	// turn, which is why a revoke takes effect on the next call everywhere else — and
+	// this view is not going to be the exception.
+	//
+	// They are also the two cheapest of the stores a landscape touches, which is what
+	// makes paying for them per request affordable: the drafts (with their XML), the
+	// walk of every compiled process, the overrides and the targets stay cached.
+	projs, err := s.projectsByID()
+	if err != nil {
+		return panorama.Landscape{}, nil, err
+	}
+	// Configured workers still live in the worker store, whose record still spells
+	// the Worker Type Kind — names ADR-0203 leaves in place until the packages move.
+	// What the mesh emits is Worker vocabulary.
+	confWorkers, err := s.connectors.LoadAll()
+	if err != nil {
+		return panorama.Landscape{}, nil, err
+	}
+	byName := make(map[string]connector, len(confWorkers))
+	for _, w := range confWorkers {
+		byName[w.Name] = w
 	}
 
 	// Parked work is counted once for the whole landscape rather than per process:
@@ -338,7 +372,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 		Decisions:  facts.decisions,
 		Targets:    append([]panorama.Target(nil), facts.targets...),
 	}
-	for _, w := range facts.workers {
+	for _, w := range confWorkers {
 		state, reason := s.workerStatus(w.Kind, w.Name, polled, held)
 		land.Workers = append(land.Workers, panorama.Worker{
 			ID: w.ID, Name: w.Name, Type: w.Kind,
@@ -348,10 +382,10 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 			State: state, Reason: reason,
 		})
 	}
-	for _, p := range facts.projs {
+	for _, p := range projs {
 		land.Applications = append(land.Applications, panorama.Application{
 			ID: p.ID, Name: p.Name,
-			CanView: s.canViewArtifact(r, p.ID, p.OwnerID, facts.projs),
+			CanView: s.canViewArtifact(r, p.ID, p.OwnerID, projs),
 		})
 	}
 	for _, p := range facts.procs {
@@ -360,12 +394,12 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 		land.Processes = append(land.Processes, panorama.Process{
 			Key: p.key, ProcessID: p.processID, Name: p.name, Version: p.version,
 			ApplicationID: p.projectID,
-			CanView:       s.canViewArtifact(r, p.projectID, p.deployedBy, facts.projs),
+			CanView:       s.canViewArtifact(r, p.projectID, p.deployedBy, projs),
 			State:         state, Reason: reason,
 			Incidents: tally.Count, OldestIncident: tally.OldestRaisedAt, Sites: tally.Sites,
 			Runtime:   s.processRuntime(p.key),
 			Calls:     p.calls,
-			Workers:   p.workers,
+			Workers:   resolveWorkerRefs(p.workers, byName),
 			Decisions: p.decisions,
 		})
 	}
@@ -374,7 +408,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 			ProcessID: d.processID, Name: d.name, ApplicationID: d.projectID,
 			// The same rule the draft list applies: membership inherits from the
 			// artifact's project, falling back to its owner (ADR-0071).
-			CanView: s.canViewArtifact(r, d.projectID, d.ownerID, facts.projs),
+			CanView: s.canViewArtifact(r, d.projectID, d.ownerID, projs),
 		})
 	}
 
@@ -431,8 +465,8 @@ func (s *Server) observeLandscapeTargets(ctx context.Context, peers []remoteTarg
 	}
 }
 
-// workerUses resolves a process's worker references — the names its tasks state in
-// connector="…" — against the configured workers, mirroring the deploy-time check in
+// workerRefs is which worker each of a process's tasks asks for by name — the names
+// its tasks state in connector="…" — mirroring the deploy-time check in
 // connectorWarnings, including the two references that are deliberately *not*
 // findings there, because treating them as findings here would put false "not
 // configured" nodes on the landscape:
@@ -443,8 +477,12 @@ func (s *Server) observeLandscapeTargets(ctx context.Context, peers []remoteTarg
 //     which one it reaches is known only at call time, so there is nothing on this
 //     server to resolve it against.
 //
+// It does not say which configured worker a name currently names. That is a read of
+// the worker store, which carries a sharing scope and is therefore not cached — see
+// resolveWorkerRefs, and [meshFacts] for why.
+//
 // Run-loop goroutine only, via its caller.
-func workerUses(cp *compiler.CompiledProcess, byName map[string]connector) []panorama.WorkerUse {
+func workerRefs(cp *compiler.CompiledProcess) []panorama.WorkerUse {
 	var out []panorama.WorkerUse
 	for _, ref := range cp.ConnectorRefs() {
 		if connectorKindOfJobType(ref.JobType) == "" {
@@ -453,8 +491,28 @@ func workerUses(cp *compiler.CompiledProcess, byName map[string]connector) []pan
 		if strings.HasPrefix(strings.TrimSpace(ref.Connector), "=") {
 			continue
 		}
-		use := panorama.WorkerUse{ElementID: ref.ElementId, Name: ref.Connector}
-		if rec, ok := byName[ref.Connector]; ok {
+		out = append(out, panorama.WorkerUse{ElementID: ref.ElementId, Name: ref.Connector})
+	}
+	return out
+}
+
+// resolveWorkerRefs is the other half: which configured worker each name currently
+// names, against the store the request read for itself.
+//
+// It builds a new slice rather than filling in the cached one. The references are
+// shared by every reader inside the TTL, so writing a TargetID through them would be
+// both a data race and a record of one moment's worker store kept past its moment.
+//
+// A name nothing provides keeps an empty TargetID, which is what draws the unresolved
+// placeholder — and a worker deleted since the structure was read is exactly that
+// case, answered correctly rather than pointing at a record that is gone.
+func resolveWorkerRefs(refs []panorama.WorkerUse, byName map[string]connector) []panorama.WorkerUse {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]panorama.WorkerUse, 0, len(refs))
+	for _, use := range refs {
+		if rec, ok := byName[use.Name]; ok {
 			use.TargetID = rec.ID
 		}
 		out = append(out, use)
