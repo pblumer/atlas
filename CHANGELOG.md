@@ -185,6 +185,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Starmap says when it was read, and keeps itself true.** Everything on that
+  canvas has a shelf life — the severity badges are an observation, the incident counts
+  move as an operator works through them, and the three new weightings below are live
+  quantities, one of them measured against a clock. A landscape opened at nine and
+  still open at eleven showed two-hour-old numbers with nothing on the page saying so,
+  which is the failure the export's stamp already exists to prevent, happening on the
+  screen the stamp is copied from.
+
+  The observation time is now on the page beside the node count (**"observed 4 min
+  ago"**), rewritten every ten seconds, and a **Live** switch beside it — on by
+  default — re-reads the landscape from the server while the view is open.
+
+  The cadence is paced by what the picture costs rather than by a constant: the mesh is
+  derived on the engine's run loop, so the interval is a twentieth of what the last
+  derive actually took, floored at 30 seconds and ceilinged at 5 minutes. A landscape
+  that derives in 40 ms is re-read on the floor; one that takes four seconds backs off
+  to well over a minute by itself. Nothing is asked behind a hidden tab, or while a
+  node is being dragged. A refusal keeps the picture, says **"could not re-read"**, and
+  backs off to the ceiling — a server that is down does not want thirty requests a
+  minute from every open tab. The filter, the drilldown, the selection, the pins and
+  the zoom all survive a re-read. Turning Live off stops it; turning it back on asks at
+  once rather than waiting out another interval (ADR-0211 §7).
+
 - **The Starmap can be sized by what is running on it, by what is stuck on it, or by
   how long it has been stuck.** The instance counts were a checkbox beside the Notation
   picker — an overlay ticked onto

@@ -3726,3 +3726,177 @@ test("nothing is left stranded at the edge of the picture", async ({ page }) => 
   expect(spread.stranded, "nodes with no neighbour near them").toEqual([]);
   expect(spread.ratio).toBeLessThan(2);
 });
+
+// Keeping the picture true (ADR-0211 §7).
+//
+// Everything on this canvas has a shelf life — the severity badges are an observation,
+// the incident counts move as an operator works through them, and all three
+// weightings are live quantities, one of them measured against a clock. A landscape
+// opened at nine and still open at eleven used to show two-hour-old numbers with
+// nothing on the page saying so, which is exactly the failure the export's stamp
+// exists to prevent, happening on the screen the stamp is copied from.
+//
+// The timer is driven by a fake clock rather than waited out: a test that slept
+// through a real half-minute would be a suite that took an extra half-minute per
+// assertion, and the thing under test is *when it asks*, not how long a minute is.
+
+// installLiveMock answers the mesh from a box the test can change between reads, and
+// counts the reads. Both halves matter: the count is the claim about *when* the view
+// asks, and the swap is the claim that what it draws follows.
+//
+// The count is always polled rather than read straight after a runFor. Advancing the
+// fake clock fires the timer and returns; the request the timer started is answered on
+// real time, so a bare read of the counter asks the question a moment too early.
+function installLiveMock(page, first) {
+  const state = { mesh: first, reads: 0, fail: false };
+  page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    if (path === "/api/v1/panorama/mesh") {
+      state.reads++;
+      if (state.fail) return route.fulfill({ status: 503, json: { error: "down" } });
+      return route.fulfill({ json: state.mesh });
+    }
+    return route.fulfill({ json: [] });
+  });
+  return state;
+}
+
+// observedMesh is a landscape that states when it was read, which is the fact the
+// freshness line is about. Minted at call time: the age is measured against the clock
+// at render, and a value fixed at module load drifts behind a long suite.
+function observedMesh(nodes, at = Date.now()) {
+  return {
+    nodes, edges: [], restricted: 0, clustered: false,
+    observedAt: Math.floor(at / 1000),
+    status: { ok: nodes.length, attention: 0, critical: 0, unknown: 0, unavailable: [] },
+  };
+}
+
+const oneNode = [{ id: "process:1", kind: "process", name: "Invoice", provenance: "derived", processId: "invoice", version: 1, severity: "ok", state: "healthy" }];
+const twoNodes = [...oneNode,
+  { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", processId: "dunning", version: 1, severity: "critical", state: "degraded", reason: "parked" }];
+
+test("the picture says when it was read, and keeps itself true", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Said from the first frame, rather than only once it has aged into a problem.
+  await expect(page.locator("#mesh-observed")).toContainText("observed");
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  expect(server.reads).toBe(1);
+
+  // A tick is not a re-read: the sentence is rewritten every few seconds because it
+  // costs nothing, and the landscape is re-derived on the run loop, which does not.
+  await page.clock.runFor(10_000);
+  await expect.poll(() => server.reads).toBe(1);
+  await expect(page.locator("#mesh-observed")).toContainText("observed");
+
+  // Past the floor it asks, and what the server now says is what is drawn — a process
+  // deployed while somebody had the landscape open appears on it.
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(25_000);
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  await expect.poll(() => server.reads).toBe(2);
+  await expect(page.locator('[data-node-id="process:2"]')).toBeVisible();
+});
+
+test("Live off stops the asking, and turning it back on asks at once", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // On by default: a status view that looks live and is not is worse than a picture
+  // that moves.
+  const live = page.locator("#mesh-live");
+  await expect(live).toBeChecked();
+
+  await live.uncheck();
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(120_000);
+  // Two minutes of nothing. Reading one picture carefully is a thing somebody does,
+  // and a canvas that re-lays-out mid-thought is its own kind of wrong.
+  await expect.poll(() => server.reads).toBe(1);
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+
+  // Turning it back on is a request for a current picture, not a request to wait
+  // another half minute for one.
+  await live.check();
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  await expect.poll(() => server.reads).toBe(2);
+});
+
+test("a re-read the server refuses keeps the picture and says it is not current", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(twoNodes));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+
+  server.fail = true;
+  await page.clock.runFor(35_000);
+
+  // The picture stands. Blanking a landscape because one request failed would throw
+  // away a true answer for an error.
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  // And it says so, which is the difference between "four minutes old" and "four
+  // minutes old and no longer being kept up".
+  await expect(page.locator("#mesh-observed")).toContainText("could not re-read");
+  await expect(page.locator("#mesh-observed")).toHaveClass(/mesh-stale/);
+  const afterFailure = server.reads;
+
+  // And backs off to the ceiling rather than retrying on the floor: a server that is
+  // down does not want thirty requests a minute from every open tab.
+  await page.clock.runFor(60_000);
+  await expect.poll(() => server.reads).toBe(afterFailure);
+
+  // Past the ceiling it tries again, and a server that has come back puts the picture
+  // and the sentence right.
+  server.fail = false;
+  server.mesh = observedMesh(oneNode);
+  await page.clock.runFor(5 * 60_000);
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await expect(page.locator("#mesh-observed")).not.toContainText("could not re-read");
+});
+
+// Everything the reader has arranged is theirs, and a re-read they did not ask for
+// must not take any of it away.
+test("a re-read keeps the filter, the selection and the arrangement", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(twoNodes));
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.fill("#mesh-search", "Invoice");
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(35_000);
+  await expect.poll(() => server.reads).toBe(2);
+
+  // The question somebody asked is still the question on screen.
+  await expect(page.locator("#mesh-search")).toHaveValue("Invoice");
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+});
+
+// An interval outlives the view that started it. Left running it would go on asking
+// the server for a picture nobody is looking at for as long as the tab is open.
+test("leaving the view stops the asking", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.evaluate(() => { window.location.hash = "#/panorama/bindings"; });
+  await expect(page.locator(".mesh-canvas")).toHaveCount(0);
+  const onLeaving = server.reads;
+
+  await page.clock.runFor(10 * 60_000);
+  await expect.poll(() => server.reads).toBe(onLeaving);
+});

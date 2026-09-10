@@ -51,7 +51,9 @@
   checkbox for an entry in that list and sizes the nodes by how much is running on
   them, and the incident count and the age of the oldest one are offered beside it as
   the same choice about different quantities; §6's ranking column follows whichever
-  weighting is chosen, with the blast radius kept as the second number on a row)
+  weighting is chosen, with the blast radius kept as the second number on a row;
+  amended 2026-09-10 — §7's picture states when it was read and re-reads itself on a
+  cadence paced by what the derive costs)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1076,6 +1078,62 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > world conversion goes through it and a drag moves the content it is computed from,
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
+
+> **Amendment (2026-09-10): the picture says when it was read, and keeps itself
+> true.**
+> §10 argues that an undated "all green" picture circulates inside an organization
+> long after it stopped being true, and is believed because it looks like evidence —
+> which is why the observation time is rendered *into* the exported image. The same
+> argument applies to the screen that export is taken from, and it was not being made
+> there. Everything on this canvas has a shelf life: §4's severity is an observation,
+> the incident counts move as an operator works through them, and §8's three
+> weightings are live quantities, one of them measured against a clock, so its labels
+> go wrong while nothing on the page changes at all. A landscape opened at nine and
+> still open at eleven showed two-hour-old numbers with nothing saying so.
+>
+> Two answers, and the split is the point, because they cost different amounts:
+>
+> - **The freshness is stated, always, and cheaply.** The landscape's observation time
+>   is on the page beside the node count, rewritten every ten seconds. Writing a
+>   sentence costs nothing, and this sentence is the one that must never be wrong.
+> - **The landscape re-reads itself while it is being looked at**, on a cadence paced
+>   by what it costs. That is the part §7 is about: the mesh is derived on the run loop,
+>   which is why the size budget exists at all, so the interval is a **multiple of what
+>   the last derive actually cost** (a twentieth of it) rather than a constant somebody
+>   guessed — floored at thirty seconds, ceilinged at five minutes. A landscape that
+>   derives in 40 ms is re-read on the floor; one that takes four seconds backs off to
+>   well over a minute by itself. A fixed interval would be exactly wrong on the
+>   estates where the cost mattered most.
+>
+> The floor is not arbitrary either: it is inside the granularity of every number on
+> the picture — the age weighting's finest bucket is "under 2 min" — so asking faster
+> would buy nothing a reader could see.
+>
+> Four rules keep the re-read from being worse than the staleness it fixes:
+>
+> - **Nothing is asked behind a hidden tab**, and nothing under the reader's hand: a
+>   re-layout in the middle of a drag or a pan takes the picture out from under the
+>   gesture moving it.
+> - **A refusal keeps the picture and says so.** A landscape that blanked itself
+>   because one request failed would throw away a true answer for an error. The
+>   freshness line gains "could not re-read", because "four minutes old" and "four
+>   minutes old and no longer being kept up" are different facts and only the second is
+>   a reason to stop believing the drawing. The cadence goes straight to the ceiling: a
+>   server that is down does not want thirty requests a minute from every open tab.
+> - **Everything the reader arranged survives it** — the filter, the drilldown, the
+>   selection, the pins, the zoom — because it goes through the same path the drafts
+>   switch does.
+> - **It can be turned off**, and it is the *default that needs the argument*, not the
+>   switch. On, because a status view that looks live and is not is worse than a
+>   picture that moves; off exists because reading one picture carefully is a thing
+>   people do, and a canvas that re-lays-out mid-thought is its own kind of wrong.
+>   Turning it back on asks at once rather than waiting out another interval.
+>
+> The timer ends itself when the card it painted leaves the document. Unlike the
+> resize observer beside it, an interval outlives its view: left running it would ask
+> the server for a picture nobody is looking at for as long as the tab is open. What it
+> checks is the card, not the element the router handed the view — that one is the
+> router's and outlives every route it holds.
 
 ### 8. C4 is a read-only projection, not a theme
 

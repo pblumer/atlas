@@ -344,3 +344,49 @@ test("an unfamiliar kind still has a shape", async ({ page }) => {
     window.shapeForNode({ kind: "something-new", id: "something-new:1" }));
   expect(shape).toBe("square");
 });
+
+// How often the view re-reads the landscape it is drawing (ADR-0211 §7). The mesh is
+// derived on the run loop and the size budget exists because that is not free, so the
+// cadence is a fraction of what the last derive actually cost rather than a constant
+// somebody guessed — and a claim about every cost is arithmetic rather than a wait.
+test("the re-read cadence is a fraction of what the derive costs", async ({ page }) => {
+  const paced = await page.evaluate(() => ({
+    floor: window.REFRESH_FLOOR,
+    ceiling: window.REFRESH_CEILING,
+    // A landscape that derives in no time is re-read on the floor: there is nothing
+    // to protect, and asking faster would buy nothing a reader could see.
+    quick: window.refreshEvery(40),
+    // The floor holds until the cost would push past it, which is where the two rules
+    // cross: at a twentieth of the cadence, a derive has to reach 1.5 s before the
+    // pacing has anything to say. Pinned from both sides, because a crossover nobody
+    // states is one that moves the next time a constant is touched.
+    justUnder: window.refreshEvery(1400),
+    justOver: window.refreshEvery(1600),
+    // Past it the cadence is the cost, and backs off on its own without anybody
+    // configuring anything.
+    heavy: window.refreshEvery(4000),
+    // And an estate whose derive is measured in tens of seconds settles at the
+    // ceiling rather than growing without bound.
+    vast: window.refreshEvery(60_000),
+    // A cost that could not be measured must not read as "free".
+    unmeasured: [window.refreshEvery(0), window.refreshEvery(NaN), window.refreshEvery()],
+    // A server that would not answer is asked at the ceiling, whatever the last good
+    // derive cost: it does not want thirty requests a minute from every open tab, and
+    // the freshness line is already saying the picture is not being kept up.
+    failing: window.refreshEvery(40, { failing: true }),
+  }));
+
+  expect(paced.quick).toBe(paced.floor);
+  for (const ms of paced.unmeasured) expect(ms).toBe(paced.floor);
+  expect(paced.justUnder).toBe(paced.floor);
+  expect(paced.justOver).toBeGreaterThan(paced.floor);
+  expect(paced.heavy).toBeGreaterThan(paced.justOver);
+  expect(paced.vast).toBe(paced.ceiling);
+  expect(paced.failing).toBe(paced.ceiling);
+  // Never faster than the floor and never slower than the ceiling, at any cost.
+  for (const ms of [0, 1, 100, 1e4, 1e9]) {
+    const every = await page.evaluate((c) => window.refreshEvery(c), ms);
+    expect(every, `at ${ms} ms`).toBeGreaterThanOrEqual(paced.floor);
+    expect(every, `at ${ms} ms`).toBeLessThanOrEqual(paced.ceiling);
+  }
+});

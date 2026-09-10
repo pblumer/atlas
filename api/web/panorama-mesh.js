@@ -2218,6 +2218,46 @@ function renderGraph(graph, layoutMs, frame,
 }
 
 
+// How often this view re-reads the landscape it is drawing (ADR-0211 §7).
+//
+// Everything on the picture has a shelf life — the severity badges are an observation,
+// the incident counts move as an operator works through them, and all three heat
+// weightings are live quantities, one of them measured against a clock — so a
+// landscape left open goes quietly wrong. The failure §10's export stamp exists to
+// prevent, happening on the screen the stamp was copied from.
+//
+// REFRESH_FLOOR is the fastest this view will ask, and it is well inside the
+// granularity of every number on the picture: the age weighting's finest bucket is
+// "under 2 min", so asking faster would buy nothing a reader could see.
+export const REFRESH_FLOOR = 30_000;
+// REFRESH_CEILING is the slowest it will settle to. Past this the freshness line is
+// doing the honest work and the polling is only noise.
+export const REFRESH_CEILING = 5 * 60_000;
+// DERIVE_SHARE is the fraction of a derive's cost this view is willing to be. The mesh
+// is built on the run loop and the size budget (§7) exists because that is not free,
+// so the cadence is a *multiple of what the last one actually cost* rather than a
+// constant somebody guessed: a landscape that derives in 40 ms is re-read on the
+// floor, and one that takes four seconds backs off to well over a minute on its own. A
+// fixed interval would be exactly wrong on the estates where it mattered most.
+const DERIVE_SHARE = 0.05;
+
+// refreshEvery is that cadence, in milliseconds.
+//
+// `derivedMs` is measured as the round trip rather than as the server's own time,
+// which over-counts by the network — and erring toward asking less often is the right
+// direction to be wrong in.
+//
+// A failed attempt goes straight to the ceiling rather than retrying on the floor: a
+// server that is down does not want thirty requests a minute from every open tab, and
+// the freshness line is already saying the picture is not being kept up. A derive that
+// could not be measured at all falls to the floor, because "unknown cost" must not
+// read as "free".
+export function refreshEvery(derivedMs, { failing = false } = {}) {
+  if (failing) return REFRESH_CEILING;
+  const paced = Number.isFinite(derivedMs) && derivedMs > 0 ? derivedMs / DERIVE_SHARE : 0;
+  return Math.min(REFRESH_CEILING, Math.max(REFRESH_FLOOR, paced));
+}
+
 // rankingHTML answers "where is the risk on this landscape" without a selection.
 //
 // Impact analysis has always needed one, which quietly assumes the reader already
@@ -2735,6 +2775,23 @@ export async function mountPanoramaMesh(view, { api, toast }) {
          wide. It describes the picture rather than acting on it, so it reads better
          under the row that does. -->
     <div class="mesh-subhead">
+      <!-- When the server read this landscape, always, because the picture claims to
+           be live: the severity badges, the incident counts and the three weightings
+           are all facts with a shelf life, and an undated one that looks current is
+           the failure the export's stamp already exists to prevent. On screen there
+           was nothing saying it — a landscape opened at nine and still open at eleven
+           showed two-hour-old numbers with no hint of it. -->
+      <span id="mesh-observed" class="muted"></span>
+      <!-- And the switch that keeps it true. On by default, because a stale status
+           view that looks live is worse than a picture that moves: what it costs is a
+           derive on the run loop every half minute, and what it buys is that the
+           sentence beside it stays "just now". Off is for reading one picture
+           carefully — a canvas that re-lays-out under a reader mid-thought is its own
+           kind of wrong. -->
+      <label class="mesh-toggle mesh-live" title="Re-read the landscape from the server while this view is open">
+        <input id="mesh-live" type="checkbox" checked/> Live
+      </label>
+      <span class="mesh-subhead-gap"></span>
       <span id="mesh-count" class="muted"></span>
     </div>
     <div class="mesh-body">
@@ -2816,6 +2873,21 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const zoomFit = document.getElementById("mesh-zoom-fit");
   const release = document.getElementById("mesh-release");
   const draftsToggle = document.getElementById("mesh-drafts");
+  // The card this mount painted, which is not the element it was handed: the router
+  // owns that one and reuses it for every route, replacing what is inside it. So it
+  // is this node, not `view`, that stops being in the document when the reader leaves
+  // — and the timer below has nothing else to notice its own view is gone by.
+  const root = document.getElementById("mesh-root");
+  const liveToggle = document.getElementById("mesh-live");
+  const observed = document.getElementById("mesh-observed");
+  // What the freshness line and the cadence below are computed from: when this
+  // landscape last arrived, what it cost to derive, and whether the last attempt
+  // failed. Seeded from the fetch that opened the view, so the first tick reasons
+  // about a real request rather than about nothing.
+  let fetchedAt = Date.now();
+  let derivedMs = fetchMs;
+  let failing = false;
+  let refreshing = false;
   // Set from what was actually fetched rather than left at its markup default, so the
   // control agrees with the picture on the first frame as well as on every later one.
   draftsToggle.checked = withDrafts;
@@ -3097,6 +3169,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
+    // The freshness line, on every repaint as well as on every tick: a repaint that
+    // followed a re-read would otherwise go on saying the picture was minutes old for
+    // up to a tick after it stopped being true.
+    sayObserved();
     // Matches and context counted apart. "5 of 101" over a picture where only one
     // node matched the term would be the header agreeing with the drawing and both
     // of them misreporting the search.
@@ -3832,13 +3908,24 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // id, and the drilldown trail is pruned rather than cleared — a station whose node
   // is no longer on the picture cannot be a way back to it, and the ones still there
   // still are.
-  async function loadLandscape(wantDrafts) {
-    draftsToggle.disabled = true;
+  //
+  // `silent` is a refresh nobody asked for — the timer's, rather than the switch's.
+  // It leaves the drafts control alone: dimming it every half minute would make the
+  // one thing on this row that *is* waiting for the server indistinguishable from the
+  // thing that merely does so on its own.
+  async function loadLandscape(wantDrafts, { silent = false } = {}) {
+    if (!silent) draftsToggle.disabled = true;
+    const started = performance.now();
     try {
       graph = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
     } finally {
-      draftsToggle.disabled = false;
+      if (!silent) draftsToggle.disabled = false;
     }
+    // What this landscape costs to derive, measured every time rather than once at
+    // open: an estate grows, and the cadence below is a fraction of the cost.
+    derivedMs = performance.now() - started;
+    fetchedAt = Date.now();
+    failing = false;
     draftsToggle.checked = wantDrafts;
     trail = trail.filter((id) => graph.nodes.some((n) => n.id === id));
   }
@@ -4226,6 +4313,96 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   } else {
     window.addEventListener("resize", reframe);
   }
+
+  // Keeping the picture true (ADR-0211 §7).
+  //
+  // Everything this view draws has a shelf life. The severity badges are an
+  // observation, the incident counts move as an operator works through them, and all
+  // three weightings are live quantities — the age one is *measured against a clock*,
+  // so its labels go wrong while nothing on the page changes at all. A landscape
+  // opened at nine and still open at eleven showed two-hour-old numbers with nothing
+  // saying so, which is the failure §10's export stamp exists to prevent, happening
+  // on the screen the stamp was copied from.
+  //
+  // So the picture says when it was read, always, and re-reads itself while it is
+  // being looked at.
+
+  // TICK is how often the freshness line is rewritten, which is not how often the
+  // landscape is re-read. Writing a sentence costs nothing and the sentence is the
+  // thing that must never be wrong; the re-read costs a derive on the run loop, and is
+  // paced by refreshEvery.
+  const TICK = 10_000;
+  const refreshDue = () =>
+    Date.now() - fetchedAt >= refreshEvery(derivedMs, { failing });
+
+  // sayObserved writes when this landscape was read, and whether the last attempt to
+  // re-read it failed. Both, because they are different facts: a picture can be four
+  // minutes old because nobody asked for a newer one, or because the server would not
+  // give one, and only the second is a reason to stop believing it.
+  function sayObserved() {
+    const age = graph.observedAt
+      // The payload carries Unix *seconds*; sinceText speaks the nanoseconds the
+      // runtime tallies are in.
+      ? sinceText(graph.observedAt * 1e9)
+      : sinceText(fetchedAt * 1e6);
+    observed.textContent = `observed ${age || "just now"}` +
+      (failing ? " · could not re-read" : "");
+    observed.classList.toggle("mesh-stale", failing);
+  }
+  sayObserved();
+
+  // The re-read itself — named for what it does rather than "refresh", which in this
+  // view already means answering the impact question about the current selection.
+  //
+  // Everything the reader has arranged survives it, because it
+  // goes through the same path the drafts switch does: positions are kept by node id,
+  // the trail is pruned rather than cleared, and a selection the new landscape no
+  // longer contains is dropped by paint().
+  async function reread() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await loadLandscape(draftsToggle.checked, { silent: true });
+      paint();
+    } catch {
+      // The picture stands. A landscape that blanked itself because one request
+      // failed would have thrown away a true answer for an error, and the freshness
+      // line says the current one is no longer being kept up.
+      failing = true;
+    } finally {
+      refreshing = false;
+      sayObserved();
+    }
+  }
+
+  const ticking = setInterval(() => {
+    // The view is gone: the router replaced what this closure painted. Unlike the
+    // ResizeObserver above, an interval outlives its view and would go on asking the
+    // server for a picture nobody is looking at for as long as the tab is open — so it
+    // ends itself the first time it notices. The card is what is checked rather than
+    // the container it sits in, because the container is the router's and outlives
+    // every route it holds.
+    if (!root.isConnected) {
+      clearInterval(ticking);
+      return;
+    }
+    sayObserved();
+    // A hidden tab is not a reader. Nothing is re-read behind a background tab; the
+    // first tick after it comes back is due immediately, because the clock kept
+    // running while the picture did not.
+    if (document.visibilityState === "hidden") return;
+    if (!liveToggle.checked || !refreshDue()) return;
+    // Never under the reader's hand. A re-layout in the middle of a drag or a pan
+    // takes the picture out from under the gesture that is moving it.
+    if (moving || panning) return;
+    reread();
+  }, TICK);
+
+  // Turning it back on is a request for a current picture, not a request to wait
+  // another half minute for one.
+  liveToggle.addEventListener("change", () => {
+    if (liveToggle.checked && !moving && !panning) reread();
+  });
 
   if (fetchMs > 2000) toast(`The starmap took ${Math.round(fetchMs)} ms to derive.`);
 }

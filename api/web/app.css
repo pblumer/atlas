@@ -3971,6 +3971,18 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   display: flex; justify-content: flex-end; align-items: baseline; gap: 8px;
   margin-top: -4px; font-size: 13px;
 }
+/* Splits the row: when the landscape was read, and the switch that keeps that true,
+   sit under the search box they belong beside; how much is on screen stays against
+   the right edge, where it has always been. */
+.mesh-subhead-gap { flex: 1 1 auto; }
+/* The Live switch is a footnote on a line of footnotes, not a control in the header
+   row: it changes nothing about the picture except whether it stays true. */
+.mesh-live { font-size: 13px; color: var(--muted); }
+/* A picture the server would not re-read. Said in the danger ink rather than the
+   muted grey the rest of the line is in, because "four minutes old" and "four minutes
+   old and no longer being kept up" are different facts and only one of them is a
+   reason to stop believing what is drawn. */
+.mesh-stale { color: var(--danger); }
 /* Going into the selected node. Square, because it is an action on one thing rather
    than a phrase, and next to the search because both narrow the picture. */
 .mesh-drill-in {

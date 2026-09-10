@@ -14,7 +14,10 @@
     <div id="ready">loading</div>
     <script type="module">
       import { radiusFor, radiusForHeat, heatPeak, degreesOf, shapeForNode,
-        shapeVertices } from "/panorama-mesh.js";
+        shapeVertices, refreshEvery, REFRESH_FLOOR, REFRESH_CEILING } from "/panorama-mesh.js";
+      window.refreshEvery = (ms, opts) => refreshEvery(ms, opts);
+      window.REFRESH_FLOOR = REFRESH_FLOOR;
+      window.REFRESH_CEILING = REFRESH_CEILING;
       window.radiusFor = (node, degree) => radiusFor(node, degree);
       window.radiusForHeat = (node, peak, heat, at) => radiusForHeat(node, peak, heat, at);
       window.heatPeak = (graph, heat, at) => heatPeak(graph, heat, at);
