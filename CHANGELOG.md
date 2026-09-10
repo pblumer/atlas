@@ -226,6 +226,128 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Starmap reads its structure once for everybody, and everybody's health for
+  themselves.** With every open Starmap now re-reading itself, the cost of deriving one
+  scaled with the audience: a landscape is built on the engine's run loop — the single
+  writer — and costs a directory listing and a JSON decode per record across four
+  stores, plus a walk of every compiled process. Twenty tabs is one operations team,
+  and it was twenty of those readings, competing for the loop that executes process
+  instances.
+
+  The server now holds that reading for **30 seconds** — the view's own re-read floor,
+  deliberately: a shorter one bounds nothing, because readers do not poll in step. What
+  it holds is the whole design:
+
+  - **Health is never cached.** Parked work, incident ages, running instances, which
+    workers have polled — all read fresh on every request. They are what an operator
+    opens the view for, and they are engine point reads rather than disk. A status view
+    that made trouble wait out a timer would be saving the wrong cost.
+  - **Visibility is never cached.** Every access decision is made on the request, from
+    the request. The held reading carries the *inputs* a decision is made from and
+    never a decision, so one person's landscape can never be served to another.
+
+  Deploying a process, writing a call override and creating a deployment target drop
+  the reading at once — those are the changes somebody makes and then immediately looks
+  for on this picture. A new application or worker appears within the 30 seconds, and
+  the picture says how old it is while it waits: the landscape is dated by when its
+  *structure* was read, not by when the answer was served, so the freshness line is
+  true of a cached answer as much as a fresh one (ADR-0211 §7).
+
+- **The Starmap says when it was read, and keeps itself true.** Everything on that
+  canvas has a shelf life — the severity badges are an observation, the incident counts
+  move as an operator works through them, and the three new weightings below are live
+  quantities, one of them measured against a clock. A landscape opened at nine and
+  still open at eleven showed two-hour-old numbers with nothing on the page saying so,
+  which is the failure the export's stamp already exists to prevent, happening on the
+  screen the stamp is copied from.
+
+  The observation time is now on the page beside the node count (**"observed 4 min
+  ago"**), rewritten every ten seconds, and a **Live** switch beside it — on by
+  default — re-reads the landscape from the server while the view is open.
+
+  The cadence is paced by what the picture costs rather than by a constant: the mesh is
+  derived on the engine's run loop, so the interval is a twentieth of what the last
+  derive actually took, floored at 30 seconds and ceilinged at 5 minutes. A landscape
+  that derives in 40 ms is re-read on the floor; one that takes four seconds backs off
+  to well over a minute by itself. Nothing is asked behind a hidden tab, or while a
+  node is being dragged. A refusal keeps the picture, says **"could not re-read"**, and
+  backs off to the ceiling — a server that is down does not want thirty requests a
+  minute from every open tab. The filter, the drilldown, the selection, the pins and
+  the zoom all survive a re-read. Turning Live off stops it; turning it back on asks at
+  once rather than waiting out another interval (ADR-0211 §7).
+
+- **The Starmap can be sized by what is running on it, by what is stuck on it, or by
+  how long it has been stuck.** The instance counts were a checkbox beside the Notation
+  picker — an overlay ticked onto
+  whatever was on screen — and that offered a picture with no reading. Size on the
+  Starmap is one channel and it already carried connectivity, so a landscape with the
+  box ticked had radii meaning structure while its labels meant load, and the one
+  question somebody ticks it to ask, *where is the work*, was the one it could not
+  answer.
+
+  The checkbox is gone. The Notation picker now offers two **heatmaps** beside *Atlas
+  (derived)* and the two projections, because every entry there decides how the
+  landscape is drawn and only one of them can be chosen at a time:
+
+  - **Instances (heatmap)** — *where is the work.* A node's size is what is running on
+    it: capacity, reading a load test, finding the process actually carrying the estate.
+  - **Incidents (heatmap)** — *where is it stuck.* A node's size is how many unresolved
+    incidents the engine holds against it. The severity badges already said **which**
+    nodes have a finding; what they could not say is how much is parked behind each,
+    and a process holding four hundred stuck tokens wore the same badge as one holding
+    a single retry. The badge stays the classification; the size is now the magnitude.
+  - **Incident age (heatmap)** — *how long has it been stuck.* A node's size is how long
+    its earliest unresolved incident has been standing. This is the one that changes a
+    decision: four hundred incidents from the last five minutes is a worker that has
+    just fallen over and drains itself once somebody restarts it, and three standing
+    since Friday is a process nobody is coming back to. The count ranks those the wrong
+    way round, every time.
+
+  For the third one the mesh payload carries a new fact: **`oldestIncident`**, the
+  moment a node's earliest unresolved incident was raised. The oldest rather than the
+  newest, because that is the age of the *problem* — a process where one token parked
+  on Friday and three hundred piled up behind it has been stuck since Friday. It is
+  absent, never zero, where there is nothing to date, including an incident raised
+  before the engine recorded the moment: "not known" and "raised at the epoch" are
+  different facts, and a zero would draw the process as the oldest trouble on the
+  estate. A collapsed application carries the earliest of the processes it stands for.
+  Collecting it costs nothing — the incident scan already reads every record, and the
+  raise time is a field on the record it is reading.
+
+  The panel states the exact age for whichever node is selected (**"Oldest still parked
+  5 d ago"**), which is the number a circle cannot give.
+
+  On either, the area above the smallest node is that node's share of the largest node
+  on the landscape. Area rather than radius, because doubling a radius quadruples the
+  ink — a circle drawn straight from the number reads as four times the quantity it
+  stands for.
+
+  Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
+  idle process, a worker, a decision and an application whose load sits on the processes
+  it holds are all still nodes somebody can see and click, and "nothing here" stays
+  distinguishable from "not on this server". On the incident picture that also makes the
+  good news legible — a flat landscape is the answer, and the key says so rather than
+  leaving you to wonder whether anything was measured. Kind is unaffected: it was never
+  carried by size alone, and shape and colour still carry it.
+
+  The reference is the largest node on the **whole** landscape rather than on what the
+  filter has left on screen, so narrowing to two nodes cannot swell the smaller of them
+  into the worst thing on the estate — and it is named in the key and in the export's
+  stamp, because an area with no stated reference is a decoration rather than a
+  quantity. A saved view stored while the counts were a switch reopens as the weighting
+  it stood for.
+
+  **The ranking column follows the weighting too.** It ranks by blast radius on the
+  derived drawing, as it always has; with a heatmap on it ranks by the same quantity
+  the canvas is sized by, so the largest circle and the first row are the same node.
+  Two orderings on one screen, with nothing on it saying they answer different
+  questions, is a contradiction a reader cannot resolve. It is not a re-listing of the
+  picture: a circle gives neither the exact number — nobody reads 41 against 38 off two
+  areas — nor the name, which zoomed out is not painted at all. The blast radius stays
+  as the second number on each row, which is what turns a count into a priority: forty
+  incidents on a leaf process is a contained problem, twelve on something two hundred
+  things need is an outage (ADR-0211 §6, §8).
+
 - **A Worker Type's setup folds away once you have set it up.** The section that says
   where a type's work runs and what has to exist at the provider stood open above the
   fields. That is right the first time and wrong every time after: on a 270-pixel panel
