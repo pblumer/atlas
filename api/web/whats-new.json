@@ -45,6 +45,49 @@
       }
     },
     {
+      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See the classes and states your processes already carry — without modelling first",
+        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
+      },
+      "summary": {
+        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
+        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
+      },
+      "link": {
+        "label": "ADR draft",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-derive-the-model-from-the-processes.md"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data and press As built…, then pick the application you want to read.",
+          "The class diagram is what that application's processes carry — no model of yours is involved.",
+          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
+          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
+        ],
+        "de": [
+          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
+          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
+          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
+          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
       "version": "Unreleased",
       "date": null,
@@ -382,28 +425,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "model-authored-scripts-no-longer-inherit-atlas-credentials",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Scripts no longer receive Atlas credentials",
-        "de": "Scripts erhalten keine Atlas-Zugangsdaten mehr"
-      },
-      "summary": {
-        "en": "Script workers and interpreters now start with restricted environments, and their token can reach only the worker API. Existing scripts remain enabled unless every language is switched off.",
-        "de": "Script-Worker und Interpreter starten neu mit eingeschränkten Umgebungen; ihr Token erreicht nur noch die Worker-API. Bestehende Scripts bleiben aktiv, solange nicht alle Sprachen ausgeschaltet werden."
-      },
-      "link": {
-        "label": "ADR-0297",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0297-confine-internal-worker-token.md"
-      },
-      "tags": [
-        "Security",
-        "Scripts"
-      ]
     }
   ]
 }

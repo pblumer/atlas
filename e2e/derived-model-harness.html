@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas derived-model e2e harness</title>
+    <!-- Drives the *real* api/web/derived-model.js against a mock `api`, for the "as
+         built" reading: what an application's processes imply about its data, read
+         without anyone having modelled anything.
+
+         The fixture is deliberately imperfect, because the imperfections are what the
+         reading has to admit to: one class named after its data object (nothing
+         declared a type), one member proved structured by a dotted write path, and no
+         business key anywhere — which is the fact derivation can never produce. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountDerivedModel } from "/derived-model.js";
+
+      const view = document.getElementById("view");
+
+      // What the server derives for this application. Hand-written to be exactly what
+      // api/infomodel's Derive produces for such processes — the Go tests hold that end.
+      const DERIVED = {
+        model: {
+          classes: [
+            {
+              id: "derived-Order", name: "Order", stereotype: "businessObject", identity: null,
+              x: 0, y: 0,
+              attributes: [
+                { name: "id", type: "", multiplicity: "1" },
+                { name: "customer", type: "", multiplicity: "1" },
+              ],
+              lifecycle: {
+                states: [
+                  { name: "received", initial: true, x: 0, y: 0 },
+                  { name: "approved", x: 0, y: 90 },
+                  { name: "shipped", x: 0, y: 180 },
+                ],
+                transitions: [
+                  { id: "derived-Order-received-approved", from: "received", to: "approved" },
+                  { id: "derived-Order-approved-shipped", from: "approved", to: "shipped" },
+                ],
+              },
+            },
+            {
+              // No itemSubjectRef, so it is named after the data object — the commonest
+              // real case, and the one most likely to be named wrongly.
+              id: "derived-identitaet", name: "identitaet", stereotype: "businessObject", identity: null,
+              x: 300, y: 0,
+              attributes: [{ name: "nachname", type: "", multiplicity: "1" }],
+              lifecycle: {
+                states: [{ name: "ERFASST", initial: true, x: 0, y: 0 }, { name: "AKTIV", x: 0, y: 90 }],
+                transitions: [{ id: "derived-identitaet-ERFASST-AKTIV", from: "ERFASST", to: "AKTIV" }],
+              },
+            },
+            {
+              // Nothing writes a data state on it, so it has no life to draw.
+              id: "derived-Notiz", name: "Notiz", stereotype: "businessObject", identity: null,
+              x: 600, y: 0, attributes: [{ name: "text", type: "", multiplicity: "1" }],
+            },
+          ],
+        },
+        gaps: [
+          { kind: "no-business-key", note: "No class here has a business key. Nothing in BPMN says which attribute identifies a thing, so it cannot be read from a process — and it is the fact every cross-process capability rests on. It is the first thing to add by hand." },
+          { kind: "no-attribute-types", note: "Attributes are untyped. What a write puts into a member is a FEEL expression, and its result type is not a fact of the model." },
+          { class: "identitaet", kind: "named-after-object", note: "Named after the data object \"identitaet\", because no itemSubjectRef declared a type. The class a person would write is probably spelled differently." },
+          { class: "Order", kind: "structured-member", note: "A write targets \"customer\" inside \"Order\", so \"customer\" has members of its own — but nothing in BPMN names the class it is." },
+        ],
+      };
+
+      const EMPTY = { model: { classes: [] }, gaps: [] };
+
+      window.__derivedCalls = 0;
+      let payload = DERIVED;
+      const api = async (method, url) => {
+        if (/\/infomodel\/derived\?/.test(url)) { window.__derivedCalls++; return payload; }
+        return {};
+      };
+
+      window.__mount = () => mountDerivedModel(view, {
+        api, applicationId: "app-1", application: { id: "app-1", name: "Identitätsverwaltung" },
+      });
+      // The case the whole feature exists for, from the other end: an application whose
+      // processes carry no data at all.
+      window.__mountEmpty = () => { payload = EMPTY; return window.__mount(); };
+      window.__ready = true;
+    </script>
+  </body>
+</html>
