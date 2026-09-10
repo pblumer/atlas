@@ -1666,10 +1666,16 @@ the method and how to work it with Atlas as it stands are in
   *made* — with the one difference that forces its own record: both of those are
   build-time tests over content here, and this is runtime data in a customer's
   installation that no test will ever fail over.
-  `confirmedAt` / `confirmedBy` / `confirmationNote` on both records, set by an
-  explicit confirmation and by **no** edit, because a save that refreshed the date
-  would let a typo fix assert that every SLA had been re-read. No bulk confirm, for the
-  same reason. The horizon is one installation setting defaulting to twelve months —
+  `confirmedAt` / `confirmedBy` / `confirmedWith` / `confirmationNote` on both records,
+  set by an explicit confirmation and by **no** edit, because a save that refreshed the
+  date would let a typo fix assert that every SLA had been re-read. No bulk confirm, for
+  the same reason. `confirmedWith` is there because the confirmer is almost never the
+  owner — the owner is free text precisely because they often have no account — so
+  without it the map confirms itself and a reader cannot tell that from a review the
+  owner sat in. Optional, and its absence is the information; neither a self-confirmation
+  nor a name that differs from the recorded owner is a finding, because in a small
+  installation the first is the only confirmation possible and the second would be a
+  finding about spelling. The horizon is one installation setting defaulting to twelve months —
   configurable, unlike its two precedents, because the reviewers are somebody else's
   business architects rather than this repository's contributors. It surfaces as a
   ninth finding, as `?stale=true` beside `?realized=false` (the review backlog beside

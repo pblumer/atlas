@@ -386,7 +386,9 @@ outside your sharing scope is reported as restricted, never as missing.
   answer is the shape this repository already uses twice: a backward-looking date saying
   somebody looked, an explicit confirmation that no ordinary edit can set, a horizon
   defaulting to twelve months, and a ninth finding plus a `?stale=true` review backlog
-  beside the automation one. See
+  beside the automation one. It also records *who was asked*, because the confirmer is
+  almost never the owner and a date that does not say so means something weaker than it
+  looks. See
   [ADR-draft-a-capability-says-when-it-was-last-confirmed](../adr/draft-a-capability-says-when-it-was-last-confirmed.md).
 - **Document-level exchange** of the map on its own, with a dry-run import.
 - **The milestone event** — see [the gap above](#the-milestone-gap).

@@ -54,6 +54,10 @@ makes this a decision rather than a third application of an existing one.
   by the author and `2099-01` makes the mechanism a no-op that still looks enforced.
 - **It has to fire without anybody touching the record.** The record not being touched
   is the condition it exists to catch.
+- **The person accountable usually cannot confirm it themselves.** The business owner is
+  free text precisely because they often have no Atlas account, so whoever performs the
+  confirmation is normally *not* them — and a date that quietly means something weaker
+  than it appears to is the failure this record exists to fix, not one it may commit.
 - **It must not make the map less useful when it fires.** A stale record is still the
   best information there is, and this must not become a reason to hide it.
 - **One convention in this tree, not three.** A reader who has met the `checked` date
@@ -78,12 +82,13 @@ makes this a decision rather than a third application of an existing one.
 Chosen option: **3**, with option 5 named as a follow-up it enables rather than a
 rival.
 
-### Two fields, on both records
+### What the record carries, on both kinds
 
 | Field | Meaning |
 |-------|---------|
 | `confirmedAt` | unix seconds: when a person last said this record still describes reality |
 | `confirmedBy` | the principal who said it |
+| `confirmedWith` | free text, optional: who was **asked**, when that is somebody other than the confirmer |
 | `confirmationNote` | one line, overwritten each time: what the last review found |
 
 The note is one line and is replaced, not appended. Panorama's drift journal
@@ -110,8 +115,54 @@ propose is the mechanism failing:
 An author who has just rewritten a record confirms it in the same breath. That is one
 extra call, and it is the call that carries the meaning.
 
-**Creating a record sets both fields**, to the creator and to now. Somebody just wrote
-it down; that is an assertion, and the honest date is today.
+**Creating a record confirms it**, to the creator and to now. Somebody just wrote it
+down; that is an assertion, and the honest date is today.
+
+### Who confirms, and who was asked
+
+`confirmedBy` is whoever called the endpoint. It is almost never the owner.
+
+That is not an oversight to close. The business owner is free text *because* they are
+frequently an SVP or a department head with no account here, and requiring them to
+confirm would leave the mechanism unusable for the majority of a map — which is the
+same trap as requiring a principal in the `owner` field itself. So a confirmation is
+performed by an architect, and it says so.
+
+But then the date means "somebody with an account wrote this down", not "the
+accountable person stood behind it", and those are different claims. Left as one field,
+the map confirms itself: the architect who wrote the record re-reads their own prose,
+and the answer comes back green in a way a reader cannot distinguish from a review the
+owner actually sat in.
+
+So the record carries **`confirmedWith`** — free text, optional, naming who was asked.
+Three things follow, and each is a decision rather than a detail:
+
+- **It is optional, and its absence is the information.** Empty means the confirmer
+  spoke for the record alone. That is a legitimate confirmation — an architect
+  re-reading is better than nobody re-reading — and it is a weaker one, which the
+  record now says instead of implying the opposite. It also makes "which confirmations
+  asked nobody" a filter rather than a reading exercise.
+- **It is another unverifiable claim, and that is not a reason to refuse it.** Atlas
+  cannot check that Frau Meier was asked any more than it can check that she is the
+  owner. It earns its place for the reason `owner` does: the alternative is that the
+  information exists only in the head of whoever did the asking, which is the person
+  who will not be reading this in two years.
+- **`confirmedWith` disagreeing with `owner` is a feature, not a defect.** The
+  confirmation that names somebody who is not the recorded owner is exactly the case
+  worth seeing — either the owner has changed, or the wrong person was asked.
+
+**Neither of those is a finding.** The report does not flag a self-confirmation: in a
+four-person installation the architect is the only person who *can* confirm, so
+flagging it would flag the normal case, and a report that fires on the normal case
+stops being read. And it does not compare `confirmedWith` against `owner.name`, because
+string-comparing two free-text names produces a finding about spelling — "A. Meier"
+against "Anna Meier" — which teaches a reader to ignore the report.
+
+What happens instead is that the coverage read *shows* both: `confirmedBy`,
+`confirmedWith`, and — since `updatedBy` is already on the record — that the
+confirmation came from the same person who last wrote it. Three facts, side by side,
+for a reader to weigh. No rule, no field beyond the one, and nothing pretending to know
+what it cannot.
 
 ### There is no bulk confirm
 
@@ -188,6 +239,10 @@ hundred lines to read.
   new setting and a ninth finding — for a property Atlas can never verify, only date.
   Every other finding in the report is a fact; this one is the absence of an
   assertion, and the report has to say so rather than letting it read like the others.
+- **Negative.** `confirmedWith` is a second free-text claim about a person, next to
+  `owner.name` and `owner.contact`, and nothing keeps the three consistent. That is
+  accepted on the same terms as the first one: three fields that can disagree are more
+  honest than one field that cannot be wrong because it says nothing.
 - **Negative.** The horizon is uniform within an installation. A capability that
   genuinely changes twice a decade comes due on the same cycle as one that changes
   quarterly, and the honest response is to confirm it saying nothing has changed —
@@ -198,10 +253,13 @@ hundred lines to read.
   trail without this area growing one. An SLA's own `reviewBy` — a date the *business*
   set, which is a different thing from a date Atlas recorded — is a separate later
   refinement and deliberately not folded in here.
-- **The obvious way this fails:** somebody confirms without reading. Nothing can
-  prevent that, and the API's own wording should say so. What the mechanism buys is
-  that confirming is now a deliberate act with a name and a date attached, rather than
-  the absence of one.
+- **The obvious way this fails:** somebody confirms without reading — and the quieter
+  variant, somebody confirms without asking. Nothing can prevent either, and the API's
+  own wording should say so. What the mechanism buys is that confirming is now a
+  deliberate act with a name and a date attached rather than the absence of one, and
+  that a confirmation nobody was asked for is visibly that: `confirmedWith` empty,
+  `confirmedBy` equal to `updatedBy`, both on the read where somebody is already
+  looking.
 
 ## Pros and cons of the options
 
