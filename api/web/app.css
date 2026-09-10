@@ -3971,6 +3971,18 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   display: flex; justify-content: flex-end; align-items: baseline; gap: 8px;
   margin-top: -4px; font-size: 13px;
 }
+/* Splits the row: when the landscape was read, and the switch that keeps that true,
+   sit under the search box they belong beside; how much is on screen stays against
+   the right edge, where it has always been. */
+.mesh-subhead-gap { flex: 1 1 auto; }
+/* The Live switch is a footnote on a line of footnotes, not a control in the header
+   row: it changes nothing about the picture except whether it stays true. */
+.mesh-live { font-size: 13px; color: var(--muted); }
+/* A picture the server would not re-read. Said in the danger ink rather than the
+   muted grey the rest of the line is in, because "four minutes old" and "four minutes
+   old and no longer being kept up" are different facts and only one of them is a
+   reason to stop believing what is drawn. */
+.mesh-stale { color: var(--danger); }
 /* Going into the selected node. Square, because it is an action on one thing rather
    than a phrase, and next to the search because both narrow the picture. */
 .mesh-drill-in {
@@ -3986,9 +3998,10 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* Export sits at the end of the head, pushed away from the search box: it acts on
    the picture as a whole, and a button that saves a file should not be adjacent to
    the one that narrows what would be in it. */
-/* Which vocabulary the picture is drawn in (ADR-0211 §8). Beside the picture, not
-   in the answer column: it changes the drawing rather than what is being said about
-   it. */
+/* How the picture is drawn (ADR-0211 §8) — Atlas's own kinds, the same landscape
+   sized by what is running on it, by what is stuck on it or by how long it has been
+   stuck, or a projection into another vocabulary. Beside the picture, not in the answer column: it changes the
+   drawing rather than what is being said about it. */
 .mesh-notation { margin-left: auto; font-size: 13px; color: var(--muted); }
 .mesh-notation-pick {
   /* Sized by its longest option, not by the row. Every select on this page inherits
@@ -4004,25 +4017,38 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    the name's own reveal rule, so it appears when the name does. */
 .mesh-type { font-size: 11px; fill: var(--muted); pointer-events: none; }
 .mesh-application .mesh-type { font-size: 15px; }
-/* How much is running, under the name. Same size and same reveal as the type line —
-   it is an annotation on the node rather than a second label — and in the accent
-   rather than the muted grey, because unlike the type it is a number that changes. */
+/* What a heat weighting counts, under the name (ADR-0211 §8). Same size and same
+   reveal as the type line — it is an annotation on the node rather than a second
+   label — and in the accent rather than the muted grey, because unlike the type it is
+   a number that changes. */
 .mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
 .mesh-application .mesh-runs { font-size: 15px; }
-/* A switch beside the notation picker that adds something to the picture. There are
-   two — the running counts and the drafts — and they wear the same clothes: to the
-   reader they are one gesture, "also show me this", and two switches side by side
-   that looked different would suggest they did different kinds of thing. They are
-   not the same underneath (the counts redraw what is here, the drafts re-ask the
-   server), and that difference belongs in the wait below, not in the styling. */
+/* Except a number about incidents, which is not neutral information — how many of
+   them, or how long the oldest has stood. It is the same ink the critical outline
+   uses, so the number agrees with the badge already on the node rather than competing
+   with it, and it is a second channel behind the size for a reader who does not
+   separate these hues. */
+.mesh-runs-incidents,
+.mesh-runs-incident-age { fill: var(--danger); }
+/* How long the oldest parked token has been standing, in the panel. Under the reason
+   rather than inside it: the reason is the engine's own sentence, and the age is this
+   view's reading of a timestamp beside it. */
+.mesh-parked-since { margin: 4px 0 0; font-size: 12px; }
+/* A switch beside the notation picker that adds something to the picture. There is
+   one left — the drafts — since the running counts became a way of drawing the
+   landscape rather than an overlay on it, and moved into the picker: a switch and a
+   list entry are different gestures, and "also show me this" is only the first of
+   them. The class stays general because the next thing genuinely added to a picture
+   belongs here rather than in the list. */
 .mesh-toggle {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
   font-size: 13px; color: var(--text); white-space: nowrap; cursor: pointer;
 }
 .mesh-toggle input { margin: 0; cursor: pointer; }
 /* Disabled while an answer is being fetched — the drafts switch re-asks the server
-   rather than re-drawing what is already here — and it says so by going dim, so a
-   second click during the wait is not silently swallowed. */
+   rather than re-drawing what is already here, which is exactly why it stayed a
+   switch — and it says so by going dim, so a second click during the wait is not
+   silently swallowed. */
 .mesh-toggle input:disabled { cursor: progress; }
 .mesh-toggle:has(input:disabled) { opacity: 0.55; cursor: progress; }
 /* What the projection drops. Collapsed by default and never absent: a projection

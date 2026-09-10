@@ -2112,8 +2112,10 @@ test("the landscape can be downloaded as an ArchiMate model", async ({ page }) =
   expect(download.suggestedFilename()).toMatch(/^atlas-starmap.*\.xml$/);
 });
 
-// The picker offers what the server says it can draw. A vocabulary the browser
-// invented would be one the exported document knows nothing about.
+// The picker offers what the server says it can draw, after the two ways of drawing
+// that are the browser's own. A *vocabulary* the browser invented would be one the
+// exported document knows nothing about; a weighting it invented is a rendering
+// decision the server has no opinion on (ADR-0211 §8).
 test("the notations on offer are the ones the server serves", async ({ page }) => {
   installMock(page, radiusGraph);
   await page.goto("/index.html#/panorama/starmap");
@@ -2121,7 +2123,9 @@ test("the notations on offer are the ones the server serves", async ({ page }) =
 
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "archimate-3.2", "c4-projection"]);
+  expect(offered).toEqual([
+    "atlas", "instances", "incidents", "incident-age", "archimate-3.2", "c4-projection",
+  ]);
 });
 
 // And a landscape whose mapping cannot be read still draws. The projection is
@@ -2138,10 +2142,12 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
 
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await expect(page.locator(".mesh-node")).toHaveCount(graph.nodes.length);
-  // Only the vocabulary that cannot be wrong about which vocabulary it is in.
+  // The vocabulary that cannot be wrong about which vocabulary it is in, and the
+  // weightings that never needed the server to name anything: they are drawn from
+  // tallies already in the mesh payload.
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas"]);
+  expect(offered).toEqual(["atlas", "instances", "incidents", "incident-age"]);
 });
 
 // Going into a node, as a control rather than only as a gesture. A double-click is
@@ -2543,8 +2549,10 @@ test("the view's previous URL still lands on it", async ({ page }) => {
 });
 
 // How much is running, on the picture (ADR-0083's summary columns, on the Starmap).
-// Off by default and asked for by name: it is a second number under every name, and
-// a structural picture that always carried it would be a status board with arrows.
+// Off by default and asked for by name — a structural picture that always carried it
+// would be a status board with arrows — and asked for in the notation picker, because
+// what it changes is how the landscape is drawn: the nodes are sized by load instead
+// of by connectivity, and the numbers come with them (ADR-0211 §8).
 const runningMesh = {
   nodes: [
     { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
@@ -2570,7 +2578,7 @@ test("the count on the canvas is asked for, and only where there is one", async 
   // Off by default: the structural picture is what this view is for.
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
 
-  await page.getByLabel("Instances").check();
+  await page.selectOption("#mesh-notation", "instances");
   // On the busy process, and on nothing else. An idle one carries no number — on a
   // landscape of four hundred, "0 running" four hundred times hides the eleven
   // numbers somebody turned this on to find.
@@ -2579,8 +2587,293 @@ test("the count on the canvas is asked for, and only where there is one", async 
   // And the legend says what the absence means, so it is not read as "not measured".
   await expect(page.locator(".mesh-legend")).toContainText("carries no number");
 
-  await page.getByLabel("Instances").uncheck();
+  await page.selectOption("#mesh-notation", "atlas");
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
+});
+
+// The weighting itself: size stops being structure and becomes load. This is the
+// whole of what the entry is for, so it is checked on the drawn radii rather than
+// only on the arithmetic beside them.
+test("on the instance weighting a node is sized by what is running on it", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // data-r is the radius the layout reserved, which is the number every other part
+  // of the picture reads back — so it is the honest thing to assert against.
+  const radius = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+
+  // Structurally, an application is the largest thing on the picture and a worker
+  // among the smallest. That is the reading this weighting deliberately replaces.
+  expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
+
+  await page.selectOption("#mesh-notation", "instances");
+
+  const busy = await radius("process:1");
+  const idle = await radius("process:2");
+  const worker = await radius("worker:c1");
+  const app = await radius("application:a1");
+
+  // The only node running anything is the largest, ahead of the application that
+  // holds it: on this picture size is load, and an application's load sits on the
+  // processes inside it.
+  expect(busy).toBeGreaterThan(app);
+  expect(busy).toBeGreaterThan(idle * 1.5);
+  // And nothing has vanished. Everything with nothing running sits on one floor,
+  // which is a node somebody can see and click rather than a gap.
+  expect(idle).toBe(worker);
+  expect(idle).toBe(app);
+  expect(idle).toBeGreaterThan(8);
+
+  // The key says what size means here, and names the reference the areas are
+  // measured against — an area with no unit is a decoration.
+  await expect(page.locator(".mesh-legend")).toContainText("Size is load here, not structure");
+  await expect(page.locator(".mesh-legend")).toContainText("12");
+
+  // Switching back is switching back: the structural reading returns intact.
+  await page.selectOption("#mesh-notation", "atlas");
+  expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
+});
+
+// The other question the same channel can answer, and the one somebody opening a
+// landscape in the morning actually has: not where the work is, but where it is
+// stuck. The severity badges already say *which* nodes have a finding; what they
+// cannot say is how much is parked behind each, and a process holding four hundred
+// stuck tokens wears the same badge as one holding a single retry.
+const parkedMesh = {
+  nodes: [
+    { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+    { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 1, severity: "critical", state: "degraded", incidents: 41, runtime: { running: 3, finished: 10 } },
+    { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1, severity: "attention", state: "degraded", incidents: 2, runtime: { running: 120, finished: 7 } },
+    { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+  ],
+  edges: [
+    { from: "application:a1", to: "process:1", kind: "contains" },
+    { from: "application:a1", to: "process:2", kind: "contains" },
+    // Dunning calls Invoice, so the worst-parked process is also one something else
+    // needs — which is what makes the reach beside its count worth printing.
+    { from: "process:2", to: "process:1", kind: "calls" },
+    { from: "process:1", to: "worker:c1", kind: "uses" },
+  ],
+  restricted: 0,
+  clustered: false,
+};
+
+test("on the incident weighting a node is sized by what is parked on it", async ({ page }) => {
+  installMock(page, parkedMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const radius = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+
+  await page.selectOption("#mesh-notation", "incidents");
+
+  // The badly parked process is the largest thing on the picture — ahead of the one
+  // that is busier but healthy, which is the whole distinction the badges cannot draw.
+  const parked = await radius("process:1");
+  const nearlyFine = await radius("process:2");
+  expect(parked).toBeGreaterThan(nearlyFine * 1.5);
+  expect(nearlyFine).toBeGreaterThan(await radius("worker:c1"));
+
+  // The numbers under the names are incidents now, not instances: one question at a
+  // time, and the canvas says which.
+  await expect(page.locator('[data-node-id="process:1"] .mesh-runs'))
+    .toHaveText("41 incident(s)");
+  await expect(page.locator('[data-node-id="process:2"] .mesh-runs'))
+    .toHaveText("2 incident(s)");
+  await expect(page.locator(".mesh-runs")).toHaveCount(2);
+  await expect(page.locator(".mesh-legend")).toContainText("Size is trouble here, not structure");
+
+  // And the two weightings are alternatives rather than layers. On the instance
+  // picture the busier-but-healthy process is the larger one, which is the opposite
+  // ranking — the same nodes, a different question.
+  await page.selectOption("#mesh-notation", "instances");
+  expect(await radius("process:2")).toBeGreaterThan(await radius("process:1"));
+  await expect(page.locator('[data-node-id="process:2"] .mesh-runs')).toHaveText("120 running");
+  await expect(page.locator(".mesh-legend")).toContainText("Size is load here, not structure");
+});
+
+// A healthy estate is the case a trouble picture has to get right: flat is the
+// answer, not a missing one, and the key says so rather than leaving a reader to
+// wonder whether anything was measured at all.
+test("an estate with nothing parked draws flat, and says that is the finding", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "incidents");
+
+  const radii = await page.locator(".mesh-node .mesh-body").evaluateAll(
+    (els) => els.map((el) => Number(el.getAttribute("data-r"))));
+  expect(new Set(radii).size).toBe(1);
+  expect(radii[0]).toBeGreaterThan(8);
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+  await expect(page.locator(".mesh-legend")).toContainText("nothing on this landscape is parked at all");
+});
+
+// How long, not how much — and the two rank the same estate the opposite way round,
+// which is the whole reason this weighting exists. Four hundred incidents from the
+// last five minutes is a worker that has just fallen over and drains itself once
+// somebody restarts it; three standing since Friday is a process nobody is coming
+// back to, and a count puts that one last.
+//
+// The timestamps are minted at test time rather than fixed at module load: an age is
+// measured against the clock at render time, and a value frozen at import drifts into
+// a different bucket behind a long suite — a flake in the test rather than a fault in
+// the view.
+function agedMesh() {
+  const now = Date.now();
+  const ago = (ms) => (now - ms) * 1e6;
+  return {
+    nodes: [
+      { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+      // The loud one: hundreds parked, all of it in the last few minutes.
+      { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 1, severity: "critical", state: "degraded", incidents: 400, oldestIncident: ago(4 * 60_000) },
+      // The quiet one: two tokens, standing since the middle of last week.
+      { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1, severity: "attention", state: "degraded", incidents: 2, oldestIncident: ago(5 * 86_400_000) },
+      // Parked, and holding only incidents this engine never dated. It carries a
+      // count and no age, which must read as "not known" rather than as 1970.
+      { id: "process:3", kind: "process", name: "Chase", provenance: "derived", application: "application:a1", processId: "chase", version: 1, severity: "attention", state: "degraded", incidents: 7 },
+      { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+    ],
+    edges: [
+      { from: "application:a1", to: "process:1", kind: "contains" },
+      { from: "application:a1", to: "process:2", kind: "contains" },
+      { from: "application:a1", to: "process:3", kind: "contains" },
+      { from: "process:1", to: "worker:c1", kind: "uses" },
+    ],
+    restricted: 0,
+    clustered: false,
+  };
+}
+
+test("the age weighting ranks the estate by how long, not by how much", async ({ page }) => {
+  installMock(page, agedMesh());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const radius = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+
+  // By count, the four-hundred-incident process dominates.
+  await page.selectOption("#mesh-notation", "incidents");
+  expect(await radius("process:1")).toBeGreaterThan(await radius("process:2"));
+  await expect(page.locator(".mesh-rank-who").first()).toHaveText("Invoice");
+
+  // By age, the two tokens standing since last week do — the opposite ordering of the
+  // same estate, and the one that decides what somebody actually does next.
+  await page.selectOption("#mesh-notation", "incident-age");
+  expect(await radius("process:2")).toBeGreaterThan(await radius("process:1"));
+  await expect(page.locator('[data-node-id="process:2"] .mesh-runs')).toHaveText("stuck 5 d");
+  await expect(page.locator('[data-node-id="process:1"] .mesh-runs')).toHaveText("stuck 4 min");
+
+  // A node the engine never dated carries no number and sits at the floor: "not
+  // known" is a different fact from "raised at the epoch", and drawing it as the
+  // oldest trouble on the estate would be the picture inventing one.
+  await expect(page.locator('[data-node-id="process:3"] .mesh-runs')).toHaveCount(0);
+  expect(await radius("process:3")).toBe(await radius("worker:c1"));
+
+  await expect(page.locator(".mesh-legend")).toContainText("Size is age here, not structure");
+  await expect(page.locator(".mesh-rank-head")).toContainText("Stuck longest");
+  await expect(page.locator(".mesh-rank-who").first()).toHaveText("Dunning");
+  await expect(page.locator(".mesh-rank-go").first()).toContainText("stuck 5 d");
+});
+
+// The exact age, in the panel, for whichever node is selected — the number a circle
+// cannot give, beside the count it belongs to. Stated whatever the picture is drawn
+// with, like the instance tally beside it.
+test("the panel dates the oldest token a process is holding", async ({ page }) => {
+  installMock(page, agedMesh());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="process:2"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel .mesh-parked-since")).toContainText("5 d ago");
+
+  // And says nothing where there is nothing to date, rather than a date it does not
+  // have. The count is still on the node; only the age is missing.
+  await page.locator('[data-node-id="process:3"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel .mesh-parked-since")).toHaveCount(0);
+  await expect(page.locator(".mesh-panel .mesh-finding")).toBeVisible();
+});
+
+// The column beside the picture ranks by whatever the picture is sized by. Two
+// orderings on one screen — the largest circle and the first row being different
+// nodes — is a contradiction nothing on screen resolves.
+test("the ranking beside the picture follows the weighting", async ({ page }) => {
+  installMock(page, parkedMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const rank = page.locator(".mesh-rank");
+  // With no weighting it is the blast ranking it has always been.
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
+
+  await page.selectOption("#mesh-notation", "incidents");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Most parked");
+  await expect(rank.locator(".mesh-rank-who")).toHaveText(["Invoice", "Dunning"]);
+  // The exact number, which two areas cannot give — and the reach beside it, which is
+  // what turns a count into a priority.
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("41 incident(s)");
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("1 node(s)");
+
+  // The other weighting is the other ordering, and it is the reverse one here: the
+  // busiest process is not the worst one, which is the whole reason there are two.
+  await page.selectOption("#mesh-notation", "instances");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Busiest");
+  await expect(rank.locator(".mesh-rank-who")).toHaveText(["Dunning", "Invoice"]);
+  await expect(rank.locator(".mesh-rank-go").first()).toContainText("120 running");
+
+  // A row is still the way to the node, like every other list in this column.
+  await rank.locator(".mesh-rank-go").first().click();
+  await expect(page.locator(".mesh-panel-head")).toContainText("Dunning");
+
+  // And leaving the weighting puts the blast ranking back.
+  await page.selectOption("#mesh-notation", "atlas");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Biggest blast radius");
+});
+
+// An estate with nothing parked has nothing to rank, and that is the finding rather
+// than an empty column — the same argument the flat canvas makes.
+test("a ranking with nothing to count says so as an answer", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "incidents");
+  const rank = page.locator(".mesh-rank");
+  await expect(rank.locator(".mesh-rank-head")).toContainText("Most parked");
+  await expect(rank).toContainText("nothing to rank");
+  await expect(rank.locator(".mesh-rank-go")).toHaveCount(0);
+});
+
+// The weightings exclude the projections and each other rather than combining, and
+// that is the point of putting them in the list: size is one channel, so a picture
+// cannot mean connectivity and load at once.
+test("choosing a projection gives up the instance weighting", async ({ page }) => {
+  installMock(page, runningMesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "instances");
+  await expect(page.locator(".mesh-runs")).toHaveCount(1);
+  // No vocabulary is claimed: it is Atlas's own landscape, sized differently.
+  await expect(page.locator(".mesh-type")).toHaveCount(0);
+  await expect(page.locator(".mesh-projection")).toHaveCount(0);
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  await expect(page.locator(".mesh-runs")).toHaveCount(0);
+  await expect(page.locator(".mesh-projection")).toBeVisible();
 });
 
 // A number a real server produces: the counts on this view come from the same engine
@@ -2598,7 +2891,7 @@ test("a large count is grouped in thousands, on the canvas and in the panel", as
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
-  await page.getByLabel("Instances").check();
+  await page.selectOption("#mesh-notation", "instances");
   const runs = page.locator('[data-node-id="process:1"] .mesh-runs');
   // textContent rather than a whitespace-normalizing matcher: the separator is the
   // point, and normalization would accept a plain space just as happily.
@@ -3432,4 +3725,178 @@ test("nothing is left stranded at the edge of the picture", async ({ page }) => 
   // defect measured 3.1 with two nodes past it, and the corrected layout measures 1.1.
   expect(spread.stranded, "nodes with no neighbour near them").toEqual([]);
   expect(spread.ratio).toBeLessThan(2);
+});
+
+// Keeping the picture true (ADR-0211 §7).
+//
+// Everything on this canvas has a shelf life — the severity badges are an observation,
+// the incident counts move as an operator works through them, and all three
+// weightings are live quantities, one of them measured against a clock. A landscape
+// opened at nine and still open at eleven used to show two-hour-old numbers with
+// nothing on the page saying so, which is exactly the failure the export's stamp
+// exists to prevent, happening on the screen the stamp is copied from.
+//
+// The timer is driven by a fake clock rather than waited out: a test that slept
+// through a real half-minute would be a suite that took an extra half-minute per
+// assertion, and the thing under test is *when it asks*, not how long a minute is.
+
+// installLiveMock answers the mesh from a box the test can change between reads, and
+// counts the reads. Both halves matter: the count is the claim about *when* the view
+// asks, and the swap is the claim that what it draws follows.
+//
+// The count is always polled rather than read straight after a runFor. Advancing the
+// fake clock fires the timer and returns; the request the timer started is answered on
+// real time, so a bare read of the counter asks the question a moment too early.
+function installLiveMock(page, first) {
+  const state = { mesh: first, reads: 0, fail: false };
+  page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    if (path === "/api/v1/panorama/mesh") {
+      state.reads++;
+      if (state.fail) return route.fulfill({ status: 503, json: { error: "down" } });
+      return route.fulfill({ json: state.mesh });
+    }
+    return route.fulfill({ json: [] });
+  });
+  return state;
+}
+
+// observedMesh is a landscape that states when it was read, which is the fact the
+// freshness line is about. Minted at call time: the age is measured against the clock
+// at render, and a value fixed at module load drifts behind a long suite.
+function observedMesh(nodes, at = Date.now()) {
+  return {
+    nodes, edges: [], restricted: 0, clustered: false,
+    observedAt: Math.floor(at / 1000),
+    status: { ok: nodes.length, attention: 0, critical: 0, unknown: 0, unavailable: [] },
+  };
+}
+
+const oneNode = [{ id: "process:1", kind: "process", name: "Invoice", provenance: "derived", processId: "invoice", version: 1, severity: "ok", state: "healthy" }];
+const twoNodes = [...oneNode,
+  { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", processId: "dunning", version: 1, severity: "critical", state: "degraded", reason: "parked" }];
+
+test("the picture says when it was read, and keeps itself true", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // Said from the first frame, rather than only once it has aged into a problem.
+  await expect(page.locator("#mesh-observed")).toContainText("observed");
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  expect(server.reads).toBe(1);
+
+  // A tick is not a re-read: the sentence is rewritten every few seconds because it
+  // costs nothing, and the landscape is re-derived on the run loop, which does not.
+  await page.clock.runFor(10_000);
+  await expect.poll(() => server.reads).toBe(1);
+  await expect(page.locator("#mesh-observed")).toContainText("observed");
+
+  // Past the floor it asks, and what the server now says is what is drawn — a process
+  // deployed while somebody had the landscape open appears on it.
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(25_000);
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  await expect.poll(() => server.reads).toBe(2);
+  await expect(page.locator('[data-node-id="process:2"]')).toBeVisible();
+});
+
+test("Live off stops the asking, and turning it back on asks at once", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  // On by default: a status view that looks live and is not is worse than a picture
+  // that moves.
+  const live = page.locator("#mesh-live");
+  await expect(live).toBeChecked();
+
+  await live.uncheck();
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(120_000);
+  // Two minutes of nothing. Reading one picture carefully is a thing somebody does,
+  // and a canvas that re-lays-out mid-thought is its own kind of wrong.
+  await expect.poll(() => server.reads).toBe(1);
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+
+  // Turning it back on is a request for a current picture, not a request to wait
+  // another half minute for one.
+  await live.check();
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  await expect.poll(() => server.reads).toBe(2);
+});
+
+test("a re-read the server refuses keeps the picture and says it is not current", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(twoNodes));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+
+  server.fail = true;
+  await page.clock.runFor(35_000);
+
+  // The picture stands. Blanking a landscape because one request failed would throw
+  // away a true answer for an error.
+  await expect(page.locator(".mesh-node")).toHaveCount(2);
+  // And it says so, which is the difference between "four minutes old" and "four
+  // minutes old and no longer being kept up".
+  await expect(page.locator("#mesh-observed")).toContainText("could not re-read");
+  await expect(page.locator("#mesh-observed")).toHaveClass(/mesh-stale/);
+  const afterFailure = server.reads;
+
+  // And backs off to the ceiling rather than retrying on the floor: a server that is
+  // down does not want thirty requests a minute from every open tab.
+  await page.clock.runFor(60_000);
+  await expect.poll(() => server.reads).toBe(afterFailure);
+
+  // Past the ceiling it tries again, and a server that has come back puts the picture
+  // and the sentence right.
+  server.fail = false;
+  server.mesh = observedMesh(oneNode);
+  await page.clock.runFor(5 * 60_000);
+  await expect(page.locator(".mesh-node")).toHaveCount(1);
+  await expect(page.locator("#mesh-observed")).not.toContainText("could not re-read");
+});
+
+// Everything the reader has arranged is theirs, and a re-read they did not ask for
+// must not take any of it away.
+test("a re-read keeps the filter, the selection and the arrangement", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(twoNodes));
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.fill("#mesh-search", "Invoice");
+  await page.locator('[data-node-id="process:1"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+
+  server.mesh = observedMesh(twoNodes);
+  await page.clock.runFor(35_000);
+  await expect.poll(() => server.reads).toBe(2);
+
+  // The question somebody asked is still the question on screen.
+  await expect(page.locator("#mesh-search")).toHaveValue("Invoice");
+  await expect(page.locator(".mesh-panel-head")).toContainText("Invoice");
+});
+
+// An interval outlives the view that started it. Left running it would go on asking
+// the server for a picture nobody is looking at for as long as the tab is open.
+test("leaving the view stops the asking", async ({ page }) => {
+  await page.clock.install();
+  const server = installLiveMock(page, observedMesh(oneNode));
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.evaluate(() => { window.location.hash = "#/panorama/bindings"; });
+  await expect(page.locator(".mesh-canvas")).toHaveCount(0);
+  const onLeaving = server.reads;
+
+  await page.clock.runFor(10 * 60_000);
+  await expect.poll(() => server.reads).toBe(onLeaving);
 });

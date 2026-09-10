@@ -108,7 +108,12 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:     time.Now().Unix(),
 	}
 	var saveErr error
-	s.do(func() { saveErr = s.targets.Save(rec) })
+	// A target is a node on the Starmap, so the reading it was drawn from no longer
+	// describes this server (see forgetLandscape).
+	s.do(func() {
+		s.forgetLandscape()
+		saveErr = s.targets.Save(rec)
+	})
 	if saveErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "create target: "+saveErr.Error())
 		return
@@ -142,7 +147,10 @@ func (s *Server) handleListTargets(w http.ResponseWriter, r *http.Request) {
 // promoted to it are untouched, both here and over there.
 func (s *Server) handleDeleteTarget(w http.ResponseWriter, r *http.Request) {
 	var delErr error
-	s.do(func() { delErr = s.targets.Delete(r.PathValue("id")) })
+	s.do(func() {
+		s.forgetLandscape()
+		delErr = s.targets.Delete(r.PathValue("id"))
+	})
 	if delErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "delete target: "+delErr.Error())
 		return

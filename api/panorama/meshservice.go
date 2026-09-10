@@ -151,6 +151,11 @@ func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 	// oldest moment any fact in this answer could have been read. A picture that
 	// dates itself later than its contents is the one an export must never carry:
 	// it would make a stale landscape look freshly checked.
+	//
+	// It is a *fallback*. A collector that answers from facts it read earlier dates
+	// them itself (Landscape.ObservedAt), and that date wins below — this one is only
+	// for a collector that does not say, where "no later than the turn that ran it"
+	// is the strongest true thing available.
 	var observedAt int64
 	if m.now != nil {
 		observedAt = m.now().Unix()
@@ -192,6 +197,11 @@ func (m *Mesh) derive(w http.ResponseWriter, r *http.Request) (Graph, bool) {
 	// the one thing that must never be done while holding it.
 	if reach != nil {
 		reach(r.Context(), &land)
+	}
+	// The facts' own date, where the collector gave one. A landscape answered from a
+	// cache is as old as what it holds, not as young as the request that asked for it.
+	if land.ObservedAt > 0 {
+		observedAt = land.ObservedAt
 	}
 	// Derived off the loop: this is pure CPU over a snapshot the loop already
 	// produced, and holding the single-writer goroutine through it would make every

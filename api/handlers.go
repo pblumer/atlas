@@ -963,6 +963,10 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 				return deployed, nil, fmt.Errorf("register dmn model for %s: %w", pid, err)
 			}
 		}
+		// The Starmap's collection no longer describes this server. Deploying is the
+		// change a person makes and then immediately goes looking for, so it is the
+		// one that does not wait out the TTL (see forgetLandscape).
+		s.forgetLandscape()
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,
@@ -1271,6 +1275,7 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.Undeploy(key)
+		s.forgetLandscape()
 		delete(s.deployments, key)
 		for i, k := range s.order {
 			if k == key {

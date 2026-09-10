@@ -46,7 +46,15 @@
   the kind fills are drawn at a weight and a strength the canvas can carry, measured
   against WCAG 2.1's 3:1 for a graphical object; amended 2026-09-07 — a double-click
   goes inside, and for a process and a decision the inside is their Operations view
-  rather than a smaller starmap around them)
+  rather than a smaller starmap around them; amended 2026-09-10 — §8's picker offers
+  ways of *drawing* rather than only vocabularies: the running tally leaves its
+  checkbox for an entry in that list and sizes the nodes by how much is running on
+  them, and the incident count and the age of the oldest one are offered beside it as
+  the same choice about different quantities; §6's ranking column follows whichever
+  weighting is chosen, with the blast radius kept as the second number on a row;
+  amended 2026-09-10 — §7's picture states when it was read and re-reads itself on a
+  cadence paced by what the derive costs, and the server reads its structure once for
+  every reader while reading each one's health and visibility afresh)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1072,6 +1080,120 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-10): the picture says when it was read, and keeps itself
+> true.**
+> §10 argues that an undated "all green" picture circulates inside an organization
+> long after it stopped being true, and is believed because it looks like evidence —
+> which is why the observation time is rendered *into* the exported image. The same
+> argument applies to the screen that export is taken from, and it was not being made
+> there. Everything on this canvas has a shelf life: §4's severity is an observation,
+> the incident counts move as an operator works through them, and §8's three
+> weightings are live quantities, one of them measured against a clock, so its labels
+> go wrong while nothing on the page changes at all. A landscape opened at nine and
+> still open at eleven showed two-hour-old numbers with nothing saying so.
+>
+> Two answers, and the split is the point, because they cost different amounts:
+>
+> - **The freshness is stated, always, and cheaply.** The landscape's observation time
+>   is on the page beside the node count, rewritten every ten seconds. Writing a
+>   sentence costs nothing, and this sentence is the one that must never be wrong.
+> - **The landscape re-reads itself while it is being looked at**, on a cadence paced
+>   by what it costs. That is the part §7 is about: the mesh is derived on the run loop,
+>   which is why the size budget exists at all, so the interval is a **multiple of what
+>   the last derive actually cost** (a twentieth of it) rather than a constant somebody
+>   guessed — floored at thirty seconds, ceilinged at five minutes. A landscape that
+>   derives in 40 ms is re-read on the floor; one that takes four seconds backs off to
+>   well over a minute by itself. A fixed interval would be exactly wrong on the
+>   estates where the cost mattered most.
+>
+> The floor is not arbitrary either: it is inside the granularity of every number on
+> the picture — the age weighting's finest bucket is "under 2 min" — so asking faster
+> would buy nothing a reader could see.
+>
+> Four rules keep the re-read from being worse than the staleness it fixes:
+>
+> - **Nothing is asked behind a hidden tab**, and nothing under the reader's hand: a
+>   re-layout in the middle of a drag or a pan takes the picture out from under the
+>   gesture moving it.
+> - **A refusal keeps the picture and says so.** A landscape that blanked itself
+>   because one request failed would throw away a true answer for an error. The
+>   freshness line gains "could not re-read", because "four minutes old" and "four
+>   minutes old and no longer being kept up" are different facts and only the second is
+>   a reason to stop believing the drawing. The cadence goes straight to the ceiling: a
+>   server that is down does not want thirty requests a minute from every open tab.
+> - **Everything the reader arranged survives it** — the filter, the drilldown, the
+>   selection, the pins, the zoom — because it goes through the same path the drafts
+>   switch does.
+> - **It can be turned off**, and it is the *default that needs the argument*, not the
+>   switch. On, because a status view that looks live and is not is worse than a
+>   picture that moves; off exists because reading one picture carefully is a thing
+>   people do, and a canvas that re-lays-out mid-thought is its own kind of wrong.
+>   Turning it back on asks at once rather than waiting out another interval.
+>
+> The timer ends itself when the card it painted leaves the document. Unlike the
+> resize observer beside it, an interval outlives its view: left running it would ask
+> the server for a picture nobody is looking at for as long as the tab is open. What it
+> checks is the card, not the element the router handed the view — that one is the
+> router's and outlives every route it holds.
+
+> **Amendment (2026-09-10): the structure is read once for everybody; the health is
+> read for each of them.**
+> The amendment above made every open Starmap a reader that comes back. That turns a
+> cost this section was already careful about into one that scales with the audience:
+> a landscape is derived on the run loop — the single writer (I3) — and reading one
+> costs a directory listing and a JSON decode per record across four sidecar stores,
+> plus a walk of every compiled process. One reader paid it; twenty tabs paid it
+> twenty times, and twenty tabs is one operations team with the view open, competing
+> for the loop that executes process instances.
+>
+> The answer is a cache, and the whole of its design is **what it is allowed to
+> hold**. It holds structure — the applications, the deployed processes and what each
+> calls, the workers, the drafts, the peers — for thirty seconds. It holds nothing
+> else, and the two exclusions are the load-bearing part:
+>
+> - **Health is never cached.** Which processes have work parked, how much, how long
+>   it has been standing, how many instances are live, which workers have polled: all
+>   read fresh on every request. They are the answer an operator opens this view for,
+>   and they are engine point reads rather than disk — bounded by design
+>   (`maxStatusIncidentScan`) and cheap beside a directory listing. A status view that
+>   made trouble wait out a timer would be saving the wrong cost, and a reload that
+>   could not tell the truth is worse than a slow one.
+> - **Visibility is never cached.** Every `CanView` is decided on the request, from
+>   the request. A cache holding a *filtered* landscape would be one principal's view
+>   served to another the moment a key collided or a scope changed, and there is no
+>   cache key that makes that safe — so the shape removes the question rather than
+>   answering it. The reading carries the *inputs* a decision is made from, and never
+>   a decision.
+>
+> Thirty seconds is the view's own re-read floor, and that is not a coincidence: a TTL
+> shorter than the poll bounds nothing, because readers do not poll in step — twenty of
+> them at random phases would miss a five-second entry almost every time. At the floor,
+> the cost of the structure stops depending on how many people are looking, which is
+> the property worth having.
+>
+> The cache is loop-owned state, like the deployment registry, so it needs no lock —
+> and the loop is also the single-flight: two readers arriving together are two turns,
+> and the second finds what the first left.
+>
+> Its only key is whether drafts were asked for, because that is the only thing that
+> changes what is *read* rather than who may see it.
+>
+> **Invalidation is narrow on purpose.** A deployment arriving or being removed, a call
+> override written or dropped, a deployment target created or deleted: those are the
+> changes a person makes and then immediately goes looking for *on this picture*, and
+> they drop the reading at once. Everything else — a new application, a new worker —
+> appears within the TTL. That is a deliberate refusal of a general invalidation
+> protocol: a protocol every future writer has to remember is one that a future writer
+> forgets, and the landscape it produces is silently wrong, where a TTL everybody is
+> subject to cannot be forgotten.
+>
+> And the staleness that remains is *stated*. The landscape carries the moment its
+> structure was read, and the answer is dated by it — the oldest fact in it, not the
+> youngest — so the freshness line the amendment above put on the picture tells the
+> truth about a cached answer as much as a fresh one. A reader is never told a picture
+> is current when it is not, which is the condition under which caching a view like
+> this is honest at all.
+
 ### 8. C4 is a read-only projection, not a theme
 
 Panorama may render a **C4 projection** of an ArchiMate model. It is constrained so
@@ -1189,6 +1311,125 @@ open that door.
 > that offers what another surface contradicts is a promise the server breaks. Each
 > row carries both what a person is shown and the notation's own machine token, since
 > the two readers need different halves of one fact.
+
+> **Amendment (2026-09-10): the picker offers ways of drawing, not only vocabularies
+> — and two of them size the landscape by a quantity.**
+> The instance counts were a checkbox beside the picker — an overlay ticked onto
+> whatever was being drawn. That is this section's own failure mode approached from
+> the other side. Not a renderer toggle wearing a notation's clothes, but a rendering
+> decision left *outside* the one control that owns rendering decisions, and offering
+> a combination with no reading: size on this landscape is a single channel and it
+> already carried connectivity (§7), so a picture with the box ticked had radii
+> meaning structure while its labels meant load. The one question somebody turns the
+> counts on to ask — *where is the work* — was the one the picture could not answer.
+>
+> So the tally becomes an entry in the picker, and the picker becomes what it had
+> already grown into: **how this landscape is drawn**, of which "in whose vocabulary"
+> is one case. Choosing such an entry is choosing what size means, which is why these
+> **heat weightings** exclude the projections and each other rather than combining
+> with them.
+>
+> There are two, because they are different questions and the second is asked more
+> often:
+>
+> - `instances` — **where is the work.** The engine's running tally: capacity, reading
+>   a load test, finding the process actually carrying the estate.
+> - `incidents` — **where is it stuck.** The unresolved incidents the engine holds
+>   against a node. §4's severity badges already say *which* nodes have a finding;
+>   what they cannot say is how much is parked behind each, and a process holding four
+>   hundred stuck tokens wears the same badge as one holding a single retry. The badge
+>   stays the classification and the size becomes the magnitude — two channels saying
+>   different things about one node, which is the arrangement §4 asks for rather than
+>   a second encoding of the same fact.
+> - `incident-age` — **how long has it been stuck**, and this is the one that changes a
+>   decision. Four hundred incidents raised in the last five minutes is a worker that
+>   has just fallen over and will drain itself once somebody restarts it; three
+>   standing since Friday is a process nobody is coming back to. The count ranks those
+>   the wrong way round, every time — which is why the age is a weighting of its own
+>   rather than a tie-break inside the count.
+>
+> The third one needs a fact the payload did not carry, and §4's node gains it:
+> **`oldestIncident`, the moment the earliest unresolved incident on this node was
+> raised**, as Unix nanoseconds. Four decisions in it are worth stating, because each
+> has a wrong answer that looks reasonable:
+>
+> - **The oldest, not the newest and not an average.** The newest says only that
+>   something happened lately, which the runtime tally's `lastActivity` already says
+>   better; an average is not a fact about any incident, so nothing can be pointed at.
+>   The oldest is the age of the *problem* — a process where one token parked on Friday
+>   and three hundred piled up behind it has been stuck since Friday.
+> - **A moment, not an age.** An age computed on the server is stale by the time it is
+>   drawn, and a moment is the same fact for every reader wherever their clock is.
+> - **Absent rather than zero where there is nothing to date**, which includes an
+>   incident raised before the engine recorded the moment. "Not known" and "raised at
+>   the epoch" are different facts, and only one of them is drawable — a zero would
+>   date the process to 1970 and draw it as the oldest trouble on the estate.
+> - **A collapsed application carries the earliest of its processes**, by the same
+>   argument its summed count makes, read the other way round: it stands for them, so
+>   how long it has been in trouble is how long the longest-parked of them has been.
+>
+> It costs nothing to collect. The incident scan §4 already pays for reads every
+> record, and the raise time is a field on the record it is already reading.
+>
+> All three obey the same rules, and they are one implementation rather than three, so
+> that a reader cannot be shown pictures that mean subtly different things:
+>
+> - **Size is the quantity, and nothing else.** A node's area above the floor is its
+>   share of the largest node on the landscape. Area rather than radius, because
+>   doubling a radius quadruples the ink: a radius taken straight from the count reads
+>   as four times the quantity it stands for. Kind is unaffected — it was never carried
+>   by size alone, and shape and colour still carry it (§4).
+> - **There is a floor, and it is load-bearing.** Every node keeps a minimum radius,
+>   whatever its tally. A size that were purely the count would draw the quiet half of
+>   an estate at nothing, and a picture with its context deleted cannot distinguish
+>   "nothing here" from "not on this server". Exact proportionality and a visible
+>   minimum cannot both hold at zero; the minimum wins, and the key states the encoding
+>   it wins against rather than implying one that is not there. On the incident
+>   weighting the floor also makes the healthy case legible: a flat picture is the
+>   answer, and the key says so rather than leaving a reader to wonder whether anything
+>   was measured at all.
+> - **The reference is the whole landscape, and it is named.** The largest node is the
+>   reference, taken before the filter and the drilldown, so narrowing to two nodes
+>   cannot swell the smaller of them into the worst thing on the estate. A constant
+>   would not do here as `DEGREE_FULL` does for connectivity: twelve dependencies is a
+>   lot on every Atlas ever deployed, while "a lot of running instances" is three on one
+>   server and forty thousand on the next, and "a lot of incidents" is one on an estate
+>   that has never had any. A constant would draw one server as uniformly quiet and the
+>   next as uniformly saturated. The price is that a radius means something only against
+>   a stated reference, so the legend and the export stamp both state it — an area with
+>   no unit is a decoration.
+> - **A duration is measured against one moment per repaint.** The age weighting is the
+>   only one read against a clock rather than off the node, and the canvas, the key and
+>   the ranking beside them have to be three readings of one instant. Taken per node,
+>   the reference would be a few milliseconds older than the node that set it, and the
+>   largest node would come out larger than the whole it is a share of.
+> - **They claim nothing about vocabulary.** None is a projection: no mapping, no
+>   loss list, and every node keeps Atlas's own name for itself. The ArchiMate document
+>   is untouched — an element's type does not change because the picture was sized by
+>   load — so these entries export no document, and the constraints above about
+>   authoring and round trips have nothing to bind.
+>
+> **The ranking beside the picture follows the weighting.** §6's ranking answers "where
+> is the risk" by blast radius, with nothing selected. With a weighting on, the canvas
+> ranks the estate by a tally while that column ranked it by radius, so the largest
+> circle and the first row were routinely different nodes — two orderings on one
+> screen, with nothing on it to say they answer different questions. The column now
+> ranks by the tally the picture is drawn with, and it is not a re-listing of the
+> picture: a circle gives neither the exact number (nobody reads 41 against 38 off two
+> areas) nor the name, which at a zoomed-out magnification is not painted at all.
+>
+> §6's radius survives as the *second* number on each row, measured by the same
+> direction and depth controls as everything else in this column, and that is the part
+> that turns a count into a priority: forty incidents on a leaf process is a contained
+> problem, twelve on something two hundred things need is an outage. Rows with nothing
+> to count are absent rather than listed as zeroes, and a landscape with none of them
+> says so as an answer — on the incident weighting that sentence is the good news, and
+> an empty column would have buried it.
+>
+> The entries are defined in the browser, beside the shapes, rather than in the served
+> table. That is the same split the amendment above draws and not an exception to it:
+> what a node is **called** is the server's fact, and how large it is **drawn** is the
+> renderer's.
 
 ### 9. Placement in the shell
 

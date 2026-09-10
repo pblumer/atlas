@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // meshStatusGraph mirrors the severity half of the mesh payload (ADR-0211 §4).
@@ -21,6 +22,10 @@ type meshStatusNode struct {
 	Reason       string `json:"reason"`
 	SeverityFrom string `json:"severityFrom"`
 	Application  string `json:"application"`
+	Incidents    int    `json:"incidents"`
+	// Unix nanoseconds of the earliest unresolved incident, absent where there is
+	// nothing to date.
+	OldestIncident int64 `json:"oldestIncident"`
 }
 
 type meshStatusGraph struct {
@@ -141,6 +146,10 @@ func TestMeshReportsParkedWorkAsDegradedAndAttributesIt(t *testing.T) {
 		t.Fatalf("fail job: status=%d body=%s", code, body)
 	}
 
+	// The same read as before, and it must not be the same answer. The Starmap caches
+	// what this server *is* and never how it is doing (ADR-0211 §7), so a finding
+	// raised a moment ago is on the picture a moment later — a status view that made
+	// trouble wait out a timer would be saving the wrong cost.
 	g := getMeshStatus(t, ts)
 	after := statusNode(t, g, processID)
 	if after.State != "degraded" || after.Severity != "attention" {
@@ -240,4 +249,85 @@ func TestMeshReportsAUsableWorkerAsHealthy(t *testing.T) {
 		return
 	}
 	t.Fatalf("no worker node for ops-mail in %+v", g.Nodes)
+}
+
+// TestMeshDatesTheOldestParkedIncident. A count says how much is parked; only the
+// raise time says how long it has been, and that is what decides what somebody does.
+// Four hundred incidents from the last five minutes is a worker that has just fallen
+// over and drains itself once it is restarted; three standing since Friday is a
+// process nobody is coming back to — and a count ranks those the wrong way round
+// every time.
+//
+// The *earliest*, which is the half worth pinning: a second incident on a process
+// that has been stuck since Friday does not make it a fresh problem, and a field that
+// tracked the latest would say it did.
+func TestMeshDatesTheOldestParkedIncident(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments",
+		incidentUserTaskBPMN, "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: status=%d body=%s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	processID := meshProcessID(dep.Key)
+
+	// Nothing parked: no date, and the field is off the wire entirely rather than a
+	// zero that would read as "raised at the epoch".
+	if got := statusNode(t, getMeshStatus(t, ts), processID).OldestIncident; got != 0 {
+		t.Fatalf("a process with nothing parked is dated %d, want none", got)
+	}
+
+	park := func() {
+		t.Helper()
+		if code, body := doReq(t, ts, http.MethodPost,
+			fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("create instance: status=%d body=%s", code, body)
+		}
+		code, body := doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+		var tasks []struct {
+			Key uint64 `json:"key"`
+		}
+		if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) == 0 {
+			t.Fatalf("list tasks: %v (status=%d body=%s)", err, code, body)
+		}
+		if code, body := doReq(t, ts, http.MethodPost,
+			fmt.Sprintf("/api/v1/jobs/%d/fail", tasks[len(tasks)-1].Key),
+			`{"retries":0,"message":"boom"}`, "application/json"); code != http.StatusOK {
+			t.Fatalf("fail job: status=%d body=%s", code, body)
+		}
+	}
+
+	// The window the first raise must fall inside. Bracketing rather than comparing
+	// against one reading: the moment is minted inside the engine, and a test that
+	// asserted an exact value would be asserting its own clock.
+	before := time.Now().UnixNano()
+	park()
+	after := time.Now().UnixNano()
+
+	first := statusNode(t, getMeshStatus(t, ts), processID)
+	if first.Incidents != 1 {
+		t.Fatalf("Incidents = %d, want 1", first.Incidents)
+	}
+	if first.OldestIncident < before || first.OldestIncident > after {
+		t.Fatalf("OldestIncident = %d, want it inside [%d, %d]",
+			first.OldestIncident, before, after)
+	}
+
+	// A second one, raised later. The count moves; the date does not — the process has
+	// been stuck since the first token parked, and that is the whole claim.
+	park()
+	second := statusNode(t, getMeshStatus(t, ts), processID)
+	if second.Incidents != 2 {
+		t.Fatalf("Incidents = %d, want 2", second.Incidents)
+	}
+	if second.OldestIncident != first.OldestIncident {
+		t.Errorf("OldestIncident moved to %d after a later incident, want it to stay at %d",
+			second.OldestIncident, first.OldestIncident)
+	}
 }

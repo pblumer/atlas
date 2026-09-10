@@ -62,6 +62,181 @@ test("growth is bounded rather than unbounded", async ({ page }) => {
   expect(busy).toBeGreaterThan((await radius(page, "process", 0)) * 1.2);
 });
 
+// Sizing by a quantity instead of by structure (ADR-0211 §8's heat weightings). Same
+// argument as the band test above: this is a claim about every tally a node could
+// carry, so it is checked as arithmetic over the whole range rather than sampled
+// from whatever a rendered fixture happens to contain.
+//
+// Both weightings are checked, and by the same table rather than by two copies of
+// one test: they differ only in what they read off a node, and a property that held
+// for one of them and not the other would be a picture nobody could trust to mean
+// the same thing twice.
+const TALLIES = [0, 1, 2, 5, 25, 100, 999, 50002];
+// NOW is the moment the duration weighting is measured against, fixed so the third
+// row is arithmetic like the other two rather than a race with the wall clock.
+const NOW = 1_800_000_000_000;
+const HEATS = ["instances", "incidents", "incident-age"];
+
+// nodeWith builds a process carrying one weighting's tally, in the browser. Inlined
+// into each evaluate() rather than passed across, because a function cannot cross
+// into the page — so it is written once here and stringified there.
+const NODE_FOR = `(h, n) => h === "instances" ? { kind: "process", runtime: { running: n } }
+  : h === "incidents" ? { kind: "process", incidents: n }
+  // A duration is a moment on the node read against a clock, so a tally of n
+  // milliseconds is an incident raised n milliseconds ago — in nanoseconds, which is
+  // what the server sends.
+  : { kind: "process", oldestIncident: n > 0 ? (NOW_MS - n) * 1e6 : 0 }`;
+
+// The property the whole weighting rests on, and the one a reader would notice first
+// if it were missing: nothing disappears. A quiet process is still unmistakably a
+// node, so "nothing here" is a thing the picture can say rather than a gap
+// indistinguishable from "not on this server".
+for (const heat of HEATS) {
+  test(`every node keeps a floor on the ${heat} weighting`, async ({ page }) => {
+    const sizes = await page.evaluate(([tallies, h, now, src]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      return {
+        // Against the largest tally the fixture has, so the smallest share is the
+        // smallest one this scale can produce.
+        weighted: tallies.map((n) => window.radiusForHeat(
+          nodeFor(h, n), Math.max(...tallies), h, now)),
+        // The kinds that count nothing at all — not zero of something, but nothing
+        // that could be counted — and a node whose payload carries no tally at all.
+        quiet: ["worker", "decision", "target", "restricted", "unresolved", "draft"]
+          .map((kind) => window.radiusForHeat({ kind }, 100, h, now)),
+        // And a landscape where nothing at all is counted: no reference to divide by,
+        // and the picture must still be a picture.
+        flat: window.radiusForHeat({ kind: "process" }, 0, h, now),
+        // A weighting this build has never heard of — a saved view from a later one —
+        // falls back rather than drawing every node at nothing.
+        unknown: window.radiusForHeat({ kind: "process" }, 100, "something-new", now),
+      };
+    }, [TALLIES, heat, NOW, NODE_FOR]);
+
+    const floor = sizes.weighted[0];
+    expect(floor).toBeGreaterThan(8);
+    for (const r of [...sizes.quiet, sizes.flat, sizes.unknown]) expect(r).toBe(floor);
+    for (const r of sizes.weighted) expect(r).toBeGreaterThanOrEqual(floor);
+
+    // A node measured by *another* weighting's field sits at the floor too: the radii
+    // on one picture answer one question, and never half of another.
+    const crossed = await page.evaluate(([h, others, now, src]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      return others.map((other) => window.radiusForHeat(nodeFor(other, 500), 500, h, now));
+    }, [heat, HEATS.filter((h) => h !== heat), NOW, NODE_FOR]);
+    for (const r of crossed) expect(r).toBe(floor);
+  });
+
+  // More is never smaller, and the largest node is visibly the largest — the whole
+  // point of asking for a weighting is to find it without reading a number.
+  test(`${heat} moves a node up, and the worst is unmistakable`, async ({ page }) => {
+    const band = await page.evaluate(([tallies, h, now, src]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      return tallies.map((n) =>
+        window.radiusForHeat(nodeFor(h, n), Math.max(...tallies), h, now));
+    }, [TALLIES, heat, NOW, NODE_FOR]);
+
+    for (let i = 1; i < band.length; i++) {
+      expect(band[i], `at ${TALLIES[i]}`).toBeGreaterThanOrEqual(band[i - 1]);
+    }
+    // Not larger by a rounding error: the peak is several times the floor, so the two
+    // ends of the estate are told apart at a glance rather than by measurement.
+    expect(band[band.length - 1]).toBeGreaterThan(band[0] * 3);
+  });
+
+  // Area carries the quantity, not radius. Doubling a radius quadruples the ink, so a
+  // radius taken straight from the number would draw four times the quantity it
+  // stands for — the encoding error that makes a bubble chart lie.
+  test(`the ${heat} area above the floor is the share of the peak`, async ({ page }) => {
+    const [floor, quarter, whole] = await page.evaluate(([h, now, src]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      return [0, 25, 100].map((n) => window.radiusForHeat(nodeFor(h, n), 100, h, now));
+    }, [heat, NOW, NODE_FOR]);
+
+    // A quarter of the peak's tally is half of the peak's span above the floor, which
+    // is what "area is proportional" means once the floor is subtracted.
+    expect((quarter - floor) / (whole - floor)).toBeCloseTo(0.5, 6);
+
+    // And a tally past the reference — a stale saved reference, or a node arriving
+    // between two reads — must not draw a circle that swallows the picture.
+    const beyond = await page.evaluate(([h, now, src]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      return window.radiusForHeat(nodeFor(h, 10000), 100, h, now);
+    }, [heat, NOW, NODE_FOR]);
+    expect(beyond).toBe(whole);
+  });
+}
+
+// A duration is the one weighting measured against a clock rather than read off the
+// node, and every node on one picture has to be measured against the same reading:
+// taken per node, the reference would be a few milliseconds older than the node that
+// set it, and the largest node would come out larger than the whole it is a share of.
+test("a duration weighting is measured against one moment, not a running clock", async ({ page }) => {
+  const sizes = await page.evaluate((now) => {
+    const oldest = { kind: "process", oldestIncident: (now - 60000) * 1e6 };
+    const peak = window.heatPeak({ nodes: [oldest] }, "incident-age", now);
+    return {
+      peak,
+      // The node that set the reference, measured against it.
+      atPeak: window.radiusForHeat(oldest, peak, "incident-age", now),
+      // The same node a second later, against a reference taken a second ago: still
+      // clamped rather than swelling past the whole.
+      later: window.radiusForHeat(oldest, peak, "incident-age", now + 1000),
+      // A moment the server never dated is not an incident raised in 1970.
+      undated: window.radiusForHeat({ kind: "process", incidents: 9 }, peak, "incident-age", now),
+      floor: window.radiusForHeat({ kind: "process" }, peak, "incident-age", now),
+    };
+  }, NOW);
+
+  expect(sizes.peak).toBe(60000);
+  expect(sizes.later).toBe(sizes.atPeak);
+  expect(sizes.undated).toBe(sizes.floor);
+  expect(sizes.atPeak).toBeGreaterThan(sizes.floor * 3);
+});
+
+// The reference is the largest node on the landscape, per weighting. Taken from the
+// whole of it rather than from what is on screen — see the call site — but the
+// arithmetic is here: a payload with no tallies at all has no reference, and says so
+// as zero rather than as one.
+test("the reference is the largest tally of whichever quantity is being drawn", async ({ page }) => {
+  const peaks = await page.evaluate((now) => {
+    const graph = { nodes: [
+      { id: "p1", runtime: { running: 12 }, incidents: 3, oldestIncident: (now - 5000) * 1e6 },
+      { id: "p2", runtime: { running: 50002 } },
+      { id: "p3", incidents: 41, oldestIncident: (now - 90000) * 1e6 },
+      { id: "w", kind: "worker" },
+    ] };
+    return {
+      running: window.heatPeak(graph, "instances", now),
+      parked: window.heatPeak(graph, "incidents", now),
+      // The oldest, which is not the one holding the most: two orderings of one
+      // estate, which is the whole reason both weightings exist.
+      stuck: window.heatPeak(graph, "incident-age", now),
+      // A healthy estate has no incidents, and zero is the answer rather than a
+      // missing one — the picture it produces is flat, and flat is the finding.
+      healthy: window.heatPeak({ nodes: [{ id: "p1", runtime: { running: 9 } }] }, "incidents", now),
+      // As is an estate whose incidents this engine never dated: absent, not 1970.
+      undated: window.heatPeak({ nodes: [{ id: "p1", incidents: 9 }] }, "incident-age", now),
+      empty: window.heatPeak({ nodes: [] }, "instances", now),
+      // A payload this build does not recognise, and a weighting it does not know:
+      // both are survivable rather than fatal.
+      malformed: window.heatPeak(null, "instances", now),
+      unknown: window.heatPeak(graph, "something-new", now),
+      none: window.heatPeak(graph, null, now),
+    };
+  }, NOW);
+
+  expect(peaks).toEqual({
+    running: 50002, parked: 41, stuck: 90000, healthy: 0, undated: 0,
+    empty: 0, malformed: 0, unknown: 0, none: 0,
+  });
+});
+
 // An unknown kind is drawn as a process rather than as nothing: a node with no size
 // is a node that is not on the picture, and a payload this view does not recognise
 // is still a payload it has to draw.
@@ -168,4 +343,50 @@ test("an unfamiliar kind still has a shape", async ({ page }) => {
   const shape = await page.evaluate(() =>
     window.shapeForNode({ kind: "something-new", id: "something-new:1" }));
   expect(shape).toBe("square");
+});
+
+// How often the view re-reads the landscape it is drawing (ADR-0211 §7). The mesh is
+// derived on the run loop and the size budget exists because that is not free, so the
+// cadence is a fraction of what the last derive actually cost rather than a constant
+// somebody guessed — and a claim about every cost is arithmetic rather than a wait.
+test("the re-read cadence is a fraction of what the derive costs", async ({ page }) => {
+  const paced = await page.evaluate(() => ({
+    floor: window.REFRESH_FLOOR,
+    ceiling: window.REFRESH_CEILING,
+    // A landscape that derives in no time is re-read on the floor: there is nothing
+    // to protect, and asking faster would buy nothing a reader could see.
+    quick: window.refreshEvery(40),
+    // The floor holds until the cost would push past it, which is where the two rules
+    // cross: at a twentieth of the cadence, a derive has to reach 1.5 s before the
+    // pacing has anything to say. Pinned from both sides, because a crossover nobody
+    // states is one that moves the next time a constant is touched.
+    justUnder: window.refreshEvery(1400),
+    justOver: window.refreshEvery(1600),
+    // Past it the cadence is the cost, and backs off on its own without anybody
+    // configuring anything.
+    heavy: window.refreshEvery(4000),
+    // And an estate whose derive is measured in tens of seconds settles at the
+    // ceiling rather than growing without bound.
+    vast: window.refreshEvery(60_000),
+    // A cost that could not be measured must not read as "free".
+    unmeasured: [window.refreshEvery(0), window.refreshEvery(NaN), window.refreshEvery()],
+    // A server that would not answer is asked at the ceiling, whatever the last good
+    // derive cost: it does not want thirty requests a minute from every open tab, and
+    // the freshness line is already saying the picture is not being kept up.
+    failing: window.refreshEvery(40, { failing: true }),
+  }));
+
+  expect(paced.quick).toBe(paced.floor);
+  for (const ms of paced.unmeasured) expect(ms).toBe(paced.floor);
+  expect(paced.justUnder).toBe(paced.floor);
+  expect(paced.justOver).toBeGreaterThan(paced.floor);
+  expect(paced.heavy).toBeGreaterThan(paced.justOver);
+  expect(paced.vast).toBe(paced.ceiling);
+  expect(paced.failing).toBe(paced.ceiling);
+  // Never faster than the floor and never slower than the ceiling, at any cost.
+  for (const ms of [0, 1, 100, 1e4, 1e9]) {
+    const every = await page.evaluate((c) => window.refreshEvery(c), ms);
+    expect(every, `at ${ms} ms`).toBeGreaterThanOrEqual(paced.floor);
+    expect(every, `at ${ms} ms`).toBeLessThanOrEqual(paced.ceiling);
+  }
 });

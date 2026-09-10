@@ -19,7 +19,7 @@ import {
 } from "./panorama-export.js";
 // The runtime counts here are the engine's own, the same ones the Operations badges
 // carry — so they are grouped in thousands the same way (numfmt.js).
-import { fmtCount } from "./numfmt.js";
+import { fmtCount, spanText } from "./numfmt.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -232,19 +232,181 @@ const NOTATION_SHAPES = {
 // wrong about which vocabulary it is in.
 const DERIVED_NOTATION = {
   id: "atlas", label: "Atlas (derived)", short: "Atlas",
-  projection: false, mappingVersion: 0, types: {}, loss: [],
+  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: "degree",
 };
 
-let notations = { atlas: DERIVED_NOTATION };
+// HEATS are the ways of drawing the same landscape with its *sizes* carrying a
+// quantity the engine holds, rather than the structure the layout already draws.
+//
+// They sit in the notation picker rather than beside it as switches, and that is a
+// claim worth making explicitly: neither is a second vocabulary — they say nothing
+// about what a node is *called* — but each is the same kind of choice. A notation
+// decides how the picture is drawn; so does this. And they are mutually exclusive
+// with the projections and with each other for a reason the picture cannot argue its
+// way out of: size is one channel, and it can carry connectivity or load or trouble,
+// never two of them. A checkbox beside the picker offered exactly the combination
+// that has no reading — an ArchiMate landscape whose radii mean two things at once —
+// and a list where one entry is chosen is the honest shape of "pick what size means
+// here".
+//
+// What a weighting costs: a node's size no longer says what kind of thing it is or
+// how much hangs off it. Shape and colour still carry the kind, and the key says so.
+// What it buys is a question the structural picture cannot answer at a glance.
+//
+// Three of them, because they are three different questions.
+//
+//   - *Instances* — "where is the work". Capacity, reading a load test, finding the
+//     process that is actually carrying the estate.
+//   - *Incidents* — "where is it stuck". The severity badges already say *which* nodes
+//     have a finding (ADR-0211 §4); what they cannot say is how much is parked behind
+//     each, and a node with four hundred stuck tokens wears the same badge as one with
+//     a single retry.
+//   - *Incident age* — "how long has it been stuck", and this is the one that changes
+//     a decision. Four hundred incidents raised in the last five minutes is a worker
+//     that has just fallen over and will drain itself once somebody restarts it; three
+//     standing since Friday is a process nobody is coming back to. The count ranks
+//     those the wrong way round, every time.
+//
+// One table because they differ only in what they read off a node and what they call
+// it. Weightings written out separately would drift — one gaining a floor rule or a
+// grouped number the others never got — and the reader would have no way to know
+// which of the pictures they were looking at was the maintained one.
+//
+// The third is a *duration* rather than a count, which is the only thing in the table
+// that is not uniform: it is measured against a clock rather than read off the node,
+// so every reader passes the moment it is measuring at. One moment per repaint, or
+// the largest node could come out larger than the reference it is a share of.
+// counted is the two spellings of a plain tally: the plain one for the canvas, where
+// the text is drawn as SVG, and the rich one for a ranking row, where the number is
+// the part worth setting in bold. One word per weighting, so the two cannot end up
+// calling a tally different things.
+const counted = (unit) => ({
+  text: (n) => `${fmtCount(n)} ${unit}`,
+  rich: (n) => `<b>${fmtCount(n)}</b> ${unit}`,
+});
+
+const HEATS = {
+  instances: {
+    key: "instances", label: "Instances (heatmap)", short: "Instances",
+    // The engine's own tally, the same one the Operations badges carry. Absent on
+    // every kind that cannot have instances, which is why this reads through the
+    // optional chain rather than defaulting: "no instances" and "cannot have
+    // instances" are different facts and neither is a zero to be drawn.
+    of: (node) => node?.runtime?.running,
+    ...counted("running"),
+    // What size means, in one sentence, for the key and for whoever has to read the
+    // picture after it has been pasted somewhere with no key beside it.
+    heading: "Size is load here, not structure.",
+    peakPhrase: (peak) => `the busiest one on this landscape, which is running
+      <b>${fmtCount(peak)}</b>`,
+    floorNote: `Anything with no running instances of its own sits at the floor — a
+      worker, a decision, and an application too, whose load is on the processes it
+      holds — so nothing drops off the picture.`,
+    quiet: `<b>Size is load here, not structure</b> — and nothing is running on this
+      landscape at all, so every node is drawn at the same floor.`,
+    // Why a node can be sizeable and still carry no number under its name.
+    absent: `Running instances are drawn under the names that have any. A process with
+      none carries no number; select it to see the zero, and what it has finished.`,
+    // What the column beside the picture calls this ordering, and what it says when
+    // there is nothing to order.
+    rankHeading: "Busiest",
+    rankSub: "how much each one is running",
+    rankEmpty: `Nothing is running on this landscape, so there is nothing to rank by
+      load. The blast-radius ranking is on the derived drawing.`,
+  },
+  incidents: {
+    key: "incidents", label: "Incidents (heatmap)", short: "Incidents",
+    // Unresolved incidents the engine holds against this node. Only a process can
+    // carry one — an incident belongs to a token — and a collapsed application
+    // carries the sum of the processes it stands for.
+    of: (node) => node?.incidents,
+    ...counted("incident(s)"),
+    heading: "Size is trouble here, not structure.",
+    peakPhrase: (peak) => `the worst one on this landscape, which is holding
+      <b>${fmtCount(peak)}</b>`,
+    floorNote: `Everything with nothing parked on it sits at the floor, so a healthy
+      estate reads as a flat one and the exceptions are the only things that stand up.
+      The badges still say which nodes have a finding; the size says how much is behind
+      each.`,
+    quiet: `<b>Size is trouble here, not structure</b> — and nothing on this landscape
+      is parked at all, so every node is drawn at the same floor. That is the answer,
+      not a missing one.`,
+    absent: `Open incidents are drawn under the names that have any. A node with none
+      carries no number, and a kind that cannot hold one — a worker, a decision — never
+      does: an incident belongs to a token, and only a process has tokens.`,
+    rankHeading: "Most parked",
+    rankSub: "how much is stuck on each",
+    rankEmpty: `Nothing on this landscape is parked, so there is nothing to rank. That
+      is the answer rather than an empty list — and it is the one worth having.`,
+  },
+  "incident-age": {
+    key: "incident-age", label: "Incident age (heatmap)", short: "Incident age",
+    // How long the earliest unresolved incident on this node has been standing. The
+    // server sends the moment it was raised (Unix nanoseconds) rather than an age,
+    // because an age computed there would be stale by the time it was drawn — and
+    // because a moment is the same fact for every reader, wherever their clock is.
+    //
+    // The *oldest* incident, which is the server's choice and the right one: the newest
+    // says only that something happened lately, which the runtime tally already says
+    // better, and an average is not a fact about any incident, so nothing can be
+    // pointed at.
+    of: (node, at) => (node?.oldestIncident > 0
+      ? Math.max(0, at - node.oldestIncident / 1e6) : 0),
+    text: (ms) => `stuck ${spanText(ms)}`,
+    rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
+    heading: "Size is age here, not structure.",
+    peakPhrase: (peak) => `the longest-parked one on this landscape, which has been
+      stuck <b>${esc(spanText(peak))}</b>`,
+    floorNote: `Everything with nothing parked on it sits at the floor. A process that
+      parked its first token an hour ago is small beside one that parked its first on
+      Friday, however many each is holding — how much is the other picture, and the two
+      routinely rank the same estate the opposite way round.`,
+    quiet: `<b>Size is age here, not structure</b> — and nothing on this landscape is
+      parked at all, so every node is drawn at the same floor. That is the answer, not
+      a missing one.`,
+    absent: `How long each has been stuck is drawn under the names that have any. A node
+      with nothing parked carries no number — and neither does one whose incidents were
+      all raised before this engine recorded the moment, which is a fact about the
+      record rather than about the process.`,
+    rankHeading: "Stuck longest",
+    rankSub: "how long each has been parked",
+    rankEmpty: `Nothing on this landscape is parked, so there is nothing to rank. That
+      is the answer rather than an empty list — and it is the one worth having.`,
+  },
+};
+
+// heatOf is which quantity a way of drawing spends its radii on, or null for the
+// ones that spend them on structure. One lookup rather than a flag carried beside
+// the notation: four things need the answer — the radius, the number under the name,
+// the margin the layout reserves for it, and the sentence the key writes — and a
+// picture where two of them disagreed would draw a number a node has no room for.
+export function heatOf(notation) {
+  return HEATS[notationOf(notation?.id ?? notation).weigh] || null;
+}
+
+// The heat weightings, as entries the picker can offer. Built from the table above
+// so a weighting cannot exist as a picker entry the renderer has never heard of.
+const HEAT_NOTATIONS = Object.fromEntries(Object.values(HEATS).map((heat) => [heat.key, {
+  id: heat.key, label: heat.label, short: heat.short,
+  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: heat.key,
+}]));
+
+// The local entries are held here rather than fetched, by the split this file already
+// keeps: what a node is *called* is the server's table (ADR-0211 §8), and how big it
+// is drawn is this side's business, exactly like NOTATION_SHAPES.
+let notations = { atlas: DERIVED_NOTATION, ...HEAT_NOTATIONS };
 
 // useNotations takes what the server serves and adds this side's shapes to it. An
 // entry with no shapes is still usable — every kind falls back to its derived
 // outline — so a notation the server learns about before this file does degrades to
 // a vocabulary change rather than to a blank canvas.
 export function useNotations(served) {
-  const next = { atlas: DERIVED_NOTATION };
+  const next = { atlas: DERIVED_NOTATION, ...HEAT_NOTATIONS };
   for (const notation of Array.isArray(served) ? served : []) {
-    if (!notation?.id || notation.id === "atlas") continue;
+    // The locally-defined entries win over a served row of the same id. They are
+    // rendering decisions rather than vocabularies, and a server that grew a word for
+    // one of them must not be able to turn a weighting into a projection.
+    if (!notation?.id || next[notation.id]) continue;
     const shapes = NOTATION_SHAPES[notation.id] || {};
     next[notation.id] = {
       id: notation.id,
@@ -303,6 +465,86 @@ export function radiusFor(node, degree) {
   const style = KIND[node.kind] || KIND.process;
   const reach = Math.log2(1 + Math.max(0, degree || 0)) / Math.log2(1 + DEGREE_FULL);
   return style.r + (style.grow || 0) * Math.min(1, reach);
+}
+
+// HEAT_FLOOR is the radius every node keeps on a heat weighting, whatever its tally
+// — and it is the whole reason the weightings are usable at all.
+//
+// A size that were *only* the count would draw an idle process at nothing, and a
+// landscape whose quiet half is invisible is not a picture of where the trouble is:
+// it is a picture with the context deleted, and a reader cannot tell "nothing here"
+// from "not on this server". So the floor is a node that is unmistakably a node — at
+// the size a worker is drawn on the structural picture — and the count is what is
+// added on top of it.
+const HEAT_FLOOR = 11;
+// HEAT_SPAN is how much radius the worst node earns above the floor. Getting on for
+// three times the floor, which puts it past the largest thing the structural picture
+// ever draws: the two ends of the estate are then told apart at a glance rather than
+// by measurement, which is the whole of what a weighting is for.
+const HEAT_SPAN = 30;
+
+// heatPeak is the largest tally on a landscape, and the reference every node on it is
+// drawn against.
+//
+// Taken from the *whole* landscape rather than from whatever is currently on screen,
+// and that is deliberate: filtering to two nodes must not make the smaller of them
+// swell into the largest thing ever drawn. It is the same objection DEGREE_FULL
+// answers with a constant, answered differently because the quantity is different —
+// twelve dependencies is a lot on every Atlas ever deployed, and "a lot of running
+// instances" is three on one server and forty thousand on the next, while "a lot of
+// incidents" is one on an estate that has never had any. A constant would draw one
+// server as uniformly idle and the next as uniformly saturated.
+//
+// The price is that a radius means something only against a stated reference, so the
+// key and the export stamp state it. A picture that did not say what its largest node
+// stands for would be a quantity with no unit.
+//
+// `at` is the moment a duration weighting is measured against, and every node on one
+// picture has to be measured against the same one: read per node, the reference would
+// be taken a few milliseconds before the node that set it, and the largest node would
+// come out larger than the whole it is a share of. The counts ignore it.
+export function heatPeak(graph, heat, at = Date.now()) {
+  const read = heatReader(heat);
+  if (!read) return 0;
+  let peak = 0;
+  for (const node of graph?.nodes || []) {
+    const value = read(node, at);
+    if (typeof value === "number" && value > peak) peak = value;
+  }
+  return peak;
+}
+
+// radiusForHeat sizes a node by whatever the chosen weighting counts on it.
+//
+// Area carries the count, not radius: doubling a radius quadruples the ink, so a
+// radius drawn straight from the number reads as four times the quantity it stands
+// for. Taking the square root is what makes "twice as much" look like twice as much,
+// and it is the standard the eye is actually calibrated against on a bubble chart.
+//
+// Exact proportionality and a visible minimum cannot both hold — one of them has to
+// give at zero — and the minimum wins here, because a landscape is read for the
+// nodes on it as well as for the numbers. So the honest statement of the encoding is
+// the one the key makes: the floor is a node, and the area *above* the floor is the
+// share of the largest node's tally.
+//
+// A node with no tally at all — a worker, a decision, a deployment target, a draft,
+// a placeholder — sits on the floor rather than being sized as a zero, and that is
+// the same fact rather than a missing one: nothing is counted there because nothing
+// can be.
+export function radiusForHeat(node, peak, heat, at = Date.now()) {
+  const read = heatReader(heat);
+  const value = read ? Math.max(0, read(node, at) || 0) : 0;
+  if (!(peak > 0) || value <= 0) return HEAT_FLOOR;
+  return HEAT_FLOOR + HEAT_SPAN * Math.min(1, Math.sqrt(value / peak));
+}
+
+// heatReader resolves either spelling of a weighting — the entry itself, or the key
+// naming it — to the function that reads a node's tally. A weighting this build does
+// not know reads as none rather than as zero everywhere, so an unfamiliar saved view
+// draws the structural picture instead of a flat one.
+function heatReader(heat) {
+  const entry = typeof heat === "string" ? HEATS[heat] : heat;
+  return entry?.of || null;
 }
 
 // A target is not part of the dependency graph — no edge is derived to it, because
@@ -1351,6 +1593,58 @@ export function blastRanking(graph, { direction = "dependents", depth = Infinity
   return rows.slice(0, limit);
 }
 
+// heatRanking answers, in a list, the question the heat weighting asks of the
+// picture: which nodes carry the most of whatever is being drawn.
+//
+// It exists because the picture and the column beside it were answering different
+// questions at once. With a weighting on, the canvas ranks the estate by a tally
+// while the list ranked it by blast radius, so the largest circle and the first row
+// were routinely different nodes — and a reader has no way to tell that two orderings
+// on one screen are deliberate rather than a contradiction.
+//
+// It is not a re-listing of the picture. Two things a circle cannot give: the exact
+// number — nobody reads 41 against 38 off two areas — and the name, which at a
+// zoomed-out magnification is not painted at all (see LABEL_TIERS).
+//
+// Each row also carries the reach the blast ranking would have measured, and that is
+// what turns a count into a priority: forty incidents on a leaf process is a contained
+// problem, twelve on something two hundred things need is an outage. It follows the
+// same direction and depth controls as everything else in this column, so the two
+// numbers on one row were measured the way the panel measures them.
+//
+// The walk runs only for the rows that survived the cut, which is why the tie-break is
+// severity rather than reach: ranking *by* reach would mean walking from every node to
+// order rows most of which are then thrown away, and the ordering the reader came for
+// is the tally.
+export function heatRanking(graph, heat, { direction = "dependents", depth = Infinity, limit = 6, at = Date.now() } = {}) {
+  const read = heatReader(heat);
+  if (!read) return [];
+  const rows = [];
+  for (const node of graph.nodes) {
+    const value = Number(read(node, at));
+    // Only where there is something to rank. A "most parked" list padded out with
+    // zeroes is a list whose first rows are the answer and whose rest is noise — and
+    // on a healthy estate it would be nothing but noise.
+    if (!Number.isFinite(value) || value <= 0) continue;
+    rows.push({ id: node.id, name: node.name, kind: node.kind, severity: node.severity, value });
+  }
+  rows.sort((a, b) =>
+    (b.value - a.value) ||
+    ((SEVERITY_ORDER[b.severity] ?? 0) - (SEVERITY_ORDER[a.severity] ?? 0)) ||
+    String(a.name || a.id).localeCompare(String(b.name || b.id)));
+  const top = rows.slice(0, limit);
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const index = edgeIndex(graph);
+  for (const row of top) {
+    const walked = walkImpact(index, byId, [row.id], { direction, depth, edges: false });
+    row.total = walked.hops.size - 1;
+    // A walk stopped at a permission boundary produces a floor rather than a total,
+    // and the row says so rather than printing a number it cannot stand behind.
+    row.complete = walked.truncatedBy.length === 0;
+  }
+  return top;
+}
+
 // windowOverlap is the arithmetic a maintenance window needs and a count cannot give.
 //
 // The question behind it is not "what does each of these break" but "what does the
@@ -1695,8 +1989,9 @@ function legendEntries(graph, notation) {
   return entries;
 }
 
-function legendHTML(graph, layoutMs, notation, instances = false) {
+function legendHTML(graph, layoutMs, notation, peak = 0) {
   const spoken = notationOf(notation?.id ?? notation);
+  const heat = heatOf(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
     <svg width="16" height="16" aria-hidden="true">${entry.mark}</svg>${esc(entry.label)}</span>`;
   const entries = legendEntries(graph, spoken);
@@ -1715,13 +2010,20 @@ function legendHTML(graph, layoutMs, notation, instances = false) {
     notes.push(`<p class="mesh-note">This starmap exceeded the size budget, so it is
       collapsed to applications. Each one states how many nodes it stands for.</p>`);
   }
-  // What the count on the canvas does and does not say. A process with nothing
-  // running carries no number, and a reader who did not know that would read its
-  // absence as "not measured" — which is the one thing it does not mean.
-  if (instances) {
-    notes.push(`<p class="mesh-note">Running instances are drawn under the names that
-      have any. A process with none carries no number; select it to see the zero, and
-      what it has finished.</p>`);
+  // What size means on this picture, said before anything else the key says: a reader
+  // who takes the radii for the structural ones would read the estate backwards. The
+  // reference is named, because an area is a quantity and a quantity with no unit is
+  // a decoration. Then what the *count* on the canvas does and does not say — a node
+  // with nothing to report carries no number, and a reader who did not know that
+  // would read its absence as "not measured", which is the one thing it does not mean.
+  if (heat) {
+    notes.push(peak > 0
+      ? `<p class="mesh-note"><b>${heat.heading}</b> The area above the smallest node is
+         that node's share of ${heat.peakPhrase(peak)}. ${heat.floorNote} Kind is still
+         carried by shape and colour.</p>`
+      : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
+         colour.</p>`);
+    notes.push(`<p class="mesh-note">${heat.absent}</p>`);
   }
   // The comparison counts only mean something once a model has been overlaid; with
   // none, saying "0 unmodeled" would imply the landscape had been checked.
@@ -1789,8 +2091,13 @@ function legendHTML(graph, layoutMs, notation, instances = false) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances = false } = {}) {
+function renderGraph(graph, layoutMs, frame,
+  { pinned, from, notation, peak = 0, at: measuredAt = Date.now() } = {}) {
   const spoken = notationOf(notation?.id ?? notation);
+  // Read off the notation rather than passed in beside it: the numbers under the names
+  // and the radii they hang from are one decision, and two arguments that could
+  // disagree would eventually draw a number a node has no room for.
+  const heat = heatOf(spoken);
   // A projected node carries a second line under its name, so the margin the layout
   // reserves has to carry it too — otherwise the type annotation is the one thing
   // that ends up outside the frame.
@@ -1799,8 +2106,9 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
   // "Onboarding". Both directions have to grow, or the annotation is the one part of
   // the picture that ends up over the edge of it.
   // Two things can hang a line under a node's name — the notation's word for it, and
-  // its running-instance count — and the margin has to carry however many are on.
-  const underlines = (spoken.projection ? 1 : 0) + (instances ? 1 : 0);
+  // whatever tally a heat weighting counts — and the margin has to carry however many
+  // are on.
+  const underlines = (spoken.projection ? 1 : 0) + (heat ? 1 : 0);
   const margin = underlines
     ? { top: LABEL_MARGIN.top, right: LABEL_MARGIN.right + (spoken.projection ? 44 : 0),
         bottom: LABEL_MARGIN.bottom + 16 * underlines,
@@ -1810,7 +2118,13 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
   // radius, and the world budget, the separation pass and the circle all read it
   // back off the node (see radiusOf) rather than working it out again.
   const degree = degreesOf(graph);
-  const nodes = graph.nodes.map((n) => ({ ...n, r: radiusFor(n, degree.get(n.id)) }));
+  // Which quantity the radius is spending itself on. Connectivity by default —
+  // structure is what this view is for — or one of the heat tallies, when that is the
+  // question being asked of it. Never two: one channel, one meaning.
+  const nodes = graph.nodes.map((n) => ({
+    ...n,
+    r: heat ? radiusForHeat(n, peak, heat, measuredAt) : radiusFor(n, degree.get(n.id)),
+  }));
   // The graph is laid out in a world of its own size, not in the viewport. The
   // frame only decides that world's shape, so the opening view fills the window
   // without letterboxing.
@@ -1860,12 +2174,13 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
     // ArchiMate's corner icon spelled out, and it is the only thing that makes a
     // canvas of identical boxes readable at all.
     const typed = typeIn(n.kind, spoken);
-    // How much is running here, when the reader has asked for it. Only where there
-    // is something to say: on a landscape of four hundred processes, "0 running"
-    // four hundred times is a wall of text that hides the eleven numbers somebody
-    // turned this on to find. The panel says the zero for whichever node is
+    // What the weighting counts here, when the reader has asked for it. Only where
+    // there is something to say: on a landscape of four hundred processes, "0
+    // running" four hundred times is a wall of text that hides the eleven numbers
+    // somebody turned this on to find. The panel says the zero for whichever node is
     // selected, and the legend says that the canvas does not.
-    const running = instances && n.runtime && n.runtime.running > 0 ? n.runtime.running : 0;
+    const tally = heat ? Number(heat.of(n, measuredAt)) : 0;
+    const measured = Number.isFinite(tally) && tally > 0 ? tally : 0;
     const runsAt = r + 28 + (typed ? 14 : 0);
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
       class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${context ? " mesh-context" : ""}${n.held ? " mesh-pinned" : ""}"
@@ -1883,7 +2198,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
       <g class="mesh-caption" data-room="${(r + 8).toFixed(1)}">
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
-      ${running ? `<text class="mesh-runs" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${fmtCount(running)} running</tspan></text>` : ""}
+      ${measured ? `<text class="mesh-runs mesh-runs-${esc(heat.key)}" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${esc(heat.text(measured))}</tspan></text>` : ""}
       </g>
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
@@ -1903,6 +2218,46 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
 }
 
 
+// How often this view re-reads the landscape it is drawing (ADR-0211 §7).
+//
+// Everything on the picture has a shelf life — the severity badges are an observation,
+// the incident counts move as an operator works through them, and all three heat
+// weightings are live quantities, one of them measured against a clock — so a
+// landscape left open goes quietly wrong. The failure §10's export stamp exists to
+// prevent, happening on the screen the stamp was copied from.
+//
+// REFRESH_FLOOR is the fastest this view will ask, and it is well inside the
+// granularity of every number on the picture: the age weighting's finest bucket is
+// "under 2 min", so asking faster would buy nothing a reader could see.
+export const REFRESH_FLOOR = 30_000;
+// REFRESH_CEILING is the slowest it will settle to. Past this the freshness line is
+// doing the honest work and the polling is only noise.
+export const REFRESH_CEILING = 5 * 60_000;
+// DERIVE_SHARE is the fraction of a derive's cost this view is willing to be. The mesh
+// is built on the run loop and the size budget (§7) exists because that is not free,
+// so the cadence is a *multiple of what the last one actually cost* rather than a
+// constant somebody guessed: a landscape that derives in 40 ms is re-read on the
+// floor, and one that takes four seconds backs off to well over a minute on its own. A
+// fixed interval would be exactly wrong on the estates where it mattered most.
+const DERIVE_SHARE = 0.05;
+
+// refreshEvery is that cadence, in milliseconds.
+//
+// `derivedMs` is measured as the round trip rather than as the server's own time,
+// which over-counts by the network — and erring toward asking less often is the right
+// direction to be wrong in.
+//
+// A failed attempt goes straight to the ceiling rather than retrying on the floor: a
+// server that is down does not want thirty requests a minute from every open tab, and
+// the freshness line is already saying the picture is not being kept up. A derive that
+// could not be measured at all falls to the floor, because "unknown cost" must not
+// read as "free".
+export function refreshEvery(derivedMs, { failing = false } = {}) {
+  if (failing) return REFRESH_CEILING;
+  const paced = Number.isFinite(derivedMs) && derivedMs > 0 ? derivedMs / DERIVE_SHARE : 0;
+  return Math.min(REFRESH_CEILING, Math.max(REFRESH_FLOOR, paced));
+}
+
 // rankingHTML answers "where is the risk on this landscape" without a selection.
 //
 // Impact analysis has always needed one, which quietly assumes the reader already
@@ -1913,39 +2268,68 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, instances
 // It follows the direction and depth controls rather than fixing its own, so this
 // list and the panel are always answering the same question. Two blast-radius
 // numbers on one page that were measured differently would be worse than one.
-function rankingHTML(graph, direction, depth) {
-  const rows = blastRanking(graph, { direction, depth });
-  const heading = direction === "dependencies" ? "Most dependent"
-    : direction === "both" ? "Most entangled" : "Biggest blast radius";
+//
+// And it follows the *weighting* for the same reason one step up: with a heat on, the
+// canvas ranks the estate by a tally, and a column beside it ranking by blast radius
+// would be a second ordering nobody asked for. The reach then becomes the second
+// number on a row rather than the first — see heatRanking.
+function rankingHTML(graph, direction, depth, heat = null, at = Date.now()) {
+  const reach = depth === Infinity ? "any" : depth;
   const sub = direction === "dependencies" ? "how much each one needs to work"
     : direction === "both" ? "how much each one is connected to"
     : "how much stops if this one does";
-  const reach = depth === Infinity ? "any" : depth;
+  const who = (r) => esc(r.name ||
+    String((KIND[r.kind] || {}).label || r.kind || r.id).split(" — ")[0]);
+  const shell = (heading, body) => `<div class="mesh-rank">
+    <div class="mesh-rank-head">${heading}</div>${body}</div>`;
+
+  // With a weighting on, the list ranks by the same quantity the canvas sizes by.
+  // Anything else puts two orderings on one screen and leaves the reader to work out
+  // that they are deliberate.
+  if (heat) {
+    const rows = heatRanking(graph, heat, { direction, depth, at });
+    if (!rows.length) {
+      // On the incident weighting this is the good news, and it has to read as an
+      // answer rather than as an empty list — the same argument the flat canvas makes.
+      return shell(`<b>${esc(heat.rankHeading)}</b>`,
+        `<p class="mesh-note">${heat.rankEmpty}</p>`);
+    }
+    return shell(
+      `<b>${esc(heat.rankHeading)}</b>
+       <span class="muted">${esc(heat.rankSub)}, and ${esc(sub)}, within
+         ${esc(reach)} hop(s)</span>`,
+      `<ol class="mesh-rank-list">${rows.map((r) => `<li>
+        <button type="button" class="mesh-rank-go mesh-sev-${esc(r.severity || "unknown")}"
+          data-finding="${esc(r.id)}">
+          <span class="mesh-rank-who">${who(r)}</span>
+          <span class="mesh-rank-count">${heat.rich(r.value)}<span
+            class="muted"> · ${r.complete ? "" : "at least "}${r.total} node(s)</span></span>
+        </button></li>`).join("")}</ol>`);
+  }
+
+  const rows = blastRanking(graph, { direction, depth });
+  const heading = direction === "dependencies" ? "Most dependent"
+    : direction === "both" ? "Most entangled" : "Biggest blast radius";
 
   if (!rows.length) {
     // Said as a fact about the edges rather than as reassurance: a landscape whose
     // processes call nothing has no blast radius to rank, and that is not the same
     // as a safe one.
-    return `<div class="mesh-rank">
-      <div class="mesh-rank-head"><b>${esc(heading)}</b></div>
-      <p class="mesh-note">Nothing here depends on anything else within ${esc(reach)}
+    return shell(`<b>${esc(heading)}</b>`,
+      `<p class="mesh-note">Nothing here depends on anything else within ${esc(reach)}
       hop(s), so there is no radius to rank. Containment is not counted: an
-      application holds its processes, it does not depend on them.</p></div>`;
+      application holds its processes, it does not depend on them.</p>`);
   }
-  return `<div class="mesh-rank">
-    <div class="mesh-rank-head">
-      <b>${esc(heading)}</b>
-      <span class="muted">${esc(sub)}, within ${esc(reach)} hop(s)</span>
-    </div>
-    <ol class="mesh-rank-list">${rows.map((r) => `<li>
+  return shell(
+    `<b>${esc(heading)}</b>
+     <span class="muted">${esc(sub)}, within ${esc(reach)} hop(s)</span>`,
+    `<ol class="mesh-rank-list">${rows.map((r) => `<li>
       <button type="button" class="mesh-rank-go mesh-sev-${esc(r.severity || "unknown")}"
         data-finding="${esc(r.id)}">
-        <span class="mesh-rank-who">${esc(r.name ||
-          String((KIND[r.kind] || {}).label || r.kind || r.id).split(" — ")[0])}</span>
+        <span class="mesh-rank-who">${who(r)}</span>
         <span class="mesh-rank-count">${r.complete ? "" : "at least "}<b>${r.total}</b>
           node(s)<span class="muted"> · ${r.direct} direct</span></span>
-      </button></li>`).join("")}</ol>
-  </div>`;
+      </button></li>`).join("")}</ol>`);
 }
 
 // findingsHTML lists every node with something wrong with it, worst first.
@@ -2172,10 +2556,20 @@ function impactPanelHTML(node, result, direction, depth,
   const inherited = node.severityFrom
     ? `<span class="muted"> — inherited from ${esc(node.severityFrom)}</span>`
     : "";
+  // How long this has been wrong, beside how much of it there is. The reason above
+  // says "12 token(s) are parked"; whether they parked five minutes ago or on Friday
+  // is what decides whether somebody restarts a worker or opens the process — and it
+  // is the one thing a count can never say. Only where the engine recorded the moment:
+  // an incident raised before it did is a gap in the record, not an old one.
+  const parkedSince = node.oldestIncident > 0
+    ? `<p class="mesh-parked-since muted">Oldest still parked
+        ${esc(sinceText(node.oldestIncident))}.</p>`
+    : "";
   const finding = `<div class="mesh-finding mesh-sev-${esc(node.severity || "unknown")}">
       <b>${esc(sev.label.split(" — ")[0])}</b>
       <span class="muted">${esc(STATE_TEXT[node.state] || node.state || "unbound")}</span>
       ${node.reason ? `<p>${esc(node.reason)}${inherited}</p>` : ""}
+      ${parkedSince}
       ${sitesHTML(node)}
     </div>`;
   return `<div class="mesh-panel">
@@ -2342,19 +2736,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            one a way back to it. "All" is the first station, so leaving is a step
            like any other rather than a separate escape hatch. -->
       <nav id="mesh-drill-trail" class="mesh-trail" aria-label="Where you are" hidden></nav>
-      <!-- Which vocabulary the picture is drawn in. Beside the picture rather than in
-           the side column, because it changes the drawing rather than the answer
-           about it (ADR-0211 §8). -->
+      <!-- How the picture is drawn. Beside the picture rather than in the side column,
+           because it changes the drawing rather than the answer about it (ADR-0211
+           §8) — and it is one list rather than a list plus a switch, because every
+           entry on it spends the same channels on a different question and only one
+           of them can be answered at a time. -->
       <label class="mesh-notation" for="mesh-notation">Notation</label>
-      <select id="mesh-notation" class="mesh-notation-pick">${notationsAvailable()
+      <select id="mesh-notation" class="mesh-notation-pick"
+        title="How this landscape is drawn: Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, or projected into another vocabulary">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
-      <!-- How much is running, on the picture rather than only in the panel. Off by
-           default and asked for by name: it is a second number on every node, and a
-           structural picture that always carried it would be a status board that
-           happens to have arrows. -->
-      <label class="mesh-toggle" title="Show how many instances are running, on the processes that have any">
-        <input id="mesh-instances" type="checkbox"/> Instances
-      </label>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:
            the drafts are not in the payload until they are wanted, because an estate
@@ -2385,6 +2775,23 @@ export async function mountPanoramaMesh(view, { api, toast }) {
          wide. It describes the picture rather than acting on it, so it reads better
          under the row that does. -->
     <div class="mesh-subhead">
+      <!-- When the server read this landscape, always, because the picture claims to
+           be live: the severity badges, the incident counts and the three weightings
+           are all facts with a shelf life, and an undated one that looks current is
+           the failure the export's stamp already exists to prevent. On screen there
+           was nothing saying it — a landscape opened at nine and still open at eleven
+           showed two-hour-old numbers with no hint of it. -->
+      <span id="mesh-observed" class="muted"></span>
+      <!-- And the switch that keeps it true. On by default, because a stale status
+           view that looks live is worse than a picture that moves: what it costs is a
+           derive on the run loop every half minute, and what it buys is that the
+           sentence beside it stays "just now". Off is for reading one picture
+           carefully — a canvas that re-lays-out under a reader mid-thought is its own
+           kind of wrong. -->
+      <label class="mesh-toggle mesh-live" title="Re-read the landscape from the server while this view is open">
+        <input id="mesh-live" type="checkbox" checked/> Live
+      </label>
+      <span class="mesh-subhead-gap"></span>
       <span id="mesh-count" class="muted"></span>
     </div>
     <div class="mesh-body">
@@ -2465,8 +2872,22 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const zoomOut = document.getElementById("mesh-zoom-out");
   const zoomFit = document.getElementById("mesh-zoom-fit");
   const release = document.getElementById("mesh-release");
-  const instancesToggle = document.getElementById("mesh-instances");
   const draftsToggle = document.getElementById("mesh-drafts");
+  // The card this mount painted, which is not the element it was handed: the router
+  // owns that one and reuses it for every route, replacing what is inside it. So it
+  // is this node, not `view`, that stops being in the document when the reader leaves
+  // — and the timer below has nothing else to notice its own view is gone by.
+  const root = document.getElementById("mesh-root");
+  const liveToggle = document.getElementById("mesh-live");
+  const observed = document.getElementById("mesh-observed");
+  // What the freshness line and the cadence below are computed from: when this
+  // landscape last arrived, what it cost to derive, and whether the last attempt
+  // failed. Seeded from the fetch that opened the view, so the first tick reasons
+  // about a real request rather than about nothing.
+  let fetchedAt = Date.now();
+  let derivedMs = fetchMs;
+  let failing = false;
+  let refreshing = false;
   // Set from what was actually fetched rather than left at its markup default, so the
   // control agrees with the picture on the first frame as well as on every later one.
   draftsToggle.checked = withDrafts;
@@ -2503,6 +2924,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const viewName = document.getElementById("mesh-view-name");
   const viewNote = document.getElementById("mesh-view-note");
   const notationPick = document.getElementById("mesh-notation");
+  // Which quantity the picture currently sizes its nodes by, if any. Asked of the
+  // picker rather than remembered beside it, so the canvas, the key, the saved view
+  // and the export stamp cannot end up describing different pictures.
+  const weighted = () => heatOf(notationPick.value);
+  // The moment the current picture was measured at. A duration weighting is read
+  // against a clock, and the canvas, the key and the ranking have to be three
+  // readings of one instant — so paint() takes it once and everything drawn from that
+  // pass uses it, including the ranking, which is painted separately.
+  let measuredAt = Date.now();
   const exportSvgBtn = document.getElementById("mesh-export-svg");
   const exportModelBtn = document.getElementById("mesh-export-archimate");
   const exportPngBtn = document.getElementById("mesh-export-png");
@@ -2708,8 +3138,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
     const spoken = notationOf(notationPick.value);
     laidOut = frame;
+    // The reference the radii are drawn against comes from the whole landscape, not
+    // from what the filter has left on screen: narrowing to two nodes must not make
+    // the smaller of them swell into the worst thing on the estate.
+    //
+    // And one moment for the whole repaint, because a duration weighting measures
+    // against a clock: the canvas, the key and the ranking beside them have to be
+    // three readings of one instant, or the picture disagrees with its own caption.
+    measuredAt = Date.now();
+    const peak = heatPeak(graph, heatOf(spoken), measuredAt);
     const painted = renderGraph(shown, 0, frame, {
-      pinned, from, notation: spoken, instances: instancesToggle.checked,
+      pinned, from, notation: spoken, peak, at: measuredAt,
     });
     const { ms, svg } = painted;
     world = painted.world;
@@ -2727,9 +3166,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, instancesToggle.checked);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
+    // The freshness line, on every repaint as well as on every tick: a repaint that
+    // followed a re-read would otherwise go on saying the picture was minutes old for
+    // up to a tick after it stopped being true.
+    sayObserved();
     // Matches and context counted apart. "5 of 101" over a picture where only one
     // node matched the term would be the header agreeing with the drawing and both
     // of them misreporting the search.
@@ -2765,7 +3208,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function paintRanking() {
     rankingSlot.innerHTML = rankingHTML(
       shown, dirSelect.value,
-      depthHops());
+      depthHops(), weighted(), measuredAt);
   }
 
   // refresh answers the impact question about the current selection and shows the
@@ -3392,11 +3835,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // single selection is not a window, and its ring is explained by the fact that
       // somebody clicked it.
       window: windowStamp(),
-      // Whether the numbers under the names are in this file. Said in the stamp
-      // rather than left to be inferred: a reader who receives a picture with counts
-      // on some nodes and not others has no way to tell "nothing running" from "this
-      // export was taken with counts off".
-      instances: instancesToggle.checked,
+      // Which quantity the sizes and the numbers under the names carry in this file,
+      // and what the largest of them stands for. Said in the stamp rather than left to
+      // be inferred: on screen the key says it beside the picture, and a file that has
+      // been pasted into a ticket has no key beside it — a reader who took these radii
+      // for the structural ones would read the estate exactly backwards, and an area
+      // with no stated reference is a quantity nobody can read back.
+      heat: weighted()?.key || null,
+      // Kept beside it because a stamp rendered by an older build asks this question
+      // directly, and the answer it wants is still true.
+      instances: weighted()?.key === "instances",
+      peak: heatPeak(graph, weighted(), measuredAt),
       drafts: draftsToggle.checked,
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({
@@ -3449,10 +3898,6 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
   // except the outlines.
   notationPick.addEventListener("change", paint);
-  // A repaint rather than a class toggle: the count is a line under every name, so
-  // switching it on changes how much room a node needs and therefore the layout that
-  // reserves it (see the margin in renderGraph).
-  instancesToggle.addEventListener("change", paint);
 
   // Drafts are the one switch that changes the *landscape* rather than the drawing of
   // it, so it is answered by the server. Two things reach for it — the switch, and a
@@ -3463,13 +3908,24 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // id, and the drilldown trail is pruned rather than cleared — a station whose node
   // is no longer on the picture cannot be a way back to it, and the ones still there
   // still are.
-  async function loadLandscape(wantDrafts) {
-    draftsToggle.disabled = true;
+  //
+  // `silent` is a refresh nobody asked for — the timer's, rather than the switch's.
+  // It leaves the drafts control alone: dimming it every half minute would make the
+  // one thing on this row that *is* waiting for the server indistinguishable from the
+  // thing that merely does so on its own.
+  async function loadLandscape(wantDrafts, { silent = false } = {}) {
+    if (!silent) draftsToggle.disabled = true;
+    const started = performance.now();
     try {
       graph = await api("GET", "/api/v1/panorama/mesh" + (wantDrafts ? "?drafts=1" : ""));
     } finally {
-      draftsToggle.disabled = false;
+      if (!silent) draftsToggle.disabled = false;
     }
+    // What this landscape costs to derive, measured every time rather than once at
+    // open: an estate grows, and the cadence below is a fraction of the cost.
+    derivedMs = performance.now() - started;
+    fetchedAt = Date.now();
+    failing = false;
     draftsToggle.checked = wantDrafts;
     trail = trail.filter((id) => graph.nodes.some((n) => n.id === id));
   }
@@ -3538,7 +3994,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function viewSummary(v) {
     const parts = [];
     if (v.term) parts.push(`filter “${v.term}”`);
-    if (v.instances) parts.push("with instance counts");
+    // From the notation, which is where the weighting lives, and falling back to the
+    // flag for a view stored while the counts were still a switch of their own.
+    const weighing = HEATS[v.notation] || (v.instances ? HEATS.instances : null);
+    if (weighing) parts.push(`sized by ${weighing.short.toLowerCase()}`);
     if (v.drafts) parts.push("with drafts");
     if (v.trail?.length) parts.push(`${v.trail.length} step(s) in`);
     if (v.picked?.length) parts.push(`a window of ${v.picked.length} node(s)`);
@@ -3575,9 +4034,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // A view saved before notations existed carries none, and the derived drawing is
     // what it was looking at.
     notationPick.value = notationOf(v.notation).id === v.notation ? v.notation : "atlas";
-    // A view saved before the counts existed carries none, and false is the picture
-    // it was looking at.
-    instancesToggle.checked = Boolean(v.instances);
+    // A view saved while the counts were a switch beside the picker carries them as
+    // their own flag, and the derived drawing as its notation. That combination no
+    // longer exists, and the picture it stands for is this one — so it is restored as
+    // the weighting rather than dropped. A view saved in a projection keeps the
+    // projection: the counts were the lesser half of what it was named for, and
+    // silently replacing ArchiMate with a heatmap would reopen a different question.
+    if (v.instances && notationPick.value === "atlas") notationPick.value = "instances";
     // The walk, before the paint that draws it: the picture a view saved is the one
     // cut from the last station, so restoring the path is part of restoring the
     // picture rather than something done to it afterwards. Stations whose nodes are
@@ -3655,7 +4118,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       notation: notationPick.value,
       selected: only(),
       picked,
-      instances: instancesToggle.checked,
+      // Kept in the stored view even though the notation now carries it: a view is
+      // read back by older builds, which ask this question directly and can only
+      // answer it about the one weighting they had.
+      instances: weighted()?.key === "instances",
       drafts: draftsToggle.checked,
       trail,
       frameView,
@@ -3847,6 +4313,96 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   } else {
     window.addEventListener("resize", reframe);
   }
+
+  // Keeping the picture true (ADR-0211 §7).
+  //
+  // Everything this view draws has a shelf life. The severity badges are an
+  // observation, the incident counts move as an operator works through them, and all
+  // three weightings are live quantities — the age one is *measured against a clock*,
+  // so its labels go wrong while nothing on the page changes at all. A landscape
+  // opened at nine and still open at eleven showed two-hour-old numbers with nothing
+  // saying so, which is the failure §10's export stamp exists to prevent, happening
+  // on the screen the stamp was copied from.
+  //
+  // So the picture says when it was read, always, and re-reads itself while it is
+  // being looked at.
+
+  // TICK is how often the freshness line is rewritten, which is not how often the
+  // landscape is re-read. Writing a sentence costs nothing and the sentence is the
+  // thing that must never be wrong; the re-read costs a derive on the run loop, and is
+  // paced by refreshEvery.
+  const TICK = 10_000;
+  const refreshDue = () =>
+    Date.now() - fetchedAt >= refreshEvery(derivedMs, { failing });
+
+  // sayObserved writes when this landscape was read, and whether the last attempt to
+  // re-read it failed. Both, because they are different facts: a picture can be four
+  // minutes old because nobody asked for a newer one, or because the server would not
+  // give one, and only the second is a reason to stop believing it.
+  function sayObserved() {
+    const age = graph.observedAt
+      // The payload carries Unix *seconds*; sinceText speaks the nanoseconds the
+      // runtime tallies are in.
+      ? sinceText(graph.observedAt * 1e9)
+      : sinceText(fetchedAt * 1e6);
+    observed.textContent = `observed ${age || "just now"}` +
+      (failing ? " · could not re-read" : "");
+    observed.classList.toggle("mesh-stale", failing);
+  }
+  sayObserved();
+
+  // The re-read itself — named for what it does rather than "refresh", which in this
+  // view already means answering the impact question about the current selection.
+  //
+  // Everything the reader has arranged survives it, because it
+  // goes through the same path the drafts switch does: positions are kept by node id,
+  // the trail is pruned rather than cleared, and a selection the new landscape no
+  // longer contains is dropped by paint().
+  async function reread() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await loadLandscape(draftsToggle.checked, { silent: true });
+      paint();
+    } catch {
+      // The picture stands. A landscape that blanked itself because one request
+      // failed would have thrown away a true answer for an error, and the freshness
+      // line says the current one is no longer being kept up.
+      failing = true;
+    } finally {
+      refreshing = false;
+      sayObserved();
+    }
+  }
+
+  const ticking = setInterval(() => {
+    // The view is gone: the router replaced what this closure painted. Unlike the
+    // ResizeObserver above, an interval outlives its view and would go on asking the
+    // server for a picture nobody is looking at for as long as the tab is open — so it
+    // ends itself the first time it notices. The card is what is checked rather than
+    // the container it sits in, because the container is the router's and outlives
+    // every route it holds.
+    if (!root.isConnected) {
+      clearInterval(ticking);
+      return;
+    }
+    sayObserved();
+    // A hidden tab is not a reader. Nothing is re-read behind a background tab; the
+    // first tick after it comes back is due immediately, because the clock kept
+    // running while the picture did not.
+    if (document.visibilityState === "hidden") return;
+    if (!liveToggle.checked || !refreshDue()) return;
+    // Never under the reader's hand. A re-layout in the middle of a drag or a pan
+    // takes the picture out from under the gesture that is moving it.
+    if (moving || panning) return;
+    reread();
+  }, TICK);
+
+  // Turning it back on is a request for a current picture, not a request to wait
+  // another half minute for one.
+  liveToggle.addEventListener("change", () => {
+    if (liveToggle.checked && !moving && !panning) reread();
+  });
 
   if (fetchMs > 2000) toast(`The starmap took ${Math.round(fetchMs)} ms to derive.`);
 }

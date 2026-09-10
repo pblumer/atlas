@@ -202,6 +202,12 @@ type Server struct {
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	// landscapes is what the Starmap last read this server's *structure* as
+	// (ADR-0211 §7). It holds no health and nobody's view of anything — see
+	// [meshFacts] — and it lives here, under the same single-owner discipline as the
+	// registry above, which is also what makes it single-flight: two readers arriving
+	// together are two loop turns, and the second finds what the first left.
+	landscapes meshCollection
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.
