@@ -3987,8 +3987,8 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    the picture as a whole, and a button that saves a file should not be adjacent to
    the one that narrows what would be in it. */
 /* How the picture is drawn (ADR-0211 §8) — Atlas's own kinds, the same landscape
-   sized by what is running on it or by what is stuck on it, or a projection into
-   another vocabulary. Beside the picture, not in the answer column: it changes the
+   sized by what is running on it, by what is stuck on it or by how long it has been
+   stuck, or a projection into another vocabulary. Beside the picture, not in the answer column: it changes the
    drawing rather than what is being said about it. */
 .mesh-notation { margin-left: auto; font-size: 13px; color: var(--muted); }
 .mesh-notation-pick {
@@ -4011,11 +4011,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    a number that changes. */
 .mesh-runs { font-size: 11px; fill: var(--accent); pointer-events: none; }
 .mesh-application .mesh-runs { font-size: 15px; }
-/* Except an incident count, which is not neutral information. It is the same ink the
-   critical outline uses, so the number agrees with the badge already on the node
-   rather than competing with it — and it is a second channel behind the size, for a
-   reader who does not separate these hues. */
-.mesh-runs-incidents { fill: var(--danger); }
+/* Except a number about incidents, which is not neutral information — how many of
+   them, or how long the oldest has stood. It is the same ink the critical outline
+   uses, so the number agrees with the badge already on the node rather than competing
+   with it, and it is a second channel behind the size for a reader who does not
+   separate these hues. */
+.mesh-runs-incidents,
+.mesh-runs-incident-age { fill: var(--danger); }
+/* How long the oldest parked token has been standing, in the panel. Under the reason
+   rather than inside it: the reason is the engine's own sentence, and the age is this
+   view's reading of a timestamp beside it. */
+.mesh-parked-since { margin: 4px 0 0; font-size: 12px; }
 /* A switch beside the notation picker that adds something to the picture. There is
    one left — the drafts — since the running counts became a way of drawing the
    landscape rather than an overlay on it, and moved into the picker: a switch and a

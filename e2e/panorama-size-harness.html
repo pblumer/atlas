@@ -16,8 +16,8 @@
       import { radiusFor, radiusForHeat, heatPeak, degreesOf, shapeForNode,
         shapeVertices } from "/panorama-mesh.js";
       window.radiusFor = (node, degree) => radiusFor(node, degree);
-      window.radiusForHeat = (node, peak, heat) => radiusForHeat(node, peak, heat);
-      window.heatPeak = (graph, heat) => heatPeak(graph, heat);
+      window.radiusForHeat = (node, peak, heat, at) => radiusForHeat(node, peak, heat, at);
+      window.heatPeak = (graph, heat, at) => heatPeak(graph, heat, at);
       window.degreesOf = (graph) => [...degreesOf(graph)];
       window.shapeForNode = (node) => shapeForNode(node);
       window.shapeVertices = (shape, r) => shapeVertices(shape, r);

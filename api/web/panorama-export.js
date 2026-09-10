@@ -29,7 +29,7 @@
 // nothing about having dropped them; the narrowing, by contrast, is a question
 // somebody asked, so it is kept and named in the stamp.
 
-import { fmtCount } from "./numfmt.js";
+import { fmtCount, spanText } from "./numfmt.js";
 
 // EXPORT_WIDTH is the exported picture's width in pixels. Everything else — the
 // height, the stamp's type sizes — is derived from it, so one number decides how
@@ -120,6 +120,19 @@ const HEAT_STAMPS = {
       `landscape, so every node is drawn at the same floor.`,
     absent: `Running instances are drawn under the names that have any, as observed ` +
       `above. A process with none carries no number.`,
+  },
+  "incident-age": {
+    heading: "Size is age here, not structure:",
+    peakPhrase: (peak) => `the longest-parked one on this landscape, which has been ` +
+      `stuck ${spanText(peak)}`,
+    floorNote: `Everything with nothing parked on it sits at the floor. A process that ` +
+      `parked its first token an hour ago is small beside one that parked its first on ` +
+      `Friday, however many each is holding.`,
+    quiet: `Size is age here, not structure — and nothing on this landscape was parked ` +
+      `at all, so every node is drawn at the same floor. That is the answer, not a ` +
+      `missing one.`,
+    absent: `How long each has been stuck is drawn under the names that have any, ` +
+      `measured at the moment above. A node with nothing parked carries no number.`,
   },
   incidents: {
     heading: "Size is trouble here, not structure:",

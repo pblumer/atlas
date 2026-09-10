@@ -2123,7 +2123,9 @@ test("the notations on offer are the ones the server serves", async ({ page }) =
 
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "instances", "incidents", "archimate-3.2", "c4-projection"]);
+  expect(offered).toEqual([
+    "atlas", "instances", "incidents", "incident-age", "archimate-3.2", "c4-projection",
+  ]);
 });
 
 // And a landscape whose mapping cannot be read still draws. The projection is
@@ -2140,12 +2142,12 @@ test("a landscape draws even when the notations cannot be read", async ({ page }
 
   await expect(page.locator(".mesh-canvas")).toBeVisible();
   await expect(page.locator(".mesh-node")).toHaveCount(graph.nodes.length);
-  // The vocabulary that cannot be wrong about which vocabulary it is in, and the two
+  // The vocabulary that cannot be wrong about which vocabulary it is in, and the
   // weightings that never needed the server to name anything: they are drawn from
   // tallies already in the mesh payload.
   const offered = await page.locator("#mesh-notation option").evaluateAll(
     (options) => options.map((o) => o.value));
-  expect(offered).toEqual(["atlas", "instances", "incidents"]);
+  expect(offered).toEqual(["atlas", "instances", "incidents", "incident-age"]);
 });
 
 // Going into a node, as a control rather than only as a gesture. A double-click is
@@ -2712,6 +2714,94 @@ test("an estate with nothing parked draws flat, and says that is the finding", a
   expect(radii[0]).toBeGreaterThan(8);
   await expect(page.locator(".mesh-runs")).toHaveCount(0);
   await expect(page.locator(".mesh-legend")).toContainText("nothing on this landscape is parked at all");
+});
+
+// How long, not how much — and the two rank the same estate the opposite way round,
+// which is the whole reason this weighting exists. Four hundred incidents from the
+// last five minutes is a worker that has just fallen over and drains itself once
+// somebody restarts it; three standing since Friday is a process nobody is coming
+// back to, and a count puts that one last.
+//
+// The timestamps are minted at test time rather than fixed at module load: an age is
+// measured against the clock at render time, and a value frozen at import drifts into
+// a different bucket behind a long suite — a flake in the test rather than a fault in
+// the view.
+function agedMesh() {
+  const now = Date.now();
+  const ago = (ms) => (now - ms) * 1e6;
+  return {
+    nodes: [
+      { id: "application:a1", kind: "application", name: "Billing", provenance: "derived" },
+      // The loud one: hundreds parked, all of it in the last few minutes.
+      { id: "process:1", kind: "process", name: "Invoice", provenance: "derived", application: "application:a1", processId: "invoice", version: 1, severity: "critical", state: "degraded", incidents: 400, oldestIncident: ago(4 * 60_000) },
+      // The quiet one: two tokens, standing since the middle of last week.
+      { id: "process:2", kind: "process", name: "Dunning", provenance: "derived", application: "application:a1", processId: "dunning", version: 1, severity: "attention", state: "degraded", incidents: 2, oldestIncident: ago(5 * 86_400_000) },
+      // Parked, and holding only incidents this engine never dated. It carries a
+      // count and no age, which must read as "not known" rather than as 1970.
+      { id: "process:3", kind: "process", name: "Chase", provenance: "derived", application: "application:a1", processId: "chase", version: 1, severity: "attention", state: "degraded", incidents: 7 },
+      { id: "worker:c1", kind: "worker", name: "ops-mail", provenance: "derived", workerType: "mail" },
+    ],
+    edges: [
+      { from: "application:a1", to: "process:1", kind: "contains" },
+      { from: "application:a1", to: "process:2", kind: "contains" },
+      { from: "application:a1", to: "process:3", kind: "contains" },
+      { from: "process:1", to: "worker:c1", kind: "uses" },
+    ],
+    restricted: 0,
+    clustered: false,
+  };
+}
+
+test("the age weighting ranks the estate by how long, not by how much", async ({ page }) => {
+  installMock(page, agedMesh());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const radius = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+
+  // By count, the four-hundred-incident process dominates.
+  await page.selectOption("#mesh-notation", "incidents");
+  expect(await radius("process:1")).toBeGreaterThan(await radius("process:2"));
+  await expect(page.locator(".mesh-rank-who").first()).toHaveText("Invoice");
+
+  // By age, the two tokens standing since last week do — the opposite ordering of the
+  // same estate, and the one that decides what somebody actually does next.
+  await page.selectOption("#mesh-notation", "incident-age");
+  expect(await radius("process:2")).toBeGreaterThan(await radius("process:1"));
+  await expect(page.locator('[data-node-id="process:2"] .mesh-runs')).toHaveText("stuck 5 d");
+  await expect(page.locator('[data-node-id="process:1"] .mesh-runs')).toHaveText("stuck 4 min");
+
+  // A node the engine never dated carries no number and sits at the floor: "not
+  // known" is a different fact from "raised at the epoch", and drawing it as the
+  // oldest trouble on the estate would be the picture inventing one.
+  await expect(page.locator('[data-node-id="process:3"] .mesh-runs')).toHaveCount(0);
+  expect(await radius("process:3")).toBe(await radius("worker:c1"));
+
+  await expect(page.locator(".mesh-legend")).toContainText("Size is age here, not structure");
+  await expect(page.locator(".mesh-rank-head")).toContainText("Stuck longest");
+  await expect(page.locator(".mesh-rank-who").first()).toHaveText("Dunning");
+  await expect(page.locator(".mesh-rank-go").first()).toContainText("stuck 5 d");
+});
+
+// The exact age, in the panel, for whichever node is selected — the number a circle
+// cannot give, beside the count it belongs to. Stated whatever the picture is drawn
+// with, like the instance tally beside it.
+test("the panel dates the oldest token a process is holding", async ({ page }) => {
+  installMock(page, agedMesh());
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.locator('[data-node-id="process:2"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel .mesh-parked-since")).toContainText("5 d ago");
+
+  // And says nothing where there is nothing to date, rather than a date it does not
+  // have. The count is still on the node; only the age is missing.
+  await page.locator('[data-node-id="process:3"] .mesh-body').click();
+  await expect(page.locator(".mesh-panel .mesh-parked-since")).toHaveCount(0);
+  await expect(page.locator(".mesh-panel .mesh-finding")).toBeVisible();
 });
 
 // The column beside the picture ranks by whatever the picture is sized by. Two

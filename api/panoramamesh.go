@@ -117,7 +117,7 @@ func (s *Server) collectLandscape(r *http.Request) (panorama.Landscape, panorama
 			ApplicationID: d.ProjectID,
 			CanView:       s.canViewArtifact(r, d.ProjectID, d.DeployedBy, projs),
 			State:         state, Reason: reason,
-			Incidents: tally.Count, Sites: tally.Sites,
+			Incidents: tally.Count, OldestIncident: tally.OldestRaisedAt, Sites: tally.Sites,
 			Runtime: s.processRuntime(d.Key),
 		}
 		for _, ref := range d.cp.CallActivities() {

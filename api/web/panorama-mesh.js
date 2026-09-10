@@ -19,7 +19,7 @@ import {
 } from "./panorama-export.js";
 // The runtime counts here are the engine's own, the same ones the Operations badges
 // carry — so they are grouped in thousands the same way (numfmt.js).
-import { fmtCount } from "./numfmt.js";
+import { fmtCount, spanText } from "./numfmt.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -253,19 +253,38 @@ const DERIVED_NOTATION = {
 // how much hangs off it. Shape and colour still carry the kind, and the key says so.
 // What it buys is a question the structural picture cannot answer at a glance.
 //
-// Two of them, because they are different questions and the second is the one asked
-// more often. *Instances* answers "where is the work" — useful for capacity, for
-// reading a load test, for finding the process that is actually carrying the estate.
-// *Incidents* answers "where is it stuck", and that is what somebody opening a
-// landscape at nine in the morning wants. The severity badges already say *which*
-// nodes have a finding (ADR-0211 §4); what they cannot say is how much is parked
-// behind each one, and a node with four hundred stuck tokens wears the same badge as
-// one with a single retry.
+// Three of them, because they are three different questions.
 //
-// One table because they differ only in what they read and what they call it. Two
-// weightings written out separately would drift — one gaining a floor rule or a
-// grouped number the other never got — and the reader would have no way to know
-// which of the two pictures they were looking at was the maintained one.
+//   - *Instances* — "where is the work". Capacity, reading a load test, finding the
+//     process that is actually carrying the estate.
+//   - *Incidents* — "where is it stuck". The severity badges already say *which* nodes
+//     have a finding (ADR-0211 §4); what they cannot say is how much is parked behind
+//     each, and a node with four hundred stuck tokens wears the same badge as one with
+//     a single retry.
+//   - *Incident age* — "how long has it been stuck", and this is the one that changes
+//     a decision. Four hundred incidents raised in the last five minutes is a worker
+//     that has just fallen over and will drain itself once somebody restarts it; three
+//     standing since Friday is a process nobody is coming back to. The count ranks
+//     those the wrong way round, every time.
+//
+// One table because they differ only in what they read off a node and what they call
+// it. Weightings written out separately would drift — one gaining a floor rule or a
+// grouped number the others never got — and the reader would have no way to know
+// which of the pictures they were looking at was the maintained one.
+//
+// The third is a *duration* rather than a count, which is the only thing in the table
+// that is not uniform: it is measured against a clock rather than read off the node,
+// so every reader passes the moment it is measuring at. One moment per repaint, or
+// the largest node could come out larger than the reference it is a share of.
+// counted is the two spellings of a plain tally: the plain one for the canvas, where
+// the text is drawn as SVG, and the rich one for a ranking row, where the number is
+// the part worth setting in bold. One word per weighting, so the two cannot end up
+// calling a tally different things.
+const counted = (unit) => ({
+  text: (n) => `${fmtCount(n)} ${unit}`,
+  rich: (n) => `<b>${fmtCount(n)}</b> ${unit}`,
+});
+
 const HEATS = {
   instances: {
     key: "instances", label: "Instances (heatmap)", short: "Instances",
@@ -274,10 +293,7 @@ const HEATS = {
     // optional chain rather than defaulting: "no instances" and "cannot have
     // instances" are different facts and neither is a zero to be drawn.
     of: (node) => node?.runtime?.running,
-    // The word after the number, wherever the number is written: under a name on the
-    // canvas, and in the ranking row beside the picture. Held once, so the two cannot
-    // end up calling one tally different things.
-    unit: "running",
+    ...counted("running"),
     // What size means, in one sentence, for the key and for whoever has to read the
     // picture after it has been pasted somewhere with no key beside it.
     heading: "Size is load here, not structure.",
@@ -304,7 +320,7 @@ const HEATS = {
     // carry one — an incident belongs to a token — and a collapsed application
     // carries the sum of the processes it stands for.
     of: (node) => node?.incidents,
-    unit: "incident(s)",
+    ...counted("incident(s)"),
     heading: "Size is trouble here, not structure.",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding
       <b>${fmtCount(peak)}</b>`,
@@ -320,6 +336,40 @@ const HEATS = {
       does: an incident belongs to a token, and only a process has tokens.`,
     rankHeading: "Most parked",
     rankSub: "how much is stuck on each",
+    rankEmpty: `Nothing on this landscape is parked, so there is nothing to rank. That
+      is the answer rather than an empty list — and it is the one worth having.`,
+  },
+  "incident-age": {
+    key: "incident-age", label: "Incident age (heatmap)", short: "Incident age",
+    // How long the earliest unresolved incident on this node has been standing. The
+    // server sends the moment it was raised (Unix nanoseconds) rather than an age,
+    // because an age computed there would be stale by the time it was drawn — and
+    // because a moment is the same fact for every reader, wherever their clock is.
+    //
+    // The *oldest* incident, which is the server's choice and the right one: the newest
+    // says only that something happened lately, which the runtime tally already says
+    // better, and an average is not a fact about any incident, so nothing can be
+    // pointed at.
+    of: (node, at) => (node?.oldestIncident > 0
+      ? Math.max(0, at - node.oldestIncident / 1e6) : 0),
+    text: (ms) => `stuck ${spanText(ms)}`,
+    rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
+    heading: "Size is age here, not structure.",
+    peakPhrase: (peak) => `the longest-parked one on this landscape, which has been
+      stuck <b>${esc(spanText(peak))}</b>`,
+    floorNote: `Everything with nothing parked on it sits at the floor. A process that
+      parked its first token an hour ago is small beside one that parked its first on
+      Friday, however many each is holding — how much is the other picture, and the two
+      routinely rank the same estate the opposite way round.`,
+    quiet: `<b>Size is age here, not structure</b> — and nothing on this landscape is
+      parked at all, so every node is drawn at the same floor. That is the answer, not
+      a missing one.`,
+    absent: `How long each has been stuck is drawn under the names that have any. A node
+      with nothing parked carries no number — and neither does one whose incidents were
+      all raised before this engine recorded the moment, which is a fact about the
+      record rather than about the process.`,
+    rankHeading: "Stuck longest",
+    rankSub: "how long each has been parked",
     rankEmpty: `Nothing on this landscape is parked, so there is nothing to rank. That
       is the answer rather than an empty list — and it is the one worth having.`,
   },
@@ -448,12 +498,17 @@ const HEAT_SPAN = 30;
 // The price is that a radius means something only against a stated reference, so the
 // key and the export stamp state it. A picture that did not say what its largest node
 // stands for would be a quantity with no unit.
-export function heatPeak(graph, heat) {
+//
+// `at` is the moment a duration weighting is measured against, and every node on one
+// picture has to be measured against the same one: read per node, the reference would
+// be taken a few milliseconds before the node that set it, and the largest node would
+// come out larger than the whole it is a share of. The counts ignore it.
+export function heatPeak(graph, heat, at = Date.now()) {
   const read = heatReader(heat);
   if (!read) return 0;
   let peak = 0;
   for (const node of graph?.nodes || []) {
-    const value = read(node);
+    const value = read(node, at);
     if (typeof value === "number" && value > peak) peak = value;
   }
   return peak;
@@ -476,9 +531,9 @@ export function heatPeak(graph, heat) {
 // a placeholder — sits on the floor rather than being sized as a zero, and that is
 // the same fact rather than a missing one: nothing is counted there because nothing
 // can be.
-export function radiusForHeat(node, peak, heat) {
+export function radiusForHeat(node, peak, heat, at = Date.now()) {
   const read = heatReader(heat);
-  const value = read ? Math.max(0, read(node) || 0) : 0;
+  const value = read ? Math.max(0, read(node, at) || 0) : 0;
   if (!(peak > 0) || value <= 0) return HEAT_FLOOR;
   return HEAT_FLOOR + HEAT_SPAN * Math.min(1, Math.sqrt(value / peak));
 }
@@ -1561,12 +1616,12 @@ export function blastRanking(graph, { direction = "dependents", depth = Infinity
 // severity rather than reach: ranking *by* reach would mean walking from every node to
 // order rows most of which are then thrown away, and the ordering the reader came for
 // is the tally.
-export function heatRanking(graph, heat, { direction = "dependents", depth = Infinity, limit = 6 } = {}) {
+export function heatRanking(graph, heat, { direction = "dependents", depth = Infinity, limit = 6, at = Date.now() } = {}) {
   const read = heatReader(heat);
   if (!read) return [];
   const rows = [];
   for (const node of graph.nodes) {
-    const value = Number(read(node));
+    const value = Number(read(node, at));
     // Only where there is something to rank. A "most parked" list padded out with
     // zeroes is a list whose first rows are the answer and whose rest is noise — and
     // on a healthy estate it would be nothing but noise.
@@ -2036,7 +2091,8 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
   </div>`;
 }
 
-function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 } = {}) {
+function renderGraph(graph, layoutMs, frame,
+  { pinned, from, notation, peak = 0, at: measuredAt = Date.now() } = {}) {
   const spoken = notationOf(notation?.id ?? notation);
   // Read off the notation rather than passed in beside it: the numbers under the names
   // and the radii they hang from are one decision, and two arguments that could
@@ -2067,7 +2123,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 
   // question being asked of it. Never two: one channel, one meaning.
   const nodes = graph.nodes.map((n) => ({
     ...n,
-    r: heat ? radiusForHeat(n, peak, heat) : radiusFor(n, degree.get(n.id)),
+    r: heat ? radiusForHeat(n, peak, heat, measuredAt) : radiusFor(n, degree.get(n.id)),
   }));
   // The graph is laid out in a world of its own size, not in the viewport. The
   // frame only decides that world's shape, so the opening view fills the window
@@ -2123,8 +2179,8 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 
     // running" four hundred times is a wall of text that hides the eleven numbers
     // somebody turned this on to find. The panel says the zero for whichever node is
     // selected, and the legend says that the canvas does not.
-    const tally = heat ? Number(heat.of(n)) : 0;
-    const counted = Number.isFinite(tally) && tally > 0 ? tally : 0;
+    const tally = heat ? Number(heat.of(n, measuredAt)) : 0;
+    const measured = Number.isFinite(tally) && tally > 0 ? tally : 0;
     const runsAt = r + 28 + (typed ? 14 : 0);
     return `<g transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"
       class="mesh-node mesh-${n.kind} mesh-prov-${esc(n.provenance || "derived")} mesh-sev-${esc(n.severity || "unknown")}${named ? " mesh-named" : ""}${context ? " mesh-context" : ""}${n.held ? " mesh-pinned" : ""}"
@@ -2142,7 +2198,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 
       <g class="mesh-caption" data-room="${(r + 8).toFixed(1)}">
       <text class="mesh-label" text-anchor="middle" dy="${(r + 14).toFixed(1)}"><tspan class="mesh-label-ink">${label}</tspan></text>
       ${typed ? `<text class="mesh-type" text-anchor="middle" dy="${(r + 28).toFixed(1)}"><tspan class="mesh-label-ink">[${esc(typed.name)}]</tspan></text>` : ""}
-      ${counted ? `<text class="mesh-runs mesh-runs-${esc(heat.key)}" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${fmtCount(counted)} ${esc(heat.unit)}</tspan></text>` : ""}
+      ${measured ? `<text class="mesh-runs mesh-runs-${esc(heat.key)}" text-anchor="middle" dy="${runsAt.toFixed(1)}"><tspan class="mesh-label-ink">${esc(heat.text(measured))}</tspan></text>` : ""}
       </g>
       <title>${esc(nodeTitle(n, spoken))}</title></g>`;
   }).join("");
@@ -2177,7 +2233,7 @@ function renderGraph(graph, layoutMs, frame, { pinned, from, notation, peak = 0 
 // canvas ranks the estate by a tally, and a column beside it ranking by blast radius
 // would be a second ordering nobody asked for. The reach then becomes the second
 // number on a row rather than the first — see heatRanking.
-function rankingHTML(graph, direction, depth, heat = null) {
+function rankingHTML(graph, direction, depth, heat = null, at = Date.now()) {
   const reach = depth === Infinity ? "any" : depth;
   const sub = direction === "dependencies" ? "how much each one needs to work"
     : direction === "both" ? "how much each one is connected to"
@@ -2191,7 +2247,7 @@ function rankingHTML(graph, direction, depth, heat = null) {
   // Anything else puts two orderings on one screen and leaves the reader to work out
   // that they are deliberate.
   if (heat) {
-    const rows = heatRanking(graph, heat, { direction, depth });
+    const rows = heatRanking(graph, heat, { direction, depth, at });
     if (!rows.length) {
       // On the incident weighting this is the good news, and it has to read as an
       // answer rather than as an empty list — the same argument the flat canvas makes.
@@ -2206,7 +2262,7 @@ function rankingHTML(graph, direction, depth, heat = null) {
         <button type="button" class="mesh-rank-go mesh-sev-${esc(r.severity || "unknown")}"
           data-finding="${esc(r.id)}">
           <span class="mesh-rank-who">${who(r)}</span>
-          <span class="mesh-rank-count"><b>${fmtCount(r.value)}</b> ${esc(heat.unit)}<span
+          <span class="mesh-rank-count">${heat.rich(r.value)}<span
             class="muted"> · ${r.complete ? "" : "at least "}${r.total} node(s)</span></span>
         </button></li>`).join("")}</ol>`);
   }
@@ -2460,10 +2516,20 @@ function impactPanelHTML(node, result, direction, depth,
   const inherited = node.severityFrom
     ? `<span class="muted"> — inherited from ${esc(node.severityFrom)}</span>`
     : "";
+  // How long this has been wrong, beside how much of it there is. The reason above
+  // says "12 token(s) are parked"; whether they parked five minutes ago or on Friday
+  // is what decides whether somebody restarts a worker or opens the process — and it
+  // is the one thing a count can never say. Only where the engine recorded the moment:
+  // an incident raised before it did is a gap in the record, not an old one.
+  const parkedSince = node.oldestIncident > 0
+    ? `<p class="mesh-parked-since muted">Oldest still parked
+        ${esc(sinceText(node.oldestIncident))}.</p>`
+    : "";
   const finding = `<div class="mesh-finding mesh-sev-${esc(node.severity || "unknown")}">
       <b>${esc(sev.label.split(" — ")[0])}</b>
       <span class="muted">${esc(STATE_TEXT[node.state] || node.state || "unbound")}</span>
       ${node.reason ? `<p>${esc(node.reason)}${inherited}</p>` : ""}
+      ${parkedSince}
       ${sitesHTML(node)}
     </div>`;
   return `<div class="mesh-panel">
@@ -2637,7 +2703,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            of them can be answered at a time. -->
       <label class="mesh-notation" for="mesh-notation">Notation</label>
       <select id="mesh-notation" class="mesh-notation-pick"
-        title="How this landscape is drawn: Atlas's own kinds, sized by what is running or by what is stuck, or projected into another vocabulary">${notationsAvailable()
+        title="How this landscape is drawn: Atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, or projected into another vocabulary">${notationsAvailable()
         .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:
@@ -2790,6 +2856,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // picker rather than remembered beside it, so the canvas, the key, the saved view
   // and the export stamp cannot end up describing different pictures.
   const weighted = () => heatOf(notationPick.value);
+  // The moment the current picture was measured at. A duration weighting is read
+  // against a clock, and the canvas, the key and the ranking have to be three
+  // readings of one instant — so paint() takes it once and everything drawn from that
+  // pass uses it, including the ranking, which is painted separately.
+  let measuredAt = Date.now();
   const exportSvgBtn = document.getElementById("mesh-export-svg");
   const exportModelBtn = document.getElementById("mesh-export-archimate");
   const exportPngBtn = document.getElementById("mesh-export-png");
@@ -2998,9 +3069,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // The reference the radii are drawn against comes from the whole landscape, not
     // from what the filter has left on screen: narrowing to two nodes must not make
     // the smaller of them swell into the worst thing on the estate.
-    const peak = heatPeak(graph, heatOf(spoken));
+    //
+    // And one moment for the whole repaint, because a duration weighting measures
+    // against a clock: the canvas, the key and the ranking beside them have to be
+    // three readings of one instant, or the picture disagrees with its own caption.
+    measuredAt = Date.now();
+    const peak = heatPeak(graph, heatOf(spoken), measuredAt);
     const painted = renderGraph(shown, 0, frame, {
-      pinned, from, notation: spoken, peak,
+      pinned, from, notation: spoken, peak, at: measuredAt,
     });
     const { ms, svg } = painted;
     world = painted.world;
@@ -3056,7 +3132,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function paintRanking() {
     rankingSlot.innerHTML = rankingHTML(
       shown, dirSelect.value,
-      depthHops(), weighted());
+      depthHops(), weighted(), measuredAt);
   }
 
   // refresh answers the impact question about the current selection and shows the
@@ -3693,7 +3769,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // Kept beside it because a stamp rendered by an older build asks this question
       // directly, and the answer it wants is still true.
       instances: weighted()?.key === "instances",
-      peak: heatPeak(graph, weighted()),
+      peak: heatPeak(graph, weighted(), measuredAt),
       drafts: draftsToggle.checked,
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({

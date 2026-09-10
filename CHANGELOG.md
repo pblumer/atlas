@@ -185,8 +185,9 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
-- **The Starmap can be sized by what is running on it, or by what is stuck on it.** The
-  instance counts were a checkbox beside the Notation picker — an overlay ticked onto
+- **The Starmap can be sized by what is running on it, by what is stuck on it, or by
+  how long it has been stuck.** The instance counts were a checkbox beside the Notation
+  picker — an overlay ticked onto
   whatever was on screen — and that offered a picture with no reading. Size on the
   Starmap is one channel and it already carried connectivity, so a landscape with the
   box ticked had radii meaning structure while its labels meant load, and the one
@@ -204,6 +205,26 @@ _Changed_ / _Removed_ for each version.
     nodes have a finding; what they could not say is how much is parked behind each,
     and a process holding four hundred stuck tokens wore the same badge as one holding
     a single retry. The badge stays the classification; the size is now the magnitude.
+  - **Incident age (heatmap)** — *how long has it been stuck.* A node's size is how long
+    its earliest unresolved incident has been standing. This is the one that changes a
+    decision: four hundred incidents from the last five minutes is a worker that has
+    just fallen over and drains itself once somebody restarts it, and three standing
+    since Friday is a process nobody is coming back to. The count ranks those the wrong
+    way round, every time.
+
+  For the third one the mesh payload carries a new fact: **`oldestIncident`**, the
+  moment a node's earliest unresolved incident was raised. The oldest rather than the
+  newest, because that is the age of the *problem* — a process where one token parked
+  on Friday and three hundred piled up behind it has been stuck since Friday. It is
+  absent, never zero, where there is nothing to date, including an incident raised
+  before the engine recorded the moment: "not known" and "raised at the epoch" are
+  different facts, and a zero would draw the process as the oldest trouble on the
+  estate. A collapsed application carries the earliest of the processes it stands for.
+  Collecting it costs nothing — the incident scan already reads every record, and the
+  raise time is a field on the record it is reading.
+
+  The panel states the exact age for whichever node is selected (**"Oldest still parked
+  5 d ago"**), which is the number a circle cannot give.
 
   On either, the area above the smallest node is that node's share of the largest node
   on the landscape. Area rather than radius, because doubling a radius quadruples the
@@ -226,8 +247,8 @@ _Changed_ / _Removed_ for each version.
   it stood for.
 
   **The ranking column follows the weighting too.** It ranks by blast radius on the
-  derived drawing, as it always has; with a heatmap on it ranks by the same tally the
-  canvas is sized by, so the largest circle and the first row are the same node.
+  derived drawing, as it always has; with a heatmap on it ranks by the same quantity
+  the canvas is sized by, so the largest circle and the first row are the same node.
   Two orderings on one screen, with nothing on it saying they answer different
   questions, is a contradiction a reader cannot resolve. It is not a re-listing of the
   picture: a circle gives neither the exact number — nobody reads 41 against 38 off two

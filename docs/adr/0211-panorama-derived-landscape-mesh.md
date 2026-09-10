@@ -49,9 +49,9 @@
   rather than a smaller starmap around them; amended 2026-09-10 — §8's picker offers
   ways of *drawing* rather than only vocabularies: the running tally leaves its
   checkbox for an entry in that list and sizes the nodes by how much is running on
-  them, and the incident count is offered beside it as the same choice about a
-  different quantity; §6's ranking column follows whichever weighting is chosen, with
-  the blast radius kept as the second number on a row)
+  them, and the incident count and the age of the oldest one are offered beside it as
+  the same choice about different quantities; §6's ranking column follows whichever
+  weighting is chosen, with the blast radius kept as the second number on a row)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1224,9 +1224,38 @@ open that door.
 >   stays the classification and the size becomes the magnitude — two channels saying
 >   different things about one node, which is the arrangement §4 asks for rather than
 >   a second encoding of the same fact.
+> - `incident-age` — **how long has it been stuck**, and this is the one that changes a
+>   decision. Four hundred incidents raised in the last five minutes is a worker that
+>   has just fallen over and will drain itself once somebody restarts it; three
+>   standing since Friday is a process nobody is coming back to. The count ranks those
+>   the wrong way round, every time — which is why the age is a weighting of its own
+>   rather than a tie-break inside the count.
 >
-> Both obey the same four rules, and they are one implementation rather than two, so
-> that a reader cannot be shown two pictures that mean subtly different things:
+> The third one needs a fact the payload did not carry, and §4's node gains it:
+> **`oldestIncident`, the moment the earliest unresolved incident on this node was
+> raised**, as Unix nanoseconds. Four decisions in it are worth stating, because each
+> has a wrong answer that looks reasonable:
+>
+> - **The oldest, not the newest and not an average.** The newest says only that
+>   something happened lately, which the runtime tally's `lastActivity` already says
+>   better; an average is not a fact about any incident, so nothing can be pointed at.
+>   The oldest is the age of the *problem* — a process where one token parked on Friday
+>   and three hundred piled up behind it has been stuck since Friday.
+> - **A moment, not an age.** An age computed on the server is stale by the time it is
+>   drawn, and a moment is the same fact for every reader wherever their clock is.
+> - **Absent rather than zero where there is nothing to date**, which includes an
+>   incident raised before the engine recorded the moment. "Not known" and "raised at
+>   the epoch" are different facts, and only one of them is drawable — a zero would
+>   date the process to 1970 and draw it as the oldest trouble on the estate.
+> - **A collapsed application carries the earliest of its processes**, by the same
+>   argument its summed count makes, read the other way round: it stands for them, so
+>   how long it has been in trouble is how long the longest-parked of them has been.
+>
+> It costs nothing to collect. The incident scan §4 already pays for reads every
+> record, and the raise time is a field on the record it is already reading.
+>
+> All three obey the same rules, and they are one implementation rather than three, so
+> that a reader cannot be shown pictures that mean subtly different things:
 >
 > - **Size is the quantity, and nothing else.** A node's area above the floor is its
 >   share of the largest node on the landscape. Area rather than radius, because
@@ -1252,7 +1281,12 @@ open that door.
 >   next as uniformly saturated. The price is that a radius means something only against
 >   a stated reference, so the legend and the export stamp both state it — an area with
 >   no unit is a decoration.
-> - **They claim nothing about vocabulary.** Neither is a projection: no mapping, no
+> - **A duration is measured against one moment per repaint.** The age weighting is the
+>   only one read against a clock rather than off the node, and the canvas, the key and
+>   the ranking beside them have to be three readings of one instant. Taken per node,
+>   the reference would be a few milliseconds older than the node that set it, and the
+>   largest node would come out larger than the whole it is a share of.
+> - **They claim nothing about vocabulary.** None is a projection: no mapping, no
 >   loss list, and every node keeps Atlas's own name for itself. The ArchiMate document
 >   is untouched — an element's type does not change because the picture was sized by
 >   load — so these entries export no document, and the constraints above about
