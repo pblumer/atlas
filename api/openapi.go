@@ -742,6 +742,25 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
+		// Portal orders (ADR-draft-portal-catalogue-order-inventory). An order names
+		// exactly one release and carries the schedule that release computed, so
+		// fulfilment reads one record and never recomputes a graph — and what was
+		// ordered cannot change because somebody edited a product while an approval
+		// was pending. Reading is confined to your own orders by the handler, not by
+		// the role: an order somebody else placed is not yours to see.
+		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
+			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
+			req: jsonBody("Order", schemaObj(map[string]any{
+				"releaseId": tString(), "items": tArray(), "recipient": tString(),
+			}, "releaseId", "items")),
+			resp: jsonBody("The placed order", tObject())}},
+		{"GET", "/api/v1/orders", s.orders.HandleList, apiOp{
+			summary: "Your own orders, newest first", tag: "Order", role: RoleUser,
+			resp: jsonBody("Orders", tArray())}},
+		{"GET", "/api/v1/orders/{id}", s.orders.HandleGet, apiOp{
+			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
+			resp: jsonBody("The order", tObject())}},
+
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an
 		// immutable, per-process numbered version, optionally shared through a

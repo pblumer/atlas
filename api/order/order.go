@@ -173,6 +173,12 @@ type Order struct {
 	Orderer   string `json:"orderer"`
 	Recipient string `json:"recipient"`
 	Lines     []Line `json:"lines"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	// Waves and Requires are copied from the release when the order is placed, for
+	// the lines this order actually carries. The release computed them; the order
+	// records them rather than recomputing later against a catalogue that may have
+	// moved on, and so that fulfilment reads one record instead of two.
+	Waves     [][]string          `json:"waves,omitempty"`
+	Requires  map[string][]string `json:"requires,omitempty"`
+	CreatedAt int64               `json:"createdAt"`
+	UpdatedAt int64               `json:"updatedAt"`
 }

@@ -90,6 +90,16 @@ type Release struct {
 	// there. Both are wrong, so the edges travel with the schedule and [Blocked] is
 	// what the fulfilment process asks when a line fails.
 	Requires map[string][]string `json:"requires,omitempty"`
+	// Includes and Options are the structure: what a product is made of, and what
+	// is offered alongside it. Both are direct edges, sorted, with no entry for a
+	// product made of nothing.
+	//
+	// They are kept apart because they mean opposite things to a basket. An
+	// inclusion is a consequence of ordering the whole — integral, never
+	// deselectable — and an option is an offer. Merging them would order a second
+	// screen for everybody who orders a workplace.
+	Includes map[string][]string `json:"includes,omitempty"`
+	Options  map[string][]string `json:"options,omitempty"`
 	// WithoutApproval names every item orderable with no approval at all, sorted.
 	// It is a standing list rather than a report somebody has to think to run,
 	// because the role that defines approval rules is the role that publishes them.
@@ -125,8 +135,11 @@ func Publish(in Input) (Release, []Problem) {
 		return Release{}, problems
 	}
 
+	structure := structuralEdges(in)
 	return Release{
 		Items:           freeze(in.Items),
+		Includes:        structure[EdgeComposition],
+		Options:         structure[EdgeAggregation],
 		Waves:           schedule(in),
 		Requires:        preconditions(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
@@ -344,6 +357,73 @@ func schedule(in Input) [][]string {
 		waves[depth[id]] = append(waves[depth[id]], id)
 	}
 	return waves
+}
+
+// Expand resolves a selection into everything it actually orders: the chosen
+// products, plus every product any of them is made of, all the way down.
+//
+// Options are not pulled in — an aggregation is an offer, and including it
+// automatically is how somebody ends up with a second screen they never asked
+// for. Each product appears once however many selected products contain it,
+// which is the deduplication the same service in two bundles needs.
+//
+// Anything the release does not carry is ignored rather than invented: a request
+// naming a product that was withdrawn, or never existed, must not become a line
+// that nothing can provision.
+func (r Release) Expand(selected []string) []string {
+	if len(selected) == 0 {
+		return nil
+	}
+	carried := make(map[string]bool, len(r.Items))
+	for _, it := range r.Items {
+		carried[it.ID] = true
+	}
+
+	out := map[string]bool{}
+	var walk func(id string)
+	walk = func(id string) {
+		if out[id] || !carried[id] {
+			return
+		}
+		out[id] = true
+		for _, part := range r.Includes[id] {
+			walk(part)
+		}
+	}
+	for _, id := range selected {
+		walk(id)
+	}
+
+	ids := make([]string, 0, len(out))
+	for id := range out {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// structuralEdges collects the composition and aggregation edges by kind.
+func structuralEdges(in Input) map[EdgeKind]map[string][]string {
+	out := map[EdgeKind]map[string][]string{
+		EdgeComposition: {}, EdgeAggregation: {},
+	}
+	for _, e := range in.Edges {
+		if !e.Kind.Structural() {
+			continue
+		}
+		out[e.Kind][e.From] = append(out[e.Kind][e.From], e.To)
+	}
+	for _, byParent := range out {
+		for _, parts := range byParent {
+			sort.Strings(parts)
+		}
+	}
+	for kind, byParent := range out {
+		if len(byParent) == 0 {
+			out[kind] = nil
+		}
+	}
+	return out
 }
 
 // Blocked reports every item that cannot run because one of the given items

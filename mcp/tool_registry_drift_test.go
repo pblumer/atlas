@@ -137,6 +137,12 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/catalogs/{id}/releases":  "portal catalogue surface still being built; a tool is a public contract",
 	"GET /api/v1/catalog-products":        "portal catalogue surface still being built; a tool is a public contract",
 	"POST /api/v1/catalog-products":       "portal catalogue surface still being built; a tool is a public contract",
+	// Ordering, for the same reason. An order is also somebody's own: the handler
+	// confines reads to the orders you placed or are the recipient of, and a tool
+	// acting as a server identity would have no such person to be.
+	"POST /api/v1/orders":     "portal ordering surface still being built; a tool is a public contract",
+	"GET /api/v1/orders":      "portal ordering surface still being built, and an order is read as the person who placed it",
+	"GET /api/v1/orders/{id}": "portal ordering surface still being built, and an order is read as the person who placed it",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is
