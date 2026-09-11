@@ -100,11 +100,16 @@ are not a reliable assumption for the supported container and Kubernetes path.
 - **Negative / trade-offs accepted:** Landlock restricts access rather than creating a
   new filesystem image. Some path metadata may remain observable even though file
   contents and directory listings are denied.
-- **Known defect in what landed:** the strict allowlist omits `/proc` and `/etc/passwd`,
-  which the .NET runtime requires, so PowerShell does not start under `strict` at all. The
-  failure surfaces on the first script job rather than at startup, because `CheckSandbox`
-  proves the Landlock ABI and never that an enabled interpreter can start. Python and
-  JavaScript are unaffected ([#892](https://github.com/pblumer/atlas/issues/892)).
+- **Defect in what first landed, since fixed:** ~~the strict allowlist omits `/proc` and
+  `/etc/passwd`, which the .NET runtime requires, so PowerShell does not start under
+  `strict` at all. The failure surfaces on the first script job rather than at startup,
+  because `CheckSandbox` proves the Landlock ABI and never that an enabled interpreter can
+  start. Python and JavaScript are unaffected.~~ The allowlist now carries this process's
+  own `/proc` entry, `/proc/meminfo`, `/proc/mounts` and `/etc/passwd` — its own entry and
+  no other, because `/proc` as a whole would expose every same-uid process's environ. And
+  strict no longer takes the profile on trust: it starts each enabled interpreter once,
+  inside the real policy, and refuses to start the process when one cannot
+  ([#892](https://github.com/pblumer/atlas/issues/892)).
 - **Follow-ups / risks to watch.** Each one now has an issue, so it can be picked up by
   somebody who never reads this record:
   - **Model-level capability declarations**, so a profile is chosen per script rather than
