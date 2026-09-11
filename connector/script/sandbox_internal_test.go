@@ -364,21 +364,63 @@ func isZombieAccordingToProc(t *testing.T, pid int) bool {
 	return b[i+2] == 'Z'
 }
 
+// What a timed-out script must not leave behind: a descendant still doing work.
+//
+// The property is ADR-0303's — the deadline kills the interpreter's whole process
+// group, not only the interpreter — and the observation it is read through is the
+// part this test has now got wrong twice.
+//
+// It first read the descendant's liveness with kill(pid, 0), which cannot tell a
+// live process from an unreaped one; #876 gave the probe /proc so a zombie reads as
+// gone. It then failed again in CI, on a commit whose diff contained no Go at all,
+// on a head whose parent had passed the same job twenty minutes earlier, and it has
+// not reproduced once in the container it was written in — not in a full race build,
+// not in ten consecutive focused runs. **The mechanism is not known.** What is known
+// is that a pid is a number and not an identity: nothing in the old assertion tied
+// 26241 back to the process that pid file was written for, so "that number still
+// answers a signal" and "the descendant survived" were being treated as one fact
+// when they are two.
+//
+// So the assertion is the descendant's own evidence instead. It is given a second of
+// work and a file to write at the end of it; if the group kill reached it, the file
+// is never written. That cannot be confounded by anything the pid namespace does,
+// and it fails loudly in the one case the test is for — a descendant that outlives
+// the script and goes on running.
+//
+// The signal probe is kept as a *diagnostic* rather than an assertion. An assertion
+// that can fail while the system is correct is unsound whatever its subject, and
+// this one demonstrably can; but what it reports is still the only lead on the open
+// question, so a failure now says what that process actually is rather than only
+// what it is numbered.
 func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("sh not available")
 	}
-	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	outlived := filepath.Join(dir, "outlived")
+
+	// One second of work for the descendant, and half of it as the bound on the call
+	// itself. The two do not overlap on purpose: a shell that survived its own kill
+	// blocks in `wait` and trips the elapsed check, a descendant that survived one
+	// its shell did not writes the file, and neither failure can be mistaken for the
+	// other.
+	const work = time.Second
+	const returnWithin = work / 2
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	_, err := execCommand(ctx, "sh", []string{"-c", `sleep 5 & echo $! > "$1"; wait`, "sh", pidFile}, nil, defaultMaxOutput)
+	_, err := execCommand(ctx, "sh", []string{"-c",
+		`sleep 1 && : > "$2" & echo $! > "$1"; wait`, "sh", pidFile, outlived}, nil, defaultMaxOutput)
 	if err == nil {
 		t.Fatal("timed command succeeded")
 	}
-	if elapsed := time.Since(start); elapsed > time.Second {
+	if elapsed := time.Since(start); elapsed > returnWithin {
 		t.Fatalf("execCommand returned after %s; a descendant kept the command alive", elapsed)
 	}
+
+	// The pid file proves the descendant was forked before the deadline, which is
+	// what makes the rest of this a test of the kill rather than of the timing.
 	b, err := os.ReadFile(pidFile)
 	if err != nil {
 		t.Fatalf("read child pid: %v", err)
@@ -387,13 +429,36 @@ func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("child pid %q: %v", b, err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for processExists(pid) == nil && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
+
+	// Past the moment a surviving descendant would have finished its second.
+	time.Sleep(time.Until(start.Add(work + 400*time.Millisecond)))
+	if _, err := os.Stat(outlived); err == nil {
+		t.Errorf("descendant process %d ran to completion after its script timed out", pid)
 	}
 	if err := processExists(pid); err == nil {
-		t.Errorf("descendant process %d survived its script timeout", pid)
+		t.Logf("pid %d still answers a signal, %s; the descendant did not finish its "+
+			"work, so this is a pid that outlived its meaning rather than a failed kill",
+			pid, procSummary(pid))
 	}
+}
+
+// procSummary is what /proc knows about a pid, for a message that would otherwise be
+// a bare number. A recycled pid names a different program here, which is the first
+// thing to check the next time this comes up.
+func procSummary(pid int) string {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return fmt.Sprintf("no /proc entry (%v)", err)
+	}
+	i := bytes.LastIndexByte(b, ')')
+	if i < 1 || i+2 >= len(b) {
+		return fmt.Sprintf("unparsable stat %q", b)
+	}
+	open := bytes.IndexByte(b[:i], '(')
+	if open < 0 {
+		return fmt.Sprintf("unparsable stat %q", b)
+	}
+	return fmt.Sprintf("running %q in state %q", b[open+1:i], b[i+2])
 }
 
 func environmentMap(env []string) map[string]string {
