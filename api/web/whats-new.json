@@ -121,6 +121,63 @@
       }
     },
     {
+      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Link a diagram to the capability it draws",
+        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
+      },
+      "summary": {
+        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
+        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Architecture"
+      ],
+      "tutorial": {
+        "en": [
+          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
+          "Open the Panorama model and select the Capability element that draws it.",
+          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
+          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
+        ],
+        "de": [
+          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
+          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
+          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
+          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
+        ]
+      }
+    },
+    {
+      "id": "a-value-stream-is-an-element-you-can-draw",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Draw a value stream",
+        "de": "Einen Wertstrom zeichnen"
+      },
+      "summary": {
+        "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
+        "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama"
+      ]
+    },
+    {
       "id": "a-milestone-is-an-element-you-can-draw-now",
       "version": "Unreleased",
       "date": null,
@@ -325,92 +382,6 @@
           "de": "Dashboard öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See the classes and states your processes already carry — without modelling first",
-        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
-      },
-      "summary": {
-        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
-        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
-      },
-      "link": {
-        "label": "ADR draft",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and press As built…, then pick the application you want to read.",
-          "The class diagram is what that application's processes carry — no model of yours is involved.",
-          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
-          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
-        ],
-        "de": [
-          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
-          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
-          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
-          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas now tells you when a state nothing ever reaches",
-        "de": "Atlas sagt jetzt, wenn ein Zustand nie erreicht wird"
-      },
-      "summary": {
-        "en": "If a class says an order can be cancelled and no process in the application ever cancels one, you now hear about it — at deploy and in the Modeler's Problems panel. Either a process is missing or the model is describing a plan rather than what is built, and both are worth knowing. It is a note, never a refusal, and it stays quiet about a class no process handles yet: drawing a lifecycle before the process that writes it is the normal way round.",
-        "de": "Wenn eine Klasse sagt, eine Bestellung könne storniert werden, aber kein Prozess der Anwendung storniert je eine, erfahren Sie das jetzt — beim Deploy und in der Problemliste des Modelers. Entweder fehlt ein Prozess, oder das Modell beschreibt einen Plan statt des Gebauten; beides ist wissenswert. Es ist ein Hinweis, nie eine Ablehnung, und über eine Klasse, die noch kein Prozess anfasst, schweigt es: einen Lebenszyklus vor dem Prozess zu zeichnen, der ihn schreibt, ist die normale Reihenfolge."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, pick your information model, and give a business object a lifecycle with more states than your processes currently write.",
-          "Open a process of the same application in the Modeler.",
-          "The Problems panel names the class and every state nothing reaches, in one line.",
-          "Add the data association that writes that state — or a process that does — and the line goes away."
-        ],
-        "de": [
-          "Unter Daten das Informationsmodell öffnen und einem Geschäftsobjekt einen Lebenszyklus mit mehr Zuständen geben, als die Prozesse derzeit schreiben.",
-          "Einen Prozess derselben Anwendung im Modeler öffnen.",
-          "Die Problemliste nennt die Klasse und jeden nie erreichten Zustand in einer Zeile.",
-          "Die Datenzuweisung ergänzen, die diesen Zustand schreibt — oder den fehlenden Prozess —, und die Zeile verschwindet."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

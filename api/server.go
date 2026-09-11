@@ -289,6 +289,13 @@ type Server struct {
 	// perform (ADR-0305). Design-time, and a
 	// per-area service under ADR-0147 like the two above.
 	capabilities *capability.Service
+	// capabilityRecords and valueStreamRecords are the two stores behind that
+	// service. The service owns writing them; the Server keeps a handle because
+	// Panorama resolves a capability binding against them (ADR-0189 §4) from
+	// collectBindingCatalog, which already runs on the run loop — going back through
+	// the service there would re-enter the loop it is standing on.
+	capabilityRecords  *capability.Store
+	valueStreamRecords *capability.StreamStore
 	// remoteNodes is what peer Atlas servers last said about themselves
 	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
 	// loop, because it is written by goroutines waiting on the network and putting
@@ -1393,6 +1400,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.confirmationHorizon,
 		time.Now,
 	)
+	s.capabilityRecords, s.valueStreamRecords = capabilityStore, valueStreamStore
 	for _, opt := range opts {
 		opt(s)
 	}
