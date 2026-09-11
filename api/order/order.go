@@ -99,6 +99,14 @@ type Line struct {
 	// It is set by [Propagate] alongside BlockedBy and is meaningless on any other
 	// status.
 	TerminallyBlocked bool `json:"terminallyBlocked,omitempty"`
+	// AbandonedBy and AbandonedAt record who gave up on this line's incident and
+	// when. Both are required on an abandoned line and forbidden on any other, so
+	// the record can never say a line was given up on without saying by whom.
+	//
+	// AbandonedBy is a principal id. Never a name — see
+	// ADR-draft-portal-personal-data.
+	AbandonedBy string `json:"abandonedBy,omitempty"`
+	AbandonedAt int64  `json:"abandonedAt,omitempty"`
 }
 
 // Terminal reports whether this line has finished moving: either it reached an

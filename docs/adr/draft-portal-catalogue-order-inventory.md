@@ -185,10 +185,20 @@ For that to close rather than run forever, a failure has to be able to **stop** 
 repairable, and the deadline that decides it sits on the **incident**, not on the
 order. The incident is the thing actually stuck; a deadline on the order would settle
 work that was about to succeed, and one on the order's own clock would have to guess at
-what the incident is doing. When an incident is given up on — by a person, or by that
-deadline — its line becomes *abandoned*, which settles like a failure and lifts like
-nothing: it is a failure nobody will repair. An incident already carries `RaisedAt`,
-frozen into its event, so its age needs no new state. A generic
+what the incident is doing. What that deadline does is **escalate**: it makes
+the incident visible and tells somebody. It never abandons anything itself. A system
+that closed orders because nobody was in the incident queue over the holidays would
+tell an orderer their line is never coming for a reason that was actually short
+staffing, and would write "the system decided" into a record kept forever.
+
+Giving up is therefore a decision with an author. A line whose incident a **person**
+gave up on becomes *abandoned*, which settles like a failure and lifts like nothing: it
+is a failure nobody will repair, and among a blocked line's causes it counts exactly as
+a rejection. The rule is structural rather than a review note — there is one transition
+into the status and it cannot be called without naming the principal who decided, so an
+automated caller has no call to make, and the same rule is re-checked where a line
+arrives as JSON. An incident already carries `RaisedAt`, frozen into its event, so the
+deadline needs no new state to measure against. A generic
 fulfilment process works the release's waves: every line in a wave starts its
 provisioning process as a call activity, and the next wave begins when the current one
 settles. When a line fails, every line that does not depend on it continues; dependent
@@ -317,8 +327,9 @@ discrepancy, which no other system in the estate can do.
 `api/catalog` carries the catalogue model and `Publish` — the validation, the wave
 schedule and the preconditions described above, with `Release.Blocked` answering which
 lines a failure stops. `api/order` carries the order model and the propagation:
-`Propagate` marks what a settled outcome stopped, and `Derive` reads an order's own
-standing off its lines rather than storing it. The order, the basket and the inventory are not built yet,
+`Propagate` marks what a settled outcome stopped, `Derive` reads an order's own
+standing off its lines rather than storing it, and `Abandon` is the one transition into
+a given-up failure, with `Line.Valid` holding that rule at the persistence boundary. The order, the basket and the inventory are not built yet,
 which is why this record reads `Partial`.
 
 ## Links
