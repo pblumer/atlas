@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -1034,5 +1035,179 @@ func TestMeasurementOfAnUnautomatedCapabilitySaysSo(t *testing.T) {
 	}
 	if len(got.Processes) != 0 {
 		t.Errorf("processes = %d, want none: a manual realization is not a process that failed to deploy", len(got.Processes))
+	}
+}
+
+// measurableBPMN is a process that runs to completion on its own: no task parks it,
+// so creating an instance produces a finished case with a cycle time and a visit on
+// its end event. The end event is distinctly named because the method asks for that,
+// even though the compiler drops the name today.
+func measurableBPMN(processID string) string {
+	return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="` + processID + `" isExecutable="true">
+    <startEvent id="start"/>
+    <endEvent id="verified" name="Verified"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="verified"/>
+  </process>
+</definitions>`
+}
+
+// TestMeasurementCountsWhatActuallyRan is the test the contract tests above do not
+// replace: it runs real instances through a real engine and checks the numbers, not
+// the shape. Everything between the counters and the response — which elements count
+// as an ending, how the window is applied, how a cycle time is derived — is only
+// exercised by a case that actually completed.
+func TestMeasurementCountsWhatActuallyRan(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Verification"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		measurableBPMN("verify"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	const cases = 3
+	for range cases {
+		if code, b := doReq(t, ts, http.MethodPost,
+			fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key),
+			`{}`, "application/json"); code != http.StatusOK && code != http.StatusCreated {
+			t.Fatalf("create instance: %d %s", code, b)
+		}
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"verify","name":"Verify an identity",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"verify"}],
+		  "slas":[{"name":"Instant","metric":"cycle time","threshold":"within an hour",
+		           "thresholdSeconds":3600,"scope":"internal"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/verify/measurement?windowDays=1", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Processes []struct {
+			Outcomes []struct {
+				ElementID string `json:"elementId"`
+				Count     int64  `json:"count"`
+			} `json:"outcomes"`
+			Cases struct {
+				Cases       int64   `json:"cases"`
+				MeanSeconds float64 `json:"meanSeconds"`
+			} `json:"cases"`
+		} `json:"processes"`
+		SLAs []struct {
+			Within int64   `json:"within"`
+			Cases  int64   `json:"cases"`
+			Share  float64 `json:"share"`
+		} `json:"slas"`
+		Unrealizable bool `json:"unrealizable"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode measurement: %v — %s", err, body)
+	}
+	if got.Unrealizable {
+		t.Fatal("unrealizable = true, but a deployed process ran three cases")
+	}
+	if len(got.Processes) != 1 {
+		t.Fatalf("processes = %d, want the one realization", len(got.Processes))
+	}
+	p := got.Processes[0]
+	// The end event is the only element counted as an outcome: the start event was
+	// visited just as often and is not an ending.
+	if len(p.Outcomes) != 1 || p.Outcomes[0].ElementID != "verified" {
+		t.Fatalf("outcomes = %+v, want only the end event", p.Outcomes)
+	}
+	if p.Outcomes[0].Count != cases {
+		t.Errorf("outcome count = %d, want %d", p.Outcomes[0].Count, cases)
+	}
+	// And the window held all three, each of which completed instantly.
+	if p.Cases.Cases != cases {
+		t.Errorf("cases in window = %d, want %d", p.Cases.Cases, cases)
+	}
+	if p.Cases.MeanSeconds < 0 {
+		t.Errorf("mean cycle time = %v, want a non-negative duration", p.Cases.MeanSeconds)
+	}
+	// All three came in under an hour, so the SLA is fully attained — and the share is
+	// reported beside the counts rather than instead of them.
+	if len(got.SLAs) != 1 || got.SLAs[0].Within != cases || got.SLAs[0].Cases != cases {
+		t.Fatalf("attainment = %+v, want %d/%d", got.SLAs, cases, cases)
+	}
+	if got.SLAs[0].Share != 1 {
+		t.Errorf("share = %v, want 1", got.SLAs[0].Share)
+	}
+}
+
+// A window that ended before anything ran holds no case. The counters still report
+// every ending, because they are all-time — which is the mixing the response's two
+// basis sentences exist to keep legible, checked here against real numbers.
+func TestMeasurementWindowExcludesWhatItShould(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Verification"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct{ ID, Key string }
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		measurableBPMN("verify2"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	if code, b := doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key),
+		`{}`, "application/json"); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create instance: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"verify2","name":"Verify",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"verify2"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/verify2/measurement?windowDays=400", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Processes []struct {
+			Outcomes []struct{ Count int64 } `json:"outcomes"`
+			Cases    struct{ Cases int64 }   `json:"cases"`
+		} `json:"processes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Processes[0].Cases.Cases != 1 || got.Processes[0].Outcomes[0].Count != 1 {
+		t.Errorf("a 400-day window should hold the one case that just ran: %+v", got.Processes[0])
 	}
 }

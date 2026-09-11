@@ -1,6 +1,8 @@
 package capability
 
 import (
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -206,5 +208,117 @@ func TestOutcomesAreOrderedCommonestFirstAndDeterministically(t *testing.T) {
 	}
 	if got[1].ElementID != "a" || got[2].ElementID != "b" {
 		t.Errorf("tie order = %q,%q, want a,b by element id", got[1].ElementID, got[2].ElementID)
+	}
+}
+
+// The handler's own paths, exercised in this package because that is where they are
+// counted: a request from api_test runs them but credits them to nothing, and a
+// function nobody can see the coverage of is a function nobody notices going untested.
+
+// A server with no resolver wired says so rather than answering with an empty
+// measurement, which would read as "nothing ran".
+func TestMeasurementWithoutAResolverSaysSo(t *testing.T) {
+	fx := newFixture(t)
+	if rec := fx.do(t, "POST", "/api/v1/capabilities",
+		map[string]any{"key": "c", "name": "C"}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	rec := fx.do(t, "GET", "/api/v1/capabilities/c/measurement?windowDays=7", nil)
+	if rec.Code != http.StatusNotImplemented {
+		t.Fatalf("code = %d %s, want 501", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "cannot measure") {
+		t.Errorf("body = %s, want it to say this server cannot measure", rec.Body)
+	}
+}
+
+// windowDays is validated before anything is read, and each way of getting it wrong
+// gets its own answer.
+func TestMeasurementValidatesTheWindowBeforeReading(t *testing.T) {
+	fx := newFixture(t)
+	reached := false
+	fx.svc.SetMeasurementResolver(func(*http.Request, []string, Window) ([]RecordedProcess, error) {
+		reached = true
+		return nil, nil
+	})
+	for _, tc := range []struct{ name, query, want string }{
+		{"missing", "", "windowDays is required"},
+		{"not a number", "?windowDays=soon", "whole number"},
+		{"zero", "?windowDays=0", "required"},
+		{"too large", "?windowDays=99999", "at most"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := fx.do(t, "GET", "/api/v1/capabilities/c/measurement"+tc.query, nil)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("code = %d %s, want 400", rec.Code, rec.Body)
+			}
+			if !strings.Contains(rec.Body.String(), tc.want) {
+				t.Errorf("body = %s, want %q", rec.Body, tc.want)
+			}
+		})
+	}
+	// And none of them reached the resolver: a bad window must not cost a read, which
+	// is the whole reason the parameter is checked first.
+	if reached {
+		t.Error("the resolver ran despite an invalid window")
+	}
+}
+
+// A capability that does not exist is a 404, not an empty measurement.
+func TestMeasurementOfAnUnknownCapabilityIsNotFound(t *testing.T) {
+	fx := newFixture(t)
+	fx.svc.SetMeasurementResolver(func(*http.Request, []string, Window) ([]RecordedProcess, error) {
+		return nil, nil
+	})
+	if rec := fx.do(t, "GET", "/api/v1/capabilities/nope/measurement?windowDays=7", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("code = %d %s, want 404", rec.Code, rec.Body)
+	}
+}
+
+// A failing read is reported as a failure. An empty measurement would say the
+// capability ran nothing, which is a different and false claim.
+func TestMeasurementReportsAFailedRead(t *testing.T) {
+	fx := newFixture(t)
+	if rec := fx.do(t, "POST", "/api/v1/capabilities",
+		map[string]any{"key": "c", "name": "C"}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d", rec.Code)
+	}
+	fx.svc.SetMeasurementResolver(func(*http.Request, []string, Window) ([]RecordedProcess, error) {
+		return nil, errors.New("the store is unreadable")
+	})
+	rec := fx.do(t, "GET", "/api/v1/capabilities/c/measurement?windowDays=7", nil)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d %s, want 500", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "unreadable") {
+		t.Errorf("body = %s, want the underlying reason", rec.Body)
+	}
+}
+
+// Only process realisations reach the resolver. A purchased system or a person is not
+// a process that failed to deploy, and passing it on would make the resolver answer
+// "not deployed" about something never meant to be.
+func TestOnlyProcessRealizationsAreMeasured(t *testing.T) {
+	fx := newFixture(t)
+	if rec := fx.do(t, "POST", "/api/v1/capabilities", map[string]any{
+		"key": "c", "name": "C",
+		"realizations": []any{
+			map[string]any{"kind": "process", "applicationKey": "app", "processId": "p1"},
+			map[string]any{"kind": "manual", "note": "a clerk"},
+			map[string]any{"kind": "system", "note": "a purchased scoring tool"},
+		},
+	}); rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	var asked []string
+	fx.svc.SetMeasurementResolver(func(_ *http.Request, ids []string, _ Window) ([]RecordedProcess, error) {
+		asked = ids
+		return nil, nil
+	})
+	if rec := fx.do(t, "GET", "/api/v1/capabilities/c/measurement?windowDays=7", nil); rec.Code != http.StatusOK {
+		t.Fatalf("code = %d %s", rec.Code, rec.Body)
+	}
+	if len(asked) != 1 || asked[0] != "p1" {
+		t.Errorf("resolver was asked about %v, want only the process realization", asked)
 	}
 }

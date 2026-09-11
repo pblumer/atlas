@@ -59,6 +59,7 @@ func newFixture(t *testing.T) *fixture {
 	fx.mux.HandleFunc("PUT /api/v1/capabilities/{key}", fx.svc.HandleUpdateCapability)
 	fx.mux.HandleFunc("DELETE /api/v1/capabilities/{key}", fx.svc.HandleDeleteCapability)
 	fx.mux.HandleFunc("GET /api/v1/capabilities/{key}/coverage", fx.svc.HandleCoverage)
+	fx.mux.HandleFunc("GET /api/v1/capabilities/{key}/measurement", fx.svc.HandleMeasurement)
 	fx.mux.HandleFunc("POST /api/v1/capabilities/{key}/confirmation", fx.svc.HandleConfirmCapability)
 	fx.mux.HandleFunc("POST /api/v1/value-streams/{key}/confirmation", fx.svc.HandleConfirmValueStream)
 	fx.mux.HandleFunc("GET /api/v1/value-streams", fx.svc.HandleListValueStreams)
