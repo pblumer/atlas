@@ -2054,6 +2054,79 @@ test("C4 draws boxes and says which kind of box each one is", async ({ page }) =
   await expect(page.locator(".mesh-projection")).toContainText("External systems are absent");
 });
 
+// ArchiMate's own notation, drawn rather than described (ADR-0211 §8).
+//
+// A projection that keeps Atlas's circles and squares and only relabels them is a
+// translation of the vocabulary without the script: a reader who works in ArchiMate
+// recognises the notation by its silhouettes, and those silhouettes were exactly what
+// was missing. The standard defines two ways to draw an element — a box with a small
+// type icon in its corner, or the icon itself at full size — and at the radii this
+// canvas uses a corner icon would be one or two pixels. So the icon is the node.
+//
+// Checked as the properties rather than against a picture: each mapped kind gets its
+// own outline, no two share one, each differs from the one Atlas drew, and the fill
+// is the layer's.
+test("ArchiMate is drawn in ArchiMate's own symbols and layer colours", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const drawn = async () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll(".mesh-node")].map((g) => {
+      const body = g.querySelector(".mesh-body");
+      return [g.getAttribute("data-node-id"), {
+        // The outline as drawn, so two shapes are compared rather than two names.
+        outline: `${body.tagName.toLowerCase()}:${body.getAttribute("points") || body.getAttribute("rx") || ""}`,
+        fill: body.getAttribute("fill"),
+      }];
+    })));
+
+  const before = await drawn();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  const after = await drawn();
+  const mapped = ["application:a1", "process:1", "worker:c1", "decision:credit"];
+
+  // Application, process, worker and decision are all Application layer, so they all
+  // carry its fill: the colour says the layer, the silhouette says the element.
+  for (const id of mapped) expect(after[id].fill, id).toBe("#B5FFFF");
+
+  // Four kinds, four different outlines. A shape standing for two of them would be a
+  // channel spent on nothing — the rule Atlas's own kinds are already held to.
+  expect(new Set(mapped.map((id) => after[id].outline)).size, "all different").toBe(4);
+
+  // And every one differs from what Atlas drew, or the projection changed nothing but
+  // the caption.
+  for (const id of mapped) expect(after[id].outline, id).not.toBe(before[id].outline);
+
+  // The caption still names the element. The silhouette carries the type at a glance;
+  // the word is what settles it, and a reader new to ArchiMate has only the word.
+  await expect(page.locator(".mesh-canvas")).toContainText("[Application Component]");
+  await expect(page.locator(".mesh-canvas")).toContainText("[Application Process]");
+});
+
+// A Node is Technology, and the layer is what its colour says. Drawing a deployment
+// target in the Application layer's blue would put it on the wrong floor of the one
+// kind of diagram whose readers count the floors.
+test("a deployment target is drawn as a Node, in the Technology layer's colour", async ({ page }) => {
+  const withTarget = {
+    ...graph,
+    nodes: [...graph.nodes, { id: "target:peer", kind: "target", name: "atlas-prod-2", provenance: "derived" }],
+    edges: [...graph.edges, { from: "application:a1", to: "target:peer", kind: "runs-on" }],
+  };
+  installMock(page, withTarget);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  await expect(page.locator('[data-node-id="target:peer"] .mesh-body'))
+    .toHaveAttribute("fill", "#C9E7B7");
+  // The two interior edges that make the box read as three-dimensional. They are
+  // drawn beside the outline rather than as part of it, so the severity and hover
+  // rules — which select .mesh-body — cannot put a finding's stroke on a fold.
+  await expect(page.locator('[data-node-id="target:peer"] .mesh-body-detail')).toHaveCount(2);
+  await expect(page.locator('[data-node-id="target:peer"] .mesh-body')).toHaveCount(1);
+});
+
 // A kind the notation has no word for keeps its own shape and is named as loss.
 // Inventing an element for it would be the silent drop §8's theme ban exists to
 // prevent — and a restricted placeholder is a finding about the picture rather than
@@ -2065,14 +2138,21 @@ test("a kind the notation cannot express keeps its own shape", async ({ page }) 
 
   const shapeOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
     .evaluate((el) => el.tagName.toLowerCase());
-  const before = await shapeOf("restricted:1");
+  const fillOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => el.getAttribute("fill"));
+  const before = { shape: await shapeOf("restricted:1"), fill: await fillOf("restricted:1") };
+  const process = await shapeOf("process:1");
 
   await page.selectOption("#mesh-notation", "archimate-3.2");
-  expect(await shapeOf("restricted:1")).toBe(before);
+  expect(await shapeOf("restricted:1")).toBe(before.shape);
+  // And the colour with it. A placeholder painted in the Application layer's fill
+  // would be claiming a layer for something the notation has no element for at all.
+  expect(await fillOf("restricted:1")).toBe(before.fill);
   await expect(page.locator(".mesh-projection")).toContainText("no ArchiMate element");
-  // The process beside it did change, so this is a node the projection left alone
-  // rather than a projection that did nothing.
-  expect(await shapeOf("process:1")).toBe("rect");
+  // The process beside it did change — into ArchiMate's own arrow — so this is a node
+  // the projection left alone rather than a projection that did nothing.
+  expect(await shapeOf("process:1")).not.toBe(process);
+  expect(await shapeOf("process:1")).toBe("polygon");
 });
 
 // An exported projection has to carry that it is one. A C4-looking file that does

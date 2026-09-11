@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Starmap's ArchiMate view now draws ArchiMate's own symbols and layer colours.**
+  Picking **ArchiMate 3.2** under Notation mapped each node to an ArchiMate element type
+  and wrote that type under its name — and then drew Atlas's own circles and squares.
+  For the one reader that view exists for, that is the vocabulary without the script:
+  ArchiMate is recognised by its silhouettes.
+
+  The five mapped kinds are now drawn as the elements themselves — an Application
+  Component with its two lugs, an Application Process as an arrow, an Application
+  Service as a rounded lozenge, an Application Function as a chevron, and a deployment
+  target as a Node's three-dimensional box. The standard allows either a box with a
+  small type icon in the corner or the icon at full size; at the size a node is drawn
+  here the corner icon would be a pixel or two, so the icon is the node. The written
+  type stays beside it for readers who do not know the notation by sight.
+
+  The fills are the layer colours everyone recognises — Application `#B5FFFF`,
+  Technology `#C9E7B7` — and the key says plainly what they are: **ArchiMate 3.2
+  defines no colours at all**, and these are the convention its own figures and the
+  Archi tool use. They are pale by design, so a red or amber finding still stands out
+  above them. A draft, a restricted placeholder and an unresolved dependency keep
+  Atlas's own shape and colour: ArchiMate has no element for them, and dressing them as
+  one would claim something the notation does not.
+
 - **The Starmap opens using the whole window, whatever the size of the estate.** A
   landscape of a handful of nodes was drawn as a handful of small circles adrift in an
   empty canvas, and a single unattached process could sit out at the far edge holding

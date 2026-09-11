@@ -1082,6 +1082,51 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, sixth): the ArchiMate projection is drawn in ArchiMate's
+> notation, not only in its vocabulary.**
+> §8 mapped each kind to an ArchiMate element type and wrote that type under the
+> node's name — and then drew Atlas's own circle, square, hexagon, triangle and
+> pentagon. The record listed that as loss ("the type is written out rather than drawn
+> as ArchiMate's corner icon"), which understated it: a reader who works in ArchiMate
+> recognises the notation by its silhouettes, so a projection that keeps Atlas's
+> shapes is a translation of the vocabulary without the script, and the one reader it
+> is for does not recognise it.
+>
+> The standard defines two ways to draw an element: a rectangle carrying the name with
+> a small type icon in its corner, or **the icon itself at full size** with the name
+> beneath. Both are the notation. This canvas takes the second, and the reason is
+> arithmetic: a process is drawn at a radius of 17, a corner icon is about a tenth of
+> the element it sits in, and one or two pixels of icon is a rectangle with a smudge
+> in the corner — every node on the picture being the same rectangle. Drawn as the
+> icon, the silhouette carries the type at a glance, which is the altitude this view is
+> read at. The written type stays beside it: the silhouette is for the reader who
+> knows ArchiMate, the word for the one who does not.
+>
+> Five elements, one per mapped kind — Application Component, Application Process,
+> Application Service, Application Function, Node. The geometry is ArchiMate's
+> proportions taken from Archi's own drawing routines, centred and then normalised so
+> the furthest corner lands *on* the reserved circle: the separation guarantee is about
+> that circle, and a notation that drew outside it could make two nodes overlap that
+> the layout had kept apart. That normalisation is computed rather than hand-fitted,
+> and the property is checked over every shape the picture can draw.
+>
+> **The colours are convention and the record says so.** ArchiMate 3.2 states that
+> colour carries no formal semantics and defines none. What is recognised as the
+> ArchiMate palette is two things at once: the convention the specification's own
+> figures are drawn in, and the default fills of Archi, where most of these models are
+> made. The values used here are Archi's, read off its source rather than sampled from
+> a picture — Application `#B5FFFF`, Technology `#C9E7B7`. They are pale by design,
+> which is what makes them safe under §4: a layer fill is a ground for black text, not
+> a signal, and the amber and red a finding is marked with stay the loudest things on
+> the canvas. The outline is the canvas's own ink rather than a literal, so an
+> ArchiMate node carries the same line weight as every edge and every other outline.
+>
+> The three kinds ArchiMate has no element for — a draft, a restricted placeholder, an
+> unresolved dependency — keep Atlas's shape *and* its colour. The rule §8 already
+> stated for shape extends to paint for the same reason: painting a placeholder in the
+> Application layer's fill would claim a layer for something the notation has no word
+> for at all.
+
 > **Amendment (2026-09-11, fifth): the scale is also the control.**
 > A scale a reader can measure by is one they will want to point at. "Show me the
 > ones running a hundred or more" is the question the row of reference circles makes
