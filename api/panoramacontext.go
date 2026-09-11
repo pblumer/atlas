@@ -279,6 +279,10 @@ func contextUnidentifiableReason(key string) string {
 	case panorama.KeyReleaseID:
 		return "A release is a record of what shipped, not something the engine emits " +
 			"events for, so the event log has nothing to say about one."
+	case panorama.KeyCapabilityKey, panorama.KeyValueStreamKey:
+		return "A capability says what the organisation must be able to do, and the " +
+			"event log records process instances — so it can only be asked about the " +
+			"processes that realise one, and not about the capability itself."
 	}
 	return "The event log records nothing that identifies a resource of this kind."
 }

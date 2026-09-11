@@ -192,6 +192,49 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A drawing and the capability register are now one architecture.** Panorama holds an
+  architect's ArchiMate model; the register holds what has to be done, with an owner, a
+  scope and SLAs. Draw *Underwrite a loan*, file a capability keyed `loan-underwriting`,
+  and nothing connected them but the fact that somebody wrote a similar phrase twice —
+  and renaming either end lost even that, silently and in the direction of still looking
+  right.
+
+  Two binding keys close it: `atlas.capabilityKey` on an ArchiMate `Capability` and
+  `atlas.valueStreamKey` on a `ValueStream`. They are ordinary ArchiMate properties, so
+  a bound model stays a standard model and the binding travels with it into any
+  conformant tool. What travels is the record's **key** and nothing else: the name is
+  resolved by the server on every read, so a drawing cannot go stale about the register,
+  and a binding whose record was deleted reads as *missing* rather than as a name that
+  quietly stopped matching.
+
+  The key rather than an opaque id, which is the opposite of every other binding here.
+  Those carry an id because the resource's own name is mutable; a capability's key is
+  not — it is the filename on disk, it is not renameable in place, and it is what an
+  export carries — so it is the stable identifier the rule asks for.
+
+  **Each key is refused on the other's element.** A `Capability` and a `ValueStream` are
+  both strategy-layer behaviour elements binding a key from the same register, which
+  makes them the pair a later edit is likeliest to treat as interchangeable and the pair
+  where doing so would be least visible: both keys would still resolve, against a
+  register holding both.
+
+  Every signed-in caller may resolve one, unlike every other binding, and that is the
+  register's own rule rather than a shortcut. A capability says what the organisation
+  must be able to do and nothing about what this server runs. What *is* scoped are the
+  processes it names as realisations, and those are resolved elsewhere, through their
+  own sharing scope.
+
+- **A value stream is an element you can draw.** ArchiMate's `ValueStream` was accepted
+  by Panorama's validator and absent from its palette, so a model containing value
+  streams could be opened, edited around, and never added to — the worst of the three
+  states an element can be in, because reading works and nothing looks broken.
+
+  It is authorable now, on the strategy layer with a behaviour aspect, where the
+  standard puts it and where `Capability` already sat. The relationship matrix is
+  predicates over layer and aspect rather than a table of type pairs, so it inherits
+  exactly the rules a capability has and none were touched; a test holds the two to that
+  equivalence across every relationship and every partner, in both directions.
+
 - **A milestone is an element you can draw now.** BPMN's marker for a point on the path
   where no work sits is a **none intermediate throw event**: an intermediate throw event
   with no event definition, named after the point it marks. *Identity verification
