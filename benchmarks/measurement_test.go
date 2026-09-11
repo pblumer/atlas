@@ -43,8 +43,9 @@ import (
 
 // measurementPopulations are the sizes every reading is measured at. They span two
 // orders of magnitude, which is enough to tell a flat line from a linear one without
-// making the smoke run in CI (`-benchtime=1x`, which still pays the setup) slow: the
-// whole file populates about 11k self-completing instances.
+// making the smoke run in CI slow. Setup is paid even under `-benchtime=1x`, so the
+// sizes here are a CI budget as much as a measurement choice; the whole file runs in
+// about 23 seconds that way.
 //
 // A larger population is a deliberate local run, not a committed default: set
 // ATLAS_BENCH_POPULATIONS to a comma-separated list to override. The override exists
@@ -242,7 +243,15 @@ func populatedStepped(b *testing.B, instances, steps int) (*state.Store, *compil
 // measurementLengthPopulation is the fixed population the length axis is measured at.
 // One size, three lengths: the question here is the slope in the other direction, and
 // the population axis is already answered above.
-const measurementLengthPopulation = 10_000
+//
+// A thousand rather than the ten thousand the published capture used, and the reason
+// is CI. This axis populates its size once per length per benchmark — six times — and
+// setup runs even under `-benchtime=1x`, so the smoke run pays for every instance
+// whether or not it measures anything. At ten thousand it added about two and a half
+// minutes to a job that already spends seventeen on the race detector. The slope is
+// what this axis is for, and a thousand instances show it; the published numbers are
+// in results/ and reproduce with the override above.
+const measurementLengthPopulation = 1_000
 
 // BenchmarkMeasurementCycleTimeByLength is the control. Cycle time reads the instance
 // record, so a longer process must not move it — and if it does, the comparison below
