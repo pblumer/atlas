@@ -32,6 +32,8 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 		Releases:     map[string]panorama.ResourceRef{},
 		Runtimes:     map[string]panorama.ResourceRef{},
 		JobTypes:     map[string]panorama.ResourceRef{},
+		Capabilities: map[string]panorama.ResourceRef{},
+		ValueStreams: map[string]panorama.ResourceRef{},
 	}
 
 	// Job types are the last kind this catalog could not answer, and the reason it
@@ -131,6 +133,34 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 		// own, so there is nothing to filter on. Its base URL and credential
 		// reference stay out regardless.
 		catalog.Targets[t.ID] = panorama.ResourceRef{ID: t.ID, Name: t.Name, CanView: true}
+	}
+
+	// The business-architecture register (ADR-0305), resolved as
+	// ADR-0308 decides. A binding carries the
+	// record's
+	// key, which is its identity: the filename on disk, not renameable in place, and
+	// what an export carries. The name is what the server supplies here.
+	//
+	// Every caller may see them, and that is the register's own rule rather than a
+	// shortcut taken here: a capability says what the organisation must be able to do
+	// and nothing about what this server runs, so its read route is open to any
+	// signed-in identity. What is scoped are the processes it names as realisations,
+	// and a caller who may not see one of those learns nothing about it from this
+	// catalog — the realisation is resolved elsewhere, through its own scope, and
+	// reads as restricted there.
+	caps, err := s.capabilityRecords.LoadAll()
+	if err != nil {
+		return panorama.Catalog{}, err
+	}
+	for _, c := range caps {
+		catalog.Capabilities[c.Key] = panorama.ResourceRef{ID: c.Key, Name: c.Name, CanView: true}
+	}
+	streams, err := s.valueStreamRecords.LoadAll()
+	if err != nil {
+		return panorama.Catalog{}, err
+	}
+	for _, v := range streams {
+		catalog.ValueStreams[v.Key] = panorama.ResourceRef{ID: v.Key, Name: v.Name, CanView: true}
 	}
 	return catalog, nil
 }
