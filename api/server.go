@@ -1335,7 +1335,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// inside the order service's own run-loop closure, so it must not dispatch
 	// onto the loop again — Do is a rendezvous, and a nested one would deadlock.
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
-		catalogStore.Release)
+		catalogStore.Release, s.catalogs.MayOrderFrom)
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the

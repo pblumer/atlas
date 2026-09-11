@@ -3,8 +3,10 @@ package order
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -72,7 +74,10 @@ func newService(t *testing.T) *Service {
 				return catalog.Release{}, false, nil
 			}
 			return rel, true, nil
-		})
+		},
+		// These tests are about placing and reading orders; the catalogue gate has
+		// its own cases below.
+		func(*httpapi.Principal, string) (bool, error) { return true, nil })
 }
 
 func do(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, body string, vals ...string) *httptest.ResponseRecorder {
@@ -97,6 +102,9 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 	}
 	return out
 }
+
+// errTest stands for any failure a collaborator can have.
+var errTest = errors.New("the collaborator failed")
 
 func someone(id string) *httpapi.Principal {
 	return &httpapi.Principal{UserID: id, Roles: []string{"user"}}
@@ -256,5 +264,173 @@ func TestUnknownOrderIs404(t *testing.T) {
 	s := newService(t)
 	if rec := do(t, s.HandleGet, someone("usr_1"), "GET", "", "id", "ord_nope"); rec.Code != http.StatusNotFound {
 		t.Fatalf("get = %d, want 404", rec.Code)
+	}
+}
+
+// Knowing a release id must not be enough to order against it. Which catalogue
+// somebody may order from is decided by the catalogue service; this one asks.
+
+// serviceGatedBy builds an order service whose catalogue check answers `allow`.
+func serviceGatedBy(t *testing.T, allow bool) *Service {
+	t.Helper()
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	return New(loop, store, func() int64 { return 1700 },
+		func(id string) (catalog.Release, bool, error) {
+			if id != rel.ID {
+				return catalog.Release{}, false, nil
+			}
+			return rel, true, nil
+		},
+		func(p *httpapi.Principal, catalogID string) (bool, error) {
+			if catalogID != rel.CatalogID {
+				t.Errorf("checked catalogue %q, want the release's %q", catalogID, rel.CatalogID)
+			}
+			return allow, nil
+		})
+}
+
+// TestOrderingNeedsAccessToTheCatalogue is the gap this closes: the release id
+// appears in every publish response and every order, so knowing one is no
+// qualification at all.
+func TestOrderingNeedsAccessToTheCatalogue(t *testing.T) {
+	refused := do(t, serviceGatedBy(t, false).HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`)
+	if refused.Code != http.StatusForbidden {
+		t.Fatalf("outsider got %d (%s), want 403", refused.Code, refused.Body)
+	}
+
+	allowed := do(t, serviceGatedBy(t, true).HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`)
+	if allowed.Code != http.StatusCreated {
+		t.Fatalf("audience member got %d (%s), want 201", allowed.Code, allowed.Body)
+	}
+}
+
+// TestARefusedOrderWritesNothing: a refusal must leave no half-order behind.
+func TestARefusedOrderWritesNothing(t *testing.T) {
+	s := serviceGatedBy(t, false)
+	do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
+
+	if n := len(decode[[]Order](t, do(t, s.HandleList, someone("usr_1"), "GET", ""))); n != 0 {
+		t.Fatalf("%d orders after a refusal, want none", n)
+	}
+}
+
+// TestAFailingAccessCheckIsAnError, not a quiet refusal and certainly not a
+// quiet pass: if the catalogue cannot be consulted, nobody knows whether this
+// order was allowed.
+func TestAFailingAccessCheckIsAnError(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) {
+			return false, errTest
+		})
+
+	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d (%s), want 500", rec.Code, rec.Body)
+	}
+}
+
+// TestAFailingReleaseLookupIsAnError, for the same reason.
+func TestAFailingReleaseLookupIsAnError(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return catalog.Release{}, false, errTest },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil })
+
+	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d (%s), want 500", rec.Code, rec.Body)
+	}
+}
+
+// TestListingWithNoIdentityIsEmpty: a caller who is nobody owns no orders. It is
+// an empty list rather than an error, because the boundary already decided
+// whether the route may be reached at all.
+func TestListingWithNoIdentityIsEmpty(t *testing.T) {
+	s := newService(t)
+	rec := do(t, s.HandleList, nil, "GET", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list = %d, want 200", rec.Code)
+	}
+	if n := len(decode[[]Order](t, rec)); n != 0 {
+		t.Fatalf("got %d orders, want none", n)
+	}
+}
+
+// TestAnUnreadableStoreIsAnError: the same rule as everywhere — a store that
+// cannot be read produces a 500, never a 200 with an empty list, which would
+// read as "you have no orders".
+func TestAnUnreadableStoreIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("RemoveAll: %v", err)
+	}
+	if err := os.WriteFile(dir, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+	rel := testRelease(t)
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil })
+
+	for _, tt := range []struct {
+		name string
+		h    http.HandlerFunc
+		body string
+		id   bool
+	}{
+		{"place", s.HandlePlace, `{"releaseId":"rel_1","items":["account"]}`, false},
+		{"get", s.HandleGet, "", true},
+		{"list", s.HandleList, "", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var rec *httptest.ResponseRecorder
+			if tt.id {
+				rec = do(t, tt.h, someone("usr_1"), "GET", tt.body, "id", "ord_1")
+			} else {
+				rec = do(t, tt.h, someone("usr_1"), "POST", tt.body)
+			}
+			if rec.Code != http.StatusInternalServerError {
+				t.Fatalf("code = %d (%s), want 500", rec.Code, rec.Body)
+			}
+		})
 	}
 }

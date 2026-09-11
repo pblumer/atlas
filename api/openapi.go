@@ -748,6 +748,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		// ordered cannot change because somebody edited a product while an approval
 		// was pending. Reading is confined to your own orders by the handler, not by
 		// the role: an order somebody else placed is not yours to see.
+		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
+			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("Your catalogue", tObject())}},
 		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
 			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
 			req: jsonBody("Order", schemaObj(map[string]any{

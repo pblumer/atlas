@@ -36,12 +36,23 @@ type Service struct {
 	// dispatch onto the loop itself: Do is a rendezvous, and a nested one would
 	// deadlock.
 	release func(id string) (catalog.Release, bool, error)
+	// mayOrderFrom answers whether a principal may order from a catalogue. Which
+	// catalogue somebody sees is decided by their groups and its rank, which is
+	// the catalogue service's question — so this package asks rather than
+	// deciding, and carries no copy of that rule.
+	//
+	// Unlike release it is called *outside* this service's loop closure, because
+	// the catalogue service dispatches onto the loop itself and a nested Do would
+	// deadlock.
+	mayOrderFrom func(*httpapi.Principal, string) (bool, error)
 }
 
 // New builds the service.
 func New(loop *runloop.Loop, store *Store, now func() int64,
-	release func(id string) (catalog.Release, bool, error)) *Service {
-	return &Service{loop: loop, store: store, now: now, release: release}
+	release func(id string) (catalog.Release, bool, error),
+	mayOrderFrom func(*httpapi.Principal, string) (bool, error)) *Service {
+	return &Service{loop: loop, store: store, now: now,
+		release: release, mayOrderFrom: mayOrderFrom}
 }
 
 func newID(prefix string) (string, error) {
@@ -88,18 +99,42 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		recipient = p.UserID
 	}
 
+	// Resolve the release first, and check access to its catalogue before writing
+	// anything. Knowing a release id is no qualification: it appears in every
+	// publish response and in every order placed against it.
+	var (
+		rel     catalog.Release
+		found   bool
+		lookErr error
+	)
+	s.loop.Do(func() { rel, found, lookErr = s.release(req.ReleaseID) })
+	switch {
+	case lookErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read release: "+lookErr.Error())
+		return
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no release "+req.ReleaseID)
+		return
+	}
+
+	// Off the loop: the catalogue service dispatches onto it itself, and a nested
+	// Do would deadlock.
+	allowed, accessErr := s.mayOrderFrom(p, rel.CatalogID)
+	if accessErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "check catalogue access: "+accessErr.Error())
+		return
+	}
+	if !allowed {
+		httpapi.Error(w, http.StatusForbidden, "you cannot order from this catalogue")
+		return
+	}
+
 	var (
 		out   Order
-		found bool
 		empty bool
 		opErr error
 	)
 	s.loop.Do(func() {
-		var rel catalog.Release
-		if rel, found, opErr = s.release(req.ReleaseID); opErr != nil || !found {
-			return
-		}
-
 		ordered := rel.Expand(req.Items)
 		if len(ordered) == 0 {
 			// Nothing the release carries was asked for. An order with no lines is
@@ -123,8 +158,6 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "place order: "+opErr.Error())
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no release "+req.ReleaseID)
 	case empty:
 		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
 	default:
