@@ -388,6 +388,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0300](0300-openapi-element-templates.md) | An OpenAPI document as element templates | Accepted | Landed |
 | [0301](0301-derive-the-model-from-the-processes.md) | Derive the information model from the processes that use it | Accepted | Landed |
 | [0302](0302-withdrawing-commit-attribution.md) | The repository stops rewriting who authored an agent's commit | Accepted | Landed |
+| [0303](0303-script-sandbox-isolation.md) | Isolate general-purpose script tasks inside a restrictive OS sandbox | Accepted | Partial |
 
 ## The two states of a record
 

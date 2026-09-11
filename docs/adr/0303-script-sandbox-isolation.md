@@ -1,4 +1,4 @@
-# ADR-DRAFT: Isolate general-purpose script tasks inside a restrictive OS sandbox
+# ADR-0303: Isolate general-purpose script tasks inside a restrictive OS sandbox
 
 - **Status:** Accepted
 - **Implementation:** Partial

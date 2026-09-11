@@ -10,6 +10,6 @@
   "tags": ["Security", "Scripts"],
   "link": {
     "label": "ADR",
-    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-script-sandbox-isolation.md"
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
   }
 }

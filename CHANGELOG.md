@@ -89,7 +89,7 @@ _Changed_ / _Removed_ for each version.
   scripts that intentionally use mounted files or services. Independently of that
   setting, a script timeout on Unix now kills the interpreter's complete process
   group, so a spawned child cannot survive its timed-out parent.
-  ([ADR-draft-script-sandbox-isolation](docs/adr/draft-script-sandbox-isolation.md))
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md))
 
 - **The information model can now be read off the processes instead of typed in beside
   them.** [ADR-0230](docs/adr/0230-process-information-model.md) and

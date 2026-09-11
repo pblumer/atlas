@@ -130,7 +130,7 @@ type CmdExec struct {
 	Timeout time.Duration // per-script wall-clock limit; <= 0 means defaultTimeout
 	// Sandbox is the operating-system isolation profile. Empty/off preserves the
 	// historical path; strict is the fail-closed Linux profile from
-	// ADR-draft-script-sandbox-isolation.
+	// ADR-0303.
 	Sandbox SandboxMode
 	// MaxOutput bounds what one script may write to stdout, in bytes; <= 0 means
 	// defaultMaxOutput. The server sets it from the installation's budgets.
