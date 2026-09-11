@@ -266,6 +266,28 @@ The orderer is told, not the recipient. They are frequently the same person; whe
 are not, it is the orderer who is waiting and who can act — and a recipient onboarding
 next month may have no mailbox to write to yet.
 
+### An approval nobody answers
+
+The quieter half of the same problem. A stuck incident stands out in an operations
+view; an unattended approval task looks exactly like every other task in an inbox, and
+the order waits on it with no failure to escalate and nothing to notice.
+
+A deadline on an approval therefore **reminds, then escalates to a deputy, and never
+decides.** Silence is not a refusal. Recording one would put a decision nobody made
+into a record kept forever — the same thing abandonment is guarded against on the
+incident path, and guarded the same way: the transition into a refusal takes the
+principal who decided, so a clock has nothing to pass and no call to make. The only
+thing a deadline can do to an assignment is move it.
+
+An assignment keeps **who it started with** alongside who holds it now and every hop
+between, because a decision eventually taken by a third deputy reads very differently
+from one taken by the line manager it was meant for. Escalation refuses to return the
+approval to anybody who has already held it: two colleagues deputising for each other
+is an ordinary arrangement, and following it would pass the approval back and forth
+until the order is forgotten. It also refuses when there is no deputy at all, rather
+than quietly leaving the approval where it was — that would hide the one thing anybody
+wanted to learn from the deadline, which is that it achieved nothing.
+
 ### The inventory — engine state, its own column family
 
 An `Entitlement` records that a principal holds a service, in a variant, since when,
@@ -363,8 +385,8 @@ schedule and the preconditions described above, with `Release.Blocked` answering
 lines a failure stops. `api/order` carries the order model and the propagation:
 `Propagate` marks what a settled outcome stopped, `Derive` reads an order's own
 standing off its lines rather than storing it, `Abandon` and `Reject` are the transitions into the two
-decided outcomes, `Line.Valid` holds their rules at the persistence boundary, and
-`Notices` reports what a change owes the orderer. The order, the basket and the inventory are not built yet,
+decided outcomes, `Line.Valid` holds their rules at the persistence boundary, `Notices` reports what a change owes the orderer, and
+`Assign`/`Escalate` move an unanswered approval along without ever deciding it. The order, the basket and the inventory are not built yet,
 which is why this record reads `Partial`.
 
 ## Links
