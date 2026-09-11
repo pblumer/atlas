@@ -1733,6 +1733,42 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
 
 // A filtered export is a real landscape and not *the* landscape, and the only place
 // a later reader can learn that is the file itself.
+// The scale travels with the picture, for the reason §10 gives for the stamp: beside
+// the canvas the key is one scroll away, and in a file pasted into a ticket there is
+// nothing to scroll to. A sentence saying the scale is logarithmic is not a thing a
+// reader can hold a circle against.
+test("an exported heat picture carries its size scale", async ({ page }) => {
+  const mesh = { nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  for (const [i, running] of [0, 1, 100, 4200].entries()) {
+    const id = `process:${i}`;
+    mesh.nodes.push({ id, kind: "process", name: `Lauf ${i}`, provenance: "derived", processId: id, version: 1, runtime: { running } });
+    mesh.edges.push({ from: "application:a1", to: id, kind: "contains" });
+  }
+  installMock(page, mesh);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "instances");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => { out += chunk; });
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+
+  // The row names the weighting on its first mark, because in a file it arrives after
+  // the kinds with nothing above it to say what it is about, and it names both ends.
+  expect(svg).toContain("Instances — none");
+  expect(svg).toMatch(/>4[\s\u202f\u00a0]?200</);
+  // And the stamp points at it, rather than leaving a row of circles unexplained.
+  expect(svg).toContain("The row of");
+});
+
 test("an export of a filtered landscape says it is filtered", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
@@ -2635,6 +2671,68 @@ test("on the instance weighting a node is sized by what is running on it", async
   // Switching back is switching back: the structural reading returns intact.
   await page.selectOption("#mesh-notation", "atlas");
   expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
+});
+
+// The scale in the key: reference circles a reader holds the picture against.
+//
+// The key said what the law was in words, and words are not a scale. A reader looking
+// at a node cannot tell from a sentence whether it is running ten or a thousand; they
+// can tell it by holding the node against a circle with a number under it, which is
+// what a bubble chart has always done.
+//
+// What makes it a scale rather than a decoration is that the circles come out of the
+// same function the nodes did. So that is what is checked: not that a row exists, but
+// that a node carrying a tally is drawn the size of the reference circle bearing that
+// number — measured off the rendered picture, both of them.
+test("the key carries a scale, and it is the scale the picture was drawn with", async ({ page }) => {
+  const mesh = { nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  // A load profile with a real range: the quiet tail is the part the old scale could
+  // not draw, and the top is three orders of magnitude above it.
+  for (const [i, running] of [0, 1, 1, 10, 100, 4200].entries()) {
+    const id = `process:${i}`;
+    mesh.nodes.push({ id, kind: "process", name: `Lauf ${i}`, provenance: "derived", processId: id, version: 1, runtime: { running } });
+    mesh.edges.push({ from: "application:a1", to: id, kind: "contains" });
+  }
+  installMock(page, mesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "instances");
+
+  const scale = await page.evaluate(() => {
+    const row = document.querySelector(".mesh-scale");
+    if (!row) return null;
+    return [...row.querySelectorAll(".mesh-scale-step")].map((step) => ({
+      label: step.querySelector(".mesh-scale-tick").textContent.trim(),
+      r: Number(step.querySelector("circle").getAttribute("r")),
+    }));
+  });
+  expect(scale, "the key has a size scale").not.toBeNull();
+
+  // Both ends are named: the nothing-at-all circle, which is the one the complaint
+  // this scale answers was about, and the busiest node on the landscape.
+  expect(scale[0].label).toBe("none");
+  expect(scale[scale.length - 1].label.replace(/\s/g, "")).toBe("4200");
+  // Every circle is larger than the one before it, or the row is not a ladder.
+  for (let i = 1; i < scale.length; i++) {
+    expect(scale[i].r, `${scale[i].label} against ${scale[i - 1].label}`)
+      .toBeGreaterThan(scale[i - 1].r);
+  }
+
+  // And the ratios on the row are the ratios on the canvas. The row is drawn smaller
+  // than the picture so that it fits in the key, so what has to match is the
+  // proportion between its circles and the proportion between the nodes they stand
+  // for — which is what a ratio scale is read by.
+  const drawn = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+  const shrink = scale[0].r / (await drawn("process:0"));
+  // The rungs the row actually shows: with a peak of 4200 the decades are thinned to
+  // a constant hundredfold, so the ladder is 1, 100 and the peak.
+  for (const [id, label] of [["process:0", "none"], ["process:1", "1"], ["process:4", "100"], ["process:5", "4200"]]) {
+    const mark = scale.find((m) => m.label.replace(/\s/g, "") === label);
+    expect(mark, `the scale marks ${label}`).toBeTruthy();
+    expect(mark.r / (await drawn(id)), `${label} is drawn to scale`).toBeCloseTo(shrink, 3);
+  }
 });
 
 // The other question the same channel can answer, and the one somebody opening a

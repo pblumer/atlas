@@ -4122,6 +4122,17 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .mesh-swatches { display: flex; flex-wrap: wrap; gap: 16px; }
 .mesh-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+/* The size scale on a heat weighting: reference circles a reader holds the picture
+   against. A row of its own under the shapes, because the circles are taller than a
+   line of text and threading them among the kinds would push the shapes off the line.
+   Baseline-aligned at the bottom rather than centred, so the numbers under them form
+   one line however far apart the circles are in size. */
+.mesh-scale { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.mesh-scale-step { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+/* The circles carry their own fill and stroke, read off the process kind where the
+   picture reads them (see heatScaleMarks): a second copy here would be a colour that
+   could drift from the nodes the scale is for. */
+.mesh-scale-tick { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .mesh-meta { font-size: 13px; color: var(--text); }
 /* A filtered or collapsed picture states so in words, not only in shading — the
    whole point is that incompleteness is legible rather than inferred. */

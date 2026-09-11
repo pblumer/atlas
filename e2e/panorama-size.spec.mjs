@@ -251,6 +251,66 @@ for (const heat of HEATS) {
       .not.toBeCloseTo(0.25, 2);
   });
 
+  // The scale in the key, as arithmetic: which tallies get a circle.
+  //
+  // Powers of ten from the weighting's least upward and then the peak, because the law
+  // is logarithmic and the marks a reader can interpolate between on a logarithmic
+  // scale are the decades. A linear set of marks would be four of them crowded at one
+  // end, saying nothing about the range the picture actually spans.
+  test(`the ${heat} scale is marked by decades, and always names both ends`, async ({ page }) => {
+    const least = LEAST[heat];
+    const read = await page.evaluate(([h, l]) => ({
+      quiet: window.heatTicks(0, h),
+      flat: window.heatTicks(l, h),
+      narrow: window.heatTicks(l * 2, h),
+      decade: window.heatTicks(l * 40, h),
+      wide: window.heatTicks(l * 4200, h),
+      vast: window.heatTicks(l * 1e7, h),
+    }), [heat, least]);
+
+    // Nothing counted anywhere: no scale, because there is nothing to scale against.
+    expect(read.quiet).toEqual([]);
+    // Every other landscape names its own ends — the smallest tally that counts, and
+    // the largest there is — whatever happens to the rungs in between.
+    for (const [name, ticks] of Object.entries(read)) {
+      if (name === "quiet") continue;
+      expect(ticks[0], `${name} starts at the least`).toBe(least);
+      expect(ticks[ticks.length - 1], `${name} ends at the peak`).toBe(
+        name === "flat" ? least : { narrow: least * 2, decade: least * 40, wide: least * 4200, vast: least * 1e7 }[name]);
+      // Short enough to stay on one line beside a legend that already carries the
+      // kinds, the edges, the severities and the provenances. The nothing-at-all
+      // circle takes a place of its own, so this counts to one less than the row does.
+      expect(ticks.length, `${name} fits the row`).toBeLessThanOrEqual(4);
+    }
+    // And the rungs between the ends are a constant multiple rather than a different
+    // one each time: a ladder of ten, then a hundredfold, then fourfold is three rules
+    // on one line and a reader carries none of them.
+    const rungs = read.vast.slice(0, -1);
+    const stride = rungs.slice(1).map((v, i) => v / rungs[i]);
+    for (const each of stride) expect(each).toBeCloseTo(stride[0], 6);
+  });
+
+  // The circles in the key are the law, not a drawing of it. The scale is sized by
+  // radiusForTally, which is what sized the nodes — so a reader holding a node against
+  // a reference circle is comparing like with like, and neither can be changed without
+  // the other following.
+  test(`the ${heat} scale is sized by the same law as the picture`, async ({ page }) => {
+    const least = LEAST[heat];
+    const same = await page.evaluate(([h, now, src, l]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      const peak = l * 4200;
+      return window.heatTicks(peak, h).map((value) => ({
+        value,
+        onScale: window.radiusForTally(value, peak, h),
+        onCanvas: window.radiusForHeat(nodeFor(h, value), peak, h, now),
+      }));
+    }, [heat, NOW, NODE_FOR, least]);
+
+    expect(same.length).toBeGreaterThan(1);
+    for (const row of same) expect(row.onScale, `at ${row.value}`).toBeCloseTo(row.onCanvas, 9);
+  });
+
   // A tally past the reference — a stale saved reference, or a node arriving between
   // two reads — must not draw a circle that swallows the picture.
   test(`nothing on the ${heat} weighting is drawn larger than the reference`, async ({ page }) => {
