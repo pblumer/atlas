@@ -148,8 +148,9 @@ var mcpOmittedRoutes = map[string]string{
 	// could report a line as provisioned could make an order say something no
 	// target system ever did — the one place in this surface where a wrong call
 	// is not a wrong answer but a wrong record.
-	"GET /api/v1/orders/{id}/next":          "orchestrator call; the ordering surface is still being built",
-	"POST /api/v1/orders/{id}/lines/{item}": "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
+	"GET /api/v1/orders/{id}/next":                   "orchestrator call; the ordering surface is still being built",
+	"POST /api/v1/orders/{id}/lines/{item}":          "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
+	"POST /api/v1/orders/{id}/lines/{item}/decision": "records somebody's refusal of a request; an agent must not be able to decide on a person's behalf, and the record is kept forever",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is

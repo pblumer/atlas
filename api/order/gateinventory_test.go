@@ -41,6 +41,8 @@ var orderGates = []handlerGate{
 		why: "orchestrator work, gated by the operator role rather than by the object: an operator drives orders that are not theirs, which is what the role is for (ADR-0209). It exposes which lines are ready and nothing about who ordered them"},
 	{name: "HandleReport", kind: ungated, method: "POST", id: true,
 		why: "the other half of the same pair, and the same reasoning: nobody reports the result of their own provisioning. It accepts only the two outcomes a provisioning attempt produces — a rejection and an abandonment are decisions with an author and have their own transitions"},
+	{name: "HandleDecide", kind: ungated, method: "POST", id: true,
+		why: "an approver's refusal, reaching the order through an approval process the catalogue bound. Gated by the operator role like the orchestrator pair, and by the transition itself, which will not record a refusal without naming who decided and why — the authority that matters here is the approver's, and it is carried in the call rather than held by the caller"},
 	{name: "HandleList", kind: ungated, method: "GET",
 		why: "returns only the caller's own orders, so it names no object to gate; somebody else's simply is not in it, proved in TestAnOrderIsReadBackByItsOwner"},
 }

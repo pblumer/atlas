@@ -92,6 +92,11 @@ type Line struct {
 	// order granted uses the process that was in force when it was granted.
 	ProvisionProcess   string `json:"provisionProcess,omitempty"`
 	DeprovisionProcess string `json:"deprovisionProcess,omitempty"`
+	// Approval is the rule this line is approved under, copied from the release
+	// like the bindings are. It travels for the same reason: the rule belongs to
+	// the catalogue, and reading it when the line is reached would let a product's
+	// approval be relaxed after somebody ordered under the stricter one.
+	Approval Approval `json:"approval,omitempty"`
 	// BlockedBy names the lines whose failure or rejection stopped this one —
 	// the *root* causes, not the intermediate blocked lines between.
 	//
@@ -150,6 +155,26 @@ func (l Line) Terminal() bool {
 		return false
 	}
 	return l.Status.Settled()
+}
+
+// Approval is one line's approval rule, as the release froze it. It mirrors the
+// catalogue's shape rather than importing it, so an order can be read back
+// without the catalogue package — and so that a change to the authoring shape is
+// a deliberate change here rather than a silent one.
+type Approval struct {
+	// Kind is "none", "fixed", "role", "superior", or the name of a registered
+	// approval process.
+	Kind string `json:"kind,omitempty"`
+	// Ref names the principal for "fixed" or the group for "role", empty for the
+	// kinds that resolve their approver from the order itself.
+	Ref string `json:"ref,omitempty"`
+}
+
+// NeedsApproval reports whether this line waits on somebody before it is
+// provisioned. The fulfilment process asks it to decide which process to start,
+// so it has to be answerable from the line alone.
+func (l Line) NeedsApproval() bool {
+	return l.Approval.Kind != "" && l.Approval.Kind != "none"
 }
 
 // Status is where a whole order stands. It is derived from the lines rather than

@@ -22,7 +22,7 @@
 
 Der Auftrag trägt alles, was hier gebraucht wird — die Wellen, die Vorbedingungen und je Position den Prozess, an den sie gebunden ist. Deshalb wird der Katalog nie gelesen: was bestellt wurde, kann sich nicht ändern, während der Auftrag läuft.
 
-Startvariable: orderId (die Auftragsnummer, zugleich der Korrelationsschlüssel beider Nachrichten).
+Startvariablen: orderId (die Auftragsnummer, zugleich der Korrelationsschlüssel beider Nachrichten), orderer und recipient.
 
 Warum keine Call Activity: zeebe:calledElement processId ist ein statisches Attribut, der Prozess einer Position steht aber erst zur Laufzeit fest. Die Instanz wird deshalb über die API gestartet.
 
@@ -70,7 +70,9 @@ Schreibt: bereit (Liste von Positionen).</bpmn:documentation>
 
 Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden.
 
-Der Prozessname kommt aus der Position (provisionProcess), nicht aus dem Katalog. Was bestellt wurde, ist eingefroren.</bpmn:documentation>
+Gestartet wird nicht immer der Provisionierungsprozess: verlangt die Position eine Genehmigung, wird der Genehmigungsprozess ihrer Art gestartet, und der startet die Provisionierung, wenn zugestimmt wurde. Die Genehmigungsregel steht am Produkt und gehört dem Katalog — läge sie im Produktprozess, müsste jeder von ihnen sie mitmodellieren.
+
+Beide Prozessnamen kommen aus der Position, nicht aus dem Katalog. Was bestellt wurde, ist eingefroren: auch die Regel, unter der genehmigt wird.</bpmn:documentation>
       <bpmn:extensionElements>
         <zeebe:taskDefinition type="rest" />
         <zeebe:taskHeaders>
@@ -79,7 +81,7 @@ Der Prozessname kommt aus der Position (provisionProcess), nicht aus dem Katalog
           <zeebe:header key="path" value="/api/v1/instances" />
         </zeebe:taskHeaders>
         <zeebe:ioMapping>
-          <zeebe:input source="={processId: position.provisionProcess, variables: {orderId: orderId, itemId: position.itemId, variantId: position.variantId, recipient: recipient}}" target="body" />
+          <zeebe:input source="={processId: if position.approval.kind = null or position.approval.kind = &#34;none&#34; then position.provisionProcess else &#34;atlas-genehmigung-&#34; + position.approval.kind, variables: {orderId: orderId, itemId: position.itemId, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref}}" target="body" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Starten</bpmn:incoming>

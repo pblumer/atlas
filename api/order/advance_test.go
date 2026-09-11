@@ -282,3 +282,41 @@ func TestReadyAndNextAgree(t *testing.T) {
 		}
 	}
 }
+
+// A line carries its approval rule too, for the same reason it carries its
+// process: the rule belongs to the catalogue, and looking it up when the line is
+// reached would let a product's approval be relaxed after somebody ordered it.
+
+func TestALineCarriesItsApprovalRule(t *testing.T) {
+	o := Order{Lines: []Line{
+		{ItemID: "laptop", Status: StatusPending,
+			ProvisionProcess: "prov-laptop",
+			Approval:         Approval{Kind: "superior"}},
+		{ItemID: "pen", Status: StatusPending,
+			ProvisionProcess: "prov-pen",
+			Approval:         Approval{Kind: "none"}},
+	}}
+
+	ready := Ready(o)
+	if len(ready) != 2 {
+		t.Fatalf("Ready = %v, want both", ready)
+	}
+	if ready[0].Approval.Kind != "superior" {
+		t.Errorf("laptop rule = %q, want superior", ready[0].Approval.Kind)
+	}
+	if ready[1].Approval.Kind != "none" {
+		t.Errorf("pen rule = %q, want none", ready[1].Approval.Kind)
+	}
+}
+
+// TestNeedsApprovalIsAPropertyOfTheLine: the fulfilment process asks it to
+// decide which process to start, so it must be answerable from the line alone.
+func TestNeedsApprovalIsAPropertyOfTheLine(t *testing.T) {
+	tests := map[string]bool{"none": false, "": false, "fixed": true, "role": true, "superior": true}
+	for kind, want := range tests {
+		l := Line{ItemID: "a", Approval: Approval{Kind: kind}}
+		if got := l.NeedsApproval(); got != want {
+			t.Errorf("%q: NeedsApproval = %v, want %v", kind, got, want)
+		}
+	}
+}

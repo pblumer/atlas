@@ -212,7 +212,11 @@ func linesFor(rel catalog.Release, ordered []string) []Line {
 		it := bound[id]
 		out[i] = Line{ItemID: id, Status: StatusPending,
 			ProvisionProcess:   it.ProvisionProcess,
-			DeprovisionProcess: it.DeprovisionProcess}
+			DeprovisionProcess: it.DeprovisionProcess,
+			Approval: Approval{
+				Kind: string(it.Approval.Kind),
+				Ref:  it.Approval.Ref,
+			}}
 	}
 	return out
 }
@@ -397,6 +401,82 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 		if err := s.wake(AdvancedMessage, id); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the outcome was recorded, but the fulfilment process could not be woken: "+err.Error())
+			return
+		}
+		httpapi.JSON(w, http.StatusOK, got)
+	}
+}
+
+// decideReq is an approver's refusal: who decided, and in their own words why.
+type decideReq struct {
+	By     string `json:"by"`
+	Reason string `json:"reason"`
+}
+
+// HandleDecide records that an approver refused a line.
+//
+// It exists because [Service.HandleReport] deliberately will not take a
+// rejection: that is a decision with an author, not a provisioning outcome, and
+// a second way in would make the author optional. Approving needs no call at all
+// — a line that was approved simply goes on to be provisioned, and its outcome
+// arrives through the ordinary report.
+func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
+	id, item := r.PathValue("id"), r.PathValue("item")
+
+	var req decideReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+		return
+	}
+
+	var (
+		got       Order
+		found     bool
+		lineOK    bool
+		decideErr error
+		opErr     error
+	)
+	s.loop.Do(func() {
+		if got, found, opErr = s.store.Get(id); opErr != nil || !found {
+			return
+		}
+		lines := make([]Line, len(got.Lines))
+		copy(lines, got.Lines)
+		for i := range lines {
+			if lines[i].ItemID != item {
+				continue
+			}
+			lineOK = true
+			var next Line
+			if next, decideErr = Reject(lines[i], req.By, s.now(), req.Reason); decideErr != nil {
+				return
+			}
+			lines[i] = next
+			break
+		}
+		if !lineOK || decideErr != nil {
+			return
+		}
+		got.Lines = Propagate(lines, got.Requires)
+		got.UpdatedAt = s.now()
+		opErr = s.store.Save(got)
+	})
+
+	switch {
+	case opErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "record decision: "+opErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no order "+id)
+	case !lineOK:
+		httpapi.Error(w, http.StatusNotFound, "order "+id+" carries no line for "+item)
+	case decideErr != nil:
+		httpapi.Error(w, http.StatusBadRequest, decideErr.Error())
+	default:
+		// A refusal settles a line exactly as a provisioning outcome does, so what
+		// waited on it has to be told.
+		if err := s.wake(AdvancedMessage, id); err != nil {
+			httpapi.Error(w, http.StatusInternalServerError,
+				"the decision was recorded, but the fulfilment process could not be woken: "+err.Error())
 			return
 		}
 		httpapi.JSON(w, http.StatusOK, got)

@@ -680,3 +680,101 @@ func TestAnOrderNobodyWillFulfilIsReported(t *testing.T) {
 		t.Fatalf("%d orders after a failed start, want the one that was written", n)
 	}
 }
+
+// A decision needs a way in. Reporting refuses rejections on purpose — they are
+// decisions with an author, not provisioning outcomes — so an approval process
+// needs its own call, and that call records who decided and why.
+
+func TestRejectingALineThroughTheAPI(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	rec := do(t, s.HandleDecide, op, "POST",
+		`{"by":"usr_boss","reason":"kein Budget"}`, "id", placed.ID, "item", "laptop")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reject = %d (%s), want 200", rec.Code, rec.Body)
+	}
+
+	got := decode[Order](t, do(t, s.HandleGet, someone("usr_1"), "GET", "", "id", placed.ID))
+	var laptop Line
+	for _, l := range got.Lines {
+		if l.ItemID == "laptop" {
+			laptop = l
+		}
+	}
+	if laptop.Status != StatusRejected {
+		t.Fatalf("laptop = %s, want rejected", laptop.Status)
+	}
+	if laptop.DecidedBy != "usr_boss" || laptop.Reason != "kein Budget" {
+		t.Fatalf("decision = %q/%q, want the approver and their words",
+			laptop.DecidedBy, laptop.Reason)
+	}
+}
+
+// TestARejectionNeedsAnApproverAndAReason: the API cannot be a way around the
+// rule the transition holds.
+func TestARejectionNeedsAnApproverAndAReason(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	for _, body := range []string{
+		`{"reason":"kein Budget"}`,
+		`{"by":"usr_boss"}`,
+		`{}`,
+	} {
+		if rec := do(t, s.HandleDecide, op, "POST", body, "id", placed.ID, "item", "account"); rec.Code != http.StatusBadRequest {
+			t.Errorf("reject %s = %d, want 400", body, rec.Code)
+		}
+	}
+}
+
+// TestARejectionWakesTheFulfilmentProcess: it settles a line exactly as a
+// provisioning outcome does, so what waited on it must be told.
+func TestARejectionWakesTheFulfilmentProcess(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	var woken []string
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error { woken = append(woken, message); return nil })
+
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+	do(t, s.HandleDecide, op, "POST", `{"by":"usr_boss","reason":"x"}`, "id", placed.ID, "item", "laptop")
+
+	if len(woken) != 2 || woken[1] != AdvancedMessage {
+		t.Fatalf("woken = %v, want the start and then the advance", woken)
+	}
+}
+
+func TestDecidingOnAnUnknownOrderOrLineIs404(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+	body := `{"by":"usr_boss","reason":"x"}`
+
+	if rec := do(t, s.HandleDecide, op, "POST", body, "id", "ord_nope", "item", "account"); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown order = %d, want 404", rec.Code)
+	}
+	if rec := do(t, s.HandleDecide, op, "POST", body, "id", placed.ID, "item", "ghost"); rec.Code != http.StatusNotFound {
+		t.Errorf("unknown line = %d, want 404", rec.Code)
+	}
+	if rec := do(t, s.HandleDecide, op, "POST", "{not json", "id", placed.ID, "item", "account"); rec.Code != http.StatusBadRequest {
+		t.Errorf("malformed = %d, want 400", rec.Code)
+	}
+}

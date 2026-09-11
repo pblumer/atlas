@@ -778,6 +778,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "status")),
 			resp: jsonBody("The updated order", tObject())}},
 
+		{"POST", "/api/v1/orders/{id}/lines/{item}/decision", s.orders.HandleDecide, apiOp{
+			summary: "Record that an approver refused a line, with who decided and why — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome", tag: "Order", role: RoleOperator,
+			req: jsonBody("Decision", schemaObj(map[string]any{
+				"by": tString(), "reason": tString(),
+			}, "by", "reason")),
+			resp: jsonBody("The updated order", tObject())}},
+
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an
 		// immutable, per-process numbered version, optionally shared through a

@@ -228,6 +228,25 @@ and asking on a timer would be asking at every moment except that one. The two m
 names are constants in `api/order` rather than strings in the model, because a name
 nobody publishes is a process that waits forever and fails silently.
 
+**Approval sits before provisioning and outside the product's own process.** The rule
+belongs to the catalogue, so the fulfilment process starts the approval process of the
+line's kind, and that one starts the provisioning process if somebody agreed. Were the
+approval inside the product process, every one of them would have to model it, and
+changing a rule would be a change to every process that carries it. An agreement needs
+no message back: the line goes on to be provisioned and its outcome arrives the ordinary
+way. Only a refusal is reported, because otherwise it would be recorded nowhere — and it
+is reported through its own call, since the ordinary one deliberately refuses a
+rejection.
+
+**One of the three shipped approval kinds cannot name who decided.** Atlas does not
+record which principal completed a user task, so an approval assigned to a *person* —
+the fixed approver, the superior read from the directory — names them because the task
+went to exactly them, while an approval assigned to a *group* can only name the group.
+For evidence kept forever that is too little, and it is not fixable in a model: it needs
+the engine to record the completer. Until it does, the group variant says what it does
+not know, in its own documentation, rather than writing the group into a field that
+reads like a person.
+
 That puts one obligation on every provisioning process: its last step reports the
 outcome. The catalogue cannot check it — a release proves the process is deployed, not
 what it does — so it is a convention, stated here and in the fulfilment process's own

@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_atlas-genehmigung-vorgesetzter"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="atlas-genehmigung-vorgesetzter" name="Portal: Genehmigung (Linienvorgesetzter)" isExecutable="true">
+    <bpmn:documentation>Holt die Genehmigung für eine Auftragsposition ein und entscheidet, was danach geschieht: bei Zustimmung wird der Provisionierungsprozess der Position gestartet, bei Ablehnung die Entscheidung mit Urheber und Begründung an den Auftrag gemeldet.
+
+Startvariablen: orderId, itemId, provisionProcess, approvalRef, recipient, orderer, variantId.
+
+Warum die Genehmigung hier liegt und nicht im Provisionierungsprozess: die Regel steht am Produkt und gehört dem Katalog. Läge sie im Produktprozess, müsste jeder von ihnen sie mitmodellieren, und eine Änderung an der Regel wäre eine Änderung an jedem Prozess.
+
+Eine Zustimmung braucht keine eigene Meldung an den Auftrag: die Position wird provisioniert, und ihr Ergebnis kommt auf dem gewöhnlichen Weg. Gemeldet wird nur die Ablehnung, weil sie sonst nirgends stünde.
+
+Voraussetzung beim Betreiber: ein REST-Worker namens „atlas“, der auf diese Atlas-Instanz zeigt und ein API-Token mit der Rolle operator trägt.</bpmn:documentation>
+
+    <bpmn:startEvent id="Start" name="Genehmigung nötig">
+      <bpmn:documentation>Wird vom Erfüllungsprozess gestartet, sobald die Position an der Reihe ist und ihre Genehmigungsregel diese Art nennt.</bpmn:documentation>
+      <bpmn:outgoing>F_Start_Ad</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="Vorgesetzter" name="Vorgesetzten lesen">
+      <bpmn:documentation>Liest den Linienvorgesetzten der bestellenden Person aus dem Verzeichnis (Attribut manager).
+
+Findet sich keiner — die Person steht an der Spitze, oder das Attribut ist nicht gepflegt — schlägt dieser Schritt fehl und erzeugt einen Incident. Das ist Absicht: eine Genehmigung, die an niemanden geht, ist eine Bestellung, die stillsteht, ohne dass es jemand merkt.
+
+Schreibt: vorgesetzter.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="ad" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="verzeichnis" />
+          <zeebe:header key="operation" value="search" />
+          <zeebe:header key="attributes" value="manager" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;(userPrincipalName=&#34; + orderer + &#34;)&#34;" target="filter" />
+          <zeebe:output source="=entries[1].manager" target="vorgesetzter" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Start_Ad</bpmn:incoming>
+      <bpmn:outgoing>F_Ad_Task</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:userTask id="Genehmigen" name="Genehmigen">
+      <bpmn:documentation>Die Aufgabe geht an den Linienvorgesetzten der bestellenden Person, wie ihn der vorige Schritt aus dem Verzeichnis gelesen hat.
+
+Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begründung — die bestellende Person bekommt sie zu lesen, und „abgelehnt“ ohne weiteres ist die Nachricht, die einen Anruf erzeugt.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:formDefinition formId="genehmigung" />
+        <zeebe:assignmentDefinition assignee="=vorgesetzter" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Ad_Task</bpmn:incoming>
+      <bpmn:outgoing>F_Task_Gw</bpmn:outgoing>
+    </bpmn:userTask>
+
+    <bpmn:exclusiveGateway id="Gw" name="Genehmigt?" default="F_Gw_Ablehnen">
+      <bpmn:documentation>Zustimmung und Ablehnung gehen unterschiedliche Wege, weil sie unterschiedliche Dinge sind: die eine startet Arbeit, die andere hält eine Entscheidung fest.</bpmn:documentation>
+      <bpmn:incoming>F_Task_Gw</bpmn:incoming>
+      <bpmn:outgoing>F_Gw_Provisionieren</bpmn:outgoing>
+      <bpmn:outgoing>F_Gw_Ablehnen</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="Provisionieren" name="Provisionierung starten">
+      <bpmn:documentation>POST /api/v1/instances startet den Prozess, an den die Position gebunden ist. Der Prozessname kommt aus der Position und nicht aus dem Katalog: was bestellt wurde, ist eingefroren.
+
+Die Zustimmung selbst wird nicht gemeldet — das Ergebnis der Provisionierung kommt auf dem gewöhnlichen Weg, und eine zweite Meldung wäre eine zweite Wahrheit.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+          <zeebe:header key="path" value="/api/v1/instances" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="={processId: provisionProcess, variables: {orderId: orderId, itemId: itemId, variantId: variantId, recipient: recipient}}" target="body" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Gw_Provisionieren</bpmn:incoming>
+      <bpmn:outgoing>F_Prov_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="Ablehnen" name="Ablehnung melden">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/decision mit der Person, die entschieden hat, und ihrer Begründung.
+
+Eine Ablehnung geht bewusst nicht über die gewöhnliche Ergebnismeldung: sie ist eine Entscheidung mit Urheber und keine Provisionierungsstörung. Als Störung geführt erzeugte sie Incidents, die niemand schliessen kann, und stellte im dauerhaften Nachweis eine Entscheidung als Fehler dar.
+
+Der Genehmiger ist der Vorgesetzte, den der erste Schritt gelesen hat: die Aufgabe ging an genau ihn, also steht im Nachweis, wer entschieden hat.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/decision&#34;" target="path" />
+          <zeebe:input source="={by: vorgesetzter, reason: begruendung}" target="body" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Gw_Ablehnen</bpmn:incoming>
+      <bpmn:outgoing>F_Abl_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="Ende" name="Entschieden">
+      <bpmn:incoming>F_Prov_Ende</bpmn:incoming>
+      <bpmn:incoming>F_Abl_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F_Start_Ad" sourceRef="Start" targetRef="Vorgesetzter" />
+    <bpmn:sequenceFlow id="F_Ad_Task" sourceRef="Vorgesetzter" targetRef="Genehmigen" />
+    <bpmn:sequenceFlow id="F_Task_Gw" sourceRef="Genehmigen" targetRef="Gw" />
+    <bpmn:sequenceFlow id="F_Gw_Provisionieren" name="ja" sourceRef="Gw" targetRef="Provisionieren">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=genehmigt = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Gw_Ablehnen" name="nein" sourceRef="Gw" targetRef="Ablehnen" />
+    <bpmn:sequenceFlow id="F_Prov_Ende" sourceRef="Provisionieren" targetRef="Ende" />
+    <bpmn:sequenceFlow id="F_Abl_Ende" sourceRef="Ablehnen" targetRef="Ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagram">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="atlas-genehmigung-vorgesetzter">
+      <bpmndi:BPMNShape id="S_Start" bpmnElement="Start">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ad" bpmnElement="Vorgesetzter">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Task" bpmnElement="Genehmigen">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw" isMarkerVisible="true">
+        <dc:Bounds x="550" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="540" y="132" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Prov" bpmnElement="Provisionieren">
+        <dc:Bounds x="650" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Abl" bpmnElement="Ablehnen">
+        <dc:Bounds x="500" y="300" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
+        <dc:Bounds x="800" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="790" y="225" width="60" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="E_Start" bpmnElement="F_Start_Ad">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Ad_Task" bpmnElement="F_Ad_Task">
+        <di:waypoint x="350" y="200" />
+        <di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Task_Gw" bpmnElement="F_Task_Gw">
+        <di:waypoint x="500" y="200" />
+        <di:waypoint x="550" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Prov" bpmnElement="F_Gw_Provisionieren">
+        <di:waypoint x="600" y="200" />
+        <di:waypoint x="650" y="200" />
+        <bpmndi:BPMNLabel><dc:Bounds x="618" y="182" width="14" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Abl" bpmnElement="F_Gw_Ablehnen">
+        <di:waypoint x="575" y="225" />
+        <di:waypoint x="575" y="300" />
+        <bpmndi:BPMNLabel><dc:Bounds x="581" y="250" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Prov_Ende" bpmnElement="F_Prov_Ende">
+        <di:waypoint x="750" y="200" />
+        <di:waypoint x="800" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Abl_Ende" bpmnElement="F_Abl_Ende">
+        <di:waypoint x="600" y="340" />
+        <di:waypoint x="818" y="340" />
+        <di:waypoint x="818" y="218" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
