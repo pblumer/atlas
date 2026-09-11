@@ -778,3 +778,55 @@ func TestDecidingOnAnUnknownOrderOrLineIs404(t *testing.T) {
 		t.Errorf("malformed = %d, want 400", rec.Code)
 	}
 }
+
+// TestNextNamesTheProcessThatDecides.
+//
+// The fulfilment model asks /next which process to start, and for a line with an
+// approval that is not the provisioning process. The first cut left the model to
+// work the name out from the approval kind by string arithmetic, which produced
+// three ids that were never deployed; the answer now carries the name, and the
+// model only has to ask whether it is empty.
+func TestNextNamesTheProcessThatDecides(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_a"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+
+	rec := do(t, s.HandleNext, someone("usr_a"), "GET", "", "id", placed.ID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("next = %d (%s)", rec.Code, rec.Body)
+	}
+	ready := decode[[]map[string]any](t, rec)
+	if len(ready) == 0 {
+		t.Fatal("nothing is ready on a fresh order")
+	}
+	for _, l := range ready {
+		got, ok := l["approvalProcess"]
+		if !ok {
+			t.Fatalf("line %v carries no approvalProcess; the model would read null and "+
+				"compare it against a string", l["itemId"])
+		}
+		// The account has no approval and the laptop is approved by the orderer's
+		// line manager. Nothing else is ready in the first wave.
+		want := ""
+		if l["itemId"] == "laptop" {
+			want = "atlas-genehmigung-vorgesetzter"
+		}
+		if got != want {
+			t.Errorf("%v routes to %q, want %q", l["itemId"], got, want)
+		}
+	}
+}
+
+// TestAnInstallationMayNameItsOwnApprovalProcess: the three built-in kinds are a
+// convenience, not the whole vocabulary. A kind that is not one of them names a
+// process directly, which is what lets an organisation approve through its own
+// model without a change here.
+func TestAnInstallationMayNameItsOwnApprovalProcess(t *testing.T) {
+	l := Line{Approval: Approval{Kind: "unser-vierstufiges-gremium"}}
+	if got := l.ApprovalProcess(); got != "unser-vierstufiges-gremium" {
+		t.Errorf("ApprovalProcess = %q; an unknown kind is a process name", got)
+	}
+	if got := (Line{}).ApprovalProcess(); got != "" {
+		t.Errorf("a line with no approval routes to %q, want nothing", got)
+	}
+}

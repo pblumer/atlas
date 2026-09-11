@@ -37,7 +37,7 @@ Voraussetzung beim Betreiber: ein REST-Worker namens „atlas“, der auf diese 
     </bpmn:startEvent>
 
     <bpmn:serviceTask id="Next" name="Startbereite Positionen holen">
-      <bpmn:documentation>GET /api/v1/orders/{orderId}/next. Antwortet mit den Positionen, deren Vorbedingungen alle provisioniert sind — jede mit dem Prozess, der sie provisioniert, und der gewählten Variante.
+      <bpmn:documentation>GET /api/v1/orders/{orderId}/next. Antwortet mit den Positionen, deren Vorbedingungen alle provisioniert sind — jede mit dem Prozess, der sie provisioniert, dem Prozess, der sie genehmigt (leer, wenn keine Genehmigung nötig ist), und der gewählten Variante.
 
 Bewusst pro Position und nicht pro Welle: eine Welle kann teilweise scheitern, und ihre Grenze weiss nur, dass die vorige Runde vorbei ist, nicht welche ihrer Positionen ankamen.
 
@@ -72,7 +72,7 @@ Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes dar
 
 Gestartet wird nicht immer der Provisionierungsprozess: verlangt die Position eine Genehmigung, wird der Genehmigungsprozess ihrer Art gestartet, und der startet die Provisionierung, wenn zugestimmt wurde. Die Genehmigungsregel steht am Produkt und gehört dem Katalog — läge sie im Produktprozess, müsste jeder von ihnen sie mitmodellieren.
 
-Beide Prozessnamen kommen aus der Position, nicht aus dem Katalog. Was bestellt wurde, ist eingefroren: auch die Regel, unter der genehmigt wird.</bpmn:documentation>
+Beide Prozessnamen kommen aus der Antwort von /next, nicht aus dem Katalog. Eingefroren ist, was der Katalog versprochen hat: das Produkt, die Variante und die Regel, unter der genehmigt wird. Welches Modell diese Regel ausfuehrt, ist dagegen die Verdrahtung dieser Installation und wird beim Lesen aufgelöst — sonst bräche ein Betreiber, der einen Genehmigungsprozess neu deployt, jeden bereits wartenden Auftrag. Ist approvalProcess leer, braucht die Position keine Genehmigung.</bpmn:documentation>
       <bpmn:extensionElements>
         <zeebe:taskDefinition type="rest" />
         <zeebe:taskHeaders>
@@ -81,7 +81,7 @@ Beide Prozessnamen kommen aus der Position, nicht aus dem Katalog. Was bestellt 
           <zeebe:header key="path" value="/api/v1/instances" />
         </zeebe:taskHeaders>
         <zeebe:ioMapping>
-          <zeebe:input source="={processId: if position.approval.kind = null or position.approval.kind = &#34;none&#34; then position.provisionProcess else &#34;atlas-genehmigung-&#34; + position.approval.kind, variables: {orderId: orderId, itemId: position.itemId, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref}}" target="body" />
+          <zeebe:input source="={processId: if position.approvalProcess = &#34;&#34; then position.provisionProcess else position.approvalProcess, variables: {orderId: orderId, itemId: position.itemId, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref}}" target="body" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Starten</bpmn:incoming>

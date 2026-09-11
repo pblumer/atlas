@@ -177,6 +177,47 @@ func (l Line) NeedsApproval() bool {
 	return l.Approval.Kind != "" && l.Approval.Kind != "none"
 }
 
+// approvalProcesses maps the three built-in approval kinds to the processes that
+// decide them.
+//
+// It exists because the two vocabularies are not the same words and cannot be
+// made to be. A kind is the catalogue's contract — "fixed", "role", "superior",
+// the words a product manager binds a product with — and the processes are
+// Atlas's own models, named in the language they are written in. The first cut
+// built the process id by concatenating the kind onto a prefix, which produced
+// three ids that were never deployed: *every* approval would have failed to start,
+// and nothing said so, because a mapping that lives in a string expression has
+// nowhere to be checked. It is a table here so that a test can walk it against the
+// processes this binary actually ships.
+var approvalProcesses = map[string]string{
+	"fixed":    "atlas-genehmigung-fix",
+	"role":     "atlas-genehmigung-rolle",
+	"superior": "atlas-genehmigung-vorgesetzter",
+}
+
+// ApprovalProcess names the process that decides this line, or "" when the line
+// needs none.
+//
+// It is resolved when fulfilment asks and deliberately *not* frozen into the
+// order. What a catalogue promised is frozen — the product, its variant, the rule
+// it is approved under — because an edit to the catalogue must not change a
+// pending order. Which model implements that rule is not the catalogue's promise;
+// it is this installation's wiring, and freezing it would mean an operator who
+// redeploys an approval process breaks every order already waiting on one.
+//
+// A kind that is not one of the three is taken as naming a process directly, which
+// is what [Approval.Kind] documents: an installation with its own approval model
+// binds a product to it by name.
+func (l Line) ApprovalProcess() string {
+	if !l.NeedsApproval() {
+		return ""
+	}
+	if p, ok := approvalProcesses[l.Approval.Kind]; ok {
+		return p
+	}
+	return l.Approval.Kind
+}
+
 // Status is where a whole order stands. It is derived from the lines rather than
 // stored, so it can never disagree with them.
 type Status string

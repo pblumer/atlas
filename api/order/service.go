@@ -339,12 +339,28 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no order "+id)
 	default:
-		out := Ready(got)
-		if out == nil {
-			out = []Line{}
+		ready := Ready(got)
+		out := make([]readyLine, 0, len(ready))
+		for _, l := range ready {
+			out = append(out, readyLine{Line: l, ApprovalProcess: l.ApprovalProcess()})
 		}
 		httpapi.JSON(w, http.StatusOK, out)
 	}
+}
+
+// readyLine is a line as the fulfilment process reads it: everything the order
+// stored, plus the process that decides it.
+//
+// The process is added here rather than stored on the line because it is resolved
+// now — see [Line.ApprovalProcess]. Embedding flattens the JSON, so the
+// fulfilment model reads one object with one more field and not a nested one.
+type readyLine struct {
+	Line
+	// ApprovalProcess is empty for a line that needs no approval, which is how the
+	// model tells the two apart. It is written unconditionally, without omitempty:
+	// a FEEL expression comparing an absent key is comparing against null, and the
+	// model should be asking whether the string is empty.
+	ApprovalProcess string `json:"approvalProcess"`
 }
 
 // reportReq is one line's provisioning outcome.

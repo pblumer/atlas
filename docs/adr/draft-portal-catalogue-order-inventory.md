@@ -465,9 +465,9 @@ schedule and the preconditions described above, with `Release.Blocked` answering
 lines a failure stops. `api/web/portal.html` and `portal.js` are the visitor's half: the catalogue they are
 the audience for, what each product is made of, and their own orders with a status per
 line. It computes an order's standing from its lines rather than reading a stored one,
-for the same reason the server derives it — the two cannot then disagree. A theme per
-catalogue is a separate record and not built, so a visitor sees the instance's brand
-until it is.
+for the same reason the server derives it — the two cannot then disagree. The brand a
+visitor sees is their catalogue's, under its own record
+([ADR-draft-portal-theme-per-catalogue](draft-portal-theme-per-catalogue.md)).
 
 `api/order` carries the order model, the propagation and the orchestrator's two
 questions:
@@ -478,8 +478,25 @@ storing it, `Abandon` and `Reject` are the transitions into the two
 decided outcomes, `Line.Valid` holds their rules at the persistence boundary, `Notices` reports what a change owes the orderer, and
 `Assign`, `Escalate`, `Stall` and `Reassign` move an unanswered
 approval along, make it visible when it can go no further, and let a person restart it
-— without anything there ever deciding it. The order, the basket and the inventory are not built yet,
-which is why this record reads `Partial`.
+— without anything there ever deciding it. The inventory is not built yet, which is why
+this record reads `Partial`.
+
+**Which process decides a line is resolved when fulfilment asks, and was wrong at
+first.** The model built an approval's process id by concatenating the catalogue's
+kind onto a prefix — `"atlas-genehmigung-" + "fixed"` — and the three approval
+processes this binary ships are named in German. Not one of the three ids existed, so
+no approval could ever have started; the model parsed, the processes compiled, and
+every test passed, because a mapping that lives inside a string expression has nowhere
+to be checked. `Line.ApprovalProcess` is that mapping as a table, `/next` carries the
+answer, and a test walks every `ApprovalKind` against the processes the binary
+actually deploys.
+
+It is deliberately *not* frozen into the order, unlike everything else the order
+copies. What the catalogue promised is frozen — the product, the variant, the rule it
+is approved under — because a catalogue edit must not change a pending order. Which
+model implements that rule is this installation's wiring, and freezing it would mean
+an operator who redeploys an approval process breaks every order already waiting on
+one.
 
 ## Links
 
