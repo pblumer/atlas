@@ -3727,6 +3727,156 @@ test("nothing is left stranded at the edge of the picture", async ({ page }) => 
   expect(spread.ratio).toBeLessThan(2);
 });
 
+// Reading a landscape off the page needs the same helper twice, so it is written
+// once: where every node was drawn, how big, and at what magnification.
+async function drawnPicture(page) {
+  return page.evaluate(() => {
+    const surface = document.querySelector(".mesh-surface").getBoundingClientRect();
+    const [vx, vy, vw, vh] = document.querySelector(".mesh-canvas")
+      .getAttribute("viewBox").split(" ").map(Number);
+    const at = [...document.querySelectorAll(".mesh-node")].map((el) => {
+      const t = /translate\(([-\d.]+),([-\d.]+)\)/.exec(el.getAttribute("transform"));
+      // Every kind is drawn inside a circle of its own radius, whatever shape the
+      // notation paints in it, so the circle is what the footprint is measured from.
+      const circle = el.querySelector("circle");
+      return { id: el.getAttribute("data-node-id"), x: +t[1], y: +t[2], r: +circle.getAttribute("r") };
+    });
+    // The share of the canvas the nodes' own footprints reach, on a grid over the
+    // view the reader is actually looking at. NODE_ROOM is the personal space the
+    // layout gives a node, so it is part of the footprint: what is being measured is
+    // how much of the window the picture occupies, not how much ink is on it.
+    const cols = 56, rows = 32;
+    let covered = 0;
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = vx + (i + 0.5) * vw / cols, y = vy + (j + 0.5) * vh / rows;
+        if (at.some((n) => Math.hypot(n.x - x, n.y - y) <= n.r + 34)) covered++;
+      }
+    }
+    const near = at.map((a) => Math.min(...at.filter((b) => b !== a)
+      .map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
+    const sorted = [...near].sort((p, q) => p - q);
+    return {
+      nodes: at.length,
+      cover: covered / (cols * rows),
+      // Screen pixels per world unit, which is what decides how big a name is drawn.
+      scale: surface.width / vw,
+      ratio: sorted[sorted.length - 1] / sorted[Math.floor(sorted.length / 2)],
+    };
+  });
+}
+
+// One mock for a run of landscapes, because a second page.route on the same page
+// does not replace the first — it queues behind it, and every landscape after the
+// first would be the first one again.
+function installShifting(page, hold) {
+  page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/panorama/mesh") return route.fulfill({ json: hold.mesh });
+    if (path === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    return route.fulfill({ json: [] });
+  });
+}
+
+function landscapeOf(apps, per, loose) {
+  const mesh = { nodes: [], edges: [], restricted: 0, clustered: false };
+  for (let a = 1; a <= apps; a++) {
+    mesh.nodes.push({ id: `application:a${a}`, kind: "application", name: `App ${a}`, provenance: "derived" });
+    for (let p = 1; p <= per; p++) {
+      const id = `process:${a}_${p}`;
+      mesh.nodes.push({ id, kind: "process", name: `Proc ${a}.${p}`, provenance: "derived", processId: id, version: 1 });
+      mesh.edges.push({ from: `application:a${a}`, to: id, kind: "contains" });
+    }
+  }
+  for (let i = 1; i <= loose; i++) {
+    mesh.nodes.push({ id: `process:free${i}`, kind: "process", name: `Frei ${i}`, provenance: "derived", processId: `f${i}`, version: 1 });
+  }
+  return mesh;
+}
+
+// A small landscape has to use the window as well as a large one does (ADR-0211 §7).
+//
+// The world the graph settles in is sized from the content — the cells the nodes
+// need, at the density WORLD_FILL asks for — and the opening view shows the whole of
+// it, so the world's size is what decides the magnification. There used to be a
+// floor under it, a frame's worth of area whatever the estate, on the reasoning that
+// a handful of nodes was comfortable already. It was not: the floor stopped binding
+// only past about twenty-five nodes, so every smaller landscape was laid out in a
+// world several times larger than its content, and shown at the scale that fits that
+// world into the canvas. Five nodes covered 7% of the window where a hundred and
+// twenty-five covered 17% — the same picture, drawn small for no reason but its own
+// size.
+//
+// So the property is stated across sizes rather than at one of them: whatever the
+// estate, the picture fills the window the same way. It is what "the window is not
+// being used" actually meant, and it is invisible to any test that looks at one
+// landscape.
+test("a small landscape uses the window as well as a large one", async ({ page }) => {
+  const sizes = [];
+  const hold = { mesh: null };
+  installShifting(page, hold);
+  for (const [apps, per, loose] of [[1, 4, 0], [1, 6, 1], [5, 6, 5], [6, 19, 5]]) {
+    hold.mesh = landscapeOf(apps, per, loose);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    // Away and back: navigating to the URL it is already on is a fragment change,
+    // not a load, and the view would draw the landscape before this one again.
+    await page.goto("about:blank");
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(400);
+    sizes.push(await drawnPicture(page));
+  }
+
+  for (const drawn of sizes) {
+    // The floor put the five-node landscape at 0.07. Everything here measures 0.17.
+    expect(drawn.cover, `${drawn.nodes} nodes`).toBeGreaterThan(0.15);
+  }
+  // And the smallest estate is not the one that pays: it covers at least as much of
+  // the window as the largest does. It used to cover 0.42 of what the largest did.
+  expect(sizes[0].cover / sizes[sizes.length - 1].cover).toBeGreaterThan(0.9);
+  // A smaller estate is a *larger* picture, node for node, because the world it is
+  // laid out in is smaller and the window is the same. That is the whole mechanism,
+  // and it is worth pinning: it is what makes a four-node landscape readable.
+  for (let i = 1; i < sizes.length; i++) {
+    expect(sizes[i].scale, `${sizes[i].nodes} nodes`).toBeLessThan(sizes[i - 1].scale);
+  }
+});
+
+// The ceiling on how far one node may be drawn from the rest (GATHER_REACH).
+//
+// The test above this one measures the same ratio on an estate of four applications
+// and ten unattached processes, and that estate passes it without any ceiling: there
+// are enough loose nodes for them to be each other's neighbours. The shape that does
+// not is the one this was reported on — a single application with its processes
+// around it, and one process attached to nothing. The spokes set a close median and
+// the loose node has nobody, so it settles at 2.07 times it: a visible hole in the
+// picture, and, because fitToFrame scales the *bounding box* onto the world, the
+// thing that decides how small everything else is drawn.
+//
+// Stated as the guarantee rather than as a number that happened to come out: no node
+// is further from its nearest neighbour than GATHER_REACH times the median, whatever
+// the estate. The forces cannot promise that — see gather — so it is enforced after
+// them, in the same place and for the same reason the separation pass is.
+test("no node is drawn further from the picture than the picture's own spacing", async ({ page }) => {
+  const hold = { mesh: null };
+  installShifting(page, hold);
+  for (const [apps, per, loose] of [[1, 12, 1], [1, 20, 2], [6, 19, 5]]) {
+    hold.mesh = landscapeOf(apps, per, loose);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    // Away and back: navigating to the URL it is already on is a fragment change,
+    // not a load, and the view would draw the landscape before this one again.
+    await page.goto("about:blank");
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(400);
+    const drawn = await drawnPicture(page);
+    // 1.5 is the ceiling; the tolerance is for the separation pass, which runs after
+    // the gather and may push a pair a little further apart than it found them.
+    expect(drawn.ratio, `${drawn.nodes} nodes`).toBeLessThan(1.55);
+  }
+});
+
 // Keeping the picture true (ADR-0211 §7).
 //
 // Everything on this canvas has a shelf life — the severity badges are an observation,

@@ -14,6 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Starmap opens using the whole window, whatever the size of the estate.** A
+  landscape of a handful of nodes was drawn as a handful of small circles adrift in an
+  empty canvas, and a single unattached process could sit out at the far edge holding
+  two thirds of the window open behind it. Both come from how the picture is scaled:
+  the graph is laid out in a world sized from its own content, the opening view shows
+  the whole of that world, and so the world's size decides the magnification.
+
+  Two things were working against that. The world had a floor of a window's worth of
+  area, put there so that small landscapes would not change when the world became
+  content-sized — but the floor stopped binding only past about twenty-five nodes, so
+  every smaller estate was laid out in a world several times larger than it needed and
+  shown correspondingly small. Measured on the rendered page at 1400x900, as the share
+  of the window the nodes and their spacing occupy: five nodes covered 7% where a
+  hundred and twenty-five covered 17%. The floor is gone, and the same five nodes now
+  cover 18% — the same picture, at the size it should always have been drawn.
+
+  The second is the stranded node. A process attached to nothing is held near the
+  picture only by the pull toward its centre, against a repulsion that falls away with
+  distance, and that balance puts it a long way out. The cost is not the node itself:
+  the view is framed from the box that contains everything, so one node far out decides
+  how small the rest is drawn. On the shape this was reported on — one application with
+  its processes around it, plus one process attached to nothing — the straggler sat at
+  2.07 times the picture's own spacing. It is now bounded at 1.5: it is still the
+  outlying thing it is, on the side it settled on, but it no longer sets the scale for
+  everything else. Nothing moves in a landscape that has no straggler, and nothing moves
+  at all once you have arranged the picture by hand.
+
 - **Removing someone from an application now takes their Starmap away on their next
   request.** The Starmap holds a 30-second reading of what this server is, so that
   twenty people with the view open cost the engine one reading rather than twenty. It
