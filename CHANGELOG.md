@@ -47,6 +47,26 @@ _Changed_ / _Removed_ for each version.
   Instances and Incidents heatmaps and the ArchiMate and C4 projections get them too:
   there was never a per-view layout to fix.
 
+- **The script-timeout test no longer reads a pid as an identity.** The fix above gave
+  `TestTimeoutKillsTheInterpretersWholeProcessGroup` a probe that can tell a zombie
+  from a live process, and it went red in CI again — on a commit whose diff contained
+  no Go at all, on a head whose parent had passed the same job twenty minutes earlier,
+  and without reproducing once in a full race build or in ten consecutive focused runs.
+  The mechanism is not known. What is known is that the assertion rested on a number:
+  nothing tied the pid in the file back to the process it was written for, so "that
+  number still answers a signal" and "the descendant survived" were being treated as
+  one fact when they are two.
+
+  So the test now reads the descendant's own evidence. It is given a second of work
+  and a file to write at the end of it; if the group kill reached it, the file is never
+  written. Nothing about the pid namespace can confound that. Both halves are shown to
+  catch what they are for: killing the child instead of its group trips the elapsed
+  check, and a descendant that escapes the group with `setsid` writes the file. The
+  signal probe stays as a *diagnostic* — an assertion that can fail while the system is
+  correct is unsound whatever its subject, but what it reports is the only lead on the
+  open question, so a failure now names the program behind the pid instead of only its
+  number.
+
 - **A script's liveness probe read a zombie as a running process.** ADR-0303 made a
   timed-out script take its whole process group with it, and
   `TestTimeoutKillsTheInterpretersWholeProcessGroup` checks that by asking whether the
