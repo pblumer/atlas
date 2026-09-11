@@ -1,7 +1,16 @@
 # ADR-0288: An agent's commit is authored by the person who asked for it
 
-- **Status:** Accepted
-- **Implementation:** Landed
+> **Withdrawn on 2026-09-11 by [ADR-draft-withdrawing-commit-attribution](draft-withdrawing-commit-attribution.md).**
+> The mechanism described below — the session hook, the identity table and the CI
+> check — landed on 2026-09-08 and was removed from the tree on 2026-09-11: the
+> branch-wide history rewrite the check prescribes was reopening conflicts on branches
+> that were mergeable before it ran. The record is left as it was written, because the
+> argument for the split is unchanged and only the price of enforcing it was in
+> question. The two state lines are updated to what is true now, which is why
+> `Implementation` reads `Not started`: none of the chosen option is in the tree.
+
+- **Status:** Deprecated
+- **Implementation:** Not started
 - **Date:** 2026-09-08
 - **Deciders:** Atlas maintainers
 
