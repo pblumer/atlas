@@ -97,6 +97,21 @@ type Class struct {
 // Nothing executes it. Atlas runs BPMN; a lifecycle constrains data that BPMN moves,
 // and is resolved at deploy exactly as a class name is (ADR-0259 §5).
 type Lifecycle struct {
+	// StatesFrom names an «enumeration» in the same model whose literals are this
+	// lifecycle's states, or is empty — which is the normal case and means the states
+	// below are declared here and nowhere else
+	// (ADR-0306).
+	//
+	// It is a *reference*, not a merge. The enumeration answers which values there
+	// are; this answers in what order, which is the half no closed set of values can
+	// hold. What it buys is that the strings are written once: the model that prompted
+	// the record had five state names written twice, as literals a person maintained
+	// and as states a deploy resolved, with nothing noticing when they drifted.
+	//
+	// A name rather than an id, for the reason Class.Identity names attributes and
+	// DataStore.Class names a class: a state's identity is already its name, and a
+	// literal's rename *is* a state's rename.
+	StatesFrom  string                `json:"statesFrom,omitempty"`
 	States      []LifecycleState      `json:"states"`
 	Transitions []LifecycleTransition `json:"transitions"`
 }

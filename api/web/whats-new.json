@@ -233,6 +233,49 @@
       }
     },
     {
+      "id": "a-lifecycle-can-now-take-its-states-from-an-enumeration-you-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Write your states once, as an enumeration, and use them as the lifecycle",
+        "de": "Zustände einmal schreiben, als Enumeration, und als Lebenszyklus nutzen"
+      },
+      "summary": {
+        "en": "If you already wrote your states as an «enumeration» — with the documentation on each one — that enumeration can now be the lifecycle of a business object. Its literals are the states, so each name lives in one place. Rename a literal and the state and its transitions follow; remove one and its arrows go too. What an enumeration cannot say stays on the lifecycle: where instances start, where the life ends, and what may follow what. The class diagram shows the tie as a dashed «lifecycle» line.",
+        "de": "Wenn Sie Ihre Zustände bereits als «enumeration» geschrieben haben — samt Dokumentation zu jedem —, kann diese Enumeration jetzt der Lebenszyklus eines Geschäftsobjekts sein. Ihre Literale sind die Zustände, jeder Name steht also nur an einer Stelle. Ein umbenanntes Literal benennt den Zustand und seine Übergänge mit um; ein gelöschtes nimmt seine Pfeile mit. Was eine Enumeration nicht sagen kann, bleibt am Lebenszyklus: wo Instanzen starten, wo das Leben endet und was worauf folgen darf. Das Klassendiagramm zeigt die Verbindung als gestrichelte «lifecycle»-Linie."
+      },
+      "link": {
+        "label": "ADR-0259",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0259-data-object-lifecycle.md"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, open your information model, and click the business object whose life you want to declare.",
+          "Under Lifecycle, pick your enumeration in the States from list. Its literals become the states at once.",
+          "Open the lifecycle and draw the arrows — the order is the half no enumeration can hold. Move the starting state if the first literal is not it.",
+          "Back on the class diagram, the dashed «lifecycle» line says which enumeration is which class's life."
+        ],
+        "de": [
+          "Unter Daten das Informationsmodell öffnen und das Geschäftsobjekt anklicken, dessen Leben Sie festlegen wollen.",
+          "Unter Lifecycle in der Liste States from die Enumeration wählen. Ihre Literale werden sofort zu den Zuständen.",
+          "Den Lebenszyklus öffnen und die Pfeile zeichnen — die Reihenfolge ist die Hälfte, die keine Enumeration tragen kann. Den Startzustand verschieben, falls es nicht das erste Literal ist.",
+          "Zurück im Klassendiagramm zeigt die gestrichelte «lifecycle»-Linie, welche Enumeration das Leben welcher Klasse ist."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
       "version": "Unreleased",
       "date": null,
@@ -367,28 +410,6 @@
         },
         "route": "#/data"
       }
-    },
-    {
-      "id": "an-openapi-document-can-configure-the-task-that-calls-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Turn an API's operations into ready-made task settings",
-        "de": "Aus den Operationen einer API fertige Task-Einstellungen machen"
-      },
-      "summary": {
-        "en": "Configuring a REST task means reading the API's documentation and typing what it says: the method, the address, which values the process has to supply. Atlas can now read that file for you and write out one ready-made setting sheet per operation — the method already chosen, the address already filled in, and a note saying which values your process needs to hold. What the file cannot decide, such as which login to use, is deliberately left blank rather than guessed. One honest catch: nothing in Atlas can apply these sheets to a task yet, so for now they are files to keep or to hand on — the command tells you so when it writes them.",
-        "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
-      },
-      "link": {
-        "label": "ADR-0300",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0300-openapi-element-templates.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ]
     }
   ]
 }
