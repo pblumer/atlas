@@ -253,6 +253,40 @@ _Changed_ / _Removed_ for each version.
   Prometheus surface is operational rather than business-level, so a KPI dashboard
   planned against `/metrics` will not find what it needs.
 
+- **A lifecycle can now take its states from an «enumeration» you already wrote.**
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) gave a class a state machine, and it
+  was written against a real model that already had one — drawn as an enumeration. That
+  model is the whole problem: its author had written the five states of an identity as
+  literals, with a paragraph of documentation on each, *because that was the only place
+  the states could be written down at all*. Adding a lifecycle beside it made the model
+  say the same five strings twice, with nothing connecting them and nothing noticing when
+  they drifted.
+
+  A business object's lifecycle now names an enumeration in the same model, and that
+  enumeration's literals **are** its states. The name of a state is written in one place.
+  Everything an enumeration cannot hold stays on the lifecycle, which is most of what a
+  lifecycle is for: which state instances are created in, which end the life, what may
+  follow what, and where each sits on the canvas.
+
+  Renaming a literal renames the state and rewrites every transition that names it —
+  which is exactly what renaming a state already does, because a state's name *is* the
+  string every process writes. Removing a literal removes the state and the arrows
+  touching it. Adding a state on the lifecycle sheet writes the literal, since that is
+  where the names live. On a lifecycle fed this way the state's name is shown read-only
+  and says where it is renamed, rather than taking an edit and dropping it.
+
+  **The class diagram finally shows the tie**: a dashed `«lifecycle»` line from the class
+  to the enumeration. It is derived from the reference and never drawn by hand — the same
+  construction as a data store's line to its class, for the same reason. A class and an
+  enumeration do not *relate*; one *takes its states from* the other, so the relationship
+  rules are untouched and nothing that counts relationships counts it.
+
+  The server refuses the three ways a document can contradict itself here: a reference to
+  a class that is not there, a reference to something that is not an enumeration, and a
+  state the enumeration does not declare. A literal with no state yet is *not* refused —
+  a machine half drawn is the normal condition, and that is incompleteness rather than a
+  contradiction. A lifecycle that names no enumeration behaves exactly as it did before.
+
 - **General-purpose scripts now have an opt-in, fail-closed OS sandbox.**
   `--script-sandbox=strict` (or `ATLAS_SCRIPT_SANDBOX=strict`) gives every
   PowerShell, Python and JavaScript execution private scratch, restricts file reads

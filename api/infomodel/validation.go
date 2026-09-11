@@ -65,6 +65,14 @@ const (
 	CodeUnknownTransitionState     = "unknown-transition-state"
 	CodeDuplicateTransitionID      = "duplicate-transition-id"
 	CodeTransitionLeavesFinalState = "transition-leaves-final-state"
+
+	// A lifecycle sourced from an «enumeration»
+	// (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). All three say
+	// the same kind of thing: the document claims its states come from a set, and then
+	// contradicts itself about what that set is or what is in it.
+	CodeLifecycleUnknownEnumeration = "lifecycle-unknown-enumeration"
+	CodeLifecycleNotAnEnumeration   = "lifecycle-not-an-enumeration"
+	CodeStateNotALiteral            = "state-not-a-literal"
 )
 
 // Finding is one thing wrong with a model, located precisely enough that the
@@ -183,7 +191,7 @@ func validateClass(c *Class, classByName map[string]*Class, add func(Finding)) {
 	}
 
 	validateIdentity(c, kind, add)
-	validateLifecycle(c, kind, add)
+	validateLifecycle(c, kind, classByName, add)
 }
 
 // validateLifecycle holds a class's state machine to what a deploy can resolve
@@ -195,7 +203,7 @@ func validateClass(c *Class, classByName map[string]*Class, add func(Finding)) {
 // renamed — and a validator that refused those would be a canvas nobody could draw
 // on. What it refuses is a document that says something contradictory, or that names
 // a state which is not there.
-func validateLifecycle(c *Class, kind StereotypeKind, add func(Finding)) {
+func validateLifecycle(c *Class, kind StereotypeKind, classByName map[string]*Class, add func(Finding)) {
 	if c.Lifecycle == nil {
 		return // the normal case, and the one this must leave completely alone
 	}
@@ -213,6 +221,30 @@ func validateLifecycle(c *Class, kind StereotypeKind, add func(Finding)) {
 			Message: fmt.Sprintf("%s declares a lifecycle with no states. Remove the lifecycle, "+
 				"or give it the state its instances start in.", c.Name)})
 		return
+	}
+
+	// Where the states come from, if they come from anywhere but here. A nil map means
+	// the lifecycle declares its own states, which is the normal case and the one that
+	// has to behave exactly as it did before this existed
+	// (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration).
+	var literals map[string]bool
+	if from := strings.TrimSpace(c.Lifecycle.StatesFrom); from != "" {
+		src := classByName[from]
+		switch {
+		case src == nil:
+			add(Finding{Code: CodeLifecycleUnknownEnumeration, Reason: RefusedByNotation, ClassID: c.ID,
+				Message: fmt.Sprintf("%s takes its states from %q, and there is no such class in this "+
+					"model. Draw the enumeration, or let the lifecycle declare its own states.", c.Name, from)})
+		case src.Stereotype != StereotypeEnumeration:
+			add(Finding{Code: CodeLifecycleNotAnEnumeration, Reason: RefusedByNotation, ClassID: c.ID,
+				Message: fmt.Sprintf("%s takes its states from %s, which is not an enumeration. States "+
+					"are a closed set of names, which is what an enumeration's literals are.", c.Name, from)})
+		default:
+			literals = map[string]bool{}
+			for _, lit := range src.Literals {
+				literals[lit] = true
+			}
+		}
 	}
 
 	states := map[string]*LifecycleState{}
@@ -233,6 +265,17 @@ func validateLifecycle(c *Class, kind StereotypeKind, add func(Finding)) {
 			continue
 		}
 		states[st.Name] = st
+		// The contradiction the reference exists to prevent: the states come from that
+		// set, and this is one the set does not contain. A literal with *no* state is
+		// the other way round and is not refused — that is a machine half drawn, which
+		// is the normal condition every rule here is careful about.
+		if literals != nil && !literals[st.Name] {
+			add(Finding{Code: CodeStateNotALiteral, Reason: RefusedByNotation, ClassID: c.ID,
+				State: st.Name,
+				Message: fmt.Sprintf("%s is in the state %q, which %s does not declare. Add the literal "+
+					"there, or take this state off the machine — the literals are where the names live.",
+					c.Name, st.Name, strings.TrimSpace(c.Lifecycle.StatesFrom))})
+		}
 		if st.Initial {
 			initial++
 		}

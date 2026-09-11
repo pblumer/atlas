@@ -197,6 +197,49 @@
       }
     },
     {
+      "id": "a-lifecycle-can-now-take-its-states-from-an-enumeration-you-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Write your states once, as an enumeration, and use them as the lifecycle",
+        "de": "Zustände einmal schreiben, als Enumeration, und als Lebenszyklus nutzen"
+      },
+      "summary": {
+        "en": "If you already wrote your states as an «enumeration» — with the documentation on each one — that enumeration can now be the lifecycle of a business object. Its literals are the states, so each name lives in one place. Rename a literal and the state and its transitions follow; remove one and its arrows go too. What an enumeration cannot say stays on the lifecycle: where instances start, where the life ends, and what may follow what. The class diagram shows the tie as a dashed «lifecycle» line.",
+        "de": "Wenn Sie Ihre Zustände bereits als «enumeration» geschrieben haben — samt Dokumentation zu jedem —, kann diese Enumeration jetzt der Lebenszyklus eines Geschäftsobjekts sein. Ihre Literale sind die Zustände, jeder Name steht also nur an einer Stelle. Ein umbenanntes Literal benennt den Zustand und seine Übergänge mit um; ein gelöschtes nimmt seine Pfeile mit. Was eine Enumeration nicht sagen kann, bleibt am Lebenszyklus: wo Instanzen starten, wo das Leben endet und was worauf folgen darf. Das Klassendiagramm zeigt die Verbindung als gestrichelte «lifecycle»-Linie."
+      },
+      "link": {
+        "label": "ADR-0259",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0259-data-object-lifecycle.md"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, open your information model, and click the business object whose life you want to declare.",
+          "Under Lifecycle, pick your enumeration in the States from list. Its literals become the states at once.",
+          "Open the lifecycle and draw the arrows — the order is the half no enumeration can hold. Move the starting state if the first literal is not it.",
+          "Back on the class diagram, the dashed «lifecycle» line says which enumeration is which class's life."
+        ],
+        "de": [
+          "Unter Daten das Informationsmodell öffnen und das Geschäftsobjekt anklicken, dessen Leben Sie festlegen wollen.",
+          "Unter Lifecycle in der Liste States from die Enumeration wählen. Ihre Literale werden sofort zu den Zuständen.",
+          "Den Lebenszyklus öffnen und die Pfeile zeichnen — die Reihenfolge ist die Hälfte, die keine Enumeration tragen kann. Den Startzustand verschieben, falls es nicht das erste Literal ist.",
+          "Zurück im Klassendiagramm zeigt die gestrichelte «lifecycle»-Linie, welche Enumeration das Leben welcher Klasse ist."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
       "version": "Unreleased",
       "date": null,
@@ -353,51 +396,6 @@
         "Connectors",
         "Modeler"
       ]
-    },
-    {
-      "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See where an order got to — on the lifecycle its class declares",
-        "de": "Sehen, wo eine Bestellung steht — auf dem Lebenszyklus ihrer Klasse"
-      },
-      "summary": {
-        "en": "Open a running or finished instance and the Data tab now has a third view: the state machine the class declares, with the states this particular datum has been through filled in, the one it is in right now ringed, and every step labelled with the task that made it. Where something went a way the model does not allow, the drawing says so in a dashed line and names it underneath — which is how you find a process writing a state that does not exist, or one that was built before anyone drew the lifecycle.",
-        "de": "Beim Öffnen einer laufenden oder beendeten Instanz hat der Reiter Daten jetzt eine dritte Ansicht: die Zustandsmaschine, die die Klasse deklariert — mit den Zuständen, die genau dieses Datum durchlaufen hat, dem aktuellen hervorgehoben und jedem Schritt beschriftet mit der Aufgabe, die ihn ausgelöst hat. Ist etwas einen Weg gegangen, den das Modell nicht vorsieht, zeigt die Zeichnung das als gestrichelte Linie und benennt es darunter — so findet man einen Prozess, der einen Zustand schreibt, den es nicht gibt, oder einen, der schon vor dem Lebenszyklus gebaut wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and click an instance to replay it.",
-          "Switch to the Data tab and choose Lifecycle.",
-          "Filled states are ones this datum has been through; the ringed one is where it is now. Each arrow it travelled names the element that moved it.",
-          "Carrying several data objects? Pick which one to draw with the selector on the right.",
-          "Nothing there? The class needs a lifecycle first — draw one under Data › Model, on the class itself."
-        ],
-        "de": [
-          "Unter Betrieb eine Instanz anklicken, um sie abzuspielen.",
-          "Auf den Reiter Daten wechseln und Lebenszyklus wählen.",
-          "Gefüllte Zustände hat dieses Datum durchlaufen; der umrandete ist der aktuelle. Jeder durchlaufene Pfeil nennt das Element, das den Schritt ausgelöst hat.",
-          "Mehrere Datenobjekte? Rechts auswählen, welches gezeichnet wird.",
-          "Nichts zu sehen? Dann hat die Klasse noch keinen Lebenszyklus — unter Daten › Modell an der Klasse selbst zeichnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Betrieb öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }

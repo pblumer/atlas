@@ -460,6 +460,76 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   // ---- the lifecycle panels -----------------------------------------------
 
+  // ---- states taken from an «enumeration» -----------------------------------
+  //
+  // The enumeration is where the *names* live; everything it cannot hold — the order,
+  // the start, the ends, the layout — stays on the lifecycle
+  // (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). So every function
+  // here adds and removes and never overwrites: a state that survives keeps what
+  // somebody set on it.
+
+  function enumerationsIn() {
+    return (state.model.classes || []).filter((x) => x.stereotype === "enumeration");
+  }
+
+  // The enumeration a class takes its states from, or null. A reference to something
+  // that is not there resolves to null rather than being repaired: the validator
+  // reports it, and a canvas that quietly fixed it would hide the typo.
+  function sourceEnumOf(c) {
+    const from = c && c.lifecycle && c.lifecycle.statesFrom;
+    if (!from) return null;
+    return enumerationsIn().find((x) => x.name === from) || null;
+  }
+
+  // syncStatesFromLiterals brings a lifecycle's states in step with its enumeration's
+  // literals: a literal with no state gets one, a state whose literal is gone goes and
+  // takes the transitions that name it with it. Order follows the literals, because
+  // the order somebody put them in is the order they read.
+  function syncStatesFromLiterals(c) {
+    const src = sourceEnumOf(c);
+    if (!src) return;
+    const lc = c.lifecycle;
+    const had = new Map((lc.states || []).map((st) => [st.name, st]));
+    // A literal listed twice is one state said twice, which the validator refuses on
+    // the enumeration itself — so it is not made into two states here.
+    const wanted = (src.literals || []).filter((lit, i, all) => lit && all.indexOf(lit) === i);
+    let below = Math.max(-90, ...(lc.states || []).map((st) => st.y || 0));
+    lc.states = wanted.map((name) => {
+      const kept = had.get(name);
+      if (kept) return kept;
+      below += 90;
+      return { name, x: 0, y: below };
+    });
+    // A machine with no start is one the document refuses, and picking one is a worse
+    // surprise than the first literal standing in — which the lifecycle sheet changes
+    // in one click.
+    if (lc.states.length && !lc.states.some((st) => st.initial)) lc.states[0].initial = true;
+    const live = new Set(lc.states.map((st) => st.name));
+    lc.transitions = (lc.transitions || []).filter((t) => live.has(t.from) && live.has(t.to));
+  }
+
+  // Renaming a literal renames the state, exactly as renaming a state does — because a
+  // state's name *is* what every process writes, so the transitions naming it are
+  // rewritten rather than left pointing at a string that is gone.
+  function renameStateFromLiteral(enumName, before, after) {
+    if (!before || !after || before === after) return;
+    for (const cls of state.model.classes || []) {
+      if (!cls.lifecycle || cls.lifecycle.statesFrom !== enumName) continue;
+      for (const st of cls.lifecycle.states || []) if (st.name === before) st.name = after;
+      for (const t of cls.lifecycle.transitions || []) {
+        if (t.from === before) t.from = after;
+        if (t.to === before) t.to = after;
+      }
+    }
+  }
+
+  // Every class this enumeration supplies, after its literals changed.
+  function resyncClassesSourcedFrom(enumName) {
+    for (const cls of state.model.classes || []) {
+      if (cls.lifecycle && cls.lifecycle.statesFrom === enumName) syncStatesFromLiterals(cls);
+    }
+  }
+
   function lcStates() { return (lifecycleClass()?.lifecycle?.states) || []; }
   function lcTransitions() { return (lifecycleClass()?.lifecycle?.transitions) || []; }
 
@@ -473,19 +543,62 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         ? `${lcStates().length} state${lcStates().length === 1 ? "" : "s"},
            ${lcTransitions().length} transition${lcTransitions().length === 1 ? "" : "s"}.
            Pick one to edit it.`
-        : "Add the state an instance is created in, then the ones it moves to."}</p>`);
+        : "Add the state an instance is created in, then the ones it moves to."}</p>
+      ${sourceEnumOf(c)
+        ? `<p class="im-hint-text">The names come from the enumeration
+             <b>${esc(sourceEnumOf(c).name)}</b> and are renamed there. What is set here is what an
+             enumeration cannot say: where instances start, where the life ends, and what may
+             follow what.</p>`
+        : ""}`);
+  }
+
+  // Where a class's state names come from: this lifecycle, or an «enumeration» the
+  // model already has. The second is the case the record exists for — a model whose
+  // author had written the states as literals, with documentation, because that was
+  // the only place they could be written at all.
+  function lifecycleSourceHTML(c) {
+    const enums = enumerationsIn();
+    const from = (c.lifecycle && c.lifecycle.statesFrom) || "";
+    // A reference to something that is not there is shown as what it says rather than
+    // silently reset, because the remedy — draw it, or point somewhere else — is the
+    // author's to pick.
+    const stray = from && !enums.some((e) => e.name === from)
+      ? `<option value="${esc(from)}" selected>${esc(from)} — no such enumeration</option>` : "";
+    return `<label class="field"><span>States from</span>
+        <select id="im-c-lcfrom">
+          <option value=""${from ? "" : " selected"}>This lifecycle</option>
+          ${enums.map((e) => `<option value="${esc(e.name)}"${e.name === from ? " selected" : ""}>${esc(e.name)}</option>`).join("")}
+          ${stray}
+        </select></label>
+      ${from
+        ? `<p class="im-hint-text">The literals of <b>${esc(from)}</b> are this class's states, so each
+             name is written in one place. What an enumeration cannot hold — which state instances start
+             in, which end the life, and what may follow what — stays on the lifecycle. The class diagram
+             draws the tie as a dashed <code>&laquo;lifecycle&raquo;</code> line.</p>`
+        : enums.length
+          ? `<p class="im-hint-text">Or take them from an enumeration you have already written, so the
+             names and their documentation live in one place rather than two.</p>`
+          : ""}`;
   }
 
   function renderStatePanel() {
     const st = lcStates().find((x) => x.name === state.selected.id);
     if (!st) return renderLifecycleNothingSelected();
-    paint(`${pheadHTML("ST", "State", st.name,
-      `<button type="button" class="icon-btn" data-act="del-state" title="Delete this state">✕</button>`)}
+    // Where the names come from an enumeration, they are edited there and nowhere
+    // else. Shown read-only rather than hidden or silently ignored: a field that took
+    // a rename and dropped it is the worse surprise, and the remedy is one sentence.
+    const src = sourceEnumOf(lifecycleClass());
+    paint(`${pheadHTML("ST", "State", st.name, src ? ""
+      : `<button type="button" class="icon-btn" data-act="del-state" title="Delete this state">✕</button>`)}
       <h3>General</h3>
       <label class="field"><span>Name</span>
-        <input id="im-st-name" value="${esc(st.name)}" autocomplete="off"/></label>
-      <p class="im-hint-text">This is the string a process writes into the BPMN data state
-        (<code>${esc(st.name)}</code>). Renaming it here renames what every process has to write.</p>
+        <input id="im-st-name" value="${esc(st.name)}" autocomplete="off"${src ? " readonly" : ""}/></label>
+      ${src
+        ? `<p class="im-hint-text">This name is the literal <code>${esc(st.name)}</code> of
+             <b>${esc(src.name)}</b>, which is where it is renamed and where it is removed. It is also
+             the string a process writes into the BPMN data state.</p>`
+        : `<p class="im-hint-text">This is the string a process writes into the BPMN data state
+             (<code>${esc(st.name)}</code>). Renaming it here renames what every process has to write.</p>`}
       <label class="field"><span>Documentation</span>
         <textarea id="im-st-doc" rows="3">${esc(st.documentation || "")}</textarea></label>
       <h3>Where it sits in the life</h3>
@@ -734,6 +847,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             : `<p class="im-hint-text">None declared, which is the normal case: a class without one
                behaves exactly as it always has, and the states its processes write are simply not
                checked against anything.</p>`}
+          ${lifecycleSourceHTML(c)}
           <div class="field-actions">
             <button type="button" class="btn ghost small" data-act="open-lifecycle" data-class-id="${esc(c.id)}">${(c.lifecycle && (c.lifecycle.states || []).length) ? "Open lifecycle" : "Draw a lifecycle"}</button>
           </div>` : ""}
@@ -1005,6 +1119,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         const before = c.name;
         for (const other of state.model.classes) {
           for (const a of other.attributes || []) if (a.type === before) a.type = target.value;
+          // And every lifecycle that takes its states from it, for the same reason: a
+          // reference by name has to follow the name.
+          if (other.lifecycle && other.lifecycle.statesFrom === before) {
+            other.lifecycle.statesFrom = target.value;
+          }
         }
         c.name = target.value;
         markDirty(); syncCanvas(); renderProblems();
@@ -1022,6 +1141,21 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         if ((c.documentation || "") === target.value) return;
         c.documentation = target.value;
         markDirty();
+        return;
+      }
+      if (target.id === "im-c-lcfrom") {
+        const from = target.value;
+        if (((c.lifecycle && c.lifecycle.statesFrom) || "") === from) return;
+        if (!from) {
+          // Unhooking keeps the states that were there. They were this class's states
+          // all along; what changes is that the enumeration no longer supplies them.
+          if (c.lifecycle) delete c.lifecycle.statesFrom;
+        } else {
+          if (!c.lifecycle) c.lifecycle = { states: [], transitions: [] };
+          c.lifecycle.statesFrom = from;
+          syncStatesFromLiterals(c);
+        }
+        markDirty(); render();
         return;
       }
 
@@ -1057,8 +1191,11 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       if (lit) {
         const i = Number(lit.dataset.lit);
         if (c.literals[i] === target.value) return;
+        // A literal is a state wherever a lifecycle takes its states from here, so a
+        // rename is a state's rename and the transitions naming it are rewritten.
+        renameStateFromLiteral(c.name, c.literals[i], target.value);
         c.literals[i] = target.value;
-        markDirty(); syncCanvas();
+        markDirty(); syncCanvas(); renderProblems();
       }
       return;
     }
@@ -1163,9 +1300,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       } else if (act === "add-literal") {
         c.literals = c.literals || [];
         c.literals.push(`value${c.literals.length + 1}`);
+        resyncClassesSourcedFrom(c.name);
         markDirty(); render();
       } else if (act === "del-literal") {
         c.literals.splice(Number(btn.closest("[data-lit]").dataset.lit), 1);
+        // The state goes with the literal, and the transitions that named it go too:
+        // an arrow to a state that is not there is what the validator refuses.
+        resyncClassesSourcedFrom(c.name);
         markDirty(); render();
       } else if (act === "del-class") {
         if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.`)) return;
@@ -1441,6 +1582,20 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // else — so a new one is numbered until it is.
     let name = "new";
     for (let n = 2; states.some((x) => x.name === name); n++) name = `new${n}`;
+    // Where the states come from an enumeration, the name lives there, so the gesture
+    // writes the literal and the state follows from it. Adding a state here instead
+    // would add one the enumeration does not declare, which the server refuses — and a
+    // palette that draws something unsaveable is a trap.
+    const src = sourceEnumOf(c);
+    if (src) {
+      src.literals = src.literals || [];
+      src.literals.push(name);
+      syncStatesFromLiterals(c);
+      state.selected = { kind: "state", id: name };
+      state.connecting = null;
+      markDirty(); render();
+      return;
+    }
     // Where the reader is looking, rather than on a grid the sheet may have been
     // scrolled away from: a state dropped outside the window reads as a palette that
     // did nothing.

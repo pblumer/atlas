@@ -821,8 +821,12 @@ test("pointing at a node shows what it is connected to", async ({ page }) => {
       width: parseFloat(getComputedStyle(el).strokeWidth),
     }));
   const neighbour = await related.first().getAttribute("data-node-id");
+  // The ring fades in over 90ms, so reading it once can land mid-transition: on a
+  // loaded runner this sampled 0.26 and then 0.39, which are points on the ramp to
+  // 0.7 rather than the value it reaches. Poll for where it settles — the claim is
+  // unchanged, only the moment it is read.
+  await expect.poll(async () => (await ring(neighbour)).opacity).toBeGreaterThan(0.5);
   const lit = await ring(neighbour);
-  expect(lit.opacity).toBeGreaterThan(0.5);
   expect(lit.width).toBeGreaterThan(1);
   // The node being asked about is never in doubt: its ring is the stronger one.
   expect((await ring("process:1")).width).toBeGreaterThan(lit.width);
