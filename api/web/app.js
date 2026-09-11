@@ -40,6 +40,7 @@ import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML 
 // is a self-contained page and this file is long enough; it takes its dependencies
 // as arguments so the import stays one-directional, like every other module here.
 import { viewAIAccess } from "./aiaccess.js";
+import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 
 const view = document.getElementById("view");
 
@@ -1085,6 +1086,18 @@ function wnSetLang(l) {
   try { localStorage.setItem("atlas.whatsnew.lang", l); } catch { /* ignore */ }
 }
 
+// The landing page carries two bilingual sections — What's New and the key-features
+// tile — and they share one language: switching either toggle repaints both, so the
+// page is never half English and half German. wnEntries caches what renderWhatsNew
+// fetched, so the repaint costs nothing.
+let wnEntries = [];
+function setConsoleLang(l) {
+  wnSetLang(l);
+  const wn = document.getElementById("whats-new-slot");
+  if (wn && wnEntries.length) paintWhatsNew(wn, wnEntries, l);
+  paintKeyFeatures(document.getElementById("key-features-slot"), l, setConsoleLang);
+}
+
 // wnText resolves a {en, de} field for the active language, falling back to English.
 const wnText = (b, lang) => (b && (b[lang] != null ? b[lang] : b.en)) || "";
 
@@ -1097,6 +1110,7 @@ async function renderWhatsNew(slot) {
     doc = await res.json();
   } catch { return; } // offline or malformed — the landing page works without it
   const entries = (doc && Array.isArray(doc.entries)) ? doc.entries : [];
+  wnEntries = entries;
   if (entries.length) paintWhatsNew(slot, entries, wnLang());
 }
 
@@ -1149,13 +1163,11 @@ function paintWhatsNew(slot, entries, lang) {
     `</details></div>`;
 
   // The language toggle lives inside the <summary>; stop the click from also toggling
-  // the section open/closed, switch language, remember it, and repaint in place.
+  // the section open/closed, and switch the whole landing page's language.
   slot.querySelectorAll(".wn-lang button").forEach((b) => b.addEventListener("click", (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
-    const l = b.dataset.lang;
-    wnSetLang(l);
-    paintWhatsNew(slot, entries, l);
+    setConsoleLang(b.dataset.lang);
   }));
   const more = slot.querySelector(".wn-more");
   if (more) more.addEventListener("click", () => {
@@ -1198,8 +1210,13 @@ async function viewConsoleDashboard() {
           <div class="stat"><b id="s-ei">0</b><span>active element instances</span></div>
         </div>
       </div>
-    </div>`;
+    </div>
+    <div id="key-features-slot"></div>`;
   renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
+  // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
+  // someone who arrived here without having read the README. Fills its own slot,
+  // and is silent if the asset is missing.
+  renderKeyFeatures(document.getElementById("key-features-slot"), wnLang(), setConsoleLang);
   try {
     const [procs, stats] = await Promise.all([
       api("GET", "/api/v1/processes"),

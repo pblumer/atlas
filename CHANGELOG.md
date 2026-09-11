@@ -79,6 +79,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Console landing page says what Atlas is, in both languages**: the dashboard
+  opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
+  what they are running. A **Key features / Kernmerkmale** tile now sits below the
+  dashboard's own tiles: fourteen short entries (one binary, durability, the compiler,
+  throughput, the Modeler, token visibility, human work, DMN, checkable BPMN coverage,
+  integrations, agents, operations, deployment, licence), collapsible and carrying the
+  same EN/DE toggle as What's New. The copy is a static asset
+  (`api/web/key-features.json`, guarded by a test) rather than markup, and the landing
+  page's two bilingual sections now share one language setting, so it is never half
+  English and half German.
+
 - **The information model can now be read off the processes instead of typed in beside
   them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
   [ADR-0259](docs/adr/0259-data-object-lifecycle.md) both run in one direction: a person

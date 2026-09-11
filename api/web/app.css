@@ -3687,6 +3687,46 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .whats-new .wn-more:hover { text-decoration: underline; }
 
+/* ---------- Key features (Console landing page) ----------
+   A short statement of what Atlas is, below the dashboard's own tiles (see
+   key-features.js). Bilingual like What's New, and collapsible for the same
+   reason: someone who has read it once should be able to fold it away. The
+   entries are a responsive two-column grid that collapses to one on a narrow
+   window, so fourteen short items stay scannable instead of becoming a wall. */
+.key-features { margin-top: 18px; }
+.key-features .kf-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; cursor: pointer; list-style: none;
+}
+.key-features .kf-head::-webkit-details-marker { display: none; }
+.key-features .kf-title {
+  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
+}
+.key-features .kf-title::before {
+  content: "\25B8"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
+}
+.key-features .kf-root[open] .kf-title::before { transform: rotate(90deg); }
+
+/* Segmented EN/DE toggle, matching the What's New header. */
+.key-features .kf-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.key-features .kf-lang button {
+  appearance: none; border: 0; background: var(--surface); color: var(--muted);
+  font: 600 12px/1 system-ui, sans-serif; padding: 5px 9px; cursor: pointer;
+}
+.key-features .kf-lang button + button { border-left: 1px solid var(--border); }
+.key-features .kf-lang button:hover { background: var(--bg); }
+.key-features .kf-lang button.active { background: var(--accent-soft); color: var(--accent); }
+
+.key-features .kf-intro { margin: 10px 0 0; }
+.key-features .kf-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px;
+  margin: 14px 0 2px; padding: 0; list-style: none;
+}
+@media (max-width: 760px) { .key-features .kf-grid { grid-template-columns: 1fr; } }
+.key-features .kf-item { display: flex; flex-direction: column; gap: 2px; }
+.key-features .kf-item-title { font-weight: 600; }
+.key-features .kf-item-text { color: var(--muted); }
+
 /* The Workers view (ADR-0157). Two tables that only mean something read together:
    a job type's queue depth, and who is pulling it. The one state worth catching —
    work piling up with nobody serving it — is a row style rather than a number the
