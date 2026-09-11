@@ -99,6 +99,10 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			// machine that has that interpreter installed. A supervised worker receives
 			// the languages enabled on atlas serve; an external worker with no filter
 			// keeps the historical default of serving all three.
+			sandbox, err := script.ParseSandboxMode(env(script.SandboxEnv))
+			if err != nil {
+				return Connectors{}, err
+			}
 			langs := script.Langs
 			if configured := splitAndTrim(env(script.LanguagesEnv)); len(configured) > 0 {
 				langs = make([]script.Lang, 0, len(configured))
@@ -112,6 +116,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			}
 			for _, lang := range langs {
 				exec := script.New(lang)
+				exec.Sandbox = sandbox
 				built.Handlers[lang.JobTypeName] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 					return runScript(ctx, j, exec)
 				})

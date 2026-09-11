@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "Run scripts in a locked-down OS sandbox",
+    "de": "Skripte in einer abgeschotteten OS-Sandbox ausführen"
+  },
+  "summary": {
+    "en": "A new strict Linux profile gives every PowerShell, Python or JavaScript run its own temporary workspace, blocks access to Atlas data and other host files, and denies network sockets. It is opt-in so existing scripts keep working; once a process needs only its variables, enable it with --script-sandbox=strict.",
+    "de": "Ein neues striktes Linux-Profil gibt jedem PowerShell-, Python- oder JavaScript-Lauf ein eigenes temporäres Arbeitsverzeichnis, sperrt Atlas-Daten und andere Host-Dateien und blockiert Netzwerk-Sockets. Es ist bewusst opt-in, damit bestehende Skripte weiterlaufen; braucht ein Prozess nur seine Variablen, wird es mit --script-sandbox=strict aktiviert."
+  },
+  "tags": ["Security", "Scripts"],
+  "link": {
+    "label": "ADR",
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-script-sandbox-isolation.md"
+  }
+}
