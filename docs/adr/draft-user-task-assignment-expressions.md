@@ -114,9 +114,14 @@ variable-read gate and the task-command gate answering the same question the sam
   `JobValue` grows one string. Candidate groups exist in two places during the migration
   window (the job for new records, the model for old ones), which the fallback resolves
   and time removes.
-- **Follow-ups / risks to watch:** The open question above. And
-  [ADR-0178](0178-responsibility-metadata-raci.md)'s responsibility metadata is still
-  literal — an expression there would be the same change again, and nobody has asked.
+- **Follow-ups / risks to watch:** The open question above. The Tasks app's folder
+  editor builds its list of candidate groups from what the *models* name
+  ([ADR-0268](0268-task-folders-are-saved-filters.md)), so a group that is computed is not among the
+  values it suggests — the rule still matches it, but nobody is offered it. Filling that
+  list from the open tasks instead would fix it and costs a scan, which is why it is
+  noted rather than done. And [ADR-0178](0178-responsibility-metadata-raci.md)'s
+  responsibility metadata is still literal — an expression there would be the same
+  change again, and nobody has asked.
 
 ## Implementation
 
