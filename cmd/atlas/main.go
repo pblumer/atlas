@@ -674,6 +674,14 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		ex.MaxOutput = budgets.Payload
 		ex.Sandbox = scriptSandbox
 		if err := ex.Check(); err != nil {
+			// A sandbox that cannot start an enabled interpreter is refused here rather
+			// than left to surface one failed job at a time. ADR-0303 makes strict a
+			// fail-closed contract, and a profile under which a language can never run
+			// is that contract broken, not a host that happens to lack a runtime.
+			if errors.Is(err, script.ErrSandboxInterpreter) {
+				return fmt.Errorf("%w; run it under a kernel and runtime the profile can start, "+
+					"turn the language off with --%s=false, or select --script-sandbox=off", err, lang.Name)
+			}
 			logging.Warn(logging.ScriptWorkerMissing,
 				"script worker enabled but its interpreter was not found on PATH; its script tasks "+
 					"will park until it is installed",
@@ -1120,6 +1128,12 @@ func runWorker(args []string) error {
 	}
 	if slices.Contains(kinds, "script") {
 		if err := script.CheckSandbox(scriptSandbox); err != nil {
+			return err
+		}
+		// An external worker gets the same fail-closed startup the server has: the
+		// languages it will serve are proved to start under the profile now, not
+		// discovered to be unrunnable by the first job that leases.
+		if err := script.CheckSandboxLanguages(scriptSandbox, splitList(*scriptLanguages)); err != nil {
 			return err
 		}
 	}

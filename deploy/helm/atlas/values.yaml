@@ -177,6 +177,8 @@ atlas:
     # -- OS sandbox profile (--script-sandbox). "off" preserves the file and
     # network access of existing processes. "strict" requires Linux Landlock
     # ABI 3+, gives every run private scratch, and denies all socket creation.
+    # "strict" also proves each enabled interpreter starts inside the profile at
+    # boot, so a pod fails to start rather than failing every script job.
     sandbox: "off"
 
   # -- Grace period for in-flight requests on shutdown (--shutdown-timeout).

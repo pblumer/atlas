@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "PowerShell works in the strict script sandbox",
+        "de": "PowerShell funktioniert in der strikten Skript-Sandbox"
+      },
+      "summary": {
+        "en": "The strict profile denied PowerShell the process and account files its runtime reads before starting, so every PowerShell script task failed while Python and JavaScript worked. It now allows exactly those, and only this process's own entry. Starting with --script-sandbox=strict also launches each enabled interpreter once to prove it runs, so a broken profile is refused at startup instead of one failed job at a time.",
+        "de": "Das strikte Profil verwehrte PowerShell die Prozess- und Kontodateien, die seine Laufzeit vor dem Start liest; deshalb scheiterte jede PowerShell-Skriptaufgabe, während Python und JavaScript liefen. Genau diese sind nun erlaubt, und nur der eigene Prozesseintrag. Beim Start mit --script-sandbox=strict wird zudem jeder aktivierte Interpreter einmal ausgeführt: Ein nicht lauffähiges Profil wird beim Start abgewiesen statt Auftrag für Auftrag."
+      },
+      "link": {
+        "label": "ADR",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
+      },
+      "tags": [
+        "Security",
+        "Scripts"
+      ]
+    },
+    {
       "id": "the-starmap-opens-using-the-whole-window-whatever-the-size-o",
       "version": "Unreleased",
       "date": null,
@@ -360,49 +382,6 @@
           "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
           "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
           "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas now tells you when a state nothing ever reaches",
-        "de": "Atlas sagt jetzt, wenn ein Zustand nie erreicht wird"
-      },
-      "summary": {
-        "en": "If a class says an order can be cancelled and no process in the application ever cancels one, you now hear about it — at deploy and in the Modeler's Problems panel. Either a process is missing or the model is describing a plan rather than what is built, and both are worth knowing. It is a note, never a refusal, and it stays quiet about a class no process handles yet: drawing a lifecycle before the process that writes it is the normal way round.",
-        "de": "Wenn eine Klasse sagt, eine Bestellung könne storniert werden, aber kein Prozess der Anwendung storniert je eine, erfahren Sie das jetzt — beim Deploy und in der Problemliste des Modelers. Entweder fehlt ein Prozess, oder das Modell beschreibt einen Plan statt des Gebauten; beides ist wissenswert. Es ist ein Hinweis, nie eine Ablehnung, und über eine Klasse, die noch kein Prozess anfasst, schweigt es: einen Lebenszyklus vor dem Prozess zu zeichnen, der ihn schreibt, ist die normale Reihenfolge."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, pick your information model, and give a business object a lifecycle with more states than your processes currently write.",
-          "Open a process of the same application in the Modeler.",
-          "The Problems panel names the class and every state nothing reaches, in one line.",
-          "Add the data association that writes that state — or a process that does — and the line goes away."
-        ],
-        "de": [
-          "Unter Daten das Informationsmodell öffnen und einem Geschäftsobjekt einen Lebenszyklus mit mehr Zuständen geben, als die Prozesse derzeit schreiben.",
-          "Einen Prozess derselben Anwendung im Modeler öffnen.",
-          "Die Problemliste nennt die Klasse und jeden nie erreichten Zustand in einer Zeile.",
-          "Die Datenzuweisung ergänzen, die diesen Zustand schreibt — oder den fehlenden Prozess —, und die Zeile verschwindet."
         ]
       },
       "try": {

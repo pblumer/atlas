@@ -1,0 +1,15 @@
+{
+  "title": {
+    "en": "PowerShell works in the strict script sandbox",
+    "de": "PowerShell funktioniert in der strikten Skript-Sandbox"
+  },
+  "summary": {
+    "en": "The strict profile denied PowerShell the process and account files its runtime reads before starting, so every PowerShell script task failed while Python and JavaScript worked. It now allows exactly those, and only this process's own entry. Starting with --script-sandbox=strict also launches each enabled interpreter once to prove it runs, so a broken profile is refused at startup instead of one failed job at a time.",
+    "de": "Das strikte Profil verwehrte PowerShell die Prozess- und Kontodateien, die seine Laufzeit vor dem Start liest; deshalb scheiterte jede PowerShell-Skriptaufgabe, während Python und JavaScript liefen. Genau diese sind nun erlaubt, und nur der eigene Prozesseintrag. Beim Start mit --script-sandbox=strict wird zudem jeder aktivierte Interpreter einmal ausgeführt: Ein nicht lauffähiges Profil wird beim Start abgewiesen statt Auftrag für Auftrag."
+  },
+  "tags": ["Security", "Scripts"],
+  "link": {
+    "label": "ADR",
+    "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
+  }
+}

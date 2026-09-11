@@ -470,3 +470,25 @@ func environmentMap(env []string) map[string]string {
 	}
 	return out
 }
+
+// Startup refuses a profile that cannot run a language it was told to serve, and
+// refuses nothing else. A host that simply lacks an interpreter still boots and
+// parks that language's jobs, exactly as it did before there was a sandbox.
+func TestCheckSandboxLanguagesOnlyRefusesASandboxTheInterpreterCannotStart(t *testing.T) {
+	if err := CheckSandboxLanguages(SandboxOff, nil); err != nil {
+		t.Errorf("off refused startup: %v", err)
+	}
+	if err := CheckSandboxLanguages("", []string{"python"}); err != nil {
+		t.Errorf("empty mode refused startup: %v", err)
+	}
+	err := CheckSandboxLanguages(SandboxStrict, []string{"powershell", "klingon"})
+	if err == nil || !strings.Contains(err.Error(), "klingon") {
+		t.Errorf("error = %v, want the unknown language named", err)
+	}
+	// Whatever this host has installed, neither a missing interpreter nor a kernel
+	// that cannot enforce Landlock is this check's business — both are reported
+	// elsewhere, and only ErrSandboxInterpreter stops a start.
+	if err := CheckSandboxLanguages(SandboxStrict, []string{"python"}); err != nil {
+		t.Errorf("strict refused startup for a reason that is not the interpreter: %v", err)
+	}
+}

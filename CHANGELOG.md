@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
+  enabled interpreter refuses to boot.** The strict allowlist admitted the installed
+  runtimes, the loader and trust files, and a private scratch directory — everything
+  Python and JavaScript need to start. The .NET runtime behind `pwsh` needs more: it
+  sizes its heap from `/proc`, reads `/proc/mounts`, and resolves its user through
+  `/etc/passwd`. None of those were allowed, so CoreCLR refused to start with
+  `E_OUTOFMEMORY` and every PowerShell script task failed. The other two languages
+  worked throughout, which is the asymmetry that let this land unnoticed.
+
+  The allowlist now carries this process's own `/proc` entry, `/proc/meminfo`,
+  `/proc/mounts` and `/etc/passwd`. Its own entry and no other: a rule on `/proc` as a
+  whole would hand model-authored code every same-uid process's environment, which is
+  where the engine's token and its vault key are, and that is the opposite of what the
+  profile exists for.
+
+  Startup no longer takes the profile on trust either. It proved the Landlock ABI and
+  stopped there, so a language the sandbox could not run looked healthy until the first
+  job failed one at a time. Selecting `strict` now starts each enabled interpreter once,
+  inside the real policy, on an empty program. One that cannot start is a startup error
+  naming the language and the three ways out; one that is simply not installed stays the
+  warning it has always been, because that is a host that was never going to run it.
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md),
+  [issue #892](https://github.com/pblumer/atlas/issues/892))
+
 - **The Starmap opens using the whole window, whatever the size of the estate.** A
   landscape of a handful of nodes was drawn as a handful of small circles adrift in an
   empty canvas, and a single unattached process could sit out at the far edge holding

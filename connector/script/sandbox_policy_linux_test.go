@@ -3,8 +3,10 @@
 package script
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -343,4 +345,153 @@ func evaluateSandboxFilter(t *testing.T, filter []unix.SockFilter, arch, syscall
 	}
 	t.Fatal("filter terminated without an action")
 	return 0
+}
+
+// The strict allowlist has to carry the process metadata a language runtime reads
+// before it will run anything at all. The .NET runtime behind pwsh sizes its heap
+// from /proc and resolves its user from /etc/passwd; without them CoreCLR refuses
+// to start with E_OUTOFMEMORY, so PowerShell was unusable under strict while
+// Python and JavaScript were fine.
+func TestStrictSandboxAllowsTheProcessMetadataAnInterpreterReads(t *testing.T) {
+	system := newRecordingSandboxSystem()
+	if err := runSandboxWith(system, "/tmp/atlas-script-one", []string{"/usr/bin/python3"}, nil); err != nil {
+		t.Fatalf("runSandboxWith: %v", err)
+	}
+	own := system.allowed["/proc/self"]
+	if own&unix.LANDLOCK_ACCESS_FS_READ_FILE == 0 || own&unix.LANDLOCK_ACCESS_FS_READ_DIR == 0 {
+		t.Errorf("/proc/self access = %#x, want file and directory read", own)
+	}
+	if own&(unix.LANDLOCK_ACCESS_FS_WRITE_FILE|unix.LANDLOCK_ACCESS_FS_EXECUTE) != 0 {
+		t.Errorf("/proc/self access = %#x, want neither write nor execute", own)
+	}
+	for _, path := range []string{"/proc/meminfo", "/proc/mounts", "/etc/passwd"} {
+		if got := system.allowed[path]; got&unix.LANDLOCK_ACCESS_FS_READ_FILE == 0 || got&unix.LANDLOCK_ACCESS_FS_READ_DIR != 0 {
+			t.Errorf("%s access = %#x, want file read without directory read", path, got)
+		}
+	}
+	// Only this process's own entry. /proc as a whole would hand a script every other
+	// same-uid process's environ, which is where the engine's ATLAS_TOKEN and
+	// ATLAS_VAULT_KEY live.
+	for _, path := range []string{"/proc", "/etc"} {
+		if _, ok := system.allowed[path]; ok {
+			t.Errorf("%s is allowed as a whole", path)
+		}
+	}
+}
+
+// An installed interpreter the sandbox cannot start is a different failure from a
+// missing one. A missing interpreter parks that language's jobs and is a warning;
+// a strict profile that the interpreter cannot start under is the operator's
+// explicit choice being broken, so the call site has to be able to tell them apart
+// rather than logging both as "not installed".
+func TestStrictSandboxCheckSeparatesARefusingInterpreterFromAMissingOne(t *testing.T) {
+	probe := func(t *testing.T, run func() ([]byte, error)) error {
+		t.Helper()
+		e := New(Python)
+		e.Bin = "/bin/true" // resolves inside the runtime allowlist on every Linux host
+		e.Sandbox = SandboxStrict
+		e.run = func(context.Context, string, []string, []string) ([]byte, error) { return run() }
+		return e.probeSandbox()
+	}
+	if _, err := resolveExistingPath("/bin/true"); err != nil {
+		t.Skipf("no /bin/true to stand in for an interpreter: %v", err)
+	}
+
+	err := probe(t, func() ([]byte, error) {
+		return nil, errors.New("exit status 255: Failed to create CoreCLR, HRESULT: 0x8007000E")
+	})
+	if err == nil {
+		t.Fatal("an interpreter that refuses to start was accepted")
+	}
+	if !errors.Is(err, ErrSandboxInterpreter) {
+		t.Errorf("error %v does not identify itself as a sandbox/interpreter mismatch", err)
+	}
+	if !strings.Contains(err.Error(), "python") || !strings.Contains(err.Error(), "CoreCLR") {
+		t.Errorf("error %q names neither the language nor the interpreter's own diagnosis", err)
+	}
+
+	if err := probe(t, func() ([]byte, error) { return nil, nil }); err != nil {
+		t.Errorf("an interpreter that starts was rejected: %v", err)
+	}
+}
+
+// The probe is only ever run for the profile that asks for it: off must keep the
+// historical startup, which never launched an interpreter to find out.
+func TestSandboxOffProbesNothing(t *testing.T) {
+	launched := false
+	e := New(Python)
+	e.Bin = "/bin/true"
+	e.run = func(context.Context, string, []string, []string) ([]byte, error) {
+		launched = true
+		return nil, nil
+	}
+	if err := e.Check(); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if launched {
+		t.Error("off launched the interpreter at startup")
+	}
+}
+
+// The regression this whole change exists for: every interpreter installed on this
+// host must actually start inside the strict policy and run its own bootstrap, not
+// merely resolve on PATH. PowerShell did neither while Python and JavaScript did
+// both, so the test is written across all three rather than against the one that
+// broke.
+//
+// The launcher is entered in a helper process rather than through CmdExec.Check,
+// because under `go test` os.Executable() is the test binary, which owns no
+// script-sandbox subcommand. Everything below it — policy, interpreter, bootstrap —
+// is the production path.
+func TestStrictSandboxStartsEveryInstalledInterpreter(t *testing.T) {
+	if err := sandboxSupport(); err != nil {
+		t.Skipf("kernel cannot enforce the strict sandbox: %v", err)
+	}
+	for _, lang := range Langs {
+		t.Run(lang.Name, func(t *testing.T) {
+			path, err := exec.LookPath(lang.Bin)
+			if err != nil {
+				t.Skipf("%s is not installed", lang.Bin)
+			}
+			if path, err = filepath.Abs(path); err != nil {
+				t.Fatal(err)
+			}
+			if !interpreterInSandboxRuntime(path) {
+				t.Skipf("%s is installed outside the sandbox runtime, at %s", lang.Bin, path)
+			}
+			scratch, err := os.MkdirTemp("", "atlas-sandbox-start-")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.RemoveAll(scratch) })
+
+			cmd := exec.Command(os.Args[0], "-test.run=^TestStrictSandboxStartHelper$")
+			cmd.Env = append(os.Environ(),
+				"ATLAS_SANDBOX_START_HELPER=1",
+				"ATLAS_SANDBOX_SCRATCH="+scratch,
+				"ATLAS_SANDBOX_INTERPRETER="+path,
+				"ATLAS_SANDBOX_LANGUAGE="+lang.Name,
+			)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("%s did not start inside the strict sandbox: %v\n%s", lang.Bin, err, out)
+			}
+		})
+	}
+}
+
+func TestStrictSandboxStartHelper(t *testing.T) {
+	if os.Getenv("ATLAS_SANDBOX_START_HELPER") != "1" {
+		return
+	}
+	lang, ok := LangByName(os.Getenv("ATLAS_SANDBOX_LANGUAGE"))
+	if !ok {
+		t.Fatalf("unknown language %q", os.Getenv("ATLAS_SANDBOX_LANGUAGE"))
+	}
+	scratch := os.Getenv("ATLAS_SANDBOX_SCRATCH")
+	interpreter := os.Getenv("ATLAS_SANDBOX_INTERPRETER")
+	argv := append([]string{interpreter}, lang.Args(lang.Wrap)...)
+	env := privateScratchEnvironment(interpreterEnvironment("{}", ""), scratch)
+	if err := runSandbox(scratch, argv, env); err != nil {
+		t.Fatal(err)
+	}
 }
