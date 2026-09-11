@@ -138,17 +138,13 @@ model knows an id. `TestEverySystemProcessCallsARouteThatExists` now walks every
 call in every system process against the route table, which is what should have caught
 both.
 
-The third is **not fixed and blocks the three shipped approval models.** They address
-their task with `assignee="=approvalRef"`, and Atlas does not evaluate an expression in
-an assignment definition: `engine/behavior.go` interns the model's string verbatim, so
-the task is assigned to the literal `=approvalRef` and no person holds it. The same gap
-stops `genehmigung-rolle` naming a group and `genehmigung-vorgesetzter` using the
-manager it read from the directory. Closing it is a compiler and engine change — compile
-the attribute as an expression when it begins with `=`, evaluate it at activation and
-freeze the result into the job-created event, as the due date already is — and it is a
-decision of its own rather than a detail of this page. Until it is made, an installation
-reaches this page by binding a product to its own approval model with a static
-assignment, which is the path the tests take.
+The third was an engine gap rather than a wiring mistake, and it is fixed in
+[ADR-draft-user-task-assignment-expressions](draft-user-task-assignment-expressions.md):
+the three shipped models address their task with `assignee="=approvalRef"`, and Atlas
+interned the model's string verbatim, so the task was assigned to the literal
+`=approvalRef` and no person held it. A user task's assignment is now evaluated at
+activation and frozen into the job, so all three reach their approver — a test starts
+each of the two that can be started without a directory and checks who holds the task.
 
 ## Links
 
@@ -157,3 +153,4 @@ assignment, which is the path the tests take.
 - decides the orders of [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
 - keeps [ADR-0113](0113-org-wide-ui-theme.md) untouched — the Console stays the operator's
 - uses [ADR-0042](0042-user-task-assignment-and-claim.md) — who holds a task
+- needs [ADR-draft-user-task-assignment-expressions](draft-user-task-assignment-expressions.md) — without it no shipped approval reaches an approver

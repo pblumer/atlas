@@ -4221,10 +4221,16 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 				// What the task is actually asking the person to do, if the modeler
 				// wrote it down (ADR-0025).
 				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
-				// The assignee is the job's runtime value (claim/unclaim rewrite it,
-				// ADR-0042); candidate groups stay the compile-time attribute.
+				// Both halves of the assignment are the job's runtime values: the
+				// assignee because claim and unclaim rewrite it (ADR-0042), the
+				// candidate groups because a model may name them with an expression
+				// and what it evaluated to belongs to this instance
+				// (ADR-draft-user-task-assignment-expressions). The model's own value
+				// is the fallback for a job written before the job carried them.
 				tr.Assignee = jv.Assignee
-				tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				if tr.CandidateGroups = jv.CandidateGroups; tr.CandidateGroups == "" {
+					tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				}
 				tr.FormID = cp.Intern(detail.FormId)
 				tr.Priority = detail.Priority
 				// The due date is frozen on the job as an absolute instant

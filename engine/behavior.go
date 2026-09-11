@@ -1147,6 +1147,13 @@ func resumeParkedElement(c *ProcessingContext, elKey uint64, reason model.Incide
 	}
 	node := cp.Node(ei.ElementId)
 	switch node.Type {
+	case compiler.TypeUserTask:
+		// A user task whose assignment expression could not be resolved parked
+		// without a job. Re-running the activation re-evaluates it against the
+		// variables as they are now, which is the whole of the retry: it either
+		// addresses somebody and creates the job, or parks again on a fresh
+		// incident. It never creates a job addressed to nobody.
+		c.p.behavior(ei.BpmnElementType).OnActivated(c, elKey, ei)
 	case compiler.TypeExclusiveGateway, compiler.TypeInclusiveGateway:
 		// A gateway that could not route parked holding its token
 		// (ADR-0273). Resolving re-runs the decision from
@@ -3728,6 +3735,23 @@ func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 	if detail.DueDateNanos != 0 {
 		deadline = c.Now() + detail.DueDateNanos
 	}
+	// Who the task is for. A model may name the person and the group outright or
+	// write a FEEL expression for either; the expression is evaluated here, at
+	// command processing, and frozen into the job-created event below — exactly
+	// like the due date above, and for the same reason: replay must reproduce the
+	// assignment rather than re-evaluate it against variables that have moved on
+	// (I4/I6).
+	assignee, err := resolveAssignment(c, cp, key, detail.Assignee, detail.AssigneeExpr)
+	if err != nil {
+		raiseAssignmentIncident(c, key, ei, "assignee", err)
+		return
+	}
+	groups, err := resolveAssignment(c, cp, key, detail.CandidateGroups, detail.CandidateGroupsExpr)
+	if err != nil {
+		raiseAssignmentIncident(c, key, ei, "candidateGroups", err)
+		return
+	}
+
 	jobKey := c.NewKey()
 	c.AppendJobEvent(jobKey, model.IntentJobCreated, model.JobValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -3737,9 +3761,57 @@ func (userTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.
 		Deadline:           deadline,
 		// Seed the runtime assignee with the model's default; claim/unclaim
 		// rewrites it through the job lifecycle (ADR-0042).
-		Assignee: cp.Intern(detail.Assignee),
+		Assignee:        assignee,
+		CandidateGroups: groups,
 	})
 	c.NotifyJobAvailable(detail.JobType)
+}
+
+// resolveAssignment reads one half of a user task's assignment: the interned
+// literal when the model wrote a name, or the value of the expression it wrote
+// instead. An absent assignment is the empty string and not an error — most tasks
+// name nobody.
+//
+// A non-string result is refused rather than coerced. "Who is this for" has one
+// correct shape, and a number or a context stringified into an assignee is a task
+// addressed to somebody who does not exist — silently, and to the one gate that
+// decides who may act on it. A FEEL *list* of candidate groups is likewise refused
+// for now: the engine stores them as one comma-separated string, and a model that
+// wants two writes ="a,b".
+func resolveAssignment(c *ProcessingContext, cp *compiler.CompiledProcess, scope uint64, literal int32, e *expr.Compiled) (string, error) {
+	if e == nil {
+		return cp.Intern(literal), nil
+	}
+	v, err := e.Eval(bindInputsChain(c, e.Inputs(), scope))
+	if err != nil {
+		return "", err
+	}
+	kind, _, text := expr.Classify(v)
+	if kind != expr.KindString {
+		return "", errors.New("evaluated to something that is not a name")
+	}
+	if strings.TrimSpace(text) == "" {
+		// An empty result is the dangerous case, not a harmless one: a task nobody
+		// was addressed to is open work, so an approval whose approver could not be
+		// resolved would become everybody's. It parks instead.
+		return "", errors.New("evaluated to nothing, which would leave the task addressed to nobody")
+	}
+	return text, nil
+}
+
+// raiseAssignmentIncident parks a user task whose assignment could not be
+// resolved (ADR-draft-user-task-assignment-expressions), with no job created: the
+// element stays Activated and visible, an operator fixes the data, and resolving
+// the incident re-runs the activation against the corrected variables. The job-less
+// incident is the same shape a failed timer schedule raises (ADR-0064).
+func raiseAssignmentIncident(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue, what string, err error) {
+	c.AppendIncidentEvent(model.IntentIncidentCreated, model.IncidentValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ElementInstanceKey: key,
+		ElementId:          ei.ElementId,
+		RaisedAt:           c.Now(),
+		Message:            "user task " + what + ": " + err.Error(),
+	})
 }
 
 func (userTaskBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {

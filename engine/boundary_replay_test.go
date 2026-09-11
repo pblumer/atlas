@@ -23,7 +23,7 @@ func TestInterruptingBoundaryRecordsHostTerminated(t *testing.T) {
 	const deadline = int64(45 * 60 * 1_000_000_000) // PT45M, as in the reported model
 	b := compiler.NewBuilder(900, "quittieren", 1)
 	start := b.AddStartEvent()
-	host := b.AddUserTask("Quittieren", "", "", "", 0, 0, 3)
+	host := b.AddUserTask("Quittieren", compiler.Assignment{Literal: ""}, compiler.Assignment{Literal: ""}, "", 0, 0, 3)
 	boundary := b.AddBoundaryTimerEvent(host, true, deadline)
 	join := b.AddExclusiveGateway()
 	end := b.AddEndEvent()

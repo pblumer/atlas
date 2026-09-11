@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/pblumer/atlas/api"
 )
 
 // ownApprovalBPMN is an installation's own approval model, which is what a
@@ -329,4 +331,87 @@ func aCatalogueWithAnOrder(t *testing.T, ts *httptest.Server, admin *http.Client
 	}
 
 	return cat.ID, ord.ID
+}
+
+// TestTheShippedApprovalModelReachesItsApprover.
+//
+// The three approval processes Atlas ships address their task with an expression
+// — `=approvalRef` for the two that name a person, the group the product named for
+// the third. Until the engine evaluated those, every one of them assigned the
+// literal string and no person held the task, which made every approval in the
+// portal unreachable.
+//
+// This starts the shipped model the way the fulfilment orchestrator starts it and
+// asks the one question that was wrong: who holds the task.
+func TestTheShippedApprovalModelReachesItsApprover(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses())
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	alice := twoUsers(t, ts, admin, "alice")[0]
+
+	start := `{"processId":"atlas-genehmigung-fix","variables":{
+		"orderId":"ord_x","itemId":"vpn","approvalRef":"alice",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start the shipped approval: %d (%s)", code, b)
+	}
+
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d (%s)", code, body)
+	}
+	var tasks []struct {
+		Key       uint64 `json:"key"`
+		ProcessID string `json:"processId"`
+		Assignee  string `json:"assignee"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %d, want 1 (%s)", len(tasks), body)
+	}
+	if tasks[0].Assignee != "alice" {
+		t.Fatalf("the shipped approval is assigned to %q, want alice", tasks[0].Assignee)
+	}
+
+	// And the person it names can actually act on it, which is the other half: an
+	// assignee nobody matches is a task nobody can decide.
+	if code, b := cReq(t, alice, ts, "POST",
+		fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key),
+		`{"variables":{"genehmigt":false,"begruendung":"nein"}}`); code != http.StatusOK {
+		t.Fatalf("the named approver was refused their own task: %d (%s)", code, b)
+	}
+}
+
+// TestTheShippedGroupApprovalNamesTheGroupTheProductChose: the same for the
+// variant that routes to whoever holds a group, where the expression is on
+// candidateGroups rather than on the assignee.
+func TestTheShippedGroupApprovalNamesTheGroupTheProductChose(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses())
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	start := `{"processId":"atlas-genehmigung-rolle","variables":{
+		"orderId":"ord_x","itemId":"vpn","approvalRef":"einkauf",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d (%s)", code, body)
+	}
+	var tasks []struct {
+		CandidateGroups string `json:"candidateGroups"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 || tasks[0].CandidateGroups != "einkauf" {
+		t.Fatalf("candidate groups = %v, want einkauf (%s)", tasks, body)
+	}
 }
