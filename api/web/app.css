@@ -4296,6 +4296,14 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    edges, the halo and the severity ring already follow: positions and radii are the
    picture and scale with it, a stroke is a channel and holds its weight. */
 .mesh-body { vector-effect: non-scaling-stroke; }
+/* Interior line work on a shape whose silhouette does not carry the whole drawing —
+   the two edges that make ArchiMate's Node read as a box rather than as a notched
+   rectangle. Thinner than the outline and not selectable: it is detail, and a fold
+   that answered to the severity and hover rules would be an outline. */
+.mesh-body-detail {
+  vector-effect: non-scaling-stroke; pointer-events: none;
+  stroke: var(--mesh-ink); stroke-width: 1.2; opacity: 0.75;
+}
 .mesh-relating .mesh-related .mesh-halo {
   stroke-width: 2.5; opacity: 0.7; transition: opacity 90ms linear;
 }

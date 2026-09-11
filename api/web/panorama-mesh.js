@@ -152,6 +152,10 @@ export function shapeVertices(shape, r) {
     // half-diagonal is r, which is what keeps it inside the reserved circle.
     case "square": return at(4, -Math.PI / 4);
     default: {
+      // ArchiMate's own outlines, at the same rule as everything else: the furthest
+      // corner sits *on* the reserved circle and none is outside it.
+      const icon = ARCHIMATE_ICONS[shape];
+      if (icon) return iconPoints(icon.points, r);
       // The wide rectangles the notation projections draw in (see NOTATION_SHAPES). Same
       // rule as every other shape: the corners sit *on* the reserved circle, so the
       // separation guarantee transfers unchanged and a projection cannot make two
@@ -168,15 +172,77 @@ export function shapeVertices(shape, r) {
 // RECTS are the shapes drawn as rectangles rather than as polygons: aspect is width
 // over height, round is the corner radius as a fraction of the short side.
 //
-// ArchiMate's own convention is the reason there are two of them — a structure
-// element is a rectangle and a behaviour element is a rounded one — and C4 draws
-// everything as a rounded box and tells its types apart by the annotation under the
-// name rather than by silhouette.
+// C4 draws everything as the same box and tells its types apart by the annotation
+// under the name rather than by silhouette, so it needs two of them and no more.
+// `am-service` is here rather than among the polygons because a stadium is a
+// rectangle whose corners are its own half-height, which is what `round: 0.5` says.
 const RECTS = {
   square: { aspect: 1, round: 0.26 },
   box: { aspect: 1.9, round: 0.08 },
   rounded: { aspect: 1.9, round: 0.42 },
+  "am-service": { aspect: 16 / 9, round: 0.5 },
 };
+
+// ARCHIMATE_ICONS is ArchiMate's own notation, as geometry.
+//
+// The standard defines two ways to draw an element: a rectangle carrying the name
+// with a small type icon in its corner, or the icon itself at full size with the name
+// beneath it. Both are the notation; the choice is about the space there is. This
+// canvas takes the second, and the reason is arithmetic rather than taste — a process
+// is drawn at a radius of 17 and a corner icon is about a tenth of the element it
+// sits in, which is one or two pixels here. An icon nobody can resolve is a rectangle
+// with a smudge in the corner, and every node on the picture would be that same
+// rectangle. Drawn as the icon, the silhouette carries the type at a glance, which is
+// what this view is read at.
+//
+// The coordinates are ArchiMate's proportions taken from Archi's own drawing routines
+// (ApplicationComponentFigure, ProcessFigure, FunctionFigure, ServiceFigure,
+// NodeFigure), centred on the origin and left at their natural scale: `iconPoints`
+// normalises them so the furthest corner lands exactly on the reserved circle. So the
+// table reads as the shape, and the one number that matters — that nothing leaves the
+// circle the layout reserved — is computed rather than hand-fitted.
+//
+// `detail` is interior line work that is part of the drawing but not of the
+// silhouette: the two edges that make a Node's box read as three-dimensional. It is
+// drawn from the same coordinates, so it cannot drift away from the outline.
+const ARCHIMATE_ICONS = {
+  // Application Component: a rectangle with two lugs on its left edge. The lugs sit
+  // at a quarter and three quarters of the height, which is where a reader of UML
+  // has been looking for them since before ArchiMate existed.
+  "am-component": {
+    points: [[-3.5, -6.5], [6.5, -6.5], [6.5, 6.5], [-3.5, 6.5], [-3.5, 4.5], [-6.5, 4.5],
+      [-6.5, 2], [-3.5, 2], [-3.5, -2], [-6.5, -2], [-6.5, -4.5], [-3.5, -4.5]],
+  },
+  // Application Process: an arrow. Behaviour with a direction — something is being
+  // carried from one end to the other.
+  "am-process": {
+    points: [[-7, -2], [1, -2], [1, -5], [7, 0], [1, 5], [1, 2], [-7, 2]],
+  },
+  // Application Function: a chevron. Behaviour gathered by what it can do rather than
+  // by the order it happens in, so it points up instead of along.
+  "am-function": {
+    points: [[-6, 7], [-6, -2], [0, -7], [6, -2], [6, 7], [0, 1]],
+  },
+  // Node: a box in perspective. The silhouette is the six-sided outline; the two
+  // interior edges are what make it a cuboid rather than an arrow-notched rectangle.
+  "am-node": {
+    points: [[-7, -4], [-4, -7], [7, -7], [7, 4], [4, 7], [-7, 7]],
+    detail: [[[-7, -4], [4, -4], [4, 7]], [[4, -4], [7, -7]]],
+  },
+};
+
+// iconPoints scales one of those outlines to the radius the layout reserved.
+//
+// Normalised on the furthest corner, so the shape is inscribed in the reserved circle
+// exactly as every other shape here is: the separation guarantee is about that circle,
+// and a notation that drew outside it could make two nodes overlap that the layout had
+// kept apart.
+function iconPoints(points, r) {
+  let furthest = 0;
+  for (const [x, y] of points) furthest = Math.max(furthest, Math.hypot(x, y));
+  const k = furthest > 0 ? r / furthest : 0;
+  return points.map(([x, y]) => [x * k, y * k]);
+}
 
 // bodyElement is the node's own outline, as SVG. Everything downstream keys off the
 // mesh-body class rather than off the element name, so severity, hover and impact
@@ -187,6 +253,19 @@ const RECTS = {
 // circle — not the polygon — that the separation guarantee is about.
 function bodyElement(shape, r, attrs) {
   const common = `class="mesh-body" data-r="${r.toFixed(1)}" ${attrs}`;
+  // Interior line work is drawn *beside* the outline rather than as part of it, and
+  // under its own class: the severity and hover rules select .mesh-body and would put
+  // a three-pixel red stroke on the fold of a box if it were one element. It is also
+  // the reason there is never more than one .mesh-body in a node — everything that
+  // reads the picture back, the tests included, asks for the outline by that name.
+  const icon = ARCHIMATE_ICONS[shape];
+  if (icon) {
+    const path = (list) => iconPoints(list, r)
+      .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const detail = (icon.detail || []).map((line) =>
+      `<polyline class="mesh-body-detail" fill="none" points="${path(line)}"/>`).join("");
+    return `<polygon ${common} points="${path(icon.points)}"/>${detail}`;
+  }
   const rect = RECTS[shape];
   if (rect) {
     const half = r / Math.hypot(rect.aspect, 1);
@@ -217,14 +296,70 @@ function bodyElement(shape, r, attrs) {
 // types apart by the annotation under the name. Both are rendering.
 const NOTATION_SHAPES = {
   "archimate-3.2": {
-    application: "box", process: "rounded", worker: "rounded",
-    decision: "rounded", target: "box",
+    application: "am-component", process: "am-process", worker: "am-service",
+    decision: "am-function", target: "am-node",
   },
   "c4-projection": {
     application: "rounded", process: "rounded", worker: "rounded",
     decision: "rounded", target: "box",
   },
 };
+
+// NOTATION_PAINT is what a projection fills its elements with.
+//
+// Here for the same reason NOTATION_SHAPES is: the server owns the vocabulary — what
+// a node is *called* in a notation — and the browser owns how it is drawn. A colour
+// is drawing.
+//
+// **These are not standard colours, and saying so matters.** ArchiMate 3.2 defines
+// none: the specification states that colour carries no formal semantics, and a model
+// is free to use any. What everybody recognises as the ArchiMate palette is two
+// things at once — the convention the specification's own figures are drawn in, and
+// the default fills of Archi, the tool most of these models are made in. The values
+// below are Archi's, read off its source rather than sampled from a picture
+// (AbstractArchimateElementUIProvider: defaultApplicationColor is rgb(181,255,255),
+// defaultTechnologyColor rgb(201,231,183)). They are a de-facto standard, and a
+// reader who works in ArchiMate recognises a landscape drawn in them at a glance,
+// which is the whole of what this projection is for.
+//
+// They are also *pale on purpose*, which is what makes them safe here. A layer fill
+// is a ground for black text, not a signal; the amber and red a finding is marked
+// with have to stay the loudest thing on the canvas (ADR-0211 §4), and these sit far
+// below them. The outline is the canvas's own ink rather than a literal, so a node
+// keeps the same line weight and the same colour as every edge and every other
+// outline on the picture.
+//
+// Only the kinds the notation has a word for are painted. A draft, a restricted
+// placeholder and an unresolved dependency keep Atlas's own colours, for the same
+// reason they keep Atlas's own shapes: ArchiMate has no element for them, and
+// dressing them as one would be a claim the notation does not make.
+const ARCHIMATE_APPLICATION = "#B5FFFF";
+const ARCHIMATE_TECHNOLOGY = "#C9E7B7";
+const NOTATION_PAINT = {
+  "archimate-3.2": {
+    application: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    process: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    worker: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    decision: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    // A Node is Technology, and the layer is the thing its colour says. Drawing a
+    // deployment target in the application blue would put it on the wrong floor of
+    // the only diagram whose readers count the floors.
+    target: { fill: ARCHIMATE_TECHNOLOGY, stroke: "var(--mesh-ink)" },
+  },
+};
+
+// paintFor is the fill and outline one node is drawn with: the notation's, where it
+// has one for that kind, and Atlas's own otherwise.
+//
+// One function, because two of them would eventually disagree — the key beside the
+// picture draws its swatches through this as well, and a key that painted its
+// swatches from its own copy would be a legend for a different picture.
+export function paintFor(node, notation) {
+  const style = KIND[node?.kind] || KIND.process;
+  const spoken = notationOf(notation?.id ?? notation);
+  const paint = NOTATION_PAINT[spoken.id]?.[node?.kind];
+  return paint ? { ...style, ...paint } : style;
+}
 
 // The landscape drawn as itself: Atlas's own kinds, no projection, nothing to
 // declare. It is here rather than fetched because it is what the view falls back to
@@ -2307,6 +2442,7 @@ function legendEntries(graph, notation) {
     .filter(([kind]) => present.has(kind))
     .map(([kind, style]) => {
       const typed = typeIn(kind, spoken);
+      const paint = paintFor({ kind }, spoken);
       return {
         group: "kind",
         tone: "",
@@ -2316,8 +2452,8 @@ function legendEntries(graph, notation) {
         // reason they opened the landscape.
         label: typed ? `${typed.name} — ${style.label.split(" — ")[0]}` : style.label,
         mark: `<g transform="translate(8,8)">${bodyElement(typed?.shape || style.shape, 6,
-          `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
-          (style.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
+          `fill="${paint.fill}" stroke="${paint.stroke}" stroke-width="2" ` +
+          (paint.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
       };
     });
 
@@ -2702,7 +2838,11 @@ function renderGraph(graph, layoutMs, frame,
   }).join("");
 
   const circles = nodes.map((n) => {
-    const style = KIND[n.kind] || KIND.process;
+    // The notation's fill and outline where it has one for this kind, Atlas's own
+    // otherwise. Everything else on the node — the radius, the badge, the provenance
+    // ring — is about the resource rather than about the vocabulary, and is unchanged
+    // by which notation is being spoken.
+    const style = paintFor(n, spoken);
     const r = radiusOf(n);
     const label = n.kind === "restricted" ? "" : esc(n.name || "");
     const prov = PROVENANCE[n.provenance] || PROVENANCE.derived;
