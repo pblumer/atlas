@@ -1,0 +1,144 @@
+name: Build DMN vendor
+
+on:
+  push:
+    branches:
+      - feature/dmn-1.5-decision-service-roundtrip
+    paths:
+      - .github/workflows/build-dmn-vendor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build pinned dmn-js vendor
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Atlas branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/dmn-1.5-decision-service-roundtrip
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Build pinned dmn-js bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DMN_JS_SHA=214b15b86e213b8ea49640aa6c6b82f8c5e28ad2
+          DMN_MODDLE_SHA=23697fac646aaa0bc09d9ce3ae90c96769397bc6
+          VENDOR_DIR="$GITHUB_WORKSPACE/api/web/vendor/dmn"
+
+          git clone https://github.com/pblumer/dmn-js.git /tmp/dmn-js
+          git -C /tmp/dmn-js checkout "$DMN_JS_SHA"
+          test "$(git -C /tmp/dmn-js rev-parse HEAD)" = "$DMN_JS_SHA"
+
+          cd /tmp/dmn-js
+          npm ci
+          npm run build-distro
+          npm install --no-save \
+            dmn-js-properties-panel@3.11.1 \
+            @bpmn-io/properties-panel@3.48.0 \
+            camunda-dmn-moddle@1.3.1 \
+            esbuild@0.24.0
+
+          test "$(node -p "require('./packages/dmn-js/package.json').version")" = "17.10.2"
+          test "$(node -p "require('./packages/dmn-js-shared/package.json').dependencies['dmn-moddle']")" = \
+            "github:pblumer/dmn-moddle#$DMN_MODDLE_SHA"
+          test "$(readlink -f node_modules/dmn-js)" = "/tmp/dmn-js/packages/dmn-js"
+
+          cat > /tmp/atlas-dmn-vendor-entry.js <<'EOF'
+          import Modeler from 'dmn-js/lib/Modeler';
+          import {
+            DmnPropertiesPanelModule,
+            DmnPropertiesProviderModule,
+            CamundaPropertiesProviderModule
+          } from 'dmn-js-properties-panel';
+          import CamundaModdleDescriptor from 'camunda-dmn-moddle/resources/camunda.json';
+
+          export {
+            Modeler as DmnJS,
+            DmnPropertiesPanelModule,
+            DmnPropertiesProviderModule,
+            CamundaPropertiesProviderModule,
+            CamundaModdleDescriptor
+          };
+          EOF
+
+          npx esbuild /tmp/atlas-dmn-vendor-entry.js \
+            --bundle \
+            --format=iife \
+            --global-name=AtlasDmn \
+            --loader:.json=json \
+            --minify \
+            --legal-comments=none \
+            --outfile="$VENDOR_DIR/dmn-modeler.js"
+
+          rm -rf "$VENDOR_DIR/assets"
+          cp -R packages/dmn-js/dist/assets "$VENDOR_DIR/assets"
+          cp node_modules/@bpmn-io/properties-panel/dist/assets/properties-panel.css \
+            "$VENDOR_DIR/assets/properties-panel.css"
+
+          BUNDLE_SHA="$(sha256sum "$VENDOR_DIR/dmn-modeler.js" | awk '{ print $1 }')"
+
+          cat > "$VENDOR_DIR/ATLAS-VENDORED.txt" <<EOF
+          dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
+
+            - pblumer/dmn-js@17.10.2
+              commit: $DMN_JS_SHA
+            - pblumer/dmn-moddle
+              commit: $DMN_MODDLE_SHA
+            - dmn-js-properties-panel@3.11.1
+            - @bpmn-io/properties-panel@3.48.0
+            - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
+
+          The dmn-js fork is pinned to the exact commit above. Its dmn-js-shared package
+          pins dmn-moddle to the exact commit above as well. The fork adds generic DMN 1.5
+          Decision Service authoring, divider modeling and semantic roundtrip support; no
+          Atlas-specific behavior is implemented inside dmn-js or dmn-moddle.
+
+          All bpmn.io / MIT (see LICENSE). The properties panel and the Modeler must share
+          ONE dmn-js instance, so they are bundled together. The build is done offline and
+          only its OUTPUT is committed; nothing is built during Atlas's own build/CI
+          (ADR-0012/0062: no CDN, no build step at runtime).
+
+          window.AtlasDmn exposes: DmnJS (the Modeler), DmnPropertiesPanelModule,
+          DmnPropertiesProviderModule, CamundaPropertiesProviderModule, CamundaModdleDescriptor.
+
+          Do not edit dmn-modeler.js by hand. To reproduce the bundle, check out
+          pblumer/dmn-js at $DMN_JS_SHA with Node 24, run npm ci and npm run build-distro,
+          install the exact properties-panel / camunda-dmn-moddle / esbuild versions above,
+          and bundle the same entry point documented in this repository's history with:
+
+            esbuild src/index.js --bundle --format=iife --global-name=AtlasDmn \
+                  --loader:.json=json --minify --legal-comments=none --outfile=dmn-modeler.js
+
+          assets/ holds the dmn-js diagram/drd/decision-table/literal-expression CSS and
+          icon font from the pinned fork distro, plus properties-panel.css from
+          @bpmn-io/properties-panel@3.48.0.
+
+          SHA-256 dmn-modeler.js:
+          $BUNDLE_SHA
+          EOF
+
+          sed -i 's/^          //' "$VENDOR_DIR/ATLAS-VENDORED.txt"
+          sha256sum "$VENDOR_DIR/dmn-modeler.js"
+
+      - name: Commit generated vendor files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add api/web/vendor/dmn
+          if git diff --cached --quiet; then
+            echo "Vendor output already current"
+            exit 0
+          fi
+          git commit -m "feat(dmn): vendor DMN 1.5 Decision Service modeler"
+          git push origin HEAD:feature/dmn-1.5-decision-service-roundtrip
