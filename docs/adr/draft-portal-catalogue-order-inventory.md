@@ -156,7 +156,19 @@ the scope of what was ordered cannot shift because somebody edited the catalogue
 an approval was pending.
 
 An `OrderLine` per position carries its own status, its own approval and its resolved
-variant, because a single order can require several independent approvals. A generic
+variant, because a single order can require several independent approvals.
+
+**A line's status distinguishes three ways of not being provisioned**, and merging
+them would break two things at once. *Failed* is a defect: something broke, an
+operator repairs it, it retries. *Rejected* is a decision: nothing is broken, somebody
+said no, and there is nothing to repair — filing it as a failure raises incidents
+nobody can close and reports a decision as a malfunction. *Blocked* is a consequence:
+the line was never attempted because something it requires failed or was rejected, and
+it carries the **root** cause rather than the intermediate blocked line between, since
+that one is blocked for the same reason and naming it makes a reader walk the chain.
+A fourth, *skipped*, is a line the recipient already holds; it satisfies its dependents
+exactly as a provisioned one does, or the inventory would block a line for the reason
+that it was unnecessary. A generic
 fulfilment process works the release's waves: every line in a wave starts its
 provisioning process as a call activity, and the next wave begins when the current one
 settles. When a line fails, every line that does not depend on it continues; dependent
@@ -284,7 +296,9 @@ discrepancy, which no other system in the estate can do.
 
 `api/catalog` carries the catalogue model and `Publish` — the validation, the wave
 schedule and the preconditions described above, with `Release.Blocked` answering which
-lines a failure stops. The order, the basket and the inventory are not built yet,
+lines a failure stops. `api/order` carries the order model and the propagation:
+`Propagate` marks what a settled outcome stopped, and `Derive` reads an order's own
+standing off its lines rather than storing it. The order, the basket and the inventory are not built yet,
 which is why this record reads `Partial`.
 
 ## Links

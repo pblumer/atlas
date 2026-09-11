@@ -1,0 +1,245 @@
+package order
+
+import (
+	"strings"
+	"testing"
+)
+
+// Propagation is where the three failure statuses earn their separation. The rule
+// they serve: a line that fails stops only the lines that depend on it, and
+// everything else provisions (order 20 of the portal decisions).
+
+// requires builds the precondition map a release carries.
+func requires(pairs map[string][]string) map[string][]string { return pairs }
+
+func lines(spec ...any) []Line {
+	var out []Line
+	for i := 0; i < len(spec); i += 2 {
+		out = append(out, Line{ItemID: spec[i].(string), Status: spec[i+1].(LineStatus)})
+	}
+	return out
+}
+
+func statusOf(got []Line, id string) LineStatus {
+	for _, l := range got {
+		if l.ItemID == id {
+			return l.Status
+		}
+	}
+	return ""
+}
+
+func blockedBy(got []Line, id string) string {
+	for _, l := range got {
+		if l.ItemID == id {
+			return strings.Join(l.BlockedBy, ",")
+		}
+	}
+	return ""
+}
+
+// TestFailureBlocksOnlyItsDependents is the rule in one test: laptop fails, vpn
+// depends on it and stops, mailbox depends on account and runs.
+func TestFailureBlocksOnlyItsDependents(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}, "mailbox": {"account"}})
+	got := Propagate(lines(
+		"laptop", StatusFailed,
+		"account", StatusDone,
+		"vpn", StatusPending,
+		"mailbox", StatusPending,
+	), req)
+
+	if s := statusOf(got, "vpn"); s != StatusBlocked {
+		t.Errorf("vpn = %s, want blocked", s)
+	}
+	if s := statusOf(got, "mailbox"); s != StatusPending {
+		t.Errorf("mailbox = %s, want pending — account succeeded", s)
+	}
+}
+
+// TestRejectionBlocksLikeAFailureButKeepsItsName: the propagation is the same,
+// the cause is not, and a decision must never be filed as a malfunction.
+func TestRejectionBlocksLikeAFailureButKeepsItsName(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusRejected, "vpn", StatusPending), req)
+
+	if s := statusOf(got, "laptop"); s != StatusRejected {
+		t.Errorf("laptop = %s, want rejected — propagation must not rewrite it as failed", s)
+	}
+	if s := statusOf(got, "vpn"); s != StatusBlocked {
+		t.Errorf("vpn = %s, want blocked", s)
+	}
+}
+
+// TestBlockedNamesItsRootCause: not the intermediate blocked line, which carries
+// the same cause and would make a reader walk the chain.
+func TestBlockedNamesItsRootCause(t *testing.T) {
+	req := requires(map[string][]string{"dock": {"laptop"}, "vpn": {"dock"}})
+	got := Propagate(lines(
+		"laptop", StatusRejected,
+		"dock", StatusPending,
+		"vpn", StatusPending,
+	), req)
+
+	if got := blockedBy(got, "vpn"); got != "laptop" {
+		t.Fatalf("vpn blocked by %q, want laptop — dock is itself blocked", got)
+	}
+}
+
+// TestSeveralCausesAreAllNamed, sorted, so a person sees everything that has to
+// be resolved rather than the first thing found.
+func TestSeveralCausesAreAllNamed(t *testing.T) {
+	req := requires(map[string][]string{"z": {"x", "y"}})
+	got := Propagate(lines(
+		"x", StatusFailed,
+		"y", StatusRejected,
+		"z", StatusPending,
+	), req)
+
+	if got := blockedBy(got, "z"); got != "x,y" {
+		t.Fatalf("z blocked by %q, want x,y", got)
+	}
+}
+
+// TestSkippedSatisfiesItsDependents: a laptop the recipient already holds is a
+// met precondition. Blocking the VPN because the laptop was unnecessary would be
+// the inventory making the order worse.
+func TestSkippedSatisfiesItsDependents(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusSkipped, "vpn", StatusPending), req)
+
+	if s := statusOf(got, "vpn"); s != StatusPending {
+		t.Fatalf("vpn = %s, want pending — a skipped precondition is met", s)
+	}
+}
+
+// TestRunningPreconditionDoesNotBlock: not yet satisfied is not the same as never
+// going to be. A line whose precondition is still running simply waits.
+func TestRunningPreconditionDoesNotBlock(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusRunning, "vpn", StatusPending), req)
+
+	if s := statusOf(got, "vpn"); s != StatusPending {
+		t.Fatalf("vpn = %s, want pending", s)
+	}
+}
+
+// TestSettledLinesAreNotRewritten: a line already provisioned before something
+// upstream failed stays done. Provisioning happened; the record must say so.
+func TestSettledLinesAreNotRewritten(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusFailed, "vpn", StatusDone), req)
+
+	if s := statusOf(got, "vpn"); s != StatusDone {
+		t.Fatalf("vpn = %s, want done — it was already provisioned", s)
+	}
+}
+
+// TestPropagationIsIdempotent: running it twice changes nothing, which is what
+// lets the fulfilment process call it after every line settles.
+func TestPropagationIsIdempotent(t *testing.T) {
+	req := requires(map[string][]string{"b": {"a"}, "c": {"b"}})
+	once := Propagate(lines("a", StatusFailed, "b", StatusPending, "c", StatusPending), req)
+	twice := Propagate(once, req)
+
+	for i := range once {
+		if once[i].Status != twice[i].Status ||
+			strings.Join(once[i].BlockedBy, ",") != strings.Join(twice[i].BlockedBy, ",") {
+			t.Fatalf("line %s changed on a second pass: %v then %v",
+				once[i].ItemID, once[i], twice[i])
+		}
+	}
+}
+
+// TestPropagateLeavesTheInputAlone: the caller's slice must not change under it,
+// or a retry would resolve against already-rewritten lines.
+func TestPropagateLeavesTheInputAlone(t *testing.T) {
+	in := lines("a", StatusFailed, "b", StatusPending)
+	Propagate(in, requires(map[string][]string{"b": {"a"}}))
+
+	if in[1].Status != StatusPending {
+		t.Fatalf("input line b was mutated to %s", in[1].Status)
+	}
+}
+
+// TestOrderStatusIsDerived pins the four outcomes. Partial is an ordinary result:
+// everything that could be provisioned was.
+func TestOrderStatusIsDerived(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []Line
+		want Status
+	}{
+		{"still working", lines("a", StatusDone, "b", StatusRunning), OrderRunning},
+		{"nothing reached yet", lines("a", StatusPending), OrderRunning},
+		{"all provisioned", lines("a", StatusDone, "b", StatusDone), OrderCompleted},
+		{"skipped counts as provisioned", lines("a", StatusSkipped, "b", StatusDone), OrderCompleted},
+		{"some through, some not", lines("a", StatusDone, "b", StatusFailed), OrderPartial},
+		{"blocked counts against it", lines("a", StatusDone, "b", StatusBlocked), OrderPartial},
+		{"nothing through", lines("a", StatusRejected, "b", StatusBlocked), OrderUnfulfilled},
+		{"an empty order is complete", nil, OrderCompleted},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Derive(tt.in); got != tt.want {
+				t.Fatalf("Derive = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestStatusPredicates pins which statuses satisfy a dependent and which have
+// stopped moving, since the propagation reads both.
+func TestStatusPredicates(t *testing.T) {
+	satisfied := map[LineStatus]bool{
+		StatusPending: false, StatusRunning: false, StatusDone: true,
+		StatusSkipped: true, StatusFailed: false, StatusRejected: false,
+		StatusBlocked: false,
+	}
+	settled := map[LineStatus]bool{
+		StatusPending: false, StatusRunning: false, StatusDone: true,
+		StatusSkipped: true, StatusFailed: true, StatusRejected: true,
+		StatusBlocked: true,
+	}
+	for s, want := range satisfied {
+		if got := s.Satisfied(); got != want {
+			t.Errorf("%s.Satisfied() = %v, want %v", s, got, want)
+		}
+	}
+	for s, want := range settled {
+		if got := s.Settled(); got != want {
+			t.Errorf("%s.Settled() = %v, want %v", s, got, want)
+		}
+	}
+}
+
+// TestOrderWithNoPreconditionsIsUntouched: most catalogues have no precedence at
+// all, and that path must not depend on the propagation machinery working.
+func TestOrderWithNoPreconditionsIsUntouched(t *testing.T) {
+	in := lines("a", StatusFailed, "b", StatusPending)
+	got := Propagate(in, nil)
+
+	if s := statusOf(got, "b"); s != StatusPending {
+		t.Fatalf("b = %s, want pending — nothing requires anything", s)
+	}
+	if len(got) != len(in) {
+		t.Fatalf("got %d lines, want %d", len(got), len(in))
+	}
+}
+
+// TestPreconditionOutsideTheOrderDoesNotBlock.
+//
+// A line can require an item this order does not carry — because the recipient
+// already holds it, or because it was never in the basket. The catalogue cannot
+// know which, and this is deliberately not where that is decided: whether the
+// recipient actually has it is a question only the target system can answer, so
+// the item's own provisioning process asks it. Blocking here would refuse every
+// order that builds on something already in place, which is most of them.
+func TestPreconditionOutsideTheOrderDoesNotBlock(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("vpn", StatusPending), req)
+
+	if s := statusOf(got, "vpn"); s != StatusPending {
+		t.Fatalf("vpn = %s, want pending — laptop is not part of this order", s)
+	}
+}
