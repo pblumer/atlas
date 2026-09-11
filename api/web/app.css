@@ -292,6 +292,13 @@ td.row-actions .icon-btn { margin-left: 4px; }
 ol.steps { margin: 10px 0; padding-left: 20px; }
 ol.steps li { margin: 6px 0; }
 
+/* The Console landing card leads with the brand mark beside its heading. It is the
+   same ".mark" box as the top bar — so an org logo (logo.js) replaces the built-in
+   glyph here too — only larger, and the heading's bottom margin moves to the row. */
+.welcome-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.welcome-head h1 { margin: 0; }
+.welcome-mark { width: 40px; height: 40px; border-radius: 8px; flex: none; }
+
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);

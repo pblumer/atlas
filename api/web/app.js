@@ -1181,7 +1181,12 @@ function paintWhatsNew(slot, entries, lang) {
 async function viewConsoleDashboard() {
   view.innerHTML = `
     <div class="card">
-      <h1>Welcome to Atlas</h1>
+      <div class="welcome-head">
+        <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
+          hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
+        }</span>
+        <h1>Welcome to Atlas</h1>
+      </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
       from a single self-contained binary. This Console manages deployments and shows engine health;
       the Modeler lets you design and deploy BPMN models in the browser.</p>
@@ -2486,7 +2491,8 @@ function appearanceCard() {
         <div class="between"><h3 style="margin:0">Logo</h3>
           <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"} title="Remove the uploaded logo and restore the built-in mark">Remove logo</button></div>
         <p class="muted" style="margin:6px 0 12px">Replace the built-in mark with your organisation's logo —
-        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
+        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar, on the Console's landing page and on the
+        login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
             hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
