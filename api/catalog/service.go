@@ -9,6 +9,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
 
 // The catalogue's HTTP surface (ADR-0147: an API area is a service, not more
@@ -32,11 +33,27 @@ type Service struct {
 	// role vocabulary — a list kept in two places is a list that eventually
 	// disagrees with itself.
 	admin func(*httpapi.Principal) bool
+
+	// Limits are the installation's resource budgets. New sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read
+	// the environment.
+	Limits limits.Limits
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).
 func New(loop *runloop.Loop, store *Store, now func() int64, admin func(*httpapi.Principal) bool) *Service {
-	return &Service{loop: loop, store: store, now: now, admin: admin}
+	return &Service{loop: loop, store: store, now: now, admin: admin, Limits: limits.Default()}
+}
+
+// budgets is how this service reads a ceiling. It defaults a Service built as a
+// struct literal to [limits.Default], because the zero Limits is every ceiling at
+// zero and a ceiling of zero admits nothing — a failure that looks like a bad
+// request rather than like missing configuration. New always sets them.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 // mayEdit reports whether p may change this catalogue: the object axis of

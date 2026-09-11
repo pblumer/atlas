@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/limits"
 )
 
 // Importing a catalogue from an architecture model.
@@ -214,14 +216,10 @@ func TestIdsAreReadableAndSafe(t *testing.T) {
 	}
 }
 
-// TestATooLargeModelIsRefused and TestTooDeepIsRefused: the same bounds panorama
-// puts on a document it reads from outside.
-func TestATooLargeModelIsRefused(t *testing.T) {
-	if _, err := ImportArchiMate(make([]byte, maxImportBytes+1), "cat_1"); err == nil {
-		t.Fatal("want a refusal")
-	}
-}
-
+// TestTooDeepIsRefused: a document cannot exhaust the stack. The other bound —
+// how many bytes the server will hold at once — is the installation's budget and
+// is checked at the endpoint, where the reading happens
+// (TestATooLargeModelIsRefused).
 func TestTooDeepIsRefused(t *testing.T) {
 	doc := `<?xml version="1.0"?><model>` + strings.Repeat("<x>", maxImportDepth+2) +
 		strings.Repeat("</x>", maxImportDepth+2) + `</model>`
@@ -384,5 +382,22 @@ func TestImportingNeedsTheAuthorityToChangeTheCatalogue(t *testing.T) {
 	}
 	if rec := as(t, s.HandleImport, user("usr_owner"), "POST", "not xml", "id", cat.ID); rec.Code != http.StatusBadRequest {
 		t.Fatalf("rubbish got %d, want 400", rec.Code)
+	}
+}
+
+// TestATooLargeModelIsRefused checks the ceiling where the bytes actually arrive.
+// It is a named installation budget rather than a constant in the importer, so a
+// deployment that really does export a larger model can raise it instead of
+// patching the binary.
+func TestATooLargeModelIsRefused(t *testing.T) {
+	s := serviceWithAdmin(t)
+	s.Limits = limits.Default()
+	s.Limits.Import = 64
+	cat := makeCatalog(t, s, user("usr_owner"))
+
+	body := `<?xml version="1.0"?><model identifier="m">` + strings.Repeat(" ", 64) + `</model>`
+	rec := as(t, s.HandleImport, user("usr_owner"), "POST", body, "id", cat.ID)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversize import = %d (%s), want 413", rec.Code, rec.Body)
 	}
 }

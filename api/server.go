@@ -1420,6 +1420,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
+	s.catalogs.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred

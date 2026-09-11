@@ -30,8 +30,6 @@ import (
 // it.
 
 const (
-	// maxImportBytes bounds the document, as panorama bounds its own.
-	maxImportBytes = 8 << 20
 	// maxImportDepth bounds nesting, so a document cannot exhaust the stack.
 	maxImportDepth = 64
 	// maxSkipped bounds the report. Past it the reader has the message anyway.
@@ -66,9 +64,6 @@ type Import struct {
 // compares them with what it has and decides.
 func ImportArchiMate(data []byte, homeCatalog string) (Import, error) {
 	out := Import{Items: []Item{}, Edges: []Edge{}, Skipped: []string{}}
-	if len(data) > maxImportBytes {
-		return out, fmt.Errorf("catalog: the model exceeds the %d byte limit", maxImportBytes)
-	}
 
 	skip := func(format string, args ...any) {
 		if len(out.Skipped) >= maxSkipped {
@@ -350,9 +345,19 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p := httpapi.PrincipalFrom(r.Context())
 
-	data, err := io.ReadAll(io.LimitReader(r.Body, maxImportBytes+1))
+	// One byte past the budget, so an over-large document is refused rather than
+	// silently truncated into a model that parses and is missing half its
+	// products. The ceiling is the installation's, not this file's: a number
+	// written here would be a budget nobody could find or configure.
+	max := s.budgets().Import
+	data, err := io.ReadAll(io.LimitReader(r.Body, max+1))
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if int64(len(data)) > max {
+		httpapi.Error(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("the model exceeds the %d byte limit", max))
 		return
 	}
 	imported, err := ImportArchiMate(data, id)
