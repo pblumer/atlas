@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pblumer/atlas/api/sidecar"
-	"github.com/pblumer/atlas/api/token"
+	apitoken "github.com/pblumer/atlas/api/token"
 )
 
 // Store persists Panorama models as atomic, fsynced design-time sidecars. It is
@@ -19,7 +19,7 @@ type Store struct {
 func NewStore(dir string) (*Store, error) {
 	store, err := sidecar.NewStore(dir, "panoramastore",
 		func(model Model) string { return model.ID },
-		sidecar.Names[Model](func(id string) string { return id }, token.IsHex),
+		sidecar.Names[Model](func(id string) string { return id }, apitoken.IsHex),
 		sidecar.Order(func(a, b Model) bool {
 			if a.UpdatedAt != b.UpdatedAt {
 				return a.UpdatedAt > b.UpdatedAt
