@@ -185,3 +185,101 @@ func BenchmarkMeasurementPhaseDuration(b *testing.B) {
 		}
 	})
 }
+
+// The population is not the only axis, and the second one is the one that decides
+// whether per-phase duration is affordable.
+//
+// Cycle time reads two fields off each instance record, so its cost per instance is
+// the same whether the process has three elements or thirty. Per-phase duration reads
+// the instance's step trail, which holds one entry per element a token activated — so
+// its cost per instance is proportional to the *length of the process*.
+//
+// Every benchmark above runs the three-element linear workload, which is the shortest
+// process this harness can build and therefore the most flattering case per-phase
+// duration will ever get. Reporting its 100k number without this axis would be
+// answering an easier question than the one that was asked.
+
+// steppedWorkload builds Start → n script tasks in a row → End, so an instance leaves
+// n+2 entries in its step trail. n is what a real process's length varies.
+func steppedWorkload(b *testing.B, n int) *compiler.CompiledProcess {
+	b.Helper()
+	bld := compiler.NewBuilder(1, "bench-stepped", 1)
+	prev := bld.AddStartEvent()
+	for i := range n {
+		task := bld.AddScriptTask(mustCompile(b, `"done"`), fmt.Sprintf("step%d", i))
+		bld.Connect(prev, task)
+		prev = task
+	}
+	end := bld.AddEndEvent()
+	bld.Connect(prev, end)
+	cp, err := bld.Build()
+	if err != nil {
+		b.Fatalf("Build stepped(%d): %v", n, err)
+	}
+	return cp
+}
+
+// measurementStepCounts are the process lengths the length axis is measured at, at one
+// fixed population. Three is the linear workload above; thirty is an ordinary
+// end-to-end process, not a pathological one.
+var measurementStepCounts = []int{1, 10, 30}
+
+// populatedStepped is [populated] over a process of a chosen length.
+func populatedStepped(b *testing.B, instances, steps int) (*state.Store, *compiler.CompiledProcess) {
+	b.Helper()
+	cp := steppedWorkload(b, steps)
+	p, store, _ := durableEngine(b)
+	deploy(b, p, cp)
+	for range instances {
+		p.CreateInstance(cp.Key)
+	}
+	if err := p.RunUntilIdle(); err != nil {
+		b.Fatalf("RunUntilIdle (populate %d×%d): %v", instances, steps, err)
+	}
+	return store, cp
+}
+
+// measurementLengthPopulation is the fixed population the length axis is measured at.
+// One size, three lengths: the question here is the slope in the other direction, and
+// the population axis is already answered above.
+const measurementLengthPopulation = 10_000
+
+// BenchmarkMeasurementCycleTimeByLength is the control. Cycle time reads the instance
+// record, so a longer process must not move it — and if it does, the comparison below
+// is measuring something other than trail length.
+func BenchmarkMeasurementCycleTimeByLength(b *testing.B) {
+	forEachLength(b, func(b *testing.B, store *state.Store, cp *compiler.CompiledProcess) {
+		if err := store.FinishedInstancesOfDefDesc(cp.Key, 0, 0, func(uint64, *model.ProcessInstanceValue) error {
+			return nil
+		}); err != nil {
+			b.Fatalf("FinishedInstancesOfDefDesc: %v", err)
+		}
+	})
+}
+
+// BenchmarkMeasurementPhaseDurationByLength is the question. If this tracks the
+// process's length while the control above stays flat, then per-phase duration costs
+// instances × elements, and its price on a real process is not the price the
+// three-element workload reported.
+func BenchmarkMeasurementPhaseDurationByLength(b *testing.B) {
+	forEachLength(b, func(b *testing.B, store *state.Store, cp *compiler.CompiledProcess) {
+		if err := store.FinishedInstancesOfDefDesc(cp.Key, 0, 0, func(piKey uint64, _ *model.ProcessInstanceValue) error {
+			return store.ElementStepHistory(piKey, func(int64, uint64, int32) error { return nil })
+		}); err != nil {
+			b.Fatalf("phase duration walk: %v", err)
+		}
+	})
+}
+
+func forEachLength(b *testing.B, read func(b *testing.B, store *state.Store, cp *compiler.CompiledProcess)) {
+	for _, steps := range measurementStepCounts {
+		b.Run(fmt.Sprintf("steps=%d", steps), func(b *testing.B) {
+			store, cp := populatedStepped(b, measurementLengthPopulation, steps)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				read(b, store, cp)
+			}
+		})
+	}
+}
