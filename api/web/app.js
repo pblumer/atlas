@@ -1181,7 +1181,12 @@ function paintWhatsNew(slot, entries, lang) {
 async function viewConsoleDashboard() {
   view.innerHTML = `
     <div class="card">
-      <h1>Welcome to Atlas</h1>
+      <div class="welcome-head">
+        <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
+          hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
+        }</span>
+        <h1>Welcome to Atlas</h1>
+      </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
       from a single self-contained binary. This Console manages deployments and shows engine health;
       the Modeler lets you design and deploy BPMN models in the browser.</p>
