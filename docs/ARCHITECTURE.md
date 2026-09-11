@@ -44,9 +44,9 @@ See [ADR-0001](adr/0001-event-sourcing-and-log-structured-state.md), [ADR-0002](
 
 ## System overview
 
-![Atlas system overview: users, applications, interfaces, workflow engine, workers and target systems](architecture/system-overview.svg)
+![Atlas system overview: users, applications, interfaces, workflow engine, workers, per-run script sandbox and target systems](architecture/system-overview.svg)
 
-A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands.
+A client never talks to the state store directly. Everything is a **command** submitted to a partition. The processor turns commands into **events**, makes them durable, and applies them to state. External work (service tasks) is handed out to **Worker Instances** as durable jobs over the HTTP Worker API, and their results come back as new commands. General-purpose PowerShell, Python, and JavaScript tasks can opt into a fail-closed [Linux sandbox](adr/draft-script-sandbox-isolation.md) for each execution; `strict` confines filesystem access with Landlock, denies socket creation with seccomp, and never silently falls back, while the compatible default remains `off`.
 
 ## The three pillars
 
