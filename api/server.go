@@ -1334,8 +1334,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Orders read releases straight from the catalogue store. The closure runs
 	// inside the order service's own run-loop closure, so it must not dispatch
 	// onto the loop again — Do is a rendezvous, and a nested one would deadlock.
+	// The wake is the fulfilment process's only prompt: a settled line publishes
+	// a message correlated on the order id, and the orchestrator parked on it asks
+	// what may start next. Publishing runs the processor, which is a visit to the
+	// loop of its own — so the order service calls this outside its own closure.
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
-		catalogStore.Release, s.catalogs.MayOrderFrom)
+		catalogStore.Release, s.catalogs.MayOrderFrom,
+		func(message, orderID string) error {
+			s.do(func() { s.proc.PublishMessage(message, orderID) })
+			return s.drive()
+		})
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the

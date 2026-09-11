@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  id="Definitions_AuftragErfuellung"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:message id="Msg_Placed" name="atlas.order.placed">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=orderId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+  <bpmn:message id="Msg_Advanced" name="atlas.order.advanced">
+    <bpmn:extensionElements>
+      <zeebe:subscription correlationKey="=orderId" />
+    </bpmn:extensionElements>
+  </bpmn:message>
+
+  <bpmn:process id="atlas-auftrag-erfuellung" name="Portal: Auftrag erfüllen" isExecutable="true">
+    <bpmn:documentation>Arbeitet einen Portal-Auftrag ab: fragt, welche Positionen jetzt starten dürfen, startet deren Provisionierungsprozesse und wartet, bis eine Position ein Ergebnis gemeldet hat.
+
+Der Auftrag trägt alles, was hier gebraucht wird — die Wellen, die Vorbedingungen und je Position den Prozess, an den sie gebunden ist. Deshalb wird der Katalog nie gelesen: was bestellt wurde, kann sich nicht ändern, während der Auftrag läuft.
+
+Startvariable: orderId (die Auftragsnummer, zugleich der Korrelationsschlüssel beider Nachrichten).
+
+Warum keine Call Activity: zeebe:calledElement processId ist ein statisches Attribut, der Prozess einer Position steht aber erst zur Laufzeit fest. Die Instanz wird deshalb über die API gestartet.
+
+Warum kein Polling: die Provisionierungsprozesse melden ihr Ergebnis selbst, und dieses Melden veröffentlicht atlas.order.advanced. Der Prozess wartet darauf, statt in Intervallen zu fragen.
+
+Voraussetzung beim Betreiber: ein REST-Worker namens „atlas“, der auf diese Atlas-Instanz zeigt und ein API-Token mit der Rolle operator trägt.</bpmn:documentation>
+
+    <bpmn:startEvent id="Start" name="Auftrag aufgegeben">
+      <bpmn:documentation>Wird von POST /api/v1/orders ausgelöst, sobald der Auftrag geschrieben ist. Die Nachricht trägt orderId, und diese Instanz gehört von da an zu genau diesem Auftrag.</bpmn:documentation>
+      <bpmn:outgoing>F_Start_Next</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_Start" messageRef="Msg_Placed" />
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="Next" name="Startbereite Positionen holen">
+      <bpmn:documentation>GET /api/v1/orders/{orderId}/next. Antwortet mit den Positionen, deren Vorbedingungen alle provisioniert sind — jede mit dem Prozess, der sie provisioniert, und der gewählten Variante.
+
+Bewusst pro Position und nicht pro Welle: eine Welle kann teilweise scheitern, und ihre Grenze weiss nur, dass die vorige Runde vorbei ist, nicht welche ihrer Positionen ankamen.
+
+Schreibt: bereit (Liste von Positionen).</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/orders/&#34; + orderId + &#34;/next&#34;" target="path" />
+          <zeebe:output source="=body" target="bereit" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Start_Next</bpmn:incoming>
+      <bpmn:incoming>F_Warten_Next</bpmn:incoming>
+      <bpmn:outgoing>F_Next_Gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="Gw_Offen" name="Noch etwas zu tun?" default="F_Gw_Ende">
+      <bpmn:documentation>Eine leere Antwort heisst nicht zwingend „fertig“: sie heisst „nichts kann jetzt starten“. Das ist derselbe Zustand, wenn alles provisioniert ist und wenn der Rest hinter einer Ablehnung feststeckt. Beide Male ist dieser Prozess zu Ende — der Auftragsstatus sagt, welcher der beiden Fälle vorliegt.</bpmn:documentation>
+      <bpmn:incoming>F_Next_Gw</bpmn:incoming>
+      <bpmn:outgoing>F_Gw_Starten</bpmn:outgoing>
+      <bpmn:outgoing>F_Gw_Ende</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="Starten" name="Provisionierung starten">
+      <bpmn:documentation>POST /api/v1/instances, einmal je startbereiter Position, parallel. Startet den Prozess, an den die Position gebunden ist, und gibt ihm orderId und itemId mit — damit er sein Ergebnis am Ende selbst melden kann.
+
+Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden.
+
+Der Prozessname kommt aus der Position (provisionProcess), nicht aus dem Katalog. Was bestellt wurde, ist eingefroren.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+          <zeebe:header key="path" value="/api/v1/instances" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="={processId: position.provisionProcess, variables: {orderId: orderId, itemId: position.itemId, variantId: position.variantId, recipient: recipient}}" target="body" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Gw_Starten</bpmn:incoming>
+      <bpmn:outgoing>F_Starten_Warten</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false">
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=bereit" inputElement="position" />
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+    </bpmn:serviceTask>
+
+    <bpmn:intermediateCatchEvent id="Warten" name="Position gemeldet">
+      <bpmn:documentation>Wartet auf atlas.order.advanced, korreliert auf orderId. Diese Nachricht veröffentlicht Atlas, sobald eine Position ihr Ergebnis gemeldet hat — gleich ob erfolgreich oder gescheitert.
+
+Deshalb wird hier nicht gepollt: es gibt genau einen Anlass, erneut zu fragen, und der ist ein gemeldetes Ergebnis.</bpmn:documentation>
+      <bpmn:incoming>F_Starten_Warten</bpmn:incoming>
+      <bpmn:outgoing>F_Warten_Next</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="MsgDef_Warten" messageRef="Msg_Advanced" />
+    </bpmn:intermediateCatchEvent>
+
+    <bpmn:endEvent id="Ende" name="Nichts mehr startbereit">
+      <bpmn:documentation>Der Auftrag ist so weit erfüllt, wie er es werden kann. Ob das „vollständig“, „teilweise“ oder „nichts“ heisst, steht im Auftrag selbst und wird aus seinen Positionen abgeleitet, nicht hier festgehalten.</bpmn:documentation>
+      <bpmn:incoming>F_Gw_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F_Start_Next" sourceRef="Start" targetRef="Next" />
+    <bpmn:sequenceFlow id="F_Next_Gw" sourceRef="Next" targetRef="Gw_Offen" />
+    <bpmn:sequenceFlow id="F_Gw_Starten" name="ja" sourceRef="Gw_Offen" targetRef="Starten">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">=count(bereit) &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_Starten_Warten" sourceRef="Starten" targetRef="Warten" />
+    <bpmn:sequenceFlow id="F_Warten_Next" sourceRef="Warten" targetRef="Next" />
+    <bpmn:sequenceFlow id="F_Gw_Ende" name="nein" sourceRef="Gw_Offen" targetRef="Ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="Diagram">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="atlas-auftrag-erfuellung">
+      <bpmndi:BPMNShape id="S_Start" bpmnElement="Start">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="128" y="225" width="84" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Next" bpmnElement="Next">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw_Offen" isMarkerVisible="true">
+        <dc:Bounds x="425" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="410" y="132" width="81" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Starten" bpmnElement="Starten">
+        <dc:Bounds x="550" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Warten" bpmnElement="Warten">
+        <dc:Bounds x="732" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="712" y="225" width="77" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
+        <dc:Bounds x="432" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="408" y="395" width="85" height="27" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="E_Start_Next" bpmnElement="F_Start_Next">
+        <di:waypoint x="188" y="200" />
+        <di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Next_Gw" bpmnElement="F_Next_Gw">
+        <di:waypoint x="350" y="200" />
+        <di:waypoint x="425" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Starten" bpmnElement="F_Gw_Starten">
+        <di:waypoint x="475" y="200" />
+        <di:waypoint x="550" y="200" />
+        <bpmndi:BPMNLabel><dc:Bounds x="505" y="182" width="14" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Starten_Warten" bpmnElement="F_Starten_Warten">
+        <di:waypoint x="650" y="200" />
+        <di:waypoint x="732" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Warten_Next" bpmnElement="F_Warten_Next">
+        <di:waypoint x="750" y="182" />
+        <di:waypoint x="750" y="100" />
+        <di:waypoint x="300" y="100" />
+        <di:waypoint x="300" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Ende" bpmnElement="F_Gw_Ende">
+        <di:waypoint x="450" y="225" />
+        <di:waypoint x="450" y="352" />
+        <bpmndi:BPMNLabel><dc:Bounds x="456" y="280" width="24" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

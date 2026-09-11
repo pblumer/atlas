@@ -46,14 +46,39 @@ type Service struct {
 	// the catalogue service dispatches onto the loop itself and a nested Do would
 	// deadlock.
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error)
+	// wake tells the fulfilment process that an order moved.
+	//
+	// Without a call activity the orchestrator does not wait on a child, so
+	// something has to say that a line settled. The line's own provisioning
+	// process reports its result, and that report publishes the message the
+	// orchestrator is parked on — no polling, and no long-lived wait that exists
+	// only to be woken.
+	//
+	// Called outside this service's loop closure: publishing runs the processor,
+	// which is a visit to the loop of its own.
+	wake func(message, orderID string) error
 }
+
+// The two messages that drive fulfilment, correlated on the order id.
+//
+// They are constants here rather than strings in the model so the two cannot
+// drift apart: a name nobody publishes is a process that waits forever, and it
+// fails silently.
+const (
+	// PlacedMessage starts the fulfilment process for a new order.
+	PlacedMessage = "atlas.order.placed"
+	// AdvancedMessage says a line settled, so the process asks what may start
+	// next. A settled line publishes it; nothing polls.
+	AdvancedMessage = "atlas.order.advanced"
+)
 
 // New builds the service.
 func New(loop *runloop.Loop, store *Store, now func() int64,
 	release func(id string) (catalog.Release, bool, error),
-	mayOrderFrom func(*httpapi.Principal, string) (bool, error)) *Service {
+	mayOrderFrom func(*httpapi.Principal, string) (bool, error),
+	wake func(message, orderID string) error) *Service {
 	return &Service{loop: loop, store: store, now: now,
-		release: release, mayOrderFrom: mayOrderFrom}
+		release: release, mayOrderFrom: mayOrderFrom, wake: wake}
 }
 
 func newID(prefix string) (string, error) {
@@ -162,6 +187,15 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	case empty:
 		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
 	default:
+		// Start the fulfilment process for it. Durable first, then the side effect
+		// (I2): the order stands whether or not this succeeds, and a failure here
+		// is an order nothing is working on — which the placer must be told about,
+		// because replacing it is what they would do next.
+		if err := s.wake(PlacedMessage, out.ID); err != nil {
+			httpapi.Error(w, http.StatusInternalServerError,
+				"the order was placed, but fulfilment could not be started: "+err.Error())
+			return
+		}
 		httpapi.JSON(w, http.StatusCreated, out)
 	}
 }
@@ -356,6 +390,15 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 		}
 		httpapi.Error(w, http.StatusBadRequest, applyErr.Error())
 	default:
+		// The outcome is durable before anything is woken (I2). If the wake then
+		// fails, the order has moved and nothing is coming to move it again, so
+		// this is an error rather than a 200 — the reporter is the one thing that
+		// can retry, and recording the same outcome twice changes nothing.
+		if err := s.wake(AdvancedMessage, id); err != nil {
+			httpapi.Error(w, http.StatusInternalServerError,
+				"the outcome was recorded, but the fulfilment process could not be woken: "+err.Error())
+			return
+		}
 		httpapi.JSON(w, http.StatusOK, got)
 	}
 }

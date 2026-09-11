@@ -103,14 +103,16 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 			// Somebody else's order exists, placed by an insider.
 			insider := New(loop, store, func() int64 { return 1700 },
 				func(string) (catalog.Release, bool, error) { return rel, true, nil },
-				func(*httpapi.Principal, string) (bool, error) { return true, nil })
+				func(*httpapi.Principal, string) (bool, error) { return true, nil },
+				func(message, orderID string) error { return nil })
 			theirs := decode[Order](t, do(t, insider.HandlePlace, someone("usr_in"), "POST",
 				`{"releaseId":"rel_1","items":["account"]}`))
 
 			// And the same store seen by somebody the catalogue does not admit.
 			s := New(loop, store, func() int64 { return 1700 },
 				func(string) (catalog.Release, bool, error) { return rel, true, nil },
-				func(*httpapi.Principal, string) (bool, error) { return false, nil })
+				func(*httpapi.Principal, string) (bool, error) { return false, nil },
+				func(message, orderID string) error { return nil })
 
 			h := reflect.ValueOf(s).MethodByName(g.name).
 				Interface().(func(http.ResponseWriter, *http.Request))

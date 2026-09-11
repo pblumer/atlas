@@ -218,7 +218,21 @@ runtime, from the release. So the fulfilment process starts each line's provisio
 process through the API instead — the same REST Worker it already uses to ask which
 lines are ready, and to report what came back. The cost is that engine-level parent and
 child are not related, so the order is what ties them together; it already does, since
-every line carries its process and its outcome. When a line fails, every line that does not depend on it continues; dependent
+every line carries its process and its outcome.
+
+**Nothing polls, and nothing waits on a child.** Placing an order publishes a message
+that starts the fulfilment process; a line's own provisioning process reports its result
+as its last step, and that report publishes a second message the fulfilment process is
+parked on. So there is exactly one reason to ask what may start next — a settled line —
+and asking on a timer would be asking at every moment except that one. The two message
+names are constants in `api/order` rather than strings in the model, because a name
+nobody publishes is a process that waits forever and fails silently.
+
+That puts one obligation on every provisioning process: its last step reports the
+outcome. The catalogue cannot check it — a release proves the process is deployed, not
+what it does — so it is a convention, stated here and in the fulfilment process's own
+documentation. A process that does not report leaves its line running and the order open
+until somebody looks. When a line fails, every line that does not depend on it continues; dependent
 lines stop and raise an incident. Partial fulfilment is the intended behaviour, not a
 degraded mode.
 

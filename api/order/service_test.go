@@ -75,9 +75,10 @@ func newService(t *testing.T) *Service {
 			}
 			return rel, true, nil
 		},
-		// These tests are about placing and reading orders; the catalogue gate has
-		// its own cases below.
-		func(*httpapi.Principal, string) (bool, error) { return true, nil })
+		// These tests are about placing and reading orders; the catalogue gate and
+		// the wake have their own cases below.
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error { return nil })
 }
 
 func do(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, body string, vals ...string) *httptest.ResponseRecorder {
@@ -295,7 +296,8 @@ func serviceGatedBy(t *testing.T, allow bool) *Service {
 				t.Errorf("checked catalogue %q, want the release's %q", catalogID, rel.CatalogID)
 			}
 			return allow, nil
-		})
+		},
+		func(message, orderID string) error { return nil })
 }
 
 // TestOrderingNeedsAccessToTheCatalogue is the gap this closes: the release id
@@ -343,7 +345,8 @@ func TestAFailingAccessCheckIsAnError(t *testing.T) {
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) {
 			return false, errTest
-		})
+		},
+		func(message, orderID string) error { return nil })
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if rec.Code != http.StatusInternalServerError {
@@ -364,7 +367,8 @@ func TestAFailingReleaseLookupIsAnError(t *testing.T) {
 
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return catalog.Release{}, false, errTest },
-		func(*httpapi.Principal, string) (bool, error) { return true, nil })
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error { return nil })
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if rec.Code != http.StatusInternalServerError {
@@ -409,7 +413,8 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 	rel := testRelease(t)
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
-		func(*httpapi.Principal, string) (bool, error) { return true, nil })
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error { return nil })
 
 	for _, tt := range []struct {
 		name string
@@ -548,5 +553,130 @@ func TestMalformedReportIsRefused(t *testing.T) {
 
 	if rec := do(t, s.HandleReport, op, "POST", "{not json", "id", placed.ID, "item", "account"); rec.Code != http.StatusBadRequest {
 		t.Fatalf("report = %d, want 400", rec.Code)
+	}
+}
+
+// Reporting an outcome wakes the fulfilment process.
+//
+// Without a call activity the orchestrator does not wait on a child, so
+// something has to tell it that an order moved. The line's own provisioning
+// process reports its result, and that report publishes a message the
+// orchestrator is parked on — no polling, and no long-lived wait that exists
+// only to be woken.
+
+func TestReportingWakesTheFulfilmentProcess(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	var woken []string
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error {
+			woken = append(woken, message+":"+orderID)
+			return nil
+		})
+
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	if rec := do(t, s.HandleReport, op, "POST", `{"status":"done"}`,
+		"id", placed.ID, "item", "account"); rec.Code != http.StatusOK {
+		t.Fatalf("report = %d (%s)", rec.Code, rec.Body)
+	}
+	// Two messages: the placing started fulfilment, the report woke it.
+	if len(woken) != 2 {
+		t.Fatalf("woken = %v, want the start and the wake", woken)
+	}
+	if woken[0] != PlacedMessage+":"+placed.ID {
+		t.Errorf("first = %s, want the placed message", woken[0])
+	}
+	if woken[1] != AdvancedMessage+":"+placed.ID {
+		t.Errorf("second = %s, want the advanced message", woken[1])
+	}
+}
+
+// TestAFailedWakeIsReported: the outcome is durable and the orchestrator is not
+// running. Answering 200 would leave an order that moved with nothing to move it
+// again, and the reporter is the one thing that can retry.
+func TestAFailedWakeIsReported(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	// Starting fulfilment works; waking it does not. Those are the two halves of
+	// the same call, and only the second is under test here.
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error {
+			if message == AdvancedMessage {
+				return errTest
+			}
+			return nil
+		})
+
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	rec := do(t, s.HandleReport, op, "POST", `{"status":"done"}`, "id", placed.ID, "item", "account")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("report = %d (%s), want 500", rec.Code, rec.Body)
+	}
+
+	// The outcome stands: a retry of the same report is what the reporter does
+	// next, and recording it twice must change nothing.
+	got := decode[Order](t, do(t, s.HandleGet, someone("usr_1"), "GET", "", "id", placed.ID))
+	if statusOf(got.Lines, "account") != StatusDone {
+		t.Fatalf("the outcome was rolled back: %v", got.Lines)
+	}
+}
+
+// TestAnOrderNobodyWillFulfilIsReported: the order is durable, and nothing is
+// working on it. Answering 201 would hand back an order that looks placed and
+// will never move — and replacing it is what the placer would do next, which
+// they can only decide if they are told.
+func TestAnOrderNobodyWillFulfilIsReported(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string) error { return errTest })
+
+	rec := do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("place = %d (%s), want 500", rec.Code, rec.Body)
+	}
+
+	// And it is there, because it was written before fulfilment was started (I2).
+	// A placer who retries gets a second order rather than a silent duplicate of
+	// a first one they were told nothing about.
+	if n := len(decode[[]Order](t, do(t, s.HandleList, someone("usr_1"), "GET", ""))); n != 1 {
+		t.Fatalf("%d orders after a failed start, want the one that was written", n)
 	}
 }
