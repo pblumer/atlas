@@ -56,6 +56,18 @@ func TestScriptWorkerRegistersOnlyEnabledLanguages(t *testing.T) {
 	}
 }
 
+func TestScriptWorkerRejectsAnUnknownSandboxProfile(t *testing.T) {
+	_, err := worker.BuiltinConnectors(func(name string) string {
+		if name == "ATLAS_SCRIPT_SANDBOX" {
+			return "sometimes"
+		}
+		return ""
+	}, "script")
+	if err == nil || !strings.Contains(err.Error(), "sometimes") {
+		t.Fatalf("unknown script sandbox error = %v, want it to name sometimes", err)
+	}
+}
+
 const jobWorkerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs">

@@ -14,6 +14,151 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
+  enabled interpreter refuses to boot.** The strict allowlist admitted the installed
+  runtimes, the loader and trust files, and a private scratch directory — everything
+  Python and JavaScript need to start. The .NET runtime behind `pwsh` needs more: it
+  sizes its heap from `/proc`, reads `/proc/mounts`, and resolves its user through
+  `/etc/passwd`. None of those were allowed, so CoreCLR refused to start with
+  `E_OUTOFMEMORY` and every PowerShell script task failed. The other two languages
+  worked throughout, which is the asymmetry that let this land unnoticed.
+
+  The allowlist now carries this process's own `/proc` entry, `/proc/meminfo`,
+  `/proc/mounts` and `/etc/passwd`. Its own entry and no other: a rule on `/proc` as a
+  whole would hand model-authored code every same-uid process's environment, which is
+  where the engine's token and its vault key are, and that is the opposite of what the
+  profile exists for.
+
+  Startup no longer takes the profile on trust either. It proved the Landlock ABI and
+  stopped there, so a language the sandbox could not run looked healthy until the first
+  job failed one at a time. Selecting `strict` now starts each enabled interpreter once,
+  inside the real policy, on an empty program. One that cannot start is a startup error
+  naming the language and the three ways out; one that is simply not installed stays the
+  warning it has always been, because that is a host that was never going to run it.
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md),
+  [issue #892](https://github.com/pblumer/atlas/issues/892))
+- **The Starmap's ArchiMate view now draws ArchiMate's relationships too.** The nodes
+  were already ArchiMate's own symbols; the lines between them were still Atlas's — one
+  solid, one dashed, one dotted. For a reader who works in the notation that is half
+  the alphabet: ArchiMate tells **Assignment**, **Triggering** and **Serving** apart by
+  what sits at the ends of an otherwise identical solid line.
+
+  Each is now drawn that way — a ball at the source and a filled arrowhead at the
+  target for Assignment, a filled arrowhead for Triggering, an open one for Serving —
+  and the lines are solid, because in ArchiMate a dashed line with an open arrowhead is
+  a Flow and a dotted one a Realization. Keeping Atlas's dash would not have been a
+  missing statement but a wrong one.
+
+  A Serving relationship points the other way from the fact it comes from: ArchiMate
+  runs Serving from the provider to the consumer, so the arrowhead sits on the process
+  rather than on the worker it names — the same reversal the exported document has
+  always made. The key says so in words as well, for the reader who does not already
+  know the notation by sight. The marks travel into an exported file, where there is no
+  key to hover over.
+
+  The relationship table is now served by the server alongside the element table,
+  instead of the browser keeping a second copy. A picture with Triggering's filled
+  arrowhead on an edge the exported file calls Serving would be two answers to one
+  question, and nothing on either surface would say which was true. Three relationships
+  is also all there can be: Atlas knows that an application holds a process, that a
+  process calls another, and that a process uses a worker or a decision. Nothing here
+  is a Flow or a Realization, and an absent relationship type means Atlas cannot see
+  one — never that there is none.
+
+  A served notation is also a copy now. The element table, the relationship table and
+  the loss list were shared with every caller, so an edit anywhere would have changed
+  the mapping for everybody, silently.
+
+- **The Starmap's ArchiMate view now draws ArchiMate's own symbols and layer colours.**
+  Picking **ArchiMate 3.2** under Notation mapped each node to an ArchiMate element type
+  and wrote that type under its name — and then drew Atlas's own circles and squares.
+  For the one reader that view exists for, that is the vocabulary without the script:
+  ArchiMate is recognised by its silhouettes.
+
+  The five mapped kinds are now drawn as the elements themselves — an Application
+  Component with its two lugs, an Application Process as an arrow, an Application
+  Service as a rounded lozenge, an Application Function as a chevron, and a deployment
+  target as a Node's three-dimensional box. The standard allows either a box with a
+  small type icon in the corner or the icon at full size; at the size a node is drawn
+  here the corner icon would be a pixel or two, so the icon is the node. The written
+  type stays beside it for readers who do not know the notation by sight.
+
+  The fills are the layer colours everyone recognises — Application `#B5FFFF`,
+  Technology `#C9E7B7` — and the key says plainly what they are: **ArchiMate 3.2
+  defines no colours at all**, and these are the convention its own figures and the
+  Archi tool use. They are pale by design, so a red or amber finding still stands out
+  above them. A draft, a restricted placeholder and an unresolved dependency keep
+  Atlas's own shape and colour: ArchiMate has no element for them, and dressing them as
+  one would claim something the notation does not.
+
+- **The Starmap opens using the whole window, whatever the size of the estate.** A
+  landscape of a handful of nodes was drawn as a handful of small circles adrift in an
+  empty canvas, and a single unattached process could sit out at the far edge holding
+  two thirds of the window open behind it. Both come from how the picture is scaled:
+  the graph is laid out in a world sized from its own content, the opening view shows
+  the whole of that world, and so the world's size decides the magnification.
+
+  Two things were working against that. The world had a floor of a window's worth of
+  area, put there so that small landscapes would not change when the world became
+  content-sized — but the floor stopped binding only past about twenty-five nodes, so
+  every smaller estate was laid out in a world several times larger than it needed and
+  shown correspondingly small. Measured on the rendered page at 1400x900, as the share
+  of the window the nodes and their spacing occupy: five nodes covered 7% where a
+  hundred and twenty-five covered 17%. The floor is gone, and the same five nodes now
+  cover 18% — the same picture, at the size it should always have been drawn.
+
+  The second is the stranded piece. A process attached to nothing — or a handful of
+  processes that call each other and nothing else, which is what a conformance sample
+  or a test flow looks like — is held near the picture only by the pull toward its
+  centre, against a repulsion that falls away with distance, and that balance puts it
+  a long way out. The cost is not the piece itself: the view is framed from the box
+  that contains everything, so one thing far out decides how small the rest is drawn.
+  On the shapes this was reported on, the furthest piece sat at two to three times the
+  picture's own spacing. It is now bounded at 1.5, and the whole piece moves together
+  so that nothing the diagram says about the processes inside it changes. It is still
+  the outlying thing it is, on the side it settled on, but it no longer sets the scale
+  for everything else. Nothing moves in a landscape that has none, and nothing moves at
+  all once you have arranged the picture by hand.
+
+  Both corrections are in the layout, which is one function for every notation, so the
+  Instances and Incidents heatmaps and the ArchiMate and C4 projections get them too:
+  there was never a per-view layout to fix.
+
+- **The script-timeout test no longer reads a pid as an identity.** The fix above gave
+  `TestTimeoutKillsTheInterpretersWholeProcessGroup` a probe that can tell a zombie
+  from a live process, and it went red in CI again — on a commit whose diff contained
+  no Go at all, on a head whose parent had passed the same job twenty minutes earlier,
+  and without reproducing once in a full race build or in ten consecutive focused runs.
+  The mechanism is not known. What is known is that the assertion rested on a number:
+  nothing tied the pid in the file back to the process it was written for, so "that
+  number still answers a signal" and "the descendant survived" were being treated as
+  one fact when they are two.
+
+  So the test now reads the descendant's own evidence. It is given a second of work
+  and a file to write at the end of it; if the group kill reached it, the file is never
+  written. Nothing about the pid namespace can confound that. Both halves are shown to
+  catch what they are for: killing the child instead of its group trips the elapsed
+  check, and a descendant that escapes the group with `setsid` writes the file. The
+  signal probe stays as a *diagnostic* — an assertion that can fail while the system is
+  correct is unsound whatever its subject, but what it reports is the only lead on the
+  open question, so a failure now names the program behind the pid instead of only its
+  number.
+
+- **A script's liveness probe read a zombie as a running process.** ADR-0303 made a
+  timed-out script take its whole process group with it, and
+  `TestTimeoutKillsTheInterpretersWholeProcessGroup` checks that by asking whether the
+  descendant is still there — with `kill(pid, 0)`, which is the one question that
+  cannot distinguish the two states that matter. The same signal that kills the
+  descendant orphans it onto PID 1, and until PID 1 reaps it, it keeps an entry in the
+  process table that `kill(2)` goes on addressing. Whether that reap is prompt belongs
+  to the environment's init, not to Atlas: under an init that reaps (a CI runner) the
+  test passes, and under one that does not (a container started from a plain process,
+  a devbox) it fails on a kill that worked perfectly. `processExists` now reads the
+  process state from `/proc` after the probe and reports a zombie as gone, which is
+  what it is; where `/proc` is absent — macOS, the BSDs — the probe behaves exactly as
+  before. A new test states that contract directly against a zombie made on purpose,
+  so the property is checked everywhere rather than only where init is slow.
+
 - **Removing someone from an application now takes their Starmap away on their next
   request.** The Starmap holds a 30-second reading of what this server is, so that
   twenty people with the view open cost the engine one reading rather than twenty. It
@@ -78,6 +223,276 @@ _Changed_ / _Removed_ for each version.
   the paragraph underneath (ADR-0230).
 
 ### Added
+
+- **A drawing and the capability register are now one architecture.** Panorama holds an
+  architect's ArchiMate model; the register holds what has to be done, with an owner, a
+  scope and SLAs. Draw *Underwrite a loan*, file a capability keyed `loan-underwriting`,
+  and nothing connected them but the fact that somebody wrote a similar phrase twice —
+  and renaming either end lost even that, silently and in the direction of still looking
+  right.
+
+  Two binding keys close it: `atlas.capabilityKey` on an ArchiMate `Capability` and
+  `atlas.valueStreamKey` on a `ValueStream`. They are ordinary ArchiMate properties, so
+  a bound model stays a standard model and the binding travels with it into any
+  conformant tool. What travels is the record's **key** and nothing else: the name is
+  resolved by the server on every read, so a drawing cannot go stale about the register,
+  and a binding whose record was deleted reads as *missing* rather than as a name that
+  quietly stopped matching.
+
+  The key rather than an opaque id, which is the opposite of every other binding here.
+  Those carry an id because the resource's own name is mutable; a capability's key is
+  not — it is the filename on disk, it is not renameable in place, and it is what an
+  export carries — so it is the stable identifier the rule asks for.
+
+  **Each key is refused on the other's element.** A `Capability` and a `ValueStream` are
+  both strategy-layer behaviour elements binding a key from the same register, which
+  makes them the pair a later edit is likeliest to treat as interchangeable and the pair
+  where doing so would be least visible: both keys would still resolve, against a
+  register holding both.
+
+  Every signed-in caller may resolve one, unlike every other binding, and that is the
+  register's own rule rather than a shortcut. A capability says what the organisation
+  must be able to do and nothing about what this server runs. What *is* scoped are the
+  processes it names as realisations, and those are resolved elsewhere, through their
+  own sharing scope.
+
+- **A value stream is an element you can draw.** ArchiMate's `ValueStream` was accepted
+  by Panorama's validator and absent from its palette, so a model containing value
+  streams could be opened, edited around, and never added to — the worst of the three
+  states an element can be in, because reading works and nothing looks broken.
+
+  It is authorable now, on the strategy layer with a behaviour aspect, where the
+  standard puts it and where `Capability` already sat. The relationship matrix is
+  predicates over layer and aspect rather than a table of type pairs, so it inherits
+  exactly the rules a capability has and none were touched; a test holds the two to that
+  equivalence across every relationship and every partner, in both directions.
+
+- **A write into a data object now offers the members its class declares.** A data
+  output association writes one member of a structured object — `customer.name`
+  ([ADR-0060](docs/adr/0060-data-object-write-paths.md)) — and the path was free text.
+  `customer.nmae` deploys, runs, and writes a member nobody will ever read. The class the
+  object's type points at already declares what its members *are*, so the field now asks
+  the same question the class picker and the data-state picker ask, the same way: a list,
+  with an escape for a member nothing models yet.
+
+  Each entry carries what the model says about it — the type, the multiplicity where it
+  is not one, and the key mark on an attribute that is part of the business key. Where a
+  member's own type is another class in the model, that class's members are offered one
+  level down as `customer.name`, because a dotted path is exactly the case where the
+  first segment is structured and something else says what is inside it. One level and no
+  further: below that the model repeats itself, and a picker that walks it forever is one
+  nobody can read. An **untyped** member offers nothing inside it, because nothing knows.
+
+  A path the class does not declare is kept and named rather than dropped — a diagram is
+  routinely drawn before the model catches up — and it comes back in the list saying it
+  is not a member of that class, instead of looking like any other entry.
+
+  **What this is not:** a data object is not a process variable. Nothing binds one into
+  the FEEL scope, so these members say what the write *target* is shaped like and nothing
+  about what the expression above them can read. The panel says so where it matters,
+  beside the field that takes a FEEL expression, because a member list read as a variable
+  list is exactly the wrong lesson to take from it.
+
+- **A milestone is an element you can draw now.** BPMN's marker for a point on the path
+  where no work sits is a **none intermediate throw event**: an intermediate throw event
+  with no event definition, named after the point it marks. *Identity verification
+  started* is one — the work is what follows it, so there is no task there to record.
+  Atlas refused it, and refused it at Deploy rather than at author time: the Modeler drew
+  one, validated it and said nothing, because the element was never in the list of things
+  bpmn-js can draw that the engine cannot run.
+
+  It compiles. It waits for nothing and needs no worker, so its execution is the same as
+  having drawn nothing at all — and that is not what it is for. What it produces is the
+  record: the per-definition visit counters count it, the instance's step trail carries it
+  in order, and the Operations overlay lights it up. That is the whole difference between
+  a milestone and a label on a sequence flow, and it is what makes "when did this case
+  reach verification" answerable per case rather than only where a task happens to sit.
+
+  It is a node type of its own rather than a reused undefined task or link throw, because
+  everything that reads a compiled node back reads its type — the overlay, the step
+  replay, the process documentation, a migration plan matching elements across versions.
+  A milestone stored as a task would be drawn and described as a task.
+
+  **Making the empty case compile did not make the wrong case compile.** "No event
+  definition this compiler implements" and "no event definition at all" used to be one
+  state, and both were refused; with the second one compiling, the first would have become
+  a pass-through that silently does nothing the model asked for. A throw event carrying a
+  timer — which BPMN allows only on a catch — would have run straight through instead of
+  waiting. So an unmatched `*EventDefinition` child is now refused by name, and by its
+  suffix rather than by a list of the five that are wrong today, because such a list goes
+  stale silently and in the direction of accepting something.
+
+- **A capability record now says when somebody last read it and meant it.** The gap
+  report checks a realisation against what is deployed, because that is a fact Atlas can
+  see. The rest of a capability — who owns it, what it is and is not responsible for,
+  what it has promised — is prose about people and promises, and Atlas took all of it on
+  trust. A map whose realisations are green and whose owners left two years ago is worse
+  than no map: it is confidently wrong in exactly the fields somebody escalates against.
+
+  Both records now carry a confirmation: when, by whom, who they asked, and one line on
+  what the review found. `POST /api/v1/capabilities/{key}/confirmation` is the only
+  thing that sets it, and creating a record counts, because writing something down is an
+  assertion.
+
+  **No edit sets it** — not even one that rewrites the owner or an SLA. If saving
+  refreshed the date, fixing a typo in the summary would assert that every field had
+  been re-checked, which is precisely the lie the mechanism exists to prevent, made
+  automatic and leaving no diff in which anybody could have noticed it. For the same
+  reason there is no bulk confirm.
+
+  The confirmation also records **who was asked**. The confirmer is almost never the
+  owner, because the owner is free text precisely to accommodate people with no Atlas
+  account — so without that field the map confirms itself and a reader cannot tell that
+  from a review the owner sat in. Leaving it empty is a legitimate confirmation and a
+  weaker one, and the record says which. A self-confirmation is shown beside it and
+  never reported: in a four-person installation the architect is the only person who
+  *can* confirm, and a report that fires on the normal case stops being read.
+
+  A confirmation stays fresh for twelve months, the interval this repository already
+  uses for the two other things it dates and cannot verify. Unlike those, it is
+  configurable — `PUT /api/v1/settings/confirmation`, admin only — because those govern
+  content here and this governs a customer's map reviewed on their own cadence. Setting
+  it to something nothing outlives does silence the check, and that is allowed and made
+  legible instead: it is one visible number, and every report says which interval it
+  applied.
+
+  What lapses becomes two new gap findings and a `?stale=true` listing — the review
+  backlog, the exact twin of `?realized=false`, the automation one. A stale record is
+  flagged everywhere it is read and never withheld, because hiding it would make the map
+  least useful at the moment it most needs attention. Both are also MCP tools, whose
+  descriptions say in as many words that only what was actually re-read may be
+  confirmed.
+
+  Nine of the report's ten findings are facts Atlas checked. These two are not, and the
+  report does not pretend otherwise: the only honest thing it can say about prose is
+  that nobody has stood behind it lately.
+
+- **Atlas now holds what the organisation must be able to do, not only what it runs.** A
+  deployed process could be found by its name and by nothing else: not by the business
+  capability it realises, not by who owns that capability, and not by what would stall
+  without it. The answer to all three lived in a slide deck, if anywhere.
+
+  Two design-time records close that, following the business architecture of Ruecker
+  and Strauch's *Enterprise Process Orchestration*. A **business capability** says what
+  has to be done, independently of how — its scope (including what it is explicitly
+  *not* responsible for), its input and output, its business owner, the resources it
+  draws on, what it requires from other capabilities, and the KPIs and SLAs it is held
+  to. A **value stream** is the ordered activity that meets a customer need, its stages
+  naming the capabilities that perform them.
+
+  A capability says how it is currently done in one of four ways: an executable process
+  here, a Worker, a purchased system, or a person. The last two are the point. A map
+  that could only record what Atlas already runs would tell you nothing the deployment
+  list does not, and `GET /api/v1/capabilities?realized=false` — everything nothing
+  currently automates — is the adoption backlog the whole thing exists to shrink.
+
+  Nothing about a realisation is stored beyond a portable key. Whether the process still
+  exists, at which version, with how many instances running, is resolved every time you
+  read, so the record cannot go stale about the installation. **Coverage** answers that
+  for one capability, along with what it depends on, what each of those has promised, who
+  depends on it, and which value-stream stages it performs.
+
+  The reverse direction is computed and never stored. `GET
+  /api/v1/business-architecture/gaps` compares the map against what this server actually
+  runs: capabilities nothing realises, realisations pointing at what is not here,
+  deployed processes no capability claims, stages with no capability, dependencies naming
+  no capability, and — the one worth the most — a call activity crossing from one
+  capability's process into another's that the caller never declared. It is a comparison
+  and never a merge: the method's black box is normally a service task, so a declared
+  dependency with no call activity is the ordinary case and raises nothing. Two things it
+  refuses to report: a purchased system or a person, which Atlas cannot see and will not
+  call a defect, and anything outside your sharing scope, which reads as restricted
+  rather than missing — with a count, so a clean report can be told from a blind one.
+
+  Capabilities are a **flat, tagged list**, and the record has no parent field. That is
+  the method's own advice and it is now structural: an "end-to-end" capability is
+  regularly invoked from inside another one, so any tree is wrong from some direction,
+  and a test asserts the field's absence rather than a comment asking for it. There is
+  one identity, the key, and it is also the filename — the map reads on disk as
+  `capabilities/loan-underwriting.json` and diffs like source. The price, stated in the
+  refusal that enforces it, is that a key cannot be renamed in place.
+
+  Both stores are design-time, so the existing export and restore already carry the map
+  between installations. The whole surface is available as MCP tools as well, because an
+  agent that deploys a process has no other way to say what the process is for.
+
+  Every KPI and SLA in the registry is a **declaration**. Atlas computes none of them,
+  and the coverage answer says so in a field rather than letting a client render a goal
+  as an achievement. The data to compute them is already there; whether it can be
+  aggregated at the volumes this is aimed at is an open question the decision record
+  carries, and measurement is a separate slice.
+
+  The method and how to work it are in `docs/architecture/business-architecture.md`,
+  including two things checking it against the tree turned up: a **none intermediate
+  throw event** — the method's milestone marker — does not compile, and Atlas's
+  Prometheus surface is operational rather than business-level, so a KPI dashboard
+  planned against `/metrics` will not find what it needs.
+
+- **A lifecycle can now take its states from an «enumeration» you already wrote.**
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) gave a class a state machine, and it
+  was written against a real model that already had one — drawn as an enumeration. That
+  model is the whole problem: its author had written the five states of an identity as
+  literals, with a paragraph of documentation on each, *because that was the only place
+  the states could be written down at all*. Adding a lifecycle beside it made the model
+  say the same five strings twice, with nothing connecting them and nothing noticing when
+  they drifted.
+
+  A business object's lifecycle now names an enumeration in the same model, and that
+  enumeration's literals **are** its states. The name of a state is written in one place.
+  Everything an enumeration cannot hold stays on the lifecycle, which is most of what a
+  lifecycle is for: which state instances are created in, which end the life, what may
+  follow what, and where each sits on the canvas.
+
+  Renaming a literal renames the state and rewrites every transition that names it —
+  which is exactly what renaming a state already does, because a state's name *is* the
+  string every process writes. Removing a literal removes the state and the arrows
+  touching it. Adding a state on the lifecycle sheet writes the literal, since that is
+  where the names live. On a lifecycle fed this way the state's name is shown read-only
+  and says where it is renamed, rather than taking an edit and dropping it.
+
+  **The class diagram finally shows the tie**: a dashed `«lifecycle»` line from the class
+  to the enumeration. It is derived from the reference and never drawn by hand — the same
+  construction as a data store's line to its class, for the same reason. A class and an
+  enumeration do not *relate*; one *takes its states from* the other, so the relationship
+  rules are untouched and nothing that counts relationships counts it.
+
+  The server refuses the three ways a document can contradict itself here: a reference to
+  a class that is not there, a reference to something that is not an enumeration, and a
+  state the enumeration does not declare. A literal with no state yet is *not* refused —
+  a machine half drawn is the normal condition, and that is incompleteness rather than a
+  contradiction. A lifecycle that names no enumeration behaves exactly as it did before.
+
+- **General-purpose scripts now have an opt-in, fail-closed OS sandbox.**
+  `--script-sandbox=strict` (or `ATLAS_SCRIPT_SANDBOX=strict`) gives every
+  PowerShell, Python and JavaScript execution private scratch, restricts file reads
+  and execution to the installed runtime with Linux Landlock, and denies creation
+  of network and Unix-domain sockets with seccomp. Atlas checks for Landlock ABI 3+
+  before starting a strict server or worker; it never silently falls back. The
+  initial default is `off`, deliberately, so upgrading does not break deployed
+  scripts that intentionally use mounted files or services. Independently of that
+  setting, a script timeout on Unix now kills the interpreter's complete process
+  group, so a spawned child cannot survive its timed-out parent.
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md))
+
+- **The Console landing page says what Atlas is, in both languages**: the dashboard
+  opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
+  what they are running. A **Key features / Kernmerkmale** tile now sits below the
+  dashboard's own tiles: sixteen short entries (one binary, durability, the compiler,
+  throughput, the Modeler, token visibility, Panorama, human work, DMN, the information
+  model, checkable BPMN coverage, integrations, agents, operations, deployment, licence), collapsible and carrying the
+  same EN/DE toggle as What's New. The copy is a static asset
+  (`api/web/key-features.json`, guarded by a test) rather than markup, and the landing
+  page's two bilingual sections now share one language setting, so it is never half
+  English and half German.
+
+  A tile that enumerates what a product *is* goes stale the way the handbook's
+  screenshots do — silently, because the page still renders and the capability nobody
+  mentioned is simply absent. So the file carries a `reviewedThrough` marker naming the
+  newest `### Added` bullet it has been held against, and `go test ./api` fails while
+  bullets sit above it. The question a feature has to answer is one line long — does
+  this change what Atlas is? — and the usual answer is no, which moves the marker and
+  writes nothing. What the marker buys is that it is asked by the person who knows the
+  feature rather than by nobody.
 
 - **The information model can now be read off the processes instead of typed in beside
   them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
@@ -197,7 +612,6 @@ _Changed_ / _Removed_ for each version.
   `applyToState`: it is a read over what the log already said. `GET
   /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
   same answer in front of an agent (ADR-0259).
-
 - **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
   such a name while it is typed, but a model deployed from a pipeline or over the API
   never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:
@@ -269,6 +683,49 @@ _Changed_ / _Removed_ for each version.
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
 ### Changed
+
+- **The class canvas's palette is drawn in the notation now, not in Unicode.** Its marks
+  were characters — `▭` for a business object, `▢` for a value type, `☰` for an
+  enumeration, `◇` and `◆` for the two kinds of whole. That was a defensible trade when
+  there was nothing to vendor: bpmn-js ships an icon font for BPMN's shapes and there is
+  no UML equivalent, and four kilobytes of font for eight marks buys little. What it cost
+  was that a palette entry looked like whatever the reader's system had for that
+  codepoint, and that the three classifiers were three near-identical rectangles.
+
+  Each entry is now a miniature of the shape the click produces, drawn as inline SVG in
+  the stylesheet. No font, no image files, nothing to fetch — the same reasoning that
+  keeps the canvases buildless ([ADR-0012](docs/adr/0012-web-ui-app-shell.md)). There is
+  no official UML icon set to take: the standard fixes the shapes on the *diagram* and
+  says nothing about a toolbar, so the miniatures are drawn from the notation itself.
+
+  The entries split in two, and the split is what each entry *is* rather than a
+  preference. A classifier is a button — one click adds one, it has no state — so it
+  carries its kind in colour: a business object with the key knocked out of its name
+  compartment, because identity is what makes it one; a value type with that compartment
+  empty, because nothing identifies it; an «enumeration» whose body is a list of literals
+  rather than rows of attributes; a data store as its cylinder. A relationship is a
+  *mode*: one of them is armed while the next two clicks draw that line, and the armed
+  entry has to be recoloured to say so — which a baked-in colour cannot do. So the four
+  relationships and the two tools are stencils that take the palette's own colour, and
+  they keep lighting on hover and reversing out of the accent when armed.
+
+- **A refused write through MCP now says why, not just that.** A validation refusal has
+  always carried every reason at once — an author fixing a form should not make one round
+  trip per mistake — but the MCP client read only the one-line summary out of it. So an
+  agent saving an information model got "the model is not valid" and nothing else. It has
+  no form to read the details out of, so it retried blind, which is the failure mode the
+  tool surface exists to avoid. The shared client now appends the findings to the message,
+  reading both shapes in use, and skips a finding it cannot parse rather than losing the
+  whole refusal to one odd entry.
+
+- **The Console landing page carries the brand mark.** "Welcome to Atlas" opened on a
+  bare heading, so the one page a newcomer lands on was the one page that showed no
+  mark at all — the glyph sat in the top bar above it and nowhere in the card itself.
+  The heading now leads with the same `.mark` box the bar uses, at 48px. It is the
+  shared box rather than a copy of the glyph, so an organisation that has uploaded its
+  own logo (ADR-0148) sees that logo here too, and a later upload or removal repaints
+  this mark along with every other one. The logo setting names the landing page along
+  with the top bar and the login screen, so what it promises is what it does.
 
 - **The Starmap reads its structure once for everybody, and everybody's health for
   themselves.** With every open Starmap now re-reading itself, the cost of deriving one
@@ -361,10 +818,25 @@ _Changed_ / _Removed_ for each version.
   The panel states the exact age for whichever node is selected (**"Oldest still parked
   5 d ago"**), which is the number a circle cannot give.
 
-  On any of them a node grows from a floor with the **square root** of its share of the
-  largest node on the landscape. The root rather than the number itself, because a
-  circle's area goes up with the square of its radius: a circle drawn straight from the
-  count would read as four times the quantity at twice the number.
+  On any of them the size is a **ratio scale**. A node carrying nothing sits at a floor;
+  a node carrying the least the weighting counts — one running instance, one incident, a
+  minute stuck — is already a clear step above it; and from there the size grows with
+  each *tenfold*, so equal steps of size are equal multiples of the tally and the largest
+  node on the landscape is the largest circle. That is the question a heatmap is opened
+  with: an estate's instance counts run from one to several thousand, and what an
+  operator wants of a circle is how many times, not how much.
+
+  The key **draws** that scale rather than only describing it: a row of reference
+  circles — nothing at all, then the tallies the scale is marked at, up to the busiest
+  node — each at the size a node carrying that much is drawn. They come out of the same
+  arithmetic the nodes did, so a circle in the key is the circle on the picture, and
+  the row travels into an exported file as well, where there is no key to scroll to.
+
+  Each circle is also a **filter**. Click the one marked 100 and the picture narrows to
+  the nodes running between a hundred and the next mark, with their neighbours kept for
+  context exactly as a search keeps them; click it again to widen. It combines with the
+  search box rather than replacing it — a term and a band together show what matches
+  both — and a saved view remembers which band it was looking at.
 
   Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
   idle process, a worker, a decision and an application whose load sits on the processes

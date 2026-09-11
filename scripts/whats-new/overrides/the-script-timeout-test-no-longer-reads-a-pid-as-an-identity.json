@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "How a test observes a kill it was already asserting. Nothing a user of the Console or the engine can see changes: the timeout behaviour under test is unaltered. Kept out of the user-facing feed, as the probe fix before it was."
+}

@@ -292,6 +292,13 @@ td.row-actions .icon-btn { margin-left: 4px; }
 ol.steps { margin: 10px 0; padding-left: 20px; }
 ol.steps li { margin: 6px 0; }
 
+/* The Console landing card leads with the brand mark beside its heading. It is the
+   same ".mark" box as the top bar — so an org logo (logo.js) replaces the built-in
+   glyph here too — only larger, and the heading's bottom margin moves to the row. */
+.welcome-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.welcome-head h1 { margin: 0; }
+.welcome-mark { width: 48px; height: 48px; border-radius: 10px; flex: none; }
+
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
@@ -3687,6 +3694,46 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .whats-new .wn-more:hover { text-decoration: underline; }
 
+/* ---------- Key features (Console landing page) ----------
+   A short statement of what Atlas is, below the dashboard's own tiles (see
+   key-features.js). Bilingual like What's New, and collapsible for the same
+   reason: someone who has read it once should be able to fold it away. The
+   entries are a responsive two-column grid that collapses to one on a narrow
+   window, so fourteen short items stay scannable instead of becoming a wall. */
+.key-features { margin-top: 18px; }
+.key-features .kf-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; cursor: pointer; list-style: none;
+}
+.key-features .kf-head::-webkit-details-marker { display: none; }
+.key-features .kf-title {
+  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
+}
+.key-features .kf-title::before {
+  content: "\25B8"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
+}
+.key-features .kf-root[open] .kf-title::before { transform: rotate(90deg); }
+
+/* Segmented EN/DE toggle, matching the What's New header. */
+.key-features .kf-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.key-features .kf-lang button {
+  appearance: none; border: 0; background: var(--surface); color: var(--muted);
+  font: 600 12px/1 system-ui, sans-serif; padding: 5px 9px; cursor: pointer;
+}
+.key-features .kf-lang button + button { border-left: 1px solid var(--border); }
+.key-features .kf-lang button:hover { background: var(--bg); }
+.key-features .kf-lang button.active { background: var(--accent-soft); color: var(--accent); }
+
+.key-features .kf-intro { margin: 10px 0 0; }
+.key-features .kf-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px;
+  margin: 14px 0 2px; padding: 0; list-style: none;
+}
+@media (max-width: 760px) { .key-features .kf-grid { grid-template-columns: 1fr; } }
+.key-features .kf-item { display: flex; flex-direction: column; gap: 2px; }
+.key-features .kf-item-title { font-weight: 600; }
+.key-features .kf-item-text { color: var(--muted); }
+
 /* The Workers view (ADR-0157). Two tables that only mean something read together:
    a job type's queue depth, and who is pulling it. The one state worth catching —
    work piling up with nobody serving it — is a row style rather than a number the
@@ -4075,6 +4122,30 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 }
 .mesh-swatches { display: flex; flex-wrap: wrap; gap: 16px; }
 .mesh-swatch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+/* The size scale on a heat weighting: reference circles a reader holds the picture
+   against. A row of its own under the shapes, because the circles are taller than a
+   line of text and threading them among the kinds would push the shapes off the line.
+   Baseline-aligned at the bottom rather than centred, so the numbers under them form
+   one line however far apart the circles are in size. */
+.mesh-scale { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+/* Each mark is a button: clicking it narrows the picture to the band it stands for.
+   Styled back down to the shape it had as a label — the affordance is the pointer and
+   the hover, because a row of framed buttons would read as chrome and compete with
+   the circles, which are the thing being compared. */
+.mesh-scale-step {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 2px 6px; cursor: pointer; font: inherit; color: inherit;
+}
+.mesh-scale-step:hover { background: var(--hover, rgba(0, 0, 0, 0.04)); }
+.mesh-scale-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The chosen band, marked the way the rest of this view marks a chosen thing. */
+.mesh-scale-step[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft, rgba(0, 0, 0, 0.06)); }
+.mesh-scale-step[aria-pressed="true"] .mesh-scale-tick { color: var(--text); font-weight: 600; }
+/* The circles carry their own fill and stroke, read off the process kind where the
+   picture reads them (see heatScaleMarks): a second copy here would be a colour that
+   could drift from the nodes the scale is for. */
+.mesh-scale-tick { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .mesh-meta { font-size: 13px; color: var(--text); }
 /* A filtered or collapsed picture states so in words, not only in shading — the
    whole point is that incompleteness is legible rather than inferred. */
@@ -4151,6 +4222,25 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-edge { stroke: var(--mesh-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .mesh-edge-uses { stroke-dasharray: 6 4; }
 .mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
+/* A line a notation has named. The dash is the derived picture's free channel and
+   ArchiMate's is spoken for — a dashed line with an open arrowhead is a Flow there,
+   and a dotted one a Realization — so an ArchiMate line is solid and its two ends
+   carry the whole distinction. After the per-kind rules, which is what lets one
+   class undo all three of them. */
+.mesh-edge-marked { stroke-dasharray: none; opacity: 1; }
+/* The marks on those ends. context-stroke takes the colour from the line the marker
+   is drawn on, so a hovered edge lit in the accent is lit to its point; where it is
+   not understood the fill and stroke attributes on the marks stand and they are the
+   resting line colour. Neither reading can be the wrong relationship — that is the
+   shape's job, not the colour's. */
+.mesh-edge-mark { fill: context-stroke; }
+.mesh-edge-mark-open {
+  fill: none; stroke: context-stroke; stroke-width: 1.2;
+  /* The head of a hairline is a hairline. The line it ends keeps one width at every
+     zoom, and an outline that thickened with the picture would read as a different
+     mark the further in somebody went. */
+  vector-effect: non-scaling-stroke;
+}
 /* Labels (ADR-0211 §7's legibility half). A few hundred names on one canvas is a
    wall of text with circles behind it, so most names are revealed rather than
    painted: the element is always in the DOM — screen readers and the node's
@@ -4225,6 +4315,14 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    edges, the halo and the severity ring already follow: positions and radii are the
    picture and scale with it, a stroke is a channel and holds its weight. */
 .mesh-body { vector-effect: non-scaling-stroke; }
+/* Interior line work on a shape whose silhouette does not carry the whole drawing —
+   the two edges that make ArchiMate's Node read as a box rather than as a notched
+   rectangle. Thinner than the outline and not selectable: it is detail, and a fold
+   that answered to the severity and hover rules would be an outline. */
+.mesh-body-detail {
+  vector-effect: non-scaling-stroke; pointer-events: none;
+  stroke: var(--mesh-ink); stroke-width: 1.2; opacity: 0.75;
+}
 .mesh-relating .mesh-related .mesh-halo {
   stroke-width: 2.5; opacity: 0.7; transition: opacity 90ms linear;
 }
@@ -5229,31 +5327,52 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* The class canvas's palette is diagram-js's, the same one bpmn-js and dmn-js put
    down their left edge — its frame, its groups and its separators all come from
    vendor/canvas/diagram-js.css, so there is nothing to restate here. What is Atlas's
-   is which glyph stands for which entry, and that the armed relationship is lit.
+   is which mark stands for which entry, and that the armed relationship is lit.
 
-   Glyphs rather than an icon font: bpmn-js ships one for BPMN's shapes and there is
-   no UML equivalent to vendor, and four kilobytes of font for eight marks would be a
-   poor trade when the notation's own marks are in Unicode already. */
+   Every mark is a miniature of the shape the click produces, drawn from the OMG
+   notation. There is no official UML icon set to vendor — the standard fixes the
+   shapes on the diagram and says nothing about a toolbar — so they are drawn here, as
+   inline SVG in the stylesheet. No font, no image files, nothing to fetch: the same
+   reasoning that keeps the canvases buildless (ADR-0012).
+
+   The entries split in two, and the split is what each entry *is* rather than a
+   preference. A classifier is a button: one click adds one, it has no state, so it
+   carries its kind in colour. A relationship is a *mode*: one of them is armed while
+   the next two clicks draw that line, and the armed entry is recoloured to say so —
+   which a baked-in colour cannot do. So the modes are masks in currentColor and
+   follow hover and the armed state; the classifiers are painted. */
 .uml-pi::before {
-  font: 17px/1 system-ui, sans-serif; color: var(--text);
-  display: flex; align-items: center; justify-content: center; height: 100%;
+  content: ""; display: block; height: 100%; width: 100%;
+  background-repeat: no-repeat; background-position: center; background-size: 19px 19px;
 }
-.uml-pi-businessObject::before { content: "▭"; }
-.uml-pi-valueType::before { content: "▢"; }
-.uml-pi-enumeration::before { content: "☰"; font-size: 14px; }
-.uml-pi-store::before { content: "⛁"; }
-/* The four relationships carry the mark that tells them apart on the drawing, so the
-   palette and the diagram say the same thing about which is which. */
-.uml-pi-association::before { content: "─"; }
-.uml-pi-aggregation::before { content: "◇"; }
-.uml-pi-composition::before { content: "◆"; }
-.uml-pi-generalization::before { content: "△"; }
-.uml-pi-lasso::before { content: "⬚"; }
-.djs-palette .uml-pi:hover::before { color: var(--accent); }
+/* The modes: the mark is a stencil and the colour is the palette's, so hovering and
+   arming reach it. */
+.uml-pi-association::before, .uml-pi-aggregation::before, .uml-pi-composition::before,
+.uml-pi-generalization::before, .uml-pi-transition::before, .uml-pi-lasso::before {
+  background-color: var(--text);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: 19px 19px; mask-size: 19px 19px;
+}
+/* The classifiers, each in the colour of its kind. */
+.uml-pi-businessObject::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%232d7d9a%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20fill-rule%3D%22evenodd%22%20fill%3D%22%232d7d9a%22%20d%3D%22M2.1%203.1h11.8v3.1H2.1z%20M4.6%203.55a1.1%201.1%200%201%200%200%202.2%201.1%201.1%200%201%200%200-2.2z%20M5.75%204.25h3.4v0.8h-1.2v0.75h-0.85v-0.75h-1.35z%22%2F%3E%3Cpath%20d%3D%22M4%209h8M4%2011.4h5.5%22%20stroke%3D%22%232d7d9a9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-valueType::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%237a5ea8%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.1%206.2h11.8%22%20stroke%3D%22%237a5ea8%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M4%209h8M4%2011.4h5.5%22%20stroke%3D%22%237a5ea89c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-enumeration::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%234a8c3f%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.1%203.1h11.8v3.1H2.1z%22%20fill%3D%22%234a8c3f%22%2F%3E%3Ccircle%20cx%3D%224.3%22%20cy%3D%229%22%20r%3D%221.05%22%20fill%3D%22%234a8c3f%22%2F%3E%3Cpath%20d%3D%22M6.5%209h5.8%22%20stroke%3D%22%234a8c3f9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%224.3%22%20cy%3D%2211.7%22%20r%3D%221.05%22%20fill%3D%22%234a8c3f%22%2F%3E%3Cpath%20d%3D%22M6.5%2011.7h3.9%22%20stroke%3D%22%234a8c3f9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-store::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.5%204.2c0-1%202.4-1.8%205.5-1.8s5.5.8%205.5%201.8v7.6c0%201-2.4%201.8-5.5%201.8s-5.5-.8-5.5-1.8z%22%20fill%3D%22none%22%20stroke%3D%22%23a36a2c%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.5%204.2c0%201%202.4%201.8%205.5%201.8s5.5-.8%205.5-1.8%22%20fill%3D%22none%22%20stroke%3D%22%23a36a2c%22%20stroke-width%3D%221.2%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-state::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.8%22%20y%3D%224%22%20width%3D%2212.4%22%20height%3D%228%22%20rx%3D%223.2%22%20fill%3D%22none%22%20stroke%3D%22%232d7d9a%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E"); }
+/* The four relationships and the two tools, as stencils. */
+.uml-pi-association::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h12%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h12%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-aggregation::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-composition::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-generalization::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.7%208h6.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M8.1%203.7L14.4%208l-6.3%204.3z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.7%208h6.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M8.1%203.7L14.4%208l-6.3%204.3z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-transition::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h9.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M9.6%205.2L14%208l-4.4%202.8%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h9.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M9.6%205.2L14%208l-4.4%202.8%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-lasso::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%222.2%22%20y%3D%223.2%22%20width%3D%2211.6%22%20height%3D%229.6%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%222.6%202%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%222.2%22%20y%3D%223.2%22%20width%3D%2211.6%22%20height%3D%229.6%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%222.6%202%22%2F%3E%3C%2Fsvg%3E"); }
+.djs-palette .uml-pi:hover::before { background-color: var(--accent); }
 /* An armed relationship is a mode, and a mode has to be visible or it is a trap: the
    entry stays lit for exactly as long as the next two clicks draw that line. */
 .djs-palette .uml-pi.active { background: var(--accent); border-radius: 4px; }
-.djs-palette .uml-pi.active::before { color: var(--accent-ink); }
+.djs-palette .uml-pi.active::before { background-color: var(--accent-ink); }
+
 .im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
 
 .im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
@@ -5370,9 +5489,6 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 }
 .uml-transition.undeclared .uml-transition-by { fill: var(--danger); }
 
-/* The palette's marks for this notation. */
-.uml-pi-state::before { content: "▢"; }
-.uml-pi-transition::before { content: "→"; }
 .uml-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
 
 /* A store is kept visibly unlike a class, because it is not one: a cylinder, joined
@@ -5386,6 +5502,13 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* A store's line to its class is an annotation, not a relationship: a store and its
    class do not relate, one *is kept in* the other (ADR-0230 §7). Dashed says so. */
 .uml-store-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+/* And a class's line to the enumeration its states come from, which is the same kind
+   of statement: the class does not relate to the enumeration, it *takes its states
+   from* one (ADR-0306). Dashed
+   for the same reason; the «lifecycle» keyword on it is what says which dependency
+   this is, since UML allows many and draws them all the same way. */
+.uml-lifecycle-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+.uml-lifecycle-link .uml-edge-label { fill: var(--muted); font-size: 10.5px; }
 
 /* diagram-js draws the selection, so the box does not have to. A line gets no
    outline from the library, so which relationship is being edited is said here. */

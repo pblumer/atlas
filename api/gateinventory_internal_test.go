@@ -29,12 +29,14 @@ var areaHandler = regexp.MustCompile(`func \(\w+ \*\w+\) Handle\w*\(\w+ http\.Re
 // this check is a file lookup rather than a second heuristic over test source.
 const gateInventoryFile = "gateinventory_test.go"
 
-// areasWithoutAGateInventory are the area services that have no object-axis
-// inventory yet, with what stands in for one today.
+// areasWithoutAGateInventory are the area services with no object-axis inventory,
+// with what stands in for one today.
 //
-// Adding an entry here is adding debt, and the pin below makes that a visible
-// decision rather than a quiet one. Removing an entry — by writing the area its
-// table — is the direction this list is meant to move.
+// Two different things are on this list and the reasons say which. Some areas have
+// an object axis and no table stating it — that is debt, and writing the table is
+// how it leaves. Others have no object axis at all: their objects are
+// organisation-wide, and a table would assert a boundary that does not exist.
+// Neither kind may be added silently, which is what the pin below is for.
 var areasWithoutAGateInventory = map[string]string{
 	"processdoc": "documentation versions carry a share token rather than a member list; the object axis here is the token, guarded by api/token's shape guard",
 	"taskfolder": "a folder is owned by one person and shared by explicit list (ADR-0268); its handlers filter on the caller throughout, but no table states that in one place",
@@ -42,14 +44,24 @@ var areasWithoutAGateInventory = map[string]string{
 	"panorama":   "models are application-owned and reached through the application's scope; the axis is checked, not inventoried",
 	"infomodel":  "same as panorama: application-owned, checked per handler",
 	"playground": "scenarios are per-session scratch state, not a shared object anybody else could reach",
+	// Not debt: there is no axis to inventory. capability.New takes no access
+	// resolver, and the record's Owner field says in as many words that it is the
+	// business owner and *not* a sharing scope. A capability is an
+	// organisation-wide vocabulary entry; the role decides, and the only visibility
+	// boundary in the area belongs to the applications the gap report reads, which
+	// it names rather than hides (ADR-0304).
+	"capability": "capabilities and value streams are organisation-wide records with no member list; the role decides, and the gap report says how much of the answer the caller's application access hid",
 }
 
-// areasMissingAGateInventory pins the size of the debt. It may only fall.
+// areasMissingAGateInventory pins the size of the list.
 //
-// A new area service that needs an entry here is a new area service whose
-// authorization nobody wrote down, and changing this number is the moment to say
-// so out loud in review.
-const areasMissingAGateInventory = 6
+// The number is not a budget to spend. It exists so that an area service arriving
+// with handlers and no table has to be looked at by somebody: a change here is a
+// diff in a review, and the reason beside the new entry is what that review reads.
+// Raising it says "this area was examined and has no axis, or has one nobody has
+// written down yet"; lowering it says an area was given its table, which is the
+// direction the debt entries are meant to move.
+const areasMissingAGateInventory = 7
 
 func TestEveryAreaServiceKeepsAGateInventory(t *testing.T) {
 	if got := len(areasWithoutAGateInventory); got != areasMissingAGateInventory {

@@ -94,7 +94,7 @@ export function removeView(views, id) {
 // graph and the shape of the window, so a coordinate captured on one screen means
 // somewhere else on another — and a saved view that reopened on empty space would be
 // worse than no saved view. The pins go the same way, for the same reason.
-export function captureView({ name, term, direction, depth, notation, selected, picked, instances, drafts, trail, frameView, world, pinned, at, id }) {
+export function captureView({ name, term, band, direction, depth, notation, selected, picked, instances, drafts, trail, frameView, world, pinned, at, id }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -105,6 +105,17 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     name: name.trim().slice(0, MAX_NAME),
     at: at ?? Date.now(),
     term: term || "",
+    // The band of the heat scale the picture was narrowed to, as that mark's own
+    // tally — 0 for the nothing-at-all circle, null for the whole landscape. Stored
+    // for the same reason the term is: a view is the whole question somebody saved,
+    // and reopening "the processes running a hundred or more" as the whole estate
+    // answers a different one.
+    //
+    // The tally rather than the mark's position on the row, because the marks are
+    // derived from the landscape and the landscape moves. A tally that is no longer a
+    // mark is dropped when the view is opened, which is the honest outcome: the band
+    // it named is not a band of this landscape.
+    band: Number.isFinite(band) && band >= 0 ? band : null,
     direction: direction || "dependents",
     depth: depth ?? "2",
     // The vocabulary the picture was read in. A view is the whole question somebody

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/limits"
 )
 
 // TestSettingsStoreThemeRoundTrip covers the durable singleton store directly: a
@@ -341,5 +343,79 @@ func TestWriteADSeedReportsASeedItCannotWrite(t *testing.T) {
 	// And no record was written, so nothing points at the seed that is not there.
 	if _, ok, err := st.getADMock(); err != nil || ok {
 		t.Errorf("a record landed despite the seed failing: ok=%v err=%v", ok, err)
+	}
+}
+
+// TestConfirmationHorizonSetting covers the two answers the horizon has to give
+// correctly, because every business-architecture read depends on them: restoring the
+// default, and refusing to guess when the stored setting cannot be read.
+func TestConfirmationHorizonSetting(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newSettingsStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing stored: the built-in default applies and the store says nobody decided.
+	if c, stored, err := store.getConfirmation(); err != nil || stored || c.HorizonMonths != 0 {
+		t.Fatalf("unset = (%+v, stored %v, err %v)", c, stored, err)
+	}
+
+	if err := store.saveConfirmation(confirmationSetting{HorizonMonths: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if c, stored, err := store.getConfirmation(); err != nil || !stored || c.HorizonMonths != 3 {
+		t.Fatalf("stored = (%+v, stored %v, err %v)", c, stored, err)
+	}
+
+	// A corrupt setting is reported, never read as the default. Silently applying
+	// twelve months to an installation that asked for three would be a freshness check
+	// answering a question nobody asked.
+	if err := os.WriteFile(store.confFile, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.getConfirmation(); err == nil {
+		t.Error("a corrupt confirmation setting was read as valid")
+	}
+}
+
+// TestConfirmationHorizonHandlerReportsABrokenStore: a setting that cannot be read is
+// reported, never answered as the default. Every business-architecture answer carries
+// the horizon it applied, so a handler that guessed would put a number on the wire that
+// nobody configured — and the one thing this whole mechanism is for is not doing that.
+func TestConfirmationHorizonHandlerReportsABrokenStore(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newSettingsStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(store.confFile, []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := nodeServer(t, store)
+	s.limits = limits.Default()
+
+	rec := httptest.NewRecorder()
+	s.handleGetConfirmation(rec, httptest.NewRequest(http.MethodGet, "/api/v1/settings/confirmation", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("a corrupt setting read = %d %s", rec.Code, rec.Body)
+	}
+
+	// And a write that cannot land is reported too: the directory is gone under it.
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	s.handleSetConfirmation(rec, httptest.NewRequest(http.MethodPut,
+		"/api/v1/settings/confirmation", strings.NewReader(`{"horizonMonths":6}`)))
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("a write into a missing directory = %d %s", rec.Code, rec.Body)
+	}
+
+	// An unreadable body is a bad request, not a silent default.
+	rec = httptest.NewRecorder()
+	s.handleSetConfirmation(rec, httptest.NewRequest(http.MethodPut, "/api/v1/settings/confirmation", errReader{}))
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("an unreadable body = %d %s", rec.Code, rec.Body)
 	}
 }

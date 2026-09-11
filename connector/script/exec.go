@@ -128,6 +128,10 @@ type CmdExec struct {
 	Lang    Lang          // language spec
 	Bin     string        // interpreter override; empty means Lang.Bin
 	Timeout time.Duration // per-script wall-clock limit; <= 0 means defaultTimeout
+	// Sandbox is the operating-system isolation profile. Empty/off preserves the
+	// historical path; strict is the fail-closed Linux profile from
+	// ADR-0303.
+	Sandbox SandboxMode
 	// MaxOutput bounds what one script may write to stdout, in bytes; <= 0 means
 	// defaultMaxOutput. The server sets it from the installation's budgets.
 	MaxOutput int64
@@ -160,12 +164,23 @@ func (e *CmdExec) maxOutput() int64 {
 	return defaultMaxOutput
 }
 
-// Check reports whether the interpreter is resolvable on PATH. The server calls it
-// once at startup so an operator whose host lacks the interpreter sees a clear
-// warning, rather than watching script tasks park silently.
+// Check reports whether the interpreter is resolvable on PATH and whether the host
+// can enforce the selected profile at all. The server calls it once at startup so an
+// operator whose host lacks the interpreter sees a clear warning, rather than
+// watching script tasks park silently.
+//
+// It deliberately stays a cheap predicate and launches nothing. Whether the
+// interpreter can actually start *inside* the profile is a separate question, asked
+// once per process by CheckSandboxLanguages, because answering it means spawning the
+// sandbox launcher — which only the Atlas executable is.
 func (e *CmdExec) Check() error {
-	_, err := exec.LookPath(e.bin())
-	return err
+	if _, err := exec.LookPath(e.bin()); err != nil {
+		return err
+	}
+	if e.Sandbox == SandboxStrict {
+		return sandboxSupport()
+	}
+	return nil
 }
 
 func (e *CmdExec) runner() func(context.Context, string, []string, []string) ([]byte, error) {
@@ -192,9 +207,16 @@ func (e *CmdExec) Run(ctx context.Context, source string, input map[string]any) 
 	}
 	args := e.Lang.Args(e.Lang.Wrap)
 	env := interpreterEnvironment(string(varsJSON), source)
+	name, args, env, cleanup, err := e.prepareCommand(args, env)
+	if err != nil {
+		return nil, fmt.Errorf("script: prepare %s sandbox: %w", e.Lang.Name, err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
 	ctx, cancel := context.WithTimeout(ctx, e.timeout())
 	defer cancel()
-	out, err := e.runner()(ctx, e.bin(), args, env)
+	out, err := e.runner()(ctx, name, args, env)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("script: %s timed out after %s", e.Lang.Name, e.timeout())
@@ -231,6 +253,7 @@ func interpreterEnvironment(varsJSON, source string) []string {
 // dropped as they arrive, never held.
 func execCommand(ctx context.Context, name string, args, env []string, max int64) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureProcessGroup(cmd)
 	cmd.Env = env
 	// stderr is quoted into an error message, so it needs far less room than the
 	// result — the same reasoning os/exec applies when it caps ExitError.Stderr.

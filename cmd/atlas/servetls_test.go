@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/limits"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/opensearch"
@@ -200,7 +201,7 @@ func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) e
 		oauthConfig{}, tlsCfg,
 		false, // vault
 		false, // userProvisioning
-		nil, time.Second, opensearch.Config{}, promquery.Config{}, retentionConfig{},
+		nil, time.Second, script.SandboxOff, opensearch.Config{}, promquery.Config{}, retentionConfig{},
 		0, 0, false,
 		false, // metrics
 		logging.FormatText, tracing.Config{}, superviseFlag{}, nil, nil,

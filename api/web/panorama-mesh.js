@@ -152,6 +152,10 @@ export function shapeVertices(shape, r) {
     // half-diagonal is r, which is what keeps it inside the reserved circle.
     case "square": return at(4, -Math.PI / 4);
     default: {
+      // ArchiMate's own outlines, at the same rule as everything else: the furthest
+      // corner sits *on* the reserved circle and none is outside it.
+      const icon = ARCHIMATE_ICONS[shape];
+      if (icon) return iconPoints(icon.points, r);
       // The wide rectangles the notation projections draw in (see NOTATION_SHAPES). Same
       // rule as every other shape: the corners sit *on* the reserved circle, so the
       // separation guarantee transfers unchanged and a projection cannot make two
@@ -168,15 +172,77 @@ export function shapeVertices(shape, r) {
 // RECTS are the shapes drawn as rectangles rather than as polygons: aspect is width
 // over height, round is the corner radius as a fraction of the short side.
 //
-// ArchiMate's own convention is the reason there are two of them — a structure
-// element is a rectangle and a behaviour element is a rounded one — and C4 draws
-// everything as a rounded box and tells its types apart by the annotation under the
-// name rather than by silhouette.
+// C4 draws everything as the same box and tells its types apart by the annotation
+// under the name rather than by silhouette, so it needs two of them and no more.
+// `am-service` is here rather than among the polygons because a stadium is a
+// rectangle whose corners are its own half-height, which is what `round: 0.5` says.
 const RECTS = {
   square: { aspect: 1, round: 0.26 },
   box: { aspect: 1.9, round: 0.08 },
   rounded: { aspect: 1.9, round: 0.42 },
+  "am-service": { aspect: 16 / 9, round: 0.5 },
 };
+
+// ARCHIMATE_ICONS is ArchiMate's own notation, as geometry.
+//
+// The standard defines two ways to draw an element: a rectangle carrying the name
+// with a small type icon in its corner, or the icon itself at full size with the name
+// beneath it. Both are the notation; the choice is about the space there is. This
+// canvas takes the second, and the reason is arithmetic rather than taste — a process
+// is drawn at a radius of 17 and a corner icon is about a tenth of the element it
+// sits in, which is one or two pixels here. An icon nobody can resolve is a rectangle
+// with a smudge in the corner, and every node on the picture would be that same
+// rectangle. Drawn as the icon, the silhouette carries the type at a glance, which is
+// what this view is read at.
+//
+// The coordinates are ArchiMate's proportions taken from Archi's own drawing routines
+// (ApplicationComponentFigure, ProcessFigure, FunctionFigure, ServiceFigure,
+// NodeFigure), centred on the origin and left at their natural scale: `iconPoints`
+// normalises them so the furthest corner lands exactly on the reserved circle. So the
+// table reads as the shape, and the one number that matters — that nothing leaves the
+// circle the layout reserved — is computed rather than hand-fitted.
+//
+// `detail` is interior line work that is part of the drawing but not of the
+// silhouette: the two edges that make a Node's box read as three-dimensional. It is
+// drawn from the same coordinates, so it cannot drift away from the outline.
+const ARCHIMATE_ICONS = {
+  // Application Component: a rectangle with two lugs on its left edge. The lugs sit
+  // at a quarter and three quarters of the height, which is where a reader of UML
+  // has been looking for them since before ArchiMate existed.
+  "am-component": {
+    points: [[-3.5, -6.5], [6.5, -6.5], [6.5, 6.5], [-3.5, 6.5], [-3.5, 4.5], [-6.5, 4.5],
+      [-6.5, 2], [-3.5, 2], [-3.5, -2], [-6.5, -2], [-6.5, -4.5], [-3.5, -4.5]],
+  },
+  // Application Process: an arrow. Behaviour with a direction — something is being
+  // carried from one end to the other.
+  "am-process": {
+    points: [[-7, -2], [1, -2], [1, -5], [7, 0], [1, 5], [1, 2], [-7, 2]],
+  },
+  // Application Function: a chevron. Behaviour gathered by what it can do rather than
+  // by the order it happens in, so it points up instead of along.
+  "am-function": {
+    points: [[-6, 7], [-6, -2], [0, -7], [6, -2], [6, 7], [0, 1]],
+  },
+  // Node: a box in perspective. The silhouette is the six-sided outline; the two
+  // interior edges are what make it a cuboid rather than an arrow-notched rectangle.
+  "am-node": {
+    points: [[-7, -4], [-4, -7], [7, -7], [7, 4], [4, 7], [-7, 7]],
+    detail: [[[-7, -4], [4, -4], [4, 7]], [[4, -4], [7, -7]]],
+  },
+};
+
+// iconPoints scales one of those outlines to the radius the layout reserved.
+//
+// Normalised on the furthest corner, so the shape is inscribed in the reserved circle
+// exactly as every other shape here is: the separation guarantee is about that circle,
+// and a notation that drew outside it could make two nodes overlap that the layout had
+// kept apart.
+function iconPoints(points, r) {
+  let furthest = 0;
+  for (const [x, y] of points) furthest = Math.max(furthest, Math.hypot(x, y));
+  const k = furthest > 0 ? r / furthest : 0;
+  return points.map(([x, y]) => [x * k, y * k]);
+}
 
 // bodyElement is the node's own outline, as SVG. Everything downstream keys off the
 // mesh-body class rather than off the element name, so severity, hover and impact
@@ -187,6 +253,19 @@ const RECTS = {
 // circle — not the polygon — that the separation guarantee is about.
 function bodyElement(shape, r, attrs) {
   const common = `class="mesh-body" data-r="${r.toFixed(1)}" ${attrs}`;
+  // Interior line work is drawn *beside* the outline rather than as part of it, and
+  // under its own class: the severity and hover rules select .mesh-body and would put
+  // a three-pixel red stroke on the fold of a box if it were one element. It is also
+  // the reason there is never more than one .mesh-body in a node — everything that
+  // reads the picture back, the tests included, asks for the outline by that name.
+  const icon = ARCHIMATE_ICONS[shape];
+  if (icon) {
+    const path = (list) => iconPoints(list, r)
+      .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+    const detail = (icon.detail || []).map((line) =>
+      `<polyline class="mesh-body-detail" fill="none" points="${path(line)}"/>`).join("");
+    return `<polygon ${common} points="${path(icon.points)}"/>${detail}`;
+  }
   const rect = RECTS[shape];
   if (rect) {
     const half = r / Math.hypot(rect.aspect, 1);
@@ -217,8 +296,8 @@ function bodyElement(shape, r, attrs) {
 // types apart by the annotation under the name. Both are rendering.
 const NOTATION_SHAPES = {
   "archimate-3.2": {
-    application: "box", process: "rounded", worker: "rounded",
-    decision: "rounded", target: "box",
+    application: "am-component", process: "am-process", worker: "am-service",
+    decision: "am-function", target: "am-node",
   },
   "c4-projection": {
     application: "rounded", process: "rounded", worker: "rounded",
@@ -226,13 +305,207 @@ const NOTATION_SHAPES = {
   },
 };
 
+// NOTATION_PAINT is what a projection fills its elements with.
+//
+// Here for the same reason NOTATION_SHAPES is: the server owns the vocabulary — what
+// a node is *called* in a notation — and the browser owns how it is drawn. A colour
+// is drawing.
+//
+// **These are not standard colours, and saying so matters.** ArchiMate 3.2 defines
+// none: the specification states that colour carries no formal semantics, and a model
+// is free to use any. What everybody recognises as the ArchiMate palette is two
+// things at once — the convention the specification's own figures are drawn in, and
+// the default fills of Archi, the tool most of these models are made in. The values
+// below are Archi's, read off its source rather than sampled from a picture
+// (AbstractArchimateElementUIProvider: defaultApplicationColor is rgb(181,255,255),
+// defaultTechnologyColor rgb(201,231,183)). They are a de-facto standard, and a
+// reader who works in ArchiMate recognises a landscape drawn in them at a glance,
+// which is the whole of what this projection is for.
+//
+// They are also *pale on purpose*, which is what makes them safe here. A layer fill
+// is a ground for black text, not a signal; the amber and red a finding is marked
+// with have to stay the loudest thing on the canvas (ADR-0211 §4), and these sit far
+// below them. The outline is the canvas's own ink rather than a literal, so a node
+// keeps the same line weight and the same colour as every edge and every other
+// outline on the picture.
+//
+// Only the kinds the notation has a word for are painted. A draft, a restricted
+// placeholder and an unresolved dependency keep Atlas's own colours, for the same
+// reason they keep Atlas's own shapes: ArchiMate has no element for them, and
+// dressing them as one would be a claim the notation does not make.
+const ARCHIMATE_APPLICATION = "#B5FFFF";
+const ARCHIMATE_TECHNOLOGY = "#C9E7B7";
+const NOTATION_PAINT = {
+  "archimate-3.2": {
+    application: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    process: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    worker: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    decision: { fill: ARCHIMATE_APPLICATION, stroke: "var(--mesh-ink)" },
+    // A Node is Technology, and the layer is the thing its colour says. Drawing a
+    // deployment target in the application blue would put it on the wrong floor of
+    // the only diagram whose readers count the floors.
+    target: { fill: ARCHIMATE_TECHNOLOGY, stroke: "var(--mesh-ink)" },
+  },
+};
+
+// paintFor is the fill and outline one node is drawn with: the notation's, where it
+// has one for that kind, and Atlas's own otherwise.
+//
+// One function, because two of them would eventually disagree — the key beside the
+// picture draws its swatches through this as well, and a key that painted its
+// swatches from its own copy would be a legend for a different picture.
+export function paintFor(node, notation) {
+  const style = KIND[node?.kind] || KIND.process;
+  const spoken = notationOf(notation?.id ?? notation);
+  const paint = NOTATION_PAINT[spoken.id]?.[node?.kind];
+  return paint ? { ...style, ...paint } : style;
+}
+
+// ArchiMate's relationship notation, as the two ends of a line.
+//
+// The elements were already drawn in the notation's own symbols; the lines between
+// them were not, and for an ArchiMate reader that is the other half of the alphabet.
+// Serving, Triggering and Assignment are told apart by what sits at the ends of an
+// otherwise identical solid line: a filled arrowhead, an open one, and a ball at the
+// far end. Nothing else distinguishes them — not the colour, not the dash.
+//
+// Which is also why the dash has to go in this notation. Atlas's own picture draws
+// `uses` dashed and `contains` dotted, which is a free channel in a vocabulary that
+// has no opinion about it. ArchiMate has one: a dashed line with an open arrowhead
+// is a Flow, and a dotted line with a hollow triangle is a Realization. Keeping the
+// derived dash would not be a missing statement, it would be a wrong one — so in the
+// ArchiMate view all three are solid and the ends carry the whole distinction.
+//
+// The geometry is Archi's again, read off its connection figures rather than guessed:
+// Assignment is a BallEndpoint at the source and a filled PolygonDecoration at the
+// target, Triggering a filled PolygonDecoration, Serving an unfilled
+// PolylineDecoration — GEF's triangle at its default 7-by-3 scale, and a ball of
+// radius 3. The proportions below are that triangle; the size is smaller, because
+// Archi draws on boxes of a hundred and twenty pixels and a node here has a radius of
+// eleven, so Archi's own pixel count would put a third of a node on the end of every
+// line.
+const AM_HEAD = 6;        // how far an arrowhead reaches back along the line
+const AM_HALF = 2.6;      // half its width across the line — 6:2.6 is Archi's 7:3
+const AM_BALL = 2.6;      // Assignment's ball, at the relationship's source
+
+// RELATION_MARKS is what each ArchiMate relationship puts at each of its own ends.
+//
+// `tail` is the relationship's source and `head` its target, which is not the same
+// as the drawn line's two ends: a Serving runs from the provider to the consumer
+// while the derived edge runs the other way, and the served row's `flip` is what
+// maps one onto the other. Saying it in the relationship's own terms keeps that
+// reversal in one place instead of baked into a mark name.
+const RELATION_MARKS = {
+  Assignment: { tail: "ball", head: "filled" },
+  Triggering: { head: "filled" },
+  Serving: { head: "open" },
+};
+
+// MARKER_IDS resolves a mark and the end it lands on to the marker that draws it.
+//
+// Two entries per shape because an SVG marker points along the path, and a mark at
+// the *start* of a line has to point back into the node the line starts at. SVG 2's
+// `orient="auto-start-reverse"` says exactly that and is not old enough to rely on
+// here, so the reversed form is a second marker whose own geometry is mirrored —
+// which needs no feature at all.
+const MARKER_IDS = {
+  filled: { end: "am-head-filled", start: "am-head-filled-back" },
+  open: { end: "am-head-open", start: "am-head-open-back" },
+  // A ball is the same ball whichever end it sits on.
+  ball: { end: "am-ball", start: "am-ball" },
+};
+
+// MARKER_DEFS draws each of them, in world units.
+//
+// markerUnits is userSpaceOnUse rather than the default strokeWidth: the lines are
+// drawn with a non-scaling stroke, so tying the mark to the stroke would freeze it at
+// one size on screen while every node around it grew with the zoom. In user space it
+// scales with the picture, exactly as the node outlines do.
+//
+// The paint is a presentation attribute and the stylesheet raises it to
+// `context-stroke` (see .mesh-edge-mark): where that is understood a mark takes the
+// colour of the line it ends, including the accent a hovered edge is lit in, and
+// where it is not the attribute stands and the mark is the resting line colour. Both
+// are readable; neither can be the wrong relationship.
+const MARKER_DEFS = {
+  "am-head-filled": `<polygon class="mesh-edge-mark" fill="var(--mesh-line)"
+    points="0,0 ${AM_HEAD},${AM_HALF} 0,${2 * AM_HALF}"/>`,
+  "am-head-filled-back": `<polygon class="mesh-edge-mark" fill="var(--mesh-line)"
+    points="${AM_HEAD},0 0,${AM_HALF} ${AM_HEAD},${2 * AM_HALF}"/>`,
+  "am-head-open": `<polyline class="mesh-edge-mark mesh-edge-mark-open" fill="none"
+    stroke="var(--mesh-line)" points="0,0 ${AM_HEAD},${AM_HALF} 0,${2 * AM_HALF}"/>`,
+  "am-head-open-back": `<polyline class="mesh-edge-mark mesh-edge-mark-open" fill="none"
+    stroke="var(--mesh-line)" points="${AM_HEAD},0 0,${AM_HALF} ${AM_HEAD},${2 * AM_HALF}"/>`,
+  "am-ball": `<circle class="mesh-edge-mark" fill="var(--mesh-line)"
+    cx="${AM_BALL}" cy="${AM_BALL}" r="${AM_BALL}"/>`,
+};
+
+// markerElement is one <marker>, sized and anchored so the drawn point lands on the
+// line's end rather than beside it.
+function markerElement(id) {
+  const body = MARKER_DEFS[id];
+  if (!body) return "";
+  if (id === "am-ball") {
+    return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
+      markerWidth="${2 * AM_BALL}" markerHeight="${2 * AM_BALL}"
+      refX="${AM_BALL}" refY="${AM_BALL}">${body}</marker>`;
+  }
+  // refX is the tip: at the far end for a forward head, at the near end for the
+  // mirrored one, which is what puts both points exactly on the line's end.
+  const refX = id.endsWith("-back") ? 0 : AM_HEAD;
+  return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
+    markerWidth="${AM_HEAD}" markerHeight="${2 * AM_HALF}"
+    refX="${refX}" refY="${AM_HALF}">${body}</marker>`;
+}
+
+// markEnds says which marker goes on which end of one drawn line.
+//
+// The drawn line runs from the derived edge's `from` to its `to`. A relationship the
+// notation runs the other way puts its head on `from` — the arrowhead moves rather
+// than the line, so the picture stays the landscape's own geometry and only the
+// claim on it is the notation's.
+export function markEnds(kind, notation) {
+  const relation = relationIn(kind, notation);
+  const mark = relation?.mark;
+  if (!mark) return null;
+  const headAt = relation.flip ? "start" : "end";
+  const tailAt = relation.flip ? "end" : "start";
+  const ends = { relation, start: null, end: null };
+  if (mark.head) ends[headAt] = MARKER_IDS[mark.head][headAt];
+  if (mark.tail) ends[tailAt] = MARKER_IDS[mark.tail][tailAt];
+  return ends;
+}
+
+// EDGE_TRIM_MOST is the most of a line either end may give up to the node it touches.
+//
+// A line is shortened by each node's reserved radius so the mark sits outside the
+// shape instead of under it. Two nodes closer together than their radii — which the
+// separation pass discourages and a drag can still produce — would shorten it past
+// its own midpoint and draw it inside out. The cap makes that case a short line with
+// its marks still the right way round.
+const EDGE_TRIM_MOST = 0.42;
+
+// trimEdge shortens one line to the two circles it runs between.
+export function trimEdge(a, b, ra, rb) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const d = Math.hypot(dx, dy);
+  if (!(d > 0)) return { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+  const ux = dx / d, uy = dy / d;
+  const cutA = Math.min(ra, d * EDGE_TRIM_MOST);
+  const cutB = Math.min(rb, d * EDGE_TRIM_MOST);
+  return {
+    x1: a.x + ux * cutA, y1: a.y + uy * cutA,
+    x2: b.x - ux * cutB, y2: b.y - uy * cutB,
+  };
+}
+
 // The landscape drawn as itself: Atlas's own kinds, no projection, nothing to
 // declare. It is here rather than fetched because it is what the view falls back to
 // when the mapping cannot be read at all — a picture in its own vocabulary is never
 // wrong about which vocabulary it is in.
 const DERIVED_NOTATION = {
   id: "atlas", label: "Atlas (derived)", short: "Atlas",
-  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: "degree",
+  projection: false, mappingVersion: 0, types: {}, relations: {}, loss: [], weigh: "degree",
 };
 
 // HEATS are the ways of drawing the same landscape with its *sizes* carrying a
@@ -283,6 +556,9 @@ const DERIVED_NOTATION = {
 const counted = (unit) => ({
   text: (n) => `${fmtCount(n)} ${unit}`,
   rich: (n) => `<b>${fmtCount(n)}</b> ${unit}`,
+  // And the bare quantity, for the scale in the key, where the unit is written once
+  // in the heading above the row instead of five times along it.
+  tick: (n) => fmtCount(n),
 });
 
 const HEATS = {
@@ -293,6 +569,14 @@ const HEATS = {
     // optional chain rather than defaulting: "no instances" and "cannot have
     // instances" are different facts and neither is a zero to be drawn.
     of: (node) => node?.runtime?.running,
+    // One running instance is the smallest thing this weighting can be asked about,
+    // and it is a real thing rather than a rounding: a process running one is running.
+    least: 1,
+    leastPhrase: "one running instance",
+    // What the nothing-at-all mark on the scale selects, in this weighting's own
+    // words. "Nothing instances at all" is what a generic phrasing produces, and a
+    // control that reads like that is one nobody trusts.
+    bandNone: "Nothing running at all",
     ...counted("running"),
     // What size means, in one sentence, for the key and for whoever has to read the
     // picture after it has been pasted somewhere with no key beside it.
@@ -301,7 +585,8 @@ const HEATS = {
       <b>${fmtCount(peak)}</b>`,
     floorNote: `Anything with no running instances of its own sits at the floor — a
       worker, a decision, and an application too, whose load is on the processes it
-      holds — so nothing drops off the picture.`,
+      holds — so nothing drops off the picture, and one running instance is already
+      unmistakably above it.`,
     quiet: `<b>Size is load here, not structure</b> — and nothing is running on this
       landscape at all, so every node is drawn at the same floor.`,
     // Why a node can be sizeable and still carry no number under its name.
@@ -320,14 +605,18 @@ const HEATS = {
     // carry one — an incident belongs to a token — and a collapsed application
     // carries the sum of the processes it stands for.
     of: (node) => node?.incidents,
+    // One incident is one incident. There is no smaller amount of trouble.
+    least: 1,
+    leastPhrase: "one incident",
+    bandNone: "Nothing parked at all",
     ...counted("incident(s)"),
     heading: "Size is trouble here, not structure.",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding
       <b>${fmtCount(peak)}</b>`,
     floorNote: `Everything with nothing parked on it sits at the floor, so a healthy
-      estate reads as a flat one and the exceptions are the only things that stand up.
-      The badges still say which nodes have a finding; the size says how much is behind
-      each.`,
+      estate reads as a flat one and a single incident is already the shape of an
+      exception. The badges still say which nodes have a finding; the size says how
+      much is behind each.`,
     quiet: `<b>Size is trouble here, not structure</b> — and nothing on this landscape
       is parked at all, so every node is drawn at the same floor. That is the answer,
       not a missing one.`,
@@ -352,15 +641,23 @@ const HEATS = {
     // pointed at.
     of: (node, at) => (node?.oldestIncident > 0
       ? Math.max(0, at - node.oldestIncident / 1e6) : 0),
+    // A minute, because that is the smallest age worth drawing a difference for: an
+    // incident raised forty seconds ago and one raised ten are the same finding, and
+    // the raw number here is nanoseconds, where "one" means nothing to anybody.
+    least: 60_000,
+    leastPhrase: "a minute stuck",
+    bandNone: "Nothing parked at all",
     text: (ms) => `stuck ${spanText(ms)}`,
     rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
+    tick: (ms) => spanText(ms),
     heading: "Size is age here, not structure.",
     peakPhrase: (peak) => `the longest-parked one on this landscape, which has been
       stuck <b>${esc(spanText(peak))}</b>`,
-    floorNote: `Everything with nothing parked on it sits at the floor. A process that
-      parked its first token an hour ago is small beside one that parked its first on
-      Friday, however many each is holding — how much is the other picture, and the two
-      routinely rank the same estate the opposite way round.`,
+    floorNote: `Everything with nothing parked on it sits at the floor, and anything
+      parked at all stands above it. A process that parked its first token an hour ago
+      is small beside one that parked its first on Friday, however many each is
+      holding — how much is the other picture, and the two routinely rank the same
+      estate the opposite way round.`,
     quiet: `<b>Size is age here, not structure</b> — and nothing on this landscape is
       parked at all, so every node is drawn at the same floor. That is the answer, not
       a missing one.`,
@@ -388,7 +685,7 @@ export function heatOf(notation) {
 // so a weighting cannot exist as a picker entry the renderer has never heard of.
 const HEAT_NOTATIONS = Object.fromEntries(Object.values(HEATS).map((heat) => [heat.key, {
   id: heat.key, label: heat.label, short: heat.short,
-  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: heat.key,
+  projection: false, mappingVersion: 0, types: {}, relations: {}, loss: [], weigh: heat.key,
 }]));
 
 // The local entries are held here rather than fetched, by the split this file already
@@ -420,6 +717,16 @@ export function useNotations(served) {
       // second, and they come from one row so the two cannot drift apart.
       types: Object.fromEntries(Object.entries(notation.types || {}).map(([kind, type]) =>
         [kind, { name: type?.name || kind, type: type?.type || "", shape: shapes[kind] || null }])),
+      // The same for the edges, with the mark this side draws each relationship
+      // with. Keyed by the notation's own machine token rather than by the derived
+      // edge kind: the served row already says which relationship an edge is, and
+      // reading the mark off that token is what makes the arrowhead on the picture
+      // and the xsi:type in the exported file two readings of one answer.
+      relations: Object.fromEntries(Object.entries(notation.relations || {}).map(([kind, rel]) =>
+        [kind, {
+          name: rel?.name || kind, type: rel?.type || "", flip: Boolean(rel?.flip),
+          mark: RELATION_MARKS[rel?.type] || null,
+        }])),
     };
   }
   notations = next;
@@ -443,6 +750,14 @@ export function notationOf(id) {
 // derived shape and the legend lists the kind as loss.
 export function typeIn(kind, notation) {
   return notationOf(notation?.id ?? notation).types[kind] || null;
+}
+
+// relationIn is what a notation calls this kind of edge, or null where it has no
+// word for it. Null draws the derived line, unmarked — the same answer typeIn gives
+// for a node the notation cannot name, and for the same reason: a mark invented here
+// would be a claim the notation does not make.
+export function relationIn(kind, notation) {
+  return notationOf(notation?.id ?? notation).relations[kind] || null;
 }
 
 // DEGREE_FULL is the number of dependencies at which a node is drawn at the top of
@@ -482,6 +797,22 @@ const HEAT_FLOOR = 11;
 // ever draws: the two ends of the estate are then told apart at a glance rather than
 // by measurement, which is the whole of what a weighting is for.
 const HEAT_SPAN = 30;
+// HEAT_STEP is what a node earns the moment it carries anything at all, before the
+// weighting has said how much.
+//
+// It exists because "some" and "none" is the first question a heatmap is asked, and
+// on a ratio scale that question has no answer at the bottom: the smallest tally is
+// the origin, so a process running one instance and a process running none would be
+// drawn the same size. So the scale starts a step up, and the step is the whole of
+// what "this one is doing something" costs.
+//
+// Six, which puts the smallest node that carries anything at 17 against a floor of
+// 11. That is two and a third times the area, and — the part that makes it the right
+// number rather than a large one — it is exactly the gap between a worker and a
+// process on the structural picture (KIND: 12 and 17). So "has any at all" reads at
+// the same glance as "is a different kind of thing", which is the glance this view is
+// read at.
+const HEAT_STEP = 6;
 
 // heatPeak is the largest tally on a landscape, and the reference every node on it is
 // drawn against.
@@ -516,37 +847,123 @@ export function heatPeak(graph, heat, at = Date.now()) {
 
 // radiusForHeat sizes a node by whatever the chosen weighting counts on it.
 //
-// The radius rises from the floor with the *square root* of the share, which is the
-// whole of the encoding:
+// Three rules, and the whole encoding is in them:
 //
-//	r = HEAT_FLOOR + HEAT_SPAN * sqrt(value / peak)
+//	value 0      →  r = HEAT_FLOOR
+//	value least  →  r = HEAT_FLOOR + HEAT_STEP
+//	value peak   →  r = HEAT_FLOOR + HEAT_SPAN
 //
-// The root, because a circle's area goes up with the square of its radius: a radius
-// drawn straight from the number would read as four times the quantity at twice the
-// count. Taking the root is what makes "twice as much" look like twice as much, and it
-// is the standard the eye is calibrated against on a bubble chart.
+// and between the last two the radius rises with the **logarithm of the ratio**:
 //
-// What is exactly proportional to the share is therefore ((r - floor) / span)², and
-// **not** the visible area above the floor — those differ, and the difference is not
-// small: at a quarter of the peak's tally the ring above the floor is about 0.36 of
-// the ring at the peak, not 0.25. An earlier version of this comment and of the key
-// claimed the second, which was a precise statement that did not survive arithmetic;
-// the test named for it now pins the law the code actually implements.
+//	r = HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) · ln(value/least) / ln(peak/least)
 //
-// Exact proportionality and a visible minimum cannot both hold — one of them has to
-// give at zero — and the minimum wins here, because a landscape is read for the nodes
-// on it as well as for the numbers. The floor is what breaks it, deliberately, and the
-// key says growth starts *from* a floor rather than implying it starts from nothing.
+// So equal steps of radius are equal *multiples* of the tally. A process running ten
+// instances stands as far above one running one as one running a hundred stands above
+// it. That is a ratio scale, and it is the right one for this quantity: an estate's
+// instance counts span one to several thousand, its incident counts one to a handful,
+// and its incident ages a minute to a fortnight — ranges no linear reading can carry,
+// because the top of each decides the scale and everything an order of magnitude below
+// it lands in the same place.
+//
+// **What this replaced, and what it gave up.** The radius used to rise with the square
+// root of the share of the peak, which makes a circle's *area* proportional to the
+// tally — the textbook encoding for a quantity drawn as a disc, and the one the eye is
+// calibrated against on a bubble chart. It answers "how much", and the arithmetic of
+// it was right. What it could not do is the thing this view is opened for. On a span
+// of thirty, a node at a hundredth of the peak was drawn three units above a node
+// carrying nothing at all, and a node at a thousandth was drawn one unit above it: the
+// whole quiet majority of a real landscape collapsed onto the floor, and the reader
+// could not tell a process running one from a process running none. The ratio scale
+// answers "how many times" instead, and that is the question an operator is actually
+// asking of a heatmap. It is a deliberate trade and the key says which one is on the
+// picture, because a radius means nothing without the law that produced it.
+//
+// **least** is the smallest tally a weighting distinguishes, declared by the weighting
+// rather than found on the landscape (see HEATS). One running instance, one incident,
+// one minute of age. Declaring it is what keeps the picture stable — a reading taken
+// off the landscape would rescale every node the moment one quiet process appeared —
+// and what keeps it honest for a duration, where the raw number is nanoseconds and
+// "one of them" means nothing to anybody.
+//
+// A landscape whose peak is at or below its least — every incident is the only
+// incident — has no range to speak of, and everything carrying anything is
+// simultaneously the smallest and the largest of it. They are drawn at the top,
+// because being the worst is what they are.
 //
 // A node with no tally at all — a worker, a decision, a deployment target, a draft,
 // a placeholder — sits on the floor rather than being sized as a zero, and that is
 // the same fact rather than a missing one: nothing is counted there because nothing
 // can be.
 export function radiusForHeat(node, peak, heat, at = Date.now()) {
-  const read = heatReader(heat);
-  const value = read ? Math.max(0, read(node, at) || 0) : 0;
-  if (!(peak > 0) || value <= 0) return HEAT_FLOOR;
-  return HEAT_FLOOR + HEAT_SPAN * Math.min(1, Math.sqrt(value / peak));
+  const entry = heatEntry(heat);
+  return radiusForTally(entry?.of ? entry.of(node, at) : 0, peak, entry);
+}
+
+// radiusForTally is that law over a bare number, and it is separate for one reason:
+// the scale in the key is drawn from it too. A key whose circles were sized by their
+// own copy of the arithmetic would be a picture of a scale rather than the scale, and
+// the two would part company the first time either was touched.
+export function radiusForTally(tally, peak, heat) {
+  const entry = heatEntry(heat);
+  const value = Math.max(0, tally || 0);
+  if (!entry || value <= 0) return HEAT_FLOOR;
+  const least = heatLeast(entry);
+  // The top is never below the value in hand: a peak read from a landscape this node
+  // is no longer on would otherwise size it past the maximum.
+  const top = Math.max(peak || 0, value, least);
+  const rise = top > least
+    ? Math.log(Math.max(value, least) / least) / Math.log(top / least)
+    : 1;
+  return HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) * Math.min(1, Math.max(0, rise));
+}
+
+// HEAT_TICKS is how many circles the scale in the key is allowed to show, the
+// nothing-at-all one included. Five, because the row has to stay on one line beside a
+// legend that already carries the kinds, the edges, the severities and the
+// provenances — and because a scale a reader counts along is one they have stopped
+// reading. What it must never drop is either end: the smallest thing that counts, and
+// the largest thing there is.
+const HEAT_TICKS = 5;
+
+// heatTicks are the tallies the scale in the key puts a circle against.
+//
+// Powers of ten from the weighting's least upward, and then the peak. That is the
+// scale's own ruling: the law is logarithmic, so the marks a reader can interpolate
+// between are the decades, and a linear set of marks on a logarithmic scale would be
+// four of them crowded at one end.
+//
+// The decade just below the peak is dropped when the peak is sitting on top of it,
+// because two circles a hair apart with different numbers under them read as a
+// rendering fault rather than as a scale.
+export function heatTicks(peak, heat) {
+  const entry = heatEntry(heat);
+  if (!entry || !(peak > 0)) return [];
+  const least = heatLeast(entry);
+  const top = Math.max(peak, least);
+  const decades = [least];
+  for (let v = least * 10; v < top; v *= 10) decades.push(v);
+  if (decades.length > 1 && top / decades[decades.length - 1] < 2) decades.pop();
+  const crowned = top > least;
+  // Places left for decades once the nothing-at-all circle and the peak have taken
+  // theirs.
+  const room = HEAT_TICKS - 1 - (crowned ? 1 : 0);
+  let kept = decades;
+  if (decades.length > room) {
+    // Thinned by a constant stride rather than by picking `room` of them evenly: a
+    // ladder whose rungs are a hundredfold apart is one a reader can carry, where a
+    // ladder of ten, a hundredfold, and then fourfold is three different rules on one
+    // line. Fewer rungs than there is room for is the price, and it is the right way
+    // round.
+    const stride = Math.ceil(decades.length / room);
+    kept = decades.filter((_, i) => i % stride === 0);
+  }
+  return crowned ? [...kept, top] : kept;
+}
+
+// heatLeast is the smallest tally a weighting tells apart from the next one up. One,
+// for anything counted; a weighting that measures something continuous says so itself.
+function heatLeast(entry) {
+  return entry?.least > 0 ? entry.least : 1;
 }
 
 // heatReader resolves either spelling of a weighting — the entry itself, or the key
@@ -554,8 +971,14 @@ export function radiusForHeat(node, peak, heat, at = Date.now()) {
 // not know reads as none rather than as zero everywhere, so an unfamiliar saved view
 // draws the structural picture instead of a flat one.
 function heatReader(heat) {
-  const entry = typeof heat === "string" ? HEATS[heat] : heat;
-  return entry?.of || null;
+  return heatEntry(heat)?.of || null;
+}
+
+// heatEntry resolves either spelling of a weighting to the weighting itself, which is
+// what the size law needs: it reads the tally *and* the smallest tally that weighting
+// distinguishes, and the two have to come from the same place or they can disagree.
+function heatEntry(heat) {
+  return (typeof heat === "string" ? HEATS[heat] : heat) || null;
 }
 
 // A target is not part of the dependency graph — no edge is derived to it, because
@@ -601,10 +1024,19 @@ const SEVERITY = {
 // legend draws its swatches with those classes rather than with a copy of them. The
 // order here is the order the key reads in, and it is deliberate: the two kinds that
 // carry a failure path first, the structure they hang on last.
+//
+// Two labels per kind, because the same claim is introduced by two different things.
+// In Atlas's own picture the line style is what a reader has to be told about, so the
+// row leads with it. In a notation that names the relationship, the name leads and the
+// line style is no longer the distinction — every ArchiMate line here is solid, and
+// the ends carry it.
 const EDGE_KEY = [
-  ["calls", "Solid line — calls: a process invokes another process"],
-  ["uses", "Dashed line — uses: a process depends on a worker or a decision"],
-  ["contains", "Dotted line — belongs to: an application and the processes it holds"],
+  ["calls", "Solid line — calls: a process invokes another process",
+    "a process invokes another process"],
+  ["uses", "Dashed line — uses: a process depends on a worker or a decision",
+    "a process depends on a worker or a decision"],
+  ["contains", "Dotted line — belongs to: an application and the processes it holds",
+    "an application and the processes it holds"],
 ];
 
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
@@ -746,8 +1178,28 @@ function radiusOf(node) {
 //
 // So the world grows with the content instead. The frame is a window onto it, the
 // opening view shows the whole thing, and reading it closely is what the zoom is
-// for. A small graph still gets at least a frame's worth of world, so nothing
-// changes for the handful-of-nodes case that was already comfortable.
+// for.
+//
+// It grows with the content and *only* with the content. There used to be a floor
+// here — a small graph got at least a frame's worth of world — on the reasoning that
+// the handful-of-nodes case was already comfortable and did not need changing. It
+// was the single biggest thing wrong with the opening view, and the arithmetic says
+// why. The world is shown at whatever scale fits it into the canvas, so a world
+// bigger than its content needs is a picture drawn smaller than it had to be, and
+// the floor is exactly that: with cells of about 98 units square, the floor stopped
+// binding only somewhere past twenty-five nodes, and everything below it was laid
+// out in a world several times too large. Measured at 1400x820, as the share of the
+// canvas the nodes' own footprints cover:
+//
+//	nodes         4    8    8   13   15   24   40   47  122
+//	with floor   3%   6%   6%  10%  12%  17%  18%  17%  17%
+//	without     17%  17%  18%  17%  17%  17%  18%  17%  17%
+//
+// The bottom row is what WORLD_FILL asks for, at every size. The row above it opens
+// at 3%: a four-node landscape drawn as four small circles adrift in an empty canvas,
+// which is what a small estate actually looked like, and what "the window is not
+// being used" meant. The floor's own defence — that a small graph was comfortable —
+// was never measured against the large graphs it was being compared to.
 function worldFor(nodes, frame) {
   let cells = 0;
   for (const n of nodes) {
@@ -757,8 +1209,9 @@ function worldFor(nodes, frame) {
     cells += cell * cell;
   }
   const aspect = Math.max(frame.width, 1) / Math.max(frame.height, 1);
-  const area = Math.max(cells / WORLD_FILL, frame.width * frame.height);
-  const width = Math.sqrt(area * aspect);
+  // One density law for every estate size: the cells the nodes need, at the fill
+  // WORLD_FILL asks for, in the shape of the frame it will be shown in.
+  const width = Math.sqrt((cells / WORLD_FILL) * aspect);
   return { width, height: width / aspect };
 }
 
@@ -791,6 +1244,219 @@ function separate(nodes, radii, gap, rounds = 24) {
     }
     if (!moved) return;
   }
+}
+
+// GATHER_REACH is how far a node may be drawn from its nearest neighbour, as a
+// multiple of how far the median node is from its own.
+//
+// The ratio is not a new idea about what "too far out" means: the table at
+// LOOSE_PULL is that exact quantity, and it already reads a worst case of about 1.6
+// as good and worst cases of 2.1 and 3.1 as bad. What is new is that it is enforced
+// rather than hoped for, and where the line falls was measured against pictures
+// rather than reasoned about. On a hub of twelve processes with one unattached one —
+// which is the estate shape this was reported on — the straggler settles at 2.07,
+// so a ceiling of 2 leaves it exactly where it was and the report stands. At 1.5 it
+// comes in, and the canvas it was holding open goes back into the picture. Below
+// that the returns stop: 1.3 moves it a little further for no visible difference.
+//
+// The ceiling costs nothing elsewhere. Across twenty-three estate shapes at four
+// window sizes, imposing it leaves the average share of the canvas the picture spans
+// exactly where it was, at 0.692, and takes the closest pair in the whole set from
+// 33 units of clear space to 41. On an estate that is mostly unattached nodes — six
+// applications and forty loose processes — the picture is indistinguishable either
+// way, because there the loose nodes are each other's neighbours already and nothing
+// is over the ceiling to begin with.
+const GATHER_REACH = 1.5;
+
+// gather is the dual of separate: separate puts a floor under how close two nodes
+// may be drawn, gather puts a ceiling on how far one *piece* of the picture may
+// drift from the rest of it.
+//
+// It exists because the forces cannot promise this and the framing cannot survive
+// without it. A piece the springs do not tie to anything else — a node with no
+// edges, or a small cluster joined only to itself — sits where the centring pull
+// balances a repulsion falling off as 1/d², and that balance is a cube root of the
+// constants: it lands far out, and tuning the pull moves it by very little
+// (LOOSE_PULL is that tuning, and the worst case in its own table is still 3.1× the
+// median). What happens next is the expensive part. fitToFrame scales the *bounding
+// box* onto the world, so a piece a long way out is not merely a piece a long way
+// out — it is the thing that decides the scale, and everything else is squeezed into
+// the fraction of the canvas it leaves. That is the picture this was reported as
+// twice: a mass in part of the window, stragglers against the far edges, and most of
+// the canvas empty.
+//
+// So it is bounded here, deterministically, in the same place and for the same
+// reason separate is: a guarantee the simulation cannot make is made afterwards, by
+// arithmetic.
+//
+// **The piece, not the node.** The first version of this measured each node against
+// its own nearest neighbour, which catches a lone node and nothing else: two
+// processes that call each other and nothing else are each other's nearest
+// neighbour at a spring's rest length, so by that measure neither was far from
+// anything, and the pair sailed past the ceiling together. On a real estate that is
+// not the rare case — a landscape is full of test processes, conformance samples and
+// one-off flows that touch nothing else — and it was those pairs and triples, not
+// lone nodes, that were still holding the canvas open. So the unit is the connected
+// component: everything the edges tie together is one piece, and a piece is measured
+// against everything outside it.
+//
+// A piece over the ceiling is translated *rigidly* toward whatever is nearest to it,
+// until the gap is exactly the ceiling and no further. Rigidly, because every
+// distance inside a component is something the layout is saying — the springs put it
+// there — and a pass that squeezed a component would be editing the picture's
+// content rather than its placement. Between components there are no edges and so
+// nothing was being said: the gap is an artifact of where the repulsion and the pull
+// happened to balance, which is exactly the quantity that may be overruled. The
+// piece stays the outlying thing it is, on the side of the picture it settled on,
+// and stops being the thing that sets the scale for everybody else.
+//
+// The largest component never moves. It is the mass the rest is measured against,
+// and something has to hold still or the pass chases itself.
+//
+// The reach is the picture's own median nearest-neighbour distance rather than a
+// number, so it carries across every world size and every estate: it says "further
+// out than this landscape's own spacing warrants", which is a statement about the
+// landscape and not about pixels. The median is taken once, before anything moves,
+// so the pass cannot chase its own tail.
+//
+// Held nodes do not move — somebody put them there — so a component containing one
+// is left alone, and the whole pass is skipped while anything is pinned, exactly as
+// the fit is, because both would slide a hand-made arrangement out from under the
+// hand that made it.
+function gather(nodes, links, radii, rounds = 4) {
+  // Below three nodes there is no median to speak of and nothing to be an outlier
+  // from: two nodes are each other's nearest neighbour whatever the distance.
+  if (nodes.length < 3) return nodes;
+  const sorted = nearestOf(nodes).map((n) => n.d).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (!(median > 0)) return nodes;
+  const reach = GATHER_REACH * median;
+  gatherPieces(nodes, links, radii, reach, rounds);
+  gatherNodes(nodes, radii, reach, rounds);
+  return nodes;
+}
+
+// gatherPieces brings in whole components — the coarse half of the ceiling, and the
+// half a per-node rule cannot do.
+function gatherPieces(nodes, links, radii, reach, rounds) {
+  const piece = piecesOf(nodes.length, links);
+  // The mass: the piece with the most nodes in it. Ties go to the one whose first
+  // node comes first, so the same graph anchors on the same piece every time.
+  const count = new Map();
+  for (const p of piece) count.set(p, (count.get(p) || 0) + 1);
+  let mass = piece[0];
+  for (const [p, n] of count) if (n > count.get(mass)) mass = p;
+  if (count.get(mass) === nodes.length) return nodes;
+
+  // A piece somebody is holding by one of its nodes is not moved: the drag put it
+  // where it is, and dragging one node of a pair must not teleport the pair.
+  const pinned = new Set();
+  for (let i = 0; i < nodes.length; i++) if (nodes[i].held) pinned.add(piece[i]);
+
+  for (let round = 0; round < rounds; round++) {
+    // The nearest thing outside each piece, re-measured every round: moving one
+    // piece in changes what the next one is nearest to, and can bring a piece that
+    // was over the ceiling under it without touching it.
+    const out = new Map();
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (piece[i] === piece[j]) continue;
+        const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+        const room = radii[i] + radii[j] + NODE_ROOM;
+        const a = out.get(piece[i]), b = out.get(piece[j]);
+        if (!a || d < a.d) out.set(piece[i], { d, from: i, to: j, room });
+        if (!b || d < b.d) out.set(piece[j], { d, from: j, to: i, room });
+      }
+    }
+    let moved = false;
+    for (const [p, near] of out) {
+      if (p === mass || pinned.has(p)) continue;
+      // Never closer than the separation pass is about to insist on anyway, or the
+      // two would be pushed apart again and the round would have been wasted.
+      const want = Math.max(reach, near.room);
+      if (near.d <= want) continue;
+      const step = (near.d - want) / near.d;
+      const dx = (nodes[near.to].x - nodes[near.from].x) * step;
+      const dy = (nodes[near.to].y - nodes[near.from].y) * step;
+      for (let i = 0; i < nodes.length; i++) {
+        if (piece[i] !== p) continue;
+        nodes[i].x += dx;
+        nodes[i].y += dy;
+      }
+      moved = true;
+    }
+    if (!moved) return nodes;
+  }
+  return nodes;
+}
+
+// gatherNodes is the fine half: one node at a time, against whatever is nearest to
+// it, wherever that is.
+//
+// It is not made redundant by the piece pass and does not make it redundant. A piece
+// is measured against what is outside it, so a node stretched away from its own
+// neighbours *inside* a large component — a long call chain the springs did not pull
+// back in — is invisible to it; and a node is measured against its nearest
+// neighbour, so a pair adrift together is invisible to a per-node rule. Measured on
+// a 120-node estate with six small islands, dropping this half took the worst node's
+// distance from 1.5 times the median to 1.9. Both halves, or neither property holds.
+//
+// This one moves a node rather than a piece, and that does shorten whatever edge it
+// was stretched along — deliberately, and only past the ceiling, where the length
+// had stopped being a reading of the graph and started being a hole in the picture.
+function gatherNodes(nodes, radii, reach, rounds) {
+  for (let round = 0; round < rounds; round++) {
+    // Re-measured each round: pulling one node in can make it somebody else's
+    // nearest neighbour, and can leave whoever it was furthest from on its own.
+    const at = nearestOf(nodes);
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i], j = at[i].at;
+      if (n.held || j < 0) continue;
+      const target = nodes[j];
+      // Never closer than the separation pass is about to insist on anyway, or the
+      // two would be pushed apart again and the round would have been wasted.
+      const want = Math.max(reach, radii[i] + radii[j] + NODE_ROOM);
+      if (at[i].d <= want) continue;
+      const step = (at[i].d - want) / at[i].d;
+      n.x += (target.x - n.x) * step;
+      n.y += (target.y - n.y) * step;
+      moved = true;
+    }
+    if (!moved) return nodes;
+  }
+  return nodes;
+}
+
+// piecesOf labels every node with the component it belongs to, as the index of one
+// representative node. Union-find over the edges, so a chain of a hundred calls is
+// one piece for the same cost as a pair.
+function piecesOf(count, links) {
+  const parent = new Int32Array(count);
+  for (let i = 0; i < count; i++) parent[i] = i;
+  const root = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  for (const [a, b] of links) {
+    const ra = root(a), rb = root(b);
+    if (ra !== rb) parent[ra] = rb;
+  }
+  const out = new Int32Array(count);
+  for (let i = 0; i < count; i++) out[i] = root(i);
+  return out;
+}
+
+// nearestOf reports, for every node, which node is closest to it and how far away
+// that is. One pass over the pairs, so both the median and the offenders come out of
+// the same arithmetic.
+function nearestOf(nodes) {
+  const out = nodes.map(() => ({ at: -1, d: Infinity }));
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      if (d < out[i].d) { out[i].d = d; out[i].at = j; }
+      if (d < out[j].d) { out[j].d = d; out[j].at = i; }
+    }
+  }
+  return out;
 }
 
 // share splits an overlap between two nodes, giving the whole of it to whichever
@@ -1074,6 +1740,9 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
     force.pullY /= correction;
   }
   settle(nodes, links, radii, force, iterations - aimed);
+  // Nothing may be left stranded off the side of the picture before it is framed,
+  // because the framing is what turns one stranded node into an empty canvas.
+  if (!anchored) gather(nodes, links, radii);
   if (!anchored) fitToFrame(nodes, width, height, margin);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again
@@ -1849,9 +2518,20 @@ const CONTEXT_HOPS = 1;
 // A search is the viewer's own choice, unlike a sharing scope, so what is left out
 // here is not a lie — but the header still reports how much is hidden, because a
 // filtered mesh looks exactly like a small one.
-function filterGraph(graph, term) {
-  if (!term) return graph;
-  const matched = new Set(graph.nodes.filter((n) => matches(n, term)).map((n) => n.id));
+// filterGraph narrows the landscape to what the reader has asked for: a term typed
+// into the box, a band chosen off the scale in the key, or both.
+//
+// Both at once is an *intersection*, and it goes through one walk rather than two.
+// Narrowing twice would take the context of the context — a node two hops from
+// something that merely explains a match — and the picture would grow as the question
+// got narrower, which is the opposite of what was asked. So the two criteria pick the
+// seeds together and `around` is called once, exactly as it is for a term alone.
+function filterGraph(graph, { term, band, heat, at = Date.now() } = {}) {
+  if (!term && !band) return graph;
+  const read = band && heat?.of ? (n) => heat.of(n, at) : null;
+  const matched = new Set(graph.nodes
+    .filter((n) => (!term || matches(n, term)) && (!read || inBand(read(n), band)))
+    .map((n) => n.id));
   return around(graph, matched, CONTEXT_HOPS);
 }
 
@@ -1927,6 +2607,7 @@ function legendEntries(graph, notation) {
     .filter(([kind]) => present.has(kind))
     .map(([kind, style]) => {
       const typed = typeIn(kind, spoken);
+      const paint = paintFor({ kind }, spoken);
       return {
         group: "kind",
         tone: "",
@@ -1936,8 +2617,8 @@ function legendEntries(graph, notation) {
         // reason they opened the landscape.
         label: typed ? `${typed.name} — ${style.label.split(" — ")[0]}` : style.label,
         mark: `<g transform="translate(8,8)">${bodyElement(typed?.shape || style.shape, 6,
-          `fill="${style.fill}" stroke="${style.stroke}" stroke-width="2" ` +
-          (style.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
+          `fill="${paint.fill}" stroke="${paint.stroke}" stroke-width="2" ` +
+          (paint.dashed ? 'stroke-dasharray="3 2"' : ""))}</g>`,
       };
     });
 
@@ -1952,12 +2633,23 @@ function legendEntries(graph, notation) {
   // That holds in an exported file too: the harvested stylesheet carries every
   // `.mesh-` rule, this one included.
   const edgeKinds = new Set((graph.edges || []).map((e) => e.kind));
-  for (const [kind, label] of EDGE_KEY) {
+  for (const [kind, label, claim] of EDGE_KEY) {
     if (!edgeKinds.has(kind)) continue;
+    // The notation's own name for the relationship where it has one, and the swatch
+    // drawn with the same marks the canvas puts on it — the key explains the picture
+    // beside it rather than a picture of its own. A relationship the notation runs
+    // backwards says so in words too: the arrowhead alone is a thing a reader has to
+    // already know the notation to read, and the row is for the one who does not.
+    const ends = markEnds(kind, spoken);
     entries.push({
       group: "edge", tone: "",
-      label,
-      mark: `<line x1="1" y1="8" x2="15" y2="8" class="mesh-edge mesh-edge-${kind}"/>`,
+      label: ends
+        ? `${ends.relation.name} — ${claim}${ends.relation.flip ? ", drawn from the provider" : ""}`
+        : label,
+      mark: `<line x1="2" y1="8" x2="14" y2="8"
+        class="mesh-edge mesh-edge-${kind}${ends ? " mesh-edge-marked" : ""}"${
+        ends?.start ? ` marker-start="url(#${ends.start})"` : ""}${
+        ends?.end ? ` marker-end="url(#${ends.end})"` : ""}/>`,
     });
   }
 
@@ -2000,7 +2692,160 @@ function legendEntries(graph, notation) {
   return entries;
 }
 
-function legendHTML(graph, layoutMs, notation, peak = 0) {
+// HEAT_SCALE_SHRINK is how much smaller a reference circle is drawn in the key than
+// the node it stands for.
+//
+// Not 1, because the largest node is 41 units across the radius and a row of them
+// would be taller than the legend it is in. Not much smaller either: the whole point
+// of the row is that the reader compares its circles against the ones on the canvas,
+// and a scale drawn at a quarter size is a scale they have to do arithmetic on. A
+// half puts the biggest reference circle at 20 pixels, which is a legend row 44
+// pixels tall — one line of the legend, and still plainly the same family of shapes.
+//
+// Everything on the row is shrunk by the same factor, so the *ratios* — which is what
+// a ratio scale is read by — are exactly the ratios on the canvas.
+const HEAT_SCALE_SHRINK = 0.5;
+
+// heatScaleMarks is the scale itself: the circles a reader measures the picture with,
+// as a list of radius-and-label pairs.
+//
+// The key already says what the law is in words, and words are not a scale. A reader
+// looking at a node cannot tell from a sentence whether it is running ten or a
+// thousand — they can tell it by holding it against a circle with a number under it,
+// which is what a bubble chart has always done and what this was missing.
+//
+// Sized by radiusForTally, the same function that sized the nodes, so the key cannot
+// drift from the canvas: there is one law and one implementation of it, and the row
+// is a rendering of that law rather than a picture of it. Drawn in the process kind's
+// own fill and stroke, read off KIND rather than copied into a stylesheet, for the
+// same reason: a scale has to look like the thing it is measuring, and most of what
+// it measures on a heat picture is a process.
+//
+// The nothing-at-all circle comes first and carries no number, because that is what
+// it means. It is the one a reader needs most: the whole complaint this scale answers
+// was that a node running one could not be told from a node running none.
+export function heatScaleMarks(heat, peak) {
+  const ticks = heatTicks(peak, heat);
+  if (!ticks.length) return [];
+  const tick = heat.tick || ((n) => fmtCount(n));
+  return [
+    { tally: 0, label: "none", r: radiusForTally(0, peak, heat) },
+    ...ticks.map((tally) => ({ tally, label: tick(tally), r: radiusForTally(tally, peak, heat) })),
+  ];
+}
+
+// heatBand is what one mark on the scale stands for, as a range of tallies.
+//
+// A mark owns everything from itself up to the next mark, and the last one owns
+// everything above it — which is the only reading that covers the whole landscape
+// without overlapping, and the only one under which the marks partition it. The
+// nothing-at-all mark is its own case: it means a tally of zero, not "less than the
+// smallest thing that counts", because those are different facts and the picture
+// keeps them apart everywhere else (see HEAT_FLOOR).
+//
+// `at` is the mark's own tally, which is what the row stores rather than its
+// position: the marks are recomputed from the landscape on every paint, and a
+// landscape whose peak has moved has different marks in different places. A tally
+// survives that where an index does not — and when the tally is no longer a mark at
+// all, the caller can see that and let go of the band rather than filter by something
+// the reader can no longer point at.
+export function heatBand(marks, at) {
+  if (at === null || at === undefined) return null;
+  if (at === 0) return { from: 0, to: 0 };
+  const i = marks.findIndex((m) => m.tally === at);
+  if (i < 0) return null;
+  return { from: at, to: i + 1 < marks.length ? marks[i + 1].tally : Infinity };
+}
+
+// inBand is the test itself. Zero is only ever in the nothing-at-all band, and a node
+// that cannot carry a tally at all — a worker, a decision — reads as zero here, which
+// is the same answer the picture gives it: it sits on the floor.
+export function inBand(value, band) {
+  if (!band) return true;
+  const tally = Math.max(0, value || 0);
+  if (band.to === 0) return tally <= 0;
+  return tally >= band.from && tally < band.to;
+}
+
+// heatScaleHTML is that row, for the key beside the canvas.
+// heatScaleHTML is that row, for the key beside the canvas — where it is also the
+// control that narrows the picture to one band of it.
+//
+// A scale a reader can measure by is a scale they will want to point at: "show me the
+// ones running a hundred or more" is the question the row makes askable, and it is
+// the question this landscape is opened with. So each mark is a button rather than a
+// label, and the picture narrows to the tallies that mark stands for.
+//
+// Buttons rather than clickable spans, because that is the whole of the keyboard and
+// screen-reader behaviour for free, and `aria-pressed` because a filter is a state
+// rather than an action. The row loses its `role="img"`: it is a group of controls
+// now, and each one carries the band it selects as its own label — "from 100 up to
+// 4 200" rather than "100", because the number under a circle is only half a range
+// and the half a reader cannot see is the half the button acts on.
+function heatScaleHTML(heat, peak, chosen = null) {
+  const marks = heatScaleMarks(heat, peak);
+  if (!marks.length) return "";
+  const box = Math.ceil((HEAT_FLOOR + HEAT_SPAN) * 2 * HEAT_SCALE_SHRINK) + 4;
+  const style = KIND.process;
+  const step = (mark) => {
+    const band = heatBand(marks, mark.tally);
+    const on = chosen !== null && chosen === mark.tally;
+    return `<button type="button" class="mesh-scale-step${on ? " mesh-scale-on" : ""}"
+      data-tally="${mark.tally}" aria-pressed="${on}"
+      title="${esc(bandPhrase(heat, marks, mark.tally))}"
+      aria-label="${esc(bandPhrase(heat, marks, mark.tally))}">
+      <svg width="${box}" height="${box}" aria-hidden="true"><circle
+        cx="${box / 2}" cy="${box / 2}" r="${(mark.r * HEAT_SCALE_SHRINK).toFixed(1)}"
+        fill="${style.fill}" stroke="${style.stroke}" stroke-width="1"/></svg>
+      <span class="mesh-scale-tick">${esc(mark.label)}</span>
+    </button>`;
+  };
+  return `<div class="mesh-scale" role="group"
+    aria-label="Size scale — choose a band to narrow the picture to it.">
+    ${marks.map(step).join("")}
+  </div>`;
+}
+
+// bandPhrase says what one mark selects, in the weighting's own words. It is the
+// button's title and the only thing a reader who cannot compare two circles has to go
+// on, so it says the range rather than repeating the number under the circle.
+function bandPhrase(heat, marks, tally) {
+  const i = marks.findIndex((m) => m.tally === tally);
+  if (i < 0) return "";
+  if (tally === 0) return heat.bandNone || "Nothing at all";
+  const tick = heat.tick || ((n) => fmtCount(n));
+  const next = marks[i + 1];
+  return next
+    ? `From ${tick(tally)} up to ${tick(next.tally)}`
+    : `${tick(tally)} and above`;
+}
+
+// heatScaleEntries is the same row for a file, in the shape the export's key lays out.
+//
+// It travels with the picture for the reason §10 gives for the stamp: beside the
+// canvas the key is one scroll away, and in a file pasted into a ticket there is
+// nothing to scroll to. A sentence saying the scale is logarithmic is not something a
+// reader can hold a circle against.
+//
+// Every mark is drawn inside the 16-unit box the export's key scales from, so the
+// circles are the *ratios* they are on the canvas rather than its pixels — which is
+// what a ratio scale is read by. The first one names the weighting, because in a file
+// this row arrives after the kinds with nothing above it to say what it is about.
+export function heatScaleEntries(heat, peak) {
+  const marks = heatScaleMarks(heat, peak);
+  if (!marks.length) return [];
+  const style = KIND.process;
+  const largest = HEAT_FLOOR + HEAT_SPAN;
+  return marks.map((mark, i) => ({
+    group: "scale",
+    tone: "",
+    label: i === 0 ? `${heat.short} — ${mark.label}` : mark.label,
+    mark: `<circle cx="8" cy="8" r="${(mark.r * 8 / largest).toFixed(2)}"
+      fill="${style.fill}" stroke="${style.stroke}" stroke-width="1"/>`,
+  }));
+}
+
+function legendHTML(graph, layoutMs, notation, peak = 0, band = null) {
   const spoken = notationOf(notation?.id ?? notation);
   const heat = heatOf(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
@@ -2029,14 +2874,23 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
   // would read its absence as "not measured", which is the one thing it does not mean.
   if (heat) {
     notes.push(peak > 0
-      ? `<p class="mesh-note"><b>${heat.heading}</b> A node grows from the floor with the
-         <b>square root</b> of its share of ${heat.peakPhrase(peak)} — the root rather
-         than the number itself, because a circle's area goes up with the square of its
-         radius, so a radius taken straight from the count would read as far more than
-         it stands for. ${heat.floorNote} Kind is still carried by shape and
-         colour.</p>`
+      ? `<p class="mesh-note"><b>${heat.heading}</b> A node carrying nothing sits at the
+         floor; ${esc(heat.leastPhrase)} is already a step above it, and from there the
+         size grows with each <b>tenfold</b> rather than with the count itself — so
+         equal steps of size are equal multiples, and the largest node here is
+         ${heat.peakPhrase(peak)}. ${heat.floorNote} That means the area is not the
+         tally: the scale answers <em>how many times</em> rather than how much, which
+         is the question an estate spanning orders of magnitude can be asked. The
+         circles below are that scale, and each one is a control: click it to narrow
+         the picture to the band it stands for, and click it again to widen. Kind is
+         still carried by shape and colour.</p>`
       : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
          colour.</p>`);
+    // Under the sentence that explains it rather than up among the kinds: a scale is
+    // read against its own caption, and the swatch rows above are about what a node
+    // *is* where this row is about how much is on it.
+    const scale = heatScaleHTML(heat, peak, band);
+    if (scale) notes.push(scale);
     notes.push(`<p class="mesh-note">${heat.absent}</p>`);
   }
   // The comparison counts only mean something once a model has been overlaid; with
@@ -2150,17 +3004,44 @@ function renderGraph(graph, layoutMs, frame,
   // One class per derived kind; the stylesheet gives each its own stroke and EDGE_KEY
   // names it for the legend. A kind this build does not know still draws — as the
   // plain line, unexplained — rather than not drawing at all.
+  //
+  // A notation with a word for the edge marks its ends as well (see markEnds), and
+  // the line is then shortened to the two circles so the mark sits outside the shape
+  // rather than under it. Without a word it is the derived line, centre to centre,
+  // exactly as before: the geometry is the landscape's and only the marks on it are
+  // the notation's.
+  const marked = new Set();
   const edges = graph.edges.map((e) => {
     const a = at.get(e.from), b = at.get(e.to);
     if (!a || !b) return "";
-    return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}"
-      x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
-      data-from="${esc(e.from)}" data-to="${esc(e.to)}"
-      class="mesh-edge mesh-edge-${esc(e.kind || "calls")}"/>`;
+    const kind = e.kind || "calls";
+    const ends = markEnds(kind, spoken);
+    const line = ends ? trimEdge(a, b, radiusOf(a), radiusOf(b))
+      : { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+    let mark = "";
+    if (ends) {
+      if (ends.start) { marked.add(ends.start); mark += ` marker-start="url(#${ends.start})"`; }
+      if (ends.end) { marked.add(ends.end); mark += ` marker-end="url(#${ends.end})"`; }
+    }
+    return `<line x1="${line.x1.toFixed(1)}" y1="${line.y1.toFixed(1)}"
+      x2="${line.x2.toFixed(1)}" y2="${line.y2.toFixed(1)}"
+      data-from="${esc(e.from)}" data-to="${esc(e.to)}"${ends ? ' data-trimmed="1"' : ""}
+      class="mesh-edge mesh-edge-${esc(kind)}${ends ? " mesh-edge-marked" : ""}"${mark}/>`;
   }).join("");
 
+  // Only the markers this picture actually uses. They live inside the canvas SVG
+  // rather than in the page, which is what carries them into an exported file — the
+  // export serialises this element, and the key beside it references the same ids
+  // from the same document.
+  const defs = marked.size
+    ? `<defs>${[...marked].map(markerElement).join("")}</defs>` : "";
+
   const circles = nodes.map((n) => {
-    const style = KIND[n.kind] || KIND.process;
+    // The notation's fill and outline where it has one for this kind, Atlas's own
+    // otherwise. Everything else on the node — the radius, the badge, the provenance
+    // ring — is about the resource rather than about the vocabulary, and is unchanged
+    // by which notation is being spoken.
+    const style = paintFor(n, spoken);
     const r = radiusOf(n);
     const label = n.kind === "restricted" ? "" : esc(n.name || "");
     const prov = PROVENANCE[n.provenance] || PROVENANCE.derived;
@@ -2227,7 +3108,7 @@ function renderGraph(graph, layoutMs, frame,
   // picture is the entire landscape, filling the window.
   return { ms, world, nodes, margin, svg: `<svg class="mesh-canvas${
     beating && beating <= PULSE_BUDGET ? " mesh-beating" : ""}" viewBox="0 0 ${width} ${height}"
-    role="img" aria-label="Derived starmap">
+    role="img" aria-label="Derived starmap">${defs}
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
 
@@ -2984,6 +3865,20 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // nobody asked for and nobody can undo.
   let trail = [];
   const drilledAt = () => (trail.length ? trail[trail.length - 1] : null);
+  // bandAt is the mark on the scale in the key the reader has chosen, as that mark's
+  // own tally — 0 for the nothing-at-all circle, null for none chosen.
+  //
+  // The tally rather than the mark's position, because the marks are derived from the
+  // landscape and a landscape whose peak has moved has different marks: a tally is
+  // still the same question afterwards where an index is a different one. paint()
+  // checks it against the marks it just computed and lets go of it when it is no
+  // longer one of them.
+  //
+  // It narrows the picture the way the search box does — same walk, same context, and
+  // an intersection when both are in force — because they are two ways of asking the
+  // same kind of question and answering them differently would be two filters a
+  // reader has to hold apart.
+  let bandAt = null;
   // pinned holds every node somebody has dragged, by id, at the world coordinates
   // they dropped it on. It is the whole of the arrangement: the layout reads it on
   // every paint, so a hand-placed node survives filtering, selecting and resizing —
@@ -3150,7 +4045,29 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       trail = trail.slice(0, -1);
       toast("That node is no longer in this starmap.");
     }
-    shown = drilledGraph || filterGraph(graph, term);
+    // The vocabulary, the moment and the reference, before the narrowing rather than
+    // after it — the band the reader may have chosen off the scale is a criterion in
+    // those terms, so they have to exist before there is anything to filter by.
+    //
+    // The reference the radii are drawn against comes from the whole landscape, not
+    // from what the filter has left on screen: narrowing to two nodes must not make
+    // the smaller of them swell into the worst thing on the estate.
+    //
+    // And one moment for the whole repaint, because a duration weighting measures
+    // against a clock: the canvas, the key, the ranking beside them and the filter
+    // that chose what is on the canvas have to be four readings of one instant, or
+    // the picture disagrees with its own caption.
+    const spoken = notationOf(notationPick.value);
+    measuredAt = Date.now();
+    const heatNow = heatOf(spoken);
+    const peak = heatPeak(graph, heatNow, measuredAt);
+    // The scale's marks are recomputed from the landscape on every paint, so a band
+    // chosen against a peak that has since moved may no longer be a mark anybody can
+    // point at. It is let go of rather than quietly filtered by: a picture narrowed by
+    // a criterion with no control showing it is a picture nobody can widen again.
+    const band = heatNow ? heatBand(heatScaleMarks(heatNow, peak), bandAt) : null;
+    if (!band) bandAt = null;
+    shown = drilledGraph || filterGraph(graph, { term, band, heat: heatNow, at: measuredAt });
     paintDrillChip();
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
@@ -3160,17 +4077,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // Where everything currently is, so a repaint while something is pinned carries
     // the picture on screen forward instead of settling a fresh one around the pins.
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
-    const spoken = notationOf(notationPick.value);
     laidOut = frame;
-    // The reference the radii are drawn against comes from the whole landscape, not
-    // from what the filter has left on screen: narrowing to two nodes must not make
-    // the smaller of them swell into the worst thing on the estate.
-    //
-    // And one moment for the whole repaint, because a duration weighting measures
-    // against a clock: the canvas, the key and the ranking beside them have to be
-    // three readings of one instant, or the picture disagrees with its own caption.
-    measuredAt = Date.now();
-    const peak = heatPeak(graph, heatOf(spoken), measuredAt);
     const painted = renderGraph(shown, 0, frame, {
       pinned, from, notation: spoken, peak, at: measuredAt,
     });
@@ -3181,7 +4088,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     at = new Map(placed.map((n) => [n.id, n]));
     surface.innerHTML = shown.nodes.length
       ? svg
-      : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
+      : `<p class="mesh-empty-filter">Nothing matches ${
+        term ? `“${esc(term)}”` : "that"}${band && term ? " in that band" : ""}.</p>`;
     index();
     nameTheNodes();
     // The rendered SVG carries none of the hover highlight, so the record of what is
@@ -3190,7 +4098,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // The freshness line, on every repaint as well as on every tick: a repaint that
@@ -3205,9 +4113,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       count.textContent = `${context} of ${graph.nodes.length} node(s) within ` +
         `${depthAny.checked ? "any" : depthValue()} hop(s)`;
     } else {
-      count.textContent = term
-        ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match` +
-          (context ? `, ${context} shown for context` : "")
+      // Two criteria, one sentence, and it names them: a count on its own over a
+      // picture narrowed by a circle somebody clicked reads as a landscape that
+      // shrank by itself.
+      const asked = [
+        term ? `“${term}”` : null,
+        band ? bandPhrase(heatNow, heatScaleMarks(heatNow, peak), bandAt).toLowerCase() : null,
+      ].filter(Boolean);
+      count.textContent = asked.length
+        ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match ` +
+          `${asked.join(" and ")}` + (context ? `, ${context} shown for context` : "")
         : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
     }
     refresh();
@@ -3370,8 +4285,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     for (const line of edgeEls) {
       const a = at.get(line.dataset.from), b = at.get(line.dataset.to);
       if (!a || !b) continue;
-      line.setAttribute("x1", a.x.toFixed(1)); line.setAttribute("y1", a.y.toFixed(1));
-      line.setAttribute("x2", b.x.toFixed(1)); line.setAttribute("y2", b.y.toFixed(1));
+      // A marked line stops at the two circles, and a drag moves the circles — so the
+      // trim is recomputed here rather than only at render, or the arrowhead would
+      // slide under the node the moment somebody moved it. One hypot per edge, in a
+      // loop the simulation already pays far more than that for.
+      const p = line.dataset.trimmed
+        ? trimEdge(a, b, radiusOf(a), radiusOf(b))
+        : { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      line.setAttribute("x1", p.x1.toFixed(1)); line.setAttribute("y1", p.y1.toFixed(1));
+      line.setAttribute("x2", p.x2.toFixed(1)); line.setAttribute("y2", p.y2.toFixed(1));
     }
   }
 
@@ -3739,9 +4661,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function drillTo(id) {
     const seen = trail.indexOf(id);
     trail = seen >= 0 ? trail.slice(0, seen + 1) : [...trail, id];
-    // The search box and the drilldown are two ways of asking the same kind of
-    // question, so entering one clears the other rather than compounding with it.
+    // The search box, the scale's bands and the drilldown are three ways of asking
+    // the same kind of question, so entering one clears the others rather than
+    // compounding with them.
     search.value = "";
+    bandAt = null;
     picked = [id];
     // Refitted, because the picture that comes back is a different graph in a
     // different world, and a frame from the old one lands on nothing.
@@ -3896,7 +4820,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         // The key travels with the picture. Beside the canvas it is one scroll away;
         // in a file that has been pasted into a ticket there is nothing to scroll to,
         // and a hexagon nobody can name is a shape rather than a worker.
-        legend: legendEntries(shown, notationOf(notationPick.value)),
+        legend: [
+          ...legendEntries(shown, notationOf(notationPick.value)),
+          // And the size scale, when size is carrying a quantity. Appended here
+          // rather than inside legendEntries because it is the one row of the key
+          // that depends on the landscape's peak rather than on its kinds.
+          ...(weighted() ? heatScaleEntries(heatOf(notationOf(notationPick.value)),
+            heatPeak(graph, weighted(), measuredAt)) : []),
+        ],
         css: exportStyles(canvas.outerHTML),
         // The whole world, not the window: the canvas's own viewBox is wherever the
         // reader has zoomed to, and a file cropped to that would drop nodes without
@@ -3916,6 +4847,29 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       toast("export failed: " + e.message, "err");
     }
   }
+
+  // Choosing a band off the scale in the key. Delegated on the slot rather than bound
+  // to the buttons, because the key is written afresh on every paint and a listener
+  // on a button that no longer exists is a control that stopped working silently.
+  //
+  // Clicking the mark that is already chosen widens the picture again. A filter you
+  // can only turn on is a trap, and the mark itself is the only obvious place to look
+  // for the way out of it.
+  legendSlot.addEventListener("click", (event) => {
+    const step = event.target.closest(".mesh-scale-step");
+    if (!step) return;
+    const tally = Number(step.dataset.tally);
+    if (!Number.isFinite(tally)) return;
+    bandAt = bandAt === tally ? null : tally;
+    // Asking about the whole landscape again, exactly as typing in the box does:
+    // leaving the trail in force would filter inside a drilldown while the key says
+    // otherwise, and the drilldown is what the picture would actually be showing.
+    trail = [];
+    // A narrowing changes what is on screen, so a frame the reader had zoomed into is
+    // about a picture that no longer exists.
+    frameView = null;
+    paint();
+  });
 
   // A different vocabulary is a different drawing, so the picture is painted again.
   // The arrangement survives it: paint() carries the positions on screen forward and
@@ -4067,6 +5021,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       }
     }
     search.value = v.term || "";
+    // A band saved against a landscape whose peak has since moved is let go of by
+    // paint(), which checks it against the marks it has just computed. Restoring it
+    // here and letting that check decide is the same rule the live picture follows.
+    bandAt = Number.isFinite(v.band) && v.band >= 0 ? v.band : null;
     dirSelect.value = v.direction || "dependents";
     setDepth(v.depth ?? "2");
     // A view saved before notations existed carries none, and the derived drawing is
@@ -4151,6 +5109,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const captured = captureView({
       name: viewName.value,
       term: search.value.trim(),
+      band: bandAt,
       direction: dirSelect.value,
       depth: depthValue(),
       notation: notationPick.value,

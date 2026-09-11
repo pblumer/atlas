@@ -1942,6 +1942,37 @@ type xmlIntermediateThrowEvent struct {
 	// Link, when present, makes this a link throw event: a goto to the link catch of the same
 	// name in the same scope — an off-page worker (ADR-0133). A pointer so an absent one is nil.
 	Link *xmlLinkEventDefinition `xml:"linkEventDefinition"`
+	// OtherChildren collects every child element none of the fields above matched, so that
+	// "carries a definition this compiler does not implement" stays distinguishable from
+	// "carries no definition at all". They used to be the same state and both were refused;
+	// once the second one compiles to a none throw (ADR-0307),
+	// the first would otherwise be silently accepted as a pass-through that does nothing the
+	// model asked for. Most of what lands here is ordinary — documentation, extensionElements,
+	// the incoming/outgoing hints bpmn-js writes — so only a *EventDefinition child is
+	// refused; see unimplementedEventDefinition.
+	OtherChildren []xmlUnmatchedChild `xml:",any"`
+}
+
+// xmlUnmatchedChild is a child element captured only for its name. It carries no content:
+// the point is to know what was there, not to read it.
+type xmlUnmatchedChild struct {
+	XMLName xml.Name
+}
+
+// unimplementedEventDefinition returns the local name of the first unmatched child that is a
+// BPMN event definition, or "" when there is none.
+//
+// The suffix is the whole test, deliberately. Naming the specific definitions that are wrong
+// on a throw event (timer, conditional, error, cancel, terminate) would be a list that goes
+// stale the moment BPMN or this compiler grows one more; a definition nothing above matched
+// is by construction one this compiler does not implement here, whatever it is called.
+func unimplementedEventDefinition(children []xmlUnmatchedChild) string {
+	for _, ch := range children {
+		if strings.HasSuffix(ch.XMLName.Local, "EventDefinition") {
+			return ch.XMLName.Local
+		}
+	}
+	return ""
 }
 
 // xmlLinkEventDefinition is a <linkEventDefinition name="…"> on an intermediate throw or

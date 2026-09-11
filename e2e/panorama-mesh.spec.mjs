@@ -32,7 +32,7 @@ const graph = {
 // serve it too: it is the same table the ArchiMate export writes from, and a mock
 // that invented its own would be testing a picture no server produces.
 const notations = [
-  { id: "atlas", label: "Atlas (derived)", short: "Atlas", projection: false, mappingVersion: 1, types: {}, loss: [] },
+  { id: "atlas", label: "Atlas (derived)", short: "Atlas", projection: false, mappingVersion: 1, types: {}, relations: {}, loss: [] },
   {
     id: "archimate-3.2", label: "ArchiMate 3.2", short: "ArchiMate",
     projection: true, mappingVersion: 1,
@@ -42,6 +42,14 @@ const notations = [
       worker: { name: "Application Service", type: "ApplicationService" },
       decision: { name: "Application Function", type: "ApplicationFunction" },
       target: { name: "Node", type: "Node" },
+    },
+    // The relationship half of the same mapping. Assignment, Triggering and Serving
+    // are what the ArchiMate export writes, and the canvas draws its arrowheads from
+    // this row rather than from a table of its own.
+    relations: {
+      contains: { name: "Assignment", type: "Assignment" },
+      calls: { name: "Triggering", type: "Triggering" },
+      uses: { name: "Serving", type: "Serving", flip: true },
     },
     loss: [
       "Nothing here was modelled.",
@@ -57,6 +65,7 @@ const notations = [
       worker: { name: "Component" }, decision: { name: "Component" },
       target: { name: "Deployment Node" },
     },
+    relations: {},
     loss: [
       "C4 separates its levels onto different diagrams.",
       "External systems are absent. Atlas holds no model of what is behind a worker.",
@@ -821,8 +830,12 @@ test("pointing at a node shows what it is connected to", async ({ page }) => {
       width: parseFloat(getComputedStyle(el).strokeWidth),
     }));
   const neighbour = await related.first().getAttribute("data-node-id");
+  // The ring fades in over 90ms, so reading it once can land mid-transition: on a
+  // loaded runner this sampled 0.26 and then 0.39, which are points on the ramp to
+  // 0.7 rather than the value it reaches. Poll for where it settles — the claim is
+  // unchanged, only the moment it is read.
+  await expect.poll(async () => (await ring(neighbour)).opacity).toBeGreaterThan(0.5);
   const lit = await ring(neighbour);
-  expect(lit.opacity).toBeGreaterThan(0.5);
   expect(lit.width).toBeGreaterThan(1);
   // The node being asked about is never in doubt: its ring is the stronger one.
   expect((await ring("process:1")).width).toBeGreaterThan(lit.width);
@@ -1733,6 +1746,42 @@ test("exports the landscape as a stamped, self-contained SVG", async ({ page }) 
 
 // A filtered export is a real landscape and not *the* landscape, and the only place
 // a later reader can learn that is the file itself.
+// The scale travels with the picture, for the reason §10 gives for the stamp: beside
+// the canvas the key is one scroll away, and in a file pasted into a ticket there is
+// nothing to scroll to. A sentence saying the scale is logarithmic is not a thing a
+// reader can hold a circle against.
+test("an exported heat picture carries its size scale", async ({ page }) => {
+  const mesh = { nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  for (const [i, running] of [0, 1, 100, 4200].entries()) {
+    const id = `process:${i}`;
+    mesh.nodes.push({ id, kind: "process", name: `Lauf ${i}`, provenance: "derived", processId: id, version: 1, runtime: { running } });
+    mesh.edges.push({ from: "application:a1", to: id, kind: "contains" });
+  }
+  installMock(page, mesh);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "instances");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve, reject) => {
+    let out = "";
+    stream.on("data", (chunk) => { out += chunk; });
+    stream.on("end", () => resolve(out));
+    stream.on("error", reject);
+  });
+
+  // The row names the weighting on its first mark, because in a file it arrives after
+  // the kinds with nothing above it to say what it is about, and it names both ends.
+  expect(svg).toContain("Instances — none");
+  expect(svg).toMatch(/>4[\s\u202f\u00a0]?200</);
+  // And the stamp points at it, rather than leaving a row of circles unexplained.
+  expect(svg).toContain("The row of");
+});
+
 test("an export of a filtered landscape says it is filtered", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/panorama/starmap");
@@ -2018,6 +2067,79 @@ test("C4 draws boxes and says which kind of box each one is", async ({ page }) =
   await expect(page.locator(".mesh-projection")).toContainText("External systems are absent");
 });
 
+// ArchiMate's own notation, drawn rather than described (ADR-0211 §8).
+//
+// A projection that keeps Atlas's circles and squares and only relabels them is a
+// translation of the vocabulary without the script: a reader who works in ArchiMate
+// recognises the notation by its silhouettes, and those silhouettes were exactly what
+// was missing. The standard defines two ways to draw an element — a box with a small
+// type icon in its corner, or the icon itself at full size — and at the radii this
+// canvas uses a corner icon would be one or two pixels. So the icon is the node.
+//
+// Checked as the properties rather than against a picture: each mapped kind gets its
+// own outline, no two share one, each differs from the one Atlas drew, and the fill
+// is the layer's.
+test("ArchiMate is drawn in ArchiMate's own symbols and layer colours", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const drawn = async () => page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll(".mesh-node")].map((g) => {
+      const body = g.querySelector(".mesh-body");
+      return [g.getAttribute("data-node-id"), {
+        // The outline as drawn, so two shapes are compared rather than two names.
+        outline: `${body.tagName.toLowerCase()}:${body.getAttribute("points") || body.getAttribute("rx") || ""}`,
+        fill: body.getAttribute("fill"),
+      }];
+    })));
+
+  const before = await drawn();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  const after = await drawn();
+  const mapped = ["application:a1", "process:1", "worker:c1", "decision:credit"];
+
+  // Application, process, worker and decision are all Application layer, so they all
+  // carry its fill: the colour says the layer, the silhouette says the element.
+  for (const id of mapped) expect(after[id].fill, id).toBe("#B5FFFF");
+
+  // Four kinds, four different outlines. A shape standing for two of them would be a
+  // channel spent on nothing — the rule Atlas's own kinds are already held to.
+  expect(new Set(mapped.map((id) => after[id].outline)).size, "all different").toBe(4);
+
+  // And every one differs from what Atlas drew, or the projection changed nothing but
+  // the caption.
+  for (const id of mapped) expect(after[id].outline, id).not.toBe(before[id].outline);
+
+  // The caption still names the element. The silhouette carries the type at a glance;
+  // the word is what settles it, and a reader new to ArchiMate has only the word.
+  await expect(page.locator(".mesh-canvas")).toContainText("[Application Component]");
+  await expect(page.locator(".mesh-canvas")).toContainText("[Application Process]");
+});
+
+// A Node is Technology, and the layer is what its colour says. Drawing a deployment
+// target in the Application layer's blue would put it on the wrong floor of the one
+// kind of diagram whose readers count the floors.
+test("a deployment target is drawn as a Node, in the Technology layer's colour", async ({ page }) => {
+  const withTarget = {
+    ...graph,
+    nodes: [...graph.nodes, { id: "target:peer", kind: "target", name: "atlas-prod-2", provenance: "derived" }],
+    edges: [...graph.edges, { from: "application:a1", to: "target:peer", kind: "runs-on" }],
+  };
+  installMock(page, withTarget);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  await expect(page.locator('[data-node-id="target:peer"] .mesh-body'))
+    .toHaveAttribute("fill", "#C9E7B7");
+  // The two interior edges that make the box read as three-dimensional. They are
+  // drawn beside the outline rather than as part of it, so the severity and hover
+  // rules — which select .mesh-body — cannot put a finding's stroke on a fold.
+  await expect(page.locator('[data-node-id="target:peer"] .mesh-body-detail')).toHaveCount(2);
+  await expect(page.locator('[data-node-id="target:peer"] .mesh-body')).toHaveCount(1);
+});
+
 // A kind the notation has no word for keeps its own shape and is named as loss.
 // Inventing an element for it would be the silent drop §8's theme ban exists to
 // prevent — and a restricted placeholder is a finding about the picture rather than
@@ -2029,14 +2151,206 @@ test("a kind the notation cannot express keeps its own shape", async ({ page }) 
 
   const shapeOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
     .evaluate((el) => el.tagName.toLowerCase());
-  const before = await shapeOf("restricted:1");
+  const fillOf = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => el.getAttribute("fill"));
+  const before = { shape: await shapeOf("restricted:1"), fill: await fillOf("restricted:1") };
+  const process = await shapeOf("process:1");
 
   await page.selectOption("#mesh-notation", "archimate-3.2");
-  expect(await shapeOf("restricted:1")).toBe(before);
+  expect(await shapeOf("restricted:1")).toBe(before.shape);
+  // And the colour with it. A placeholder painted in the Application layer's fill
+  // would be claiming a layer for something the notation has no element for at all.
+  expect(await fillOf("restricted:1")).toBe(before.fill);
   await expect(page.locator(".mesh-projection")).toContainText("no ArchiMate element");
-  // The process beside it did change, so this is a node the projection left alone
-  // rather than a projection that did nothing.
-  expect(await shapeOf("process:1")).toBe("rect");
+  // The process beside it did change — into ArchiMate's own arrow — so this is a node
+  // the projection left alone rather than a projection that did nothing.
+  expect(await shapeOf("process:1")).not.toBe(process);
+  expect(await shapeOf("process:1")).toBe("polygon");
+});
+
+// ArchiMate's other alphabet: the lines (ADR-0211 §8).
+//
+// The elements are drawn in the notation's own symbols. The lines between them were
+// not, and for an ArchiMate reader that is half the notation missing — Assignment,
+// Triggering and Serving are one solid line apiece, told apart only by what sits at
+// the ends. A picture that drew all three the same way was saying "these are related"
+// where the data says which way and in what sense.
+const edgeLine = (page, from, to) =>
+  page.locator(`.mesh-edge[data-from="${from}"][data-to="${to}"]`);
+
+test("ArchiMate's relationships are drawn in ArchiMate's own line ends", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  // Assignment: a ball where the relationship starts, a filled arrowhead where it
+  // ends. Archi draws it with a BallEndpoint and a filled PolygonDecoration, and it
+  // is the one relationship here that marks both of its ends.
+  const assignment = edgeLine(page, "application:a1", "process:1");
+  await expect(assignment).toHaveAttribute("marker-start", "url(#am-ball)");
+  await expect(assignment).toHaveAttribute("marker-end", "url(#am-head-filled)");
+
+  // Triggering: the filled arrowhead alone.
+  const triggering = edgeLine(page, "process:1", "process:2");
+  await expect(triggering).toHaveAttribute("marker-end", "url(#am-head-filled)");
+  expect(await triggering.getAttribute("marker-start")).toBeNull();
+
+  // Serving: an open arrowhead, which is the whole of what tells it from Triggering.
+  // Filled against unfilled is not a decoration here — it is the difference between
+  // "this one sets that one going" and "that one is there for this one".
+  const serving = edgeLine(page, "process:1", "worker:c1");
+  await expect(serving).toHaveAttribute("marker-start", "url(#am-head-open-back)");
+  expect(await serving.getAttribute("marker-end")).toBeNull();
+
+  // And every one of them solid. Atlas's own picture draws `uses` dashed and
+  // `contains` dotted, which is a free channel in a vocabulary with no opinion about
+  // it — ArchiMate has one, where a dashed line with an open head is a Flow and a
+  // dotted one a Realization. Keeping the derived dash would not be a missing
+  // statement but a wrong one.
+  for (const line of [assignment, triggering, serving]) {
+    const dash = await line.evaluate((el) => getComputedStyle(el).strokeDasharray);
+    expect(["none", ""]).toContain(dash);
+  }
+
+  // The markers are inside the canvas rather than in the page around it, which is
+  // what carries them into a file somebody saves.
+  await expect(page.locator(".mesh-canvas defs #am-head-filled")).toHaveCount(1);
+});
+
+// ArchiMate's Serving runs from the provider to the consumer; the landscape's `uses`
+// edge runs the other way, because a process is what names the worker it needs. The
+// export has always reversed it. The picture has to make the same reversal or the two
+// say opposite things about one fact.
+test("a Serving relationship points at the process, not at the worker it names", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  // The drawn line still runs process → worker: the reversal moves the arrowhead, not
+  // the geometry, so everything that reads the picture back — the hover, the impact
+  // walk, the exported document — is looking at the same edge it always was.
+  const serving = edgeLine(page, "process:1", "worker:c1");
+  await expect(serving).toHaveCount(1);
+  // The head is therefore on the *start*, which is the process. The worker end
+  // carries nothing, because in ArchiMate nothing arrives at a provider.
+  await expect(serving).toHaveAttribute("marker-start", "url(#am-head-open-back)");
+
+  // Triggering is the control: the same picture, an unreversed relationship, and the
+  // head on the other end. Without it this test would pass on a build that put every
+  // mark at the start.
+  await expect(edgeLine(page, "process:1", "process:2")).toHaveAttribute(
+    "marker-end", "url(#am-head-filled)");
+
+  // The key says it in words as well. An arrowhead pointing the unexpected way is
+  // only readable to somebody who already knows the notation, and the row is for the
+  // reader who does not.
+  await expect(page.locator(".mesh-rules")).toContainText("Serving");
+  await expect(page.locator(".mesh-rules")).toContainText("drawn from the provider");
+});
+
+// A mark at the end of a centre-to-centre line is a mark underneath the node, which
+// is a notation nobody can read. The line has to stop at the circle the layout
+// reserved — the same circle the shapes are inscribed in.
+test("a marked line stops at the circles, so its ends are not under the nodes", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const geometry = async (from, to) => page.evaluate(([f, t]) => {
+    const line = document.querySelector(`.mesh-edge[data-from="${f}"][data-to="${t}"]`);
+    const at = (id) => {
+      const g = document.querySelector(`[data-node-id="${id}"]`);
+      const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+      return {
+        x: parseFloat(m[1]), y: parseFloat(m[2]),
+        r: parseFloat(g.querySelector(".mesh-body").dataset.r),
+      };
+    };
+    const a = at(f), b = at(t);
+    const read = (n) => parseFloat(line.getAttribute(n));
+    return {
+      a, b,
+      gapA: Math.hypot(read("x1") - a.x, read("y1") - a.y),
+      gapB: Math.hypot(read("x2") - b.x, read("y2") - b.y),
+      span: Math.hypot(read("x2") - read("x1"), read("y2") - read("y1")),
+      apart: Math.hypot(b.x - a.x, b.y - a.y),
+    };
+  }, [from, to]);
+
+  // Before: the derived picture draws no marks, so it has no reason to stop short and
+  // does not. This is the control — it is what makes the numbers below a change.
+  const plain = await geometry("application:a1", "process:1");
+  expect(plain.gapA).toBeLessThan(0.2);
+  expect(plain.gapB).toBeLessThan(0.2);
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  const marked = await geometry("application:a1", "process:1");
+  // Each end now starts one radius out from its node's centre, so the ball and the
+  // arrowhead land outside the shape rather than behind it.
+  expect(marked.gapA).toBeCloseTo(marked.a.r, 0);
+  expect(marked.gapB).toBeCloseTo(marked.b.r, 0);
+  // And the line is shorter than the distance between the two nodes by exactly what
+  // it gave up at the ends — it was trimmed, not moved.
+  expect(marked.span).toBeCloseTo(marked.apart - marked.a.r - marked.b.r, 0);
+});
+
+// The notation is a projection and stays inside it. A reader who never picks one is
+// looking at Atlas's own picture, and the line styles there are the only thing
+// telling its three kinds apart.
+test("Atlas's own picture keeps its line styles and puts nothing on their ends", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  for (const [from, to] of [["application:a1", "process:1"], ["process:1", "process:2"],
+    ["process:1", "worker:c1"]]) {
+    const line = edgeLine(page, from, to);
+    expect(await line.getAttribute("marker-start")).toBeNull();
+    expect(await line.getAttribute("marker-end")).toBeNull();
+  }
+  // The dash is still doing the work the marks would otherwise take over.
+  const dash = await edgeLine(page, "process:1", "worker:c1")
+    .evaluate((el) => getComputedStyle(el).strokeDasharray);
+  expect(dash).not.toBe("none");
+  await expect(page.locator(".mesh-canvas defs")).toHaveCount(0);
+  // And the key reads in Atlas's own words rather than ArchiMate's.
+  await expect(page.locator(".mesh-rules")).toContainText("Dashed line — uses");
+});
+
+// An exported picture is read where there is nothing to hover and no key to scroll
+// to. The marks have to travel with it, and so does the row that says what they mean.
+test("an exported ArchiMate picture carries its relationship marks", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+  });
+
+  // The marker definitions, and the lines that point at them. A file carrying the
+  // references without the definitions would draw every relationship as a bare line
+  // and look like a picture rather than a broken one, which is the failure worth a
+  // test: nothing about it would announce itself.
+  expect(svg).toContain('id="am-head-filled"');
+  expect(svg).toContain('id="am-head-open-back"');
+  expect(svg).toContain('id="am-ball"');
+  expect(svg).toContain('marker-end="url(#am-head-filled)"');
+  expect(svg).toContain('marker-start="url(#am-head-open-back)"');
+  // And the key in the file names the relationships rather than the line styles the
+  // ArchiMate picture no longer uses.
+  expect(svg).toContain("Serving —");
+  expect(svg).toContain("Assignment —");
 });
 
 // An exported projection has to carry that it is one. A C4-looking file that does
@@ -2087,6 +2401,40 @@ test("a saved view remembers the notation it was read in", async ({ page }) => {
   await page.locator(".mesh-view-open").first().click();
   await expect(page.locator("#mesh-notation")).toHaveValue("archimate-3.2");
   await expect(page.locator(".mesh-canvas")).toContainText("[Application Process]");
+});
+
+// A view is the whole question somebody saved, and a band of the scale is part of
+// that question: reopening "the processes running a hundred or more" as the whole
+// estate answers a different one. Stored as the mark's own tally rather than its
+// position on the row, because the marks are derived from the landscape and the
+// landscape moves.
+test("a saved view remembers the band of the scale it was narrowed to", async ({ page }) => {
+  const mesh = { nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  for (const [i, running] of [0, 1, 40, 4200].entries()) {
+    const id = `process:${i}`;
+    mesh.nodes.push({ id, kind: "process", name: `Lauf ${i}`, provenance: "derived", processId: id, version: 1, runtime: { running } });
+    mesh.edges.push({ from: "application:a1", to: id, kind: "contains" });
+  }
+  installMock(page, mesh);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  await page.selectOption("#mesh-notation", "instances");
+  await page.locator('.mesh-scale-step[data-tally="1"]').click();
+  await expect(page.locator("#mesh-count")).toContainText("match from 1 up to");
+
+  await page.locator("#mesh-view-name").fill("The quiet ones");
+  await page.locator("#mesh-view-save button").click();
+  await expect(page.locator(".mesh-view-list")).toContainText("The quiet ones");
+
+  // Away from it entirely: another weighting, no band.
+  await page.selectOption("#mesh-notation", "atlas");
+  await expect(page.locator(".mesh-scale")).toHaveCount(0);
+
+  await page.locator(".mesh-view-open").first().click();
+  await expect(page.locator("#mesh-notation")).toHaveValue("instances");
+  await expect(page.locator('.mesh-scale-step[data-tally="1"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#mesh-count")).toContainText("match from 1 up to");
 });
 
 // The landscape as a file another tool can open (ADR-0211 §8). The document is
@@ -2635,6 +2983,134 @@ test("on the instance weighting a node is sized by what is running on it", async
   // Switching back is switching back: the structural reading returns intact.
   await page.selectOption("#mesh-notation", "atlas");
   expect(await radius("application:a1")).toBeGreaterThan(await radius("process:1"));
+});
+
+// The scale in the key: reference circles a reader holds the picture against.
+//
+// The key said what the law was in words, and words are not a scale. A reader looking
+// at a node cannot tell from a sentence whether it is running ten or a thousand; they
+// can tell it by holding the node against a circle with a number under it, which is
+// what a bubble chart has always done.
+//
+// What makes it a scale rather than a decoration is that the circles come out of the
+// same function the nodes did. So that is what is checked: not that a row exists, but
+// that a node carrying a tally is drawn the size of the reference circle bearing that
+// number — measured off the rendered picture, both of them.
+test("the key carries a scale, and it is the scale the picture was drawn with", async ({ page }) => {
+  const mesh = { nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  // A load profile with a real range: the quiet tail is the part the old scale could
+  // not draw, and the top is three orders of magnitude above it.
+  for (const [i, running] of [0, 1, 1, 10, 100, 4200].entries()) {
+    const id = `process:${i}`;
+    mesh.nodes.push({ id, kind: "process", name: `Lauf ${i}`, provenance: "derived", processId: id, version: 1, runtime: { running } });
+    mesh.edges.push({ from: "application:a1", to: id, kind: "contains" });
+  }
+  installMock(page, mesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "instances");
+
+  const scale = await page.evaluate(() => {
+    const row = document.querySelector(".mesh-scale");
+    if (!row) return null;
+    return [...row.querySelectorAll(".mesh-scale-step")].map((step) => ({
+      label: step.querySelector(".mesh-scale-tick").textContent.trim(),
+      r: Number(step.querySelector("circle").getAttribute("r")),
+    }));
+  });
+  expect(scale, "the key has a size scale").not.toBeNull();
+
+  // Both ends are named: the nothing-at-all circle, which is the one the complaint
+  // this scale answers was about, and the busiest node on the landscape.
+  expect(scale[0].label).toBe("none");
+  expect(scale[scale.length - 1].label.replace(/\s/g, "")).toBe("4200");
+  // Every circle is larger than the one before it, or the row is not a ladder.
+  for (let i = 1; i < scale.length; i++) {
+    expect(scale[i].r, `${scale[i].label} against ${scale[i - 1].label}`)
+      .toBeGreaterThan(scale[i - 1].r);
+  }
+
+  // And the ratios on the row are the ratios on the canvas. The row is drawn smaller
+  // than the picture so that it fits in the key, so what has to match is the
+  // proportion between its circles and the proportion between the nodes they stand
+  // for — which is what a ratio scale is read by.
+  const drawn = (id) => page.locator(`[data-node-id="${id}"] .mesh-body`)
+    .evaluate((el) => Number(el.getAttribute("data-r")));
+  const shrink = scale[0].r / (await drawn("process:0"));
+  // The rungs the row actually shows: with a peak of 4200 the decades are thinned to
+  // a constant hundredfold, so the ladder is 1, 100 and the peak.
+  for (const [id, label] of [["process:0", "none"], ["process:1", "1"], ["process:4", "100"], ["process:5", "4200"]]) {
+    const mark = scale.find((m) => m.label.replace(/\s/g, "") === label);
+    expect(mark, `the scale marks ${label}`).toBeTruthy();
+    expect(mark.r / (await drawn(id)), `${label} is drawn to scale`).toBeCloseTo(shrink, 3);
+  }
+});
+
+// The scale is also the control. A scale a reader can measure by is one they will
+// want to point at — "show me the ones running a hundred or more" is the question the
+// row makes askable, and it is the question a landscape is opened with.
+//
+// It narrows the picture the way the search box does, through the same walk and with
+// the same context, because they are two ways of asking the same kind of question.
+test("a mark on the scale narrows the picture to its own band", async ({ page }) => {
+  const mesh = { nodes: [{ id: "application:a1", kind: "application", name: "Billing", provenance: "derived" }], edges: [], restricted: 0, clustered: false };
+  // Spread across three orders of magnitude, so the marks come out as 1, 100 and the
+  // peak and every band has something of its own in it.
+  for (const [i, running] of [0, 0, 1, 5, 40, 300, 4200].entries()) {
+    const id = `process:${i}`;
+    mesh.nodes.push({ id, kind: "process", name: `Lauf ${i}`, provenance: "derived", processId: id, version: 1, runtime: { running } });
+    mesh.edges.push({ from: "application:a1", to: id, kind: "contains" });
+  }
+  installMock(page, mesh);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "instances");
+
+  // Each mark carries the band it acts on as its own name, because the number under
+  // the circle is only half a range and the half a reader cannot see is the half the
+  // button acts on.
+  // The thousands separator is whatever fmtCount uses, so the group is matched
+  // rather than spelled: the claim is the wording, not the space.
+  await expect(page.locator('.mesh-scale-step[data-tally="100"]'))
+    .toHaveAttribute("aria-label", /^From 100 up to 4\s?200$/);
+  await expect(page.locator('.mesh-scale-step[data-tally="4200"]'))
+    .toHaveAttribute("aria-label", /^4\s?200 and above$/);
+  await expect(page.locator('.mesh-scale-step[data-tally="0"]'))
+    .toHaveAttribute("aria-label", "Nothing running at all");
+
+  const whole = await page.locator(".mesh-node").count();
+  await page.locator('.mesh-scale-step[data-tally="100"]').click();
+  await expect(page.locator('.mesh-scale-step[data-tally="100"]')).toHaveAttribute("aria-pressed", "true");
+
+  // Only the one node in the band is a match. Its application comes with it, faded,
+  // for the same reason a search brings context: a busy process with no idea which
+  // application it belongs to is half an answer.
+  await expect(page.locator("#mesh-count")).toContainText(/1 of 8 node\(s\) match from 100 up to 4\s?200/);
+  await expect(page.locator('[data-node-id="process:5"]')).toHaveCount(1);
+  await expect(page.locator('[data-node-id="process:6"]')).toHaveCount(0);
+  expect(await page.locator(".mesh-node").count()).toBeLessThan(whole);
+
+  // Clicking the same mark widens again. A filter you can only turn on is a trap, and
+  // the mark is the only obvious place to look for the way out of it.
+  await page.locator('.mesh-scale-step[data-tally="100"]').click();
+  await expect(page.locator('.mesh-scale-step[data-tally="100"]')).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("#mesh-count")).toContainText(`${whole} node(s)`);
+
+  // A term and a band together are an intersection, not two pictures glued: the term
+  // alone matches four processes, and only one of them is in the band.
+  await page.fill("#mesh-search", "Lauf");
+  await expect(page.locator("#mesh-count")).toContainText("7 of 8 node(s) match “lauf”");
+  await page.locator('.mesh-scale-step[data-tally="1"]').click();
+  await expect(page.locator("#mesh-count")).toContainText("3 of 8 node(s) match “lauf” and from 1 up to 100");
+
+  // And a weighting with no scale has no band: switching back to the structural
+  // drawing puts the whole landscape back rather than leaving a filter nobody can see.
+  await page.fill("#mesh-search", "");
+  await page.selectOption("#mesh-notation", "atlas");
+  await expect(page.locator(".mesh-scale")).toHaveCount(0);
+  await expect(page.locator("#mesh-count")).toContainText(`${whole} node(s)`);
 });
 
 // The other question the same channel can answer, and the one somebody opening a
@@ -3725,6 +4201,232 @@ test("nothing is left stranded at the edge of the picture", async ({ page }) => 
   // defect measured 3.1 with two nodes past it, and the corrected layout measures 1.1.
   expect(spread.stranded, "nodes with no neighbour near them").toEqual([]);
   expect(spread.ratio).toBeLessThan(2);
+});
+
+// Reading a landscape off the page needs the same helper twice, so it is written
+// once: where every node was drawn, how big, and at what magnification.
+async function drawnPicture(page) {
+  return page.evaluate(() => {
+    const surface = document.querySelector(".mesh-surface").getBoundingClientRect();
+    const [vx, vy, vw, vh] = document.querySelector(".mesh-canvas")
+      .getAttribute("viewBox").split(" ").map(Number);
+    const at = [...document.querySelectorAll(".mesh-node")].map((el) => {
+      const t = /translate\(([-\d.]+),([-\d.]+)\)/.exec(el.getAttribute("transform"));
+      // Every kind is drawn inside a circle of its own radius, whatever shape the
+      // notation paints in it, so the circle is what the footprint is measured from.
+      const circle = el.querySelector("circle");
+      return { id: el.getAttribute("data-node-id"), x: +t[1], y: +t[2], r: +circle.getAttribute("r") };
+    });
+    // The share of the canvas the nodes' own footprints reach, on a grid over the
+    // view the reader is actually looking at. NODE_ROOM is the personal space the
+    // layout gives a node, so it is part of the footprint: what is being measured is
+    // how much of the window the picture occupies, not how much ink is on it.
+    const cols = 56, rows = 32;
+    let covered = 0;
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = vx + (i + 0.5) * vw / cols, y = vy + (j + 0.5) * vh / rows;
+        if (at.some((n) => Math.hypot(n.x - x, n.y - y) <= n.r + 34)) covered++;
+      }
+    }
+    const near = at.map((a) => Math.min(...at.filter((b) => b !== a)
+      .map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
+    const sorted = [...near].sort((p, q) => p - q);
+    const median = sorted[Math.floor(sorted.length / 2)];
+
+    // The same measure one level up: how far the furthest *piece* of the picture
+    // sits from everything outside it. Pieces are read off the drawn edges rather
+    // than off the payload, so this measures the picture and not the fixture.
+    const index = new Map(at.map((a, i) => [a.id, i]));
+    const parent = at.map((_, i) => i);
+    const root = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    for (const edge of document.querySelectorAll(".mesh-edge")) {
+      const a = index.get(edge.getAttribute("data-from")), b = index.get(edge.getAttribute("data-to"));
+      if (a === undefined || b === undefined) continue;
+      const ra = root(a), rb = root(b);
+      if (ra !== rb) parent[ra] = rb;
+    }
+    const piece = at.map((_, i) => root(i));
+    const outside = new Map();
+    for (let i = 0; i < at.length; i++) {
+      for (let j = i + 1; j < at.length; j++) {
+        if (piece[i] === piece[j]) continue;
+        const d = Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y);
+        if (!outside.has(piece[i]) || d < outside.get(piece[i])) outside.set(piece[i], d);
+        if (!outside.has(piece[j]) || d < outside.get(piece[j])) outside.set(piece[j], d);
+      }
+    }
+    return {
+      nodes: at.length,
+      pieces: new Set(piece).size,
+      cover: covered / (cols * rows),
+      // Screen pixels per world unit, which is what decides how big a name is drawn.
+      scale: surface.width / vw,
+      ratio: sorted[sorted.length - 1] / median,
+      adrift: outside.size ? Math.max(...outside.values()) / median : 0,
+    };
+  });
+}
+
+// One mock for a run of landscapes, because a second page.route on the same page
+// does not replace the first — it queues behind it, and every landscape after the
+// first would be the first one again.
+function installShifting(page, hold) {
+  page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/panorama/mesh") return route.fulfill({ json: hold.mesh });
+    if (path === "/api/v1/panorama/notations") return route.fulfill({ json: notations });
+    return route.fulfill({ json: [] });
+  });
+}
+
+function landscapeOf(apps, per, loose, islands = []) {
+  const mesh = { nodes: [], edges: [], restricted: 0, clustered: false };
+  for (let a = 1; a <= apps; a++) {
+    mesh.nodes.push({ id: `application:a${a}`, kind: "application", name: `App ${a}`, provenance: "derived" });
+    for (let p = 1; p <= per; p++) {
+      const id = `process:${a}_${p}`;
+      mesh.nodes.push({ id, kind: "process", name: `Proc ${a}.${p}`, provenance: "derived", processId: id, version: 1 });
+      mesh.edges.push({ from: `application:a${a}`, to: id, kind: "contains" });
+    }
+    // One call between neighbouring applications, so the estate has a mass rather
+    // than several equal islands: what a piece is measured against is the rest.
+    if (a > 1) mesh.edges.push({ from: `process:${a - 1}_1`, to: `process:${a}_2`, kind: "calls" });
+  }
+  for (let i = 1; i <= loose; i++) {
+    mesh.nodes.push({ id: `process:free${i}`, kind: "process", name: `Frei ${i}`, provenance: "derived", processId: `f${i}`, version: 1 });
+  }
+  // Self-contained clusters: a conformance sample, a test flow and its subprocess —
+  // processes that call each other and nothing else. Real estates are full of them.
+  islands.forEach((size, c) => {
+    for (let i = 0; i < size; i++) {
+      const id = `process:island${c}_${i}`;
+      mesh.nodes.push({ id, kind: "process", name: `Insel ${c}.${i}`, provenance: "derived", processId: id, version: 1 });
+      if (i) mesh.edges.push({ from: `process:island${c}_${i - 1}`, to: id, kind: "calls" });
+    }
+  });
+  return mesh;
+}
+
+// A small landscape has to use the window as well as a large one does (ADR-0211 §7).
+//
+// The world the graph settles in is sized from the content — the cells the nodes
+// need, at the density WORLD_FILL asks for — and the opening view shows the whole of
+// it, so the world's size is what decides the magnification. There used to be a
+// floor under it, a frame's worth of area whatever the estate, on the reasoning that
+// a handful of nodes was comfortable already. It was not: the floor stopped binding
+// only past about twenty-five nodes, so every smaller landscape was laid out in a
+// world several times larger than its content, and shown at the scale that fits that
+// world into the canvas. Five nodes covered 7% of the window where a hundred and
+// twenty-five covered 17% — the same picture, drawn small for no reason but its own
+// size.
+//
+// So the property is stated across sizes rather than at one of them: whatever the
+// estate, the picture fills the window the same way. It is what "the window is not
+// being used" actually meant, and it is invisible to any test that looks at one
+// landscape.
+test("a small landscape uses the window as well as a large one", async ({ page }) => {
+  const sizes = [];
+  const hold = { mesh: null };
+  installShifting(page, hold);
+  for (const [apps, per, loose] of [[1, 4, 0], [1, 6, 1], [5, 6, 5], [6, 19, 5]]) {
+    hold.mesh = landscapeOf(apps, per, loose);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    // Away and back: navigating to the URL it is already on is a fragment change,
+    // not a load, and the view would draw the landscape before this one again.
+    await page.goto("about:blank");
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(400);
+    sizes.push(await drawnPicture(page));
+  }
+
+  for (const drawn of sizes) {
+    // The floor put the five-node landscape at 0.07. Everything here measures 0.17.
+    expect(drawn.cover, `${drawn.nodes} nodes`).toBeGreaterThan(0.15);
+  }
+  // And the smallest estate is not the one that pays: it covers at least as much of
+  // the window as the largest does. It used to cover 0.42 of what the largest did.
+  expect(sizes[0].cover / sizes[sizes.length - 1].cover).toBeGreaterThan(0.9);
+  // A smaller estate is a *larger* picture, node for node, because the world it is
+  // laid out in is smaller and the window is the same. That is the whole mechanism,
+  // and it is worth pinning: it is what makes a four-node landscape readable.
+  for (let i = 1; i < sizes.length; i++) {
+    expect(sizes[i].scale, `${sizes[i].nodes} nodes`).toBeLessThan(sizes[i - 1].scale);
+  }
+});
+
+// The ceiling on how far one node may be drawn from the rest (GATHER_REACH).
+//
+// The test above this one measures the same ratio on an estate of four applications
+// and ten unattached processes, and that estate passes it without any ceiling: there
+// are enough loose nodes for them to be each other's neighbours. The shape that does
+// not is the one this was reported on — a single application with its processes
+// around it, and one process attached to nothing. The spokes set a close median and
+// the loose node has nobody, so it settles at 2.07 times it: a visible hole in the
+// picture, and, because fitToFrame scales the *bounding box* onto the world, the
+// thing that decides how small everything else is drawn.
+//
+// Stated as the guarantee rather than as a number that happened to come out: no node
+// is further from its nearest neighbour than GATHER_REACH times the median, whatever
+// the estate. The forces cannot promise that — see gather — so it is enforced after
+// them, in the same place and for the same reason the separation pass is.
+test("no node is drawn further from the picture than the picture's own spacing", async ({ page }) => {
+  const hold = { mesh: null };
+  installShifting(page, hold);
+  for (const [apps, per, loose] of [[1, 12, 1], [1, 20, 2], [6, 19, 5]]) {
+    hold.mesh = landscapeOf(apps, per, loose);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    // Away and back: navigating to the URL it is already on is a fragment change,
+    // not a load, and the view would draw the landscape before this one again.
+    await page.goto("about:blank");
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(400);
+    const drawn = await drawnPicture(page);
+    // 1.5 is the ceiling; the tolerance is for the separation pass, which runs after
+    // the gather and may push a pair a little further apart than it found them.
+    expect(drawn.ratio, `${drawn.nodes} nodes`).toBeLessThan(1.55);
+  }
+});
+
+// The same ceiling, one level up: on *pieces* of the picture rather than on nodes.
+//
+// A per-node rule cannot see this and the test above it cannot either. Two processes
+// that call each other and nothing else are each other's nearest neighbour at a
+// spring's rest length, so by that measure neither is far from anything — and the
+// pair sails past the ceiling together and goes on holding the canvas open behind it.
+// That is not a contrived shape: a landscape is full of conformance samples, test
+// flows and one-off processes that touch nothing else, and it was those pairs and
+// triples that were still stranded at the edges after the per-node ceiling shipped.
+//
+// Measured on these four estates before the piece ceiling: the furthest piece sat at
+// 2.1 to 3.1 times the picture's own spacing. The reading is taken off the drawn
+// edges, so what is being checked is the picture rather than the fixture.
+test("no piece of the picture is drawn adrift from the rest of it", async ({ page }) => {
+  const hold = { mesh: null };
+  installShifting(page, hold);
+  const estates = [
+    [3, 8, 0, [2, 2, 2]],
+    [4, 7, 0, [2, 3, 2, 3]],
+    [2, 9, 0, [2, 2, 3, 2, 4]],
+    [8, 12, 0, [2, 3, 2, 4, 2, 3]],
+  ];
+  for (const [apps, per, loose, islands] of estates) {
+    hold.mesh = landscapeOf(apps, per, loose, islands);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto("about:blank");
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(400);
+    const drawn = await drawnPicture(page);
+    expect(drawn.pieces, "the estate has pieces to be adrift").toBeGreaterThan(1);
+    expect(drawn.adrift, `${drawn.nodes} nodes in ${drawn.pieces} pieces`).toBeLessThan(1.55);
+    // And the per-node ceiling still holds: the two halves of the pass are not
+    // alternatives. Dropping the node half took this to 1.9 on the last estate here.
+    expect(drawn.ratio, `${drawn.nodes} nodes`).toBeLessThan(1.55);
+  }
 });
 
 // Keeping the picture true (ADR-0211 §7).

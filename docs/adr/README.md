@@ -373,7 +373,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Accepted | Landed |
 | [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Accepted | Landed |
 | [0287](0287-create-the-worker-from-the-incident.md) | Create the worker from the incident, and run the deploy preflight on every deploy path | Accepted | Landed |
-| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Accepted | Landed |
+| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Deprecated | Not started |
 | [0289](0289-worker-type-setup-in-the-panel.md) | A Worker Type carries its own setup, in the panel where it is chosen | Accepted | Landed |
 | [0290](0290-per-flow-join-counting.md) | A join counts tokens per incoming flow | Accepted | Landed |
 | [0291](0291-one-place-for-budgets.md) | One place names every resource budget, and one way sets them | Accepted | Landed |
@@ -387,6 +387,13 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0299](0299-worker-type-admission-criteria.md) | What earns a Worker Type — admission criteria for a new kind | Proposed | Not started |
 | [0300](0300-openapi-element-templates.md) | An OpenAPI document as element templates | Accepted | Landed |
 | [0301](0301-derive-the-model-from-the-processes.md) | Derive the information model from the processes that use it | Accepted | Landed |
+| [0302](0302-withdrawing-commit-attribution.md) | The repository stops rewriting who authored an agent's commit | Accepted | Landed |
+| [0303](0303-script-sandbox-isolation.md) | Isolate general-purpose script tasks inside a restrictive OS sandbox | Accepted | Partial |
+| [0304](0304-a-capability-says-when-it-was-last-confirmed.md) | A capability record says when somebody last confirmed it | Accepted | Landed |
+| [0305](0305-business-capabilities-and-value-streams.md) | Business capabilities and value streams as design-time records | Accepted | Partial |
+| [0306](0306-a-lifecycle-may-take-its-states-from-an-enumeration.md) | A lifecycle may take its states from an «enumeration» | Accepted | Landed |
+| [0307](0307-the-milestone-event-compiles.md) | The milestone event compiles | Accepted | Landed |
+| [0308](0308-panorama-binds-the-capability-register.md) | Panorama binds the capability register | Accepted | Landed |
 
 ## The two states of a record
 

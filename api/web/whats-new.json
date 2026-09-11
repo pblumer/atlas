@@ -2,6 +2,123 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "PowerShell works in the strict script sandbox",
+        "de": "PowerShell funktioniert in der strikten Skript-Sandbox"
+      },
+      "summary": {
+        "en": "The strict profile denied PowerShell the process and account files its runtime reads before starting, so every PowerShell script task failed while Python and JavaScript worked. It now allows exactly those, and only this process's own entry. Starting with --script-sandbox=strict also launches each enabled interpreter once to prove it runs, so a broken profile is refused at startup instead of one failed job at a time.",
+        "de": "Das strikte Profil verwehrte PowerShell die Prozess- und Kontodateien, die seine Laufzeit vor dem Start liest; deshalb scheiterte jede PowerShell-Skriptaufgabe, während Python und JavaScript liefen. Genau diese sind nun erlaubt, und nur der eigene Prozesseintrag. Beim Start mit --script-sandbox=strict wird zudem jeder aktivierte Interpreter einmal ausgeführt: Ein nicht lauffähiges Profil wird beim Start abgewiesen statt Auftrag für Auftrag."
+      },
+      "link": {
+        "label": "ADR",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
+      },
+      "tags": [
+        "Security",
+        "Scripts"
+      ]
+    },
+    {
+      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-relations",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Starmap's ArchiMate view now draws the relationships too",
+        "de": "Die ArchiMate-Ansicht der Starmap zeichnet jetzt auch die Beziehungen"
+      },
+      "summary": {
+        "en": "The nodes were already drawn in ArchiMate's own symbols; the lines between them were still Atlas's — one solid, one dashed, one dotted. For a reader who works in the notation that is half the alphabet, because ArchiMate tells Assignment, Triggering and Serving apart by what sits at the ends of an otherwise identical solid line. Each is now drawn that way: a ball at the source and a filled arrowhead at the target for Assignment, a filled arrowhead for Triggering, an open one for Serving. The lines are solid, and that is not a detail — in ArchiMate a dashed line with an open arrowhead is a Flow and a dotted one a Realization, so keeping Atlas's own dash would not have been a missing statement but a wrong one. A Serving relationship points the other way from the fact it comes from: ArchiMate runs Serving from the provider to the consumer, so the arrowhead sits on the process rather than on the worker it names — the same reversal the exported document has always made. The key says that in words as well, for the reader who does not know the notation by sight, and the marks travel into an exported file where there is no key to hover over. Three relationships is all there can be: Atlas knows that an application holds a process, that a process calls another, and that a process uses a worker or a decision. Nothing here is a Flow or a Realization, and an absent relationship type means Atlas cannot see one, never that there is none. Atlas's own picture is unchanged — the dash is a free channel there, because the vocabulary has no opinion about it.",
+        "de": "Die Knoten wurden bereits in den Symbolen von ArchiMate gezeichnet, die Linien dazwischen jedoch weiterhin in der Darstellung von Atlas: eine durchgezogen, eine gestrichelt, eine gepunktet. Für Lesende, die in dieser Notation arbeiten, fehlt damit das halbe Alphabet, denn ArchiMate unterscheidet Assignment, Triggering und Serving allein danach, was an den Enden einer ansonsten identischen durchgezogenen Linie steht. Genau so wird jetzt gezeichnet: eine Kugel am Ausgangspunkt und eine gefüllte Pfeilspitze am Ziel für Assignment, eine gefüllte Pfeilspitze für Triggering, eine offene für Serving. Die Linien sind durchgezogen, und das ist kein Detail — in ArchiMate ist eine gestrichelte Linie mit offener Pfeilspitze ein Flow und eine gepunktete eine Realization. Die Strichelung von Atlas beizubehalten wäre also keine fehlende, sondern eine falsche Aussage gewesen. Eine Serving-Beziehung zeigt in die Gegenrichtung der Tatsache, aus der sie stammt: ArchiMate führt Serving vom Anbieter zum Nutzer, die Pfeilspitze sitzt daher am Prozess und nicht am Worker, den er benennt — dieselbe Umkehrung, die das exportierte Dokument seit jeher vornimmt. Die Legende sagt das zusätzlich in Worten, für Lesende, welche die Notation nicht auf den ersten Blick kennen, und die Marken wandern in eine exportierte Datei, in der es keine Legende zum Nachschlagen gibt. Mehr als drei Beziehungen kann es nicht geben: Atlas weiss, dass eine Anwendung einen Prozess hält, dass ein Prozess einen anderen aufruft und dass ein Prozess einen Worker oder eine Entscheidung nutzt. Nichts hier ist ein Flow oder eine Realization, und ein fehlender Beziehungstyp bedeutet, dass Atlas keinen erkennen kann — nie, dass es keinen gibt. Die eigene Darstellung von Atlas bleibt unverändert: Dort ist die Strichelung ein freier Kanal, weil das Vokabular dazu keine Aussage trifft."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Architecture"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Panorama; the Starmap is its landing view.",
+          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
+          "Look at the ends of the lines: a ball and a filled arrowhead is an Assignment, a filled arrowhead alone is a Triggering, an open one is a Serving.",
+          "Follow a Serving line: the arrowhead is on the process, not on the worker. The key row says \"drawn from the provider\" for exactly that reason.",
+          "Export the picture as SVG or PNG — the marks and the key travel with the file."
+        ],
+        "de": [
+          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
+          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
+          "Auf die Linienenden achten: Kugel und gefüllte Pfeilspitze bedeuten Assignment, eine gefüllte Pfeilspitze allein Triggering, eine offene Serving.",
+          "Einer Serving-Linie folgen: Die Pfeilspitze sitzt am Prozess, nicht am Worker. Die Legende vermerkt dazu „drawn from the provider“.",
+          "Das Bild als SVG oder PNG exportieren — Marken und Legende wandern mit der Datei."
+        ]
+      }
+    },
+    {
+      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-own-symbo",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Starmap's ArchiMate view is drawn in ArchiMate's own symbols",
+        "de": "Die ArchiMate-Ansicht der Starmap wird in ArchiMate-Symbolen gezeichnet"
+      },
+      "summary": {
+        "en": "Picking ArchiMate 3.2 under Notation already mapped every node to an ArchiMate element type and wrote that type under its name — and then drew Atlas's own circles and squares. For the one reader that view exists for, that was the vocabulary without the script. The five mapped kinds are now drawn as the elements themselves: an Application Component with its two lugs, an Application Process as an arrow, an Application Service as a rounded lozenge, an Application Function as a chevron, and a deployment target as a Node's three-dimensional box. The standard allows either a box with a small type icon in the corner or the icon at full size; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node, and the written type stays beside it for readers who do not know the notation by sight. The fills are the layer colours everyone recognises — Application #B5FFFF, Technology #C9E7B7 — and the key says plainly what they are: ArchiMate 3.2 defines no colours at all, and these are the convention its own figures and the Archi tool use. They are pale by design, so a red or amber finding still reads above them. A draft, a restricted placeholder and an unresolved dependency keep Atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would claim something the notation does not.",
+        "de": "Die Auswahl von ArchiMate 3.2 unter „Notation“ ordnete bisher jedem Knoten einen ArchiMate-Elementtyp zu und schrieb diesen Typ unter den Namen — gezeichnet wurden dann aber weiterhin die Kreise und Quadrate von Atlas. Für die Leserschaft, für die diese Ansicht existiert, war das die Sprache ohne die Schrift. Die fünf zugeordneten Arten werden jetzt als die Elemente selbst gezeichnet: eine Application Component mit ihren zwei Laschen, ein Application Process als Pfeil, ein Application Service als abgerundete Raute, eine Application Function als Winkel und ein Deployment-Ziel als dreidimensionaler Kasten eines Node. Der Standard erlaubt beide Formen — einen Kasten mit kleinem Typsymbol in der Ecke oder das Symbol in voller Grösse; in der Grösse, in der ein Knoten hier gezeichnet wird, wären es ein bis zwei Pixel, also ist das Symbol der Knoten. Der geschriebene Typ bleibt daneben stehen, für Lesende, die die Notation nicht auf den ersten Blick erkennen. Die Füllungen sind die bekannten Ebenenfarben — Application #B5FFFF, Technology #C9E7B7 — und die Legende sagt ausdrücklich, was sie sind: ArchiMate 3.2 definiert überhaupt keine Farben; diese sind die Konvention der Abbildungen des Standards und des Werkzeugs Archi. Sie sind bewusst blass gehalten, damit ein roter oder gelber Befund weiterhin darüber lesbar bleibt. Ein Entwurf, ein eingeschränkter Platzhalter und eine nicht aufgelöste Abhängigkeit behalten Form und Farbe von Atlas, denn ArchiMate hat für sie kein Element, und sie als eines zu zeichnen wäre eine Aussage, die die Notation nicht macht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Architecture"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Panorama; the Starmap is its landing view.",
+          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
+          "The picture is redrawn in ArchiMate's symbols, in the Application and Technology layer fills.",
+          "Read the loss list under the picture: it names what the projection cannot say, including that the colours are convention rather than standard and that drafts, restricted placeholders and unresolved dependencies keep Atlas's own shape."
+        ],
+        "de": [
+          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
+          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
+          "Das Bild wird in den Symbolen von ArchiMate gezeichnet, in den Füllfarben der Ebenen Application und Technology.",
+          "Die Verlustliste unter dem Bild lesen: Sie nennt, was die Projektion nicht ausdrücken kann — unter anderem, dass die Farben Konvention und nicht Standard sind und dass Entwürfe, eingeschränkte Platzhalter und nicht aufgelöste Abhängigkeiten die Form von Atlas behalten."
+        ]
+      }
+    },
+    {
+      "id": "the-starmap-opens-using-the-whole-window-whatever-the-size-o",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Starmap opens using the whole window",
+        "de": "Die Starmap nutzt beim Öffnen das ganze Fenster"
+      },
+      "summary": {
+        "en": "A small landscape used to open as a few small circles adrift in an empty canvas, and a process attached to nothing — or a handful that call each other and nothing else, like a test flow — could sit at the far edge holding two thirds of the window open behind it. The picture is now drawn at the same density whatever the size of the estate (five nodes fill as much of the window as a hundred and twenty-five do), and nothing is left far enough from the rest of the picture to decide how small everything else is drawn. It applies to every notation, including the Instances and Incidents heatmaps.",
+        "de": "Eine kleine Landschaft wurde bisher als ein paar kleine Kreise auf einer weitgehend leeren Fläche geöffnet, und ein Prozess ohne Verbindung — oder eine Handvoll, die nur sich gegenseitig aufrufen, etwa ein Testablauf — konnte am äusseren Rand sitzen und zwei Drittel des Fensters leer halten. Das Bild wird jetzt unabhängig von der Grösse der Landschaft in derselben Dichte gezeichnet (fünf Knoten füllen so viel Fenster wie hundertfünfundzwanzig), und nichts liegt mehr so weit vom Rest entfernt, dass es bestimmt, wie klein alles andere gezeichnet wird. Das gilt für jede Notation, auch für die Heatmaps Instances und Incidents."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama"
+      ]
+    },
+    {
       "id": "removing-someone-from-an-application-now-takes-their-starmap",
       "version": "Unreleased",
       "date": null,
@@ -100,293 +217,17 @@
       }
     },
     {
-      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
+      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "See the classes and states your processes already carry — without modelling first",
-        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
+        "en": "Link a diagram to the capability it draws",
+        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
       },
       "summary": {
-        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
-        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
-      },
-      "link": {
-        "label": "ADR draft",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and press As built…, then pick the application you want to read.",
-          "The class diagram is what that application's processes carry — no model of yours is involved.",
-          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
-          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
-        ],
-        "de": [
-          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
-          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
-          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
-          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas now tells you when a state nothing ever reaches",
-        "de": "Atlas sagt jetzt, wenn ein Zustand nie erreicht wird"
-      },
-      "summary": {
-        "en": "If a class says an order can be cancelled and no process in the application ever cancels one, you now hear about it — at deploy and in the Modeler's Problems panel. Either a process is missing or the model is describing a plan rather than what is built, and both are worth knowing. It is a note, never a refusal, and it stays quiet about a class no process handles yet: drawing a lifecycle before the process that writes it is the normal way round.",
-        "de": "Wenn eine Klasse sagt, eine Bestellung könne storniert werden, aber kein Prozess der Anwendung storniert je eine, erfahren Sie das jetzt — beim Deploy und in der Problemliste des Modelers. Entweder fehlt ein Prozess, oder das Modell beschreibt einen Plan statt des Gebauten; beides ist wissenswert. Es ist ein Hinweis, nie eine Ablehnung, und über eine Klasse, die noch kein Prozess anfasst, schweigt es: einen Lebenszyklus vor dem Prozess zu zeichnen, der ihn schreibt, ist die normale Reihenfolge."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, pick your information model, and give a business object a lifecycle with more states than your processes currently write.",
-          "Open a process of the same application in the Modeler.",
-          "The Problems panel names the class and every state nothing reaches, in one line.",
-          "Add the data association that writes that state — or a process that does — and the line goes away."
-        ],
-        "de": [
-          "Unter Daten das Informationsmodell öffnen und einem Geschäftsobjekt einen Lebenszyklus mit mehr Zuständen geben, als die Prozesse derzeit schreiben.",
-          "Einen Prozess derselben Anwendung im Modeler öffnen.",
-          "Die Problemliste nennt die Klasse und jeden nie erreichten Zustand in einer Zeile.",
-          "Die Datenzuweisung ergänzen, die diesen Zustand schreibt — oder den fehlenden Prozess —, und die Zeile verschwindet."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "an-openapi-document-can-configure-the-task-that-calls-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Turn an API's operations into ready-made task settings",
-        "de": "Aus den Operationen einer API fertige Task-Einstellungen machen"
-      },
-      "summary": {
-        "en": "Configuring a REST task means reading the API's documentation and typing what it says: the method, the address, which values the process has to supply. Atlas can now read that file for you and write out one ready-made setting sheet per operation — the method already chosen, the address already filled in, and a note saying which values your process needs to hold. What the file cannot decide, such as which login to use, is deliberately left blank rather than guessed. One honest catch: nothing in Atlas can apply these sheets to a task yet, so for now they are files to keep or to hand on — the command tells you so when it writes them.",
-        "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
-      },
-      "link": {
-        "label": "ADR-0300",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0300-openapi-element-templates.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ]
-    },
-    {
-      "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See where an order got to — on the lifecycle its class declares",
-        "de": "Sehen, wo eine Bestellung steht — auf dem Lebenszyklus ihrer Klasse"
-      },
-      "summary": {
-        "en": "Open a running or finished instance and the Data tab now has a third view: the state machine the class declares, with the states this particular datum has been through filled in, the one it is in right now ringed, and every step labelled with the task that made it. Where something went a way the model does not allow, the drawing says so in a dashed line and names it underneath — which is how you find a process writing a state that does not exist, or one that was built before anyone drew the lifecycle.",
-        "de": "Beim Öffnen einer laufenden oder beendeten Instanz hat der Reiter Daten jetzt eine dritte Ansicht: die Zustandsmaschine, die die Klasse deklariert — mit den Zuständen, die genau dieses Datum durchlaufen hat, dem aktuellen hervorgehoben und jedem Schritt beschriftet mit der Aufgabe, die ihn ausgelöst hat. Ist etwas einen Weg gegangen, den das Modell nicht vorsieht, zeigt die Zeichnung das als gestrichelte Linie und benennt es darunter — so findet man einen Prozess, der einen Zustand schreibt, den es nicht gibt, oder einen, der schon vor dem Lebenszyklus gebaut wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and click an instance to replay it.",
-          "Switch to the Data tab and choose Lifecycle.",
-          "Filled states are ones this datum has been through; the ringed one is where it is now. Each arrow it travelled names the element that moved it.",
-          "Carrying several data objects? Pick which one to draw with the selector on the right.",
-          "Nothing there? The class needs a lifecycle first — draw one under Data › Model, on the class itself."
-        ],
-        "de": [
-          "Unter Betrieb eine Instanz anklicken, um sie abzuspielen.",
-          "Auf den Reiter Daten wechseln und Lebenszyklus wählen.",
-          "Gefüllte Zustände hat dieses Datum durchlaufen; der umrandete ist der aktuelle. Jeder durchlaufene Pfeil nennt das Element, das den Schritt ausgelöst hat.",
-          "Mehrere Datenobjekte? Rechts auswählen, welches gezeichnet wird.",
-          "Nichts zu sehen? Dann hat die Klasse noch keinen Lebenszyklus — unter Daten › Modell an der Klasse selbst zeichnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Betrieb öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-deploy-says-when-a-searchable-declaration-cannot-be-hono",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The deploy answers with the same reading, for models it never sees in the Modeler",
-        "de": "Das Deployment gibt dieselbe Einschätzung, auch ohne Modeler"
-      },
-      "summary": {
-        "en": "The marker under the field only helps whoever is looking at the diagram. A model deployed from a pipeline or over the API never passes through the Modeler at all, so the deploy response now carries the same reading as a warning beside the ones it already gives. It never refuses the deploy. A name the model itself declares as a JSON input is always reported; a name nothing in the model produces is reported only where the model has stated its inputs, and the sentence says plainly that a worker writing it makes the case fine.",
-        "de": "Die Markierung unter dem Feld hilft nur, wer das Diagramm vor sich hat. Ein Modell, das aus einer Pipeline oder über die API deployt wird, sieht den Modeler nie. Deshalb enthält die Deploy-Antwort jetzt dieselbe Einschätzung als Warnung, neben den Warnungen, die sie ohnehin ausgibt. Abgelehnt wird nie. Ein Name, den das Modell selbst als JSON-Eingabe deklariert, wird immer gemeldet; ein Name, den nichts im Modell erzeugt, nur dann, wenn das Modell seine Eingaben überhaupt benannt hat — und der Satz sagt ausdrücklich, dass ein Worker, der ihn schreibt, den Fall in Ordnung macht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Deployment"
-      ]
-    },
-    {
-      "id": "a-searchable-declaration-that-indexes-nothing-now-says-so",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A name that will never be found is marked while you type it",
-        "de": "Ein Name, der nie gefunden wird, wird beim Tippen markiert"
-      },
-      "summary": {
-        "en": "Naming a variable as searchable is accepted whatever you write, so a typo, or a name holding a whole JSON structure, produced a search that stays empty forever with nothing saying why. Each name now gets a small marker under the field. Red where it is settled: the same name twice, or a name the model itself says holds a structure, which cannot be indexed. Amber where it is a question: nothing in this diagram writes that name — usually a typo, but a worker or an outside caller can write a name the diagram never mentions. Hover a marker for the reason.",
-        "de": "Eine als suchbar benannte Variable wurde bisher unbesehen übernommen. Ein Tippfehler oder ein Name, der eine ganze JSON-Struktur hält, führte damit zu einer Suche, die dauerhaft leer bleibt, ohne dass irgendwo stand, warum. Jeder Name erhält nun eine kleine Markierung unter dem Feld. Rot, wo die Sache klar ist: derselbe Name zweimal, oder ein Name, von dem das Modell selbst sagt, dass er eine Struktur hält, die nicht indexiert werden kann. Bernstein, wo es eine Frage ist: Nichts in diesem Diagramm schreibt diesen Namen — meist ein Tippfehler, aber ein Worker oder ein Aufruf von aussen kann einen Namen schreiben, den das Diagramm nie erwähnt. Der Grund steht im Tooltip der Markierung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-migration-now-re-indexes-what-its-target-declares",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Migrated instances are found by the version they moved to",
-        "de": "Migrierte Instanzen werden von ihrer neuen Version gefunden"
-      },
-      "summary": {
-        "en": "An instance carries the searchable declaration of the version that wrote its values. Moving it to a version that declares more, or fewer, left that answer behind: a search over the new version simply did not return it, which reads like the instance is not there rather than like a stale index. A migration now brings the instance's searchability along, in both directions. For instances migrated before this, an administrator can repair a whole version in bounded batches; running that twice writes nothing the second time.",
-        "de": "Eine Instanz trägt die Suchbarkeits-Angabe der Version, die ihre Werte geschrieben hat. Wurde sie auf eine Version verschoben, die mehr oder weniger deklariert, blieb diese Angabe zurück: Eine Suche über die neue Version lieferte die Instanz schlicht nicht — was so aussieht, als gäbe es sie nicht, und nicht wie ein veralteter Index. Eine Migration zieht die Suchbarkeit jetzt mit, in beide Richtungen. Für Instanzen, die vorher migriert wurden, kann eine Administratorin oder ein Administrator eine ganze Version in begrenzten Schritten nachziehen; ein zweiter Durchlauf schreibt nichts mehr."
-      },
-      "link": {
-        "label": "ADR-0244",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
-      },
-      "tags": [
-        "Operations",
-        "Migration"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-modeler-can-now-say-what-a-process-is-found-by",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Say what a process should be findable by, in the Modeler",
-        "de": "Im Modeler festlegen, wonach ein Prozess gefunden wird"
-      },
-      "summary": {
-        "en": "Searching a version's instances by a business value — \"where is MT-1998?\" — is a single read instead of a walk through every instance, but only for the variables the process says it wants to be found by. Until now that declaration existed only as an attribute in the BPMN file, so making one meant editing the exported XML by hand. The process properties now carry a Searchable variables field beside the two retention fields: select nothing in the diagram, open the Process group, and name the one or two business keys you actually search by.",
-        "de": "Die Suche nach einem Geschäftswert in den Instanzen einer Version — «wo ist MT-1998?» — ist ein einzelner Lesezugriff statt eines Durchlaufs durch alle Instanzen, aber nur für die Variablen, die der Prozess dafür benennt. Diese Angabe gab es bisher nur als Attribut in der BPMN-Datei, man musste also das exportierte XML von Hand bearbeiten. Die Prozess-Eigenschaften haben jetzt ein Feld «Searchable variables» neben den beiden Aufbewahrungsfeldern: nichts im Diagramm auswählen, die Gruppe «Process» öffnen und die ein bis zwei Geschäftsschlüssel eintragen, nach denen Sie tatsächlich suchen."
-      },
-      "link": {
-        "label": "ADR-0244",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and load the process you want to find instances of.",
-          "Click on empty canvas so nothing is selected — the panel then shows the process itself.",
-          "Open the Process group and find Searchable variables under Instance TTL and History TTL.",
-          "Type the variable names, separated by commas, for example: identityId, item.",
-          "Deploy. From then on, searching identityId=MT-1998 in Operations answers from the index."
-        ],
-        "de": [
-          "Öffnen Sie den Modeler und laden Sie den Prozess, dessen Instanzen Sie finden wollen.",
-          "Klicken Sie auf eine leere Stelle der Zeichenfläche, damit nichts ausgewählt ist — das Panel zeigt dann den Prozess selbst.",
-          "Öffnen Sie die Gruppe «Process»; «Searchable variables» steht unter «Instance TTL» und «History TTL».",
-          "Tragen Sie die Variablennamen kommagetrennt ein, zum Beispiel: identityId, item.",
-          "Deployen Sie. Danach beantwortet die Suche identityId=MT-1998 in Operations der Index."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-starmap-says-when-it-was-read-and-keeps-itself-true",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The Starmap says how old it is, and keeps itself current",
-        "de": "Die Starmap sagt, wie alt sie ist, und hält sich selbst aktuell"
-      },
-      "summary": {
-        "en": "Everything the Starmap draws has a shelf life: the status marks are an observation, the incident counts move as somebody works through them, and the three heatmaps are live quantities. But the picture was fetched once when you opened it and never again — a landscape opened at nine and still open at eleven showed two-hour-old numbers with nothing on the page saying so. That is the failure the timestamp printed into an exported image exists to prevent, happening on the screen the export is taken from. The picture now states when the server read it — \"observed 4 min ago\", under the controls — and a Live switch beside it, on by default, re-reads the landscape while you are looking. It is on by default because a status view that looks current and is not is worse than a picture that moves; turn it off when you want to study one picture without it changing under you, and turning it back on fetches at once rather than making you wait out another interval. How often it asks depends on what the picture costs the server to build, so a large estate is asked less often rather than the same amount. Nothing is fetched while the tab is in the background or while you are dragging a node. If the server will not answer, the picture stays as it is and the line says \"could not re-read\" — because four minutes old and four minutes old with nobody keeping it up are different things, and only the second is a reason to stop believing what you see. Your filter, your drilldown, your selection, the nodes you placed by hand and your zoom all survive a re-read.",
-        "de": "Alles, was die Starmap zeichnet, hat eine Halbwertszeit: Die Statusmarkierungen sind eine Beobachtung, die Incident-Zahlen bewegen sich, während jemand sie abarbeitet, und die drei Heatmaps sind lebende Grössen. Das Bild wurde aber einmal beim Öffnen geladen und danach nie wieder — eine um neun geöffnete und um elf noch offene Landschaft zeigte zwei Stunden alte Zahlen, ohne dass irgendetwas darauf hinwies. Genau davor schützt der Zeitstempel, der in ein exportiertes Bild gedruckt wird — nur passierte es auf dem Bildschirm, von dem der Export stammt. Das Bild sagt jetzt, wann der Server es gelesen hat („observed 4 min ago“, unter den Bedienelementen), und daneben steht ein Schalter „Live“, standardmässig eingeschaltet, der die Landschaft neu liest, während Sie hinsehen. Eingeschaltet ist er standardmässig, weil eine Statusansicht, die aktuell aussieht und es nicht ist, schlimmer ist als ein Bild, das sich bewegt; schalten Sie ihn aus, wenn Sie ein Bild in Ruhe studieren wollen — und beim Wiedereinschalten wird sofort geladen, statt Sie ein weiteres Intervall warten zu lassen. Wie oft gefragt wird, richtet sich danach, was das Bild den Server kostet; eine grosse Landschaft wird also seltener statt gleich oft abgefragt. Im Hintergrund-Tab und während Sie einen Knoten ziehen, wird gar nicht gefragt. Antwortet der Server nicht, bleibt das Bild stehen und die Zeile sagt „could not re-read“ — denn vier Minuten alt und vier Minuten alt ohne dass es jemand nachführt sind zwei verschiedene Dinge, und nur das Zweite ist ein Grund, dem Gezeigten nicht mehr zu trauen. Filter, Drilldown, Auswahl, von Hand platzierte Knoten und Zoom überstehen ein Neuladen unverändert."
+        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
+        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
       },
       "link": {
         "label": "Changelog",
@@ -394,22 +235,160 @@
       },
       "tags": [
         "Panorama",
-        "Operations"
+        "Architecture"
       ],
       "tutorial": {
         "en": [
-          "Open Panorama and look under the header row: it now says when this landscape was read.",
-          "Beside it is the Live switch. Leave it on and the picture re-reads itself; the sentence goes back to \"observed just now\" each time it does.",
-          "Turn Live off to hold a picture still while you study it. The sentence keeps counting up, so you always know how old what you are looking at is.",
-          "Turn it back on: it fetches immediately rather than waiting for the next interval.",
-          "Note that the landscape's structure can be up to half a minute behind — a newly created application or worker appears within that window, while a process you just deployed appears at once. The line under the header is what tells you which you are looking at."
+          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
+          "Open the Panorama model and select the Capability element that draws it.",
+          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
+          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
         ],
         "de": [
-          "Panorama öffnen und unter die Kopfzeile schauen: Dort steht jetzt, wann diese Landschaft gelesen wurde.",
-          "Daneben steht der Schalter „Live“. Bleibt er an, liest sich das Bild selbst neu; die Zeile springt dabei jedes Mal zurück auf „observed just now“.",
-          "„Live“ ausschalten, um ein Bild zum Studieren stillzuhalten. Die Zeile zählt weiter hoch, Sie wissen also immer, wie alt das Gezeigte ist.",
-          "Wieder einschalten: Es wird sofort geladen, statt auf das nächste Intervall zu warten.",
-          "Beachten Sie: Die Struktur der Landschaft kann bis zu eine halbe Minute hinterherhinken — eine neu angelegte Applikation oder ein neuer Worker erscheint innerhalb dieses Fensters, ein gerade deployter Prozess dagegen sofort. Die Zeile unter der Kopfzeile sagt Ihnen, was Sie gerade vor sich haben."
+          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
+          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
+          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
+          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
+        ]
+      }
+    },
+    {
+      "id": "a-value-stream-is-an-element-you-can-draw",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Draw a value stream",
+        "de": "Einen Wertstrom zeichnen"
+      },
+      "summary": {
+        "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
+        "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama"
+      ]
+    },
+    {
+      "id": "a-write-into-a-data-object-now-offers-the-members-its-class-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Pick the field you are writing, instead of spelling it",
+        "de": "Das Feld, in das Sie schreiben, auswählen statt tippen"
+      },
+      "summary": {
+        "en": "When an activity writes one field of a data object, that field was free text — and a typo deploys, runs, and writes something nobody ever reads. It is a list now, built from the members the object's class declares, with the type, the multiplicity and the business key beside each one. Where a member is itself a class, its own fields are offered one level down. A name nothing models yet can still be typed, and comes back in the list saying so.",
+        "de": "Wenn eine Aktivität ein einzelnes Feld eines Datenobjekts schreibt, war dieses Feld freier Text — und ein Tippfehler wird deployed, läuft und schreibt etwas, das nie jemand liest. Jetzt ist es eine Liste aus den Attributen, die die Klasse des Objekts deklariert, mit Typ, Multiplizität und Geschäftsschlüssel daneben. Ist ein Attribut selbst eine Klasse, werden deren Felder eine Ebene tiefer angeboten. Ein noch nicht modellierter Name lässt sich weiterhin tippen und erscheint in der Liste mit dem Hinweis darauf."
+      },
+      "link": {
+        "label": "ADR-0060",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0060-data-object-write-paths.md"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Modeler, draw an arrow from an activity to a data object — that is the data output association.",
+          "Select the arrow. Under Writes data object you now find Target member as a list.",
+          "Pick the field to write, or leave it on the whole object. Members of a member appear indented under it.",
+          "The list only appears once the data object has a class: set it in the object's Class field first."
+        ],
+        "de": [
+          "Im Modeler einen Pfeil von einer Aktivität zu einem Datenobjekt ziehen — das ist die Datenausgabe-Zuweisung.",
+          "Den Pfeil auswählen. Unter Writes data object steht Target member jetzt als Liste bereit.",
+          "Das zu schreibende Feld wählen, oder auf dem ganzen Objekt belassen. Felder eines Feldes stehen eingerückt darunter.",
+          "Die Liste erscheint erst, wenn das Datenobjekt eine Klasse hat: diese zuerst im Feld Class setzen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-milestone-is-an-element-you-can-draw-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Mark a milestone where no task sits",
+        "de": "Einen Meilenstein setzen, wo keine Aufgabe steht"
+      },
+      "summary": {
+        "en": "Some points in a process are worth naming even though nobody does any work at them. \"Identity verification started\" is one: the work is what follows it, so there is no task there whose timestamps you could ask about later. BPMN's marker for exactly this is an intermediate throw event with no event definition, and until now Atlas refused it — at Deploy, after the Modeler had drawn it and reported no problems. It works now. Draw the event, leave it without a definition, name it after the point it marks. Nothing waits and no worker is needed; the token flows straight through. What you get is the record: the element is counted, it appears on the instance's timeline in order, and the live diagram lights it up as a token passes — so \"when did this case reach verification\" becomes a question you can answer for each case. A throw event that carries a definition the engine cannot run, such as a timer, is still refused, and now says which one.",
+        "de": "Manche Punkte in einem Prozess lohnt es sich zu benennen, obwohl dort niemand arbeitet. „Identitätsprüfung gestartet\" ist so einer: Die Arbeit folgt erst danach, es gibt dort also keine Aufgabe, nach deren Zeitstempeln man später fragen könnte. Die BPMN-Markierung dafür ist ein Zwischenereignis vom Typ «werfend» ohne Ereignisdefinition, und Atlas hat sie bisher abgelehnt — beim Deploy, nachdem der Modeler sie gezeichnet und keine Probleme gemeldet hatte. Jetzt funktioniert sie. Das Ereignis zeichnen, ohne Definition lassen, nach dem Punkt benennen, den es markiert. Es wartet auf nichts und braucht keinen Worker; der Token fliesst direkt hindurch. Was bleibt, ist die Aufzeichnung: Das Element wird gezählt, erscheint in der richtigen Reihenfolge auf der Zeitachse der Instanz, und das Live-Diagramm leuchtet auf, wenn ein Token vorbeikommt. „Wann hat dieser Fall die Prüfung erreicht?\" ist damit pro Fall beantwortbar. Ein werfendes Ereignis mit einer Definition, die die Engine nicht ausführen kann, etwa einem Timer, wird weiterhin abgelehnt — und sagt nun, welche."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Engine"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and drop an intermediate event onto the sequence flow where the milestone belongs.",
+          "Leave its type as the plain throw event: do not give it a message, signal, timer or any other definition.",
+          "Name it after the point it marks, in the business's words — \"Identity verification started\", not \"Event_3\". The name is what you will read it by later.",
+          "Deploy and start an instance. The live diagram marks the milestone as the token passes it.",
+          "Open the instance's timeline to see it in order between the elements around it, or read the process's element counts to see how many cases reached it."
+        ],
+        "de": [
+          "Einen Prozess im Modeler öffnen und ein Zwischenereignis auf den Sequenzfluss setzen, wo der Meilenstein hingehört.",
+          "Den Typ als einfaches werfendes Ereignis belassen: keine Nachricht, kein Signal, kein Timer, keine andere Definition.",
+          "Nach dem Punkt benennen, den es markiert, in der Sprache des Fachbereichs — «Identitätsprüfung gestartet», nicht «Event_3». Über den Namen liest man es später.",
+          "Deployen und eine Instanz starten. Das Live-Diagramm markiert den Meilenstein, sobald der Token ihn passiert.",
+          "Die Zeitachse der Instanz öffnen, um ihn in der richtigen Reihenfolge zwischen den umliegenden Elementen zu sehen, oder die Elementzählung des Prozesses lesen, um zu sehen, wie viele Fälle ihn erreicht haben."
+        ]
+      }
+    },
+    {
+      "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A capability now says when somebody last read it and meant it",
+        "de": "Eine Geschäftsfähigkeit sagt jetzt, wann sie zuletzt jemand gelesen und bestätigt hat"
+      },
+      "summary": {
+        "en": "Atlas can check whether the process a capability names is deployed. It cannot check who owns the capability, what it is responsible for, or what it promised — and those are the fields anybody acts on. A map whose realisations are all green and whose owners left two years ago is worse than no map. Both records now carry a confirmation: when, by whom, who they asked, and a line on what the review found. Only confirming sets it — no edit does, because a date refreshed by a typo fix would claim every field had been re-read. What lapses turns up as a review backlog, one query, the twin of the one for work nobody has automated. The interval is twelve months by default and yours to change.",
+        "de": "Atlas kann prüfen, ob der Prozess, den eine Fähigkeit nennt, deployt ist. Wer sie fachlich verantwortet, wofür sie zuständig ist und was sie zugesagt hat, kann Atlas nicht prüfen — und genau das sind die Felder, nach denen jemand handelt. Eine Landkarte mit lauter grünen Umsetzungen und Verantwortlichen, die vor zwei Jahren gegangen sind, ist schlechter als keine. Beide Datensatzarten tragen jetzt eine Bestätigung: wann, von wem, wen man gefragt hat und eine Zeile zum Ergebnis der Prüfung. Gesetzt wird sie nur durch das Bestätigen selbst, nie durch eine Bearbeitung: Ein Datum, das eine Tippfehlerkorrektur auffrischt, behauptete, jedes Feld sei neu gelesen worden. Was abläuft, erscheint als Prüfrückstand, eine einzige Abfrage, das Gegenstück zu der nach nicht automatisierter Arbeit. Die Frist beträgt standardmässig zwölf Monate und lässt sich ändern."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Architecture",
+        "API"
+      ],
+      "tutorial": {
+        "en": [
+          "Confirm a record you have just re-read: POST /api/v1/capabilities/{key}/confirmation with {\"with\": \"Head of Credit Risk\", \"note\": \"SLA renegotiated to 3 days\"}. Both fields are optional.",
+          "Name who you asked in \"with\". Leaving it empty says you spoke for the record alone, which is legitimate and weaker — the record says which.",
+          "Ask GET /api/v1/capabilities?stale=true for the review backlog.",
+          "GET /api/v1/business-architecture/gaps reports what has lapsed, and names the interval it judged against.",
+          "An administrator can change that interval with PUT /api/v1/settings/confirmation."
+        ],
+        "de": [
+          "Einen soeben erneut gelesenen Datensatz bestätigen: POST /api/v1/capabilities/{key}/confirmation mit {\"with\": \"Leiter Kreditrisiko\", \"note\": \"SLA auf 3 Tage neu verhandelt\"}. Beide Felder sind optional.",
+          "In \"with\" eintragen, wen man gefragt hat. Leer lassen heisst, man stand allein für den Datensatz ein; das ist zulässig und schwächer, und der Datensatz sagt welches von beidem.",
+          "GET /api/v1/capabilities?stale=true liefert den Prüfrückstand.",
+          "GET /api/v1/business-architecture/gaps meldet, was abgelaufen ist, und nennt die zugrunde gelegte Frist.",
+          "Eine Administratorin ändert diese Frist mit PUT /api/v1/settings/confirmation."
         ]
       }
     }

@@ -113,6 +113,11 @@ var wantAdminRoutes = []string{
 	"PUT /api/v1/settings/sql-mock",
 	"PUT /api/v1/settings/registration",
 	"DELETE /api/v1/settings/registration",
+	// The confirmation horizon decides how loudly the gap report complains about a
+	// map nobody has re-read. Widening it silences that, so setting it is an
+	// operator's act; reading it is not, because every business-architecture answer
+	// already carries the interval it applied.
+	"PUT /api/v1/settings/confirmation",
 
 	// The claim mapping is admin-only in both directions, unlike the three above:
 	// its rules name the provider's group identifiers, and nothing on the login

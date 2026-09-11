@@ -84,6 +84,10 @@ func main() {
 			}
 			fatal("atlas worker", err)
 		}
+	case "script-sandbox":
+		if err := script.RunSandbox(args); err != nil {
+			fatal("atlas script-sandbox", err)
+		}
 	case "version", "-v", "--version":
 		printVersion(os.Stdout)
 	case "reset-password":
@@ -237,6 +241,7 @@ func runServe(args []string) error {
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
 	javascript := fs.Bool("javascript", true, "run JavaScript script tasks by shelling out to node; on by default, --javascript=false to disable (executes arbitrary interpreter code)")
 	scriptTimeout := fs.Duration("script-timeout", 30*time.Second, "wall-clock limit for a single script task in any language; an overrunning script is killed and its job left pending")
+	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for PowerShell, Python and JavaScript: off preserves existing file/network access; strict is Linux-only and permits only the installed runtime plus private scratch, with no sockets (or ATLAS_SCRIPT_SANDBOX)")
 	// OpenSearch event exporter (ADR-0114): opt-in, off unless a URL is set. The URL
 	// and index accept a flag (defaulting to the env var) for discoverability; the
 	// credentials are env-only so a secret never lands in the process arguments.
@@ -289,6 +294,26 @@ func runServe(args []string) error {
 		return err
 	}
 	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
+	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
+	if err != nil {
+		return err
+	}
+	if len(enabledScriptLanguages(enabled)) > 0 {
+		if err := script.CheckSandbox(scriptSandbox); err != nil {
+			return err
+		}
+		if err := script.CheckSandboxDataPath(scriptSandbox, *dataDir); err != nil {
+			return err
+		}
+		// A profile that cannot start an enabled interpreter is refused here rather
+		// than left to surface one failed job at a time. ADR-0303 makes strict a
+		// fail-closed contract, and a language it can never run is that contract
+		// broken, not a host that happens to lack a runtime.
+		if err := script.CheckSandboxLanguages(scriptSandbox, enabledScriptLanguages(enabled)); err != nil {
+			return fmt.Errorf("%w; run it under a kernel and runtime the profile can start, "+
+				"turn that language off with its --<language>=false flag, or select --script-sandbox=off", err)
+		}
+	}
 	osCfg := opensearch.Config{
 		URL:      strings.TrimSpace(*osURL),
 		Username: os.Getenv("ATLAS_OPENSEARCH_USERNAME"),
@@ -329,7 +354,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -406,7 +431,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -655,6 +680,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		ex := script.New(lang)
 		ex.Timeout = scriptTimeout
 		ex.MaxOutput = budgets.Payload
+		ex.Sandbox = scriptSandbox
 		if err := ex.Check(); err != nil {
 			logging.Warn(logging.ScriptWorkerMissing,
 				"script worker enabled but its interpreter was not found on PATH; its script tasks "+
@@ -705,7 +731,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !inProcessConnectors {
 		defaults := api.DefaultOffloadedKinds()
 		offloadKinds = append(defaults, offloadKinds...)
-		defaultSpecs := defaultSuperviseSpecs(defaults, scriptLangs)
+		defaultSpecs := defaultSuperviseSpecs(defaults, scriptLangs, scriptSandbox)
 		specs = append(specs, defaultSpecs...)
 		for range defaultSpecs {
 			handles = append(handles, nil)
@@ -724,7 +750,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// Kinds the operator asked this server to run a worker for. After the defaults, so
 	// asking for one of them is the no-op it should be rather than a second worker
 	// racing the first for the same jobs.
-	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs, scriptLangs)
+	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs, scriptLangs, scriptSandbox)
 	if err != nil {
 		return err
 	}
@@ -882,12 +908,17 @@ func splitList(v string) []string {
 // configuration. Script is the one kind with a finer-grained enablement contract:
 // its three language flags must select the handlers in the child process too, and
 // disabling all three means no arbitrary-code worker is started at all.
-func defaultSuperviseSpecs(kinds []string, scriptLangs map[string]bool) []api.SuperviseSpec {
+func defaultSuperviseSpecs(kinds []string, scriptLangs map[string]bool, sandbox ...script.SandboxMode) []api.SuperviseSpec {
+	sandboxMode := script.SandboxOff
+	if len(sandbox) > 0 {
+		sandboxMode = sandbox[0]
+	}
 	specs := make([]api.SuperviseSpec, 0, len(kinds))
 	for _, kind := range kinds {
 		spec := api.SuperviseSpec{ID: kind, Kinds: []string{kind}, Connectors: []string{kind}}
 		if kind == "script" {
 			spec.ScriptLanguages = enabledScriptLanguages(scriptLangs)
+			spec.ScriptSandbox = string(sandboxMode)
 			if len(spec.ScriptLanguages) == 0 {
 				continue
 			}
@@ -927,7 +958,11 @@ func enabledScriptLanguages(enabled map[string]bool) []string {
 // worker-only kind (entra) is supervised without being offloaded — there are no
 // in-process handlers to remove, and naming it in the offload list is refused at
 // startup as an unknown kind.
-func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scriptLangs map[string]bool) ([]api.SuperviseSpec, []string, error) {
+func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scriptLangs map[string]bool, sandbox ...script.SandboxMode) ([]api.SuperviseSpec, []string, error) {
+	sandboxMode := script.SandboxOff
+	if len(sandbox) > 0 {
+		sandboxMode = sandbox[0]
+	}
 	var (
 		specs   []api.SuperviseSpec
 		offload []string
@@ -950,6 +985,7 @@ func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scr
 		}
 		if kind == "script" {
 			spec.ScriptLanguages = enabledScriptLanguages(scriptLangs)
+			spec.ScriptSandbox = string(sandboxMode)
 			if len(spec.ScriptLanguages) == 0 {
 				continue
 			}
@@ -1081,10 +1117,26 @@ func runWorker(args []string) error {
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
 	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
 	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
+	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for script interpreters: off or strict (Linux Landlock/seccomp; or ATLAS_SCRIPT_SANDBOX)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	kinds := splitList(*connectors)
+	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(kinds, "script") {
+		if err := script.CheckSandbox(scriptSandbox); err != nil {
+			return err
+		}
+		// An external worker gets the same fail-closed startup the server has: the
+		// languages it will serve are proved to start under the profile now, not
+		// discovered to be unrunnable by the first job that leases.
+		if err := script.CheckSandboxLanguages(scriptSandbox, splitList(*scriptLanguages)); err != nil {
+			return err
+		}
+	}
 	// The workers are built from the environment alone, and one of them has to know
 	// this worker's own id: a mock AD directory is reported to the Console under it
 	// (ADR-0213). --id is therefore read back out of
@@ -1097,6 +1149,9 @@ func runWorker(args []string) error {
 		}
 		if name == script.LanguagesEnv && strings.TrimSpace(*scriptLanguages) != "" {
 			return *scriptLanguages
+		}
+		if name == script.SandboxEnv {
+			return string(scriptSandbox)
 		}
 		return os.Getenv(name)
 	}

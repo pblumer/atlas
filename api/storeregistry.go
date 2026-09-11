@@ -100,6 +100,8 @@ var persistentStores = []storeEntry{
 	{name: "forms", class: classDesignTime, why: "task forms"},
 	{name: "projects", class: classDesignTime, why: "applications and their sharing scopes"},
 	{name: "panorama-models", class: classDesignTime, why: "landscape models"},
+	{name: "capabilities", class: classDesignTime, why: "the business capabilities the organisation must be able to perform, and how each is currently done"},
+	{name: "value-streams", class: classDesignTime, why: "the value streams whose stages those capabilities perform"},
 	{name: "releases", class: classDesignTime, why: "published application versions"},
 	{name: "dmnrefs", class: classDesignTime, why: "decision references"},
 	{name: "dmn-models", class: classDesignTime, onDemand: true, why: "decision models"},

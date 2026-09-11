@@ -1,0 +1,27 @@
+{
+  "tags": ["Architecture", "API"],
+  "title": {
+    "en": "A capability now says when somebody last read it and meant it",
+    "de": "Eine Geschäftsfähigkeit sagt jetzt, wann sie zuletzt jemand gelesen und bestätigt hat"
+  },
+  "summary": {
+    "en": "Atlas can check whether the process a capability names is deployed. It cannot check who owns the capability, what it is responsible for, or what it promised — and those are the fields anybody acts on. A map whose realisations are all green and whose owners left two years ago is worse than no map. Both records now carry a confirmation: when, by whom, who they asked, and a line on what the review found. Only confirming sets it — no edit does, because a date refreshed by a typo fix would claim every field had been re-read. What lapses turns up as a review backlog, one query, the twin of the one for work nobody has automated. The interval is twelve months by default and yours to change.",
+    "de": "Atlas kann prüfen, ob der Prozess, den eine Fähigkeit nennt, deployt ist. Wer sie fachlich verantwortet, wofür sie zuständig ist und was sie zugesagt hat, kann Atlas nicht prüfen — und genau das sind die Felder, nach denen jemand handelt. Eine Landkarte mit lauter grünen Umsetzungen und Verantwortlichen, die vor zwei Jahren gegangen sind, ist schlechter als keine. Beide Datensatzarten tragen jetzt eine Bestätigung: wann, von wem, wen man gefragt hat und eine Zeile zum Ergebnis der Prüfung. Gesetzt wird sie nur durch das Bestätigen selbst, nie durch eine Bearbeitung: Ein Datum, das eine Tippfehlerkorrektur auffrischt, behauptete, jedes Feld sei neu gelesen worden. Was abläuft, erscheint als Prüfrückstand, eine einzige Abfrage, das Gegenstück zu der nach nicht automatisierter Arbeit. Die Frist beträgt standardmässig zwölf Monate und lässt sich ändern."
+  },
+  "tutorial": {
+    "en": [
+      "Confirm a record you have just re-read: POST /api/v1/capabilities/{key}/confirmation with {\"with\": \"Head of Credit Risk\", \"note\": \"SLA renegotiated to 3 days\"}. Both fields are optional.",
+      "Name who you asked in \"with\". Leaving it empty says you spoke for the record alone, which is legitimate and weaker — the record says which.",
+      "Ask GET /api/v1/capabilities?stale=true for the review backlog.",
+      "GET /api/v1/business-architecture/gaps reports what has lapsed, and names the interval it judged against.",
+      "An administrator can change that interval with PUT /api/v1/settings/confirmation."
+    ],
+    "de": [
+      "Einen soeben erneut gelesenen Datensatz bestätigen: POST /api/v1/capabilities/{key}/confirmation mit {\"with\": \"Leiter Kreditrisiko\", \"note\": \"SLA auf 3 Tage neu verhandelt\"}. Beide Felder sind optional.",
+      "In \"with\" eintragen, wen man gefragt hat. Leer lassen heisst, man stand allein für den Datensatz ein; das ist zulässig und schwächer, und der Datensatz sagt welches von beidem.",
+      "GET /api/v1/capabilities?stale=true liefert den Prüfrückstand.",
+      "GET /api/v1/business-architecture/gaps meldet, was abgelaufen ist, und nennt die zugrunde gelegte Frist.",
+      "Eine Administratorin ändert diese Frist mit PUT /api/v1/settings/confirmation."
+    ]
+  }
+}

@@ -1082,6 +1082,285 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, seventh): the lines are drawn in ArchiMate's notation too,
+> and the relationship table is served rather than kept twice.**
+> The sixth amendment drew the elements in ArchiMate's own symbols and left the lines
+> between them as Atlas's: one solid, one dashed, one dotted. That is half an alphabet.
+> ArchiMate distinguishes Assignment, Triggering and Serving by what sits at the ends
+> of an otherwise identical **solid** line — a ball and a filled arrowhead, a filled
+> arrowhead, an open one — and a reader who works in the notation reads the ends
+> before they read anything else.
+>
+> Keeping the derived dash would not have been a missing statement but a wrong one.
+> In ArchiMate a dashed line with an open arrowhead is a **Flow** and a dotted line
+> with a hollow triangle is a **Realization**. Drawing `uses` dashed with an open head
+> would have said Flow where the data says Serving. So in this projection all three
+> lines are solid and the ends carry the whole distinction; Atlas's own picture is
+> untouched, where the dash is a free channel because the vocabulary has no opinion
+> about it.
+>
+> **The mapping moved to where the vocabulary already lives.** §8 requires the
+> projection's mapping to be explicit, and `api/panorama/notation.go` states the reason
+> it is Go rather than JavaScript: a table both sides keep a copy of is a table that
+> eventually disagrees with itself. That risk was theoretical while the relationship
+> types were only written into an exported file. It stopped being theoretical the
+> moment the canvas drew them, because a picture with Triggering's filled arrowhead on
+> an edge the file calls Serving is two answers to one question with nothing on either
+> surface saying which is true. The `Notation` rows therefore gained `Relations`, built
+> from the exporter's own table, and a test holds the two to being the same rows.
+>
+> `Flip` travels in that table rather than in the drawing code. ArchiMate's Serving
+> runs from the provider to the consumer and the derived `uses` edge runs from the
+> process to the worker it names; the reversal is a fact about the vocabulary, so the
+> export and the canvas each read it instead of each deciding it. On the picture the
+> arrowhead moves and the line does not: the geometry stays the landscape's, so the
+> hover, the impact walk and the exported document are all still looking at the edge
+> they always were.
+>
+> A marked line stops at the two reserved circles rather than running centre to
+> centre, because a mark at the centre of a node is a mark underneath it. The trim is
+> recomputed while a node is dragged, for the same reason.
+>
+> **The mapping version did not move, and that is a decision.** No row changed
+> meaning: those three relationship types are what the exporter wrote at version 1, and
+> a document generated then is what one generated now would be. What changed is who
+> reads the table. A version that moved for that would tell a reader their file might
+> differ when it cannot.
+>
+> One thing this amendment did not add and deliberately does not: the eight other
+> ArchiMate relationships. The landscape holds two facts about how things connect, and
+> three relationships is all two facts can honestly support. An absent Flow means
+> Atlas cannot see one, never that there is none, and the loss list says so.
+
+> **Amendment (2026-09-11, sixth): the ArchiMate projection is drawn in ArchiMate's
+> notation, not only in its vocabulary.**
+> §8 mapped each kind to an ArchiMate element type and wrote that type under the
+> node's name — and then drew Atlas's own circle, square, hexagon, triangle and
+> pentagon. The record listed that as loss ("the type is written out rather than drawn
+> as ArchiMate's corner icon"), which understated it: a reader who works in ArchiMate
+> recognises the notation by its silhouettes, so a projection that keeps Atlas's
+> shapes is a translation of the vocabulary without the script, and the one reader it
+> is for does not recognise it.
+>
+> The standard defines two ways to draw an element: a rectangle carrying the name with
+> a small type icon in its corner, or **the icon itself at full size** with the name
+> beneath. Both are the notation. This canvas takes the second, and the reason is
+> arithmetic: a process is drawn at a radius of 17, a corner icon is about a tenth of
+> the element it sits in, and one or two pixels of icon is a rectangle with a smudge
+> in the corner — every node on the picture being the same rectangle. Drawn as the
+> icon, the silhouette carries the type at a glance, which is the altitude this view is
+> read at. The written type stays beside it: the silhouette is for the reader who
+> knows ArchiMate, the word for the one who does not.
+>
+> Five elements, one per mapped kind — Application Component, Application Process,
+> Application Service, Application Function, Node. The geometry is ArchiMate's
+> proportions taken from Archi's own drawing routines, centred and then normalised so
+> the furthest corner lands *on* the reserved circle: the separation guarantee is about
+> that circle, and a notation that drew outside it could make two nodes overlap that
+> the layout had kept apart. That normalisation is computed rather than hand-fitted,
+> and the property is checked over every shape the picture can draw.
+>
+> **The colours are convention and the record says so.** ArchiMate 3.2 states that
+> colour carries no formal semantics and defines none. What is recognised as the
+> ArchiMate palette is two things at once: the convention the specification's own
+> figures are drawn in, and the default fills of Archi, where most of these models are
+> made. The values used here are Archi's, read off its source rather than sampled from
+> a picture — Application `#B5FFFF`, Technology `#C9E7B7`. They are pale by design,
+> which is what makes them safe under §4: a layer fill is a ground for black text, not
+> a signal, and the amber and red a finding is marked with stay the loudest things on
+> the canvas. The outline is the canvas's own ink rather than a literal, so an
+> ArchiMate node carries the same line weight as every edge and every other outline.
+>
+> The three kinds ArchiMate has no element for — a draft, a restricted placeholder, an
+> unresolved dependency — keep Atlas's shape *and* its colour. The rule §8 already
+> stated for shape extends to paint for the same reason: painting a placeholder in the
+> Application layer's fill would claim a layer for something the notation has no word
+> for at all.
+
+> **Amendment (2026-09-11, fifth): the scale is also the control.**
+> A scale a reader can measure by is one they will want to point at. "Show me the
+> ones running a hundred or more" is the question the row of reference circles makes
+> askable, and it is a question a landscape is opened with — so each mark is a button,
+> and clicking it narrows the picture to the band that mark stands for.
+>
+> A mark owns everything from itself up to the next mark, and the last one owns
+> everything above it: the only reading under which the marks partition the landscape
+> without overlapping. The nothing-at-all mark is its own case and means a tally of
+> zero, not "below the smallest thing that counts", because the picture keeps those
+> two apart everywhere else.
+>
+> It narrows through the same walk the search box uses, with the same one hop of
+> context and the same matched/context distinction in the counter, because they are
+> two ways of asking the same kind of question and answering them differently would be
+> two filters a reader has to hold apart. Both at once is an **intersection** through
+> *one* walk: narrowing twice would take the context of the context, and the picture
+> would grow as the question got narrower. Clicking the chosen mark again widens —
+> a filter you can only turn on is a trap, and the mark is the only obvious place to
+> look for the way out.
+>
+> The band is held as the mark's own **tally**, not as its position on the row. The
+> marks are derived from the landscape and the landscape moves, so a tally is still
+> the same question after a re-read where an index is a different one; and when the
+> tally is no longer a mark at all — the peak moved, or the notation changed to one
+> with no scale — it is let go of rather than quietly filtered by, because a picture
+> narrowed by a criterion with no control showing it is a picture nobody can widen
+> again. A saved view carries it for the reason it carries the term: a view is the
+> whole question somebody saved.
+
+> **Amendment (2026-09-11, fourth): the key carries the scale, not only a sentence
+> about it.**
+> The amendment below states the sizing law in the key and in the export stamp, in
+> words. Words are not a scale. A reader looking at a node cannot tell from a sentence
+> whether it is running ten or a thousand — they can tell it by holding the node
+> against a circle with a number under it, which is what a bubble chart has always
+> done and what this was missing.
+>
+> So the key gains a row of reference circles: the nothing-at-all one first, then the
+> tallies the scale is marked at, each drawn at the radius the law gives it. The marks
+> are powers of ten from the weighting's `least` upward and then the peak, because the
+> law is logarithmic and the marks a reader interpolates between on a logarithmic
+> scale are the decades; a linear set would be four of them crowded at one end. When
+> there are more decades than the row has places the rungs are thinned by a *constant*
+> stride rather than by picking evenly, because a ladder of ten, then a hundredfold,
+> then fourfold is three rules on one line and a reader carries none of them. Both
+> ends always survive: the smallest tally that counts, and the largest there is.
+>
+> What makes it a scale rather than a decoration is that the circles come out of the
+> same function the nodes did (`radiusForTally`, which `radiusForHeat` now calls). One
+> law, one implementation, so the key cannot drift from the canvas — and the e2e test
+> states exactly that, by measuring a node and its reference circle off the rendered
+> picture and requiring the same ratio.
+>
+> It travels into the file too, for the reason §10 gives for the stamp: beside the
+> canvas the key is one scroll away, and in a file pasted into a ticket there is
+> nothing to scroll to. In the artifact the marks are drawn inside the same 16-unit
+> box the export's key scales every swatch from, so what the file carries is the
+> ratios rather than the screen's pixels — which is what a ratio scale is read by.
+
+> **Amendment (2026-09-11, third): the heat weightings are a ratio scale.**
+> §8 sized a node by the square root of its share of the peak, which makes a circle's
+> *area* proportional to the tally — the textbook encoding for a quantity drawn as a
+> disc, and arithmetically what it claimed to be. It answers "how much". That is not
+> the question a heatmap is opened with, and the numbers say why. On a span of thirty
+> units, a node at a hundredth of the peak was drawn three units above a node carrying
+> nothing at all, and one at a thousandth was drawn one unit above it. An estate's
+> instance counts run from one to several thousand, so the quiet majority of a real
+> landscape collapsed onto the floor and a process running one could not be told from
+> a process running none — which is the first thing a reader wants from this picture,
+> and it was reported as missing.
+>
+> So the law is now:
+>
+>     value 0      →  r = floor
+>     value least  →  r = floor + step
+>     value peak   →  r = floor + span
+>
+>     r = floor + step + (span − step) · ln(value ÷ least) ÷ ln(peak ÷ least)
+>
+> Equal steps of radius are equal *multiples* of the tally: a process running ten
+> stands as far above one running one as one running a hundred stands above it. The
+> scale answers "how many times".
+>
+> Two things it needs that the old law did not, and both are stated to the reader
+> rather than left implicit:
+>
+> - **A step.** On a ratio scale the smallest tally is the origin, so "one" and "none"
+>   would be drawn alike. The step is what "this one is doing something" costs, before
+>   the weighting has said how much. Six units, which puts the smallest node carrying
+>   anything at 17 against a floor of 11 — two and a third times the area, and exactly
+>   the gap between a worker and a process on the structural picture, so it reads at
+>   the same glance as a change of kind.
+> - **A least.** The bottom of the scale, declared by the weighting rather than read
+>   off the landscape: one running instance, one incident, one minute of age. Declared,
+>   because a reading taken off the landscape would rescale every node the moment one
+>   quiet process appeared, and because the raw number for a duration is nanoseconds,
+>   where "one of them" means nothing.
+>
+> What it gives up is stated in the key and in the export stamp beside what it gains:
+> the area is no longer the tally. A landscape with no range at all — every process
+> running one, every node holding its only incident — has a peak equal to its least,
+> and everything carrying anything is drawn at the top, because being the worst is
+> what it is. That is the one case where the scale is louder than the difference it is
+> reporting, and the ranking column beside the picture carries the actual numbers.
+
+> **Amendment (2026-09-11, second): the ceiling is on pieces of the picture, not on
+> nodes.**
+> The ceiling the amendment below introduced measured each node against its own
+> nearest neighbour, which catches a lone node and nothing else. Two processes that
+> call each other and nothing else are each other's nearest neighbour at a spring's
+> rest length, so by that measure neither is far from anything — the pair sails past
+> the ceiling together and goes on deciding the scale for the whole canvas. That was
+> reported from a real landscape, and it is not a rare shape: an estate is full of
+> conformance samples, test flows and one-off processes that touch nothing else.
+>
+> So the unit is the connected component. Everything the edges tie together is one
+> piece; a piece is measured against everything outside it; a piece over the ceiling
+> is translated *rigidly* toward whatever is nearest to it until the gap is exactly
+> the ceiling. Rigidly, because every distance inside a component is something the
+> springs are saying, where the gap between two components is an artifact of where
+> the repulsion and the pull happened to balance — nothing was being said, so nothing
+> is being overruled. The largest component never moves; something has to hold still.
+>
+> Both halves run, and neither replaces the other. A piece is measured against what
+> is outside it, so a node stretched away from its own neighbours *inside* a large
+> component is invisible to the piece half; a node is measured against its nearest
+> neighbour, so a pair adrift together is invisible to the node half. Measured on a
+> 120-node estate with six small islands, dropping the node half took the worst
+> node's distance from 1.5 times the median to 1.9. Across eight estate shapes at two
+> window sizes the piece ceiling takes the furthest piece from 2.0–3.1 times the
+> median to 1.5, leaves the median spacing the picture is drawn at unchanged or
+> slightly larger, and moves nothing at all on an estate whose pieces were already
+> within it.
+>
+> The layout is one function for every notation, so this reaches the heatmap
+> projections and the ArchiMate and C4 views by construction rather than by being
+> repeated. Measured on one 212-node estate across all four: coverage 0.165 / 0.163 /
+> 0.163 / 0.171 and an identical furthest-piece figure. There is no per-view layout
+> to fix, and a report that one view is worse than another is a report about the
+> estate or about the build, not about the projection.
+
+> **Amendment (2026-09-11): the opening view uses the window, whatever the estate's
+> size.**
+> §7 sizes the world from the content and then shows the whole of it, so the world's
+> size is what decides the magnification. Two rules were quietly working against
+> that, and both were reported as one symptom: on first opening "Atlas (derived)",
+> the landscape sat in a fraction of the window with a single node stranded at the
+> far edge of it.
+>
+> - **The world had a floor of a frame's worth of area.** It was put there so a
+>   handful of nodes would not be changed by the switch to a content-sized world, on
+>   the reasoning that the small case was comfortable already. It was not. With the
+>   cells a node needs at about 98 units square, the floor stopped binding only past
+>   roughly twenty-five nodes, so every smaller landscape was laid out in a world
+>   several times larger than its content and drawn at the scale that fits that world
+>   into the canvas. Measured on the rendered page at 1400x900, as the share of the
+>   window the nodes' own footprints cover: five nodes 7%, eight nodes 11%, fourteen
+>   nodes 16%, and forty or a hundred and twenty-five nodes 17%. The floor is gone.
+>   One density law now applies at every size, and the same measurements read 18%,
+>   18%, 18%, 17%, 17%.
+> - **Nothing bounded how far one node could be drawn from the rest.** A node the
+>   springs do not hold sits where the centring pull balances a repulsion falling off
+>   as 1/d², which is a cube root of the constants: it lands far out, and tuning the
+>   pull (which is what LOOSE_PULL is) moves it very little. The cost is not the node
+>   — it is that the fit scales the *bounding box* onto the world, so one straggler
+>   decides the scale and everything else is squeezed into the fraction of the canvas
+>   it leaves. On the reported shape, one application with its processes around it
+>   and one process attached to nothing, the straggler settled at 2.07 times the
+>   picture's own median spacing. A pass named `gather` now bounds it at 1.5, moving
+>   an offender along the line toward its nearest neighbour until it is exactly that
+>   far and no further, so it stays the outlying thing it is without setting the
+>   scale for the rest. It is the dual of the separation pass and sits in the same
+>   place for the same reason: a guarantee the simulation cannot make is made
+>   afterwards, by arithmetic, and it is skipped while anything is pinned because it
+>   would slide a hand-made arrangement out from under the hand that made it.
+>
+> One correction was tried and rejected on the measurements. The pull's aim at the
+> frame's aspect ratio is applied once and demonstrably undershoots (a graph asked
+> for 1.71:1 went 0.93 → 1.21). Closing it into a loop of repeated corrections fixes
+> that case and overshoots others — the simulation answers with a lag, so the loop
+> rings — and on the 36-node estate §7's own fill test uses it took the span from
+> 0.80 of the canvas to 0.68. The single correction stands.
+
 > **Amendment (2026-09-10): the picture says when it was read, and keeps itself
 > true.**
 > §10 argues that an undated "all green" picture circulates inside an organization

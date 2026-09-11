@@ -1,0 +1,11 @@
+{
+  "tags": ["Panorama"],
+  "title": {
+    "en": "Draw a value stream",
+    "de": "Einen Wertstrom zeichnen"
+  },
+  "summary": {
+    "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
+    "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
+  }
+}
