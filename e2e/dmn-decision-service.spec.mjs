@@ -67,11 +67,15 @@ const DECISION_SERVICE_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </dmndi:DMNDI>
 </definitions>`;
 
-function expectedServices(dividerY) {
+function expectedServices(
+  dividerY,
+  approvalOutput = ["#id_route"],
+  approvalEncapsulated = ["#id_elig"],
+) {
   return {
     approval: {
-      outputDecision: ["#id_route"],
-      encapsulatedDecision: ["#id_elig"],
+      outputDecision: approvalOutput,
+      encapsulatedDecision: approvalEncapsulated,
       inputDecision: [],
       inputData: ["#id_age"],
       dividerY,
@@ -173,17 +177,28 @@ test("vendored dmn-js preserves DMN 1.5 Decision Services through modeling and r
     };
   }, DECISION_SERVICE_XML);
 
-  expect(result.importWarnings).toEqual([]);
-  expect(result.initial).toEqual(expectedServices(210));
-  expect(result.dividerMoved).toEqual(expectedServices(250));
-  expect(result.dividerUndone).toEqual(expectedServices(210));
-  expect(result.dividerRedone).toEqual(expectedServices(250));
+  const importedServices = expectedServices(210);
+  const reclassifiedServices = expectedServices(
+    250,
+    ["#id_route", "#id_elig"],
+    [],
+  );
 
-  expect(result.sharedMoved.routingOnly.outputDecision).toEqual(["#id_route"]);
-  expect(result.sharedUndone).toEqual(expectedServices(250));
-  expect(result.sharedRedone.routingOnly.outputDecision).toEqual(["#id_route"]);
+  expect(result.importWarnings).toEqual([]);
+  expect(result.initial).toEqual(importedServices);
+
+  // Eligibility is centred at y=230. Moving the divider to y=250 therefore
+  // reclassifies it into the upper/output compartment. Undo must nevertheless
+  // restore the exact imported semantic membership, not recompute it from geometry.
+  expect(result.dividerMoved).toEqual(reclassifiedServices);
+  expect(result.dividerUndone).toEqual(importedServices);
+  expect(result.dividerRedone).toEqual(reclassifiedServices);
+
+  expect(result.sharedMoved).toEqual(reclassifiedServices);
+  expect(result.sharedUndone).toEqual(reclassifiedServices);
+  expect(result.sharedRedone).toEqual(reclassifiedServices);
 
   expect(result.reimportWarnings).toEqual([]);
-  expect(result.roundtrip).toEqual(expectedServices(250));
+  expect(result.roundtrip).toEqual(reclassifiedServices);
   expect(result.savedXML).toContain("DMNDecisionServiceDividerLine");
 });
