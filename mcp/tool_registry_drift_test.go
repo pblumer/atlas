@@ -144,6 +144,12 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/orders":        "portal ordering surface still being built; a tool is a public contract",
 	"GET /api/v1/orders":         "portal ordering surface still being built, and an order is read as the person who placed it",
 	"GET /api/v1/orders/{id}":    "portal ordering surface still being built, and an order is read as the person who placed it",
+	// The orchestrator pair. These drive real provisioning, and an agent that
+	// could report a line as provisioned could make an order say something no
+	// target system ever did — the one place in this surface where a wrong call
+	// is not a wrong answer but a wrong record.
+	"GET /api/v1/orders/{id}/next":          "orchestrator call; the ordering surface is still being built",
+	"POST /api/v1/orders/{id}/lines/{item}": "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -268,4 +269,83 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// HandleNext reports which of an order's lines may be started now.
+//
+// This and [Service.HandleReport] are the orchestrator's two calls, and they are
+// operator work rather than the orderer's: nobody reports the result of their own
+// provisioning, and an operator works orders that are not theirs. The route's
+// role says so; there is no object gate here, deliberately.
+func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var (
+		got     Order
+		found   bool
+		loadErr error
+	)
+	s.loop.Do(func() { got, found, loadErr = s.store.Get(id) })
+	switch {
+	case loadErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read order: "+loadErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no order "+id)
+	default:
+		out := Next(got)
+		if out == nil {
+			out = []string{}
+		}
+		httpapi.JSON(w, http.StatusOK, out)
+	}
+}
+
+// reportReq is one line's provisioning outcome.
+type reportReq struct {
+	Status LineStatus `json:"status"`
+}
+
+// HandleReport records what came back for one line and propagates it.
+func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
+	id, item := r.PathValue("id"), r.PathValue("item")
+
+	var req reportReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "malformed JSON body: "+err.Error())
+		return
+	}
+
+	var (
+		got      Order
+		found    bool
+		applyErr error
+		opErr    error
+	)
+	s.loop.Do(func() {
+		if got, found, opErr = s.store.Get(id); opErr != nil || !found {
+			return
+		}
+		var next Order
+		if next, applyErr = Apply(got, item, req.Status, s.now()); applyErr != nil {
+			return
+		}
+		got = next
+		opErr = s.store.Save(got)
+	})
+
+	switch {
+	case opErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "record outcome: "+opErr.Error())
+	case !found:
+		httpapi.Error(w, http.StatusNotFound, "no order "+id)
+	case applyErr != nil:
+		// A line the order does not carry is absent; anything else about the
+		// request is the caller's mistake.
+		if strings.Contains(applyErr.Error(), "carries no line") {
+			httpapi.Error(w, http.StatusNotFound, applyErr.Error())
+			return
+		}
+		httpapi.Error(w, http.StatusBadRequest, applyErr.Error())
+	default:
+		httpapi.JSON(w, http.StatusOK, got)
+	}
 }

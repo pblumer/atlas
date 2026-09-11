@@ -434,3 +434,113 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 		})
 	}
 }
+
+// The orchestrator's two calls: what may start, and what came back. They are
+// operator work — the person who ordered does not report their own provisioning
+// results, and an operator works orders that are not theirs.
+
+func TestTheOrchestratorDrivesAnOrderThroughTheAPI(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	for rounds := 0; ; rounds++ {
+		if rounds > 10 {
+			t.Fatal("the order did not settle in ten rounds")
+		}
+		rec := do(t, s.HandleNext, op, "GET", "", "id", placed.ID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("next = %d (%s)", rec.Code, rec.Body)
+		}
+		next := decode[[]string](t, rec)
+		if len(next) == 0 {
+			break
+		}
+		for _, id := range next {
+			res := do(t, s.HandleReport, op, "POST", `{"status":"done"}`, "id", placed.ID, "item", id)
+			if res.Code != http.StatusOK {
+				t.Fatalf("report %s = %d (%s)", id, res.Code, res.Body)
+			}
+		}
+	}
+
+	got := decode[Order](t, do(t, s.HandleGet, someone("usr_1"), "GET", "", "id", placed.ID))
+	for _, l := range got.Lines {
+		if l.Status != StatusDone {
+			t.Fatalf("line %s = %s, want done", l.ItemID, l.Status)
+		}
+	}
+	if Derive(got.Lines) != OrderCompleted {
+		t.Fatalf("order = %s, want completed", Derive(got.Lines))
+	}
+}
+
+// TestReportingAFailureBlocksTheChainThroughTheAPI.
+func TestReportingAFailureBlocksTheChainThroughTheAPI(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["workplace"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	do(t, s.HandleReport, op, "POST", `{"status":"failed"}`, "id", placed.ID, "item", "account")
+
+	got := decode[Order](t, do(t, s.HandleGet, someone("usr_1"), "GET", "", "id", placed.ID))
+	if s := statusOf(got.Lines, "laptop"); s != StatusBlocked {
+		t.Fatalf("laptop = %s, want blocked — it needs the account", s)
+	}
+}
+
+// TestReportingRefusesADecidedOutcome: those have their own transitions, with an
+// author, and a second way in would make the author optional.
+func TestReportingRefusesADecidedOutcome(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	for _, status := range []string{"rejected", "abandoned", "blocked", "nonsense"} {
+		rec := do(t, s.HandleReport, op, "POST", `{"status":"`+status+`"}`,
+			"id", placed.ID, "item", "account")
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("reporting %s = %d, want 400", status, rec.Code)
+		}
+	}
+}
+
+func TestOrchestratorCallsOnAnUnknownOrderAre404(t *testing.T) {
+	s := newService(t)
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	if rec := do(t, s.HandleNext, op, "GET", "", "id", "ord_nope"); rec.Code != http.StatusNotFound {
+		t.Errorf("next = %d, want 404", rec.Code)
+	}
+	if rec := do(t, s.HandleReport, op, "POST", `{"status":"done"}`, "id", "ord_nope", "item", "a"); rec.Code != http.StatusNotFound {
+		t.Errorf("report = %d, want 404", rec.Code)
+	}
+}
+
+// TestReportingAnUnknownLineIs404: the order exists, the line does not.
+func TestReportingAnUnknownLineIs404(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	rec := do(t, s.HandleReport, op, "POST", `{"status":"done"}`, "id", placed.ID, "item", "ghost")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("report = %d (%s), want 404", rec.Code, rec.Body)
+	}
+}
+
+func TestMalformedReportIsRefused(t *testing.T) {
+	s := newService(t)
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+	op := &httpapi.Principal{UserID: "usr_op", Roles: []string{"operator"}}
+
+	if rec := do(t, s.HandleReport, op, "POST", "{not json", "id", placed.ID, "item", "account"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("report = %d, want 400", rec.Code)
+	}
+}

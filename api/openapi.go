@@ -764,6 +764,20 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order", tObject())}},
 
+		// The two calls an orchestrator makes to drive an order: what may start,
+		// and what came back. Operator work rather than the orderer's — nobody
+		// reports the result of their own provisioning, and an operator drives
+		// orders that are not theirs.
+		{"GET", "/api/v1/orders/{id}/next", s.orders.HandleNext, apiOp{
+			summary: "Which of an order's lines may be started now: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Line ids ready to start", tArray())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}", s.orders.HandleReport, apiOp{
+			summary: "Record one line's provisioning outcome (done, skipped, failed or running) and propagate what it stopped", tag: "Order", role: RoleOperator,
+			req: jsonBody("Outcome", schemaObj(map[string]any{
+				"status": tString(),
+			}, "status")),
+			resp: jsonBody("The updated order", tObject())}},
+
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an
 		// immutable, per-process numbered version, optionally shared through a
