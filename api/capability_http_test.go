@@ -852,3 +852,45 @@ func TestTheHorizonIsAdminOnlyToSet(t *testing.T) {
 		t.Errorf("a malformed body was accepted: %d", code)
 	}
 }
+
+// Zero restores the default rather than meaning "no horizon at all". Zero is what a
+// form sends when somebody clears the field, and reading that as "never stale" would
+// switch the freshness check off by accident — which a negative value says on purpose.
+func TestZeroHorizonRestoresTheDefault(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	if login(t, admin, ts, "admin", "password1") != http.StatusOK {
+		t.Fatal("admin login")
+	}
+	if code, body := cReq(t, admin, ts, "PUT", "/api/v1/settings/confirmation", `{"horizonMonths":3}`); code != http.StatusOK {
+		t.Fatalf("set: %d %s", code, body)
+	}
+	code, body := cReq(t, admin, ts, "PUT", "/api/v1/settings/confirmation", `{"horizonMonths":0}`)
+	if code != http.StatusOK {
+		t.Fatalf("clear: %d %s", code, body)
+	}
+	var view struct {
+		HorizonMonths int  `json:"horizonMonths"`
+		Configured    bool `json:"configured"`
+	}
+	if err := json.Unmarshal(body, &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.HorizonMonths != 12 || view.Configured {
+		t.Errorf("after clearing = %+v, want the default and no decision recorded", view)
+	}
+	// And the gap report applies it.
+	code, body = cReq(t, admin, ts, "GET", "/api/v1/business-architecture/gaps", "")
+	if code != http.StatusOK {
+		t.Fatalf("gaps: %d %s", code, body)
+	}
+	var rep struct {
+		HorizonMonths int `json:"horizonMonths"`
+	}
+	if err := json.Unmarshal(body, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.HorizonMonths != 12 {
+		t.Errorf("the report applied %d months after the setting was cleared", rep.HorizonMonths)
+	}
+}
