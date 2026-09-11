@@ -1559,6 +1559,146 @@ dataset of up to 50 000 cases":
 
 ---
 
+## Milestone B — Business architecture: capabilities & value streams 🚧
+
+A parallel track: give Atlas a place for what an organisation must be able to do,
+above the processes that do it. The method is the business architecture of *Enterprise
+Process Orchestration* (Ruecker/Strauch, Wiley 2025) — value streams, strategic
+end-to-end processes, and business capabilities as a flat, tagged list stated
+independently of their implementation. Atlas holds every process and none of that, so
+a deployed process can be found by its name and by nothing else: not by the capability
+it realises, not by who owns that capability in the business, and not by what would
+stall without it.
+
+The whole milestone is **design-time**. It emits no events, participates in no replay,
+and `applyToState` never sees it. The reasoning, the options weighed and what is
+deliberately refused are in
+[ADR-draft-business-capabilities-and-value-streams](docs/adr/draft-business-capabilities-and-value-streams.md);
+the method and how to work it with Atlas as it stands are in
+[`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md).
+
+- ✅ **B0 — The method, written down.** The five levels mapped onto what Atlas has and
+  has not, the conventions the method needs from a modeller whatever the registry holds
+  (an application per capability, a required capability as a service task rather than a
+  call activity, an end event named for its outcome), and the measurement patterns with
+  the Atlas fact each one actually produces.
+- ✅ **B1 — The capability record.** A new `api/capability` area service
+  ([ADR-0147](docs/adr/0147-splitting-the-api-server-object.md)) over its own
+  `sidecar.NewStore`, holding scope, inputs, outputs, business owner, resources,
+  realisations, required capabilities, KPIs, SLAs, tags and a lifecycle state — with
+  **no parent field**, because the flat list is the method rather than a preference,
+  and a test asserts the absence rather than a comment describing it. The business
+  owner is free text with an optional principal: the person accountable for a
+  capability frequently has no account. One identity, the key, which is also the
+  filename — so the map reads as `capabilities/loan-underwriting.json` and diffs like
+  source; the price is that a key cannot be renamed in place, and the refusal says so.
+  Registered in [`api/storeregistry.go`](api/storeregistry.go) as design-time, so the
+  existing export already carries the map between installations. Exposed as MCP tools
+  alongside the HTTP surface: an agent that deploys a process otherwise has no way to
+  say what part of the business it is for.
+- ✅ **B2 — The value stream record.** Ordered stages, each naming the capabilities
+  that perform it, with the stream's own KPIs. The method's own inconsistency is
+  accepted rather than engineered away: an end-to-end process spans several stages
+  *and* is itself a capability, so a stage names capabilities and an end-to-end
+  capability is named by every stage it spans.
+- ✅ **B3 — Realisation, resolved at read time.** A capability's realisations point
+  outward by portable key ([ADR-0134](docs/adr/0134-git-backed-applications.md)) in one
+  of four kinds — `process`, `worker`, `system`, `manual` — because the two that are
+  not Atlas resources are the normal state of a capability before the work starts.
+  Everything mutable (does the application exist, is it deployed, at which version, how
+  many instances are live) is resolved when the record is read and stored nowhere:
+  [ADR-0189](docs/adr/0189-panorama-architecture-modeling-and-live-overlays.md) §4's
+  discipline, for its reason.
+- ✅ **B4 — The gap report.** The reverse direction, computed rather than stored, the
+  way [ADR-0211](docs/adr/0211-panorama-derived-landscape-mesh.md) computes its overlay:
+  capabilities realised by nothing (the manual work, made visible), realisations
+  pointing at what no longer exists, deployed processes no capability claims, stages
+  with no capability, `requires` naming no capability, one process two capabilities both
+  claim, and a call activity crossing into another capability's process that the caller
+  never declared. A comparison, never
+  a merge — a declared dependency with no call is the normal case, since the method's
+  black box is usually a REST call. It runs *on* the run loop, and only because nothing
+  in it grows with the instance population: the map and the deployment registry are
+  design-time size, and the running-instance count is the maintained O(1) per-definition
+  counter ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) rather than a scan.
+  [ADR-0239](docs/adr/0239-off-loop-queries.md) is the rule that makes that a check
+  somebody had to pass rather than an assumption. Alongside it, a per-capability
+  **coverage** read: the resolved
+  realisations, what the capability depends on and what each has promised, who depends
+  on it, and the value-stream stages it performs.
+- 🔲 **B5 — The milestone event compiles.** A **none intermediate throw event** — an
+  event whose only job is to leave a trace in the engine's history — is the method's
+  milestone marker, and today the compiler refuses it (*"only message, signal,
+  compensation, escalation, and link events are supported yet"*). It compiles to a
+  pass-through node, which the link throw event already does. Small, and it is what
+  makes "identity verification started" a readable business state where no task sits.
+- 🔲 **B6 — Panorama meets the registry.** Binding keys `atlas.capabilityKey` on an
+  ArchiMate `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing
+  and the registry are the same architecture seen twice rather than two architectures.
+  ArchiMate's `ValueStream` type is already accepted by Panorama's validator and only
+  missing from its authorable palette.
+- 🔲 **B7 — Measurement.** Compute a capability's declared KPIs and SLAs from the data
+  Atlas already keeps: outcome distribution from the per-element visit counters
+  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) over distinctly named end
+  events, timeout rates from the termination counters, cycle time and per-phase
+  duration from the instance timeline, and slicing by `atlas:searchable` variables
+  ([ADR-0244](docs/adr/0244-searchable-variables.md)). This slice carries the draft
+  record's open question, and it has to be answered by measurement rather than by
+  argument: whether that is computable at the instance volumes this is aimed at
+  *without* the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)),
+  which not every installation runs. Until it is answered, a KPI in the record is a
+  declaration and the API must not imply otherwise.
+- 🔲 **B8 — The Console surface.** A capability list that is worth opening: filter by
+  tag, sort by realisation state, and the gap report as the landing view rather than a
+  report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
+- 🔲 **B9 — Document-level exchange.** One JSON document holding the whole map, and an
+  import that reports what it would do before doing it: reconciled by key rather than by
+  position, with a `dryRun` naming what it would add, change and leave alone. The
+  installation-level half already works — both stores are design-time, so the existing
+  export and restore ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carry them — and
+  this is the half that makes a map reviewable in a pull request and importable into a
+  second server without moving everything else with it. Cheap by construction: there are
+  no local ids to remap and no positional identity to preserve, so the document is the
+  records as they stand. Importing *another tool's* model — ArchiMate Open Exchange, or a
+  BIAN/eTOM reference model onto tags — is a separate slice again.
+- ✅ **B10 — A record says when somebody last confirmed it.** Every finding the gap
+  report raises today is a fact Atlas checked. The half of a capability it cannot check
+  is the half anybody acts on: who owns it, what it is and is not responsible for, and
+  what it has promised. Those decay silently, and a map whose realisations are green
+  and whose owners left two years ago is worse than no map.
+  [ADR-draft-a-capability-says-when-it-was-last-confirmed](docs/adr/draft-a-capability-says-when-it-was-last-confirmed.md)
+  is the third instance in this tree of the shape ADR-0289 and
+  [ADR-0293](docs/adr/0293-open-questions-in-records-expire.md) already use — a
+  backward-looking date saying somebody *looked*, never a forward promise somebody
+  *made* — with the one difference that forces its own record: both of those are
+  build-time tests over content here, and this is runtime data in a customer's
+  installation that no test will ever fail over.
+  `confirmedAt` / `confirmedBy` / `confirmedWith` / `confirmationNote` on both records,
+  set by an explicit confirmation and by **no** edit, because a save that refreshed the
+  date would let a typo fix assert that every SLA had been re-read. No bulk confirm, for
+  the same reason. `confirmedWith` is there because the confirmer is almost never the
+  owner — the owner is free text precisely because they often have no account — so
+  without it the map confirms itself and a reader cannot tell that from a review the
+  owner sat in. Optional, and its absence is the information; neither a self-confirmation
+  nor a name that differs from the recorded owner is a finding, because in a small
+  installation the first is the only confirmation possible and the second would be a
+  finding about spelling. The horizon is one installation setting defaulting to twelve months —
+  configurable, unlike its two precedents, because the reviewers are somebody else's
+  business architects rather than this repository's contributors. It surfaces as a
+  ninth finding, as `?stale=true` beside `?realized=false` (the review backlog beside
+  the automation one), and on the coverage read — and it never withholds a stale
+  record, which would make the map least useful exactly when it needs attention.
+
+Deliberately out of scope: business areas (Level 1) and integration capabilities
+(Level 5) as record kinds of their own — the first is a tag, and the second is what a
+Worker Type already is ([ADR-0203](docs/adr/0203-worker-execution-model.md)). Importing
+an industry reference model (BIAN, ACORD, eTOM) maps its levels onto tags and is a
+later slice; doing it inside B1 would drag the hierarchy question into the record that
+exists to settle it. No approval workflow: `state` is a field somebody sets, and Atlas
+is the engine an organisation would model such a workflow *in*.
+
+---
+
 ## Explicit non-goals (for now)
 
 - **A *bespoke* graphical BPMN modeler.** Atlas ships a viewer/editor by embedding

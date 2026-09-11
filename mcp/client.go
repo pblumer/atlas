@@ -229,9 +229,52 @@ func (c *Client) doResponse(method, path, contentType string, body []byte) (clie
 func extractError(body []byte) string {
 	var e struct {
 		Error string `json:"error"`
+		// Findings is what a validation refusal carries beside its one-line summary:
+		// every reason the record was refused, so an author fixing a form does not make
+		// one round trip per mistake. Without them here an agent gets "the record is not
+		// valid" and nothing else — it has no form to read the details out of, so it
+		// would learn the rules one blind retry at a time.
+		//
+		// Two shapes are in use and both are read: a list of strings, and a list of
+		// objects carrying a `message`.
+		Findings []json.RawMessage `json:"findings"`
 	}
-	if json.Unmarshal(body, &e) == nil && e.Error != "" {
+	if json.Unmarshal(body, &e) != nil || e.Error == "" {
+		return strings.TrimSpace(string(body))
+	}
+	reasons := findingMessages(e.Findings)
+	if len(reasons) == 0 {
 		return e.Error
 	}
-	return strings.TrimSpace(string(body))
+	return e.Error + ": " + strings.Join(reasons, "; ")
+}
+
+// findingMessages renders each finding as one sentence, skipping any it cannot read
+// rather than failing the whole message — a refusal that becomes unreadable because
+// one finding had an unexpected shape is worse than a partial one.
+func findingMessages(findings []json.RawMessage) []string {
+	out := make([]string, 0, len(findings))
+	for _, raw := range findings {
+		var text string
+		if json.Unmarshal(raw, &text) == nil {
+			if text = strings.TrimSpace(text); text != "" {
+				out = append(out, text)
+			}
+			continue
+		}
+		var obj struct {
+			Message string `json:"message"`
+			Reason  string `json:"reason"`
+		}
+		if json.Unmarshal(raw, &obj) != nil {
+			continue
+		}
+		switch {
+		case strings.TrimSpace(obj.Message) != "":
+			out = append(out, strings.TrimSpace(obj.Message))
+		case strings.TrimSpace(obj.Reason) != "":
+			out = append(out, strings.TrimSpace(obj.Reason))
+		}
+	}
+	return out
 }

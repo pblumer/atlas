@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "General-purpose scripts now have an opt-in, fail-closed OS sandbox.",
+  "reviewedThrough": "A capability record now says when somebody last read it and meant it.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -85,6 +85,17 @@
       "text": {
         "en": "Panorama draws every application and process of a server as one landscape with the calls and messages between them, sized by what is running on it or by where work is stuck, so the question \"what do we actually operate\" has a picture.",
         "de": "Panorama zeichnet alle Applikationen und Prozesse eines Servers als eine Landschaft mit ihren Aufrufen und Nachrichten, skaliert nach dem, was darauf läuft, oder danach, wo Arbeit hängt — damit die Frage «was betreiben wir eigentlich» ein Bild hat."
+      }
+    },
+    {
+      "id": "business-architecture",
+      "title": {
+        "en": "Business capabilities, not only processes",
+        "de": "Business Capabilities, nicht nur Prozesse"
+      },
+      "text": {
+        "en": "A flat, tagged register of what the organisation must be able to do, each capability with its scope, its business owner, what it requires of others, and how it is done today \u2014 a process here, a worker, a purchased system or a person. What nothing yet automates is a list you can read, and every record says when somebody last confirmed it still describes reality.",
+        "de": "Ein flaches, getaggtes Verzeichnis dessen, was die Organisation k\u00f6nnen muss: jede Capability mit ihrem Scope, ihrem fachlichen Owner, dem, was sie von anderen ben\u00f6tigt, und der Art, wie sie heute erbracht wird \u2014 ein Prozess hier, ein Worker, ein zugekauftes System oder ein Mensch. Was noch nichts automatisiert, ist eine lesbare Liste, und jeder Eintrag sagt, wann ihn zuletzt jemand best\u00e4tigt hat."
       }
     },
     {
