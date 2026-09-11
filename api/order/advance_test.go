@@ -233,3 +233,52 @@ func TestAFailureStopsOnlyItsChain(t *testing.T) {
 		t.Errorf("order = %s, want running", s)
 	}
 }
+
+// An order is self-contained: it carries the schedule, the preconditions, and
+// the process each line is provisioned by. All three come from the release at
+// the moment of placing, for the same reason — fulfilment reads one record, and
+// what was ordered cannot change because somebody edited a product afterwards.
+
+// TestReadyLinesCarryTheirProcess: an orchestrator has to know what to start,
+// and looking it up in the catalogue would reintroduce the edit it was frozen
+// against.
+func TestReadyLinesCarryTheirProcess(t *testing.T) {
+	o := Order{ID: "ord_1", Lines: []Line{
+		{ItemID: "laptop", Status: StatusPending, ProvisionProcess: "prov-laptop"},
+		{ItemID: "vpn", Status: StatusPending, ProvisionProcess: "prov-vpn",
+			VariantID: "fast"},
+	}, Requires: map[string][]string{"vpn": {"laptop"}}}
+
+	got := Ready(o)
+	if len(got) != 1 {
+		t.Fatalf("Ready = %v, want the laptop alone", got)
+	}
+	if got[0].ItemID != "laptop" || got[0].ProvisionProcess != "prov-laptop" {
+		t.Fatalf("ready line = %+v, want the laptop with its process", got[0])
+	}
+
+	o.Lines[0].Status = StatusDone
+	got = Ready(o)
+	if len(got) != 1 || got[0].VariantID != "fast" {
+		t.Fatalf("ready line = %+v, want the vpn with its variant", got)
+	}
+}
+
+// TestReadyAndNextAgree: one is the other with the detail an orchestrator needs,
+// and a reader has to be able to trust that.
+func TestReadyAndNextAgree(t *testing.T) {
+	o := Order{Lines: []Line{
+		{ItemID: "b", Status: StatusPending}, {ItemID: "a", Status: StatusPending},
+		{ItemID: "c", Status: StatusDone},
+	}}
+	ids := Next(o)
+	ready := Ready(o)
+	if len(ids) != len(ready) {
+		t.Fatalf("Next has %d, Ready has %d", len(ids), len(ready))
+	}
+	for i := range ids {
+		if ids[i] != ready[i].ItemID {
+			t.Fatalf("position %d: Next says %s, Ready says %s", i, ids[i], ready[i].ItemID)
+		}
+	}
+}

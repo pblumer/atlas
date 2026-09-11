@@ -89,3 +89,24 @@ func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
 	o.UpdatedAt = at
 	return o, nil
 }
+
+// Ready is [Next] with what an orchestrator needs to act: each line that may
+// start now, in the same order, carrying the process that provisions it and the
+// variant that was chosen.
+//
+// Two functions rather than one because they answer to different readers. Next
+// is the question — which lines are ready — and is what a person or a status
+// screen wants; Ready is the same answer with the detail a machine needs to do
+// something about it.
+func Ready(o Order) []Line {
+	ids := Next(o)
+	byID := make(map[string]Line, len(o.Lines))
+	for _, l := range o.Lines {
+		byID[l.ItemID] = l
+	}
+	out := make([]Line, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, byID[id])
+	}
+	return out
+}

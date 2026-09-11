@@ -147,7 +147,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 
 		out = Order{
 			ID: id, ReleaseID: rel.ID, Orderer: p.UserID, Recipient: recipient,
-			Lines:     linesFor(ordered),
+			Lines:     linesFor(rel, ordered),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
 			CreatedAt: s.now(),
@@ -166,11 +166,19 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// linesFor turns the resolved product ids into pending lines.
-func linesFor(ordered []string) []Line {
+// linesFor turns the resolved product ids into pending lines, each carrying the
+// processes its product is bound to as the release froze them.
+func linesFor(rel catalog.Release, ordered []string) []Line {
+	bound := make(map[string]catalog.Item, len(rel.Items))
+	for _, it := range rel.Items {
+		bound[it.ID] = it
+	}
 	out := make([]Line, len(ordered))
 	for i, id := range ordered {
-		out[i] = Line{ItemID: id, Status: StatusPending}
+		it := bound[id]
+		out[i] = Line{ItemID: id, Status: StatusPending,
+			ProvisionProcess:   it.ProvisionProcess,
+			DeprovisionProcess: it.DeprovisionProcess}
 	}
 	return out
 }
@@ -271,7 +279,9 @@ func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-// HandleNext reports which of an order's lines may be started now.
+// HandleNext reports which of an order's lines may be started now, each with the
+// process that provisions it and the variant that was chosen — everything an
+// orchestrator needs to act, from one call.
 //
 // This and [Service.HandleReport] are the orchestrator's two calls, and they are
 // operator work rather than the orderer's: nobody reports the result of their own
@@ -291,9 +301,9 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no order "+id)
 	default:
-		out := Next(got)
+		out := Ready(got)
 		if out == nil {
-			out = []string{}
+			out = []Line{}
 		}
 		httpapi.JSON(w, http.StatusOK, out)
 	}

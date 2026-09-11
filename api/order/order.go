@@ -82,6 +82,16 @@ type Line struct {
 	// VariantID is the variant the basket resolved, empty where the item has none.
 	VariantID string     `json:"variantId,omitempty"`
 	Status    LineStatus `json:"status"`
+	// ProvisionProcess and DeprovisionProcess are the processes bound to this
+	// line's product, copied from the release when the order was placed.
+	//
+	// They travel with the order for the same reason the schedule does: fulfilment
+	// reads one record, and looking the binding up in the catalogue at the moment
+	// of provisioning would reintroduce exactly the edit the release was frozen
+	// against. The deprovision process travels too, so that revoking what this
+	// order granted uses the process that was in force when it was granted.
+	ProvisionProcess   string `json:"provisionProcess,omitempty"`
+	DeprovisionProcess string `json:"deprovisionProcess,omitempty"`
 	// BlockedBy names the lines whose failure or rejection stopped this one —
 	// the *root* causes, not the intermediate blocked lines between.
 	//

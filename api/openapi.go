@@ -769,8 +769,8 @@ func (s *Server) apiRoutes() []apiRoute {
 		// reports the result of their own provisioning, and an operator drives
 		// orders that are not theirs.
 		{"GET", "/api/v1/orders/{id}/next", s.orders.HandleNext, apiOp{
-			summary: "Which of an order's lines may be started now: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
-			resp: jsonBody("Line ids ready to start", tArray())}},
+			summary: "Which of an order's lines may be started now, each with the process that provisions it and the variant chosen: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Lines ready to start", tArray())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}", s.orders.HandleReport, apiOp{
 			summary: "Record one line's provisioning outcome (done, skipped, failed or running) and propagate what it stopped", tag: "Order", role: RoleOperator,
 			req: jsonBody("Outcome", schemaObj(map[string]any{

@@ -454,14 +454,20 @@ func TestTheOrchestratorDrivesAnOrderThroughTheAPI(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("next = %d (%s)", rec.Code, rec.Body)
 		}
-		next := decode[[]string](t, rec)
+		next := decode[[]Line](t, rec)
 		if len(next) == 0 {
 			break
 		}
-		for _, id := range next {
-			res := do(t, s.HandleReport, op, "POST", `{"status":"done"}`, "id", placed.ID, "item", id)
+		for _, l := range next {
+			// The orchestrator starts what the line names; it never looks the
+			// binding up in the catalogue.
+			if l.ProvisionProcess != "prov" {
+				t.Fatalf("line %s carries process %q, want the one the release froze",
+					l.ItemID, l.ProvisionProcess)
+			}
+			res := do(t, s.HandleReport, op, "POST", `{"status":"done"}`, "id", placed.ID, "item", l.ItemID)
 			if res.Code != http.StatusOK {
-				t.Fatalf("report %s = %d (%s)", id, res.Code, res.Body)
+				t.Fatalf("report %s = %d (%s)", l.ItemID, res.Code, res.Body)
 			}
 		}
 	}
