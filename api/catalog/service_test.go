@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
 )
 
@@ -29,7 +30,8 @@ func newService(t *testing.T) *Service {
 	t.Cleanup(func() { close(quit) })
 
 	n := int64(0)
-	return New(loop, store, func() int64 { n++; return 1700 + n })
+	return New(loop, store, func() int64 { n++; return 1700 + n },
+		func(p *httpapi.Principal) bool { return p.HasRole("admin") })
 }
 
 func do(t *testing.T, h http.HandlerFunc, method, target, body string, vals ...string) *httptest.ResponseRecorder {
@@ -41,6 +43,11 @@ func do(t *testing.T, h http.HandlerFunc, method, target, body string, vals ...s
 		rdr = strings.NewReader(body)
 	}
 	req := httptest.NewRequest(method, target, rdr)
+	// These tests are about what the handlers do, not about who may call them:
+	// authorization has its own file. So every request here carries an identity
+	// that reaches every catalogue.
+	req = req.WithContext(httpapi.WithPrincipal(req.Context(),
+		&httpapi.Principal{UserID: "usr_test", Roles: []string{"admin"}}))
 	for i := 0; i+1 < len(vals); i += 2 {
 		req.SetPathValue(vals[i], vals[i+1])
 	}
@@ -199,8 +206,9 @@ func TestPublishingAnUnknownCatalogueIs404(t *testing.T) {
 // TestItemsAreListed so a catalogue maintainer can pick from what exists.
 func TestItemsAreListed(t *testing.T) {
 	s := newService(t)
+	cat := decode[Catalog](t, do(t, s.HandleCreateCatalog, "POST", "/x", `{"rank":1}`))
 	do(t, s.HandleSaveItem, "POST", "/x",
-		`{"id":"a","homeCatalog":"c","state":"active","texts":{"de":"A"},`+
+		`{"id":"a","homeCatalog":"`+cat.ID+`","state":"active","texts":{"de":"A"},`+
 			`"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d"}`)
 
 	rec := do(t, s.HandleListItems, "GET", "/api/v1/catalog-items", "")
@@ -286,7 +294,8 @@ func brokenService(t *testing.T) *Service {
 	loop := runloop.New(quit)
 	go loop.Run()
 	t.Cleanup(func() { close(quit) })
-	return New(loop, store, func() int64 { return 1700 })
+	return New(loop, store, func() int64 { return 1700 },
+		func(p *httpapi.Principal) bool { return p.HasRole("admin") })
 }
 
 func TestAnUnreadableStoreIsAnError(t *testing.T) {

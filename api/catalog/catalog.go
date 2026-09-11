@@ -139,6 +139,32 @@ type Edge struct {
 	Kind EdgeKind `json:"kind"`
 }
 
+// MemberRole is what a member may do. The two values are ADR-0071's, unchanged:
+// a viewer reads, an editor reads and writes. Ownership is the implicit third and
+// highest, and is not listed.
+type MemberRole string
+
+const (
+	// RoleViewer reads the catalogue.
+	RoleViewer MemberRole = "viewer"
+	// RoleEditor reads and changes it, publishing releases included.
+	RoleEditor MemberRole = "editor"
+)
+
+// PrincipalRef names who a grant is for. Type is "user" or "group"; a group grant
+// reaches everyone in it, resolved from the membership the principal already
+// carries, so no store read happens inside an authorization check (ADR-0180).
+type PrincipalRef struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+// Member is one grant on a catalogue.
+type Member struct {
+	Ref  PrincipalRef `json:"ref"`
+	Role MemberRole   `json:"role"`
+}
+
 // Catalog is a named set of items, with the appearance, audience and precedence
 // that decide who sees it and how.
 type Catalog struct {
@@ -157,11 +183,19 @@ type Catalog struct {
 	Items []string `json:"items"`
 	// Groups are the directory or Atlas groups whose members reach this catalogue.
 	Groups []string `json:"groups,omitempty"`
+	// Members are the object axis (ADR-0071/0180/0278): the role says a caller may
+	// maintain catalogues at all, this says which ones. Without it a product
+	// manager can rebuild and publish every customer's catalogue, with nothing in
+	// the way but not knowing an id — which ADR-0278 states plainly is not an
+	// access control.
+	Members []Member `json:"members,omitempty"`
 	// Edges are the structure and precedence between the items this catalogue
 	// offers. They belong to the catalogue rather than to the items because they
 	// are what its release is computed from, and because the same two products can
 	// relate differently in two catalogues.
-	Edges     []Edge `json:"edges,omitempty"`
+	Edges []Edge `json:"edges,omitempty"`
+	// OwnerID is whoever created it, because creation is the one moment where
+	// there is nobody to ask. The owner may always read, write and share.
 	OwnerID   string `json:"ownerId,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`

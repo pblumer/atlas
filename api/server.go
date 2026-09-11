@@ -1321,7 +1321,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	)
 	// The portal catalogue is another area service on the same shape: it takes the
 	// run loop, its store, and the server clock, and nothing else.
-	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() })
+	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() },
+		func(p *httpapi.Principal) bool { return p.HasRole(RoleAdmin) })
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the
