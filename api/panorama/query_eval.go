@@ -52,7 +52,10 @@ func executeGraphQueryContext(ctx context.Context, graph Graph, req QueryRequest
 		return QueryResponse{}, err
 	}
 	return QueryResponse{
-		Profile: QueryProfileV1, Graph: result, Complete: true, Limits: limits,
+		Profile: QueryProfileV1,
+		Graph: result,
+		Complete: true,
+		Limits: limits,
 	}, nil
 }
 
@@ -106,8 +109,8 @@ func matchPlan(ctx context.Context, graph Graph, plan queryPlan, params map[stri
 			if depth >= plan.edge.min && depth <= plan.edge.max && nodeMatches(graph.Nodes[current], *plan.end) {
 				m := match{
 					aliases: map[string]int{plan.start.alias: startIndex, plan.end.alias: current},
-					nodes:   append([]int(nil), pathNodes...),
-					edges:   append([]int(nil), pathEdges...),
+					nodes: append([]int(nil), pathNodes...),
+					edges: append([]int(nil), pathEdges...),
 				}
 				ok, err := evalWhere(plan.where, graph, m, params, source)
 				if err != nil {
@@ -337,6 +340,7 @@ func queryPropertyType(kind, property string) string {
 			if p.Name == property {
 				return p.Type
 			}
+		}
 		return ""
 	}
 	var found string
