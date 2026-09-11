@@ -1,0 +1,300 @@
+// The self-service portal (ADR-draft-portal-catalogue-order-inventory).
+//
+// One page with two halves: the catalogue somebody is the audience for, and the
+// orders they placed. It reads five endpoints and holds no state the server does
+// not already have, which is why it can be reloaded at any point without losing
+// anything.
+//
+// Language follows the browser (ADR-draft-portal-language-follows-the-browser),
+// on the condition that record names: every string below exists in every locale
+// the page offers, held by TestPortalCatalogueIsComplete. A missing key would
+// otherwise reach a customer, who cannot act on a review signal.
+
+const STRINGS = {
+  de: {
+    'portal.title': 'Leistungsportal',
+    'portal.catalog': 'Katalog',
+    'portal.orders': 'Meine Bestellungen',
+    'portal.none': 'Ihnen ist kein Katalog zugeordnet.',
+    'portal.none.hint': 'Wenden Sie sich an die Stelle, die Ihren Zugang eingerichtet hat.',
+    'portal.empty': 'Dieser Katalog enthält zurzeit nichts Bestellbares.',
+    'portal.includes': 'Enthalten',
+    'portal.options': 'Zusätzlich wählbar',
+    'portal.order': 'Bestellen',
+    'portal.ordering': 'Wird bestellt …',
+    'portal.noOrders': 'Sie haben noch nichts bestellt.',
+    'portal.placed': 'Bestellt am',
+    'portal.approval': 'Genehmigung nötig',
+    'portal.blockedBy': 'Wartet auf',
+    'portal.reason': 'Begründung',
+    'portal.retry': 'Erneut versuchen',
+    'portal.failed': 'Das hat nicht geklappt.',
+    'status.pending': 'Wartet',
+    'status.running': 'Läuft',
+    'status.done': 'Erledigt',
+    'status.skipped': 'Bereits vorhanden',
+    'status.failed': 'Störung',
+    'status.rejected': 'Abgelehnt',
+    'status.abandoned': 'Aufgegeben',
+    'status.blocked': 'Blockiert',
+    'order.running': 'In Arbeit',
+    'order.completed': 'Abgeschlossen',
+    'order.partial': 'Teilweise erfüllt',
+    'order.unfulfilled': 'Nicht erfüllt',
+  },
+  en: {
+    'portal.title': 'Service portal',
+    'portal.catalog': 'Catalogue',
+    'portal.orders': 'My orders',
+    'portal.none': 'No catalogue is assigned to you.',
+    'portal.none.hint': 'Ask whoever set up your access.',
+    'portal.empty': 'This catalogue currently offers nothing.',
+    'portal.includes': 'Included',
+    'portal.options': 'Also available',
+    'portal.order': 'Order',
+    'portal.ordering': 'Ordering …',
+    'portal.noOrders': 'You have not ordered anything yet.',
+    'portal.placed': 'Ordered on',
+    'portal.approval': 'Needs approval',
+    'portal.blockedBy': 'Waiting for',
+    'portal.reason': 'Reason',
+    'portal.retry': 'Try again',
+    'portal.failed': 'That did not work.',
+    'status.pending': 'Waiting',
+    'status.running': 'In progress',
+    'status.done': 'Done',
+    'status.skipped': 'Already held',
+    'status.failed': 'Failed',
+    'status.rejected': 'Refused',
+    'status.abandoned': 'Given up on',
+    'status.blocked': 'Blocked',
+    'order.running': 'In progress',
+    'order.completed': 'Completed',
+    'order.partial': 'Partly fulfilled',
+    'order.unfulfilled': 'Not fulfilled',
+  },
+};
+
+// The locale, from the browser and narrowed to what the page offers.
+//
+// The record puts a signed-in visitor's choice on their account rather than in
+// this browser, because they arrive from a phone and a desktop. That endpoint
+// does not exist yet, so the choice is remembered here in the meantime — which
+// is the one place this page knowingly falls short of its own record.
+function pickLocale() {
+  const url = new URLSearchParams(location.search).get('lang');
+  const stored = (() => { try { return localStorage.getItem('portal.lang'); } catch { return null; } })();
+  for (const want of [url, stored, ...(navigator.languages || [navigator.language || ''])]) {
+    if (!want) continue;
+    const base = String(want).toLowerCase().split('-')[0];
+    if (STRINGS[base]) return base;
+  }
+  return 'de';
+}
+
+let locale = pickLocale();
+
+// t renders a key. A key with no string shows as itself — in this page that can
+// only happen if the completeness test was removed, and looking broken in review
+// is better than guessing at a language nobody chose.
+function t(key) {
+  return (STRINGS[locale] && STRINGS[locale][key]) || key;
+}
+
+function setLocale(next) {
+  locale = next;
+  try { localStorage.setItem('portal.lang', next); } catch { /* private window */ }
+  render();
+}
+
+// textOf reads a catalogue item's name in the current locale, falling back to
+// whatever the catalogue has. A product is named by its catalogue, not by this
+// page, so there is no key to look up and no way to be complete about it.
+function textOf(texts, fallback) {
+  if (!texts) return fallback;
+  return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
+}
+
+const state = {
+  catalog: null,
+  release: null,
+  orders: [],
+  chosen: new Set(),
+  busy: false,
+  error: '',
+};
+
+async function api(path, options) {
+  const res = await fetch(path, { credentials: 'same-origin', ...options });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.status === 204 ? null : res.json();
+}
+
+async function load() {
+  state.error = '';
+  try {
+    state.catalog = await api('/api/v1/portal/catalog');
+  } catch {
+    // 404 here is the ordinary "you are the audience for nothing" answer, not a
+    // failure: the page says so rather than showing an error.
+    state.catalog = null;
+  }
+  if (state.catalog) {
+    const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
+    state.release = releases && releases.length ? releases[0] : null;
+  }
+  state.orders = await api('/api/v1/orders');
+  render();
+}
+
+// products returns what a person picks from: the items nothing else includes.
+// A part is shown under the whole it belongs to rather than beside it, or the
+// catalogue would read as a list of components.
+function products(release) {
+  const included = new Set();
+  for (const parts of Object.values(release.includes || {})) parts.forEach((p) => included.add(p));
+  for (const parts of Object.values(release.options || {})) parts.forEach((p) => included.add(p));
+  return (release.items || []).filter((i) => !included.has(i.id));
+}
+
+function itemsById(release) {
+  const by = {};
+  for (const i of release.items || []) by[i.id] = i;
+  return by;
+}
+
+async function order(productId, options) {
+  state.busy = true;
+  state.error = '';
+  render();
+  try {
+    await api('/api/v1/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ releaseId: state.release.id, items: [productId, ...options] }),
+    });
+    state.chosen.clear();
+    await load();
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') node.className = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    node.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+function renderCatalogue() {
+  if (!state.catalog) {
+    return el('div', { class: 'empty' },
+      el('p', {}, t('portal.none')),
+      el('p', { class: 'muted' }, t('portal.none.hint')));
+  }
+  if (!state.release || !(state.release.items || []).length) {
+    return el('div', { class: 'empty' }, el('p', {}, t('portal.empty')));
+  }
+
+  const by = itemsById(state.release);
+  const cards = products(state.release).map((p) => {
+    const includes = (state.release.includes || {})[p.id] || [];
+    const options = (state.release.options || {})[p.id] || [];
+    const picked = [...options].filter((o) => state.chosen.has(`${p.id}:${o}`));
+
+    return el('article', { class: 'card' },
+      el('h3', {}, textOf(p.texts, p.id)),
+      p.approval && p.approval.kind && p.approval.kind !== 'none'
+        ? el('p', { class: 'pill' }, t('portal.approval')) : null,
+      includes.length ? el('div', { class: 'parts' },
+        el('span', { class: 'muted' }, t('portal.includes')),
+        el('ul', {}, includes.map((id) => el('li', {}, textOf((by[id] || {}).texts, id))))) : null,
+      options.length ? el('div', { class: 'parts' },
+        el('span', { class: 'muted' }, t('portal.options')),
+        el('ul', {}, options.map((id) => {
+          const key = `${p.id}:${id}`;
+          return el('li', {},
+            el('label', {},
+              el('input', {
+                type: 'checkbox',
+                ...(state.chosen.has(key) ? { checked: 'checked' } : {}),
+                onchange: (e) => {
+                  if (e.target.checked) state.chosen.add(key); else state.chosen.delete(key);
+                },
+              }),
+              ' ', textOf((by[id] || {}).texts, id)));
+        }))) : null,
+      el('button', {
+        class: 'primary',
+        ...(state.busy ? { disabled: 'disabled' } : {}),
+        onclick: () => order(p.id, picked),
+      }, state.busy ? t('portal.ordering') : t('portal.order')));
+  });
+  return el('div', { class: 'cards' }, cards);
+}
+
+// deriveStatus mirrors the server's own rule rather than asking for it: an order
+// carries its lines, and its standing is computed from them so the two cannot
+// disagree. Doing it here keeps that property — a stored status could.
+function deriveStatus(order) {
+  const lines = order.lines || [];
+  let provisioned = 0;
+  for (const l of lines) {
+    const terminal = l.status === 'blocked'
+      ? !!l.terminallyBlocked
+      : ['done', 'skipped', 'rejected', 'abandoned'].includes(l.status);
+    if (!terminal) return 'order.running';
+    if (l.status === 'done' || l.status === 'skipped') provisioned++;
+  }
+  if (!lines.length || provisioned === lines.length) return 'order.completed';
+  return provisioned ? 'order.partial' : 'order.unfulfilled';
+}
+
+function renderOrders() {
+  if (!state.orders.length) {
+    return el('div', { class: 'empty' }, el('p', {}, t('portal.noOrders')));
+  }
+  return el('div', { class: 'cards' }, state.orders.map((o) => el('article', { class: 'card' },
+    el('div', { class: 'row' },
+      el('strong', {}, t(deriveStatus(o))),
+      el('span', { class: 'muted' }, `${t('portal.placed')} ${new Date(o.createdAt / 1e6).toLocaleDateString(locale)}`)),
+    el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
+      el('span', { class: `dot ${l.status}` }),
+      ' ', l.itemId, ' — ', t(`status.${l.status}`),
+      l.blockedBy && l.blockedBy.length
+        ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
+      l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null))))));
+}
+
+function render() {
+  const root = document.getElementById('app');
+  if (!root) return;
+  root.replaceChildren(
+    el('header', {},
+      el('h1', {}, state.catalog ? textOf(state.catalog.texts, t('portal.title')) : t('portal.title')),
+      el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
+        class: l === locale ? 'lang on' : 'lang',
+        onclick: () => setLocale(l),
+      }, l.toUpperCase())))),
+    state.error ? el('p', { class: 'error' }, state.error,
+      ' ', el('button', { onclick: load }, t('portal.retry'))) : null,
+    el('section', {}, el('h2', {}, t('portal.catalog')), renderCatalogue()),
+    el('section', {}, el('h2', {}, t('portal.orders')), renderOrders()));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.documentElement.lang = locale;
+  render();
+  load().catch((e) => { state.error = `${t('portal.failed')} ${e.message}`; render(); });
+});

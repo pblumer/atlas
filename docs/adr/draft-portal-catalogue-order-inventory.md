@@ -462,7 +462,14 @@ discrepancy, which no other system in the estate can do.
 
 `api/catalog` carries the catalogue model, the ArchiMate import and `Publish` — the validation, the wave
 schedule and the preconditions described above, with `Release.Blocked` answering which
-lines a failure stops. `api/order` carries the order model, the propagation and the orchestrator's two
+lines a failure stops. `api/web/portal.html` and `portal.js` are the visitor's half: the catalogue they are
+the audience for, what each product is made of, and their own orders with a status per
+line. It computes an order's standing from its lines rather than reading a stored one,
+for the same reason the server derives it — the two cannot then disagree. A theme per
+catalogue is a separate record and not built, so a visitor sees the instance's brand
+until it is.
+
+`api/order` carries the order model, the propagation and the orchestrator's two
 questions:
 `Next` and `Ready` say which lines may start — `Ready` with the process and variant an
 orchestrator needs — `Apply` records what came back, `Propagate` marks what a settled

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Leistungsportal</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
+<style>
+  /* The same token set app.css and the public form declare. theme.js overwrites
+     the accent trio on the root once the server answers, so this page carries the
+     operator's brand without knowing anything about it.
+
+     A per-catalogue theme is a separate record and not built yet: until it is,
+     a portal visitor sees the instance's brand, which is the operator's. */
+  :root {
+    --bg:#f3f4f6; --surface:#ffffff;
+    --border:#e2e4e9; --border-strong:#cdd0d6;
+    --text:#14161a; --muted:#62666d;
+    --accent:#0b5cff; --accent-hover:#0a4ad1; --accent-soft:#eaf0ff; --accent-ink:#ffffff;
+    --ok:#2d8a4e; --danger:#c0392b;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
+  #app { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+           flex-wrap:wrap; margin-bottom:8px; }
+  h1 { font-size:22px; margin:0; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+       margin:32px 0 12px; font-weight:600; }
+  h3 { font-size:16px; margin:0 0 8px; }
+  .langs { display:flex; gap:4px; }
+  .lang { border:1px solid var(--border-strong); background:var(--surface); color:var(--muted);
+          border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
+  .lang.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .cards { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .parts { margin:10px 0; font-size:14px; }
+  .parts ul { margin:4px 0 0; padding-left:18px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .pill { display:inline-block; background:var(--accent-soft); color:var(--accent-hover);
+          border-radius:999px; padding:2px 10px; font-size:12px; margin:0 0 8px; }
+  .row { display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+         margin-bottom:8px; flex-wrap:wrap; }
+  .lines { margin:0; padding-left:0; list-style:none; font-size:14px; }
+  .lines li { padding:3px 0; border-top:1px solid var(--border); }
+  .lines li:first-child { border-top:0; }
+  /* One dot per line status. The three that mean "not provisioned" are deliberately
+     different colours: a refusal is a decision, a failure is a defect somebody is
+     fixing, and a block is neither — showing them alike would tell a visitor the
+     same thing about three different situations. */
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--border-strong); }
+  .dot.done, .dot.skipped { background:var(--ok); }
+  .dot.failed, .dot.abandoned { background:var(--danger); }
+  .dot.rejected { background:var(--muted); }
+  .dot.blocked { background:var(--accent-soft); border:1px solid var(--border-strong); }
+  .dot.running { background:var(--accent); }
+  button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
+                   border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; margin-top:8px; }
+  button.primary:disabled { opacity:.55; cursor:default; }
+  .empty { background:var(--surface); border:1px dashed var(--border-strong); border-radius:10px;
+           padding:24px; text-align:center; }
+  .empty p { margin:4px 0; }
+  .error { background:#fdecea; border:1px solid var(--danger); color:var(--danger);
+           border-radius:8px; padding:10px 14px; }
+  @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/theme.js"></script>
+  <script src="/portal.js"></script>
+</body>
+</html>
