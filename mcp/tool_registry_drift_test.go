@@ -121,6 +121,22 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// The portal catalogue (ADR-draft-portal-catalogue-order-inventory). Authoring
+	// one is a plausible agent task — building a catalogue out of an ArchiMate
+	// model is close to what an agent is good at — and these will very likely
+	// become tools. They are not yet, for one reason: an MCP tool is a public
+	// contract, and this surface is half-built. There is no ordering side, no
+	// portal, and the shapes here are still moving with every slice. Exposing them
+	// now would pin a contract to a design that is still settling, which is the
+	// same argument the panorama entries below make.
+	"GET /api/v1/catalogs":                "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs":               "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalogs/{id}":           "portal catalogue surface still being built; a tool is a public contract",
+	"PATCH /api/v1/catalogs/{id}":         "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs/{id}/releases": "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalogs/{id}/releases":  "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalog-products":        "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalog-products":       "portal catalogue surface still being built; a tool is a public contract",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is
