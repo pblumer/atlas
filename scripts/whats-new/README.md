@@ -114,3 +114,14 @@ Nothing regenerates the feed at build or run time, so two checks stand in for th
 
 Neither check can tell that an entry *reads* well, or that a user-facing change has
 an override at all. That part stays a human step — step 3 above.
+
+## The other thing a changelog bullet feeds
+
+The Console landing page carries a second bilingual section below this one: the
+**key features** tile ([`api/web/key-features.json`](../../api/web/key-features.json)),
+which says what Atlas *is* rather than what changed. It is hand-written, not generated
+— but it reads the same source indirectly, through a `reviewedThrough` marker naming the
+newest `### Added` bullet somebody has held against it. `go test ./api` fails while
+bullets sit above that marker, so a feature cannot land without the question being asked.
+Most bullets change nothing in the tile; moving the marker records that they were
+considered.
