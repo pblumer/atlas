@@ -1,6 +1,7 @@
 package order
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -10,8 +11,8 @@ import (
 // record kept forever a decision nobody made — the same thing Abandon exists to
 // prevent on the incident path.
 
-// deputies builds a lookup of who stands in for whom.
-func deputies(m map[string]string) func(string) string {
+// superiors builds a directory lookup: who an approver reports to.
+func superiors(m map[string]string) func(string) string {
 	return func(of string) string { return m[of] }
 }
 
@@ -25,7 +26,7 @@ func chain(a Assignment) string {
 
 func TestEscalationMovesTheApprovalToTheDeputy(t *testing.T) {
 	a := Assign("laptop", "usr_boss", 1000)
-	got, err := Escalate(a, deputies(map[string]string{"usr_boss": "usr_deputy"}), 2000)
+	got, err := Escalate(a, superiors(map[string]string{"usr_boss": "usr_deputy"}), 2000)
 	if err != nil {
 		t.Fatalf("Escalate: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestEscalationMovesTheApprovalToTheDeputy(t *testing.T) {
 // silently leaving it where it is would hide that the deadline achieved nothing.
 func TestEscalationWithoutADeputyIsRefused(t *testing.T) {
 	a := Assign("laptop", "usr_boss", 1000)
-	got, err := Escalate(a, deputies(nil), 2000)
+	got, err := Escalate(a, superiors(nil), 2000)
 	if err == nil {
 		t.Fatal("Escalate with no deputy must fail")
 	}
@@ -63,7 +64,7 @@ func TestEscalationWithoutADeputyIsRefused(t *testing.T) {
 // arrangement between two colleagues, and following it would hand the approval
 // back and forth until the order is forgotten.
 func TestEscalationDoesNotCircleBack(t *testing.T) {
-	both := deputies(map[string]string{"usr_a": "usr_b", "usr_b": "usr_a"})
+	both := superiors(map[string]string{"usr_a": "usr_b", "usr_b": "usr_a"})
 
 	first, err := Escalate(Assign("laptop", "usr_a", 1000), both, 2000)
 	if err != nil {
@@ -77,7 +78,7 @@ func TestEscalationDoesNotCircleBack(t *testing.T) {
 // TestSelfDeputyIsRefused: somebody recorded as their own deputy would absorb the
 // deadline forever and nothing would ever move.
 func TestSelfDeputyIsRefused(t *testing.T) {
-	self := deputies(map[string]string{"usr_a": "usr_a"})
+	self := superiors(map[string]string{"usr_a": "usr_a"})
 	if _, err := Escalate(Assign("laptop", "usr_a", 1000), self, 2000); err == nil {
 		t.Fatal("escalating to the current approver must fail")
 	}
@@ -86,7 +87,7 @@ func TestSelfDeputyIsRefused(t *testing.T) {
 // TestEscalationChainsThroughSeveralDeputies, each recorded, so the record shows
 // the route an approval took rather than only where it ended.
 func TestEscalationChainsThroughSeveralDeputies(t *testing.T) {
-	d := deputies(map[string]string{"usr_a": "usr_b", "usr_b": "usr_c", "usr_c": "usr_d"})
+	d := superiors(map[string]string{"usr_a": "usr_b", "usr_b": "usr_c", "usr_c": "usr_d"})
 
 	a := Assign("laptop", "usr_a", 1000)
 	for i, at := range []int64{2000, 3000, 4000} {
@@ -107,7 +108,7 @@ func TestEscalationChainsThroughSeveralDeputies(t *testing.T) {
 // placed against the deadline it came from.
 func TestEscalationNeedsAMoment(t *testing.T) {
 	a := Assign("laptop", "usr_boss", 1000)
-	if _, err := Escalate(a, deputies(map[string]string{"usr_boss": "usr_d"}), 0); err == nil {
+	if _, err := Escalate(a, superiors(map[string]string{"usr_boss": "usr_d"}), 0); err == nil {
 		t.Fatal("Escalate with no moment must fail")
 	}
 }
@@ -139,7 +140,7 @@ func TestSilenceIsNeverARejection(t *testing.T) {
 
 	// What it does instead.
 	a, err := Escalate(Assign("laptop", "usr_a", 1000),
-		deputies(map[string]string{"usr_a": "usr_b"}), 2000)
+		superiors(map[string]string{"usr_a": "usr_b"}), 2000)
 	if err != nil {
 		t.Fatalf("Escalate: %v", err)
 	}
@@ -163,7 +164,7 @@ func TestAssignmentValidRejectsAnUnnamedLine(t *testing.T) {
 // must not manufacture a valid-looking escalation out of it.
 func TestEscalateRefusesAnInvalidAssignment(t *testing.T) {
 	broken := Assignment{ItemID: "laptop"} // nobody holds it
-	if _, err := Escalate(broken, deputies(map[string]string{"": "usr_b"}), 2000); err == nil {
+	if _, err := Escalate(broken, superiors(map[string]string{"": "usr_b"}), 2000); err == nil {
 		t.Fatal("escalating an assignment with no approver must fail")
 	}
 }
@@ -172,7 +173,7 @@ func TestEscalateRefusesAnInvalidAssignment(t *testing.T) {
 // two people. A deputises for B, B for C, and C back to B — following it would
 // return the approval to somebody who already declined to act on it.
 func TestEscalationDoesNotReturnToSomebodyMidChain(t *testing.T) {
-	d := deputies(map[string]string{"usr_a": "usr_b", "usr_b": "usr_c", "usr_c": "usr_b"})
+	d := superiors(map[string]string{"usr_a": "usr_b", "usr_b": "usr_c", "usr_c": "usr_b"})
 
 	a, err := Escalate(Assign("laptop", "usr_a", 1000), d, 2000)
 	if err != nil {
@@ -183,5 +184,160 @@ func TestEscalationDoesNotReturnToSomebodyMidChain(t *testing.T) {
 	}
 	if _, err := Escalate(a, d, 4000); err == nil {
 		t.Fatal("escalating back to usr_b, who already held it, must fail")
+	}
+}
+
+// The chain escalates upwards — a deputy is the approver's superior, read from
+// the directory, which is the same lookup the "superior" approval rule already
+// uses. Upwards ends somewhere: nobody is above the top, and a directory can
+// loop. When it ends, the approval must become visible rather than quietly sit
+// where nobody is looking, and somebody must be able to start it moving again.
+
+// TestExhaustedChainIsDistinguishable: an operator's tooling has to tell "this
+// cannot escalate any further" from "this record is broken", because only the
+// first is a thing to hand to a person.
+func TestExhaustedChainIsDistinguishable(t *testing.T) {
+	top := Assign("laptop", "usr_ceo", 1000) // nobody above
+	_, err := Escalate(top, superiors(nil), 2000)
+	if !errors.Is(err, ErrNoFurtherEscalation) {
+		t.Fatalf("err = %v, want ErrNoFurtherEscalation", err)
+	}
+
+	// A directory loop is the same operational case: there is nowhere new to go.
+	loop := superiors(map[string]string{"usr_a": "usr_b", "usr_b": "usr_a"})
+	one, err := Escalate(Assign("laptop", "usr_a", 1000), loop, 2000)
+	if err != nil {
+		t.Fatalf("first escalation: %v", err)
+	}
+	if _, err := Escalate(one, loop, 3000); !errors.Is(err, ErrNoFurtherEscalation) {
+		t.Fatalf("err = %v, want ErrNoFurtherEscalation", err)
+	}
+
+	// A broken record is not.
+	if _, err := Escalate(Assignment{ItemID: "laptop"}, superiors(nil), 2000); errors.Is(err, ErrNoFurtherEscalation) {
+		t.Fatal("an invalid assignment must not report as an exhausted chain")
+	}
+}
+
+// TestStallMakesAStuckApprovalVisible: without this the approval sits in the last
+// holder's inbox and the order waits on it with nothing anywhere saying so.
+func TestStallMakesAStuckApprovalVisible(t *testing.T) {
+	a := Assign("laptop", "usr_ceo", 1000)
+	if a.Stalled() {
+		t.Fatal("a fresh assignment must not be stalled")
+	}
+
+	got, err := Stall(a, 2000)
+	if err != nil {
+		t.Fatalf("Stall: %v", err)
+	}
+	if !got.Stalled() || got.StalledAt != 2000 {
+		t.Fatalf("stalled = %v at %d, want true at 2000", got.Stalled(), got.StalledAt)
+	}
+	// It is still with whoever last held it: stalling reports a fact, it does not
+	// take the task away from them.
+	if got.Approver != "usr_ceo" {
+		t.Errorf("approver = %s, want usr_ceo", got.Approver)
+	}
+}
+
+func TestStallNeedsAMomentAndAValidAssignment(t *testing.T) {
+	if _, err := Stall(Assign("laptop", "usr_a", 1000), 0); err == nil {
+		t.Error("Stall with no moment must fail")
+	}
+	if _, err := Stall(Assignment{ItemID: "laptop"}, 2000); err == nil {
+		t.Error("Stall of an assignment with no approver must fail")
+	}
+}
+
+// TestReassignClosesTheCircle: visibility with no way to act on it is just a
+// quieter kind of stuck. A person puts the approval somewhere, and it moves again.
+func TestReassignClosesTheCircle(t *testing.T) {
+	stalled, err := Stall(Assign("laptop", "usr_ceo", 1000), 2000)
+	if err != nil {
+		t.Fatalf("Stall: %v", err)
+	}
+
+	got, err := Reassign(stalled, "usr_new", "usr_admin", 3000)
+	if err != nil {
+		t.Fatalf("Reassign: %v", err)
+	}
+	if got.Approver != "usr_new" {
+		t.Errorf("approver = %s, want usr_new", got.Approver)
+	}
+	if got.Stalled() {
+		t.Error("a reassigned approval must no longer be stalled")
+	}
+	if chain(got) != "usr_ceo>usr_new" {
+		t.Errorf("chain = %q, want the hop recorded", chain(got))
+	}
+	if got.Escalations[0].By != "usr_admin" {
+		t.Errorf("hop by %q, want usr_admin — a person did this, and the record says so",
+			got.Escalations[0].By)
+	}
+}
+
+// TestEscalationRecordsNoAuthor is the other half of the same field: a hop the
+// deadline made has nobody to name, and that absence is what distinguishes an
+// automatic move from somebody's decision to intervene.
+func TestEscalationRecordsNoAuthor(t *testing.T) {
+	got, err := Escalate(Assign("laptop", "usr_a", 1000),
+		superiors(map[string]string{"usr_a": "usr_b"}), 2000)
+	if err != nil {
+		t.Fatalf("Escalate: %v", err)
+	}
+	if got.Escalations[0].By != "" {
+		t.Fatalf("hop by %q, want nobody — a clock moved it", got.Escalations[0].By)
+	}
+}
+
+// TestReassignMayGoToSomebodyWhoAlreadyHeldIt. The loop guard exists to stop a
+// clock cycling an approval between two colleagues; a person choosing to send it
+// back to the original approver knows something the guard does not.
+func TestReassignMayGoToSomebodyWhoAlreadyHeldIt(t *testing.T) {
+	a, err := Escalate(Assign("laptop", "usr_a", 1000),
+		superiors(map[string]string{"usr_a": "usr_b"}), 2000)
+	if err != nil {
+		t.Fatalf("Escalate: %v", err)
+	}
+	if _, err := Reassign(a, "usr_a", "usr_admin", 3000); err != nil {
+		t.Fatalf("Reassign back to usr_a: %v, want it allowed", err)
+	}
+}
+
+func TestReassignNeedsATargetAnAuthorAndAMoment(t *testing.T) {
+	a := Assign("laptop", "usr_a", 1000)
+	if _, err := Reassign(Assignment{ItemID: "laptop"}, "usr_b", "usr_admin", 3000); err == nil {
+		t.Error("reassigning an assignment with no approver must fail")
+	}
+	if _, err := Reassign(a, "", "usr_admin", 3000); err == nil {
+		t.Error("Reassign with no target must fail")
+	}
+	if _, err := Reassign(a, "usr_b", "", 3000); err == nil {
+		t.Error("Reassign with no author must fail")
+	}
+	if _, err := Reassign(a, "usr_b", "usr_admin", 0); err == nil {
+		t.Error("Reassign with no moment must fail")
+	}
+	if _, err := Reassign(a, "usr_a", "usr_admin", 3000); err == nil {
+		t.Error("Reassign to the current approver must fail — nothing would move")
+	}
+}
+
+// TestEscalationResumesAfterAReassignment: the new holder's own superior is where
+// the deadline goes next, so intervening puts the approval back on the normal path
+// rather than into a special case.
+func TestEscalationResumesAfterAReassignment(t *testing.T) {
+	sup := superiors(map[string]string{"usr_new": "usr_newboss"})
+	a, err := Reassign(Assign("laptop", "usr_ceo", 1000), "usr_new", "usr_admin", 3000)
+	if err != nil {
+		t.Fatalf("Reassign: %v", err)
+	}
+	got, err := Escalate(a, sup, 4000)
+	if err != nil {
+		t.Fatalf("Escalate: %v", err)
+	}
+	if got.Approver != "usr_newboss" {
+		t.Fatalf("approver = %s, want usr_newboss", got.Approver)
 	}
 }

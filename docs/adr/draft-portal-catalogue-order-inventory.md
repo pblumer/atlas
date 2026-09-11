@@ -279,14 +279,31 @@ incident path, and guarded the same way: the transition into a refusal takes the
 principal who decided, so a clock has nothing to pass and no call to make. The only
 thing a deadline can do to an assignment is move it.
 
+It escalates **upwards**: the deputy is the approver's superior, read from the
+directory. That is the lookup the `superior` approval rule already performs, so no
+second list has to be kept current for the day it is finally needed — the failure mode
+of every deputy register.
+
 An assignment keeps **who it started with** alongside who holds it now and every hop
-between, because a decision eventually taken by a third deputy reads very differently
-from one taken by the line manager it was meant for. Escalation refuses to return the
-approval to anybody who has already held it: two colleagues deputising for each other
-is an ordinary arrangement, and following it would pass the approval back and forth
-until the order is forgotten. It also refuses when there is no deputy at all, rather
-than quietly leaving the approval where it was — that would hide the one thing anybody
-wanted to learn from the deadline, which is that it achieved nothing.
+between, because a decision eventually taken by a third superior reads very differently
+from one taken by the line manager it was meant for. Each hop records **who moved it**,
+or nobody when a deadline did: that absence is what separates an automatic move from
+somebody's decision to intervene.
+
+Escalating upwards ends somewhere — nobody is above the top, and a directory can loop.
+Both are the same operational case, there is nowhere new to go, so both raise one
+distinguishable error and the assignment is **stalled**: still with whoever last held
+it, since stalling reports a fact rather than taking the task away, but now visible.
+That visibility is the point. An approval nobody can escalate and nobody is looking at
+is exactly how an order waits forever, and it is the quiet version of the incident
+problem this record already solved loudly.
+
+Visibility with no way to act on it is only a quieter kind of stuck, so a person can
+**reassign** a stalled approval, which clears the stall and puts the deadline back on
+the normal path from the new holder. A reassignment may go to somebody who already held
+it: the loop guard exists to stop a *clock* cycling an approval between two colleagues,
+and a person sending it back to the original approver knows something the guard does
+not.
 
 ### The inventory — engine state, its own column family
 
@@ -386,7 +403,9 @@ lines a failure stops. `api/order` carries the order model and the propagation:
 `Propagate` marks what a settled outcome stopped, `Derive` reads an order's own
 standing off its lines rather than storing it, `Abandon` and `Reject` are the transitions into the two
 decided outcomes, `Line.Valid` holds their rules at the persistence boundary, `Notices` reports what a change owes the orderer, and
-`Assign`/`Escalate` move an unanswered approval along without ever deciding it. The order, the basket and the inventory are not built yet,
+`Assign`, `Escalate`, `Stall` and `Reassign` move an unanswered
+approval along, make it visible when it can go no further, and let a person restart it
+— without anything there ever deciding it. The order, the basket and the inventory are not built yet,
 which is why this record reads `Partial`.
 
 ## Links
