@@ -1082,6 +1082,88 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, third): the heat weightings are a ratio scale.**
+> §8 sized a node by the square root of its share of the peak, which makes a circle's
+> *area* proportional to the tally — the textbook encoding for a quantity drawn as a
+> disc, and arithmetically what it claimed to be. It answers "how much". That is not
+> the question a heatmap is opened with, and the numbers say why. On a span of thirty
+> units, a node at a hundredth of the peak was drawn three units above a node carrying
+> nothing at all, and one at a thousandth was drawn one unit above it. An estate's
+> instance counts run from one to several thousand, so the quiet majority of a real
+> landscape collapsed onto the floor and a process running one could not be told from
+> a process running none — which is the first thing a reader wants from this picture,
+> and it was reported as missing.
+>
+> So the law is now:
+>
+>     value 0      →  r = floor
+>     value least  →  r = floor + step
+>     value peak   →  r = floor + span
+>
+>     r = floor + step + (span − step) · ln(value ÷ least) ÷ ln(peak ÷ least)
+>
+> Equal steps of radius are equal *multiples* of the tally: a process running ten
+> stands as far above one running one as one running a hundred stands above it. The
+> scale answers "how many times".
+>
+> Two things it needs that the old law did not, and both are stated to the reader
+> rather than left implicit:
+>
+> - **A step.** On a ratio scale the smallest tally is the origin, so "one" and "none"
+>   would be drawn alike. The step is what "this one is doing something" costs, before
+>   the weighting has said how much. Six units, which puts the smallest node carrying
+>   anything at 17 against a floor of 11 — two and a third times the area, and exactly
+>   the gap between a worker and a process on the structural picture, so it reads at
+>   the same glance as a change of kind.
+> - **A least.** The bottom of the scale, declared by the weighting rather than read
+>   off the landscape: one running instance, one incident, one minute of age. Declared,
+>   because a reading taken off the landscape would rescale every node the moment one
+>   quiet process appeared, and because the raw number for a duration is nanoseconds,
+>   where "one of them" means nothing.
+>
+> What it gives up is stated in the key and in the export stamp beside what it gains:
+> the area is no longer the tally. A landscape with no range at all — every process
+> running one, every node holding its only incident — has a peak equal to its least,
+> and everything carrying anything is drawn at the top, because being the worst is
+> what it is. That is the one case where the scale is louder than the difference it is
+> reporting, and the ranking column beside the picture carries the actual numbers.
+
+> **Amendment (2026-09-11, second): the ceiling is on pieces of the picture, not on
+> nodes.**
+> The ceiling the amendment below introduced measured each node against its own
+> nearest neighbour, which catches a lone node and nothing else. Two processes that
+> call each other and nothing else are each other's nearest neighbour at a spring's
+> rest length, so by that measure neither is far from anything — the pair sails past
+> the ceiling together and goes on deciding the scale for the whole canvas. That was
+> reported from a real landscape, and it is not a rare shape: an estate is full of
+> conformance samples, test flows and one-off processes that touch nothing else.
+>
+> So the unit is the connected component. Everything the edges tie together is one
+> piece; a piece is measured against everything outside it; a piece over the ceiling
+> is translated *rigidly* toward whatever is nearest to it until the gap is exactly
+> the ceiling. Rigidly, because every distance inside a component is something the
+> springs are saying, where the gap between two components is an artifact of where
+> the repulsion and the pull happened to balance — nothing was being said, so nothing
+> is being overruled. The largest component never moves; something has to hold still.
+>
+> Both halves run, and neither replaces the other. A piece is measured against what
+> is outside it, so a node stretched away from its own neighbours *inside* a large
+> component is invisible to the piece half; a node is measured against its nearest
+> neighbour, so a pair adrift together is invisible to the node half. Measured on a
+> 120-node estate with six small islands, dropping the node half took the worst
+> node's distance from 1.5 times the median to 1.9. Across eight estate shapes at two
+> window sizes the piece ceiling takes the furthest piece from 2.0–3.1 times the
+> median to 1.5, leaves the median spacing the picture is drawn at unchanged or
+> slightly larger, and moves nothing at all on an estate whose pieces were already
+> within it.
+>
+> The layout is one function for every notation, so this reaches the heatmap
+> projections and the ArchiMate and C4 views by construction rather than by being
+> repeated. Measured on one 212-node estate across all four: coverage 0.165 / 0.163 /
+> 0.163 / 0.171 and an identical furthest-piece figure. There is no per-view layout
+> to fix, and a report that one view is worse than another is a report about the
+> estate or about the build, not about the projection.
+
 > **Amendment (2026-09-11): the opening view uses the window, whatever the estate's
 > size.**
 > §7 sizes the world from the content and then shows the whole of it, so the world's

@@ -293,6 +293,10 @@ const HEATS = {
     // optional chain rather than defaulting: "no instances" and "cannot have
     // instances" are different facts and neither is a zero to be drawn.
     of: (node) => node?.runtime?.running,
+    // One running instance is the smallest thing this weighting can be asked about,
+    // and it is a real thing rather than a rounding: a process running one is running.
+    least: 1,
+    leastPhrase: "one running instance",
     ...counted("running"),
     // What size means, in one sentence, for the key and for whoever has to read the
     // picture after it has been pasted somewhere with no key beside it.
@@ -301,7 +305,8 @@ const HEATS = {
       <b>${fmtCount(peak)}</b>`,
     floorNote: `Anything with no running instances of its own sits at the floor — a
       worker, a decision, and an application too, whose load is on the processes it
-      holds — so nothing drops off the picture.`,
+      holds — so nothing drops off the picture, and one running instance is already
+      unmistakably above it.`,
     quiet: `<b>Size is load here, not structure</b> — and nothing is running on this
       landscape at all, so every node is drawn at the same floor.`,
     // Why a node can be sizeable and still carry no number under its name.
@@ -320,14 +325,17 @@ const HEATS = {
     // carry one — an incident belongs to a token — and a collapsed application
     // carries the sum of the processes it stands for.
     of: (node) => node?.incidents,
+    // One incident is one incident. There is no smaller amount of trouble.
+    least: 1,
+    leastPhrase: "one incident",
     ...counted("incident(s)"),
     heading: "Size is trouble here, not structure.",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding
       <b>${fmtCount(peak)}</b>`,
     floorNote: `Everything with nothing parked on it sits at the floor, so a healthy
-      estate reads as a flat one and the exceptions are the only things that stand up.
-      The badges still say which nodes have a finding; the size says how much is behind
-      each.`,
+      estate reads as a flat one and a single incident is already the shape of an
+      exception. The badges still say which nodes have a finding; the size says how
+      much is behind each.`,
     quiet: `<b>Size is trouble here, not structure</b> — and nothing on this landscape
       is parked at all, so every node is drawn at the same floor. That is the answer,
       not a missing one.`,
@@ -352,15 +360,21 @@ const HEATS = {
     // pointed at.
     of: (node, at) => (node?.oldestIncident > 0
       ? Math.max(0, at - node.oldestIncident / 1e6) : 0),
+    // A minute, because that is the smallest age worth drawing a difference for: an
+    // incident raised forty seconds ago and one raised ten are the same finding, and
+    // the raw number here is nanoseconds, where "one" means nothing to anybody.
+    least: 60_000,
+    leastPhrase: "a minute stuck",
     text: (ms) => `stuck ${spanText(ms)}`,
     rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
     heading: "Size is age here, not structure.",
     peakPhrase: (peak) => `the longest-parked one on this landscape, which has been
       stuck <b>${esc(spanText(peak))}</b>`,
-    floorNote: `Everything with nothing parked on it sits at the floor. A process that
-      parked its first token an hour ago is small beside one that parked its first on
-      Friday, however many each is holding — how much is the other picture, and the two
-      routinely rank the same estate the opposite way round.`,
+    floorNote: `Everything with nothing parked on it sits at the floor, and anything
+      parked at all stands above it. A process that parked its first token an hour ago
+      is small beside one that parked its first on Friday, however many each is
+      holding — how much is the other picture, and the two routinely rank the same
+      estate the opposite way round.`,
     quiet: `<b>Size is age here, not structure</b> — and nothing on this landscape is
       parked at all, so every node is drawn at the same floor. That is the answer, not
       a missing one.`,
@@ -482,6 +496,22 @@ const HEAT_FLOOR = 11;
 // ever draws: the two ends of the estate are then told apart at a glance rather than
 // by measurement, which is the whole of what a weighting is for.
 const HEAT_SPAN = 30;
+// HEAT_STEP is what a node earns the moment it carries anything at all, before the
+// weighting has said how much.
+//
+// It exists because "some" and "none" is the first question a heatmap is asked, and
+// on a ratio scale that question has no answer at the bottom: the smallest tally is
+// the origin, so a process running one instance and a process running none would be
+// drawn the same size. So the scale starts a step up, and the step is the whole of
+// what "this one is doing something" costs.
+//
+// Six, which puts the smallest node that carries anything at 17 against a floor of
+// 11. That is two and a third times the area, and — the part that makes it the right
+// number rather than a large one — it is exactly the gap between a worker and a
+// process on the structural picture (KIND: 12 and 17). So "has any at all" reads at
+// the same glance as "is a different kind of thing", which is the glance this view is
+// read at.
+const HEAT_STEP = 6;
 
 // heatPeak is the largest tally on a landscape, and the reference every node on it is
 // drawn against.
@@ -516,37 +546,71 @@ export function heatPeak(graph, heat, at = Date.now()) {
 
 // radiusForHeat sizes a node by whatever the chosen weighting counts on it.
 //
-// The radius rises from the floor with the *square root* of the share, which is the
-// whole of the encoding:
+// Three rules, and the whole encoding is in them:
 //
-//	r = HEAT_FLOOR + HEAT_SPAN * sqrt(value / peak)
+//	value 0      →  r = HEAT_FLOOR
+//	value least  →  r = HEAT_FLOOR + HEAT_STEP
+//	value peak   →  r = HEAT_FLOOR + HEAT_SPAN
 //
-// The root, because a circle's area goes up with the square of its radius: a radius
-// drawn straight from the number would read as four times the quantity at twice the
-// count. Taking the root is what makes "twice as much" look like twice as much, and it
-// is the standard the eye is calibrated against on a bubble chart.
+// and between the last two the radius rises with the **logarithm of the ratio**:
 //
-// What is exactly proportional to the share is therefore ((r - floor) / span)², and
-// **not** the visible area above the floor — those differ, and the difference is not
-// small: at a quarter of the peak's tally the ring above the floor is about 0.36 of
-// the ring at the peak, not 0.25. An earlier version of this comment and of the key
-// claimed the second, which was a precise statement that did not survive arithmetic;
-// the test named for it now pins the law the code actually implements.
+//	r = HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) · ln(value/least) / ln(peak/least)
 //
-// Exact proportionality and a visible minimum cannot both hold — one of them has to
-// give at zero — and the minimum wins here, because a landscape is read for the nodes
-// on it as well as for the numbers. The floor is what breaks it, deliberately, and the
-// key says growth starts *from* a floor rather than implying it starts from nothing.
+// So equal steps of radius are equal *multiples* of the tally. A process running ten
+// instances stands as far above one running one as one running a hundred stands above
+// it. That is a ratio scale, and it is the right one for this quantity: an estate's
+// instance counts span one to several thousand, its incident counts one to a handful,
+// and its incident ages a minute to a fortnight — ranges no linear reading can carry,
+// because the top of each decides the scale and everything an order of magnitude below
+// it lands in the same place.
+//
+// **What this replaced, and what it gave up.** The radius used to rise with the square
+// root of the share of the peak, which makes a circle's *area* proportional to the
+// tally — the textbook encoding for a quantity drawn as a disc, and the one the eye is
+// calibrated against on a bubble chart. It answers "how much", and the arithmetic of
+// it was right. What it could not do is the thing this view is opened for. On a span
+// of thirty, a node at a hundredth of the peak was drawn three units above a node
+// carrying nothing at all, and a node at a thousandth was drawn one unit above it: the
+// whole quiet majority of a real landscape collapsed onto the floor, and the reader
+// could not tell a process running one from a process running none. The ratio scale
+// answers "how many times" instead, and that is the question an operator is actually
+// asking of a heatmap. It is a deliberate trade and the key says which one is on the
+// picture, because a radius means nothing without the law that produced it.
+//
+// **least** is the smallest tally a weighting distinguishes, declared by the weighting
+// rather than found on the landscape (see HEATS). One running instance, one incident,
+// one minute of age. Declaring it is what keeps the picture stable — a reading taken
+// off the landscape would rescale every node the moment one quiet process appeared —
+// and what keeps it honest for a duration, where the raw number is nanoseconds and
+// "one of them" means nothing to anybody.
+//
+// A landscape whose peak is at or below its least — every incident is the only
+// incident — has no range to speak of, and everything carrying anything is
+// simultaneously the smallest and the largest of it. They are drawn at the top,
+// because being the worst is what they are.
 //
 // A node with no tally at all — a worker, a decision, a deployment target, a draft,
 // a placeholder — sits on the floor rather than being sized as a zero, and that is
 // the same fact rather than a missing one: nothing is counted there because nothing
 // can be.
 export function radiusForHeat(node, peak, heat, at = Date.now()) {
-  const read = heatReader(heat);
-  const value = read ? Math.max(0, read(node, at) || 0) : 0;
-  if (!(peak > 0) || value <= 0) return HEAT_FLOOR;
-  return HEAT_FLOOR + HEAT_SPAN * Math.min(1, Math.sqrt(value / peak));
+  const entry = heatEntry(heat);
+  const value = entry?.of ? Math.max(0, entry.of(node, at) || 0) : 0;
+  if (value <= 0) return HEAT_FLOOR;
+  const least = heatLeast(entry);
+  // The top is never below the value in hand: a peak read from a landscape this node
+  // is no longer on would otherwise size it past the maximum.
+  const top = Math.max(peak || 0, value, least);
+  const rise = top > least
+    ? Math.log(Math.max(value, least) / least) / Math.log(top / least)
+    : 1;
+  return HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) * Math.min(1, Math.max(0, rise));
+}
+
+// heatLeast is the smallest tally a weighting tells apart from the next one up. One,
+// for anything counted; a weighting that measures something continuous says so itself.
+function heatLeast(entry) {
+  return entry?.least > 0 ? entry.least : 1;
 }
 
 // heatReader resolves either spelling of a weighting — the entry itself, or the key
@@ -554,8 +618,14 @@ export function radiusForHeat(node, peak, heat, at = Date.now()) {
 // not know reads as none rather than as zero everywhere, so an unfamiliar saved view
 // draws the structural picture instead of a flat one.
 function heatReader(heat) {
-  const entry = typeof heat === "string" ? HEATS[heat] : heat;
-  return entry?.of || null;
+  return heatEntry(heat)?.of || null;
+}
+
+// heatEntry resolves either spelling of a weighting to the weighting itself, which is
+// what the size law needs: it reads the tally *and* the smallest tally that weighting
+// distinguishes, and the two have to come from the same place or they can disagree.
+function heatEntry(heat) {
+  return (typeof heat === "string" ? HEATS[heat] : heat) || null;
 }
 
 // A target is not part of the dependency graph — no edge is derived to it, because
@@ -837,59 +907,146 @@ function separate(nodes, radii, gap, rounds = 24) {
 const GATHER_REACH = 1.5;
 
 // gather is the dual of separate: separate puts a floor under how close two nodes
-// may be drawn, gather puts a ceiling on how far one may drift from the rest.
+// may be drawn, gather puts a ceiling on how far one *piece* of the picture may
+// drift from the rest of it.
 //
 // It exists because the forces cannot promise this and the framing cannot survive
-// without it. A node the springs do not hold — one with no edges, or one in a small
-// component of its own — sits where the centring pull balances a repulsion that
-// falls off as 1/d², and that balance is a cube root of the constants: it lands far
-// out, and tuning the pull moves it by very little (LOOSE_PULL is that tuning, and
-// the worst case in its own table is still 3.1× the median). What happens next is
-// the expensive part. fitToFrame scales the *bounding box* onto the world, so one
-// node a long way out is not merely a node a long way out — it is the thing that
-// decides the scale, and everything else is squeezed into the fraction of the canvas
-// it leaves. That is the picture this was reported as: a cluster in one third of the
-// window, a single node hard against the far edge, and two thirds of the canvas
-// empty.
+// without it. A piece the springs do not tie to anything else — a node with no
+// edges, or a small cluster joined only to itself — sits where the centring pull
+// balances a repulsion falling off as 1/d², and that balance is a cube root of the
+// constants: it lands far out, and tuning the pull moves it by very little
+// (LOOSE_PULL is that tuning, and the worst case in its own table is still 3.1× the
+// median). What happens next is the expensive part. fitToFrame scales the *bounding
+// box* onto the world, so a piece a long way out is not merely a piece a long way
+// out — it is the thing that decides the scale, and everything else is squeezed into
+// the fraction of the canvas it leaves. That is the picture this was reported as
+// twice: a mass in part of the window, stragglers against the far edges, and most of
+// the canvas empty.
 //
 // So it is bounded here, deterministically, in the same place and for the same
 // reason separate is: a guarantee the simulation cannot make is made afterwards, by
-// arithmetic. A node further than GATHER_REACH from its nearest neighbour is moved
-// along the line toward that neighbour until it is exactly that far — no further, so
-// it stays the outlying thing it is and stays on the side of the picture it settled
-// on. What it stops being is the thing that sets the scale for everybody else.
+// arithmetic.
 //
-// The reach is the picture's own median rather than a number, so it carries across
-// every world size and every estate: it says "further out than this landscape's own
-// spacing warrants", which is a statement about the landscape and not about pixels.
-// The median is taken once, before anything moves, so the pass cannot chase its own
-// tail.
+// **The piece, not the node.** The first version of this measured each node against
+// its own nearest neighbour, which catches a lone node and nothing else: two
+// processes that call each other and nothing else are each other's nearest
+// neighbour at a spring's rest length, so by that measure neither was far from
+// anything, and the pair sailed past the ceiling together. On a real estate that is
+// not the rare case — a landscape is full of test processes, conformance samples and
+// one-off flows that touch nothing else — and it was those pairs and triples, not
+// lone nodes, that were still holding the canvas open. So the unit is the connected
+// component: everything the edges tie together is one piece, and a piece is measured
+// against everything outside it.
 //
-// Held nodes do not move — somebody put them there — and the whole pass is skipped
-// while anything is pinned, exactly as the fit is, because both would slide a
-// hand-made arrangement out from under the hand that made it.
+// A piece over the ceiling is translated *rigidly* toward whatever is nearest to it,
+// until the gap is exactly the ceiling and no further. Rigidly, because every
+// distance inside a component is something the layout is saying — the springs put it
+// there — and a pass that squeezed a component would be editing the picture's
+// content rather than its placement. Between components there are no edges and so
+// nothing was being said: the gap is an artifact of where the repulsion and the pull
+// happened to balance, which is exactly the quantity that may be overruled. The
+// piece stays the outlying thing it is, on the side of the picture it settled on,
+// and stops being the thing that sets the scale for everybody else.
 //
-// What it deliberately does not catch: two nodes joined to each other and to nothing
-// else, out on their own. They are each other's nearest neighbour at a spring's rest
-// length, so by this measure neither is far from anything, and a pass that pulled
-// them in anyway would be measuring something else — how far a *component* is from
-// the mass. That is a larger claim and a more expensive one (it is single-linkage
-// clustering, not a pass over the pairs), and it is a rarer picture than the one
-// reported. Stating what is measured and what is not is worth more here than a
-// second mechanism that is nearly the first.
-function gather(nodes, radii, rounds = 4) {
+// The largest component never moves. It is the mass the rest is measured against,
+// and something has to hold still or the pass chases itself.
+//
+// The reach is the picture's own median nearest-neighbour distance rather than a
+// number, so it carries across every world size and every estate: it says "further
+// out than this landscape's own spacing warrants", which is a statement about the
+// landscape and not about pixels. The median is taken once, before anything moves,
+// so the pass cannot chase its own tail.
+//
+// Held nodes do not move — somebody put them there — so a component containing one
+// is left alone, and the whole pass is skipped while anything is pinned, exactly as
+// the fit is, because both would slide a hand-made arrangement out from under the
+// hand that made it.
+function gather(nodes, links, radii, rounds = 4) {
   // Below three nodes there is no median to speak of and nothing to be an outlier
   // from: two nodes are each other's nearest neighbour whatever the distance.
   if (nodes.length < 3) return nodes;
-  const near = nearestOf(nodes);
-  const sorted = [...near.map((n) => n.d)].sort((a, b) => a - b);
+  const sorted = nearestOf(nodes).map((n) => n.d).sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
   if (!(median > 0)) return nodes;
   const reach = GATHER_REACH * median;
+  gatherPieces(nodes, links, radii, reach, rounds);
+  gatherNodes(nodes, radii, reach, rounds);
+  return nodes;
+}
+
+// gatherPieces brings in whole components — the coarse half of the ceiling, and the
+// half a per-node rule cannot do.
+function gatherPieces(nodes, links, radii, reach, rounds) {
+  const piece = piecesOf(nodes.length, links);
+  // The mass: the piece with the most nodes in it. Ties go to the one whose first
+  // node comes first, so the same graph anchors on the same piece every time.
+  const count = new Map();
+  for (const p of piece) count.set(p, (count.get(p) || 0) + 1);
+  let mass = piece[0];
+  for (const [p, n] of count) if (n > count.get(mass)) mass = p;
+  if (count.get(mass) === nodes.length) return nodes;
+
+  // A piece somebody is holding by one of its nodes is not moved: the drag put it
+  // where it is, and dragging one node of a pair must not teleport the pair.
+  const pinned = new Set();
+  for (let i = 0; i < nodes.length; i++) if (nodes[i].held) pinned.add(piece[i]);
+
+  for (let round = 0; round < rounds; round++) {
+    // The nearest thing outside each piece, re-measured every round: moving one
+    // piece in changes what the next one is nearest to, and can bring a piece that
+    // was over the ceiling under it without touching it.
+    const out = new Map();
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (piece[i] === piece[j]) continue;
+        const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+        const room = radii[i] + radii[j] + NODE_ROOM;
+        const a = out.get(piece[i]), b = out.get(piece[j]);
+        if (!a || d < a.d) out.set(piece[i], { d, from: i, to: j, room });
+        if (!b || d < b.d) out.set(piece[j], { d, from: j, to: i, room });
+      }
+    }
+    let moved = false;
+    for (const [p, near] of out) {
+      if (p === mass || pinned.has(p)) continue;
+      // Never closer than the separation pass is about to insist on anyway, or the
+      // two would be pushed apart again and the round would have been wasted.
+      const want = Math.max(reach, near.room);
+      if (near.d <= want) continue;
+      const step = (near.d - want) / near.d;
+      const dx = (nodes[near.to].x - nodes[near.from].x) * step;
+      const dy = (nodes[near.to].y - nodes[near.from].y) * step;
+      for (let i = 0; i < nodes.length; i++) {
+        if (piece[i] !== p) continue;
+        nodes[i].x += dx;
+        nodes[i].y += dy;
+      }
+      moved = true;
+    }
+    if (!moved) return nodes;
+  }
+  return nodes;
+}
+
+// gatherNodes is the fine half: one node at a time, against whatever is nearest to
+// it, wherever that is.
+//
+// It is not made redundant by the piece pass and does not make it redundant. A piece
+// is measured against what is outside it, so a node stretched away from its own
+// neighbours *inside* a large component — a long call chain the springs did not pull
+// back in — is invisible to it; and a node is measured against its nearest
+// neighbour, so a pair adrift together is invisible to a per-node rule. Measured on
+// a 120-node estate with six small islands, dropping this half took the worst node's
+// distance from 1.5 times the median to 1.9. Both halves, or neither property holds.
+//
+// This one moves a node rather than a piece, and that does shorten whatever edge it
+// was stretched along — deliberately, and only past the ceiling, where the length
+// had stopped being a reading of the graph and started being a hole in the picture.
+function gatherNodes(nodes, radii, reach, rounds) {
   for (let round = 0; round < rounds; round++) {
     // Re-measured each round: pulling one node in can make it somebody else's
     // nearest neighbour, and can leave whoever it was furthest from on its own.
-    const at = round === 0 ? near : nearestOf(nodes);
+    const at = nearestOf(nodes);
     let moved = false;
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i], j = at[i].at;
@@ -907,6 +1064,22 @@ function gather(nodes, radii, rounds = 4) {
     if (!moved) return nodes;
   }
   return nodes;
+}
+
+// piecesOf labels every node with the component it belongs to, as the index of one
+// representative node. Union-find over the edges, so a chain of a hundred calls is
+// one piece for the same cost as a pair.
+function piecesOf(count, links) {
+  const parent = new Int32Array(count);
+  for (let i = 0; i < count; i++) parent[i] = i;
+  const root = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  for (const [a, b] of links) {
+    const ra = root(a), rb = root(b);
+    if (ra !== rb) parent[ra] = rb;
+  }
+  const out = new Int32Array(count);
+  for (let i = 0; i < count; i++) out[i] = root(i);
+  return out;
 }
 
 // nearestOf reports, for every node, which node is closest to it and how far away
@@ -1207,7 +1380,7 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
   settle(nodes, links, radii, force, iterations - aimed);
   // Nothing may be left stranded off the side of the picture before it is framed,
   // because the framing is what turns one stranded node into an empty canvas.
-  if (!anchored) gather(nodes, radii);
+  if (!anchored) gather(nodes, links, radii);
   if (!anchored) fitToFrame(nodes, width, height, margin);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again
@@ -2163,12 +2336,14 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
   // would read its absence as "not measured", which is the one thing it does not mean.
   if (heat) {
     notes.push(peak > 0
-      ? `<p class="mesh-note"><b>${heat.heading}</b> A node grows from the floor with the
-         <b>square root</b> of its share of ${heat.peakPhrase(peak)} — the root rather
-         than the number itself, because a circle's area goes up with the square of its
-         radius, so a radius taken straight from the count would read as far more than
-         it stands for. ${heat.floorNote} Kind is still carried by shape and
-         colour.</p>`
+      ? `<p class="mesh-note"><b>${heat.heading}</b> A node carrying nothing sits at the
+         floor. ${esc(heat.leastPhrase)} is already a step above it, and from there the
+         size grows with each <b>tenfold</b> rather than with the count itself — so
+         equal steps of size are equal multiples, and the largest node here is
+         ${heat.peakPhrase(peak)}. ${heat.floorNote} That means the area is not the
+         tally: this scale answers <em>how many times</em>, which is the question a
+         landscape spanning one to a thousand can be asked. Kind is still carried by
+         shape and colour.</p>`
       : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
          colour.</p>`);
     notes.push(`<p class="mesh-note">${heat.absent}</p>`);
