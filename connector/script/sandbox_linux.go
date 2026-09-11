@@ -162,13 +162,29 @@ func installFilesystemPolicyWith(system sandboxSystem, scratch string) error {
 	readOnlyDirectory := uint64(unix.LANDLOCK_ACCESS_FS_READ_FILE | unix.LANDLOCK_ACCESS_FS_READ_DIR)
 	for _, path := range []string{
 		"/etc/alternatives", "/etc/ld.so.conf.d", "/etc/ssl/certs", "/etc/pki",
+		// This process's own procfs entry, and deliberately nothing else under /proc.
+		// The rule is taken through the /proc/self symlink, which resolves to this
+		// launcher's pid; exec keeps that pid, so the interpreter inherits its own
+		// entry and no other. Allowing /proc itself would instead hand model-authored
+		// code every same-uid process's environ, which is where the engine's
+		// ATLAS_TOKEN and ATLAS_VAULT_KEY are — the opposite of what strict is for.
+		"/proc/self",
 	} {
 		if err := addAllowedPath(system, ruleset, path, readOnlyDirectory); err != nil {
 			return err
 		}
 	}
+	// The loader and locale files, plus what a language runtime insists on reading
+	// before it will run anything at all: the .NET runtime behind pwsh sizes its heap
+	// from /proc/meminfo, inspects /proc/mounts, and resolves its user through
+	// /etc/passwd. Without them CoreCLR refuses to start with E_OUTOFMEMORY, so
+	// PowerShell was unusable under strict while Python and JavaScript were fine —
+	// the asymmetry that let it land unnoticed.
 	readOnlyFile := uint64(unix.LANDLOCK_ACCESS_FS_READ_FILE)
-	for _, path := range []string{"/etc/ld.so.cache", "/etc/ld.so.conf", "/etc/localtime"} {
+	for _, path := range []string{
+		"/etc/ld.so.cache", "/etc/ld.so.conf", "/etc/localtime", "/etc/passwd",
+		"/proc/meminfo", "/proc/mounts",
+	} {
 		if err := addAllowedPath(system, ruleset, path, readOnlyFile); err != nil {
 			return err
 		}

@@ -470,3 +470,25 @@ func environmentMap(env []string) map[string]string {
 	}
 	return out
 }
+
+// The startup proof resolves what it will launch before it launches anything, and
+// resolves nothing at all for a compatible profile — an installation on off must keep
+// exactly the boot it had before the sandbox existed.
+func TestSandboxLanguagesResolveOnlyForAProfileThatMustBeProved(t *testing.T) {
+	for _, mode := range []SandboxMode{"", SandboxOff} {
+		langs, err := sandboxLanguages(mode, []string{"python"})
+		if err != nil || langs != nil {
+			t.Errorf("mode %q resolved %v (err %v), want nothing to launch", mode, langs, err)
+		}
+	}
+	langs, err := sandboxLanguages(SandboxStrict, nil)
+	if err != nil || len(langs) != len(Langs) {
+		t.Errorf("strict with no filter resolved %d languages (err %v), want all %d", len(langs), err, len(Langs))
+	}
+	if langs, err := sandboxLanguages(SandboxStrict, []string{" PowerShell "}); err != nil || len(langs) != 1 || langs[0].Name != "powershell" {
+		t.Errorf("resolved %v (err %v), want powershell alone", langs, err)
+	}
+	if _, err := sandboxLanguages(SandboxStrict, []string{"powershell", "klingon"}); err == nil || !strings.Contains(err.Error(), "klingon") {
+		t.Errorf("error = %v, want the unknown language named", err)
+	}
+}
