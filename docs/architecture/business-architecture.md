@@ -424,7 +424,12 @@ reporting the limits of its eyesight as a defect in your architecture. And a ref
 outside your sharing scope is reported as restricted, never as missing.
 
 **The milestone event is built** — see [the milestone marker](#the-milestone-marker)
-above.
+above. **So are Panorama's binding keys**: an ArchiMate `Capability` carries
+`atlas.capabilityKey` and a `ValueStream` carries `atlas.valueStreamKey`, so a drawing
+and this register are the same architecture seen twice. The key travels in the exchange
+document as an ordinary ArchiMate property; the record's name is resolved on every read,
+so the drawing cannot go stale about the register
+([ADR-draft-panorama-binds-the-capability-register](../adr/draft-panorama-binds-the-capability-register.md)).
 
 **Not built, each a named slice on [Milestone B](../../ROADMAP.md):**
 
@@ -435,8 +440,6 @@ above.
   aggregated at the instance volumes this is aimed at, without the OpenSearch exporter,
   is the open question the decision record carries.
 - **Document-level exchange** of the map on its own, with a dry-run import.
-- **Panorama binding keys**, so an ArchiMate `Capability` on a drawing names a registry
-  record.
 - **A model-side declaration**, so a process can state the capability it realises where
   the delivery team already works, and carry it through an export.
 - **A Console surface.** Today the registry is the HTTP API and the MCP tools over it

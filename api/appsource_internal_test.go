@@ -6,13 +6,15 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
-	"github.com/pblumer/atlas/limits"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/capability"
+	"github.com/pblumer/atlas/limits"
 )
 
 // ADR-0134 Phase 4: the curated source layout. These tests pin the serialization
@@ -380,7 +382,23 @@ func storesFor(t *testing.T) *Server {
 	if err != nil {
 		t.Fatalf("newDmnRefStore: %v", err)
 	}
-	return &Server{projects: projects, drafts: drafts, forms: forms, dmnrefs: refs}
+	// The business-architecture register (ADR-0305). A real Server always has both,
+	// and the binding catalog reads them directly rather than through the capability
+	// service, because it already stands on the run loop — so a fixture without them
+	// is a Server shape that cannot occur, and the first caller to read one would find
+	// that out by panicking rather than by failing an assertion.
+	caps, err := capability.NewStore(filepath.Join(dir, "capabilities"))
+	if err != nil {
+		t.Fatalf("capability.NewStore: %v", err)
+	}
+	streams, err := capability.NewStreamStore(filepath.Join(dir, "value-streams"))
+	if err != nil {
+		t.Fatalf("capability.NewStreamStore: %v", err)
+	}
+	return &Server{
+		projects: projects, drafts: drafts, forms: forms, dmnrefs: refs,
+		capabilityRecords: caps, valueStreamRecords: streams,
+	}
 }
 
 // allow is the authorize callback for a caller who may write the application.

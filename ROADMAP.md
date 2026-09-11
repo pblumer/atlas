@@ -1640,11 +1640,31 @@ the method and how to work it with Atlas as it stands are in
   intermediate throw event carrying a definition this compiler does not implement is now
   refused by name, so making the empty case compile did not quietly make the wrong case
   compile too ([ADR-0307](docs/adr/0307-the-milestone-event-compiles.md)).
-- 🔲 **B6 — Panorama meets the registry.** Binding keys `atlas.capabilityKey` on an
-  ArchiMate `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing
-  and the registry are the same architecture seen twice rather than two architectures.
-  ArchiMate's `ValueStream` type is already accepted by Panorama's validator and only
-  missing from its authorable palette.
+- ✅ **B6 — Panorama meets the registry.** `atlas.capabilityKey` on an ArchiMate
+  `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing and the
+  registry are the same architecture seen twice rather than two architectures. Each key
+  is allowed on its own element and refused on the other's: both are strategy-layer
+  behaviour elements binding a key from the same register, which makes them the pair a
+  later edit is likeliest to treat as interchangeable and the pair where doing so would
+  be least visible.
+
+  The key travels, not an opaque id, because a capability's key *is* its identity — the
+  filename on disk, not renameable in place, what an export carries — so ADR-0189 §4's
+  rule points at it. The name is resolved on every read, as for every other binding.
+
+  `ValueStream` became authorable, which it was not: the validator accepted one in a
+  document it read and the palette offered no way to create one, so a model containing
+  value streams could be opened and edited around but never added to. One palette line,
+  because the relationship matrix is predicates over layer and aspect rather than a
+  table of type pairs, and a test asserts it is treated exactly as `Capability` is
+  across every relationship and partner in both directions.
+
+  Three surfaces are deliberately untouched, each for a stated reason: the mesh overlay
+  draws the runtime landscape and a capability is a different altitude; observations
+  are runtime health and a capability has none; the event-log context now says in its
+  own words that it can be asked about the processes realising a capability and not
+  about the capability itself
+  ([ADR-draft-panorama-binds-the-capability-register](docs/adr/draft-panorama-binds-the-capability-register.md)).
 - 🔲 **B7 — Measurement.** Compute a capability's declared KPIs and SLAs from the data
   Atlas already keeps: outcome distribution from the per-element visit counters
   ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) over distinctly named end

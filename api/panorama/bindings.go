@@ -21,6 +21,16 @@ import (
 // BindingContractVersion is the version of this key set. It is a small public
 // contract: the keys below are what another tool can rely on finding, so a change
 // to their meaning is a version bump rather than a quiet redefinition.
+//
+// Adding a key is not such a change, and the business-architecture keys were added
+// without one (ADR-draft-panorama-binds-the-capability-register). Version 1 says what
+// a client may rely on finding, and every promise it made still holds: no key's
+// meaning moved, none was removed, and a
+// document carrying the new keys reads correctly under the old contract — the
+// extractor already ignores what it does not recognise, and a property outside
+// atlas.* was never read at all. Bumping on an addition would make the number mean
+// "something here changed", and a version that changes when nothing a client depends
+// on has changed is one clients stop reading.
 const BindingContractVersion = 1
 
 // The binding keys. This is an allowlist, and that is load-bearing: ADR-0189 §4
@@ -35,6 +45,21 @@ const (
 	KeyRuntimeID          = "atlas.runtimeId"
 	KeyDeploymentTargetID = "atlas.deploymentTargetId"
 	KeyReleaseID          = "atlas.releaseId"
+	// The business architecture (ADR-draft-panorama-binds-the-capability-register;
+	// the register itself is ADR-0305). A capability record is what has to be
+	// done, stated independently of how; an ArchiMate Capability is the architect's
+	// drawing of the same thing. Bound, they are one architecture seen twice. Unbound,
+	// the only thing connecting them is a name, and a name is exactly what gets
+	// renamed.
+	//
+	// These bind the record's key rather than an opaque id, because the key *is* the
+	// record's identity: it is the filename on disk, it is not renameable in place, and
+	// it is what an export carries. Every other binding here holds an opaque id because
+	// the resource's own name is mutable; a capability key is not, so the rule ADR-0189
+	// §4 states — carry the stable identifier, resolve the mutable rest at read time —
+	// points at the key.
+	KeyCapabilityKey  = "atlas.capabilityKey"
+	KeyValueStreamKey = "atlas.valueStreamKey"
 )
 
 // bindingKeyPrefix is the namespace this contract owns. A property outside it
@@ -54,6 +79,13 @@ var allowedOn = map[string][]string{
 	KeyRuntimeID:          {"Node"},
 	KeyDeploymentTargetID: {"Node"},
 	KeyReleaseID:          {"Artifact"},
+	// Each on its own element, and not on the other's: Capability and ValueStream are
+	// both strategy-layer behaviour elements binding a key from the same register, so
+	// they are the pair a later edit is likeliest to make interchangeable — and the
+	// pair where doing so would be least visible, because both keys would still
+	// resolve against a register that holds both.
+	KeyCapabilityKey:  {"Capability"},
+	KeyValueStreamKey: {"ValueStream"},
 }
 
 // Binding is every id bound under one key on one element. Values is a list because
@@ -87,6 +119,7 @@ func BindingKeys() []string {
 	return []string{
 		KeyApplicationID, KeyProcessID, KeyConnectorID, KeyJobType,
 		KeyRuntimeID, KeyDeploymentTargetID, KeyReleaseID,
+		KeyCapabilityKey, KeyValueStreamKey,
 	}
 }
 
