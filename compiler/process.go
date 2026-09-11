@@ -83,8 +83,10 @@ const (
 
 	TypeAdHocSubProcess // an ad-hoc subprocess: a container scope whose contained activities run on demand, in any order, zero or more times — not driven by sequence flow from a start event (ADR-0138). On entry it activates every entry activity (a contained node with no incoming flow) at once; after each contained activity completes an optional boolean FEEL completion condition is re-evaluated, and the first time it holds the remaining work is cancelled and the ad-hoc completes (else it completes on scope-drain)
 
+	TypeNoneThrowEvent // an intermediate throw event with no event definition: it throws nothing and waits for nothing, and runs as a pass-through. Its whole purpose is the fact it leaves behind — one named point in the instance's history, on the path, where no task sits (ADR-draft-the-milestone-event-compiles; the method's milestone marker, ADR-0305)
+
 	// numBpmnTypes bounds behavior dispatch tables. Grow as element types land.
-	numBpmnTypes = 42
+	numBpmnTypes = 43
 )
 
 // NumBpmnTypes is the size a behavior dispatch table indexed by BpmnType needs.
@@ -174,6 +176,8 @@ func (t BpmnType) String() string {
 		return "LinkCatchEvent"
 	case TypeConditionalCatchEvent:
 		return "ConditionalCatchEvent"
+	case TypeNoneThrowEvent:
+		return "NoneThrowEvent"
 	default:
 		return "Unspecified"
 	}

@@ -8,7 +8,7 @@ Terms used throughout Atlas's documentation and code.
 
 **Boundary event** — An event attached to an activity that can interrupt (or run alongside) it: a timeout, an error, a message. Compiled as a `Span` on the enclosing scope.
 
-**Business capability** — What an organisation must be able to do, stated independently of how it is done: *underwrite a loan*, *verify an identity*. Carries a scope, an input and output contract, a business owner, the resources it draws on, and the KPIs and SLAs it is held to. Kept as a flat, tagged list rather than a hierarchy, and realised by an executable process, a purchased system, a Worker, or manual work — interchangeably, over its life. Atlas has no capability record today; the method and the conventions that work without one are in [`business-architecture.md`](business-architecture.md), and the proposed record is [ADR-0305](../adr/0305-business-capabilities-and-value-streams.md). Not to be confused with a **Worker Type**, which is a *technical* capability.
+**Business capability** — What an organisation must be able to do, stated independently of how it is done: *underwrite a loan*, *verify an identity*. Carries a scope, an input and output contract, a business owner, the resources it draws on, and the KPIs and SLAs it is held to. Kept as a flat, tagged list rather than a hierarchy, and realised by an executable process, a purchased system, a Worker, or manual work — interchangeably, over its life. Atlas holds one as a design-time record ([ADR-0305](../adr/0305-business-capabilities-and-value-streams.md)), read and written over `/api/v1/capabilities` and the MCP tools over it; the method and how to work it are in [`business-architecture.md`](business-architecture.md). Not to be confused with a **Worker Type**, which is a *technical* capability.
 
 **Command** — An intention to do something, submitted to a partition. May be rejected. Not persisted. Turned into events by the processor.
 
@@ -39,6 +39,8 @@ Terms used throughout Atlas's documentation and code.
 **Key** — A globally unique 64-bit identifier for a stateful entity, with the partition encoded in the high 16 bits.
 
 **Linearization** — The compiler stage that flattens BPMN's hierarchy into flat, indexed slices with scope references.
+
+**Milestone** — A point on a process's path worth naming although no work happens at it: *identity verification started*. Modelled as a **none intermediate throw event** — an intermediate throw event with no event definition — which waits for nothing and runs as a pass-through. Its product is not its execution but its record: it is counted per definition, it sits in order on the instance's step trail, and the Operations overlay marks it. The marker of the business-architecture method's measurement points; see [`business-architecture.md`](business-architecture.md).
 
 **Partition** — A fully independent execution unit: its own command queue, single-writer processor, WAL, and state store. A process instance lives entirely in one partition.
 

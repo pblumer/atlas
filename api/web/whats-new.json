@@ -121,6 +121,44 @@
       }
     },
     {
+      "id": "a-milestone-is-an-element-you-can-draw-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Mark a milestone where no task sits",
+        "de": "Einen Meilenstein setzen, wo keine Aufgabe steht"
+      },
+      "summary": {
+        "en": "Some points in a process are worth naming even though nobody does any work at them. \"Identity verification started\" is one: the work is what follows it, so there is no task there whose timestamps you could ask about later. BPMN's marker for exactly this is an intermediate throw event with no event definition, and until now Atlas refused it — at Deploy, after the Modeler had drawn it and reported no problems. It works now. Draw the event, leave it without a definition, name it after the point it marks. Nothing waits and no worker is needed; the token flows straight through. What you get is the record: the element is counted, it appears on the instance's timeline in order, and the live diagram lights it up as a token passes — so \"when did this case reach verification\" becomes a question you can answer for each case. A throw event that carries a definition the engine cannot run, such as a timer, is still refused, and now says which one.",
+        "de": "Manche Punkte in einem Prozess lohnt es sich zu benennen, obwohl dort niemand arbeitet. „Identitätsprüfung gestartet\" ist so einer: Die Arbeit folgt erst danach, es gibt dort also keine Aufgabe, nach deren Zeitstempeln man später fragen könnte. Die BPMN-Markierung dafür ist ein Zwischenereignis vom Typ «werfend» ohne Ereignisdefinition, und Atlas hat sie bisher abgelehnt — beim Deploy, nachdem der Modeler sie gezeichnet und keine Probleme gemeldet hatte. Jetzt funktioniert sie. Das Ereignis zeichnen, ohne Definition lassen, nach dem Punkt benennen, den es markiert. Es wartet auf nichts und braucht keinen Worker; der Token fliesst direkt hindurch. Was bleibt, ist die Aufzeichnung: Das Element wird gezählt, erscheint in der richtigen Reihenfolge auf der Zeitachse der Instanz, und das Live-Diagramm leuchtet auf, wenn ein Token vorbeikommt. „Wann hat dieser Fall die Prüfung erreicht?\" ist damit pro Fall beantwortbar. Ein werfendes Ereignis mit einer Definition, die die Engine nicht ausführen kann, etwa einem Timer, wird weiterhin abgelehnt — und sagt nun, welche."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Engine"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and drop an intermediate event onto the sequence flow where the milestone belongs.",
+          "Leave its type as the plain throw event: do not give it a message, signal, timer or any other definition.",
+          "Name it after the point it marks, in the business's words — \"Identity verification started\", not \"Event_3\". The name is what you will read it by later.",
+          "Deploy and start an instance. The live diagram marks the milestone as the token passes it.",
+          "Open the instance's timeline to see it in order between the elements around it, or read the process's element counts to see how many cases reached it."
+        ],
+        "de": [
+          "Einen Prozess im Modeler öffnen und ein Zwischenereignis auf den Sequenzfluss setzen, wo der Meilenstein hingehört.",
+          "Den Typ als einfaches werfendes Ereignis belassen: keine Nachricht, kein Signal, kein Timer, keine andere Definition.",
+          "Nach dem Punkt benennen, den es markiert, in der Sprache des Fachbereichs — «Identitätsprüfung gestartet», nicht «Event_3». Über den Namen liest man es später.",
+          "Deployen und eine Instanz starten. Das Live-Diagramm markiert den Meilenstein, sobald der Token ihn passiert.",
+          "Die Zeitachse der Instanz öffnen, um ihn in der richtigen Reihenfolge zwischen den umliegenden Elementen zu sehen, oder die Elementzählung des Prozesses lesen, um zu sehen, wie viele Fälle ihn erreicht haben."
+        ]
+      }
+    },
+    {
       "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
       "version": "Unreleased",
       "date": null,
@@ -353,51 +391,6 @@
         "Connectors",
         "Modeler"
       ]
-    },
-    {
-      "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See where an order got to — on the lifecycle its class declares",
-        "de": "Sehen, wo eine Bestellung steht — auf dem Lebenszyklus ihrer Klasse"
-      },
-      "summary": {
-        "en": "Open a running or finished instance and the Data tab now has a third view: the state machine the class declares, with the states this particular datum has been through filled in, the one it is in right now ringed, and every step labelled with the task that made it. Where something went a way the model does not allow, the drawing says so in a dashed line and names it underneath — which is how you find a process writing a state that does not exist, or one that was built before anyone drew the lifecycle.",
-        "de": "Beim Öffnen einer laufenden oder beendeten Instanz hat der Reiter Daten jetzt eine dritte Ansicht: die Zustandsmaschine, die die Klasse deklariert — mit den Zuständen, die genau dieses Datum durchlaufen hat, dem aktuellen hervorgehoben und jedem Schritt beschriftet mit der Aufgabe, die ihn ausgelöst hat. Ist etwas einen Weg gegangen, den das Modell nicht vorsieht, zeigt die Zeichnung das als gestrichelte Linie und benennt es darunter — so findet man einen Prozess, der einen Zustand schreibt, den es nicht gibt, oder einen, der schon vor dem Lebenszyklus gebaut wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and click an instance to replay it.",
-          "Switch to the Data tab and choose Lifecycle.",
-          "Filled states are ones this datum has been through; the ringed one is where it is now. Each arrow it travelled names the element that moved it.",
-          "Carrying several data objects? Pick which one to draw with the selector on the right.",
-          "Nothing there? The class needs a lifecycle first — draw one under Data › Model, on the class itself."
-        ],
-        "de": [
-          "Unter Betrieb eine Instanz anklicken, um sie abzuspielen.",
-          "Auf den Reiter Daten wechseln und Lebenszyklus wählen.",
-          "Gefüllte Zustände hat dieses Datum durchlaufen; der umrandete ist der aktuelle. Jeder durchlaufene Pfeil nennt das Element, das den Schritt ausgelöst hat.",
-          "Mehrere Datenobjekte? Rechts auswählen, welches gezeichnet wird.",
-          "Nichts zu sehen? Dann hat die Klasse noch keinen Lebenszyklus — unter Daten › Modell an der Klasse selbst zeichnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Betrieb öffnen"
-        },
-        "route": "#/operations"
-      }
     }
   ]
 }
