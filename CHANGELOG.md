@@ -448,6 +448,12 @@ _Changed_ / _Removed_ for each version.
   with: an estate's instance counts run from one to several thousand, and what an
   operator wants of a circle is how many times, not how much.
 
+  The key **draws** that scale rather than only describing it: a row of reference
+  circles — nothing at all, then the tallies the scale is marked at, up to the busiest
+  node — each at the size a node carrying that much is drawn. They come out of the same
+  arithmetic the nodes did, so a circle in the key is the circle on the picture, and
+  the row travels into an exported file as well, where there is no key to scroll to.
+
   Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
   idle process, a worker, a decision and an application whose load sits on the processes
   it holds are all still nodes somebody can see and click, and "nothing here" stays

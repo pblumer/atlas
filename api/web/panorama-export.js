@@ -213,7 +213,8 @@ export function stampLines(meta = {}) {
         `grows with each tenfold rather than with the count itself, so equal steps ` +
         `of size are equal multiples. The largest node here is ` +
         `${heat.peakPhrase(meta.peak)}. ${heat.floorNote} The area is therefore not ` +
-        `the tally: this scale answers how many times. ` +
+        `the tally: the scale answers how many times rather than how much. The row of ` +
+        `circles in the key below is that scale. ` +
         `Kind is still carried by shape and colour.`
       : `${heat.quiet} Kind is still carried by shape and colour.` });
     lines.push({ text: heat.absent });

@@ -283,6 +283,9 @@ const DERIVED_NOTATION = {
 const counted = (unit) => ({
   text: (n) => `${fmtCount(n)} ${unit}`,
   rich: (n) => `<b>${fmtCount(n)}</b> ${unit}`,
+  // And the bare quantity, for the scale in the key, where the unit is written once
+  // in the heading above the row instead of five times along it.
+  tick: (n) => fmtCount(n),
 });
 
 const HEATS = {
@@ -367,6 +370,7 @@ const HEATS = {
     leastPhrase: "a minute stuck",
     text: (ms) => `stuck ${spanText(ms)}`,
     rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
+    tick: (ms) => spanText(ms),
     heading: "Size is age here, not structure.",
     peakPhrase: (peak) => `the longest-parked one on this landscape, which has been
       stuck <b>${esc(spanText(peak))}</b>`,
@@ -595,8 +599,17 @@ export function heatPeak(graph, heat, at = Date.now()) {
 // can be.
 export function radiusForHeat(node, peak, heat, at = Date.now()) {
   const entry = heatEntry(heat);
-  const value = entry?.of ? Math.max(0, entry.of(node, at) || 0) : 0;
-  if (value <= 0) return HEAT_FLOOR;
+  return radiusForTally(entry?.of ? entry.of(node, at) : 0, peak, entry);
+}
+
+// radiusForTally is that law over a bare number, and it is separate for one reason:
+// the scale in the key is drawn from it too. A key whose circles were sized by their
+// own copy of the arithmetic would be a picture of a scale rather than the scale, and
+// the two would part company the first time either was touched.
+export function radiusForTally(tally, peak, heat) {
+  const entry = heatEntry(heat);
+  const value = Math.max(0, tally || 0);
+  if (!entry || value <= 0) return HEAT_FLOOR;
   const least = heatLeast(entry);
   // The top is never below the value in hand: a peak read from a landscape this node
   // is no longer on would otherwise size it past the maximum.
@@ -605,6 +618,49 @@ export function radiusForHeat(node, peak, heat, at = Date.now()) {
     ? Math.log(Math.max(value, least) / least) / Math.log(top / least)
     : 1;
   return HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) * Math.min(1, Math.max(0, rise));
+}
+
+// HEAT_TICKS is how many circles the scale in the key is allowed to show, the
+// nothing-at-all one included. Five, because the row has to stay on one line beside a
+// legend that already carries the kinds, the edges, the severities and the
+// provenances — and because a scale a reader counts along is one they have stopped
+// reading. What it must never drop is either end: the smallest thing that counts, and
+// the largest thing there is.
+const HEAT_TICKS = 5;
+
+// heatTicks are the tallies the scale in the key puts a circle against.
+//
+// Powers of ten from the weighting's least upward, and then the peak. That is the
+// scale's own ruling: the law is logarithmic, so the marks a reader can interpolate
+// between are the decades, and a linear set of marks on a logarithmic scale would be
+// four of them crowded at one end.
+//
+// The decade just below the peak is dropped when the peak is sitting on top of it,
+// because two circles a hair apart with different numbers under them read as a
+// rendering fault rather than as a scale.
+export function heatTicks(peak, heat) {
+  const entry = heatEntry(heat);
+  if (!entry || !(peak > 0)) return [];
+  const least = heatLeast(entry);
+  const top = Math.max(peak, least);
+  const decades = [least];
+  for (let v = least * 10; v < top; v *= 10) decades.push(v);
+  if (decades.length > 1 && top / decades[decades.length - 1] < 2) decades.pop();
+  const crowned = top > least;
+  // Places left for decades once the nothing-at-all circle and the peak have taken
+  // theirs.
+  const room = HEAT_TICKS - 1 - (crowned ? 1 : 0);
+  let kept = decades;
+  if (decades.length > room) {
+    // Thinned by a constant stride rather than by picking `room` of them evenly: a
+    // ladder whose rungs are a hundredfold apart is one a reader can carry, where a
+    // ladder of ten, a hundredfold, and then fourfold is three different rules on one
+    // line. Fewer rungs than there is room for is the price, and it is the right way
+    // round.
+    const stride = Math.ceil(decades.length / room);
+    kept = decades.filter((_, i) => i % stride === 0);
+  }
+  return crowned ? [...kept, top] : kept;
 }
 
 // heatLeast is the smallest tally a weighting tells apart from the next one up. One,
@@ -2307,6 +2363,90 @@ function legendEntries(graph, notation) {
   return entries;
 }
 
+// HEAT_SCALE_SHRINK is how much smaller a reference circle is drawn in the key than
+// the node it stands for.
+//
+// Not 1, because the largest node is 41 units across the radius and a row of them
+// would be taller than the legend it is in. Not much smaller either: the whole point
+// of the row is that the reader compares its circles against the ones on the canvas,
+// and a scale drawn at a quarter size is a scale they have to do arithmetic on. A
+// half puts the biggest reference circle at 20 pixels, which is a legend row 44
+// pixels tall — one line of the legend, and still plainly the same family of shapes.
+//
+// Everything on the row is shrunk by the same factor, so the *ratios* — which is what
+// a ratio scale is read by — are exactly the ratios on the canvas.
+const HEAT_SCALE_SHRINK = 0.5;
+
+// heatScaleMarks is the scale itself: the circles a reader measures the picture with,
+// as a list of radius-and-label pairs.
+//
+// The key already says what the law is in words, and words are not a scale. A reader
+// looking at a node cannot tell from a sentence whether it is running ten or a
+// thousand — they can tell it by holding it against a circle with a number under it,
+// which is what a bubble chart has always done and what this was missing.
+//
+// Sized by radiusForTally, the same function that sized the nodes, so the key cannot
+// drift from the canvas: there is one law and one implementation of it, and the row
+// is a rendering of that law rather than a picture of it. Drawn in the process kind's
+// own fill and stroke, read off KIND rather than copied into a stylesheet, for the
+// same reason: a scale has to look like the thing it is measuring, and most of what
+// it measures on a heat picture is a process.
+//
+// The nothing-at-all circle comes first and carries no number, because that is what
+// it means. It is the one a reader needs most: the whole complaint this scale answers
+// was that a node running one could not be told from a node running none.
+function heatScaleMarks(heat, peak) {
+  const ticks = heatTicks(peak, heat);
+  if (!ticks.length) return [];
+  const tick = heat.tick || ((n) => fmtCount(n));
+  return [
+    { label: "none", r: radiusForTally(0, peak, heat) },
+    ...ticks.map((value) => ({ label: tick(value), r: radiusForTally(value, peak, heat) })),
+  ];
+}
+
+// heatScaleHTML is that row, for the key beside the canvas.
+function heatScaleHTML(heat, peak) {
+  const marks = heatScaleMarks(heat, peak);
+  if (!marks.length) return "";
+  const box = Math.ceil((HEAT_FLOOR + HEAT_SPAN) * 2 * HEAT_SCALE_SHRINK) + 4;
+  const style = KIND.process;
+  const step = (mark) => `<span class="mesh-scale-step">
+    <svg width="${box}" height="${box}" aria-hidden="true"><circle
+      cx="${box / 2}" cy="${box / 2}" r="${(mark.r * HEAT_SCALE_SHRINK).toFixed(1)}"
+      fill="${style.fill}" stroke="${style.stroke}" stroke-width="1"/></svg>
+    <span class="mesh-scale-tick">${esc(mark.label)}</span></span>`;
+  return `<div class="mesh-scale" role="img"
+    aria-label="Size scale: ${esc(marks.map((m) => m.label).join(", "))}.">
+    ${marks.map(step).join("")}
+  </div>`;
+}
+
+// heatScaleEntries is the same row for a file, in the shape the export's key lays out.
+//
+// It travels with the picture for the reason §10 gives for the stamp: beside the
+// canvas the key is one scroll away, and in a file pasted into a ticket there is
+// nothing to scroll to. A sentence saying the scale is logarithmic is not something a
+// reader can hold a circle against.
+//
+// Every mark is drawn inside the 16-unit box the export's key scales from, so the
+// circles are the *ratios* they are on the canvas rather than its pixels — which is
+// what a ratio scale is read by. The first one names the weighting, because in a file
+// this row arrives after the kinds with nothing above it to say what it is about.
+export function heatScaleEntries(heat, peak) {
+  const marks = heatScaleMarks(heat, peak);
+  if (!marks.length) return [];
+  const style = KIND.process;
+  const largest = HEAT_FLOOR + HEAT_SPAN;
+  return marks.map((mark, i) => ({
+    group: "scale",
+    tone: "",
+    label: i === 0 ? `${heat.short} — ${mark.label}` : mark.label,
+    mark: `<circle cx="8" cy="8" r="${(mark.r * 8 / largest).toFixed(2)}"
+      fill="${style.fill}" stroke="${style.stroke}" stroke-width="1"/>`,
+  }));
+}
+
 function legendHTML(graph, layoutMs, notation, peak = 0) {
   const spoken = notationOf(notation?.id ?? notation);
   const heat = heatOf(spoken);
@@ -2337,15 +2477,20 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
   if (heat) {
     notes.push(peak > 0
       ? `<p class="mesh-note"><b>${heat.heading}</b> A node carrying nothing sits at the
-         floor. ${esc(heat.leastPhrase)} is already a step above it, and from there the
+         floor; ${esc(heat.leastPhrase)} is already a step above it, and from there the
          size grows with each <b>tenfold</b> rather than with the count itself — so
          equal steps of size are equal multiples, and the largest node here is
          ${heat.peakPhrase(peak)}. ${heat.floorNote} That means the area is not the
-         tally: this scale answers <em>how many times</em>, which is the question a
-         landscape spanning one to a thousand can be asked. Kind is still carried by
-         shape and colour.</p>`
+         tally: the scale answers <em>how many times</em> rather than how much, which
+         is the question an estate spanning orders of magnitude can be asked. Kind is
+         still carried by shape and colour.</p>`
       : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
          colour.</p>`);
+    // Under the sentence that explains it rather than up among the kinds: a scale is
+    // read against its own caption, and the swatch rows above are about what a node
+    // *is* where this row is about how much is on it.
+    const scale = heatScaleHTML(heat, peak);
+    if (scale) notes.push(scale);
     notes.push(`<p class="mesh-note">${heat.absent}</p>`);
   }
   // The comparison counts only mean something once a model has been overlaid; with
@@ -4205,7 +4350,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         // The key travels with the picture. Beside the canvas it is one scroll away;
         // in a file that has been pasted into a ticket there is nothing to scroll to,
         // and a hexagon nobody can name is a shape rather than a worker.
-        legend: legendEntries(shown, notationOf(notationPick.value)),
+        legend: [
+          ...legendEntries(shown, notationOf(notationPick.value)),
+          // And the size scale, when size is carrying a quantity. Appended here
+          // rather than inside legendEntries because it is the one row of the key
+          // that depends on the landscape's peak rather than on its kinds.
+          ...(weighted() ? heatScaleEntries(heatOf(notationOf(notationPick.value)),
+            heatPeak(graph, weighted(), measuredAt)) : []),
+        ],
         css: exportStyles(canvas.outerHTML),
         // The whole world, not the window: the canvas's own viewBox is wherever the
         // reader has zoomed to, and a file cropped to that would drop nodes without

@@ -1082,6 +1082,36 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, fourth): the key carries the scale, not only a sentence
+> about it.**
+> The amendment below states the sizing law in the key and in the export stamp, in
+> words. Words are not a scale. A reader looking at a node cannot tell from a sentence
+> whether it is running ten or a thousand — they can tell it by holding the node
+> against a circle with a number under it, which is what a bubble chart has always
+> done and what this was missing.
+>
+> So the key gains a row of reference circles: the nothing-at-all one first, then the
+> tallies the scale is marked at, each drawn at the radius the law gives it. The marks
+> are powers of ten from the weighting's `least` upward and then the peak, because the
+> law is logarithmic and the marks a reader interpolates between on a logarithmic
+> scale are the decades; a linear set would be four of them crowded at one end. When
+> there are more decades than the row has places the rungs are thinned by a *constant*
+> stride rather than by picking evenly, because a ladder of ten, then a hundredfold,
+> then fourfold is three rules on one line and a reader carries none of them. Both
+> ends always survive: the smallest tally that counts, and the largest there is.
+>
+> What makes it a scale rather than a decoration is that the circles come out of the
+> same function the nodes did (`radiusForTally`, which `radiusForHeat` now calls). One
+> law, one implementation, so the key cannot drift from the canvas — and the e2e test
+> states exactly that, by measuring a node and its reference circle off the rendered
+> picture and requiring the same ratio.
+>
+> It travels into the file too, for the reason §10 gives for the stamp: beside the
+> canvas the key is one scroll away, and in a file pasted into a ticket there is
+> nothing to scroll to. In the artifact the marks are drawn inside the same 16-unit
+> box the export's key scales every swatch from, so what the file carries is the
+> ratios rather than the screen's pixels — which is what a ratio scale is read by.
+
 > **Amendment (2026-09-11, third): the heat weightings are a ratio scale.**
 > §8 sized a node by the square root of its share of the peak, which makes a circle's
 > *area* proportional to the tally — the textbook encoding for a quantity drawn as a
