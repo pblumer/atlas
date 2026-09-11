@@ -248,6 +248,15 @@ exactly that point.
   drops its own scope's compensables today. Nested-transaction cancellation, a cancel throw
   from an event subprocess, and BPMN **compensation data** (a handler that needs the
   compensated activity's inputs) remain open, as they do for ADR-0103.
+- **Done since:** the **Design-view token simulation** (ADR-0078 and its increments) cancels
+  transactions. A cancel end had been walked as a plain end event, which produced the most
+  misleading picture of the three end events the simulation got wrong: the transaction quiesced,
+  completed *normally*, and the flow left by its success exit — a cancelled run drawn as the
+  happy path, with the rollback and the recovery flow both invisible. It now does what this ADR
+  specifies: the transaction's other work stops, everything it completed is compensated newest
+  first, the transaction is marked cancelling while its handlers run, and when they drain it
+  leaves by its cancel boundary. The cancel boundary is inert, fired by the rollback and never
+  by hand.
 
 ## Pros and cons of the options
 

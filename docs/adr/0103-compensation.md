@@ -225,6 +225,16 @@ order and activates each handler.
   reverse-order execution is **sequential**; a concurrent variant is a later option. A
   compensation throw for an `activityRef` that completed **multiple** times (a loop) — all
   instances, newest first — is covered by Phase 4's multi-run test.
+- **Done since:** the **Design-view token simulation** (ADR-0078 and its increments) compensates.
+  It had walked a compensation throw as a plain pass-through, so the handler a person had drawn
+  never ran — and it offered the inert compensation boundary as a *fire this event* affordance,
+  where one click destroyed the host activity's token and credited a completion for a sequence
+  flow that does not exist. It now keeps the same per-scope record of completed compensable
+  activities this ADR describes, resolves the boundary's handler through the `<association>` the
+  way the compiler does, and runs the handlers newest first, for the whole scope or for one
+  `activityRef`. A handler runs inside the scope it compensates, so the scope cannot finish
+  before it does, and it retires rather than counting as a completion of the process. A
+  compensation boundary is inert on the diagram, as it is in the engine.
 
 ## Pros and cons of the options
 

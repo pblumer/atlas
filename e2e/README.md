@@ -96,6 +96,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`compensation.spec.mjs`** ([ADR-0103](../docs/adr/0103-compensation.md),
+  [ADR-0108](../docs/adr/0108-bpmn-transactions.md)): the part of BPMN that runs **backwards**.
+  A **compensation throw** runs the handler of the activity that completed and then carries on,
+  the activity stops being compensable once undone, and the handler retires rather than counting
+  as a completion; the inert compensation boundary is **not** offered as a fire affordance,
+  because one click there used to destroy the host's token. A **cancel end** rolls its
+  transaction back — the handler runs while the transaction is marked cancelling — and the flow
+  leaves by the **cancel boundary**, never by the transaction's success exit.
 - **`fault-events.spec.mjs`** ([ADR-0089](../docs/adr/0089-error-events.md),
   [ADR-0125](../docs/adr/0125-escalation-events.md)): **errors and escalations**, which hand a
   path to a handler rather than completing it. An **error end** inside a subprocess throws to the

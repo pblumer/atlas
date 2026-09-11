@@ -94,6 +94,38 @@ const faultCode = (el, defType) => {
 // as the engine's errorCodeMatches.
 const codeCatches = (catchCode, thrown) => catchCode === "" || catchCode === thrown;
 
+// Compensation (ADR-0103) and transactions (ADR-0108) are the other two things an end event
+// can do instead of completing. A *compensation* throw or end runs the handlers of the
+// activities that already completed in its scope, newest first — undoing work in the reverse
+// of the order it was done. A *cancel* end sits inside a transaction and rolls the whole
+// transaction back: compensate everything it completed, then leave by the cancel boundary
+// instead of the normal exit.
+const COMPENSATE_DEF = "bpmn:CompensateEventDefinition";
+const CANCEL_DEF = "bpmn:CancelEventDefinition";
+const isTransaction = (el) => el.type === "bpmn:Transaction";
+const isCancelEnd = (el) => isEnd(el) && hasDef(el, CANCEL_DEF);
+const isCompensationThrow = (el) =>
+  (el.type === "bpmn:IntermediateThrowEvent" || isEnd(el)) && hasDef(el, COMPENSATE_DEF);
+// A compensation boundary is inert: it never fires on its own and has no sequence flow out of
+// it — it names, through a BPMN <association>, the handler that runs when its activity is
+// compensated. A cancel boundary is inert for the same kind of reason: only its transaction's
+// own rollback fires it. Neither may be offered as "fire this event", and firing one by hand
+// would destroy the host's token and take a flow that does not exist.
+const isInertBoundary = (el) =>
+  isBoundary(el) && (hasDef(el, COMPENSATE_DEF) || hasDef(el, CANCEL_DEF));
+const isCancelBoundary = (el) => isBoundary(el) && hasDef(el, CANCEL_DEF);
+// activityRef narrows a compensation throw to a single activity; without one it compensates
+// every completed compensable activity in its scope.
+const compensationRef = (el) => {
+  const d = eventDefs(el).find((x) => x.$type === COMPENSATE_DEF);
+  return (d && d.activityRef && d.activityRef.id) || null;
+};
+
+// A "special" end does something instead of completing its path — it throws, cancels, or
+// compensates — and each needs its token resting on the element while it does so.
+const isSpecialEnd = (el) =>
+  isErrorEnd(el) || isEscalationEnd(el) || isCancelEnd(el) || isCompensationThrow(el);
+
 // A catch-like target can receive a thrown message/signal dot — a catch event, a boundary
 // event, or a start event (a message can begin a new instance). A throw is never a target.
 const isCatchLike = (el) => isCatch(el) || isBoundary(el) || isStart(el);
@@ -255,6 +287,14 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   // waits on the element until the fault lands, so the scope it is leaving cannot quiesce and
   // complete out from under it, and nothing may move that token in the meantime.
   this._throwing = new Set();
+  // compensables: per scope (the process root keyed by ""), the compensable activities that
+  // have completed there, in completion order. This is the simulation's stand-in for the
+  // engine's cfCompensable index, and the reason compensation can run backwards: the newest
+  // record is undone first. A record is consumed when its handler runs.
+  this._compensables = new Map();
+  this._compHandlers = new Map(); // compensation boundary id → its handler element, from <association>
+  this._compensating = new Set(); // handler activities running right now — they retire, not complete
+  this._cancelling = new Set(); // transaction scopes rolling back, waiting for their handlers to drain
   // incidents: error ends whose error no handler caught. The engine raises an incident and
   // parks the instance there (ADR-0089/0061); the simulation parks the token the same way,
   // because the one reading it must not be given is "the process completed".
@@ -421,6 +461,7 @@ TokenSimulation.prototype.reset = function () {
   this._clearAllScopes();
   this._scopeGen.clear();
   this._throwing.clear();
+  this._clearAllCompensation();
   this._clearIncidents();
   this._completed = 0;
   this._terminated = 0;
@@ -459,6 +500,15 @@ TokenSimulation.prototype._rest = function (id, delta) {
 TokenSimulation.prototype._indexDiagram = function () {
   this._boundaries.clear();
   this._eventSubStarts = [];
+  // A compensation boundary names its handler with a BPMN <association>, not a sequence flow,
+  // and either end of the association may be the boundary. Resolving it once here is what lets
+  // a compensation throw find the activity to run — the compiler does the same post-pass.
+  this._compHandlers.clear();
+  this._registry.forEach((el) => {
+    if (el.type !== "bpmn:Association" || !el.source || !el.target) return;
+    if (isInertBoundary(el.source)) this._compHandlers.set(el.source.id, el.target);
+    else if (isInertBoundary(el.target)) this._compHandlers.set(el.target.id, el.source);
+  });
   this._registry.forEach((el) => {
     if (isBoundary(el)) {
       const host = el.host || (el.businessObject && el.businessObject.attachedToRef);
@@ -598,10 +648,11 @@ TokenSimulation.prototype._emit = function (el) {
     this._terminate(el);
     return;
   }
-  // A fault throw hands its token to a handler rather than moving it on: an error end throws
-  // to the nearest catch and never completes, an escalation end/throw raises and then carries
-  // on unless an interrupting catch takes the scope. The token stays put while the fault
-  // travels, so _throwFault owns it from here.
+  // An element that throws, cancels or compensates hands its token to _throwFault rather than
+  // simply moving on: an error end throws to the nearest catch and never completes, an
+  // escalation raises and carries on unless an interrupting catch takes the scope, a cancel end
+  // rolls its transaction back, a compensation throw runs the handlers of what already
+  // completed. The token stays put while that happens, so _throwFault owns it from here.
   if (this._throwFault(el)) return;
   if (isThrow(el)) this._throwEvent(el);
   this._departFrom(el);
@@ -611,10 +662,15 @@ TokenSimulation.prototype._emit = function (el) {
 // flow, or — with none — off the graph as a completion. It is the tail that every "the token
 // leaves here" path shares, whether the token simply moved on or first raised an escalation.
 TokenSimulation.prototype._departFrom = function (el) {
+  // A compensation handler retires when it is done: it is not on the normal flow, so it never
+  // counts as a completion of the process. Anything else leaving a compensable activity makes
+  // that activity compensable from now on — which is what a later throw undoes.
+  const compensating = this._compensating.delete(el.id);
+  if (!compensating) this._recordCompensable(el);
   const outs = outFlows(el);
   this._rest(el.id, -1);
   if (outs.length === 0) {
-    this._creditCompletion(el);
+    if (!compensating) this._creditCompletion(el);
     this._flash(el);
     this._render();
     this._notify();
@@ -758,6 +814,7 @@ TokenSimulation.prototype._fireInclusive = function (gw, flowIds) {
 // Interrupting cancels the activity (the token leaves via the boundary); non-interrupting
 // spawns a parallel token out the boundary and leaves the activity running.
 TokenSimulation.prototype._fireBoundary = function (b) {
+  if (isInertBoundary(b)) return; // a compensation / cancel boundary is fired by a rollback, never by hand
   const host = b.host || (b.businessObject && b.businessObject.attachedToRef);
   if (!host || (this._resting.get(host.id) || 0) <= 0) return;
   const interrupting = b.businessObject.cancelActivity !== false;
@@ -812,6 +869,7 @@ TokenSimulation.prototype._fireEventSub = function (start) {
       this._clearAllScopes();
       this._clearAllDeciding();
       this._clearIncidents();
+      this._clearAllCompensation();
     }
   }
   this._flash(start);
@@ -878,9 +936,10 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
       this._terminate(target);
       return;
     }
-    // A fault end holds its token while the fault travels to its handler, so — unlike every
-    // other end event — it comes to rest first and only then throws.
-    if (isErrorEnd(target) || isEscalationEnd(target)) {
+    // A special end comes to rest first and only then acts: a fault end holds its token while
+    // the fault travels, and a cancel or compensation end needs its scope to stay live while
+    // the handlers it starts appear inside it.
+    if (isSpecialEnd(target)) {
       this._rest(target.id, 1);
       this._render();
       this._notify();
@@ -1070,7 +1129,8 @@ TokenSimulation.prototype._settleScopes = function () {
       continue;
     }
     if (this._scopeLive(sub)) continue;
-    this._completeScope(sub);
+    if (this._cancelling.has(sid)) this._completeCancelledScope(sub);
+    else this._completeScope(sub);
   }
 };
 
@@ -1099,6 +1159,7 @@ TokenSimulation.prototype._completeScope = function (sub) {
   const rec = this._scopes.get(sub.id);
   const count = (rec && rec.count) || 1;
   this._scopes.delete(sub.id);
+  this._forgetCompensables(sub.id); // a finished scope leaves nothing to compensate
   this._removeMarker(sub.id, "atlas-sim-scope");
   this._rest(sub.id, -count);
   this._flash(sub);
@@ -1160,7 +1221,13 @@ TokenSimulation.prototype._clearScopeContents = function (sub) {
   for (const sid of Array.from(this._scopes.keys())) {
     if (sid === sub.id || !this._within(sid, sub.id)) continue;
     this._scopes.delete(sid);
+    this._forgetCompensables(sid);
+    this._cancelling.delete(sid);
+    this._removeMarker(sid, "atlas-sim-cancelling");
     this._removeMarker(sid, "atlas-sim-scope"); // a nested scope stops running with its parent
+  }
+  for (const id of Array.from(this._compensating)) {
+    if (this._within(id, sub.id)) this._compensating.delete(id); // a handler stops with its scope
   }
   for (const id of Array.from(this._miRemaining.keys())) {
     if (this._within(id, sub.id)) this._miRemaining.delete(id);
@@ -1179,6 +1246,9 @@ TokenSimulation.prototype._teardownScope = function (sub) {
   this._clearScopeContents(sub);
   this._resting.delete(sub.id);
   this._scopes.delete(sub.id);
+  this._forgetCompensables(sub.id);
+  this._cancelling.delete(sub.id);
+  this._removeMarker(sub.id, "atlas-sim-cancelling");
   this._removeMarker(sub.id, "atlas-sim-scope");
 };
 
@@ -1201,6 +1271,14 @@ TokenSimulation.prototype._throwFault = function (el) {
   }
   if (isEscalationEnd(el) || isEscalationThrow(el)) {
     this._throwEscalation(el);
+    return true;
+  }
+  if (isCancelEnd(el)) {
+    this._cancelTransaction(el);
+    return true;
+  }
+  if (isCompensationThrow(el)) {
+    this._compensateFrom(el);
     return true;
   }
   return false;
@@ -1329,6 +1407,148 @@ TokenSimulation.prototype._boundaryOn = function (scope, defType, code) {
   return null;
 };
 
+// --- Compensation and transactions ---------------------------------------------------
+
+// _handlerFor returns the compensation handler armed on an activity — the activity its
+// compensation boundary points at — or null when it carries none and is not compensable.
+TokenSimulation.prototype._handlerFor = function (el) {
+  for (const b of this._boundaries.get(el.id) || []) {
+    const handler = this._compHandlers.get(b.id);
+    if (handler) return handler;
+  }
+  return null;
+};
+
+// _scopeKeyOf keys the compensable index: a running subprocess scope by its id, the process
+// root by the empty string (no element can own that id).
+TokenSimulation.prototype._scopeKeyOf = function (el) {
+  const scope = this._scopeOf(el);
+  return scope ? scope.id : "";
+};
+
+// _recordCompensable notes that a compensable activity has completed. From here on a
+// compensation throw in the same scope can undo it, and the order they are recorded in is the
+// order compensation walks backwards through.
+TokenSimulation.prototype._recordCompensable = function (el) {
+  const handler = this._handlerFor(el);
+  if (!handler) return;
+  const key = this._scopeKeyOf(el);
+  const list = this._compensables.get(key) || [];
+  list.push({ activityId: el.id, handlerId: handler.id });
+  this._compensables.set(key, list);
+  this._addMarker(el.id, "atlas-sim-compensable");
+};
+
+// _runCompensations starts the compensation handlers of the completed compensable activities
+// in a scope — the one named by `activityId`, or all of them — newest first, and consumes their
+// records: an activity is compensated once. It returns how many handlers it started. The
+// handlers run *inside* the scope, so the scope cannot finish until they are done, which is
+// what makes a rollback wait for itself.
+TokenSimulation.prototype._runCompensations = function (scopeKey, activityId) {
+  const list = this._compensables.get(scopeKey) || [];
+  const keep = [];
+  const run = [];
+  for (const rec of list) (activityId && rec.activityId !== activityId ? keep : run).push(rec);
+  if (keep.length) this._compensables.set(scopeKey, keep);
+  else this._compensables.delete(scopeKey);
+  run.reverse(); // reverse completion order: the last thing done is the first thing undone
+  for (const rec of run) {
+    this._removeMarker(rec.activityId, "atlas-sim-compensable");
+    const handler = this._registry.get(rec.handlerId);
+    if (!handler) continue;
+    this._compensating.add(handler.id);
+    this._ping(handler);
+    this._rest(handler.id, 1);
+    this._land(handler);
+  }
+  return run.length;
+};
+
+// _compensateFrom runs a compensation throw or compensation end event (ADR-0103). It starts the
+// handlers of what already completed in its own scope and then goes on its way — a throw takes
+// its outgoing flow, an end ends its path — because compensation runs alongside rather than
+// blocking the thrower. Compensation is scope-confined: a throw undoes what completed in its
+// own scope, never what completed elsewhere.
+TokenSimulation.prototype._compensateFrom = function (el) {
+  if (this._runCompensations(this._scopeKeyOf(el), compensationRef(el))) this._flash(el);
+  this._departFrom(el);
+};
+
+// _cancelTransaction runs a cancel end event (ADR-0108): the enclosing transaction is rolled
+// back. Its other live tokens are terminated, everything it completed is compensated newest
+// first, and the transaction is marked cancelling — so when those handlers drain it leaves by
+// its cancel boundary instead of its normal outgoing flow. A cancel end that is not inside a
+// transaction can roll nothing back (the compiler rejects that model); the simulation walks it
+// as the plain end the diagram actually drew rather than inventing a rollback.
+TokenSimulation.prototype._cancelTransaction = function (el) {
+  const scope = this._scopeOf(el);
+  if (!scope || !isTransaction(scope)) {
+    this._departFrom(el);
+    return;
+  }
+  this._rest(el.id, -1); // the cancel end's own token goes with the rollback
+  this._cancelling.add(scope.id);
+  this._addMarker(scope.id, "atlas-sim-cancelling");
+  this._terminated += this._tokensInScope(scope);
+  this._clearScopeContents(scope); // the transaction's other work stops before it is undone
+  this._flashAbort(el);
+  this._runCompensations(scope.id, null);
+  this._render();
+  this._notify();
+  this._settleScopes(); // with nothing to compensate, the rollback finishes here
+};
+
+// _completeCancelledScope finishes a rolled-back transaction once its compensation handlers
+// have drained: the transaction is torn down and its cancel boundary takes the recovery flow.
+// A transaction drawn without a cancel boundary has nowhere to send it — the compiler warns
+// about that model, and here the tokens that entered simply end with it.
+TokenSimulation.prototype._completeCancelledScope = function (sub) {
+  this._cancelling.delete(sub.id);
+  this._removeMarker(sub.id, "atlas-sim-cancelling");
+  const boundary = (this._boundaries.get(sub.id) || []).find(isCancelBoundary);
+  const held = (this._scopes.get(sub.id) || {}).count || 1;
+  this._teardownScope(sub);
+  this._flash(sub);
+  this._render();
+  this._notify();
+  if (!boundary) {
+    this._terminated += held;
+    this._settleScopes();
+    return;
+  }
+  if (held > 1) this._terminated += held - 1; // only one token leaves by the boundary
+  this._flash(boundary);
+  const outs = outFlows(boundary);
+  if (outs.length === 0) this._creditCompletion(boundary);
+  else for (const f of outs) this._travel(f);
+  this._settleJoins();
+  this._settleScopes();
+};
+
+// _clearAllCompensation drops every compensable record, running handler and rollback: the whole
+// process has been torn down, so there is nothing left that could be undone.
+TokenSimulation.prototype._clearAllCompensation = function () {
+  for (const key of Array.from(this._compensables.keys())) this._forgetCompensables(key);
+  this._compensating.clear();
+  this._clearCancelling();
+};
+
+// _clearCancelling drops every rollback in progress and its marking — the scopes are gone.
+TokenSimulation.prototype._clearCancelling = function () {
+  for (const id of this._cancelling) this._removeMarker(id, "atlas-sim-cancelling");
+  this._cancelling.clear();
+};
+
+// _forgetCompensables drops a scope's compensable records and the markings that went with
+// them. A scope that is gone — completed, cancelled or torn down — leaves nothing to undo, the
+// same teardown the engine does on the scope's own Completed/Terminated event.
+TokenSimulation.prototype._forgetCompensables = function (scopeKey) {
+  for (const rec of this._compensables.get(scopeKey) || []) {
+    this._removeMarker(rec.activityId, "atlas-sim-compensable");
+  }
+  this._compensables.delete(scopeKey);
+};
+
 // _clearIncidents drops every parked incident and its marking — the tokens they belonged to
 // are gone (a reset, or a teardown that took them).
 TokenSimulation.prototype._clearIncidents = function () {
@@ -1379,6 +1599,7 @@ TokenSimulation.prototype._terminate = function (el) {
   this._clearAllScopes();
   this._clearAllDeciding();
   this._clearIncidents();
+  this._clearAllCompensation();
   this._completed++; // the token that reached the terminate end is the one completion
   this._render();
   this._notify();
@@ -1489,8 +1710,10 @@ TokenSimulation.prototype._render = function () {
     } catch {
       /* shape without graphics — skip */
     }
-    // Offer any boundary events attached to an activity that now holds a token.
+    // Offer any boundary events attached to an activity that now holds a token. An inert one
+    // is not offered: nothing a person does fires a compensation or cancel boundary.
     for (const b of this._boundaries.get(id) || []) {
+      if (isInertBoundary(b)) continue;
       this._drawFire(b, "&#9889;", () => this._fireBoundary(b), this._boundaryTitle(b));
     }
   }

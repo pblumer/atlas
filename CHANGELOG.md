@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The token simulation now compensates, and cancels a transaction instead of completing
+  it.** Compensation is the one part of BPMN that runs backwards, and the Design-view
+  simulation ran none of it. A compensation throw passed straight through, so the handler a
+  person had drawn never ran. A **cancel end event** inside a transaction was walked as a
+  plain end: the transaction quiesced, completed *normally*, and the flow left by its success
+  exit. A cancelled run was drawn as the happy path, with the rollback and the recovery flow
+  both invisible — the most misleading of the three end events the simulation got wrong.
+
+  Both now follow [ADR-0103](docs/adr/0103-compensation.md) and
+  [ADR-0108](docs/adr/0108-bpmn-transactions.md). An activity that completes carrying a
+  compensation boundary is marked compensable, and a compensation throw undoes what completed
+  in its own scope, newest first — the whole scope, or the single activity its `activityRef`
+  names. The handler is found through the BPMN `<association>` the compiler resolves too. It
+  runs inside the scope it compensates, so the scope cannot finish before it does, and it
+  retires rather than counting as a completion. A cancel end stops the transaction's other
+  work, compensates everything it did, marks it cancelling while the handlers run, and leaves
+  by the cancel boundary when they drain.
+
+  It also removes a click that did damage. A **compensation boundary** is inert — it has no
+  sequence flow out of it, it names a handler — but the simulation offered it as a *fire this
+  event* affordance like any other boundary. One click destroyed the host activity's token and
+  credited a completion for a flow that does not exist. Compensation and cancel boundaries are
+  no longer offered, and refuse to fire by hand.
+
 - **The token simulation now throws errors and escalations instead of swallowing them.**
   Both are *faults*: they do not complete a path, they hand it to the nearest enclosing
   handler. The Design-view simulation knew neither definition, so an error end and an
