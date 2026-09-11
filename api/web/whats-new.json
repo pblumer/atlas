@@ -157,6 +157,42 @@
       }
     },
     {
+      "id": "a-capability-s-service-levels-are-measured-not-only-declared",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Check a service level against what actually ran",
+        "de": "Ein Service Level gegen das prüfen, was tatsächlich lief"
+      },
+      "summary": {
+        "en": "A business capability could say what it has promised — decide within five days, verify within ten minutes — and nothing checked it. The promise sat in the record and the evidence sat in the engine, and no one page held both. Now you can ask for a capability's measurement over a window and get back, for each process that performs it, how often each ending occurred, how often work was cancelled, how long cases took, and what share of them met each promise. Two things are worth knowing before you read a number. The counts of endings and cancellations are running totals since the process was first deployed; only the timings are limited to the window you asked for, and the answer says so beside each figure. And a promise is only checked where somebody wrote its threshold as a number: «within five business days» stays as written, because Atlas will not decide what a business day means in your organisation. Add the number and the promise starts being measured.",
+        "de": "Eine Geschäftsfähigkeit konnte festhalten, was sie zugesagt hat — in fünf Tagen entscheiden, in zehn Minuten prüfen — und niemand glich das ab. Die Zusage stand im Datensatz, die Belege lagen in der Engine, und keine Ansicht hielt beides. Jetzt lässt sich die Messung einer Fähigkeit über einen Zeitraum abrufen: je ausführendem Prozess, wie oft welches Ende eintrat, wie oft Arbeit abgebrochen wurde, wie lange Fälle dauerten, und welcher Anteil davon jede Zusage eingehalten hat. Zwei Dinge sollte man wissen, bevor man eine Zahl liest. Die Zählungen von Enden und Abbrüchen sind laufende Summen seit der ersten Bereitstellung des Prozesses; nur die Zeiten beziehen sich auf den angefragten Zeitraum, und die Antwort sagt das bei jeder Zahl dazu. Und eine Zusage wird nur dort geprüft, wo jemand ihren Schwellwert als Zahl hinterlegt hat: «innert fünf Arbeitstagen» bleibt so stehen, weil Atlas nicht entscheidet, was ein Arbeitstag in Ihrer Organisation ist. Ergänzt man die Zahl, wird die Zusage gemessen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Architecture",
+        "API"
+      ],
+      "tutorial": {
+        "en": [
+          "Give an SLA on the capability a machine-readable threshold: add thresholdSeconds beside the wording it already carries.",
+          "Ask for the measurement: GET /api/v1/capabilities/{key}/measurement?windowDays=30. The window is required — a reading over all history is not offered, because it costs seconds once a process has run a hundred thousand cases.",
+          "Read countedBasis and walkedBasis in the answer before presenting anything: the counts are all-time, the timings are windowed.",
+          "Look at notMeasured to see which declared figures were left alone, and why."
+        ],
+        "de": [
+          "Einem SLA der Fähigkeit einen maschinenlesbaren Schwellwert geben: thresholdSeconds neben den bestehenden Wortlaut setzen.",
+          "Die Messung abrufen: GET /api/v1/capabilities/{key}/measurement?windowDays=30. Der Zeitraum ist Pflicht — eine Auswertung über die gesamte Historie wird nicht angeboten, weil sie Sekunden kostet, sobald ein Prozess hunderttausend Fälle hinter sich hat.",
+          "Vor jeder Darstellung countedBasis und walkedBasis lesen: Die Zählungen gelten seit Beginn, die Zeiten nur für den Zeitraum.",
+          "In notMeasured nachsehen, welche deklarierten Kennzahlen unberührt blieben und warum."
+        ]
+      }
+    },
+    {
       "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
       "version": "Unreleased",
       "date": null,
@@ -369,28 +405,6 @@
         },
         "route": "#/data"
       }
-    },
-    {
-      "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Run scripts in a locked-down OS sandbox",
-        "de": "Skripte in einer abgeschotteten OS-Sandbox ausführen"
-      },
-      "summary": {
-        "en": "A new strict Linux profile gives every PowerShell, Python or JavaScript run its own temporary workspace, blocks access to Atlas data and other host files, and denies network sockets. It is opt-in so existing scripts keep working; once a process needs only its variables, enable it with --script-sandbox=strict.",
-        "de": "Ein neues striktes Linux-Profil gibt jedem PowerShell-, Python- oder JavaScript-Lauf ein eigenes temporäres Arbeitsverzeichnis, sperrt Atlas-Daten und andere Host-Dateien und blockiert Netzwerk-Sockets. Es ist bewusst opt-in, damit bestehende Skripte weiterlaufen; braucht ein Prozess nur seine Variablen, wird es mit --script-sandbox=strict aktiviert."
-      },
-      "link": {
-        "label": "ADR",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
-      },
-      "tags": [
-        "Security",
-        "Scripts"
-      ]
     }
   ]
 }

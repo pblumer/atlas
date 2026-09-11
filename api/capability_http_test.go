@@ -894,3 +894,145 @@ func TestZeroHorizonRestoresTheDefault(t *testing.T) {
 		t.Errorf("the report applied %d months after the setting was cleared", rep.HorizonMonths)
 	}
 }
+
+// Measuring a capability is the one read in this area that walks instances, so it is
+// the one that had to be proved affordable before it was built
+// (benchmarks/results/measurement-381825f.md). These tests are about the contract that
+// measurement produced rather than about the arithmetic, which is unit-tested against
+// values in api/capability.
+
+// The window is required, and the refusal says why rather than only that. A caller who
+// omits it is asking for a reading over all history, which is the thing the
+// measurement ruled out.
+func TestMeasurementRefusesAnUnboundedReading(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"onboarding","name":"Customer onboarding"}`, "application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d", code)
+	}
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/capabilities/onboarding/measurement", "", "")
+	if code != http.StatusBadRequest {
+		t.Fatalf("missing windowDays = %d %s, want 400", code, body)
+	}
+	if !strings.Contains(string(body), "windowDays") {
+		t.Errorf("refusal = %s, want it to name the parameter", body)
+	}
+	// And a window nobody could mean is refused with the ceiling named, so the caller
+	// learns the bound rather than guessing at it.
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/onboarding/measurement?windowDays=100000", "", "")
+	if code != http.StatusBadRequest || !strings.Contains(string(body), "400") {
+		t.Errorf("oversized window = %d %s, want 400 naming the ceiling", code, body)
+	}
+}
+
+// TestMeasurementSaysWhatEachFigureRestsOn is the property the whole response exists
+// to protect. Outcome counts are all-time and cycle times are windowed; both are
+// integers on a screen, and a client that mixed them would be wrong invisibly.
+func TestMeasurementSaysWhatEachFigureRestsOn(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Onboarding"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		capabilityBPMN("identity-verification"), "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"identity","name":"Verify an identity",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"identity-verification"}],
+		  "slas":[{"name":"Ten minutes","metric":"cycle time","threshold":"within 10 minutes",
+		           "thresholdSeconds":600,"scope":"internal"},
+		          {"name":"Five business days","metric":"cycle time",
+		           "threshold":"within five business days","scope":"internal"}],
+		  "kpis":[{"name":"Verify same day","metric":"cycle time"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/identity/measurement?windowDays=30", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		WindowDays   int    `json:"windowDays"`
+		CountedBasis string `json:"countedBasis"`
+		WalkedBasis  string `json:"walkedBasis"`
+		Processes    []struct {
+			ProcessID string `json:"processId"`
+			Deployed  bool   `json:"deployed"`
+		} `json:"processes"`
+		SLAs []struct {
+			Name             string `json:"name"`
+			ThresholdSeconds int64  `json:"thresholdSeconds"`
+		} `json:"slas"`
+		NotMeasured []struct {
+			Kind string `json:"kind"`
+			Name string `json:"name"`
+		} `json:"notMeasured"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode measurement: %v — %s", err, body)
+	}
+	if got.WindowDays != 30 {
+		t.Errorf("windowDays = %d, want the 30 that was measured", got.WindowDays)
+	}
+	if got.CountedBasis == "" || got.WalkedBasis == "" || got.CountedBasis == got.WalkedBasis {
+		t.Errorf("bases = %q / %q, want two distinct sentences", got.CountedBasis, got.WalkedBasis)
+	}
+	if len(got.Processes) != 1 || got.Processes[0].ProcessID != "identity-verification" || !got.Processes[0].Deployed {
+		t.Errorf("processes = %+v, want the deployed realization", got.Processes)
+	}
+	// The SLA with a number is measured; the one written as prose and the KPI are both
+	// reported as not measured rather than silently absent.
+	if len(got.SLAs) != 1 || got.SLAs[0].ThresholdSeconds != 600 {
+		t.Errorf("slas = %+v, want only the one carrying thresholdSeconds", got.SLAs)
+	}
+	kinds := map[string]bool{}
+	for _, n := range got.NotMeasured {
+		kinds[n.Kind] = true
+	}
+	if !kinds["sla"] || !kinds["kpi"] {
+		t.Errorf("notMeasured = %+v, want both the prose SLA and the KPI named", got.NotMeasured)
+	}
+}
+
+// A capability realised only by a person or a purchased system has nothing this server
+// can measure, and that is a fact about the map rather than a failure of the reading.
+func TestMeasurementOfAnUnautomatedCapabilitySaysSo(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"underwriting","name":"Underwrite a loan",
+		  "realizations":[{"kind":"manual","note":"a clerk with a scoring tool"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+	code, body := doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/underwriting/measurement?windowDays=7", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Unrealizable bool       `json:"unrealizable"`
+		Processes    []struct{} `json:"processes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Unrealizable {
+		t.Error("unrealizable = false; a manual realization is nothing this server records")
+	}
+	if len(got.Processes) != 0 {
+		t.Errorf("processes = %d, want none: a manual realization is not a process that failed to deploy", len(got.Processes))
+	}
+}
