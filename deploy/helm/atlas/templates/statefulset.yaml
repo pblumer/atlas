@@ -64,6 +64,7 @@ spec:
             - --python={{ .Values.atlas.script.python }}
             - --javascript={{ .Values.atlas.script.javascript }}
             - --script-timeout={{ .Values.atlas.script.timeout }}
+            - --script-sandbox={{ .Values.atlas.script.sandbox }}
             - --shutdown-timeout={{ .Values.atlas.shutdownTimeout }}
             {{- if .Values.atlas.tls.enabled }}
             {{- if not .Values.atlas.tls.existingSecret }}

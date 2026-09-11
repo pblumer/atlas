@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/connector/script"
 )
 
 // The gap these cover, named as a follow-up by ADR-0181 itself: trying the AD
@@ -34,12 +35,15 @@ func TestDefaultScriptWorkerHonorsLanguageFlags(t *testing.T) {
 		"powershell": false,
 		"python":     true,
 		"javascript": false,
-	})
+	}, script.SandboxStrict)
 	if len(specs) != 3 {
 		t.Fatalf("specs = %s, want csv,script,mail", specIDs(specs))
 	}
 	if got := strings.Join(specs[1].ScriptLanguages, ","); got != "python" {
 		t.Errorf("script languages = %q, want python", got)
+	}
+	if got := specs[1].ScriptSandbox; got != "strict" {
+		t.Errorf("script sandbox = %q, want strict", got)
 	}
 }
 
@@ -51,7 +55,7 @@ func TestDefaultScriptWorkerIsNotStartedWhenEveryLanguageIsDisabled(t *testing.T
 		"powershell": false,
 		"python":     false,
 		"javascript": false,
-	})
+	}, script.SandboxStrict)
 	if got := specIDs(specs); got != "csv,mail" {
 		t.Fatalf("specs = %q, want csv,mail", got)
 	}
@@ -62,7 +66,7 @@ func TestDefaultScriptWorkerIsNotStartedWhenEveryLanguageIsDisabled(t *testing.T
 // other language switches after the default worker has correctly stayed down.
 func TestExplicitScriptSupervisionCannotBypassDisabledLanguages(t *testing.T) {
 	enabled := map[string]bool{"python": false, "powershell": false, "javascript": false}
-	specs, offload, err := superviseConnectorSpecs([]string{"script"}, nil, enabled)
+	specs, offload, err := superviseConnectorSpecs([]string{"script"}, nil, enabled, script.SandboxStrict)
 	if err != nil {
 		t.Fatalf("superviseConnectorSpecs: %v", err)
 	}

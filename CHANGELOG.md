@@ -79,6 +79,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **General-purpose scripts now have an opt-in, fail-closed OS sandbox.**
+  `--script-sandbox=strict` (or `ATLAS_SCRIPT_SANDBOX=strict`) gives every
+  PowerShell, Python and JavaScript execution private scratch, restricts file reads
+  and execution to the installed runtime with Linux Landlock, and denies creation
+  of network and Unix-domain sockets with seccomp. Atlas checks for Landlock ABI 3+
+  before starting a strict server or worker; it never silently falls back. The
+  initial default is `off`, deliberately, so upgrading does not break deployed
+  scripts that intentionally use mounted files or services. Independently of that
+  setting, a script timeout on Unix now kills the interpreter's complete process
+  group, so a spawned child cannot survive its timed-out parent.
+  ([ADR-draft-script-sandbox-isolation](docs/adr/draft-script-sandbox-isolation.md))
+
 - **The information model can now be read off the processes instead of typed in beside
   them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
   [ADR-0259](docs/adr/0259-data-object-lifecycle.md) both run in one direction: a person
@@ -197,7 +209,6 @@ _Changed_ / _Removed_ for each version.
   `applyToState`: it is a read over what the log already said. `GET
   /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
   same answer in front of an agent (ADR-0259).
-
 - **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
   such a name while it is typed, but a model deployed from a pipeline or over the API
   never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:

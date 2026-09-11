@@ -100,6 +100,28 @@
       }
     },
     {
+      "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Run scripts in a locked-down OS sandbox",
+        "de": "Skripte in einer abgeschotteten OS-Sandbox ausführen"
+      },
+      "summary": {
+        "en": "A new strict Linux profile gives every PowerShell, Python or JavaScript run its own temporary workspace, blocks access to Atlas data and other host files, and denies network sockets. It is opt-in so existing scripts keep working; once a process needs only its variables, enable it with --script-sandbox=strict.",
+        "de": "Ein neues striktes Linux-Profil gibt jedem PowerShell-, Python- oder JavaScript-Lauf ein eigenes temporäres Arbeitsverzeichnis, sperrt Atlas-Daten und andere Host-Dateien und blockiert Netzwerk-Sockets. Es ist bewusst opt-in, damit bestehende Skripte weiterlaufen; braucht ein Prozess nur seine Variablen, wird es mit --script-sandbox=strict aktiviert."
+      },
+      "link": {
+        "label": "ADR",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/draft-script-sandbox-isolation.md"
+      },
+      "tags": [
+        "Security",
+        "Scripts"
+      ]
+    },
+    {
       "id": "the-information-model-can-now-be-read-off-the-processes-inst",
       "version": "Unreleased",
       "date": null,
@@ -373,44 +395,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-starmap-says-when-it-was-read-and-keeps-itself-true",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The Starmap says how old it is, and keeps itself current",
-        "de": "Die Starmap sagt, wie alt sie ist, und hält sich selbst aktuell"
-      },
-      "summary": {
-        "en": "Everything the Starmap draws has a shelf life: the status marks are an observation, the incident counts move as somebody works through them, and the three heatmaps are live quantities. But the picture was fetched once when you opened it and never again — a landscape opened at nine and still open at eleven showed two-hour-old numbers with nothing on the page saying so. That is the failure the timestamp printed into an exported image exists to prevent, happening on the screen the export is taken from. The picture now states when the server read it — \"observed 4 min ago\", under the controls — and a Live switch beside it, on by default, re-reads the landscape while you are looking. It is on by default because a status view that looks current and is not is worse than a picture that moves; turn it off when you want to study one picture without it changing under you, and turning it back on fetches at once rather than making you wait out another interval. How often it asks depends on what the picture costs the server to build, so a large estate is asked less often rather than the same amount. Nothing is fetched while the tab is in the background or while you are dragging a node. If the server will not answer, the picture stays as it is and the line says \"could not re-read\" — because four minutes old and four minutes old with nobody keeping it up are different things, and only the second is a reason to stop believing what you see. Your filter, your drilldown, your selection, the nodes you placed by hand and your zoom all survive a re-read.",
-        "de": "Alles, was die Starmap zeichnet, hat eine Halbwertszeit: Die Statusmarkierungen sind eine Beobachtung, die Incident-Zahlen bewegen sich, während jemand sie abarbeitet, und die drei Heatmaps sind lebende Grössen. Das Bild wurde aber einmal beim Öffnen geladen und danach nie wieder — eine um neun geöffnete und um elf noch offene Landschaft zeigte zwei Stunden alte Zahlen, ohne dass irgendetwas darauf hinwies. Genau davor schützt der Zeitstempel, der in ein exportiertes Bild gedruckt wird — nur passierte es auf dem Bildschirm, von dem der Export stammt. Das Bild sagt jetzt, wann der Server es gelesen hat („observed 4 min ago“, unter den Bedienelementen), und daneben steht ein Schalter „Live“, standardmässig eingeschaltet, der die Landschaft neu liest, während Sie hinsehen. Eingeschaltet ist er standardmässig, weil eine Statusansicht, die aktuell aussieht und es nicht ist, schlimmer ist als ein Bild, das sich bewegt; schalten Sie ihn aus, wenn Sie ein Bild in Ruhe studieren wollen — und beim Wiedereinschalten wird sofort geladen, statt Sie ein weiteres Intervall warten zu lassen. Wie oft gefragt wird, richtet sich danach, was das Bild den Server kostet; eine grosse Landschaft wird also seltener statt gleich oft abgefragt. Im Hintergrund-Tab und während Sie einen Knoten ziehen, wird gar nicht gefragt. Antwortet der Server nicht, bleibt das Bild stehen und die Zeile sagt „could not re-read“ — denn vier Minuten alt und vier Minuten alt ohne dass es jemand nachführt sind zwei verschiedene Dinge, und nur das Zweite ist ein Grund, dem Gezeigten nicht mehr zu trauen. Filter, Drilldown, Auswahl, von Hand platzierte Knoten und Zoom überstehen ein Neuladen unverändert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Panorama and look under the header row: it now says when this landscape was read.",
-          "Beside it is the Live switch. Leave it on and the picture re-reads itself; the sentence goes back to \"observed just now\" each time it does.",
-          "Turn Live off to hold a picture still while you study it. The sentence keeps counting up, so you always know how old what you are looking at is.",
-          "Turn it back on: it fetches immediately rather than waiting for the next interval.",
-          "Note that the landscape's structure can be up to half a minute behind — a newly created application or worker appears within that window, while a process you just deployed appears at once. The line under the header is what tells you which you are looking at."
-        ],
-        "de": [
-          "Panorama öffnen und unter die Kopfzeile schauen: Dort steht jetzt, wann diese Landschaft gelesen wurde.",
-          "Daneben steht der Schalter „Live“. Bleibt er an, liest sich das Bild selbst neu; die Zeile springt dabei jedes Mal zurück auf „observed just now“.",
-          "„Live“ ausschalten, um ein Bild zum Studieren stillzuhalten. Die Zeile zählt weiter hoch, Sie wissen also immer, wie alt das Gezeigte ist.",
-          "Wieder einschalten: Es wird sofort geladen, statt auf das nächste Intervall zu warten.",
-          "Beachten Sie: Die Struktur der Landschaft kann bis zu eine halbe Minute hinterherhinken — eine neu angelegte Applikation oder ein neuer Worker erscheint innerhalb dieses Fensters, ein gerade deployter Prozess dagegen sofort. Die Zeile unter der Kopfzeile sagt Ihnen, was Sie gerade vor sich haben."
-        ]
       }
     }
   ]
