@@ -4907,6 +4907,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Completing is deciding: it writes the form's answer into the instance and
+	// lets the process act on it. Who may (taskauthority.go) is asked before the
+	// processor is told anything.
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
 	var (
 		found  bool
 		runErr error
@@ -5013,6 +5020,14 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	// Claiming and releasing are gated with completion, and have to be: releasing
+	// somebody else's task is how a caller who may not complete it makes sure
+	// nobody can. An approval left holderless is an order stuck until an operator
+	// repairs it (taskauthority.go).
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
 	var (

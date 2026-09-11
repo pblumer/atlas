@@ -274,6 +274,15 @@ type Server struct {
 	// orders serves the portal's orders: what somebody asked for, against one
 	// frozen catalogue release.
 	orders *order.Service
+	// catalogStore and orderStore are the same two stores the services above hold,
+	// kept here for one reader that is neither of them: the approval page
+	// (approvals.go) joins a running task to the order it decides and the catalogue
+	// that order came from, and has to do it off the run loop, because it walks the
+	// open tasks (ADR-0239). Sidecar stores are written atomically and may be read
+	// directly for exactly that reason — it is the same access the order service is
+	// already built with (catalogStore.Release below).
+	catalogStore *catalog.Store
+	orderStore   *order.Store
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// formGen writes a form from a description and from the process it belongs to
@@ -1338,6 +1347,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// a message correlated on the order id, and the orchestrator parked on it asks
 	// what may start next. Publishing runs the processor, which is a visit to the
 	// loop of its own — so the order service calls this outside its own closure.
+	s.catalogStore, s.orderStore = catalogStore, orderStore
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
 		func(message, orderID string) error {
