@@ -1,7 +1,7 @@
 # ADR-DRAFT: Catalogue, order, inventory — three models, not one
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether a column family holding millions of entitlements stays
@@ -95,10 +95,25 @@ system. The moment either happens, "the orders that succeeded" is a wrong answer
 
 A `CatalogItem` is a product or a service; the distinction is its position, not its
 type, so the structure nests to arbitrary depth. Items are linked by a `CatalogEdge`
-that is either a **composition** (integral, always included, not deselectable) or an
-**aggregation** (optional, separately orderable) — the two ArchiMate relationships the
-source model already distinguishes. An item may have several parents: the same service
-legitimately appears in several products.
+of one of **three** kinds, and the split matters more than it looks — they belong to
+two graphs answering two different questions:
+
+- **Structure** — a **composition** (integral, always included, not deselectable) or
+  an **aggregation** (optional, separately orderable). These are the two ArchiMate
+  relationships the source model already distinguishes, and they say what belongs to
+  what.
+- **Precedence** — **requires**, saying one service cannot be provisioned before
+  another is. This is the edge the fulfilment order is computed over, and the only one
+  whose direction means "after".
+
+Writing this record, the two were conflated: it named the structural edges and then
+spoke of "the dependency graph" as though that were the same thing. It is not, and
+reading them as one graph refuses ordinary catalogues — a workplace that *contains* an
+account and cannot be provisioned *before* one exists would be a cycle. Both graphs
+must be acyclic; they are checked separately.
+
+An item may have several parents: the same service legitimately appears in several
+products.
 
 Each item carries its orderable window (`orderableFrom`, `orderableUntil`), a
 withdrawal state, multilingual texts, its variant definition, an approval rule, a
@@ -116,8 +131,11 @@ A `CatalogRelease` is a frozen, published version, following the shape applicati
 already have ([ADR-0128](0128-process-applications.md)). **Publishing is where the work
 happens**, and this is I5 applied to a catalogue:
 
-- the dependency graph is checked for cycles and **topologically sorted**, so the
-  fulfilment order is computed once, not derived per order;
+- both graphs are checked for cycles, and the precedence graph is **topologically
+  sorted**, so the fulfilment order is computed once, not derived per order. The sort
+  keeps its ready set ordered, so the sequence is deterministic: a release that
+  reordered between two publishes of one input would make a diff of two releases
+  unreadable and fulfil the same order differently twice;
 - every binding is resolved — a process that no longer exists fails the publish;
 - every item has both processes, and translations for every declared language;
 - ranks are unique.
@@ -239,6 +257,12 @@ discrepancy, which no other system in the estate can do.
   applications for versioning, the engine for orders, the state store for the inventory.
 - Bad: the most machinery. Three stores must agree about what a service *is*, which is
   what the catalogue item id is for and what a review must check.
+
+## Implementation
+
+`api/catalog` carries the catalogue model and `Publish` — the validation and the
+topological sort described above. The order, the basket and the inventory are not
+built yet, which is why this record reads `Partial`.
 
 ## Links
 
