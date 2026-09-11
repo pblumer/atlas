@@ -133,12 +133,24 @@ func TestAReturnIsRefusedFromUnderSomethingThatNeedsIt(t *testing.T) {
 		t.Errorf("the refusal does not name what is in the way: %s", body)
 	}
 
-	// The laptop first, and then the account may follow.
+	// The laptop first.
 	if code, b := returnLine(t, ts, admin, orderID, "laptop"); code != http.StatusOK {
 		t.Fatalf("returning the laptop: %d (%s)", code, b)
 	}
+
+	// And the account still waits, because a revocation that has been *asked for*
+	// has not happened: until the laptop's return confirms, the laptop is there.
+	if code, _ := returnLine(t, ts, admin, orderID, "account"); code != http.StatusConflict {
+		t.Errorf("the account went while the laptop's own return was only under way: %d", code)
+	}
+
+	// Confirmed gone, and now it may follow.
+	if code, b := cReq(t, admin, ts, "POST",
+		fmt.Sprintf("/api/v1/orders/%s/lines/laptop", orderID), `{"status":"returned"}`); code != http.StatusOK {
+		t.Fatalf("report the laptop returned: %d (%s)", code, b)
+	}
 	if code, b := returnLine(t, ts, admin, orderID, "account"); code != http.StatusOK {
-		t.Fatalf("returning the account once the laptop is going back: %d (%s)", code, b)
+		t.Fatalf("returning the account once the laptop is confirmed gone: %d (%s)", code, b)
 	}
 }
 
