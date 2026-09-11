@@ -433,6 +433,13 @@ func TestCheckLaunchesNothing(t *testing.T) {
 	}
 }
 
+// sandboxE2EEnv lets an environment that is known to be able to run the end-to-end
+// sandbox check say so. Without it every reason to skip is legitimate and silent,
+// which is a poor property for the one test that proves the profile actually runs an
+// interpreter: `go test` hides skips unless it is given -v, so a guard that quietly
+// stopped guarding anything looks exactly like a guard that passed. CI sets it.
+const sandboxE2EEnv = "ATLAS_SANDBOX_E2E"
+
 // The regression this whole change exists for: every interpreter installed on this
 // host must actually start inside the strict policy and run its own bootstrap, not
 // merely resolve on PATH. PowerShell did neither while Python and JavaScript did
@@ -444,20 +451,32 @@ func TestCheckLaunchesNothing(t *testing.T) {
 // script-sandbox subcommand. Everything below it — policy, interpreter, bootstrap —
 // is the production path.
 func TestStrictSandboxStartsEveryInstalledInterpreter(t *testing.T) {
+	required := strings.EqualFold(strings.TrimSpace(os.Getenv(sandboxE2EEnv)), "required")
 	if err := sandboxSupport(); err != nil {
+		if required {
+			t.Fatalf("%s=required, but this kernel cannot enforce the strict sandbox: %v", sandboxE2EEnv, err)
+		}
 		t.Skipf("kernel cannot enforce the strict sandbox: %v", err)
 	}
+
+	exercised, skipped := 0, map[string]string{}
 	for _, lang := range Langs {
 		t.Run(lang.Name, func(t *testing.T) {
 			path, err := exec.LookPath(lang.Bin)
 			if err != nil {
-				t.Skipf("%s is not installed", lang.Bin)
+				skipped[lang.Name] = lang.Bin + " is not installed"
+				t.Skip(skipped[lang.Name])
 			}
 			if path, err = filepath.Abs(path); err != nil {
 				t.Fatal(err)
 			}
+			// Not a defect in the test environment but a fact about it: an interpreter
+			// outside the runtime roots is one strict refuses in production too. It is
+			// ordinary on a host whose toolchain unpacks runtimes elsewhere, so it
+			// skips rather than fails — but it does not count as proof of anything.
 			if !interpreterInSandboxRuntime(path) {
-				t.Skipf("%s is installed outside the sandbox runtime, at %s", lang.Bin, path)
+				skipped[lang.Name] = lang.Bin + " is installed outside the sandbox runtime, at " + path
+				t.Skip(skipped[lang.Name])
 			}
 			scratch, err := os.MkdirTemp("", "atlas-sandbox-start-")
 			if err != nil {
@@ -475,7 +494,34 @@ func TestStrictSandboxStartsEveryInstalledInterpreter(t *testing.T) {
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("%s did not start inside the strict sandbox: %v\n%s", lang.Bin, err, out)
 			}
+			exercised++
 		})
+	}
+	if exercised > 0 {
+		return
+	}
+	reasons := make([]string, 0, len(skipped))
+	for _, lang := range Langs {
+		if why, ok := skipped[lang.Name]; ok {
+			reasons = append(reasons, why)
+		}
+	}
+	why := strings.Join(reasons, "; ")
+	if required {
+		t.Fatalf("%s=required, but no interpreter was exercised inside the sandbox: %s", sandboxE2EEnv, why)
+	}
+	t.Skipf("no interpreter could be exercised inside the sandbox: %s", why)
+}
+
+// Whether the check above is allowed to be silent is itself worth asserting: the
+// switch exists so that an environment which can run it cannot quietly stop.
+func TestSandboxE2ERequirementIsOffUnlessAskedFor(t *testing.T) {
+	for _, value := range []string{"", "0", "yes", "Required "} {
+		t.Setenv(sandboxE2EEnv, value)
+		got := strings.EqualFold(strings.TrimSpace(os.Getenv(sandboxE2EEnv)), "required")
+		if want := value == "Required "; got != want {
+			t.Errorf("%s=%q read as required=%v, want %v", sandboxE2EEnv, value, got, want)
+		}
 	}
 }
 
