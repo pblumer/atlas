@@ -69,7 +69,7 @@ type approvalMoveResp struct {
 // third one going somewhere it has already been.
 func (s *Server) handleEscalateApproval(w http.ResponseWriter, r *http.Request) {
 	var req escalateReq
-	if err := decodeApprovalMove(r, &req); err != nil {
+	if err := s.decodeApprovalMove(r, &req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -91,7 +91,7 @@ func (s *Server) handleEscalateApproval(w http.ResponseWriter, r *http.Request) 
 // will act, not so that whoever finds it can take it and approve it.
 func (s *Server) handleReassignApproval(w http.ResponseWriter, r *http.Request) {
 	var req reassignReq
-	if err := decodeApprovalMove(r, &req); err != nil {
+	if err := s.decodeApprovalMove(r, &req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -118,8 +118,14 @@ func (s *Server) handleReassignApproval(w http.ResponseWriter, r *http.Request) 
 }
 
 // decodeApprovalMove reads a small JSON body, tolerating an empty one.
-func decodeApprovalMove(r *http.Request, into any) error {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<10))
+//
+// The ceiling is the installation's ordinary request budget rather than a number
+// chosen here. These bodies hold one identifier or one sentence, so any of the
+// budgets would do — which is exactly why writing one down would have been a
+// budget nobody could find or configure, and limits.TestNoCeilingWithoutAName is
+// what caught it.
+func (s *Server) decodeApprovalMove(r *http.Request, into any) error {
+	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().Request))
 	if err != nil {
 		return errors.New("read body: " + err.Error())
 	}

@@ -42,8 +42,17 @@ func Returnable(o Order, itemID string) error {
 	if !found {
 		return fmt.Errorf("order %s carries no line for %s", o.ID, itemID)
 	}
-	if !line.Status.Held() {
-		return fmt.Errorf("order: line %s is %s and is not held by anybody", itemID, line.Status)
+	// Narrower than Held on purpose. A line already on its way back must not be
+	// asked for twice — two revocations racing against one target system is how a
+	// half-deleted account happens — while one whose revocation failed is exactly
+	// what a retry is for.
+	if line.Status != StatusDone && line.Status != StatusReturnFailed {
+		switch line.Status {
+		case StatusReturning:
+			return fmt.Errorf("order: line %s is already going back", itemID)
+		default:
+			return fmt.Errorf("order: line %s is %s and is not held by anybody", itemID, line.Status)
+		}
 	}
 	if line.DeprovisionProcess == "" {
 		return fmt.Errorf("order: line %s names no process to revoke it with", itemID)
@@ -55,8 +64,9 @@ func Returnable(o Order, itemID string) error {
 	return nil
 }
 
-// stillNeeding names the held lines that require this one, sorted so the message
-// is the same every time.
+// stillNeeding names the lines that require this one and are still held — which
+// includes one whose own return is under way or has failed, because neither is
+// gone. Sorted, so the message is the same every time.
 func stillNeeding(o Order, itemID string) []string {
 	held := map[string]bool{}
 	for _, l := range o.Lines {

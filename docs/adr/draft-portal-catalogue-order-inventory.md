@@ -582,8 +582,26 @@ act with a different risk, and one click doing both deletes accounts on a mis-cl
 the same reason the page asks before it starts one.
 
 Reporting it goes through the same endpoint a provisioning reports through, and only a
-line already `returning` may be reported `returned` — otherwise a provisioning worker
-could take a line somebody holds and record it as given back with nothing having run.
+line already `returning` may be reported `returned` or `returnFailed` — otherwise a
+provisioning worker could take a line somebody holds and record it as given back with
+nothing having run.
+
+**A revocation that runs and fails is its own status**, because the two plausible
+alternatives both lose something. Read as `failed`, a reader concludes nobody has it —
+and the precedence guard would then let the account underneath be revoked out from under
+something very much still there. Fallen back to `done`, the fact that a revocation was
+attempted and lost is gone, and the next person to look sees an ordinary held line with
+no sign anything went wrong. So `returnFailed`: still **held**, not **settled**, and
+asking for the return again is the ordinary repair.
+
+**"Held" is wider than "provisioned", and that is the correction this cost.** The first
+cut asked only whether a line was `done`, so a laptop whose revocation had merely been
+*asked for* did not stop the account underneath from being revoked — the precise harm
+the guard exists to prevent, written into the guard. A revocation that has been
+requested has not happened: until it confirms, the access is there, and one that failed
+is plainer still. Both count as held. What may be *returned* is the narrower question,
+and asks separately — a return already under way must not be asked for twice, because
+two revocations racing against one target system is how a half-deleted account happens.
 
 Two things this deliberately is not. It is not the **inventory**: "what you hold, and
 giving it back" is the recipient's question, and the recipient cannot see an order at

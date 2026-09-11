@@ -38,7 +38,7 @@ func TestNothingIsGivenBackFromUnderSomethingThatNeedsIt(t *testing.T) {
 		t.Errorf("the refusal does not name what is in the way: %v", err)
 	}
 
-	// The laptop goes first, and then the account may follow.
+	// The laptop goes first.
 	if err := Returnable(o, "laptop"); err != nil {
 		t.Fatalf("the laptop, which nothing needs, was refused: %v", err)
 	}
@@ -46,8 +46,88 @@ func TestNothingIsGivenBackFromUnderSomethingThatNeedsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Returning: %v", err)
 	}
-	if err := Returnable(o, "account"); err != nil {
-		t.Errorf("the account is still refused once the laptop is on its way back: %v", err)
+
+	// And the account waits until the laptop is *confirmed* gone, not merely until
+	// its revocation was asked for. A requested return has not happened: the access
+	// is there until it confirms, and the first cut of this guard let the account
+	// be revoked out from under a laptop that was still working.
+	if err := Returnable(o, "account"); err == nil {
+		t.Error("the account went while the laptop's own return was only under way")
+	}
+	// A revocation that ran and failed is the plainest case of all: the laptop is
+	// still there, and now somebody knows it.
+	failed, err := Apply(o, "laptop", StatusReturnFailed, 150)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if err := Returnable(failed, "account"); err == nil {
+		t.Error("the account went while the laptop's revocation had failed")
+	}
+
+	back, err := Apply(o, "laptop", StatusReturned, 200)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if err := Returnable(back, "account"); err != nil {
+		t.Errorf("the account is still refused once the laptop is confirmed gone: %v", err)
+	}
+}
+
+// TestARevocationIsNotAskedForTwice: two revocations racing against one target
+// system is how a half-deleted account happens.
+func TestARevocationIsNotAskedForTwice(t *testing.T) {
+	o, err := Returning(aHeldOrder(), "laptop", 100)
+	if err != nil {
+		t.Fatalf("Returning: %v", err)
+	}
+	err = Returnable(o, "laptop")
+	if err == nil {
+		t.Fatal("a return already under way was asked for again")
+	}
+	if !strings.Contains(err.Error(), "already going back") {
+		t.Errorf("the refusal reads as if nobody holds it: %v", err)
+	}
+}
+
+// TestAFailedRevocationCanBeTriedAgain — the ordinary repair: fix the target
+// system, ask once more.
+func TestAFailedRevocationCanBeTriedAgain(t *testing.T) {
+	o, err := Returning(aHeldOrder(), "laptop", 100)
+	if err != nil {
+		t.Fatalf("Returning: %v", err)
+	}
+	o, err = Apply(o, "laptop", StatusReturnFailed, 150)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if err := Returnable(o, "laptop"); err != nil {
+		t.Fatalf("a failed revocation could not be retried: %v", err)
+	}
+	if _, err := Returning(o, "laptop", 200); err != nil {
+		t.Errorf("Returning after a failure: %v", err)
+	}
+}
+
+// TestAFailedRevocationIsNotAFailedProvisioning. Read as Failed, a reader would
+// conclude nobody has it — and the precedence guard would let the account
+// underneath be revoked out from under something very much still there.
+func TestAFailedRevocationIsNotAFailedProvisioning(t *testing.T) {
+	if StatusReturnFailed == StatusFailed {
+		t.Fatal("the two are the same value")
+	}
+	if !StatusReturnFailed.Held() {
+		t.Error("a failed revocation reads as not held; the thing is still there")
+	}
+	if StatusFailed.Held() {
+		t.Error("a failed provisioning reads as held")
+	}
+	if StatusReturnFailed.Settled() {
+		t.Error("a failed revocation is settled, so the order would close over it " +
+			"while somebody still holds what they gave back")
+	}
+	// Only the return that was asked for reports it.
+	if _, err := Apply(aHeldOrder(), "laptop", StatusReturnFailed, 100); err == nil {
+		t.Error("a held line was recorded as a failed revocation with nothing running")
 	}
 }
 
@@ -120,8 +200,13 @@ func TestAReturnedLineIsNotACancelledOne(t *testing.T) {
 		t.Error("a line on its way back is settled; an order would report itself finished " +
 			"while an account is half-deleted")
 	}
-	if StatusReturned.Held() || StatusReturning.Held() {
-		t.Error("a line being or having been given back still reads as held")
+	if StatusReturned.Held() {
+		t.Error("a line already given back still reads as held")
+	}
+	// A revocation that has only been *asked for* has not happened. Until it
+	// confirms, the access is there.
+	if !StatusReturning.Held() {
+		t.Error("a return under way reads as gone before anything confirmed it")
 	}
 	if !StatusDone.Held() || StatusSkipped.Held() {
 		t.Error("Held does not mean what this order granted")

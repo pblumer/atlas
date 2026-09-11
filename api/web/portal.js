@@ -45,6 +45,7 @@ const STRINGS = {
     'status.returning': 'Wird zurückgegeben',
     'status.returned': 'Zurückgegeben',
     'portal.return.sure': 'Diese Leistung wirklich zurückgeben? Der Zugang wird entzogen.',
+    'status.returnFailed': 'Rücknahme gescheitert',
     'status.pending': 'Wartet',
     'status.running': 'Läuft',
     'status.done': 'Erledigt',
@@ -85,6 +86,7 @@ const STRINGS = {
     'status.returning': 'Being returned',
     'status.returned': 'Returned',
     'portal.return.sure': 'Really give this back? The access will be revoked.',
+    'status.returnFailed': 'Return failed',
     'status.pending': 'Waiting',
     'status.running': 'In progress',
     'status.done': 'Done',
@@ -368,8 +370,14 @@ function cancellable(order) {
 // laptop that still uses it is the mistake the guard exists for, and offering the
 // button would invite it before the server refused it.
 function returnable(order, line) {
-  if (line.status !== 'done') return false;
-  const held = new Set((order.lines || []).filter((l) => l.status === 'done').map((l) => l.itemId));
+  if (line.status !== 'done' && line.status !== 'returnFailed') return false;
+  // Held is wider than "done": a revocation only asked for has not happened, and
+  // one that failed plainly has not. Either way the access is still there, and
+  // offering to revoke what is underneath would invite the mistake the server
+  // then refuses.
+  const held = new Set((order.lines || [])
+    .filter((l) => ['done', 'returning', 'returnFailed'].includes(l.status))
+    .map((l) => l.itemId));
   const requires = order.requires || {};
   for (const [dependent, needs] of Object.entries(requires)) {
     if (held.has(dependent) && (needs || []).includes(line.itemId)) return false;

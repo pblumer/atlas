@@ -48,7 +48,7 @@ func (s *Server) handleCancelOrder(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
 
 	var req cancelReq
-	if err := decodeApprovalMove(r, &req); err != nil {
+	if err := s.decodeApprovalMove(r, &req); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}

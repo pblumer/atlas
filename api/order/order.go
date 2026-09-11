@@ -65,6 +65,19 @@ const (
 	// system, and an order that reported itself finished while an account was
 	// half-deleted would be reporting the thing it is least entitled to guess at.
 	StatusReturning LineStatus = "returning"
+	// StatusReturnFailed is a revocation that ran and did not succeed: the
+	// recipient still has the thing, and somebody has to do something about it.
+	//
+	// It is not Failed, which says a provisioning never delivered — a reader
+	// seeing that would conclude nobody has it, and the precedence guard would let
+	// the account underneath be revoked out from under something that is very much
+	// still there. And it is not a silent fall back to Done, which would lose the
+	// fact that a revocation was attempted and lost: the next person to look sees
+	// an ordinary held line and no sign anything went wrong.
+	//
+	// Asking for the return again is the ordinary repair — fix the target system,
+	// try once more — and is what [Returnable] accepts it for.
+	StatusReturnFailed LineStatus = "returnFailed"
 	// StatusReturned is a line that was provisioned and has been given back.
 	//
 	// Distinct from Cancelled, which is a line that never was: a record that says
@@ -102,13 +115,29 @@ func (s LineStatus) Settled() bool {
 	return false
 }
 
-// Held reports whether the recipient has this line's product because of this
-// order. Only a provisioned line is held: a skipped one they got elsewhere and
-// this order never granted, and a returned one they no longer have.
+// Held reports whether the recipient has this line's product, as far as anybody
+// knows, because of this order.
 //
-// It is what deprovisioning asks about, and what the precedence guard asks about
-// — a line may only be given back once nothing that needed it is still held.
-func (s LineStatus) Held() bool { return s == StatusDone }
+// Three statuses say yes, and the two beyond Done are the point. A revocation that
+// has been *asked for* has not happened: until it confirms, the access is there,
+// and treating a requested return as an absence would let the account underneath
+// be revoked out from under a laptop that is still working. One that ran and
+// failed is even plainer — it is still held, and now somebody knows it.
+//
+// A skipped line they got elsewhere and this order never granted; a returned one
+// they no longer have; everything before Done was never delivered.
+//
+// This is what the precedence guard asks: a line may only be given back once
+// nothing that needed it is still held. It is deliberately *not* what decides
+// whether a line may be returned — see [Returnable], which asks a narrower
+// question, because a return already under way must not be asked for twice.
+func (s LineStatus) Held() bool {
+	switch s {
+	case StatusDone, StatusReturning, StatusReturnFailed:
+		return true
+	}
+	return false
+}
 
 // Cancellable reports whether a line can still be withdrawn.
 //
