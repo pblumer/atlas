@@ -44,6 +44,8 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTJob, model.IntentJobAssigned):                  handleJobAssigned,
 		handlerKey(model.VTJob, model.IntentJobActivated):                 handleJobActivate,
 		handlerKey(model.VTIncident, model.IntentIncidentResolved):        handleIncidentResolved,
+		handlerKey(model.VTEntitlement, model.IntentEntitlementGranted):   handleEntitlementGranted,
+		handlerKey(model.VTEntitlement, model.IntentEntitlementRevoked):   handleEntitlementRevoked,
 		handlerKey(model.VTTimer, model.IntentTimerTriggered):             handleTimerTriggered,
 		handlerKey(model.VTTimer, model.IntentTimerStartArm):              handleTimerStartArm,
 		handlerKey(model.VTMessage, model.IntentMessagePublished):         handleMessagePublished,

@@ -180,6 +180,23 @@ func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	return err
 }
 
+// --- Entitlement ---
+
+// PutEntitlement records that a principal holds an item. Writing one that is
+// already there replaces it, which is how a re-grant after a revocation reads: one
+// entitlement with a new start, not two overlapping ones.
+func (t *Tx) PutEntitlement(v *model.EntitlementValue) error {
+	return t.b.Set(keyEntitlement(v.Principal, v.ItemID), t.encodeValue(v), nil)
+}
+
+// DeleteEntitlement removes one. Deleting one that is absent is a harmless no-op:
+// a revocation of something nobody was recorded as holding is the state the caller
+// asked for, and refusing it would make a reconciliation that removes a privilege
+// twice into an error.
+func (t *Tx) DeleteEntitlement(principal, itemID string) error {
+	return t.b.Delete(keyEntitlement(principal, itemID), nil)
+}
+
 // --- Incident ---
 
 // PutIncident writes an incident, keyed by the element instance it is attached to.

@@ -52,6 +52,7 @@ const (
 	cfElementTermination     columnFamily = 0x27 // elTerm:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
+	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-draft-portal-catalogue-order-inventory)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -697,4 +698,25 @@ func trailingKey(k []byte) uint64 {
 // which a whole-store scan needs and a per-instance one already knew.
 func instanceFromReplayKey(k []byte) uint64 {
 	return binary.BigEndian.Uint64(k[1:])
+}
+
+// entitlementPrefix keys everything one principal holds.
+//
+// The principal comes first because that is the question the inventory is asked:
+// what does this person have. A separator byte follows it — 0x00, which no
+// principal id contains — so a principal whose id is a prefix of another's cannot
+// have the other's entitlements scanned into their own answer. The item id is the
+// trailing, variable-length component, exactly as a variable's name is under its
+// scope.
+func entitlementPrefix(principal string) []byte {
+	out := append([]byte{byte(cfEntitlement)}, principal...)
+	return append(out, 0x00)
+}
+
+// keyEntitlement keys one thing one principal holds. Holding the same item twice
+// is one entitlement, not two: whether a service may be held more than once is a
+// property of the service, and where it is, the variant is what distinguishes the
+// two — which is a per-variant key and a migration, named as such in the record.
+func keyEntitlement(principal, itemID string) []byte {
+	return append(entitlementPrefix(principal), itemID...)
 }

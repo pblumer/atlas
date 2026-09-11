@@ -1399,6 +1399,8 @@ func newValue(vt ValueType) Value {
 		return &ProcessMigrationValue{}
 	case VTVariableIndex:
 		return &VariableIndexValue{}
+	case VTEntitlement:
+		return &EntitlementValue{}
 	default:
 		return nil
 	}
