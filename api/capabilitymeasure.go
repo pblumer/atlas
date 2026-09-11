@@ -10,7 +10,7 @@ import (
 )
 
 // measureCapability reads what the engine recorded for a capability's realising
-// processes, over one window (ADR-draft-measuring-a-capability; the evidence that this
+// processes, over one window (ADR-0309; the evidence that this
 // is affordable at all is benchmarks/results/measurement-381825f.md).
 //
 // It is the only read in the business-architecture area that does **not** run inside

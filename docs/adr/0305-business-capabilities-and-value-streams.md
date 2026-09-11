@@ -17,7 +17,7 @@
 > window. The per-element counters are flat at any volume; the instance walk is linear,
 > which is affordable over a window and not over all history. The exporter is an
 > optimisation for unbounded historical analysis, not a prerequisite. The decision it
-> produced is ADR-draft-measuring-a-capability, and the front matter's open-question
+> produced is ADR-0309, and the front matter's open-question
 > lines came off with it rather than being left to expire.
 
 ## Context and problem statement

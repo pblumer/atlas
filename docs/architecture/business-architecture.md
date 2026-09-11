@@ -431,7 +431,7 @@ that settled the record's open question found the instance walk linear — 1.24 
 over 100 000 finished cases — while the per-element counters stay flat at any volume.
 An SLA is measured only where it carries `thresholdSeconds`; one written as prose, and
 every KPI, is listed as not measured with the reason
-([ADR-draft-measuring-a-capability](../adr/draft-measuring-a-capability.md),
+([ADR-0309](../adr/0309-measuring-a-capability.md),
 [the evidence](../../benchmarks/results/measurement-381825f.md)). **So are Panorama's binding keys**: an ArchiMate `Capability` carries
 `atlas.capabilityKey` and a `ValueStream` carries `atlas.valueStreamKey`, so a drawing
 and this register are the same architecture seen twice. The key travels in the exchange

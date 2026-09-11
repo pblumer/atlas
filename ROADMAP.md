@@ -1694,7 +1694,7 @@ the method and how to work it with Atlas as it stands are in
   in the business's words refers to would put a number somebody acts on under a name
   nobody authored. This is the one read in the area that runs off the run loop
   ([ADR-0239](docs/adr/0239-off-loop-queries.md))
-  ([ADR-draft-measuring-a-capability](docs/adr/draft-measuring-a-capability.md)).
+  ([ADR-0309](docs/adr/0309-measuring-a-capability.md)).
 - 🔲 **B8 — The Console surface.** A capability list that is worth opening: filter by
   tag, sort by realisation state, and the gap report as the landing view rather than a
   report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).

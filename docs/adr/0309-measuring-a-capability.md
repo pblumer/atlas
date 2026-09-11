@@ -1,4 +1,4 @@
-# ADR-DRAFT: Measuring a capability
+# ADR-0309: Measuring a capability
 
 - **Status:** Accepted
 - **Implementation:** Landed

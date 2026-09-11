@@ -12,7 +12,7 @@ import (
 // new storage — it is that the numbers were already there, in the per-element counters
 // (ADR-0080) and on the instance records themselves. The measurement
 // (benchmarks/results/measurement-381825f.md) settled ADR-0305's open question, and the
-// decision it produced is ADR-draft-measuring-a-capability: three
+// decision it produced is ADR-0309: three
 // of the four readings cost microseconds at any volume, and the two that walk
 // instances are linear, which is affordable over a window and not over all history.
 //
