@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A timer in the token simulation now says which timer it is.** The Design-view simulation
+  deliberately does not honour the clock — a person fires a timer, or auto-decide does — and
+  that decision stands. What did not stand is showing nothing about the time the author
+  modelled: a five-minute wait, a thirty-day deadline and an hourly reminder were the same
+  hourglass with the same tooltip, so the element's entire content was invisible to the person
+  deciding whether to fire it. Each affordance now carries the modelled duration, date or cycle
+  as it was written. A boundary event also shows the glyph of what it catches instead of one
+  shared spark for every kind, so a timer boundary and a message boundary stop looking alike.
+
+  Timer behaviour itself was already correct and is unchanged: an interrupting deadline cancels
+  its activity and routes out the boundary, a non-interrupting reminder fires as often as it
+  comes round and leaves the activity running.
+
 - **The token simulation tells a message from a signal again, and sees the task forms of
   both.** Two things separate the two events, and the Design-view simulation had lost both.
 

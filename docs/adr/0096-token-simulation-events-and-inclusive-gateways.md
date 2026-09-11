@@ -110,6 +110,13 @@ the lesson.
   in the UI) over creeping toward a browser engine. Multi-instance and event-subprocess
   (ADR-0082) triggers are the natural next increments within the same module.
 
+- **Refined since (a timer says which timer it is):** not honouring the clock is a decision this
+  ADR defends; showing nothing about the time that was modelled was not. A five-minute wait, a
+  thirty-day deadline and an hourly reminder were the same hourglass with the same tooltip, so
+  the element's whole content was invisible to the person deciding whether to fire it. Each
+  affordance now carries the modelled `timeDuration` / `timeDate` / `timeCycle` as the author
+  wrote it, and a boundary event shows the glyph of what it catches rather than one shared spark
+  for every kind. The behaviour was already right, and is unchanged.
 - **Corrected since (message 1:1, and the task forms):** this ADR specified a throw reaching
   every catch that names the same **message (1:1)** or **signal (broadcast to all)**, but the
   implementation delivered to every same-named catch either way. That erased the one property

@@ -32,6 +32,24 @@ const eventDefs = (el) => (el.businessObject && el.businessObject.eventDefinitio
 const hasDef = (el, t) => eventDefs(el).some((d) => d.$type === t);
 const isMessageEvent = (el) => hasDef(el, "bpmn:MessageEventDefinition");
 const isTimerEvent = (el) => hasDef(el, "bpmn:TimerEventDefinition");
+// timerSpec reads the time a timer event models: a duration to wait, a date to wait until, or a
+// cycle to repeat on. The simulation deliberately does not honour the clock — a person fires the
+// timer, or auto-decide does (ADR-0096) — but a five-minute wait, a thirty-day deadline and an
+// hourly reminder are otherwise the same hourglass, and which of them it is was the whole
+// content of the element. It is shown as the author wrote it: an ISO-8601 expression says
+// exactly what it means, and prose about it would not.
+const timerSpec = (el) => {
+  const d = eventDefs(el).find((x) => x.$type === "bpmn:TimerEventDefinition");
+  if (!d) return null;
+  const body = (x) => (x && typeof x.body === "string" ? x.body.trim() : "");
+  const duration = body(d.timeDuration);
+  if (duration) return `after ${duration}`;
+  const date = body(d.timeDate);
+  if (date) return `at ${date}`;
+  const cycle = body(d.timeCycle);
+  if (cycle) return `every ${cycle}`;
+  return null;
+};
 const isSignalEvent = (el) => hasDef(el, "bpmn:SignalEventDefinition");
 
 // messageName / signalName read the correlated name off the event definition, so a throw
@@ -1871,7 +1889,10 @@ TokenSimulation.prototype._render = function () {
     // is not offered: nothing a person does fires a compensation or cancel boundary.
     for (const b of this._boundaries.get(id) || []) {
       if (isInertBoundary(b)) continue;
-      this._drawFire(b, "&#9889;", () => this._fireBoundary(b), this._boundaryTitle(b));
+      // A boundary shows the glyph of what it catches, the way the affordance on a parked catch
+      // does: a timer boundary and a message boundary are not the same event, and were drawn as
+      // the same spark.
+      this._drawFire(b, this._triggerGlyph(b), () => this._fireBoundary(b), this._boundaryTitle(b));
     }
   }
   // Remove "here" glow from elements that no longer hold a token.
@@ -1941,6 +1962,7 @@ TokenSimulation.prototype._triggerGlyph = function (el) {
   if (hasDef(el, ERROR_DEF)) return "&#9888;"; // warning sign
   if (hasDef(el, ESCALATION_DEF)) return "&#8599;"; // up-right arrow — raised up the chain
   if (hasDef(el, CONDITIONAL_DEF)) return "&#9776;"; // lines, as the conditional marker draws them
+  if (isBoundary(el)) return "&#9889;"; // a boundary naming no trigger keeps the plain spark
   return "&#9654;"; // receive task — a plain "go"
 };
 
@@ -1950,7 +1972,7 @@ TokenSimulation.prototype._triggerGlyph = function (el) {
 TokenSimulation.prototype._triggerTitle = function (el) {
   if (hasDef(el, CONDITIONAL_DEF)) return "The condition now holds — release the waiting token";
   const kind = eventKindOf(el);
-  return `Fire this ${kind ? kind + " " : ""}event — release the waiting token`;
+  return `Fire this ${kind ? kind + " " : ""}event${whenSuffix(el)} — release the waiting token`;
 };
 
 // _faultKind names what a handler catches, for the affordance titles. A fault handler is
@@ -1970,17 +1992,22 @@ const eventKindOf = (el) =>
             : hasDef(el, CONDITIONAL_DEF)
               ? "conditional"
               : ""; // an event carrying no definition has no kind to name
+// whenSuffix appends the modelled time to an affordance's title, for the events that have one.
+const whenSuffix = (el) => {
+  const when = timerSpec(el);
+  return when ? ` (${when})` : "";
+};
 
 TokenSimulation.prototype._boundaryTitle = function (b) {
   const mode = isInterruptingCatch(b) ? "interrupting" : "non-interrupting";
   const kind = eventKindOf(b);
-  return `Fire this ${mode} ${kind ? kind + " " : ""}boundary event`;
+  return `Fire this ${mode} ${kind ? kind + " " : ""}boundary event${whenSuffix(b)}`;
 };
 
 TokenSimulation.prototype._eventSubTitle = function (start) {
   const mode = isInterruptingSub(start) ? "interrupting" : "non-interrupting";
   const kind = eventKindOf(start);
-  return `Trigger this ${mode} ${kind ? kind + " " : ""}event subprocess`;
+  return `Trigger this ${mode} ${kind ? kind + " " : ""}event subprocess${whenSuffix(start)}`;
 };
 
 // _drawFire adds a clickable "fire this event" affordance on an element. Like the spawn
@@ -2013,7 +2040,7 @@ TokenSimulation.prototype._drawStartAffordances = function () {
     if (!isProcessStart(el)) return;
     const btn = document.createElement("span");
     btn.className = "atlas-sim-spawn";
-    btn.title = "Spawn a token here";
+    btn.title = `Spawn a token here${whenSuffix(el)}`;
     btn.innerHTML = "&#9654;";
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();

@@ -96,6 +96,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`timer-events.spec.mjs`** ([ADR-0096](../docs/adr/0096-token-simulation-events-and-inclusive-gateways.md)):
+  the simulation does not honour the clock, so what a timer owes its reader is **which timer it
+  is** — the parked catch and both boundaries name the modelled duration or cycle, and a
+  boundary carries the hourglass rather than a shared spark. The behaviour half: a repeating
+  reminder fires as often as it comes round and leaves its activity running, an interrupting
+  deadline cancels it.
 - **`message-signal.spec.mjs`** ([ADR-0088](../docs/adr/0088-signal-events.md),
   [ADR-0101](../docs/adr/0101-token-simulation-throw-delivers-to-waiting-catch.md)): the two
   things that separate a message from a signal. A **send task** delivers to the **receive task**
