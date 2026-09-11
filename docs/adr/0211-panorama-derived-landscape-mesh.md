@@ -1082,6 +1082,56 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, seventh): the lines are drawn in ArchiMate's notation too,
+> and the relationship table is served rather than kept twice.**
+> The sixth amendment drew the elements in ArchiMate's own symbols and left the lines
+> between them as Atlas's: one solid, one dashed, one dotted. That is half an alphabet.
+> ArchiMate distinguishes Assignment, Triggering and Serving by what sits at the ends
+> of an otherwise identical **solid** line — a ball and a filled arrowhead, a filled
+> arrowhead, an open one — and a reader who works in the notation reads the ends
+> before they read anything else.
+>
+> Keeping the derived dash would not have been a missing statement but a wrong one.
+> In ArchiMate a dashed line with an open arrowhead is a **Flow** and a dotted line
+> with a hollow triangle is a **Realization**. Drawing `uses` dashed with an open head
+> would have said Flow where the data says Serving. So in this projection all three
+> lines are solid and the ends carry the whole distinction; Atlas's own picture is
+> untouched, where the dash is a free channel because the vocabulary has no opinion
+> about it.
+>
+> **The mapping moved to where the vocabulary already lives.** §8 requires the
+> projection's mapping to be explicit, and `api/panorama/notation.go` states the reason
+> it is Go rather than JavaScript: a table both sides keep a copy of is a table that
+> eventually disagrees with itself. That risk was theoretical while the relationship
+> types were only written into an exported file. It stopped being theoretical the
+> moment the canvas drew them, because a picture with Triggering's filled arrowhead on
+> an edge the file calls Serving is two answers to one question with nothing on either
+> surface saying which is true. The `Notation` rows therefore gained `Relations`, built
+> from the exporter's own table, and a test holds the two to being the same rows.
+>
+> `Flip` travels in that table rather than in the drawing code. ArchiMate's Serving
+> runs from the provider to the consumer and the derived `uses` edge runs from the
+> process to the worker it names; the reversal is a fact about the vocabulary, so the
+> export and the canvas each read it instead of each deciding it. On the picture the
+> arrowhead moves and the line does not: the geometry stays the landscape's, so the
+> hover, the impact walk and the exported document are all still looking at the edge
+> they always were.
+>
+> A marked line stops at the two reserved circles rather than running centre to
+> centre, because a mark at the centre of a node is a mark underneath it. The trim is
+> recomputed while a node is dragged, for the same reason.
+>
+> **The mapping version did not move, and that is a decision.** No row changed
+> meaning: those three relationship types are what the exporter wrote at version 1, and
+> a document generated then is what one generated now would be. What changed is who
+> reads the table. A version that moved for that would tell a reader their file might
+> differ when it cannot.
+>
+> One thing this amendment did not add and deliberately does not: the eight other
+> ArchiMate relationships. The landscape holds two facts about how things connect, and
+> three relationships is all two facts can honestly support. An absent Flow means
+> Atlas cannot see one, never that there is none, and the loss list says so.
+
 > **Amendment (2026-09-11, sixth): the ArchiMate projection is drawn in ArchiMate's
 > notation, not only in its vocabulary.**
 > §8 mapped each kind to an ArchiMate element type and wrote that type under the
