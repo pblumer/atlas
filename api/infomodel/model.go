@@ -100,7 +100,7 @@ type Lifecycle struct {
 	// StatesFrom names an «enumeration» in the same model whose literals are this
 	// lifecycle's states, or is empty — which is the normal case and means the states
 	// below are declared here and nowhere else
-	// (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration).
+	// (ADR-0306).
 	//
 	// It is a *reference*, not a merge. The enumeration answers which values there
 	// are; this answers in what order, which is the half no closed set of values can

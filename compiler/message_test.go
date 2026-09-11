@@ -331,18 +331,14 @@ func TestParseMessageErrors(t *testing.T) {
   </bpmn:process>
 </bpmn:definitions>`,
 		},
-		{
-			name: "throw event that is not a message",
-			xml: `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL">
-  <bpmn:process id="p">
-    <bpmn:startEvent id="s"/>
-    <bpmn:intermediateThrowEvent id="t"/>
-    <bpmn:endEvent id="e"/>
-    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
-    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
-  </bpmn:process>
-</bpmn:definitions>`,
-		},
+		// A case named "throw event that is not a message" stood here: an
+		// <intermediateThrowEvent/> with no event definition at all, asserted to be
+		// refused. It is a milestone now and compiles
+		// (ADR-0307), so the assertion was removed rather
+		// than reworded — the behaviour it described is gone, not renamed. What the case
+		// was really guarding, that the message branch's fallthrough does not accept an
+		// event definition the compiler cannot run, is asserted in nonethrow_test.go
+		// against five such definitions instead of one empty element.
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -333,33 +333,36 @@ instance volumes from the OpenSearch export
 ([ADR-0114](../adr/0114-opensearch-event-exporter.md)). Do not plan a KPI dashboard
 against `/metrics`.
 
-### The milestone gap
+### The milestone marker
 
 The method's milestone marker is a **none intermediate throw event** — an event with
 no execution semantics whose only job is to leave a trace in the engine's history, so
 that "identity verification started" becomes a readable business state even where no
 task sits at that point.
 
-**Atlas does not compile it today.** An intermediate throw event with no event
-definition is rejected by the compiler:
+**Atlas compiles it** ([ADR-0307](../adr/0307-the-milestone-event-compiles.md)).
+Draw an intermediate throw event, leave it without an event definition, name it after the
+point it marks. It waits for nothing and needs no worker: the token flows straight
+through. What it produces is the record — the visit counters count it, the instance's
+step trail carries it in order, and the Operations overlay lights it up — which is the
+whole difference between a milestone and a label on a sequence flow.
 
-```
-compiler: intermediate throw event "m": only message, signal, compensation,
-escalation, and link events are supported yet
-```
+It is not always the right element, and two alternatives leave the same trace:
 
-Until that changes, use what does compile and does leave a trace:
-
-- **an embedded subprocess per phase** — the honest substitute, since a phase boundary
-  is a milestone with a duration attached, which is usually the more useful reading;
+- **an embedded subprocess per phase**, where the point you want is a phase boundary. A
+  phase has a duration and a milestone does not, and the duration is usually the more
+  useful reading;
 - **the nearest named task**, whose visit and timestamps are recorded anyway. Every
   element leaves a trace in Atlas, so a milestone that coincides with a task needs no
   extra element at all.
 
-The dedicated marker earns its place only where no task sits at the point you want to
-measure. Supporting it is a small compiler change — the event compiles to a
-pass-through node, which link throw events already do — and it is a slice on the
-roadmap rather than a gap somebody has to rediscover.
+The dedicated marker earns its place where no task and no phase boundary sits at the
+point you want to measure.
+
+An intermediate throw event carrying a definition the engine does not implement — a
+timer, say, which BPMN allows only on a catch — is refused by name at deploy rather than
+compiled to a milestone, so a model that asks for a wait never silently runs straight
+through it.
 
 ## Distributing a KPI as SLAs
 
@@ -420,6 +423,9 @@ person is not checked, because Atlas cannot see either and reporting them would 
 reporting the limits of its eyesight as a defect in your architecture. And a reference
 outside your sharing scope is reported as restricted, never as missing.
 
+**The milestone event is built** — see [the milestone marker](#the-milestone-marker)
+above.
+
 **Not built, each a named slice on [Milestone B](../../ROADMAP.md):**
 
 - **Measurement.** Every KPI and SLA in the registry is a *declaration*. Nothing computes
@@ -429,7 +435,6 @@ outside your sharing scope is reported as restricted, never as missing.
   aggregated at the instance volumes this is aimed at, without the OpenSearch exporter,
   is the open question the decision record carries.
 - **Document-level exchange** of the map on its own, with a dry-run import.
-- **The milestone event** — see [the gap above](#the-milestone-gap).
 - **Panorama binding keys**, so an ArchiMate `Capability` on a drawing names a registry
   record.
 - **A model-side declaration**, so a process can state the capability it realises where

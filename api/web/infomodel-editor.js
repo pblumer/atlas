@@ -464,7 +464,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   //
   // The enumeration is where the *names* live; everything it cannot hold — the order,
   // the start, the ends, the layout — stays on the lifecycle
-  // (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). So every function
+  // (ADR-0306). So every function
   // here adds and removes and never overwrites: a state that survives keeps what
   // somebody set on it.
 

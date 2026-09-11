@@ -395,7 +395,7 @@ func TestValidateAcceptsAStateNothingReachesYet(t *testing.T) {
 	}
 }
 
-// --- a lifecycle whose states come from an «enumeration» (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration)
+// --- a lifecycle whose states come from an «enumeration» (ADR-0306)
 //
 // The model that prompted this had its five states written as an enumeration, with
 // documentation, because that was the only place they could be written at all. The

@@ -67,7 +67,7 @@ const (
 	CodeTransitionLeavesFinalState = "transition-leaves-final-state"
 
 	// A lifecycle sourced from an «enumeration»
-	// (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). All three say
+	// (ADR-0306). All three say
 	// the same kind of thing: the document claims its states come from a set, and then
 	// contradicts itself about what that set is or what is in it.
 	CodeLifecycleUnknownEnumeration = "lifecycle-unknown-enumeration"
@@ -226,7 +226,7 @@ func validateLifecycle(c *Class, kind StereotypeKind, classByName map[string]*Cl
 	// Where the states come from, if they come from anywhere but here. A nil map means
 	// the lifecycle declares its own states, which is the normal case and the one that
 	// has to behave exactly as it did before this existed
-	// (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration).
+	// (ADR-0306).
 	var literals map[string]bool
 	if from := strings.TrimSpace(c.Lifecycle.StatesFrom); from != "" {
 		src := classByName[from]
