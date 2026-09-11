@@ -38,6 +38,15 @@ const (
 	// StatusRejected is an approval refused. Not an incident, and never reported
 	// as one.
 	StatusRejected LineStatus = "rejected"
+	// StatusAbandoned is a failure nobody will repair: the incident behind it was
+	// given up on, by a person or by the deadline that sits on the incident.
+	//
+	// It exists because "an order stays open while a blockage is repairable" needs
+	// a way for a failure to stop being repairable — otherwise it reads as "an
+	// order never closes". The deadline is on the incident rather than on the
+	// order, because the incident is the thing that is actually stuck; the order
+	// follows it here.
+	StatusAbandoned LineStatus = "abandoned"
 	// StatusBlocked is a line that cannot be attempted because something it
 	// requires is Failed or Rejected. See Line.BlockedBy.
 	//
@@ -60,7 +69,7 @@ func (s LineStatus) Satisfied() bool { return s == StatusDone || s == StatusSkip
 // on its causes rather than on itself: see [Line.Terminal].
 func (s LineStatus) Settled() bool {
 	switch s {
-	case StatusDone, StatusSkipped, StatusFailed, StatusRejected:
+	case StatusDone, StatusSkipped, StatusFailed, StatusRejected, StatusAbandoned:
 		return true
 	}
 	return false
@@ -82,9 +91,10 @@ type Line struct {
 	// needs; "waiting because the docking station is waiting" is not.
 	BlockedBy []string `json:"blockedBy,omitempty"`
 	// TerminallyBlocked marks a blocked line that will never run: one of the things
-	// it requires was rejected, and a decision does not change because an incident
-	// was repaired. A line blocked only by failures is not terminal — somebody can
-	// still fix them, and the order waits.
+	// it requires was rejected or abandoned, and neither lifts. A decision does not
+	// change because an incident was repaired, and an abandoned incident is one
+	// nobody is repairing. A line blocked only by live failures is not terminal —
+	// somebody can still fix them, and the order waits.
 	//
 	// It is set by [Propagate] alongside BlockedBy and is meaningless on any other
 	// status.

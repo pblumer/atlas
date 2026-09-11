@@ -352,3 +352,85 @@ func TestRepairableBlockageKeepsAnOtherwiseFinishedOrderOpen(t *testing.T) {
 		t.Fatalf("Derive = %s, want running", s)
 	}
 }
+
+// A deadline sits on the incident, not on the order: the incident is the thing
+// that is actually stuck, and the order follows it. What the order model owes is
+// the ability to say that a failure will not be repaired after all — otherwise
+// "the order stays open while a blockage is repairable" means "the order never
+// closes", because nothing could ever stop being repairable.
+
+// TestAbandonedFailureSettlesItsDependents: once the incident behind a failure is
+// given up on, the lines waiting for it are finished, exactly as a rejection
+// finishes them. The cause differs; the consequence does not.
+func TestAbandonedFailureSettlesItsDependents(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusAbandoned, "vpn", StatusPending), req)
+
+	if s := statusOf(got, "vpn"); s != StatusBlocked {
+		t.Fatalf("vpn = %s, want blocked", s)
+	}
+	if by := blockedBy(got, "vpn"); by != "laptop" {
+		t.Fatalf("vpn blocked by %q, want laptop", by)
+	}
+	if s := Derive(got); s != OrderUnfulfilled {
+		t.Fatalf("Derive = %s, want unfulfilled — the incident was given up on", s)
+	}
+}
+
+// TestAbandonedIsNotAFailureWaitingToBeRepaired is the whole distinction: the
+// same two orders differ only in whether somebody is still going to fix the
+// laptop, and they settle differently.
+func TestAbandonedIsNotAFailureWaitingToBeRepaired(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+
+	open := Propagate(lines("laptop", StatusFailed, "vpn", StatusPending), req)
+	if s := Derive(open); s != OrderRunning {
+		t.Errorf("with a live incident Derive = %s, want running", s)
+	}
+
+	closed := Propagate(lines("laptop", StatusAbandoned, "vpn", StatusPending), req)
+	if s := Derive(closed); s != OrderUnfulfilled {
+		t.Errorf("with an abandoned incident Derive = %s, want unfulfilled", s)
+	}
+}
+
+// TestAbandonedAmongTheCausesSettlesTheLine: same rule as a rejection. One cause
+// that will not lift is enough, whatever the others do.
+func TestAbandonedAmongTheCausesSettlesTheLine(t *testing.T) {
+	req := requires(map[string][]string{"z": {"x", "y"}})
+	got := Propagate(lines(
+		"x", StatusFailed,
+		"y", StatusAbandoned,
+		"z", StatusPending,
+	), req)
+
+	if by := blockedBy(got, "z"); by != "x,y" {
+		t.Fatalf("z blocked by %q, want x,y", by)
+	}
+	if s := Derive(got); s != OrderUnfulfilled {
+		t.Fatalf("Derive = %s, want unfulfilled — y will not lift", s)
+	}
+}
+
+// TestAbandonedLineIsNotProvisioned: giving up on an incident does not make the
+// line count as delivered. An order of one abandoned line is unfulfilled, not
+// partial.
+func TestAbandonedLineIsNotProvisioned(t *testing.T) {
+	got := Propagate(lines("a", StatusDone, "b", StatusAbandoned), nil)
+	if s := Derive(got); s != OrderPartial {
+		t.Fatalf("Derive = %s, want partial", s)
+	}
+	if s := Derive(lines("a", StatusAbandoned)); s != OrderUnfulfilled {
+		t.Fatalf("Derive = %s, want unfulfilled", s)
+	}
+}
+
+// TestAbandonedPredicates: settled like a failure, satisfying nobody.
+func TestAbandonedPredicates(t *testing.T) {
+	if !StatusAbandoned.Settled() {
+		t.Error("abandoned must be settled — nothing further will happen to it")
+	}
+	if StatusAbandoned.Satisfied() {
+		t.Error("abandoned must not satisfy a dependent — it was never provisioned")
+	}
+}

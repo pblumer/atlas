@@ -50,7 +50,7 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 		found := map[string]bool{}
 		for _, need := range requires[id] {
 			switch s := status[need]; {
-			case s == StatusFailed || s == StatusRejected:
+			case s == StatusFailed || s == StatusRejected || s == StatusAbandoned:
 				// A direct cause. It is the root: it has a fault or a decision of
 				// its own, not an inherited one.
 				found[need] = true
@@ -94,11 +94,12 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 		if blocking := causes(out[i].ItemID); len(blocking) > 0 {
 			out[i].Status = StatusBlocked
 			out[i].BlockedBy = blocking
-			// One rejection among the causes settles the line whatever happens to
-			// the rest: repairing an incident cannot undo a decision, so there is
-			// nothing left to wait for.
+			// One cause that will not lift settles the line whatever happens to the
+			// rest: repairing an incident cannot undo a decision, and an abandoned
+			// incident is one nobody is repairing. Either way there is nothing left
+			// to wait for.
 			for _, c := range blocking {
-				if status[c] == StatusRejected {
+				if s := status[c]; s == StatusRejected || s == StatusAbandoned {
 					out[i].TerminallyBlocked = true
 					break
 				}

@@ -176,10 +176,19 @@ precondition releases the line that was waiting on it, with nobody rewriting a s
 by hand. And it is what decides how long an order lives — **an order stays open while
 any blockage can still be repaired.** A failure is an incident somebody can fix, after
 which the line runs after all; a rejection will not change, so waiting on one is
-waiting for nothing. One rejection among a line's causes settles it whatever happens to
+waiting for nothing. One cause that will not lift settles the line whatever happens to
 the rest. Settling an order while an incident behind it is being worked would tell the
 orderer their line is never coming, at the moment somebody is fixing the reason it has
-not. A generic
+not.
+
+For that to close rather than run forever, a failure has to be able to **stop** being
+repairable, and the deadline that decides it sits on the **incident**, not on the
+order. The incident is the thing actually stuck; a deadline on the order would settle
+work that was about to succeed, and one on the order's own clock would have to guess at
+what the incident is doing. When an incident is given up on — by a person, or by that
+deadline — its line becomes *abandoned*, which settles like a failure and lifts like
+nothing: it is a failure nobody will repair. An incident already carries `RaisedAt`,
+frozen into its event, so its age needs no new state. A generic
 fulfilment process works the release's waves: every line in a wave starts its
 provisioning process as a call activity, and the next wave begins when the current one
 settles. When a line fails, every line that does not depend on it continues; dependent
