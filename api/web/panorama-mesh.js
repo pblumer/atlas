@@ -746,8 +746,28 @@ function radiusOf(node) {
 //
 // So the world grows with the content instead. The frame is a window onto it, the
 // opening view shows the whole thing, and reading it closely is what the zoom is
-// for. A small graph still gets at least a frame's worth of world, so nothing
-// changes for the handful-of-nodes case that was already comfortable.
+// for.
+//
+// It grows with the content and *only* with the content. There used to be a floor
+// here — a small graph got at least a frame's worth of world — on the reasoning that
+// the handful-of-nodes case was already comfortable and did not need changing. It
+// was the single biggest thing wrong with the opening view, and the arithmetic says
+// why. The world is shown at whatever scale fits it into the canvas, so a world
+// bigger than its content needs is a picture drawn smaller than it had to be, and
+// the floor is exactly that: with cells of about 98 units square, the floor stopped
+// binding only somewhere past twenty-five nodes, and everything below it was laid
+// out in a world several times too large. Measured at 1400x820, as the share of the
+// canvas the nodes' own footprints cover:
+//
+//	nodes         4    8    8   13   15   24   40   47  122
+//	with floor   3%   6%   6%  10%  12%  17%  18%  17%  17%
+//	without     17%  17%  18%  17%  17%  17%  18%  17%  17%
+//
+// The bottom row is what WORLD_FILL asks for, at every size. The row above it opens
+// at 3%: a four-node landscape drawn as four small circles adrift in an empty canvas,
+// which is what a small estate actually looked like, and what "the window is not
+// being used" meant. The floor's own defence — that a small graph was comfortable —
+// was never measured against the large graphs it was being compared to.
 function worldFor(nodes, frame) {
   let cells = 0;
   for (const n of nodes) {
@@ -757,8 +777,9 @@ function worldFor(nodes, frame) {
     cells += cell * cell;
   }
   const aspect = Math.max(frame.width, 1) / Math.max(frame.height, 1);
-  const area = Math.max(cells / WORLD_FILL, frame.width * frame.height);
-  const width = Math.sqrt(area * aspect);
+  // One density law for every estate size: the cells the nodes need, at the fill
+  // WORLD_FILL asks for, in the shape of the frame it will be shown in.
+  const width = Math.sqrt((cells / WORLD_FILL) * aspect);
   return { width, height: width / aspect };
 }
 
@@ -791,6 +812,116 @@ function separate(nodes, radii, gap, rounds = 24) {
     }
     if (!moved) return;
   }
+}
+
+// GATHER_REACH is how far a node may be drawn from its nearest neighbour, as a
+// multiple of how far the median node is from its own.
+//
+// The ratio is not a new idea about what "too far out" means: the table at
+// LOOSE_PULL is that exact quantity, and it already reads a worst case of about 1.6
+// as good and worst cases of 2.1 and 3.1 as bad. What is new is that it is enforced
+// rather than hoped for, and where the line falls was measured against pictures
+// rather than reasoned about. On a hub of twelve processes with one unattached one —
+// which is the estate shape this was reported on — the straggler settles at 2.07,
+// so a ceiling of 2 leaves it exactly where it was and the report stands. At 1.5 it
+// comes in, and the canvas it was holding open goes back into the picture. Below
+// that the returns stop: 1.3 moves it a little further for no visible difference.
+//
+// The ceiling costs nothing elsewhere. Across twenty-three estate shapes at four
+// window sizes, imposing it leaves the average share of the canvas the picture spans
+// exactly where it was, at 0.692, and takes the closest pair in the whole set from
+// 33 units of clear space to 41. On an estate that is mostly unattached nodes — six
+// applications and forty loose processes — the picture is indistinguishable either
+// way, because there the loose nodes are each other's neighbours already and nothing
+// is over the ceiling to begin with.
+const GATHER_REACH = 1.5;
+
+// gather is the dual of separate: separate puts a floor under how close two nodes
+// may be drawn, gather puts a ceiling on how far one may drift from the rest.
+//
+// It exists because the forces cannot promise this and the framing cannot survive
+// without it. A node the springs do not hold — one with no edges, or one in a small
+// component of its own — sits where the centring pull balances a repulsion that
+// falls off as 1/d², and that balance is a cube root of the constants: it lands far
+// out, and tuning the pull moves it by very little (LOOSE_PULL is that tuning, and
+// the worst case in its own table is still 3.1× the median). What happens next is
+// the expensive part. fitToFrame scales the *bounding box* onto the world, so one
+// node a long way out is not merely a node a long way out — it is the thing that
+// decides the scale, and everything else is squeezed into the fraction of the canvas
+// it leaves. That is the picture this was reported as: a cluster in one third of the
+// window, a single node hard against the far edge, and two thirds of the canvas
+// empty.
+//
+// So it is bounded here, deterministically, in the same place and for the same
+// reason separate is: a guarantee the simulation cannot make is made afterwards, by
+// arithmetic. A node further than GATHER_REACH from its nearest neighbour is moved
+// along the line toward that neighbour until it is exactly that far — no further, so
+// it stays the outlying thing it is and stays on the side of the picture it settled
+// on. What it stops being is the thing that sets the scale for everybody else.
+//
+// The reach is the picture's own median rather than a number, so it carries across
+// every world size and every estate: it says "further out than this landscape's own
+// spacing warrants", which is a statement about the landscape and not about pixels.
+// The median is taken once, before anything moves, so the pass cannot chase its own
+// tail.
+//
+// Held nodes do not move — somebody put them there — and the whole pass is skipped
+// while anything is pinned, exactly as the fit is, because both would slide a
+// hand-made arrangement out from under the hand that made it.
+//
+// What it deliberately does not catch: two nodes joined to each other and to nothing
+// else, out on their own. They are each other's nearest neighbour at a spring's rest
+// length, so by this measure neither is far from anything, and a pass that pulled
+// them in anyway would be measuring something else — how far a *component* is from
+// the mass. That is a larger claim and a more expensive one (it is single-linkage
+// clustering, not a pass over the pairs), and it is a rarer picture than the one
+// reported. Stating what is measured and what is not is worth more here than a
+// second mechanism that is nearly the first.
+function gather(nodes, radii, rounds = 4) {
+  // Below three nodes there is no median to speak of and nothing to be an outlier
+  // from: two nodes are each other's nearest neighbour whatever the distance.
+  if (nodes.length < 3) return nodes;
+  const near = nearestOf(nodes);
+  const sorted = [...near.map((n) => n.d)].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (!(median > 0)) return nodes;
+  const reach = GATHER_REACH * median;
+  for (let round = 0; round < rounds; round++) {
+    // Re-measured each round: pulling one node in can make it somebody else's
+    // nearest neighbour, and can leave whoever it was furthest from on its own.
+    const at = round === 0 ? near : nearestOf(nodes);
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i], j = at[i].at;
+      if (n.held || j < 0) continue;
+      const target = nodes[j];
+      // Never closer than the separation pass is about to insist on anyway, or the
+      // two would be pushed apart again and the round would have been wasted.
+      const want = Math.max(reach, radii[i] + radii[j] + NODE_ROOM);
+      if (at[i].d <= want) continue;
+      const step = (at[i].d - want) / at[i].d;
+      n.x += (target.x - n.x) * step;
+      n.y += (target.y - n.y) * step;
+      moved = true;
+    }
+    if (!moved) return nodes;
+  }
+  return nodes;
+}
+
+// nearestOf reports, for every node, which node is closest to it and how far away
+// that is. One pass over the pairs, so both the median and the offenders come out of
+// the same arithmetic.
+function nearestOf(nodes) {
+  const out = nodes.map(() => ({ at: -1, d: Infinity }));
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      if (d < out[i].d) { out[i].d = d; out[i].at = j; }
+      if (d < out[j].d) { out[j].d = d; out[j].at = i; }
+    }
+  }
+  return out;
 }
 
 // share splits an overlap between two nodes, giving the whole of it to whichever
@@ -1074,6 +1205,9 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
     force.pullY /= correction;
   }
   settle(nodes, links, radii, force, iterations - aimed);
+  // Nothing may be left stranded off the side of the picture before it is framed,
+  // because the framing is what turns one stranded node into an empty canvas.
+  if (!anchored) gather(nodes, radii);
   if (!anchored) fitToFrame(nodes, width, height, margin);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again

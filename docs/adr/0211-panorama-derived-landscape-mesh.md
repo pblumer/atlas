@@ -1082,6 +1082,48 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11): the opening view uses the window, whatever the estate's
+> size.**
+> §7 sizes the world from the content and then shows the whole of it, so the world's
+> size is what decides the magnification. Two rules were quietly working against
+> that, and both were reported as one symptom: on first opening "Atlas (derived)",
+> the landscape sat in a fraction of the window with a single node stranded at the
+> far edge of it.
+>
+> - **The world had a floor of a frame's worth of area.** It was put there so a
+>   handful of nodes would not be changed by the switch to a content-sized world, on
+>   the reasoning that the small case was comfortable already. It was not. With the
+>   cells a node needs at about 98 units square, the floor stopped binding only past
+>   roughly twenty-five nodes, so every smaller landscape was laid out in a world
+>   several times larger than its content and drawn at the scale that fits that world
+>   into the canvas. Measured on the rendered page at 1400x900, as the share of the
+>   window the nodes' own footprints cover: five nodes 7%, eight nodes 11%, fourteen
+>   nodes 16%, and forty or a hundred and twenty-five nodes 17%. The floor is gone.
+>   One density law now applies at every size, and the same measurements read 18%,
+>   18%, 18%, 17%, 17%.
+> - **Nothing bounded how far one node could be drawn from the rest.** A node the
+>   springs do not hold sits where the centring pull balances a repulsion falling off
+>   as 1/d², which is a cube root of the constants: it lands far out, and tuning the
+>   pull (which is what LOOSE_PULL is) moves it very little. The cost is not the node
+>   — it is that the fit scales the *bounding box* onto the world, so one straggler
+>   decides the scale and everything else is squeezed into the fraction of the canvas
+>   it leaves. On the reported shape, one application with its processes around it
+>   and one process attached to nothing, the straggler settled at 2.07 times the
+>   picture's own median spacing. A pass named `gather` now bounds it at 1.5, moving
+>   an offender along the line toward its nearest neighbour until it is exactly that
+>   far and no further, so it stays the outlying thing it is without setting the
+>   scale for the rest. It is the dual of the separation pass and sits in the same
+>   place for the same reason: a guarantee the simulation cannot make is made
+>   afterwards, by arithmetic, and it is skipped while anything is pinned because it
+>   would slide a hand-made arrangement out from under the hand that made it.
+>
+> One correction was tried and rejected on the measurements. The pull's aim at the
+> frame's aspect ratio is applied once and demonstrably undershoots (a graph asked
+> for 1.71:1 went 0.93 → 1.21). Closing it into a loop of repeated corrections fixes
+> that case and overshoots others — the simulation answers with a lag, so the loop
+> rings — and on the 36-node estate §7's own fill test uses it took the span from
+> 0.80 of the canvas to 0.68. The single correction stands.
+
 > **Amendment (2026-09-10): the picture says when it was read, and keeps itself
 > true.**
 > §10 argues that an undated "all green" picture circulates inside an organization
