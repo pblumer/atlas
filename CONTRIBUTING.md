@@ -8,6 +8,15 @@ Thanks for your interest in Atlas. The project is in early development, so the m
 - Skim the [ADRs](docs/adr/). They explain *why* things are the way they are. If your change contradicts an ADR, that's fine — but it means writing a new ADR that supersedes it, not quietly diverging.
 - For anything non-trivial, open an issue first to align on approach before writing code.
 
+## Language
+
+Atlas is a public repository, so anything that stays in it is written in **English**: code, comments, ADRs, the CHANGELOG, `docs/`, commit messages, PR descriptions, and issues. An issue is part of the project's documentation rather than an internal note — one that only the team can read is one that only the team can pick up.
+
+Two deliberate exceptions:
+
+- **User-facing Console strings are bilingual** (English and German), and the two must say the same thing — see [`AGENTS.md`](AGENTS.md).
+- **[`docs/compliance/`](docs/compliance/) is German**, because its audience is a Swiss authority.
+
 ## Architectural guardrails
 
 Atlas's performance and correctness rest on a few load-bearing decisions, captured as **invariants** in [`docs/architecture/invariants.md`](docs/architecture/invariants.md). Changes that violate these need an ADR, not just a PR:
