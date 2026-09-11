@@ -244,6 +244,32 @@ _Changed_ / _Removed_ for each version.
   exactly the rules a capability has and none were touched; a test holds the two to that
   equivalence across every relationship and every partner, in both directions.
 
+- **A write into a data object now offers the members its class declares.** A data
+  output association writes one member of a structured object — `customer.name`
+  ([ADR-0060](docs/adr/0060-data-object-write-paths.md)) — and the path was free text.
+  `customer.nmae` deploys, runs, and writes a member nobody will ever read. The class the
+  object's type points at already declares what its members *are*, so the field now asks
+  the same question the class picker and the data-state picker ask, the same way: a list,
+  with an escape for a member nothing models yet.
+
+  Each entry carries what the model says about it — the type, the multiplicity where it
+  is not one, and the key mark on an attribute that is part of the business key. Where a
+  member's own type is another class in the model, that class's members are offered one
+  level down as `customer.name`, because a dotted path is exactly the case where the
+  first segment is structured and something else says what is inside it. One level and no
+  further: below that the model repeats itself, and a picker that walks it forever is one
+  nobody can read. An **untyped** member offers nothing inside it, because nothing knows.
+
+  A path the class does not declare is kept and named rather than dropped — a diagram is
+  routinely drawn before the model catches up — and it comes back in the list saying it
+  is not a member of that class, instead of looking like any other entry.
+
+  **What this is not:** a data object is not a process variable. Nothing binds one into
+  the FEEL scope, so these members say what the write *target* is shaped like and nothing
+  about what the expression above them can read. The panel says so where it matters,
+  beside the field that takes a FEEL expression, because a member list read as a variable
+  list is exactly the wrong lesson to take from it.
+
 - **A milestone is an element you can draw now.** BPMN's marker for a point on the path
   where no work sits is a **none intermediate throw event**: an intermediate throw event
   with no event definition, named after the point it marks. *Identity verification
