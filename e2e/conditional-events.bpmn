@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  id="Defs_cond" targetNamespace="http://bpmn.io/schema/bpmn">
+  <!-- Conditional events (ADR-0137): a catch triggered by data rather than by a message, a
+       timer or a throw. The simulation evaluates no FEEL, so the condition becoming true is a
+       gesture the person makes — but the element must say that it waits on a condition. -->
+  <bpmn:process id="P" isExecutable="true">
+    <bpmn:startEvent id="Start"><bpmn:outgoing>s1</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:intermediateCatchEvent id="CondCatch">
+      <bpmn:incoming>s1</bpmn:incoming>
+      <bpmn:outgoing>s2</bpmn:outgoing>
+      <bpmn:conditionalEventDefinition id="CondDef">
+        <bpmn:condition xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">=amount &gt; 100</bpmn:condition>
+      </bpmn:conditionalEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:task id="Work"><bpmn:incoming>s2</bpmn:incoming><bpmn:outgoing>s3</bpmn:outgoing></bpmn:task>
+    <bpmn:boundaryEvent id="CondB" attachedToRef="Work" cancelActivity="false">
+      <bpmn:outgoing>b1</bpmn:outgoing>
+      <bpmn:conditionalEventDefinition id="CondBDef">
+        <bpmn:condition xsi:type="bpmn:tFormalExpression" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">=escalate</bpmn:condition>
+      </bpmn:conditionalEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Alert"><bpmn:incoming>b1</bpmn:incoming><bpmn:outgoing>b2</bpmn:outgoing></bpmn:task>
+    <bpmn:endEvent id="EndAlert"><bpmn:incoming>b2</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="End"><bpmn:incoming>s3</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="s1" sourceRef="Start" targetRef="CondCatch" />
+    <bpmn:sequenceFlow id="s2" sourceRef="CondCatch" targetRef="Work" />
+    <bpmn:sequenceFlow id="s3" sourceRef="Work" targetRef="End" />
+    <bpmn:sequenceFlow id="b1" sourceRef="CondB" targetRef="Alert" />
+    <bpmn:sequenceFlow id="b2" sourceRef="Alert" targetRef="EndAlert" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diag">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="P">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="120" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CondCatch_di" bpmnElement="CondCatch"><dc:Bounds x="220" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Work_di" bpmnElement="Work"><dc:Bounds x="320" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CondB_di" bpmnElement="CondB"><dc:Bounds x="352" y="182" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Alert_di" bpmnElement="Alert"><dc:Bounds x="320" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndAlert_di" bpmnElement="EndAlert"><dc:Bounds x="480" y="292" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="500" y="142" width="36" height="36" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="s1_di" bpmnElement="s1"><di:waypoint x="156" y="160" /><di:waypoint x="220" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s2_di" bpmnElement="s2"><di:waypoint x="256" y="160" /><di:waypoint x="320" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="s3_di" bpmnElement="s3"><di:waypoint x="420" y="160" /><di:waypoint x="500" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="b1_di" bpmnElement="b1"><di:waypoint x="370" y="218" /><di:waypoint x="370" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="b2_di" bpmnElement="b2"><di:waypoint x="420" y="310" /><di:waypoint x="480" y="310" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

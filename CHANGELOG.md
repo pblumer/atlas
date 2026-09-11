@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The token simulation now crosses a link event instead of stopping at it.** A link event
+  is BPMN's off-page connector: a throw and a catch of the same name, standing in for a
+  sequence flow the author chose not to draw. The Design-view simulation treated the throw as
+  an ordinary intermediate throw, and a link throw is drawn with no outgoing sequence flow —
+  so the token ran off the graph and was counted as a **completed process**, while everything
+  downstream of the link catch was never walked. Half a diagram silently skipped, and the run
+  reported as a success.
+
+  Throw and catch now pair the way the compiler pairs them
+  ([ADR-0132](docs/adr/0132-link-events.md)) — by trimmed name, within one flow scope — and
+  the token flies the jump the synthetic sequence flow stands for. A link catch no longer
+  parks or offers a fire glyph: nothing occurs there, it is where a jump lands. A throw whose
+  name pairs with nothing strands its token in place and says so, rather than reporting a
+  completion; such a model does not deploy either.
+
+  **Conditional events** ([ADR-0137](docs/adr/0137-conditional-events.md)) already behaved
+  correctly — a conditional catch parks and a person releases it, which is the honest shape
+  when no FEEL is evaluated — but nothing said what kind of event it was. The catch carried
+  the generic "go" glyph and offered "Fire this event", and a conditional boundary read as a
+  nameless "event boundary event". Both now name the condition, and the affordance says what
+  firing it asserts: the condition holds, rather than an event arrived.
+
 - **The token simulation now compensates, and cancels a transaction instead of completing
   it.** Compensation is the one part of BPMN that runs backwards, and the Design-view
   simulation ran none of it. A compensation throw passed straight through, so the handler a

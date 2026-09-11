@@ -44,10 +44,33 @@ const defName = (el, defType, ref) => {
 const messageName = (el) => defName(el, "bpmn:MessageEventDefinition", "messageRef");
 const signalName = (el) => defName(el, "bpmn:SignalEventDefinition", "signalRef");
 
+// A link event (ADR-0132) is BPMN's off-page connector, and the one throw/catch pair with no
+// execution semantics of its own: reaching a link throw is identical to having taken a sequence
+// flow straight to the link catch of the same name in the same scope, which then flows on. The
+// pair stands in for a line the author chose not to draw, so a token must cross it — and a link
+// catch is emphatically not an event anyone waits for or fires.
+const LINK_DEF = "bpmn:LinkEventDefinition";
+const isLinkThrow = (el) => el.type === "bpmn:IntermediateThrowEvent" && hasDef(el, LINK_DEF);
+const isLinkCatch = (el) => el.type === "bpmn:IntermediateCatchEvent" && hasDef(el, LINK_DEF);
+// A link is matched by the name on its definition, trimmed, within one flow scope — the BPMN
+// container the events are drawn in, which is what the compiler pairs them by.
+const linkName = (el) => {
+  const d = eventDefs(el).find((x) => x.$type === LINK_DEF);
+  return ((d && d.name) || "").trim();
+};
+
+// A conditional event (ADR-0137) is the catch triggered by data: it fires when a boolean FEEL
+// condition over the process's variables becomes true. The simulation evaluates no FEEL, so
+// firing it is the person saying the condition now holds — but the element has to say that is
+// what it waits for, rather than offering itself as one more event arriving from outside.
+const CONDITIONAL_DEF = "bpmn:ConditionalEventDefinition";
+
 // A catch parks the token until the modelled event "occurs" — the user fires it. Message,
-// timer, signal and conditional intermediate catch events and receive tasks all wait.
+// timer, signal and conditional intermediate catch events and receive tasks all wait. A link
+// catch does not: nothing occurs there, it is where a jump lands.
 const isCatch = (el) =>
-  el.type === "bpmn:IntermediateCatchEvent" || el.type === "bpmn:ReceiveTask";
+  (el.type === "bpmn:IntermediateCatchEvent" && !hasDef(el, LINK_DEF)) ||
+  el.type === "bpmn:ReceiveTask";
 
 // A throw emits a message/signal and the token continues: a send task, a message/signal
 // intermediate throw, or a message/signal end event. A plain throw with no event
@@ -294,6 +317,10 @@ export function TokenSimulation(eventBus, elementRegistry, canvas, overlays) {
   this._compensables = new Map();
   this._compHandlers = new Map(); // compensation boundary id → its handler element, from <association>
   this._compensating = new Set(); // handler activities running right now — they retire, not complete
+  // stuck: tokens the diagram gives nowhere to go — a link throw whose catch is missing. The
+  // model does not deploy, but it is drawn often enough while authoring, and a token that
+  // simply vanished there would be counted as a process that completed.
+  this._stuck = new Set();
   this._cancelling = new Set(); // transaction scopes rolling back, waiting for their handlers to drain
   // incidents: error ends whose error no handler caught. The engine raises an incident and
   // parks the instance there (ADR-0089/0061); the simulation parks the token the same way,
@@ -463,6 +490,7 @@ TokenSimulation.prototype.reset = function () {
   this._throwing.clear();
   this._clearAllCompensation();
   this._clearIncidents();
+  this._clearStuck();
   this._completed = 0;
   this._terminated = 0;
   this._clearAllDeciding();
@@ -482,6 +510,7 @@ TokenSimulation.prototype.stats = function () {
     completed: this._completed,
     terminated: this._terminated,
     incidents: this._incidents.size,
+    stuck: this._stuck.size,
     deciding: this._deciding.size > 0,
     waiting: this._hasPendingTrigger(),
   };
@@ -869,6 +898,7 @@ TokenSimulation.prototype._fireEventSub = function (start) {
       this._clearAllScopes();
       this._clearAllDeciding();
       this._clearIncidents();
+      this._clearStuck();
       this._clearAllCompensation();
     }
   }
@@ -880,24 +910,34 @@ TokenSimulation.prototype._fireEventSub = function (start) {
 TokenSimulation.prototype._travel = function (flow) {
   const target = flow.target;
   if (!target || !flow.waypoints || flow.waypoints.length < 2) return;
+  this._addMarker(flow.id, "atlas-sim-flow");
+  this._flyToken(flow.waypoints, target, "atlas-sim-dot", (aborted) => {
+    this._removeMarker(flow.id, "atlas-sim-flow");
+    if (aborted) return;
+    this._arrive(target, flow);
+  });
+};
+
+// _flyToken carries one token through the air to `target` and reports on arrival whether the
+// flight was superseded. It is the single place that counts a token as "still coming" — which
+// the OR-join's quiescence test depends on — and the single place that decides a token in
+// flight no longer belongs to the run: a reset, or the teardown of the scope it was flying
+// into. A token flying *into* a scope belongs to that scope; one flying toward the subprocess
+// shape itself still belongs to the enclosing flow, which is why the generation it carries is
+// that of the scope it lands in.
+TokenSimulation.prototype._flyToken = function (waypoints, target, cls, onArrive) {
   const epoch = this._epoch;
-  // A token flying *into* a scope belongs to that scope; one flying toward the subprocess
-  // shape itself still belongs to the enclosing flow. Carrying the generation of the scope
-  // it lands in is what lets a scoped teardown abort this dot without touching the others.
   const scope = this._scopeOf(target);
   const scopeId = scope ? scope.id : null;
   const gen = scopeId ? this._scopeGen.get(scopeId) || 0 : 0;
   const aborted = () =>
     this._epoch !== epoch || (scopeId !== null && (this._scopeGen.get(scopeId) || 0) !== gen);
-  this._addMarker(flow.id, "atlas-sim-flow");
   this._inflight.set(target.id, (this._inflight.get(target.id) || 0) + 1);
-  this._animateDot(flow.waypoints, aborted, "atlas-sim-dot").then(() => {
-    this._removeMarker(flow.id, "atlas-sim-flow");
+  this._animateDot(waypoints, aborted, cls).then(() => {
     const n = (this._inflight.get(target.id) || 0) - 1;
     if (n > 0) this._inflight.set(target.id, n);
     else this._inflight.delete(target.id);
-    if (aborted()) return; // superseded by a reset, or by the scope being torn down
-    this._arrive(target, flow);
+    onArrive(aborted() || !this._active);
   });
 };
 
@@ -1238,6 +1278,12 @@ TokenSimulation.prototype._clearScopeContents = function (sub) {
       this._removeMarker(id, "atlas-sim-incident");
     }
   }
+  for (const id of Array.from(this._stuck)) {
+    if (this._within(id, sub.id)) {
+      this._stuck.delete(id);
+      this._removeMarker(id, "atlas-sim-stuck");
+    }
+  }
 };
 
 // _teardownScope cancels a running subprocess outright (an interrupting boundary fired):
@@ -1258,7 +1304,7 @@ TokenSimulation.prototype._teardownScope = function (sub) {
 // pump: a fault it threw is still travelling to its handler, or an uncaught error has parked
 // it. Both are tokens the run no longer owns — moving one would throw the fault twice.
 TokenSimulation.prototype._isHeld = function (id) {
-  return this._throwing.has(id) || this._incidents.has(id);
+  return this._throwing.has(id) || this._incidents.has(id) || this._stuck.has(id);
 };
 
 // _throwFault raises the fault an element carries and reports whether it took the token over.
@@ -1279,6 +1325,10 @@ TokenSimulation.prototype._throwFault = function (el) {
   }
   if (isCompensationThrow(el)) {
     this._compensateFrom(el);
+    return true;
+  }
+  if (isLinkThrow(el)) {
+    this._jumpLink(el);
     return true;
   }
   return false;
@@ -1405,6 +1455,53 @@ TokenSimulation.prototype._boundaryOn = function (scope, defType, code) {
     if (hasDef(b, defType) && codeCatches(faultCode(b, defType), code)) return b;
   }
   return null;
+};
+
+// --- Link events ---------------------------------------------------------------------
+
+// _jumpLink runs a link intermediate throw event (ADR-0132). A link is a goto, not a wait:
+// reaching the throw is identical to having taken a sequence flow straight to the link catch of
+// the same name in the same scope, which then carries on by its own outgoing flow. The compiler
+// resolves the pair into a synthetic sequence flow; here the token flies the same jump, so the
+// two halves of a flow the author split up read as the one line they stand for.
+TokenSimulation.prototype._jumpLink = function (el) {
+  const target = this._linkCatchFor(el);
+  if (!target) {
+    // Nowhere to jump to. Such a model does not deploy, and the token must not quietly run off
+    // the graph as though the process had finished — it is stranded, and says so.
+    this._stuck.add(el.id);
+    this._addMarker(el.id, "atlas-sim-stuck");
+    this._flashAbort(el);
+    this._render();
+    this._notify();
+    return;
+  }
+  this._rest(el.id, -1);
+  this._flash(el);
+  this._render();
+  this._notify();
+  this._flyToken([centerOf(el), centerOf(target)], target, "atlas-sim-link-dot", (aborted) => {
+    if (aborted) return;
+    this._flash(target);
+    this._rest(target.id, 1);
+    this._land(target);
+  });
+};
+
+// _linkCatchFor finds the link catch a throw jumps to: the same trimmed name, in the same flow
+// scope — the BPMN container both are drawn in, which is how the compiler pairs them, so a
+// throw and a catch in different subprocesses do not pair.
+TokenSimulation.prototype._linkCatchFor = function (el) {
+  const name = linkName(el);
+  if (!name) return null;
+  const scopeId = el.parent && el.parent.id;
+  let found = null;
+  this._registry.forEach((t) => {
+    if (found || !isLinkCatch(t) || linkName(t) !== name) return;
+    if ((t.parent && t.parent.id) !== scopeId) return;
+    found = t;
+  });
+  return found;
 };
 
 // --- Compensation and transactions ---------------------------------------------------
@@ -1549,6 +1646,12 @@ TokenSimulation.prototype._forgetCompensables = function (scopeKey) {
   this._compensables.delete(scopeKey);
 };
 
+// _clearStuck drops every token the diagram had stranded, and its marking.
+TokenSimulation.prototype._clearStuck = function () {
+  for (const id of this._stuck) this._removeMarker(id, "atlas-sim-stuck");
+  this._stuck.clear();
+};
+
 // _clearIncidents drops every parked incident and its marking — the tokens they belonged to
 // are gone (a reset, or a teardown that took them).
 TokenSimulation.prototype._clearIncidents = function () {
@@ -1599,6 +1702,7 @@ TokenSimulation.prototype._terminate = function (el) {
   this._clearAllScopes();
   this._clearAllDeciding();
   this._clearIncidents();
+  this._clearStuck();
   this._clearAllCompensation();
   this._completed++; // the token that reached the terminate end is the one completion
   this._render();
@@ -1699,7 +1803,9 @@ TokenSimulation.prototype._render = function () {
     if (n <= 0) continue;
     this._addMarker(id, "atlas-sim-here");
     const el = this._registry.get(id);
-    if (el && needsTrigger(el)) this._drawFire(el, this._triggerGlyph(el), () => this._fireTrigger(el));
+    if (el && needsTrigger(el)) {
+      this._drawFire(el, this._triggerGlyph(el), () => this._fireTrigger(el), this._triggerTitle(el));
+    }
     try {
       this._overlayIds.push(
         this._overlays.add(id, "atlas-sim-token", {
@@ -1783,7 +1889,17 @@ TokenSimulation.prototype._triggerGlyph = function (el) {
   if (isSignalEvent(el)) return "&#9889;"; // spark
   if (hasDef(el, ERROR_DEF)) return "&#9888;"; // warning sign
   if (hasDef(el, ESCALATION_DEF)) return "&#8599;"; // up-right arrow — raised up the chain
-  return "&#9654;"; // receive task / conditional — a plain "go"
+  if (hasDef(el, CONDITIONAL_DEF)) return "&#9776;"; // lines, as the conditional marker draws them
+  return "&#9654;"; // receive task — a plain "go"
+};
+
+// _triggerTitle says what a person is asserting when they fire a parked catch. A conditional
+// event is the one that is not an event arriving from outside: it waits on the process's own
+// data, and the simulation evaluates no FEEL, so firing it means "the condition now holds".
+TokenSimulation.prototype._triggerTitle = function (el) {
+  if (hasDef(el, CONDITIONAL_DEF)) return "The condition now holds — release the waiting token";
+  const kind = eventKindOf(el);
+  return `Fire this ${kind ? kind + " " : ""}event — release the waiting token`;
 };
 
 // _faultKind names what a handler catches, for the affordance titles. A fault handler is
@@ -1800,16 +1916,20 @@ const eventKindOf = (el) =>
           ? "error"
           : hasDef(el, ESCALATION_DEF)
             ? "escalation"
-            : "event";
+            : hasDef(el, CONDITIONAL_DEF)
+              ? "conditional"
+              : ""; // an event carrying no definition has no kind to name
 
 TokenSimulation.prototype._boundaryTitle = function (b) {
   const mode = isInterruptingCatch(b) ? "interrupting" : "non-interrupting";
-  return `Fire this ${mode} ${eventKindOf(b)} boundary event`;
+  const kind = eventKindOf(b);
+  return `Fire this ${mode} ${kind ? kind + " " : ""}boundary event`;
 };
 
 TokenSimulation.prototype._eventSubTitle = function (start) {
   const mode = isInterruptingSub(start) ? "interrupting" : "non-interrupting";
-  return `Trigger this ${mode} ${eventKindOf(start)} event subprocess`;
+  const kind = eventKindOf(start);
+  return `Trigger this ${mode} ${kind ? kind + " " : ""}event subprocess`;
 };
 
 // _drawFire adds a clickable "fire this event" affordance on an element. Like the spawn

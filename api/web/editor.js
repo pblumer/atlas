@@ -1231,10 +1231,13 @@ function wireTokenSim(root, modeler) {
     statsEl.textContent =
       `${s.live} live · ${s.completed} completed` +
       (s.terminated ? ` · ${s.terminated} terminated` : "") +
-      (s.incidents ? ` · ${s.incidents} incident${s.incidents > 1 ? "s" : ""}` : "");
+      (s.incidents ? ` · ${s.incidents} incident${s.incidents > 1 ? "s" : ""}` : "") +
+      (s.stuck ? ` · ${s.stuck} stranded` : "");
     hintEl.textContent = s.incidents
       ? "An error reached no handler. The engine raises an incident and the instance parks there — it does not complete."
-      : s.deciding
+      : s.stuck
+        ? "A link throw has no link catch of that name in its scope, so the token has nowhere to go. Such a model does not deploy."
+        : s.deciding
         ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
         : s.waiting
           ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."

@@ -96,6 +96,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`link-conditional.spec.mjs`** ([ADR-0132](../docs/adr/0132-link-events.md),
+  [ADR-0137](../docs/adr/0137-conditional-events.md)): a **link throw** jumps to its catch and
+  the flow carries on there, neither half of the pair parks or offers a fire glyph, and nothing
+  completes at the throw — it is a goto, not an end. A throw whose name pairs with **nothing**
+  strands its token where it is instead of running off the graph as a completed process. A
+  **conditional** catch says it waits on a condition rather than on an event arriving, and its
+  boundary is named by what it catches.
 - **`compensation.spec.mjs`** ([ADR-0103](../docs/adr/0103-compensation.md),
   [ADR-0108](../docs/adr/0108-bpmn-transactions.md)): the part of BPMN that runs **backwards**.
   A **compensation throw** runs the handler of the activity that completed and then carries on,

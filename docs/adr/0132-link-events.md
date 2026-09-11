@@ -189,6 +189,17 @@ runtime, event, value type, or recovery path.
   which the parse keeps distinct by living on `linkEventDefinition`; no collision, but worth a test
   that a link "Retry" and a message "Retry" coexist.
 
+- **Done since:** the **Design-view token simulation** (ADR-0078 and its increments) crosses the
+  link. It had walked a link throw as a plain intermediate throw: with no outgoing sequence flow
+  to take — which is exactly how a link throw is drawn — the token ran off the graph and was
+  counted as a *completed process*, while everything downstream of the link catch was never
+  walked at all. Half a diagram silently skipped, and the run reported as a success. The
+  simulation now pairs throw and catch the way this ADR's compile-time resolution does, by
+  trimmed name within one flow scope, and flies the token across the jump the synthetic sequence
+  flow stands for. A link catch no longer parks or offers a fire affordance: nothing occurs
+  there. A throw whose name pairs with nothing — a model that does not deploy — strands its
+  token where it is rather than counting it as a completion.
+
 ## Pros and cons of the options
 
 ### Option 1 — synthetic sequence flow + `passThroughBehavior` (chosen)

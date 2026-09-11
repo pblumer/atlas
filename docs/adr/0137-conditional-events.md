@@ -266,6 +266,14 @@ logic is (a) parsing `<conditionalEventDefinition><condition>` and compiling the
   test that an unrelated write fires nothing. (4) **`conditionMet` on recovery** must rebuild from the
   armed instance's persisted state so a post-crash false→true still edge-triggers.
 
+- **Done since:** the **Design-view token simulation** (ADR-0078 and its increments) names the
+  conditional for what it is. A conditional intermediate catch already parked and could be
+  released by hand, which is the right shape — the simulation evaluates no FEEL, so the person
+  firing it is asserting the condition holds. What it did not do was say so: the catch carried
+  the generic "go" glyph and offered "Fire this event", and a conditional boundary read as a
+  nameless "event boundary event". Both now name the condition, and the affordance says what
+  firing it asserts rather than implying an event arrived from outside.
+
 ## Pros and cons of the options
 
 ### Option 1 — re-evaluate on variable change, command-path follow-up (chosen)
