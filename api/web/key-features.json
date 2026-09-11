@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "The Console landing page says what Atlas is, in both languages",
+  "reviewedThrough": "General-purpose scripts now have an opt-in, fail-closed OS sandbox.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -138,8 +138,8 @@
         "de": "Integration nach aussen"
       },
       "text": {
-        "en": "Job workers over HTTP, polyglot script tasks (JavaScript, Python, PowerShell), connectors for REST, mail, SharePoint, BMC Remedy, web scraping and CSV, an encrypted secret vault, and mockup service tasks for end-to-end runs before the integrations exist.",
-        "de": "Job-Worker über HTTP, polyglotte Script Tasks (JavaScript, Python, PowerShell), Konnektoren für REST, Mail, SharePoint, BMC Remedy, Web-Scraping und CSV, ein verschlüsselter Secret-Vault sowie Mockup-Service-Tasks für End-to-End-Läufe vor der Integration."
+        "en": "Job workers over HTTP, polyglot script tasks (JavaScript, Python, PowerShell), connectors for REST, mail, SharePoint, BMC Remedy, web scraping and CSV, an encrypted secret vault, script execution that can be confined to a fail-closed OS sandbox, and mockup service tasks for end-to-end runs before the integrations exist.",
+        "de": "Job-Worker über HTTP, polyglotte Script Tasks (JavaScript, Python, PowerShell), Konnektoren für REST, Mail, SharePoint, BMC Remedy, Web-Scraping und CSV, ein verschlüsselter Secret-Vault, eine fail-closed OS-Sandbox, in die sich die Skriptausführung sperren lässt, sowie Mockup-Service-Tasks für End-to-End-Läufe vor der Integration."
       }
     },
     {

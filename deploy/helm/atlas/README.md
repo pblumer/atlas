@@ -153,6 +153,23 @@ All three run inside the Linux container: `pwsh` is PowerShell Core (not Windows
 PowerShell), `python3` (not Python 2), and Node.js — scripts must be
 Linux-compatible. To turn a language off, set its `atlas.script.<lang>=false`.
 
+The initial `atlas.script.sandbox=off` default preserves existing scripts that
+read mounted files or call network services. After checking those dependencies,
+enable the fail-closed Linux profile with:
+
+```bash
+helm upgrade atlas ./deploy/helm/atlas \
+  --set atlas.script.sandbox=strict
+```
+
+`strict` requires Landlock ABI 3 or newer. Atlas checks that when it starts; a
+container runtime whose seccomp profile blocks the Landlock system calls causes a
+clear startup failure, never an unsandboxed fallback. Each run then sees only the
+installed interpreter/runtime and its own writable scratch directory. It cannot
+read `/data`, list other script scratch directories, or create network or
+Unix-domain sockets. Keep `off` for a reviewed process that intentionally needs
+one of those capabilities until model-level capability declarations exist.
+
 ## Ingress / TLS
 
 ```bash

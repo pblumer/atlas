@@ -42,6 +42,13 @@ Everything runs as a Linux container (amd64/arm64); Windows containers are not
 supported and script tasks must be Linux-compatible (PowerShell Core, `python3`,
 Node.js).
 
+Script isolation is opt-in for upgrade compatibility. Set
+`ATLAS_SCRIPT_SANDBOX=strict` (or append `--script-sandbox=strict`) after verifying
+that your scripts need neither mounted files nor network access. On a kernel with
+Landlock ABI 3+, strict mode gives each execution private scratch, denies access
+to `/data` and other non-runtime files, and blocks socket creation. Atlas refuses
+to start strict mode when the host or container runtime cannot enforce it.
+
 ## Kubernetes (Helm)
 
 ```bash

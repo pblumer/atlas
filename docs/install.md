@@ -201,6 +201,12 @@ journalctl -u atlas -f
 > If you enable script tasks, `ProtectSystem=strict` and `PrivateTmp=true` also
 > apply to the interpreters Atlas spawns. Loosen them only as far as your scripts
 > actually need.
+>
+> For scripts that need neither local files nor network services, add
+> `--script-sandbox=strict`. The per-execution boundary is narrower than the
+> systemd unit: only the installed runtime and private scratch remain readable,
+> and new sockets are denied. It requires Linux Landlock ABI 3 or newer and fails
+> startup if the kernel cannot enforce it.
 
 ### 6. The administrator account
 
@@ -692,6 +698,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--python` | `true` | Run Python script tasks via `python3` |
 | `--javascript` | `true` | Run JavaScript script tasks via `node` |
 | `--script-timeout` | `30s` | Wall-clock limit for one script task |
+| `--script-sandbox` | `off` | `off` preserves existing filesystem/network access. `strict` (also `ATLAS_SCRIPT_SANDBOX=strict`) requires Linux Landlock ABI 3+, exposes only the installed runtime and private per-run scratch, denies socket creation, and fails closed when unavailable ([ADR-0303](adr/0303-script-sandbox-isolation.md)) |
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |

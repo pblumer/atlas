@@ -38,6 +38,16 @@ func TestScriptWorkerDoesNotInheritTheServerEnvironment(t *testing.T) {
 	}
 }
 
+func TestSupervisedScriptWorkerReceivesItsSandboxProfile(t *testing.T) {
+	args := supervisedWorkerArgs("http://127.0.0.1:8080", SuperviseSpec{
+		ID: "script", Connectors: []string{"script"}, ScriptLanguages: []string{"python"}, ScriptSandbox: "strict",
+	}, nil)
+	got := strings.Join(args, " ")
+	if !strings.Contains(got, "--script-sandbox strict") {
+		t.Fatalf("worker args = %q, want strict sandbox profile", got)
+	}
+}
+
 // waitFor polls until cond holds, so a test never depends on a sleep being long
 // enough. Child processes start when the operating system gets to them.
 func waitFor(t *testing.T, what string, cond func() bool) {
