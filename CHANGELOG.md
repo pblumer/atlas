@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A cancelled multi-instance activity in the token simulation now takes its remaining runs
+  with it.** The countdown badge on a multi-instance or looping activity was keyed on the
+  activity and never cleared when the activity was cancelled part-way through. An interrupting
+  boundary event therefore left a countdown drawn on an activity holding no token — a
+  cancelled activity looking exactly like a running one — and the next token to enter inherited
+  what the cancelled visit had left behind, so an activity modelled to run three instances ran
+  two.
+
+  The counter now belongs to the token standing on the activity rather than to the activity: a
+  fresh entry starts the runs afresh, a cancelled activity takes its remaining runs with it,
+  and the badge is drawn only where a token actually is. The fixed, clearly-labelled count
+  itself is unchanged — the simulation evaluates no collection, and
+  [ADR-0097](docs/adr/0097-token-simulation-message-starts-event-subprocesses-multi-instance.md)
+  says why.
+
 - **A timer in the token simulation now says which timer it is.** The Design-view simulation
   deliberately does not honour the clock — a person fires a timer, or auto-decide does — and
   that decision stands. What did not stand is showing nothing about the time the author

@@ -75,6 +75,14 @@ evaluate; the fixed count exists only to make the marker's meaning legible.
 - **Follow-ups / risks to watch:** if the fixed multi-instance count or the process-wide
   event-sub scope ever misleads, prefer labelling or narrowing over modelling real scopes and
   collections in the browser. A user-set instance count is a small, safe future increment.
+- **Fixed since (the countdown's lifetime):** the instance counter was keyed on the activity
+  and never cleared when the activity was cancelled part-way through its runs. Two things
+  followed. An interrupting boundary left a countdown drawn on an activity holding no token, so
+  a cancelled activity looked like a running one; and the next token to enter inherited what the
+  cancelled visit had left, so an activity modelled to run three instances ran two. The counter
+  now belongs to the token standing on the activity: a fresh entry starts the runs afresh, a
+  cancelled activity takes its remaining runs with it, and the badge is drawn only where a token
+  actually is. The fixed, labelled count itself is unchanged — that is this ADR's decision.
 - **Superseded since (the process-wide event-sub scope):** an interrupting event subprocess is
   now scoped to the subprocess it is declared in, not to the whole process. Routing thrown
   errors and escalations to their handlers (ADR-0089/0125) made the difference load-bearing: an

@@ -96,6 +96,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`multi-instance-reentry.spec.mjs`** (ADR-0097 / ADR-0100): the **lifetime** of the
+  countdown. An interrupting boundary cancels a multi-instance activity part-way through its
+  runs: no token stands there, so no countdown may be drawn there, and the next token to enter
+  runs the full multiplicity rather than the remainder the cancelled visit left behind.
 - **`timer-events.spec.mjs`** ([ADR-0096](../docs/adr/0096-token-simulation-events-and-inclusive-gateways.md)):
   the simulation does not honour the clock, so what a timer owes its reader is **which timer it
   is** — the parked catch and both boundaries name the modelled duration or cycle, and a

@@ -926,6 +926,9 @@ TokenSimulation.prototype._fireBoundary = function (b) {
       this._teardownScope(host);
     } else {
       this._rest(host.id, -1);
+      // The runs the cancelled activity had left go with it. Leaving them behind would draw a
+      // countdown on an activity that is not running, and hand them to whoever arrives next.
+      if ((this._resting.get(host.id) || 0) <= 0) this._miRemaining.delete(host.id);
     }
     this._clearDeciding(host.id);
   }
@@ -1071,8 +1074,12 @@ TokenSimulation.prototype._arrive = function (target, viaFlow) {
     return;
   }
   // A multi-instance activity runs its body several times before the token moves on; seed
-  // the instance counter so the badge shows the multiplicity from the moment it arrives.
-  if (isRepeating(target) && !this._miRemaining.has(target.id)) {
+  // the instance counter so the badge shows the multiplicity from the moment it arrives. The
+  // seed is keyed on the activity being *empty*, not on there being no counter: the counter
+  // belongs to the token on the activity, so a second visit starts its runs afresh instead of
+  // inheriting whatever a cancelled first visit left behind. A second token arriving while the
+  // first is still counting joins that run rather than restarting it.
+  if (isRepeating(target) && (this._resting.get(target.id) || 0) === 0) {
     const total = this._miInstancesFor(target);
     this._miRemaining.set(target.id, { left: total, total });
   }
@@ -1924,6 +1931,7 @@ TokenSimulation.prototype._render = function () {
   // the marker on the shape — ↻ for a standard loop, ≡ / ‖ for a multi-instance.
   for (const [id, mi] of this._miRemaining) {
     if (!mi || mi.left <= 0) continue;
+    if ((this._resting.get(id) || 0) <= 0) continue; // the badge counts a token's runs; there is none
     const el = this._registry.get(id);
     if (!el) continue;
     const std = isStandardLoop(el);
