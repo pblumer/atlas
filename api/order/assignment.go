@@ -155,6 +155,9 @@ func Stall(a Assignment, at int64) (Assignment, error) {
 // intervened, and clears the stall so the deadline works normally again from the
 // new holder.
 //
+// It will not give the approval to the principal making the call: see the check
+// below for why that one is in the model rather than in a role.
+//
 // Unlike [Escalate] it may send the approval to somebody who already held it. The
 // loop guard exists to stop a clock cycling an approval between two colleagues; a
 // person sending it back to the original approver knows something the guard does
@@ -175,6 +178,20 @@ func Reassign(a Assignment, to, by string, at int64) (Assignment, error) {
 	}
 	if to == a.Approver {
 		return a, fmt.Errorf("order: the approval for %s is already with %s", a.ItemID, to)
+	}
+	if to == by {
+		// The escalation path exists so a stuck approval reaches somebody who will
+		// act on it; taking it for yourself and approving it turns the mechanism
+		// into its own bypass, and it needs no role — only access to an approval
+		// that has stalled, which is by definition one nobody is watching. The
+		// chain does record it, but afterwards, and nobody reads escalation
+		// histories routinely.
+		//
+		// This is a property of the model, not a permission: whoever genuinely
+		// needs the approval can still be given it, by somebody else, and that
+		// second person is the whole difference.
+		return a, fmt.Errorf("order: %s cannot reassign the approval for %s to themselves",
+			by, a.ItemID)
 	}
 
 	a.Escalations = withHop(a.Escalations, Escalation{From: a.Approver, To: to, At: at, By: by})

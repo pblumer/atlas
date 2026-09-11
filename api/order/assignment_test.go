@@ -291,6 +291,42 @@ func TestEscalationRecordsNoAuthor(t *testing.T) {
 	}
 }
 
+// TestNobodyReassignsAnApprovalToThemselves.
+//
+// The escalation path exists so a stuck approval reaches somebody who will act on
+// it. Taking it for yourself and approving it is the one move that turns the
+// mechanism into its own bypass — no role is needed, only access to an approval
+// that has stalled, which is by definition one nobody is watching. The chain
+// records it, but a chain records it *afterwards*, and nobody reads escalation
+// histories routinely.
+//
+// Refusing to and from the same principal is a property of the model rather than
+// a permission: whoever genuinely needs the approval can still be given it, by
+// somebody else, which is the whole difference.
+func TestNobodyReassignsAnApprovalToThemselves(t *testing.T) {
+	stalled, err := Stall(Assign("laptop", "usr_ceo", 1000), 2000)
+	if err != nil {
+		t.Fatalf("Stall: %v", err)
+	}
+
+	got, err := Reassign(stalled, "usr_greedy", "usr_greedy", 3000)
+	if err == nil {
+		t.Fatal("reassigning an approval to oneself must fail")
+	}
+	if got.Approver != "usr_ceo" || !got.Stalled() {
+		t.Fatalf("assignment changed on a refused call: %+v", got)
+	}
+
+	// The same person may still route it to somebody else, and somebody else may
+	// still route it to them.
+	if _, err := Reassign(stalled, "usr_other", "usr_greedy", 3000); err != nil {
+		t.Errorf("reassigning to a third party: %v, want it allowed", err)
+	}
+	if _, err := Reassign(stalled, "usr_greedy", "usr_admin", 3000); err != nil {
+		t.Errorf("somebody else giving it to them: %v, want it allowed", err)
+	}
+}
+
 // TestReassignMayGoToSomebodyWhoAlreadyHeldIt. The loop guard exists to stop a
 // clock cycling an approval between two colleagues; a person choosing to send it
 // back to the original approver knows something the guard does not.

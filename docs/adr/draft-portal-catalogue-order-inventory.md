@@ -305,6 +305,15 @@ it: the loop guard exists to stop a *clock* cycling an approval between two coll
 and a person sending it back to the original approver knows something the guard does
 not.
 
+What it will not do is give the approval to whoever is making the call. Taking a stuck
+approval for yourself and approving it is the one move that turns the escalation path
+into its own bypass, and it needs no role at all — only access to an approval that has
+stalled, which is by definition one nobody is watching. The chain records it, but
+afterwards, and nobody reads escalation histories routinely. This sits in the model
+rather than in a role because it is not a question of authority: whoever genuinely needs
+the approval can still be given it, by somebody else, and that second person is the
+whole difference.
+
 ### The inventory — engine state, its own column family
 
 An `Entitlement` records that a principal holds a service, in a variant, since when,
