@@ -204,3 +204,30 @@ func TestPortalMarkCascadeStopsAtTheOperator(t *testing.T) {
 		}
 	}
 }
+
+// TestPageBuildersDropAnUnsetAttribute.
+//
+// `disabled: busy ? 'disabled' : null` is the natural way to write a conditional
+// attribute, and setAttribute has no falsy handling: it renders disabled="null",
+// which a browser reads as disabled. On the approval page that meant both buttons
+// dead from the first paint, found by reading rather than by running — there is no
+// browser in this test suite, so the guard is asserted in the source instead.
+func TestPageBuildersDropAnUnsetAttribute(t *testing.T) {
+	for _, page := range []string{"portal.js", "genehmigung.js"} {
+		src := readWeb(t, page)
+		i := strings.Index(src, "function el(tag, attrs")
+		if i < 0 {
+			t.Errorf("%s has no el() builder where this test expects one", page)
+			continue
+		}
+		body := src[i:]
+		if end := strings.Index(body, "\n}\n"); end > 0 {
+			body = body[:end]
+		}
+		if !strings.Contains(body, "v == null") {
+			t.Errorf("%s's el() sets every attribute it is given, including a nullish one. "+
+				"A conditional attribute then renders as the string \"null\", which for "+
+				"disabled means permanently disabled.", page)
+		}
+	}
+}

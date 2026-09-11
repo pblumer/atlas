@@ -218,6 +218,11 @@ async function decide(approved) {
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
+    // A nullish or false value means "do not set this attribute". Without that,
+    // `disabled: busy ? 'disabled' : null` renders disabled="null", which a browser
+    // reads as disabled — both buttons on this page would have been dead from the
+    // first paint. setAttribute has no falsy handling of its own and never will.
+    if (v == null || v === false) continue;
     if (k === 'class') node.className = v;
     else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
     else node.setAttribute(k, v);
