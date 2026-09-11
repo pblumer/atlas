@@ -1,5 +1,5 @@
 // A lifecycle whose states are an «enumeration»'s literals
-// (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration).
+// (ADR-0306).
 //
 // The model that prompted this had its states written twice: as literals somebody
 // maintained, with documentation, and as states a deploy resolved against. What these

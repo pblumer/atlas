@@ -1,4 +1,4 @@
-# ADR-DRAFT: A lifecycle may take its states from an «enumeration»
+# ADR-0306: A lifecycle may take its states from an «enumeration»
 
 - **Status:** Accepted
 - **Implementation:** Landed
