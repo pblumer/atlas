@@ -470,7 +470,17 @@ func registerScope(
 			continue
 		}
 		if ev.Message == nil {
-			return fmt.Errorf("compiler: intermediate throw event %q: only message, signal, compensation, escalation, and link events are supported yet", ev.Id)
+			// Nothing above matched. Either the event carries a definition this compiler
+			// does not implement — refuse, naming it, rather than run something else — or
+			// it carries none at all, which is the milestone marker
+			// (ADR-draft-the-milestone-event-compiles): a throw
+			// that throws nothing, on the path, whose product is the record of having been
+			// reached. It compiles to a pass-through, like the link events above.
+			if def := unimplementedEventDefinition(ev.OtherChildren); def != "" {
+				return fmt.Errorf("compiler: intermediate throw event %q: <%s> is not supported here — a throw event may carry a message, signal, compensation, escalation, or link definition, or none at all (a milestone)", ev.Id, def)
+			}
+			reg.node(ev.Id, b.AddNoneThrowEvent())
+			continue
 		}
 		name, keyExpr, err := resolveMessage(ev.Id, ev.Message.MessageRef)
 		if err != nil {
