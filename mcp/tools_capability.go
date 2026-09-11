@@ -7,7 +7,7 @@ import (
 
 // The business-architecture tools: the business capabilities an organisation must be
 // able to perform, and the value streams whose stages they perform
-// (ADR-draft-business-capabilities-and-value-streams).
+// (ADR-0305).
 //
 // An agent authoring BPMN through these tools runs into the gap the registry exists to
 // close, in a sharper form than a person does. It can deploy a process and have no way

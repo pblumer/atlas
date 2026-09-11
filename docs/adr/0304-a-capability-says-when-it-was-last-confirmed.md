@@ -1,4 +1,4 @@
-# ADR-DRAFT: A capability record says when somebody last confirmed it
+# ADR-0304: A capability record says when somebody last confirmed it
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -8,7 +8,7 @@
 ## Context and problem statement
 
 The gap report
-([ADR-draft-business-capabilities-and-value-streams](draft-business-capabilities-and-value-streams.md))
+([ADR-0305](0305-business-capabilities-and-value-streams.md))
 compares the capability map against what a server actually runs, and every one of its
 eight findings is a **fact Atlas checked**: this process is not deployed, this
 dependency names nothing, two capabilities claim one implementation. That is the half
@@ -318,7 +318,7 @@ hundred lines to read.
 
 ## Links
 
-- extends [ADR-draft-business-capabilities-and-value-streams](draft-business-capabilities-and-value-streams.md)
+- extends [ADR-0305](0305-business-capabilities-and-value-streams.md)
   — the records this dates, and the gap report it adds a finding to
 - follows [ADR-0289](0289-worker-type-setup-in-the-panel.md) — the first `checked`
   date in this tree, and the argument against bumping one without re-reading

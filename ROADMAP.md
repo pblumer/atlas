@@ -1573,7 +1573,7 @@ stall without it.
 The whole milestone is **design-time**. It emits no events, participates in no replay,
 and `applyToState` never sees it. The reasoning, the options weighed and what is
 deliberately refused are in
-[ADR-draft-business-capabilities-and-value-streams](docs/adr/draft-business-capabilities-and-value-streams.md);
+[ADR-0305](docs/adr/0305-business-capabilities-and-value-streams.md);
 the method and how to work it with Atlas as it stands are in
 [`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md).
 
@@ -1666,7 +1666,7 @@ the method and how to work it with Atlas as it stands are in
   is the half anybody acts on: who owns it, what it is and is not responsible for, and
   what it has promised. Those decay silently, and a map whose realisations are green
   and whose owners left two years ago is worse than no map.
-  [ADR-draft-a-capability-says-when-it-was-last-confirmed](docs/adr/draft-a-capability-says-when-it-was-last-confirmed.md)
+  [ADR-0304](docs/adr/0304-a-capability-says-when-it-was-last-confirmed.md)
   is the third instance in this tree of the shape ADR-0289 and
   [ADR-0293](docs/adr/0293-open-questions-in-records-expire.md) already use — a
   backward-looking date saying somebody *looked*, never a forward promise somebody

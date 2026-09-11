@@ -524,7 +524,7 @@ type confirmationView struct {
 }
 
 // handleGetConfirmation reads how long a business-architecture confirmation stays fresh
-// (ADR-draft-a-capability-says-when-it-was-last-confirmed).
+// (ADR-0304).
 func (s *Server) handleGetConfirmation(w http.ResponseWriter, _ *http.Request) {
 	var (
 		c      confirmationSetting

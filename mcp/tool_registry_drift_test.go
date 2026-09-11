@@ -36,7 +36,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_process_runtime":      "GET /api/v1/processes/{key}/runtime",
 	"atlas_call_activities":      "GET /api/v1/call-activities",
 
-	// The business architecture (ADR-draft-business-capabilities-and-value-streams):
+	// The business architecture (ADR-0305):
 	// the map an agent needs in order to say what a process it deploys is *for*.
 	"atlas_business_architecture_subset": "GET /api/v1/business-architecture/subset",
 	"atlas_business_architecture_gaps":   "GET /api/v1/business-architecture/gaps",

@@ -12,7 +12,7 @@ import (
 // Confirming a record: the one act that says its prose is still true.
 //
 // It is a route of its own and not a flag on a save, and that separation is the whole
-// mechanism. See ADR-draft-a-capability-says-when-it-was-last-confirmed; the short
+// mechanism. See ADR-0304; the short
 // version is that a date refreshed by any edit would let a typo fix in the summary
 // assert that the owner, the scope and every SLA had been re-read — which is the lie
 // ADR-0289 names, made automatic and therefore leaving no diff in which anybody could

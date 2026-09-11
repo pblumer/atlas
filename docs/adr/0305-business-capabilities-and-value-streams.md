@@ -1,4 +1,4 @@
-# ADR-DRAFT: Business capabilities and value streams as design-time records
+# ADR-0305: Business capabilities and value streams as design-time records
 
 - **Status:** Accepted
 - **Implementation:** Partial
@@ -337,7 +337,7 @@ Stated so the gaps are decisions rather than omissions:
 - **Follow-ups / risks to watch.** The half of a record Atlas cannot check — the owner,
   the scope, the SLAs — is taken on trust and decays silently, which is the failure that
   turns a capability map into the documentation-only landscape the method warns about.
-  [ADR-draft-a-capability-says-when-it-was-last-confirmed](draft-a-capability-says-when-it-was-last-confirmed.md)
+  [ADR-0304](0304-a-capability-says-when-it-was-last-confirmed.md)
   is the planned answer, and it is the one follow-up that decides whether this registry
   stays true rather than merely complete. Beyond it: the model-side declaration (option 2) as a
   *secondary* source the registry reads: an `atlas:capability` attribute would let a

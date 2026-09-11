@@ -98,7 +98,7 @@ api/        HTTP API, web UI, command submission and queries
   capability/ The business architecture: business capabilities and the value streams
               whose stages they perform, with the realisation edge resolved at read
               time and the gap report computed against what this server runs
-              (ADR-draft-business-capabilities-and-value-streams)
+              (ADR-0305)
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop

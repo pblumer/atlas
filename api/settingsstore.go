@@ -146,7 +146,7 @@ func newSettingsStore(dir string) (*settingsStore, error) {
 }
 
 // confirmationSetting is how long a business-architecture record's confirmation stays
-// fresh (ADR-draft-a-capability-says-when-it-was-last-confirmed). Design-time operator
+// fresh (ADR-0304). Design-time operator
 // configuration, like the theme and the registration setting, so it lives beside them.
 //
 // It is configurable at all — unlike the two places this repository already dates

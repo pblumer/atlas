@@ -286,7 +286,7 @@ type Server struct {
 	infomodel *infomodel.Service
 	// capabilities is the business-architecture registry: the business capabilities
 	// an organisation must be able to perform and the value streams whose stages they
-	// perform (ADR-draft-business-capabilities-and-value-streams). Design-time, and a
+	// perform (ADR-0305). Design-time, and a
 	// per-area service under ADR-0147 like the two above.
 	capabilities *capability.Service
 	// remoteNodes is what peer Atlas servers last said about themselves

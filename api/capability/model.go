@@ -2,7 +2,7 @@ package capability
 
 import "time"
 
-// The two records of the business architecture (ADR-draft-business-capabilities-and-value-streams):
+// The two records of the business architecture (ADR-0305):
 // a business capability, and the value stream whose stages are performed by
 // capabilities.
 //
@@ -68,7 +68,7 @@ type Capability struct {
 	State string `json:"state"`
 	// Confirmation is when a person last said this record still describes reality, and
 	// who said it. It is set by an explicit confirmation and by no edit — see
-	// [Confirmation] and ADR-draft-a-capability-says-when-it-was-last-confirmed.
+	// [Confirmation] and ADR-0304.
 	Confirmation Confirmation `json:"confirmation"`
 	// Revision is optimistic concurrency: a write against a stale one is refused
 	// rather than silently overwriting somebody else's edit.

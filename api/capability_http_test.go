@@ -9,7 +9,7 @@ import (
 
 // The business architecture end to end, against a real server: the registry, the
 // landscape it is compared against, and the two reads that make the registry worth
-// keeping (ADR-draft-business-capabilities-and-value-streams).
+// keeping (ADR-0305).
 //
 // The half these tests exist for is the landscape collector. Everything else in the
 // area is unit-tested against a landscape written by hand; this is the only place that

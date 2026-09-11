@@ -686,7 +686,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Project one class (?class=Order) to a JSON Schema — the derived, read-only contract a value of that class is checked against, together with what the projection could not carry", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("JSON Schema projection", tObject())}},
 
-		// The business architecture (ADR-draft-business-capabilities-and-value-streams):
+		// The business architecture (ADR-0305):
 		// what the organisation must be able to do, above the processes that do it.
 		// Design-time. Reading is open to every signed-in identity on purpose — a
 		// capability map exists to cross the silos an application scope draws — while the

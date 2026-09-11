@@ -9,7 +9,7 @@ The method is the business architecture set out in **Bernd Ruecker and Leon Stra
 this document does not restate the book; it maps the method onto Atlas, says
 truthfully which parts Atlas supports today, shows how to work the method, and names
 what is not built. The design record behind it is
-[ADR-draft-business-capabilities-and-value-streams](../adr/draft-business-capabilities-and-value-streams.md).
+[ADR-0305](../adr/0305-business-capabilities-and-value-streams.md).
 
 **Related, but a different document.** [`enterprise-architecture.md`](enterprise-architecture.md)
 models *Atlas itself* in ArchiMate — Atlas as a capability provider. This document is
