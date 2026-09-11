@@ -554,6 +554,44 @@ for nothing, and the block does not lift — and an order withdrawn in full repo
 tried and did not manage; telling somebody that about their own cancellation invites
 them to ask why it failed, which is the call this was supposed to replace.
 
+### Giving back what was granted
+
+Every line has carried a `DeprovisionProcess` since orders existed, frozen at placement
+so that revoking a grant uses the rules that were in force when it was made. Nothing
+ever ran it. `POST /orders/{id}/lines/{item}/return` does.
+
+A return is **not** a cancellation, and the two are separate statuses for a reason an
+access record cares about: a line that was provisioned and given back is a different
+fact from one that never was. A record saying "cancelled" where somebody held a laptop
+for three weeks has lost three weeks, and an audit that cannot tell the two apart cannot
+answer who had access when — which is the question such a record exists to answer.
+`returning` sits between them and is deliberately **not settled**: something is in flight
+against a target system, and an order reporting itself finished while an account is
+half-deleted would be guessing at the one thing it is least entitled to guess at.
+
+**It is refused while something still held requires it.** That is the precedence graph
+read backwards, from the same `Requires` the waves were computed from. Provisioning
+ordered the account before the laptop that needs it; giving back runs the other way, and
+an account revoked under a laptop still using it leaves the laptop working until
+somebody notices — or not working, for a reason nobody connects to this. The refusal
+names what is in the way, because "cannot return" without it is an instruction to guess.
+
+A return is **not** something a cancellation does on its own. Withdrawing takes back what
+has not happened; revoking an access somebody has used for three weeks is a different
+act with a different risk, and one click doing both deletes accounts on a mis-click. For
+the same reason the page asks before it starts one.
+
+Reporting it goes through the same endpoint a provisioning reports through, and only a
+line already `returning` may be reported `returned` — otherwise a provisioning worker
+could take a line somebody holds and record it as given back with nothing having run.
+
+Two things this deliberately is not. It is not the **inventory**: "what you hold, and
+giving it back" is the recipient's question, and the recipient cannot see an order at
+all. This is the *orderer* revoking what they asked for, which is why it takes the same
+right the withdrawal takes. And there is no **return of a whole order**: that is the wave
+schedule reversed, and the per-line guard already makes a caller do it in the only order
+that is safe.
+
 **Which process decides a line is resolved when fulfilment asks, and was wrong at
 first.** The model built an approval's process id by concatenating the catalogue's
 kind onto a prefix — `"atlas-genehmigung-" + "fixed"` — and the three approval

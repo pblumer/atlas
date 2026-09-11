@@ -40,6 +40,11 @@ const STRINGS = {
     'portal.cancelling': 'Wird storniert …',
     'order.cancelled': 'Storniert',
     'status.cancelled': 'Storniert',
+    'portal.return': 'Zurückgeben',
+    'portal.returning': 'Wird zurückgegeben …',
+    'status.returning': 'Wird zurückgegeben',
+    'status.returned': 'Zurückgegeben',
+    'portal.return.sure': 'Diese Leistung wirklich zurückgeben? Der Zugang wird entzogen.',
     'status.pending': 'Wartet',
     'status.running': 'Läuft',
     'status.done': 'Erledigt',
@@ -75,6 +80,11 @@ const STRINGS = {
     'portal.cancelling': 'Cancelling …',
     'order.cancelled': 'Cancelled',
     'status.cancelled': 'Cancelled',
+    'portal.return': 'Return',
+    'portal.returning': 'Returning …',
+    'status.returning': 'Being returned',
+    'status.returned': 'Returned',
+    'portal.return.sure': 'Really give this back? The access will be revoked.',
     'status.pending': 'Waiting',
     'status.running': 'In progress',
     'status.done': 'Done',
@@ -331,7 +341,7 @@ function deriveStatus(order) {
   for (const l of lines) {
     const terminal = l.status === 'blocked'
       ? !!l.terminallyBlocked
-      : ['done', 'skipped', 'rejected', 'abandoned', 'cancelled'].includes(l.status);
+      : ['done', 'skipped', 'rejected', 'abandoned', 'cancelled', 'returned'].includes(l.status);
     if (!terminal) return 'order.running';
     if (l.status === 'done' || l.status === 'skipped') provisioned++;
     if (l.status === 'cancelled') cancelled++;
@@ -350,6 +360,42 @@ function deriveStatus(order) {
 // the telephone call this whole thing exists to prevent.
 function cancellable(order) {
   return (order.lines || []).some((l) => l.status === 'pending' || l.status === 'blocked');
+}
+
+// returnable mirrors the server's rule as far as the page can see it: a line is
+// held, and nothing still held requires it. The second half is why this reads the
+// order's own requires rather than only the line — giving back an account under a
+// laptop that still uses it is the mistake the guard exists for, and offering the
+// button would invite it before the server refused it.
+function returnable(order, line) {
+  if (line.status !== 'done') return false;
+  const held = new Set((order.lines || []).filter((l) => l.status === 'done').map((l) => l.itemId));
+  const requires = order.requires || {};
+  for (const [dependent, needs] of Object.entries(requires)) {
+    if (held.has(dependent) && (needs || []).includes(line.itemId)) return false;
+  }
+  return true;
+}
+
+// giveBack starts a line's deprovisioning, then reloads. It asks first: revoking
+// an access somebody has been using is the one thing on this page with a
+// consequence outside Atlas, and a mis-click deletes an account.
+async function giveBack(order, line) {
+  if (state.busy) return;
+  if (!window.confirm(t('portal.return.sure'))) return;
+  state.busy = true;
+  state.error = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/return`,
+      { method: 'POST' });
+    state.busy = false;
+    await load();
+  } catch (e) {
+    state.busy = false;
+    state.error = `${t('portal.failed')} ${e.message}`;
+    render();
+  }
 }
 
 // cancel withdraws an order, then reloads: what the server did to each line is
@@ -394,7 +440,14 @@ function renderOrders() {
       ' ', l.itemId, ' — ', t(`status.${l.status}`),
       l.blockedBy && l.blockedBy.length
         ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
-      l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null))))));
+      l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
+      returnable(o, l)
+        ? el('button', {
+          class: 'linkish',
+          disabled: state.busy,
+          onclick: () => giveBack(o, l),
+        }, state.busy ? t('portal.returning') : t('portal.return'))
+        : null))))));
 }
 
 // The brand mark, and the order it is looked for in: the catalogue's own, then

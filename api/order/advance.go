@@ -61,10 +61,11 @@ func Next(o Order) []string {
 // has exactly one.
 func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
 	switch status {
-	case StatusDone, StatusSkipped, StatusFailed, StatusRunning:
+	case StatusDone, StatusSkipped, StatusFailed, StatusRunning, StatusReturned:
 	default:
 		return o, fmt.Errorf("order: a line cannot be set to %s here — "+
-			"rejection and abandonment are decisions with an author, and blocked is derived", status)
+			"rejection, abandonment and cancellation are decisions with an author, "+
+			"blocked is derived, and returning is entered by asking for the return", status)
 	}
 	if at == 0 {
 		return o, fmt.Errorf("order: recording a line's outcome needs the moment it happened")
@@ -76,6 +77,13 @@ func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
 	for i := range lines {
 		if lines[i].ItemID != itemID {
 			continue
+		}
+		// A return is reported only by the revocation that was asked for. Without
+		// this, a provisioning worker reporting "returned" would take a line
+		// somebody holds and record it as given back, with nothing having run.
+		if status == StatusReturned && lines[i].Status != StatusReturning {
+			return o, fmt.Errorf("order: line %s is %s, so nothing is giving it back",
+				itemID, lines[i].Status)
 		}
 		lines[i].Status = status
 		found = true

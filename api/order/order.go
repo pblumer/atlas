@@ -58,6 +58,21 @@ const (
 	// down a colleague's laptop, when what happened is that the colleague changed
 	// their mind.
 	StatusCancelled LineStatus = "cancelled"
+	// StatusReturning is a provisioned line whose deprovisioning process is
+	// running now: the revocation was asked for and has not come back.
+	//
+	// It is deliberately *not* settled. Something is in flight against a target
+	// system, and an order that reported itself finished while an account was
+	// half-deleted would be reporting the thing it is least entitled to guess at.
+	StatusReturning LineStatus = "returning"
+	// StatusReturned is a line that was provisioned and has been given back.
+	//
+	// Distinct from Cancelled, which is a line that never was: a record that says
+	// "cancelled" where somebody held a laptop for three weeks is a record that
+	// lost three weeks. What was granted and then revoked is a different fact from
+	// what was never granted, and an audit that cannot tell them apart cannot
+	// answer who had access when.
+	StatusReturned LineStatus = "returned"
 	// StatusBlocked is a line that cannot be attempted because something it
 	// requires is Failed or Rejected. See Line.BlockedBy.
 	//
@@ -80,11 +95,20 @@ func (s LineStatus) Satisfied() bool { return s == StatusDone || s == StatusSkip
 // on its causes rather than on itself: see [Line.Terminal].
 func (s LineStatus) Settled() bool {
 	switch s {
-	case StatusDone, StatusSkipped, StatusFailed, StatusRejected, StatusAbandoned, StatusCancelled:
+	case StatusDone, StatusSkipped, StatusFailed, StatusRejected, StatusAbandoned,
+		StatusCancelled, StatusReturned:
 		return true
 	}
 	return false
 }
+
+// Held reports whether the recipient has this line's product because of this
+// order. Only a provisioned line is held: a skipped one they got elsewhere and
+// this order never granted, and a returned one they no longer have.
+//
+// It is what deprovisioning asks about, and what the precedence guard asks about
+// — a line may only be given back once nothing that needed it is still held.
+func (s LineStatus) Held() bool { return s == StatusDone }
 
 // Cancellable reports whether a line can still be withdrawn.
 //

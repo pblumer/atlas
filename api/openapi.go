@@ -773,6 +773,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
 			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
 			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
+			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
+			resp: jsonBody("The order, and the process now revoking the line", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
 			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
 			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{

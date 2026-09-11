@@ -44,6 +44,11 @@
   .parts { margin:10px 0; font-size:14px; }
   .parts ul { margin:4px 0 0; padding-left:18px; }
   .muted { color:var(--muted); font-size:13px; }
+  /* A return sits on one line among others, so it is a link and not a button:
+     a row of buttons down the side of a list reads as the list's purpose. */
+  button.linkish { background:none; border:0; padding:0 0 0 8px; font:inherit; font-size:13px;
+                   color:var(--accent-hover); cursor:pointer; text-decoration:underline; }
+  button.linkish:disabled { opacity:.55; cursor:default; text-decoration:none; }
   .pill { display:inline-block; background:var(--accent-soft); color:var(--accent-hover);
           border-radius:999px; padding:2px 10px; font-size:12px; margin:0 0 8px; }
   .row { display:flex; justify-content:space-between; align-items:baseline; gap:12px;
@@ -58,7 +63,8 @@
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--border-strong); }
   .dot.done, .dot.skipped { background:var(--ok); }
   .dot.failed, .dot.abandoned { background:var(--danger); }
-  .dot.rejected, .dot.cancelled { background:var(--muted); }
+  .dot.rejected, .dot.cancelled, .dot.returned { background:var(--muted); }
+  .dot.returning { background:var(--accent-soft); border:1px solid var(--accent); }
   .dot.blocked { background:var(--accent-soft); border:1px solid var(--border-strong); }
   .dot.running { background:var(--accent); }
   button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
