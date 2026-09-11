@@ -267,7 +267,7 @@ Between 2026-09-08 and 2026-09-11 a session hook and a CI check did, so that Git
 would count an agent's commit for the person who asked for it. Both are gone: the only
 repair the check could offer was a history rewrite of the whole branch, which kept
 reopening conflicts on branches that were mergeable before it ran. ADR-0288 still holds
-the argument for the split; ADR-draft-withdrawing-commit-attribution says why it is no
+the argument for the split; ADR-0302 says why it is no
 longer enforced here.
 
 Do not rewrite the author of commits that are already on `main`.

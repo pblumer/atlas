@@ -1,6 +1,6 @@
 # ADR-0288: An agent's commit is authored by the person who asked for it
 
-> **Withdrawn on 2026-09-11 by [ADR-draft-withdrawing-commit-attribution](draft-withdrawing-commit-attribution.md).**
+> **Withdrawn on 2026-09-11 by [ADR-0302](0302-withdrawing-commit-attribution.md).**
 > The mechanism described below — the session hook, the identity table and the CI
 > check — landed on 2026-09-08 and was removed from the tree on 2026-09-11: the
 > branch-wide history rewrite the check prescribes was reopening conflicts on branches

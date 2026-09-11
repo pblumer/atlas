@@ -1,4 +1,4 @@
-# ADR-DRAFT: The repository stops rewriting who authored an agent's commit
+# ADR-0302: The repository stops rewriting who authored an agent's commit
 
 - **Status:** Accepted
 - **Implementation:** Landed
