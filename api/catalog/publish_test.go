@@ -484,3 +484,122 @@ func TestLongPrecedenceChainBecomesOneItemPerWave(t *testing.T) {
 		t.Fatalf("schedule = %s, want a|b|c|d (one item per wave)", got)
 	}
 }
+
+// A wave is the right unit to *run* in and the wrong unit to *start on*. Waves say
+// what may go in parallel; they cannot say which lines a failure takes with it,
+// because at a wave boundary they know only "the previous wave is done". The
+// release therefore also carries each item's direct preconditions, and Blocked is
+// what the fulfilment process asks when a line fails.
+
+// TestReleaseCarriesDirectPreconditions: the edges the schedule was computed from
+// survive into the release, so the orchestrator does not need the catalogue.
+func TestReleaseCarriesDirectPreconditions(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"desk", "account", "laptop", "workplace"}}},
+		Items: []Item{item("desk"), item("account"), item("laptop"), item("workplace")},
+		Edges: []Edge{
+			requires("laptop", "desk"),
+			requires("workplace", "laptop"),
+			requires("workplace", "account"),
+		},
+	}
+	rel := mustPublish(t, in)
+
+	if got := strings.Join(rel.Requires["workplace"], ","); got != "account,laptop" {
+		t.Errorf("Requires[workplace] = %s, want account,laptop (sorted)", got)
+	}
+	if got := strings.Join(rel.Requires["laptop"], ","); got != "desk" {
+		t.Errorf("Requires[laptop] = %s, want desk", got)
+	}
+	// An item that needs nothing carries no entry: an empty list is noise in a
+	// document a person reads.
+	if _, ok := rel.Requires["desk"]; ok {
+		t.Errorf("Requires has an entry for desk, which needs nothing")
+	}
+}
+
+// TestBlockedStopsOnlyWhatDependsOnTheFailure is the rule the whole second field
+// exists for: a failing line stops its own successors and nothing else.
+func TestBlockedStopsOnlyWhatDependsOnTheFailure(t *testing.T) {
+	// laptop -> vpn, account -> mailbox. laptop fails; mailbox must still run.
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"laptop", "vpn", "account", "mailbox"}}},
+		Items: []Item{item("laptop"), item("vpn"), item("account"), item("mailbox")},
+		Edges: []Edge{requires("vpn", "laptop"), requires("mailbox", "account")},
+	}
+	rel := mustPublish(t, in)
+
+	got := rel.Blocked("laptop")
+	if strings.Join(got, ",") != "vpn" {
+		t.Fatalf("Blocked(laptop) = %v, want [vpn] — mailbox depends on account, not laptop", got)
+	}
+}
+
+// TestBlockedIsTransitive: a failure three links up stops the whole chain, not
+// only the item directly behind it.
+func TestBlockedIsTransitive(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"a", "b", "c", "d"}}},
+		Items: []Item{item("a"), item("b"), item("c"), item("d")},
+		Edges: []Edge{requires("b", "a"), requires("c", "b"), requires("d", "c")},
+	}
+	rel := mustPublish(t, in)
+	if got := strings.Join(rel.Blocked("a"), ","); got != "b,c,d" {
+		t.Fatalf("Blocked(a) = %s, want b,c,d", got)
+	}
+}
+
+// TestBlockedExcludesTheFailureItself: the failed line has a failure of its own;
+// reporting it as blocked would tell somebody to look in the wrong place.
+func TestBlockedExcludesTheFailureItself(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}, Items: []string{"a", "b"}}},
+		Items:    []Item{item("a"), item("b")},
+		Edges:    []Edge{requires("b", "a")},
+	}
+	rel := mustPublish(t, in)
+	for _, id := range rel.Blocked("a") {
+		if id == "a" {
+			t.Fatalf("Blocked(a) = %v, must not contain a itself", rel.Blocked("a"))
+		}
+	}
+}
+
+// TestBlockedTakesSeveralFailuresAtOnce: a wave can fail in more than one place,
+// and the union must be reported once each rather than twice.
+func TestBlockedTakesSeveralFailuresAtOnce(t *testing.T) {
+	// Both x and y are preconditions of z; both fail.
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"x", "y", "z", "free"}}},
+		Items: []Item{item("x"), item("y"), item("z"), item("free")},
+		Edges: []Edge{requires("z", "x"), requires("z", "y")},
+	}
+	rel := mustPublish(t, in)
+	if got := strings.Join(rel.Blocked("x", "y"), ","); got != "z" {
+		t.Fatalf("Blocked(x, y) = %s, want z once", got)
+	}
+	if got := rel.Blocked("free"); len(got) != 0 {
+		t.Fatalf("Blocked(free) = %v, want nothing", got)
+	}
+}
+
+// TestBlockedOnNothingBlocksNothing: the ordinary path, where a wave settles
+// clean.
+func TestBlockedOnNothingBlocksNothing(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}, Items: []string{"a", "b"}}},
+		Items:    []Item{item("a"), item("b")},
+		Edges:    []Edge{requires("b", "a")},
+	}
+	rel := mustPublish(t, in)
+	if got := rel.Blocked(); len(got) != 0 {
+		t.Fatalf("Blocked() = %v, want nothing", got)
+	}
+	if got := rel.Blocked("unknown"); len(got) != 0 {
+		t.Fatalf("Blocked(unknown) = %v, want nothing", got)
+	}
+}

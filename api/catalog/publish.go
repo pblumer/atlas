@@ -66,6 +66,17 @@ type Release struct {
 	// where it does. Waves keep it — a failure stops its own successors, and the
 	// rest of its wave and every independent branch continue.
 	Waves [][]string `json:"waves"`
+	// Requires holds each item's direct preconditions, sorted, with no entry for an
+	// item that has none.
+	//
+	// Waves are the right unit to *run* in and the wrong unit to *start on*. At a
+	// wave boundary all that is known is "the previous wave is done", which cannot
+	// distinguish a line whose precondition failed from one whose precondition is
+	// in the same wave and succeeded — so a wave-wide barrier either starts a line
+	// whose precondition is missing, or holds one whose preconditions are all
+	// there. Both are wrong, so the edges travel with the schedule and [Blocked] is
+	// what the fulfilment process asks when a line fails.
+	Requires map[string][]string `json:"requires,omitempty"`
 	// WithoutApproval names every item orderable with no approval at all, sorted.
 	// It is a standing list rather than a report somebody has to think to run,
 	// because the role that defines approval rules is the role that publishes them.
@@ -103,6 +114,7 @@ func Publish(in Input) (Release, []Problem) {
 
 	return Release{
 		Waves:           schedule(in),
+		Requires:        preconditions(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
 	}, nil
 }
@@ -318,6 +330,72 @@ func schedule(in Input) [][]string {
 		waves[depth[id]] = append(waves[depth[id]], id)
 	}
 	return waves
+}
+
+// Blocked reports every item that cannot run because one of the given items
+// failed, transitively, sorted and each named once.
+//
+// The failed items themselves are not in the result: they have a failure of their
+// own to report, and listing them as blocked would send somebody looking in the
+// wrong place. An unknown id blocks nothing rather than erroring — a fulfilment
+// process asking about a line that is not in this release has a different problem,
+// and inventing one here would hide it.
+func (r Release) Blocked(failed ...string) []string {
+	if len(failed) == 0 || len(r.Requires) == 0 {
+		return nil
+	}
+
+	// Invert once: precondition -> the items waiting on it.
+	waiting := map[string][]string{}
+	for item, needs := range r.Requires {
+		for _, need := range needs {
+			waiting[need] = append(waiting[need], item)
+		}
+	}
+
+	down := map[string]bool{}
+	for _, f := range failed {
+		down[f] = true
+	}
+
+	blocked := map[string]bool{}
+	queue := append([]string(nil), failed...)
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, next := range waiting[cur] {
+			if blocked[next] || down[next] {
+				continue
+			}
+			blocked[next] = true
+			queue = append(queue, next)
+		}
+	}
+
+	out := make([]string, 0, len(blocked))
+	for id := range blocked {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// preconditions collects each item's direct preconditions from the edges.
+func preconditions(in Input) map[string][]string {
+	req := map[string][]string{}
+	for _, e := range in.Edges {
+		if e.Kind != EdgeRequires {
+			continue
+		}
+		req[e.From] = append(req[e.From], e.To)
+	}
+	if len(req) == 0 {
+		return nil
+	}
+	for _, needs := range req {
+		sort.Strings(needs)
+	}
+	return req
 }
 
 // itemsWithoutApproval names every item that provisions with nobody asked.

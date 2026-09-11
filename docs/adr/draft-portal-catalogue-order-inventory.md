@@ -172,6 +172,17 @@ fulfilment process was designed against it. An item's wave is one past the *late
 its preconditions, so "everything this needs has already run" is true at every wave
 boundary.
 
+Waves alone are still not enough, and the same design pass found why. A wave is the
+right unit to **run** in and the wrong unit to **start on**: at a wave boundary the
+only fact available is "the previous wave is done", which cannot tell a line whose
+precondition failed from one whose precondition succeeded beside it. A wave-wide
+barrier therefore either starts a line whose precondition is missing or holds one
+whose preconditions are all present — both wrong. So a release carries **both**: the
+waves, which are what a person reads and what the fulfilment process parallelises
+over, and each line's direct preconditions, which are what decides who a failure
+takes with it. The release answers that question itself, so the orchestrator never
+reconsults the catalogue.
+
 Two resolutions happen in the basket, before the order exists, and both are shown to
 the person rather than decided for them: a service the ordering user **already holds**
 is marked as held and skipped, and the same service pulled in twice in **different
@@ -271,8 +282,9 @@ discrepancy, which no other system in the estate can do.
 
 ## Implementation
 
-`api/catalog` carries the catalogue model and `Publish` — the validation and the wave
-schedule described above. The order, the basket and the inventory are not built yet,
+`api/catalog` carries the catalogue model and `Publish` — the validation, the wave
+schedule and the preconditions described above, with `Release.Blocked` answering which
+lines a failure stops. The order, the basket and the inventory are not built yet,
 which is why this record reads `Partial`.
 
 ## Links
