@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Starmap's ArchiMate view now draws ArchiMate's relationships too.** The nodes
+  were already ArchiMate's own symbols; the lines between them were still Atlas's — one
+  solid, one dashed, one dotted. For a reader who works in the notation that is half
+  the alphabet: ArchiMate tells **Assignment**, **Triggering** and **Serving** apart by
+  what sits at the ends of an otherwise identical solid line.
+
+  Each is now drawn that way — a ball at the source and a filled arrowhead at the
+  target for Assignment, a filled arrowhead for Triggering, an open one for Serving —
+  and the lines are solid, because in ArchiMate a dashed line with an open arrowhead is
+  a Flow and a dotted one a Realization. Keeping Atlas's dash would not have been a
+  missing statement but a wrong one.
+
+  A Serving relationship points the other way from the fact it comes from: ArchiMate
+  runs Serving from the provider to the consumer, so the arrowhead sits on the process
+  rather than on the worker it names — the same reversal the exported document has
+  always made. The key says so in words as well, for the reader who does not already
+  know the notation by sight. The marks travel into an exported file, where there is no
+  key to hover over.
+
+  The relationship table is now served by the server alongside the element table,
+  instead of the browser keeping a second copy. A picture with Triggering's filled
+  arrowhead on an edge the exported file calls Serving would be two answers to one
+  question, and nothing on either surface would say which was true. Three relationships
+  is also all there can be: Atlas knows that an application holds a process, that a
+  process calls another, and that a process uses a worker or a decision. Nothing here
+  is a Flow or a Realization, and an absent relationship type means Atlas cannot see
+  one — never that there is none.
+
+  A served notation is also a copy now. The element table, the relationship table and
+  the loss list were shared with every caller, so an edit anywhere would have changed
+  the mapping for everybody, silently.
+
 - **The Starmap's ArchiMate view now draws ArchiMate's own symbols and layer colours.**
   Picking **ArchiMate 3.2** under Notation mapped each node to an ArchiMate element type
   and wrote that type under its name — and then drew Atlas's own circles and squares.

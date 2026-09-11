@@ -32,7 +32,7 @@ const graph = {
 // serve it too: it is the same table the ArchiMate export writes from, and a mock
 // that invented its own would be testing a picture no server produces.
 const notations = [
-  { id: "atlas", label: "Atlas (derived)", short: "Atlas", projection: false, mappingVersion: 1, types: {}, loss: [] },
+  { id: "atlas", label: "Atlas (derived)", short: "Atlas", projection: false, mappingVersion: 1, types: {}, relations: {}, loss: [] },
   {
     id: "archimate-3.2", label: "ArchiMate 3.2", short: "ArchiMate",
     projection: true, mappingVersion: 1,
@@ -42,6 +42,14 @@ const notations = [
       worker: { name: "Application Service", type: "ApplicationService" },
       decision: { name: "Application Function", type: "ApplicationFunction" },
       target: { name: "Node", type: "Node" },
+    },
+    // The relationship half of the same mapping. Assignment, Triggering and Serving
+    // are what the ArchiMate export writes, and the canvas draws its arrowheads from
+    // this row rather than from a table of its own.
+    relations: {
+      contains: { name: "Assignment", type: "Assignment" },
+      calls: { name: "Triggering", type: "Triggering" },
+      uses: { name: "Serving", type: "Serving", flip: true },
     },
     loss: [
       "Nothing here was modelled.",
@@ -57,6 +65,7 @@ const notations = [
       worker: { name: "Component" }, decision: { name: "Component" },
       target: { name: "Deployment Node" },
     },
+    relations: {},
     loss: [
       "C4 separates its levels onto different diagrams.",
       "External systems are absent. Atlas holds no model of what is behind a worker.",
@@ -2157,6 +2166,191 @@ test("a kind the notation cannot express keeps its own shape", async ({ page }) 
   // the projection left alone rather than a projection that did nothing.
   expect(await shapeOf("process:1")).not.toBe(process);
   expect(await shapeOf("process:1")).toBe("polygon");
+});
+
+// ArchiMate's other alphabet: the lines (ADR-0211 §8).
+//
+// The elements are drawn in the notation's own symbols. The lines between them were
+// not, and for an ArchiMate reader that is half the notation missing — Assignment,
+// Triggering and Serving are one solid line apiece, told apart only by what sits at
+// the ends. A picture that drew all three the same way was saying "these are related"
+// where the data says which way and in what sense.
+const edgeLine = (page, from, to) =>
+  page.locator(`.mesh-edge[data-from="${from}"][data-to="${to}"]`);
+
+test("ArchiMate's relationships are drawn in ArchiMate's own line ends", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  // Assignment: a ball where the relationship starts, a filled arrowhead where it
+  // ends. Archi draws it with a BallEndpoint and a filled PolygonDecoration, and it
+  // is the one relationship here that marks both of its ends.
+  const assignment = edgeLine(page, "application:a1", "process:1");
+  await expect(assignment).toHaveAttribute("marker-start", "url(#am-ball)");
+  await expect(assignment).toHaveAttribute("marker-end", "url(#am-head-filled)");
+
+  // Triggering: the filled arrowhead alone.
+  const triggering = edgeLine(page, "process:1", "process:2");
+  await expect(triggering).toHaveAttribute("marker-end", "url(#am-head-filled)");
+  expect(await triggering.getAttribute("marker-start")).toBeNull();
+
+  // Serving: an open arrowhead, which is the whole of what tells it from Triggering.
+  // Filled against unfilled is not a decoration here — it is the difference between
+  // "this one sets that one going" and "that one is there for this one".
+  const serving = edgeLine(page, "process:1", "worker:c1");
+  await expect(serving).toHaveAttribute("marker-start", "url(#am-head-open-back)");
+  expect(await serving.getAttribute("marker-end")).toBeNull();
+
+  // And every one of them solid. Atlas's own picture draws `uses` dashed and
+  // `contains` dotted, which is a free channel in a vocabulary with no opinion about
+  // it — ArchiMate has one, where a dashed line with an open head is a Flow and a
+  // dotted one a Realization. Keeping the derived dash would not be a missing
+  // statement but a wrong one.
+  for (const line of [assignment, triggering, serving]) {
+    const dash = await line.evaluate((el) => getComputedStyle(el).strokeDasharray);
+    expect(["none", ""]).toContain(dash);
+  }
+
+  // The markers are inside the canvas rather than in the page around it, which is
+  // what carries them into a file somebody saves.
+  await expect(page.locator(".mesh-canvas defs #am-head-filled")).toHaveCount(1);
+});
+
+// ArchiMate's Serving runs from the provider to the consumer; the landscape's `uses`
+// edge runs the other way, because a process is what names the worker it needs. The
+// export has always reversed it. The picture has to make the same reversal or the two
+// say opposite things about one fact.
+test("a Serving relationship points at the process, not at the worker it names", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  // The drawn line still runs process → worker: the reversal moves the arrowhead, not
+  // the geometry, so everything that reads the picture back — the hover, the impact
+  // walk, the exported document — is looking at the same edge it always was.
+  const serving = edgeLine(page, "process:1", "worker:c1");
+  await expect(serving).toHaveCount(1);
+  // The head is therefore on the *start*, which is the process. The worker end
+  // carries nothing, because in ArchiMate nothing arrives at a provider.
+  await expect(serving).toHaveAttribute("marker-start", "url(#am-head-open-back)");
+
+  // Triggering is the control: the same picture, an unreversed relationship, and the
+  // head on the other end. Without it this test would pass on a build that put every
+  // mark at the start.
+  await expect(edgeLine(page, "process:1", "process:2")).toHaveAttribute(
+    "marker-end", "url(#am-head-filled)");
+
+  // The key says it in words as well. An arrowhead pointing the unexpected way is
+  // only readable to somebody who already knows the notation, and the row is for the
+  // reader who does not.
+  await expect(page.locator(".mesh-rules")).toContainText("Serving");
+  await expect(page.locator(".mesh-rules")).toContainText("drawn from the provider");
+});
+
+// A mark at the end of a centre-to-centre line is a mark underneath the node, which
+// is a notation nobody can read. The line has to stop at the circle the layout
+// reserved — the same circle the shapes are inscribed in.
+test("a marked line stops at the circles, so its ends are not under the nodes", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  const geometry = async (from, to) => page.evaluate(([f, t]) => {
+    const line = document.querySelector(`.mesh-edge[data-from="${f}"][data-to="${t}"]`);
+    const at = (id) => {
+      const g = document.querySelector(`[data-node-id="${id}"]`);
+      const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute("transform"));
+      return {
+        x: parseFloat(m[1]), y: parseFloat(m[2]),
+        r: parseFloat(g.querySelector(".mesh-body").dataset.r),
+      };
+    };
+    const a = at(f), b = at(t);
+    const read = (n) => parseFloat(line.getAttribute(n));
+    return {
+      a, b,
+      gapA: Math.hypot(read("x1") - a.x, read("y1") - a.y),
+      gapB: Math.hypot(read("x2") - b.x, read("y2") - b.y),
+      span: Math.hypot(read("x2") - read("x1"), read("y2") - read("y1")),
+      apart: Math.hypot(b.x - a.x, b.y - a.y),
+    };
+  }, [from, to]);
+
+  // Before: the derived picture draws no marks, so it has no reason to stop short and
+  // does not. This is the control — it is what makes the numbers below a change.
+  const plain = await geometry("application:a1", "process:1");
+  expect(plain.gapA).toBeLessThan(0.2);
+  expect(plain.gapB).toBeLessThan(0.2);
+
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+  const marked = await geometry("application:a1", "process:1");
+  // Each end now starts one radius out from its node's centre, so the ball and the
+  // arrowhead land outside the shape rather than behind it.
+  expect(marked.gapA).toBeCloseTo(marked.a.r, 0);
+  expect(marked.gapB).toBeCloseTo(marked.b.r, 0);
+  // And the line is shorter than the distance between the two nodes by exactly what
+  // it gave up at the ends — it was trimmed, not moved.
+  expect(marked.span).toBeCloseTo(marked.apart - marked.a.r - marked.b.r, 0);
+});
+
+// The notation is a projection and stays inside it. A reader who never picks one is
+// looking at Atlas's own picture, and the line styles there are the only thing
+// telling its three kinds apart.
+test("Atlas's own picture keeps its line styles and puts nothing on their ends", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+
+  for (const [from, to] of [["application:a1", "process:1"], ["process:1", "process:2"],
+    ["process:1", "worker:c1"]]) {
+    const line = edgeLine(page, from, to);
+    expect(await line.getAttribute("marker-start")).toBeNull();
+    expect(await line.getAttribute("marker-end")).toBeNull();
+  }
+  // The dash is still doing the work the marks would otherwise take over.
+  const dash = await edgeLine(page, "process:1", "worker:c1")
+    .evaluate((el) => getComputedStyle(el).strokeDasharray);
+  expect(dash).not.toBe("none");
+  await expect(page.locator(".mesh-canvas defs")).toHaveCount(0);
+  // And the key reads in Atlas's own words rather than ArchiMate's.
+  await expect(page.locator(".mesh-rules")).toContainText("Dashed line — uses");
+});
+
+// An exported picture is read where there is nothing to hover and no key to scroll
+// to. The marks have to travel with it, and so does the row that says what they mean.
+test("an exported ArchiMate picture carries its relationship marks", async ({ page }) => {
+  installMock(page);
+  await page.goto("/index.html#/panorama/starmap");
+  await expect(page.locator(".mesh-canvas")).toBeVisible();
+  await page.selectOption("#mesh-notation", "archimate-3.2");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#mesh-export-svg").click(),
+  ]);
+  const stream = await download.createReadStream();
+  const svg = await new Promise((resolve) => {
+    let out = "";
+    stream.on("data", (chunk) => (out += chunk));
+    stream.on("end", () => resolve(out));
+  });
+
+  // The marker definitions, and the lines that point at them. A file carrying the
+  // references without the definitions would draw every relationship as a bare line
+  // and look like a picture rather than a broken one, which is the failure worth a
+  // test: nothing about it would announce itself.
+  expect(svg).toContain('id="am-head-filled"');
+  expect(svg).toContain('id="am-head-open-back"');
+  expect(svg).toContain('id="am-ball"');
+  expect(svg).toContain('marker-end="url(#am-head-filled)"');
+  expect(svg).toContain('marker-start="url(#am-head-open-back)"');
+  // And the key in the file names the relationships rather than the line styles the
+  // ArchiMate picture no longer uses.
+  expect(svg).toContain("Serving —");
+  expect(svg).toContain("Assignment —");
 });
 
 // An exported projection has to carry that it is one. A C4-looking file that does
