@@ -77,7 +77,15 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 	}
 
 	for i := range out {
-		// A line that has already settled keeps what it is. One provisioned before
+		// Blocked is derived, so it is cleared and recomputed rather than trusted.
+		// That is what makes a repair effective: once the failure behind a
+		// precondition is fixed, the line that was waiting simply is not blocked
+		// this time round.
+		if out[i].Status == StatusBlocked {
+			out[i].Status = StatusPending
+			out[i].BlockedBy, out[i].TerminallyBlocked = nil, false
+		}
+		// A line with an outcome of its own keeps it. One provisioned before
 		// something upstream failed stays done: provisioning happened, and the
 		// record has to say so.
 		if out[i].Status.Settled() {
@@ -86,6 +94,15 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 		if blocking := causes(out[i].ItemID); len(blocking) > 0 {
 			out[i].Status = StatusBlocked
 			out[i].BlockedBy = blocking
+			// One rejection among the causes settles the line whatever happens to
+			// the rest: repairing an incident cannot undo a decision, so there is
+			// nothing left to wait for.
+			for _, c := range blocking {
+				if status[c] == StatusRejected {
+					out[i].TerminallyBlocked = true
+					break
+				}
+			}
 		}
 	}
 	return out
@@ -93,10 +110,15 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 
 // Derive reports where a whole order stands, from its lines alone. It is computed
 // rather than stored so it can never disagree with them.
+//
+// An order stays open while any line can still move — including one blocked by a
+// failure somebody can repair, which is the case that decides how long an order
+// lives. It settles once every line has either an outcome of its own or a blockage
+// that will not lift.
 func Derive(ls []Line) Status {
 	provisioned, settled := 0, 0
 	for _, l := range ls {
-		if !l.Status.Settled() {
+		if !l.Terminal() {
 			return OrderRunning
 		}
 		settled++

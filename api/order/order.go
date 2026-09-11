@@ -40,6 +40,11 @@ const (
 	StatusRejected LineStatus = "rejected"
 	// StatusBlocked is a line that cannot be attempted because something it
 	// requires is Failed or Rejected. See Line.BlockedBy.
+	//
+	// It is *derived*, never a line's own outcome, and it is recomputed from
+	// scratch on every pass — which is what lets a repair undo it. An operator who
+	// fixes the incident behind a failed precondition releases the line that was
+	// waiting on it, with nobody rewriting a status by hand.
 	StatusBlocked LineStatus = "blocked"
 )
 
@@ -48,10 +53,14 @@ const (
 // running, does not yet.
 func (s LineStatus) Satisfied() bool { return s == StatusDone || s == StatusSkipped }
 
-// Settled reports whether a line will not change again without somebody acting.
+// Settled reports whether this is a line's own final outcome.
+//
+// Blocked is deliberately absent. It is not an outcome but a consequence of other
+// lines, recomputed on every pass, so whether a blocked line has finished depends
+// on its causes rather than on itself: see [Line.Terminal].
 func (s LineStatus) Settled() bool {
 	switch s {
-	case StatusDone, StatusSkipped, StatusFailed, StatusRejected, StatusBlocked:
+	case StatusDone, StatusSkipped, StatusFailed, StatusRejected:
 		return true
 	}
 	return false
@@ -72,6 +81,23 @@ type Line struct {
 	// "Your VPN is waiting because the laptop was rejected" is the sentence somebody
 	// needs; "waiting because the docking station is waiting" is not.
 	BlockedBy []string `json:"blockedBy,omitempty"`
+	// TerminallyBlocked marks a blocked line that will never run: one of the things
+	// it requires was rejected, and a decision does not change because an incident
+	// was repaired. A line blocked only by failures is not terminal — somebody can
+	// still fix them, and the order waits.
+	//
+	// It is set by [Propagate] alongside BlockedBy and is meaningless on any other
+	// status.
+	TerminallyBlocked bool `json:"terminallyBlocked,omitempty"`
+}
+
+// Terminal reports whether this line has finished moving: either it reached an
+// outcome of its own, or it is blocked by something that will not change.
+func (l Line) Terminal() bool {
+	if l.Status == StatusBlocked {
+		return l.TerminallyBlocked
+	}
+	return l.Status.Settled()
 }
 
 // Status is where a whole order stands. It is derived from the lines rather than
@@ -79,7 +105,10 @@ type Line struct {
 type Status string
 
 const (
-	// OrderRunning has at least one line still to settle.
+	// OrderRunning has at least one line still to settle — including a line
+	// blocked by a failure somebody can still repair. An order that settled while
+	// an incident behind it was being worked would tell the orderer their line is
+	// never coming, at the moment somebody is fixing the reason it has not.
 	OrderRunning Status = "running"
 	// OrderCompleted provisioned or skipped every line.
 	OrderCompleted Status = "completed"

@@ -175,8 +175,6 @@ func TestOrderStatusIsDerived(t *testing.T) {
 		{"all provisioned", lines("a", StatusDone, "b", StatusDone), OrderCompleted},
 		{"skipped counts as provisioned", lines("a", StatusSkipped, "b", StatusDone), OrderCompleted},
 		{"some through, some not", lines("a", StatusDone, "b", StatusFailed), OrderPartial},
-		{"blocked counts against it", lines("a", StatusDone, "b", StatusBlocked), OrderPartial},
-		{"nothing through", lines("a", StatusRejected, "b", StatusBlocked), OrderUnfulfilled},
 		{"an empty order is complete", nil, OrderCompleted},
 	}
 	for _, tt := range tests {
@@ -199,7 +197,9 @@ func TestStatusPredicates(t *testing.T) {
 	settled := map[LineStatus]bool{
 		StatusPending: false, StatusRunning: false, StatusDone: true,
 		StatusSkipped: true, StatusFailed: true, StatusRejected: true,
-		StatusBlocked: true,
+		// Blocked is derived from the others and recomputed on every pass, so it
+		// is never a line's own settled state — repairing its cause releases it.
+		StatusBlocked: false,
 	}
 	for s, want := range satisfied {
 		if got := s.Satisfied(); got != want {
@@ -241,5 +241,114 @@ func TestPreconditionOutsideTheOrderDoesNotBlock(t *testing.T) {
 
 	if s := statusOf(got, "vpn"); s != StatusPending {
 		t.Fatalf("vpn = %s, want pending — laptop is not part of this order", s)
+	}
+}
+
+// An order stays open while a blockage can still be repaired, and settles when it
+// cannot. The difference is the cause: a failure is an incident somebody can fix,
+// after which the blocked line runs after all; a rejection is a decision that will
+// not change, so the line will never run and there is nothing to wait for.
+
+// TestRepairingACauseReleasesTheBlockedLine is why blocked is derived rather than
+// stored. The operator repairs the laptop; the VPN must become orderable again
+// without anybody rewriting its status by hand.
+func TestRepairingACauseReleasesTheBlockedLine(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+
+	failed := Propagate(lines("laptop", StatusFailed, "vpn", StatusPending), req)
+	if s := statusOf(failed, "vpn"); s != StatusBlocked {
+		t.Fatalf("vpn = %s, want blocked", s)
+	}
+
+	// The incident is repaired and the laptop provisions.
+	repaired := make([]Line, len(failed))
+	copy(repaired, failed)
+	for i := range repaired {
+		if repaired[i].ItemID == "laptop" {
+			repaired[i].Status = StatusDone
+		}
+	}
+	got := Propagate(repaired, req)
+
+	if s := statusOf(got, "vpn"); s != StatusPending {
+		t.Fatalf("vpn = %s, want pending again", s)
+	}
+	if by := blockedBy(got, "vpn"); by != "" {
+		t.Fatalf("vpn still blocked by %q, want nothing", by)
+	}
+}
+
+// TestOrderStaysOpenWhileABlockageIsRepairable: the whole point of the decision.
+// Somebody can still fix the laptop, so the VPN is not lost and the order is not
+// finished.
+func TestOrderStaysOpenWhileABlockageIsRepairable(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusFailed, "vpn", StatusPending), req)
+
+	if s := Derive(got); s != OrderRunning {
+		t.Fatalf("Derive = %s, want running — the laptop incident is repairable", s)
+	}
+}
+
+// TestOrderSettlesWhenTheBlockageIsADecision: a rejection will not change, so
+// waiting for it is waiting for nothing.
+func TestOrderSettlesWhenTheBlockageIsADecision(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines("laptop", StatusRejected, "vpn", StatusPending), req)
+
+	if s := Derive(got); s != OrderUnfulfilled {
+		t.Fatalf("Derive = %s, want unfulfilled — nothing was provisioned and nothing will be", s)
+	}
+}
+
+// TestARejectionAmongTheCausesSettlesTheLine: a line blocked by both a failure
+// and a rejection is finished whatever happens to the failure. Repairing the
+// incident cannot release it, because the rejection still stands, and an order
+// left open on that basis would never close.
+func TestARejectionAmongTheCausesSettlesTheLine(t *testing.T) {
+	req := requires(map[string][]string{"z": {"x", "y"}})
+	got := Propagate(lines(
+		"x", StatusFailed,
+		"y", StatusRejected,
+		"z", StatusPending,
+	), req)
+
+	if by := blockedBy(got, "z"); by != "x,y" {
+		t.Fatalf("z blocked by %q, want x,y", by)
+	}
+	if s := Derive(got); s != OrderUnfulfilled {
+		t.Fatalf("Derive = %s, want unfulfilled — y will not change", s)
+	}
+}
+
+// TestPartialSettlesOnceNothingIsRepairable: some lines through, the rest
+// rejected, nothing left to wait for.
+func TestPartialSettlesOnceNothingIsRepairable(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines(
+		"mailbox", StatusDone,
+		"laptop", StatusRejected,
+		"vpn", StatusPending,
+	), req)
+
+	if s := Derive(got); s != OrderPartial {
+		t.Fatalf("Derive = %s, want partial", s)
+	}
+}
+
+// TestRepairableBlockageKeepsAnOtherwiseFinishedOrderOpen: every other line is
+// done, and the order is still not finished because one repairable blockage
+// stands. Settling here would tell the orderer their VPN is never coming while
+// somebody is actively fixing the reason it has not.
+func TestRepairableBlockageKeepsAnOtherwiseFinishedOrderOpen(t *testing.T) {
+	req := requires(map[string][]string{"vpn": {"laptop"}})
+	got := Propagate(lines(
+		"mailbox", StatusDone,
+		"laptop", StatusFailed,
+		"vpn", StatusPending,
+	), req)
+
+	if s := Derive(got); s != OrderRunning {
+		t.Fatalf("Derive = %s, want running", s)
 	}
 }

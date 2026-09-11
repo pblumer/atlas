@@ -168,7 +168,18 @@ it carries the **root** cause rather than the intermediate blocked line between,
 that one is blocked for the same reason and naming it makes a reader walk the chain.
 A fourth, *skipped*, is a line the recipient already holds; it satisfies its dependents
 exactly as a provisioned one does, or the inventory would block a line for the reason
-that it was unnecessary. A generic
+that it was unnecessary.
+
+*Blocked* is therefore **derived, never stored**, and recomputed on every pass. That is
+what makes a repair effective: an operator who fixes the incident behind a failed
+precondition releases the line that was waiting on it, with nobody rewriting a status
+by hand. And it is what decides how long an order lives — **an order stays open while
+any blockage can still be repaired.** A failure is an incident somebody can fix, after
+which the line runs after all; a rejection will not change, so waiting on one is
+waiting for nothing. One rejection among a line's causes settles it whatever happens to
+the rest. Settling an order while an incident behind it is being worked would tell the
+orderer their line is never coming, at the moment somebody is fixing the reason it has
+not. A generic
 fulfilment process works the release's waves: every line in a wave starts its
 provisioning process as a call activity, and the next wave begins when the current one
 settles. When a line fails, every line that does not depend on it continues; dependent
