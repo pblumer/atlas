@@ -2477,7 +2477,7 @@ func (b *Builder) AddLinkThrowEvent() int32 { return b.addNode(TypeLinkThrowEven
 func (b *Builder) AddLinkCatchEvent() int32 { return b.addNode(TypeLinkCatchEvent, -1) }
 
 // AddNoneThrowEvent adds an intermediate throw event with no event definition — the
-// milestone marker (ADR-draft-the-milestone-event-compiles). It carries no detail and runs
+// milestone marker (ADR-0307). It carries no detail and runs
 // as a pass-through, flowing
 // straight on its outgoing sequence flow. What distinguishes it from having drawn nothing
 // at all is not its execution but its record: activating and completing it writes element

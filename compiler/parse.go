@@ -1945,7 +1945,7 @@ type xmlIntermediateThrowEvent struct {
 	// OtherChildren collects every child element none of the fields above matched, so that
 	// "carries a definition this compiler does not implement" stays distinguishable from
 	// "carries no definition at all". They used to be the same state and both were refused;
-	// once the second one compiles to a none throw (ADR-draft-the-milestone-event-compiles),
+	// once the second one compiles to a none throw (ADR-0307),
 	// the first would otherwise be silently accepted as a pass-through that does nothing the
 	// model asked for. Most of what lands here is ordinary — documentation, extensionElements,
 	// the incoming/outgoing hints bpmn-js writes — so only a *EventDefinition child is

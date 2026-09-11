@@ -93,7 +93,7 @@ func (p *Processor) registerBehaviors() {
 	p.behaviors[compiler.TypeLinkThrowEvent] = passThroughBehavior{}
 	p.behaviors[compiler.TypeLinkCatchEvent] = passThroughBehavior{}
 	// A none throw event throws nothing and waits for nothing
-	// (ADR-draft-the-milestone-event-compiles), so its execution
+	// (ADR-0307), so its execution
 	// is a pass-through too. The element is not therefore pointless: what it exists to
 	// produce is the record of having been reached, which activation and completion write
 	// whatever the behavior does. That is the whole difference between a milestone and a

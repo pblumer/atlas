@@ -473,7 +473,7 @@ func registerScope(
 			// Nothing above matched. Either the event carries a definition this compiler
 			// does not implement — refuse, naming it, rather than run something else — or
 			// it carries none at all, which is the milestone marker
-			// (ADR-draft-the-milestone-event-compiles): a throw
+			// (ADR-0307): a throw
 			// that throws nothing, on the path, whose product is the record of having been
 			// reached. It compiles to a pass-through, like the link events above.
 			if def := unimplementedEventDefinition(ev.OtherChildren); def != "" {

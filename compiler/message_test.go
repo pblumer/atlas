@@ -334,7 +334,7 @@ func TestParseMessageErrors(t *testing.T) {
 		// A case named "throw event that is not a message" stood here: an
 		// <intermediateThrowEvent/> with no event definition at all, asserted to be
 		// refused. It is a milestone now and compiles
-		// (ADR-draft-the-milestone-event-compiles), so the assertion was removed rather
+		// (ADR-0307), so the assertion was removed rather
 		// than reworded — the behaviour it described is gone, not renamed. What the case
 		// was really guarding, that the message branch's fallthrough does not accept an
 		// event definition the compiler cannot run, is asserted in nonethrow_test.go

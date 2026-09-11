@@ -1,4 +1,4 @@
-# ADR-DRAFT: The milestone event compiles
+# ADR-0307: The milestone event compiles
 
 - **Status:** Accepted
 - **Implementation:** Landed

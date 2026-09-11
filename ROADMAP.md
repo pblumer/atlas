@@ -1639,7 +1639,7 @@ the method and how to work it with Atlas as it stands are in
   drawn and described as one. The change also splits a state that used to be single: an
   intermediate throw event carrying a definition this compiler does not implement is now
   refused by name, so making the empty case compile did not quietly make the wrong case
-  compile too ([ADR-draft-the-milestone-event-compiles](docs/adr/draft-the-milestone-event-compiles.md)).
+  compile too ([ADR-0307](docs/adr/0307-the-milestone-event-compiles.md)).
 - 🔲 **B6 — Panorama meets the registry.** Binding keys `atlas.capabilityKey` on an
   ArchiMate `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing
   and the registry are the same architecture seen twice rather than two architectures.

@@ -340,7 +340,7 @@ no execution semantics whose only job is to leave a trace in the engine's histor
 that "identity verification started" becomes a readable business state even where no
 task sits at that point.
 
-**Atlas compiles it** ([ADR-draft-the-milestone-event-compiles](../adr/draft-the-milestone-event-compiles.md)).
+**Atlas compiles it** ([ADR-0307](../adr/0307-the-milestone-event-compiles.md)).
 Draw an intermediate throw event, leave it without an event definition, name it after the
 point it marks. It waits for nothing and needs no worker: the token flows straight
 through. What it produces is the record — the visit counters count it, the instance's
