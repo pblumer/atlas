@@ -40,7 +40,10 @@ export async function mountDerivedModel(root, { api, applicationId, application 
           actually carry — read from the processes themselves, with nothing modelled by hand. The model
           under <a href="#/data">Data</a> is the other statement: what you <i>want</i> it to be.</p>
       </div>
-      <a class="btn neutral" href="#/data">Information model →</a>
+      <div style="display:flex; gap:8px">
+        <a class="btn neutral" href="#/data/difference/${esc(applicationId)}">Planned against built →</a>
+        <a class="btn neutral" href="#/data">Information model →</a>
+      </div>
     </div>
     <div id="dm-body"><p class="muted">Reading the processes…</p></div>
   </div>`;

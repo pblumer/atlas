@@ -7986,7 +7986,9 @@ async function viewInfoModels() {
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}
         <a class="dm-link" href="#/data/derived/${encodeURIComponent(app.id)}"
-           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>`
+           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>
+        <a class="dm-link" href="#/data/difference/${encodeURIComponent(app.id)}"
+           title="What this model plans that ${esc(app.name)}'s processes do not build yet, and the other way round">difference →</a>`
         : `<span class="muted">Missing application</span>`}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>
@@ -8301,6 +8303,18 @@ async function viewDerivedModel(applicationId) {
   // down rather than leave them bound to markup that is gone.
   window.__atlasCleanup = mod.cleanupDerivedModel;
   await mod.mountDerivedModel(view, { api, applicationId, application });
+}
+
+// viewModelDifference reads the authored model against what the processes build
+// (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned). It is the
+// third reading of one subject, and it is a list rather than a fourth drawing —
+// precisely so a reader cannot mistake it for either picture.
+async function viewModelDifference(applicationId) {
+  const gen = navGen;
+  const mod = await import("./model-difference.js");
+  const application = await resolveProject(applicationId);
+  if (superseded(gen)) return;
+  await mod.mountModelDifference(view, { api, applicationId, application });
 }
 
 // viewInfoModel opens one model on the class canvas, which lives in its own module
@@ -9013,6 +9027,8 @@ async function route() {
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
     const imd = path.match(/^#\/data\/derived\/(.+)$/);
     if (imd) return await viewDerivedModel(decodeURIComponent(imd[1]));
+    const imdiff = path.match(/^#\/data\/difference\/(.+)$/);
+    if (imdiff) return await viewModelDifference(decodeURIComponent(imdiff[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

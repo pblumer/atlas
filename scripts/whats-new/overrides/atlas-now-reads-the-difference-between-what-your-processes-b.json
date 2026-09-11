@@ -1,0 +1,26 @@
+{
+  "tags": ["Data"],
+  "title": {
+    "en": "See what you have planned but not built yet",
+    "de": "Sehen, was geplant, aber noch nicht gebaut ist"
+  },
+  "summary": {
+    "en": "Your processes say what your data actually is; your information model says what you want it to be. Atlas now shows the difference, in two lists that are never mixed: what is planned and not built — your backlog, and explicitly not a defect — and what is built and not described, which usually means write it down. It also tells you plainly what it never compared, because derivation cannot see a business key or an attribute's type, so a short list is not a clean bill. Nothing is changed in either document.",
+    "de": "Ihre Prozesse sagen, was Ihre Daten tatsächlich sind; Ihr Informationsmodell sagt, was sie sein sollen. Atlas zeigt jetzt die Differenz, in zwei Listen, die nie vermischt werden: was geplant und nicht gebaut ist — Ihr Backlog, und ausdrücklich kein Fehler — und was gebaut und nicht beschrieben ist, was meist heisst: aufschreiben. Es sagt auch offen, was es nie verglichen hat, denn ein Geschäftsschlüssel oder ein Attributtyp lässt sich aus Prozessen nicht ablesen; eine kurze Liste ist also kein Freispruch. An beiden Dokumenten wird nichts geändert."
+  },
+  "tutorial": {
+    "en": [
+      "Open Data and press As built…, then pick your application.",
+      "Follow Planned against built in the header — or go straight there from the model list.",
+      "Left is your backlog: states, members and classes the model declares that no process builds yet.",
+      "Read the box at the bottom before concluding anything: it names what the comparison never looked at."
+    ],
+    "de": [
+      "Unter Daten auf As built… klicken und die Anwendung wählen.",
+      "Oben Planned against built folgen — oder direkt aus der Modellliste dorthin gehen.",
+      "Links steht Ihr Backlog: Zustände, Attribute und Klassen, die das Modell deklariert und noch kein Prozess baut.",
+      "Den Kasten unten lesen, bevor Sie etwas schliessen: er nennt, was der Vergleich nie angesehen hat."
+    ]
+  },
+  "try": { "label": { "en": "Open Data", "de": "Daten öffnen" }, "route": "#/data" }
+}

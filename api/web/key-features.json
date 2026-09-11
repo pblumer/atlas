@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "A drawing and the capability register are now one architecture.",
+  "reviewedThrough": "Atlas now reads the difference between what your processes build and what your model plans.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -127,8 +127,8 @@
         "de": "Daten mit einem Modell dahinter"
       },
       "text": {
-        "en": "An information model of classes, their members and the lifecycle each one moves through — modelled by hand, or read back off the processes that actually write it. The deploy checks the models against it and says where the two disagree.",
-        "de": "Ein Informationsmodell aus Klassen, ihren Attributen und dem Lebenszyklus, den jede durchläuft — von Hand modelliert oder aus den Prozessen zurückgelesen, die es tatsächlich schreiben. Das Deployment prüft die Modelle dagegen und sagt, wo beide auseinanderlaufen."
+        "en": "An information model of classes, their members and the lifecycle each one moves through — modelled by hand, or read back off the processes that actually write it. The deploy checks the models against it, and the two readings side by side say what is planned and not yet built — a backlog, not drift.",
+        "de": "Ein Informationsmodell aus Klassen, ihren Attributen und dem Lebenszyklus, den jede durchläuft — von Hand modelliert oder aus den Prozessen zurückgelesen, die es tatsächlich schreiben. Das Deployment prüft die Modelle dagegen, und die beiden Lesungen nebeneinander zeigen, was geplant und noch nicht gebaut ist — ein Backlog, kein Auseinanderlaufen."
       }
     },
     {

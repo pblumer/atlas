@@ -217,6 +217,48 @@
       }
     },
     {
+      "id": "atlas-now-reads-the-difference-between-what-your-processes-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See what you have planned but not built yet",
+        "de": "Sehen, was geplant, aber noch nicht gebaut ist"
+      },
+      "summary": {
+        "en": "Your processes say what your data actually is; your information model says what you want it to be. Atlas now shows the difference, in two lists that are never mixed: what is planned and not built — your backlog, and explicitly not a defect — and what is built and not described, which usually means write it down. It also tells you plainly what it never compared, because derivation cannot see a business key or an attribute's type, so a short list is not a clean bill. Nothing is changed in either document.",
+        "de": "Ihre Prozesse sagen, was Ihre Daten tatsächlich sind; Ihr Informationsmodell sagt, was sie sein sollen. Atlas zeigt jetzt die Differenz, in zwei Listen, die nie vermischt werden: was geplant und nicht gebaut ist — Ihr Backlog, und ausdrücklich kein Fehler — und was gebaut und nicht beschrieben ist, was meist heisst: aufschreiben. Es sagt auch offen, was es nie verglichen hat, denn ein Geschäftsschlüssel oder ein Attributtyp lässt sich aus Prozessen nicht ablesen; eine kurze Liste ist also kein Freispruch. An beiden Dokumenten wird nichts geändert."
+      },
+      "link": {
+        "label": "ADR-0301",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
+      },
+      "tags": [
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data and press As built…, then pick your application.",
+          "Follow Planned against built in the header — or go straight there from the model list.",
+          "Left is your backlog: states, members and classes the model declares that no process builds yet.",
+          "Read the box at the bottom before concluding anything: it names what the comparison never looked at."
+        ],
+        "de": [
+          "Unter Daten auf As built… klicken und die Anwendung wählen.",
+          "Oben Planned against built folgen — oder direkt aus der Modellliste dorthin gehen.",
+          "Links steht Ihr Backlog: Zustände, Attribute und Klassen, die das Modell deklariert und noch kein Prozess baut.",
+          "Den Kasten unten lesen, bevor Sie etwas schliessen: er nennt, was der Vergleich nie angesehen hat."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
       "version": "Unreleased",
       "date": null,
@@ -351,44 +393,6 @@
           "Nach dem Punkt benennen, den es markiert, in der Sprache des Fachbereichs — «Identitätsprüfung gestartet», nicht «Event_3». Über den Namen liest man es später.",
           "Deployen und eine Instanz starten. Das Live-Diagramm markiert den Meilenstein, sobald der Token ihn passiert.",
           "Die Zeitachse der Instanz öffnen, um ihn in der richtigen Reihenfolge zwischen den umliegenden Elementen zu sehen, oder die Elementzählung des Prozesses lesen, um zu sehen, wie viele Fälle ihn erreicht haben."
-        ]
-      }
-    },
-    {
-      "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A capability now says when somebody last read it and meant it",
-        "de": "Eine Geschäftsfähigkeit sagt jetzt, wann sie zuletzt jemand gelesen und bestätigt hat"
-      },
-      "summary": {
-        "en": "Atlas can check whether the process a capability names is deployed. It cannot check who owns the capability, what it is responsible for, or what it promised — and those are the fields anybody acts on. A map whose realisations are all green and whose owners left two years ago is worse than no map. Both records now carry a confirmation: when, by whom, who they asked, and a line on what the review found. Only confirming sets it — no edit does, because a date refreshed by a typo fix would claim every field had been re-read. What lapses turns up as a review backlog, one query, the twin of the one for work nobody has automated. The interval is twelve months by default and yours to change.",
-        "de": "Atlas kann prüfen, ob der Prozess, den eine Fähigkeit nennt, deployt ist. Wer sie fachlich verantwortet, wofür sie zuständig ist und was sie zugesagt hat, kann Atlas nicht prüfen — und genau das sind die Felder, nach denen jemand handelt. Eine Landkarte mit lauter grünen Umsetzungen und Verantwortlichen, die vor zwei Jahren gegangen sind, ist schlechter als keine. Beide Datensatzarten tragen jetzt eine Bestätigung: wann, von wem, wen man gefragt hat und eine Zeile zum Ergebnis der Prüfung. Gesetzt wird sie nur durch das Bestätigen selbst, nie durch eine Bearbeitung: Ein Datum, das eine Tippfehlerkorrektur auffrischt, behauptete, jedes Feld sei neu gelesen worden. Was abläuft, erscheint als Prüfrückstand, eine einzige Abfrage, das Gegenstück zu der nach nicht automatisierter Arbeit. Die Frist beträgt standardmässig zwölf Monate und lässt sich ändern."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Architecture",
-        "API"
-      ],
-      "tutorial": {
-        "en": [
-          "Confirm a record you have just re-read: POST /api/v1/capabilities/{key}/confirmation with {\"with\": \"Head of Credit Risk\", \"note\": \"SLA renegotiated to 3 days\"}. Both fields are optional.",
-          "Name who you asked in \"with\". Leaving it empty says you spoke for the record alone, which is legitimate and weaker — the record says which.",
-          "Ask GET /api/v1/capabilities?stale=true for the review backlog.",
-          "GET /api/v1/business-architecture/gaps reports what has lapsed, and names the interval it judged against.",
-          "An administrator can change that interval with PUT /api/v1/settings/confirmation."
-        ],
-        "de": [
-          "Einen soeben erneut gelesenen Datensatz bestätigen: POST /api/v1/capabilities/{key}/confirmation mit {\"with\": \"Leiter Kreditrisiko\", \"note\": \"SLA auf 3 Tage neu verhandelt\"}. Beide Felder sind optional.",
-          "In \"with\" eintragen, wen man gefragt hat. Leer lassen heisst, man stand allein für den Datensatz ein; das ist zulässig und schwächer, und der Datensatz sagt welches von beidem.",
-          "GET /api/v1/capabilities?stale=true liefert den Prüfrückstand.",
-          "GET /api/v1/business-architecture/gaps meldet, was abgelaufen ist, und nennt die zugrunde gelegte Frist.",
-          "Eine Administratorin ändert diese Frist mit PUT /api/v1/settings/confirmation."
         ]
       }
     }

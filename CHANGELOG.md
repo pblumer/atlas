@@ -224,6 +224,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Atlas now reads the difference between what your processes build and what your model
+  plans.** [ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) settled that
+  Atlas holds two statements about the same subject and must not merge them: the derived
+  model is what is *built*, the authored one is what is *wanted*, and their difference is
+  the work not yet done. It then stopped, because it could not settle the shape and
+  because it named a blocker — a comparison "needs a stable identity for a derived class
+  across two derivations, which nothing yet provides".
+
+  That blocker belonged to a *reconciliation*, which has to remember which change you
+  rejected last time. This reading remembers nothing: both sides are computed fresh and
+  compared by name, so there is no identity to keep across anything. And the names are
+  already the mechanism — `itemSubjectRef` resolves a class by name, a write path names a
+  member, and a lifecycle state's name **is** its identity because it is the string every
+  process writes.
+
+  **Data → Planned against built** shows two lists, never blended, because a reader acts
+  on them differently. *Planned, not built* is in the model and in no process: the
+  backlog, a decision taken and not yet implemented, and explicitly not a defect —
+  `data.unreachable-state` already reported exactly one case of this, and this generalises
+  it to members, states, transitions and whole classes. *Built, not described* is in the
+  processes and in no model, which usually means write it down and occasionally means a
+  process is doing something nobody agreed to.
+
+  **What it never compares is the half that makes it trustworthy**, and it is said where
+  it lists rather than in a footnote: the business key, attribute types and multiplicity,
+  which states are final, associations and documentation. Derivation cannot see any of
+  them ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) §2), so a
+  difference there would be a fact about derivation rather than about your system — and
+  every one would sit on every class for ever. A short list is therefore not a clean bill,
+  and the screen says so.
+
+  Two more silences for the same reason. An «enumeration» is never reported as unbuilt: it
+  is machinery of the model — an attribute's type, or the states a lifecycle takes
+  ([ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md)) — and
+  no process carries one. And an application that models nothing produces no findings at
+  all, rather than a wall of rows that are only the absence of a document nobody has
+  started.
+
+  Also readable as `GET /api/v1/infomodel/difference?applicationId=…` and as the MCP tool
+  `atlas_model_difference`. Nothing is written to either model.
+
 - **A drawing and the capability register are now one architecture.** Panorama holds an
   architect's ArchiMate model; the register holds what has to be done, with an owner, a
   scope and SLAs. Draw *Underwrite a loan*, file a capability keyed `loan-underwriting`,
