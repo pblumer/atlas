@@ -412,28 +412,6 @@
         },
         "route": "#/data"
       }
-    },
-    {
-      "id": "an-openapi-document-can-configure-the-task-that-calls-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Turn an API's operations into ready-made task settings",
-        "de": "Aus den Operationen einer API fertige Task-Einstellungen machen"
-      },
-      "summary": {
-        "en": "Configuring a REST task means reading the API's documentation and typing what it says: the method, the address, which values the process has to supply. Atlas can now read that file for you and write out one ready-made setting sheet per operation — the method already chosen, the address already filled in, and a note saying which values your process needs to hold. What the file cannot decide, such as which login to use, is deliberately left blank rather than guessed. One honest catch: nothing in Atlas can apply these sheets to a task yet, so for now they are files to keep or to hand on — the command tells you so when it writes them.",
-        "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
-      },
-      "link": {
-        "label": "ADR-0300",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0300-openapi-element-templates.md"
-      },
-      "tags": [
-        "Connectors",
-        "Modeler"
-      ]
     }
   ]
 }
