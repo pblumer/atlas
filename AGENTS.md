@@ -95,6 +95,10 @@ api/        HTTP API, web UI, command submission and queries
   infomodel/  The process information model: a UML class-diagram subset giving a
               BPMN data object's itemSubjectRef a type to resolve against
               (ADR-0230)
+  capability/ The business architecture: business capabilities and the value streams
+              whose stages they perform, with the realisation edge resolved at read
+              time and the gap report computed against what this server runs
+              (ADR-0305)
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop
@@ -283,6 +287,7 @@ Do not rewrite the author of commits that are already on `main`.
 | Write a decision record | [`docs/adr/README.md`](docs/adr/README.md#writing-a-record) — copy the template to `draft-<slug>.md`, **do not pick a number** |
 | See what to build next | [`ROADMAP.md`](ROADMAP.md) |
 | Look up a term | [`docs/architecture/glossary.md`](docs/architecture/glossary.md) |
+| Understand business capabilities and value streams | [`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md) |
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
 | Set or overwrite a running instance's variables | `POST /api/v1/instances/{key}/variables` — [ADR-0095](docs/adr/0095-external-variable-modification.md) |
 | See who overrode an instance's variables (the audit trail) | `GET /api/v1/instances/{key}/variable-audit` — [ADR-0098](docs/adr/0098-external-variable-modification-audit.md) |

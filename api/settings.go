@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/httpapi"
 
 	"github.com/pblumer/atlas/api/token"
@@ -511,3 +513,88 @@ func (s *Server) handleSetADMock(w http.ResponseWriter, r *http.Request) {
 		Entries: a.SeedEntries, HasSeed: a.Seed != "",
 	})
 }
+
+// confirmationView is the confirmation horizon as the API renders it. "configured"
+// tells a client the difference between a decision made here and none at all: without
+// a record the built-in default applies, and the switch must not claim otherwise.
+type confirmationView struct {
+	HorizonMonths int  `json:"horizonMonths"`
+	Configured    bool `json:"configured"`
+	Default       int  `json:"default"`
+}
+
+// handleGetConfirmation reads how long a business-architecture confirmation stays fresh
+// (ADR-0304).
+func (s *Server) handleGetConfirmation(w http.ResponseWriter, _ *http.Request) {
+	var (
+		c      confirmationSetting
+		stored bool
+		err    error
+	)
+	s.do(func() { c, stored, err = s.settings.getConfirmation() })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read confirmation setting: "+err.Error())
+		return
+	}
+	months := c.HorizonMonths
+	if !stored || months == 0 {
+		months = capability.DefaultHorizonMonths
+	}
+	httpapi.JSON(w, http.StatusOK, confirmationView{
+		HorizonMonths: months, Configured: stored && c.HorizonMonths != 0,
+		Default: capability.DefaultHorizonMonths,
+	})
+}
+
+// handleSetConfirmation sets the horizon.
+//
+// A very long interval is accepted rather than refused. It silences the freshness
+// check, and the record that decided this says so: capping it would need a second rule
+// about how long is too long, and the honest alternative is that the number is visible
+// here and travels with every answer that applies it. A negative value switches the
+// check off, which is a legitimate thing to want while a map is being built.
+func (s *Server) handleSetConfirmation(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, s.budgets().Request))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	var payload struct {
+		// A pointer, so "not sent" and "sent as zero" are different: zero means
+		// "use the default", which is a decision, and an absent field is a mistake.
+		HorizonMonths *int `json:"horizonMonths"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	if payload.HorizonMonths == nil {
+		httpapi.Error(w, http.StatusBadRequest, "horizonMonths is required")
+		return
+	}
+	if *payload.HorizonMonths > maxConfirmationHorizonMonths {
+		httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf(
+			"horizonMonths is at most %d: past that the field is not a policy but a way of "+
+				"switching the check off, which a negative value says plainly",
+			maxConfirmationHorizonMonths))
+		return
+	}
+	s.do(func() { err = s.settings.saveConfirmation(confirmationSetting{HorizonMonths: *payload.HorizonMonths}) })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "save confirmation setting: "+err.Error())
+		return
+	}
+	months := *payload.HorizonMonths
+	if months == 0 {
+		months = capability.DefaultHorizonMonths
+	}
+	httpapi.JSON(w, http.StatusOK, confirmationView{
+		HorizonMonths: months, Configured: *payload.HorizonMonths != 0,
+		Default: capability.DefaultHorizonMonths,
+	})
+}
+
+// maxConfirmationHorizonMonths is a sanity bound, not a policy: a hundred years of
+// months. Past it the number is not an interval anybody meant, and a negative value is
+// the honest way to say "off".
+const maxConfirmationHorizonMonths = 1200

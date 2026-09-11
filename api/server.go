@@ -45,6 +45,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/infomodel"
@@ -283,6 +284,11 @@ type Server struct {
 	// isolated as a per-area service under ADR-0147.
 	panorama  *panorama.Service
 	infomodel *infomodel.Service
+	// capabilities is the business-architecture registry: the business capabilities
+	// an organisation must be able to perform and the value streams whose stages they
+	// perform (ADR-0305). Design-time, and a
+	// per-area service under ADR-0147 like the two above.
+	capabilities *capability.Service
 	// remoteNodes is what peer Atlas servers last said about themselves
 	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
 	// loop, because it is written by goroutines waiting on the network and putting
@@ -1109,6 +1115,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	capabilityStore, err := capability.NewStore(filepath.Join(dataDir, "capabilities"))
+	if err != nil {
+		return nil, err
+	}
+	valueStreamStore, err := capability.NewStreamStore(filepath.Join(dataDir, "value-streams"))
+	if err != nil {
+		return nil, err
+	}
 	releases, err := newReleaseStore(filepath.Join(dataDir, "releases"))
 	if err != nil {
 		return nil, err
@@ -1365,6 +1379,20 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		token.New,
 		time.Now,
 	)
+	// The business-architecture registry needs no sharing scope of its own: a
+	// capability map exists to cross the silos an application scope draws, so the map
+	// is readable by every signed-in identity and written by a modeler (the route table
+	// says so). What *is* filtered is the landscape it is compared against — a process
+	// outside the caller's scope travels as a placeholder, so a realization pointing at
+	// it reads as restricted rather than as missing.
+	s.capabilities = capability.New(
+		s.runLoop,
+		capabilityStore,
+		valueStreamStore,
+		s.collectCapabilityLandscape,
+		s.confirmationHorizon,
+		time.Now,
+	)
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -1385,6 +1413,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
+	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
 	// WithoutVault disabled it. An operator key from the environment is preferred

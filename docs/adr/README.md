@@ -389,6 +389,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0301](0301-derive-the-model-from-the-processes.md) | Derive the information model from the processes that use it | Accepted | Landed |
 | [0302](0302-withdrawing-commit-attribution.md) | The repository stops rewriting who authored an agent's commit | Accepted | Landed |
 | [0303](0303-script-sandbox-isolation.md) | Isolate general-purpose script tasks inside a restrictive OS sandbox | Accepted | Partial |
+| [0304](0304-a-capability-says-when-it-was-last-confirmed.md) | A capability record says when somebody last confirmed it | Accepted | Landed |
+| [0305](0305-business-capabilities-and-value-streams.md) | Business capabilities and value streams as design-time records | Accepted | Partial |
 
 ## The two states of a record
 
