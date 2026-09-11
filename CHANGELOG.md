@@ -41,6 +41,21 @@ _Changed_ / _Removed_ for each version.
   everything else. Nothing moves in a landscape that has no straggler, and nothing moves
   at all once you have arranged the picture by hand.
 
+- **A script's liveness probe read a zombie as a running process.** ADR-0303 made a
+  timed-out script take its whole process group with it, and
+  `TestTimeoutKillsTheInterpretersWholeProcessGroup` checks that by asking whether the
+  descendant is still there — with `kill(pid, 0)`, which is the one question that
+  cannot distinguish the two states that matter. The same signal that kills the
+  descendant orphans it onto PID 1, and until PID 1 reaps it, it keeps an entry in the
+  process table that `kill(2)` goes on addressing. Whether that reap is prompt belongs
+  to the environment's init, not to Atlas: under an init that reaps (a CI runner) the
+  test passes, and under one that does not (a container started from a plain process,
+  a devbox) it fails on a kill that worked perfectly. `processExists` now reads the
+  process state from `/proc` after the probe and reports a zombie as gone, which is
+  what it is; where `/proc` is absent — macOS, the BSDs — the probe behaves exactly as
+  before. A new test states that contract directly against a zombie made on purpose,
+  so the property is checked everywhere rather than only where init is slow.
+
 - **Removing someone from an application now takes their Starmap away on their next
   request.** The Starmap holds a 30-second reading of what this server is, so that
   twenty people with the view open cost the engine one reading rather than twenty. It

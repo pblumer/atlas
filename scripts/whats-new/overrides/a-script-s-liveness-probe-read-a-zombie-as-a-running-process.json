@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "A test's liveness probe, not something a user of the Console or the engine can observe: the kill it checks already worked. Kept out of the user-facing feed."
+}

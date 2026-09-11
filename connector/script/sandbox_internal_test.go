@@ -1,12 +1,15 @@
 package script
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -306,6 +309,59 @@ print(json.dumps(result))
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A process that has exited but whose parent has not reaped it is a zombie: it
+// holds an entry in the process table, and kill(2) keeps addressing it, which is
+// what made the liveness probe below answer "still running" about a process that
+// was already dead. The scenario is not exotic — every descendant the timeout
+// kills is orphaned onto PID 1 by the same signal, so whether it is reaped
+// promptly is a property of the environment's init, not of Atlas. Under an init
+// that does not reap (a container started from a plain process, a devbox),
+// TestTimeoutKillsTheInterpretersWholeProcessGroup failed on a correct kill.
+//
+// This states the probe's contract directly, with a zombie made on purpose:
+// exec.Cmd.Start without Wait leaves exactly one.
+func TestProcessExistsReportsAnUnreapedProcessAsGone(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("a process's zombie state is read from /proc, which is Linux")
+	}
+	cmd := exec.Command("sh", "-c", "exit 0")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	pid := cmd.Process.Pid
+	defer func() { _ = cmd.Wait() }() // reap it, whatever the test concluded
+
+	// Wait for it to become a zombie, reading /proc directly rather than through
+	// the function under test.
+	deadline := time.Now().Add(2 * time.Second)
+	for !isZombieAccordingToProc(t, pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("process %d never reached the zombie state", pid)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if err := processExists(pid); err == nil {
+		t.Errorf("processExists(%d) says a zombie is still a live process", pid)
+	}
+}
+
+// isZombieAccordingToProc reads the state field of /proc/<pid>/stat. The comm
+// field before it is parenthesised and may itself contain spaces, so the state
+// is the character two past the last ')'.
+func isZombieAccordingToProc(t *testing.T, pid int) bool {
+	t.Helper()
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	i := bytes.LastIndexByte(b, ')')
+	if i < 0 || i+2 >= len(b) {
+		t.Fatalf("unparsable /proc/%d/stat: %q", pid, b)
+	}
+	return b[i+2] == 'Z'
 }
 
 func TestTimeoutKillsTheInterpretersWholeProcessGroup(t *testing.T) {
