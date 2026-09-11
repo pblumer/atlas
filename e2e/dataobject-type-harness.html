@@ -49,7 +49,11 @@
     <bpmn:dataObject id="DO_incident" name="incident" itemSubjectRef="_853994e9-12f5-9cef-bf69-ca3e2b7cb6a8"/>
     <bpmn:dataObjectReference id="Ref_incident" name="incident" dataObjectRef="DO_incident"/>
     <bpmn:startEvent id="Start_1" name="Start"><bpmn:outgoing>f0</bpmn:outgoing></bpmn:startEvent>
-    <bpmn:task id="Activity_1" name="Erfassen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing></bpmn:task>
+    <bpmn:task id="Activity_1" name="Erfassen"><bpmn:incoming>f0</bpmn:incoming><bpmn:outgoing>f1</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="doa_1"><bpmn:targetRef>Ref_order</bpmn:targetRef>
+        <bpmn:assignment id="asg_1"><bpmn:from>=amount</bpmn:from><bpmn:to>total</bpmn:to></bpmn:assignment>
+      </bpmn:dataOutputAssociation>
+    </bpmn:task>
     <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f1</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Activity_1" targetRef="End_1"/>
@@ -65,6 +69,7 @@
     <bpmndi:BPMNShape id="Ref_kunde_di" bpmnElement="Ref_kunde"><dc:Bounds x="592" y="250" width="36" height="50"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="260" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="360" y="138"/><di:waypoint x="420" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="doa_1_di" bpmnElement="doa_1"><di:waypoint x="300" y="178"/><di:waypoint x="290" y="250"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
@@ -79,6 +84,8 @@
             attributes: [
               { name: "id", type: "string", multiplicity: "1" },
               { name: "total", type: "number", multiplicity: "0..1" },
+              { name: "customer", type: "Customer", multiplicity: "1" },
+              { name: "tags", type: "", multiplicity: "0..*" },
             ],
             lifecycle: {
               states: [

@@ -157,6 +157,49 @@
       }
     },
     {
+      "id": "a-write-into-a-data-object-now-offers-the-members-its-class-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Pick the field you are writing, instead of spelling it",
+        "de": "Das Feld, in das Sie schreiben, auswählen statt tippen"
+      },
+      "summary": {
+        "en": "When an activity writes one field of a data object, that field was free text — and a typo deploys, runs, and writes something nobody ever reads. It is a list now, built from the members the object's class declares, with the type, the multiplicity and the business key beside each one. Where a member is itself a class, its own fields are offered one level down. A name nothing models yet can still be typed, and comes back in the list saying so.",
+        "de": "Wenn eine Aktivität ein einzelnes Feld eines Datenobjekts schreibt, war dieses Feld freier Text — und ein Tippfehler wird deployed, läuft und schreibt etwas, das nie jemand liest. Jetzt ist es eine Liste aus den Attributen, die die Klasse des Objekts deklariert, mit Typ, Multiplizität und Geschäftsschlüssel daneben. Ist ein Attribut selbst eine Klasse, werden deren Felder eine Ebene tiefer angeboten. Ein noch nicht modellierter Name lässt sich weiterhin tippen und erscheint in der Liste mit dem Hinweis darauf."
+      },
+      "link": {
+        "label": "ADR-0060",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0060-data-object-write-paths.md"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Modeler, draw an arrow from an activity to a data object — that is the data output association.",
+          "Select the arrow. Under Writes data object you now find Target member as a list.",
+          "Pick the field to write, or leave it on the whole object. Members of a member appear indented under it.",
+          "The list only appears once the data object has a class: set it in the object's Class field first."
+        ],
+        "de": [
+          "Im Modeler einen Pfeil von einer Aktivität zu einem Datenobjekt ziehen — das ist die Datenausgabe-Zuweisung.",
+          "Den Pfeil auswählen. Unter Writes data object steht Target member jetzt als Liste bereit.",
+          "Das zu schreibende Feld wählen, oder auf dem ganzen Objekt belassen. Felder eines Feldes stehen eingerückt darunter.",
+          "Die Liste erscheint erst, wenn das Datenobjekt eine Klasse hat: diese zuerst im Feld Class setzen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-milestone-is-an-element-you-can-draw-now",
       "version": "Unreleased",
       "date": null,
@@ -361,49 +404,6 @@
           "de": "Dashboard öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See the classes and states your processes already carry — without modelling first",
-        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
-      },
-      "summary": {
-        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
-        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
-      },
-      "link": {
-        "label": "ADR draft",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and press As built…, then pick the application you want to read.",
-          "The class diagram is what that application's processes carry — no model of yours is involved.",
-          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
-          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
-        ],
-        "de": [
-          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
-          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
-          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
-          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]
