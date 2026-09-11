@@ -76,6 +76,13 @@ const TALLIES = [0, 1, 2, 5, 25, 100, 999, 50002];
 // row is arithmetic like the other two rather than a race with the wall clock.
 const NOW = 1_800_000_000_000;
 const HEATS = ["instances", "incidents", "incident-age"];
+// The smallest tally each weighting tells apart from the next one up — the bottom of
+// its scale, where the radius is the floor plus one step. Written out here rather
+// than read off the module on purpose: it is the contract the key states to a reader,
+// and a test that asked the code what the code does would check nothing.
+const LEAST = { instances: 1, incidents: 1, "incident-age": 60_000 };
+// And the step itself: what a node earns the moment it carries anything at all.
+const STEP = 6;
 
 // nodeWith builds a process carrying one weighting's tally, in the browser. Inlined
 // into each evaluate() rather than passed across, because a function cannot cross
@@ -149,49 +156,98 @@ for (const heat of HEATS) {
 
   // The law the key states, checked as the law rather than as a sample of it:
   //
-  //	r = floor + span * sqrt(share)   so   ((r - floor) / span)^2 == share
+  //	r = floor + step + (span - step) · ln(value/least) / ln(peak/least)
   //
-  // The square root is the point. A circle's area goes up with the square of its
-  // radius, so a radius taken straight from the number would draw four times the
-  // quantity at twice the count — the encoding error that makes a bubble chart lie.
-  //
-  // This is asserted over the whole range and not at one point, because it is what the
-  // picture *tells the reader it is doing*: the legend and the export stamp both spell
-  // the relation out, and a sentence a reader can check is a sentence a test has to
-  // hold the code to.
-  test(`the ${heat} radius rises with the square root of the share`, async ({ page }) => {
-    const shares = [0.01, 0.04, 0.09, 0.25, 0.5, 0.64, 1];
-    const radii = await page.evaluate(([h, now, src, ss]) => {
+  // which is a *ratio* scale: equal steps of radius are equal multiples of the tally.
+  // A process running ten instances stands as far above one running one as one
+  // running a hundred stands above it. That is the sentence the key and the export
+  // stamp both put in front of a reader, and a sentence a reader can check is one a
+  // test has to hold the code to.
+  test(`the ${heat} radius rises with the ratio, in equal steps per tenfold`, async ({ page }) => {
+    const least = LEAST[heat];
+    const decades = [1, 10, 100, 1000, 10000];
+    const radii = await page.evaluate(([h, now, src, ds, l]) => {
       const NOW_MS = now;
       const nodeFor = eval(src);
-      const at = (v) => window.radiusForHeat(nodeFor(h, v), 10000, h, now);
-      return { floor: at(0), peak: at(10000), each: ss.map((x) => at(x * 10000)) };
-    }, [heat, NOW, NODE_FOR, shares]);
+      const peak = l * 10000;
+      const at = (v) => window.radiusForHeat(nodeFor(h, v), peak, h, now);
+      return { floor: at(0), each: ds.map((d) => at(l * d)) };
+    }, [heat, NOW, NODE_FOR, decades, least]);
 
-    const span = radii.peak - radii.floor;
-    shares.forEach((share, i) => {
-      const rose = (radii.each[i] - radii.floor) / span;
-      expect(rose * rose, `at a share of ${share}`).toBeCloseTo(share, 6);
-    });
+    // Four tenfolds, four equal steps. This is the whole claim.
+    const steps = radii.each.slice(1).map((r, i) => r - radii.each[i]);
+    for (const step of steps) expect(step, "one tenfold").toBeCloseTo(steps[0], 6);
+    // And the ends are where the key says they are: the smallest tally the weighting
+    // distinguishes is one step above the floor, the peak is the top of the scale.
+    expect(radii.each[0] - radii.floor).toBeCloseTo(STEP, 6);
+    expect(radii.each[decades.length - 1] - radii.floor).toBeCloseTo(30, 6);
   });
 
-  // The claim this once made instead, kept as a test so it cannot come back. "The area
-  // above the floor is the node's share" reads well and is false: the floor offsets the
-  // relation, so the ring above the floor at a quarter of the peak's tally is about
-  // 0.36 of the ring at the peak, not 0.25. It went into the legend, the export stamp,
-  // the record and the changelog before arithmetic caught it.
-  test(`the ${heat} weighting does not claim the ring above the floor is the share`, async ({ page }) => {
-    const ring = await page.evaluate(([h, now, src]) => {
+  // What the reported defect actually was, stated as the property that fixes it: a
+  // node carrying the least this weighting can count is already unmistakably bigger
+  // than a node carrying nothing — whatever the busiest node on the landscape is
+  // doing. Under the square-root law it was not: against a peak of four thousand, one
+  // running instance was drawn half a unit above idle on a span of thirty.
+  test(`one ${heat} is drawn clear of none, however busy the landscape`, async ({ page }) => {
+    const least = LEAST[heat];
+    const drawn = await page.evaluate(([h, now, src, l, peaks]) => {
       const NOW_MS = now;
       const nodeFor = eval(src);
-      const area = (r) => Math.PI * r * r;
-      const at = (v) => area(window.radiusForHeat(nodeFor(h, v), 100, h, now));
-      const floor = at(0);
-      return (at(25) - floor) / (at(100) - floor);
-    }, [heat, NOW, NODE_FOR]);
+      return peaks.map((peak) => ({
+        peak,
+        none: window.radiusForHeat(nodeFor(h, 0), l * peak, h, now),
+        one: window.radiusForHeat(nodeFor(h, l), l * peak, h, now),
+      }));
+    }, [heat, NOW, NODE_FOR, least, [1, 2, 10, 4000, 1e6]]);
 
-    expect(ring).toBeGreaterThan(0.3);
-    expect(ring, "if this is 0.25 the encoding changed and the key must be rewritten")
+    for (const row of drawn) {
+      // Visible rather than technically larger: half again the radius, and more than
+      // twice the area, at every peak.
+      expect(row.one / row.none, `against a peak of ${row.peak}`).toBeGreaterThan(1.5);
+      expect((row.one * row.one) / (row.none * row.none)).toBeGreaterThan(2);
+      // And exactly one step, so "this one is doing something" does not get quieter
+      // as the landscape gets busier. The exception is a landscape with no range at
+      // all — every process running one, every node holding its only incident — where
+      // the smallest tally is also the largest and is drawn as the largest, because
+      // being the worst is what it is.
+      const step = row.one - row.none;
+      if (row.peak > 1) expect(step, `against a peak of ${row.peak}`).toBeCloseTo(STEP, 6);
+      else expect(step, "a landscape with no range").toBeCloseTo(30, 6);
+    }
+  });
+
+  // Two claims this picture used to make, kept as tests so neither can come back.
+  //
+  // It said the radius rose with the square root of the share, which made a circle's
+  // *area* proportional to the tally. That was arithmetically right and answered the
+  // wrong question — see radiusForHeat — and the scale is a ratio scale now. It also
+  // once said the ring above the floor was the node's share, which was never true at
+  // all: the floor offsets the relation.
+  //
+  // Both are pinned negatively, because the sentence in the key is what a reader
+  // takes away and a stale one is worse than none.
+  test(`the ${heat} weighting is not a square-root scale, and not a share of area`, async ({ page }) => {
+    const least = LEAST[heat];
+    const read = await page.evaluate(([h, now, src, l]) => {
+      const NOW_MS = now;
+      const nodeFor = eval(src);
+      const peak = l * 100;
+      const at = (v) => window.radiusForHeat(nodeFor(h, v), peak, h, now);
+      const area = (r) => Math.PI * r * r;
+      const floor = at(0), top = at(peak);
+      return {
+        // Where a square-root scale would put a quarter of the peak, against where
+        // this one does.
+        rose: (at(l * 25) - floor) / (top - floor),
+        ring: (area(at(l * 25)) - area(floor)) / (area(top) - area(floor)),
+      };
+    }, [heat, NOW, NODE_FOR, least]);
+
+    // sqrt(0.25) is 0.5. If this comes back to 0.5 the encoding changed and every
+    // sentence naming it — the key, the export stamp, ADR-0211 §8 — must change too.
+    expect(read.rose, "if this is 0.5 the scale is a square-root one again")
+      .not.toBeCloseTo(0.5, 2);
+    expect(read.ring, "if this is 0.25 the ring above the floor is the share again")
       .not.toBeCloseTo(0.25, 2);
   });
 

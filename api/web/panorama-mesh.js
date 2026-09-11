@@ -293,6 +293,10 @@ const HEATS = {
     // optional chain rather than defaulting: "no instances" and "cannot have
     // instances" are different facts and neither is a zero to be drawn.
     of: (node) => node?.runtime?.running,
+    // One running instance is the smallest thing this weighting can be asked about,
+    // and it is a real thing rather than a rounding: a process running one is running.
+    least: 1,
+    leastPhrase: "one running instance",
     ...counted("running"),
     // What size means, in one sentence, for the key and for whoever has to read the
     // picture after it has been pasted somewhere with no key beside it.
@@ -301,7 +305,8 @@ const HEATS = {
       <b>${fmtCount(peak)}</b>`,
     floorNote: `Anything with no running instances of its own sits at the floor — a
       worker, a decision, and an application too, whose load is on the processes it
-      holds — so nothing drops off the picture.`,
+      holds — so nothing drops off the picture, and one running instance is already
+      unmistakably above it.`,
     quiet: `<b>Size is load here, not structure</b> — and nothing is running on this
       landscape at all, so every node is drawn at the same floor.`,
     // Why a node can be sizeable and still carry no number under its name.
@@ -320,14 +325,17 @@ const HEATS = {
     // carry one — an incident belongs to a token — and a collapsed application
     // carries the sum of the processes it stands for.
     of: (node) => node?.incidents,
+    // One incident is one incident. There is no smaller amount of trouble.
+    least: 1,
+    leastPhrase: "one incident",
     ...counted("incident(s)"),
     heading: "Size is trouble here, not structure.",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding
       <b>${fmtCount(peak)}</b>`,
     floorNote: `Everything with nothing parked on it sits at the floor, so a healthy
-      estate reads as a flat one and the exceptions are the only things that stand up.
-      The badges still say which nodes have a finding; the size says how much is behind
-      each.`,
+      estate reads as a flat one and a single incident is already the shape of an
+      exception. The badges still say which nodes have a finding; the size says how
+      much is behind each.`,
     quiet: `<b>Size is trouble here, not structure</b> — and nothing on this landscape
       is parked at all, so every node is drawn at the same floor. That is the answer,
       not a missing one.`,
@@ -352,15 +360,21 @@ const HEATS = {
     // pointed at.
     of: (node, at) => (node?.oldestIncident > 0
       ? Math.max(0, at - node.oldestIncident / 1e6) : 0),
+    // A minute, because that is the smallest age worth drawing a difference for: an
+    // incident raised forty seconds ago and one raised ten are the same finding, and
+    // the raw number here is nanoseconds, where "one" means nothing to anybody.
+    least: 60_000,
+    leastPhrase: "a minute stuck",
     text: (ms) => `stuck ${spanText(ms)}`,
     rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
     heading: "Size is age here, not structure.",
     peakPhrase: (peak) => `the longest-parked one on this landscape, which has been
       stuck <b>${esc(spanText(peak))}</b>`,
-    floorNote: `Everything with nothing parked on it sits at the floor. A process that
-      parked its first token an hour ago is small beside one that parked its first on
-      Friday, however many each is holding — how much is the other picture, and the two
-      routinely rank the same estate the opposite way round.`,
+    floorNote: `Everything with nothing parked on it sits at the floor, and anything
+      parked at all stands above it. A process that parked its first token an hour ago
+      is small beside one that parked its first on Friday, however many each is
+      holding — how much is the other picture, and the two routinely rank the same
+      estate the opposite way round.`,
     quiet: `<b>Size is age here, not structure</b> — and nothing on this landscape is
       parked at all, so every node is drawn at the same floor. That is the answer, not
       a missing one.`,
@@ -482,6 +496,22 @@ const HEAT_FLOOR = 11;
 // ever draws: the two ends of the estate are then told apart at a glance rather than
 // by measurement, which is the whole of what a weighting is for.
 const HEAT_SPAN = 30;
+// HEAT_STEP is what a node earns the moment it carries anything at all, before the
+// weighting has said how much.
+//
+// It exists because "some" and "none" is the first question a heatmap is asked, and
+// on a ratio scale that question has no answer at the bottom: the smallest tally is
+// the origin, so a process running one instance and a process running none would be
+// drawn the same size. So the scale starts a step up, and the step is the whole of
+// what "this one is doing something" costs.
+//
+// Six, which puts the smallest node that carries anything at 17 against a floor of
+// 11. That is two and a third times the area, and — the part that makes it the right
+// number rather than a large one — it is exactly the gap between a worker and a
+// process on the structural picture (KIND: 12 and 17). So "has any at all" reads at
+// the same glance as "is a different kind of thing", which is the glance this view is
+// read at.
+const HEAT_STEP = 6;
 
 // heatPeak is the largest tally on a landscape, and the reference every node on it is
 // drawn against.
@@ -516,37 +546,71 @@ export function heatPeak(graph, heat, at = Date.now()) {
 
 // radiusForHeat sizes a node by whatever the chosen weighting counts on it.
 //
-// The radius rises from the floor with the *square root* of the share, which is the
-// whole of the encoding:
+// Three rules, and the whole encoding is in them:
 //
-//	r = HEAT_FLOOR + HEAT_SPAN * sqrt(value / peak)
+//	value 0      →  r = HEAT_FLOOR
+//	value least  →  r = HEAT_FLOOR + HEAT_STEP
+//	value peak   →  r = HEAT_FLOOR + HEAT_SPAN
 //
-// The root, because a circle's area goes up with the square of its radius: a radius
-// drawn straight from the number would read as four times the quantity at twice the
-// count. Taking the root is what makes "twice as much" look like twice as much, and it
-// is the standard the eye is calibrated against on a bubble chart.
+// and between the last two the radius rises with the **logarithm of the ratio**:
 //
-// What is exactly proportional to the share is therefore ((r - floor) / span)², and
-// **not** the visible area above the floor — those differ, and the difference is not
-// small: at a quarter of the peak's tally the ring above the floor is about 0.36 of
-// the ring at the peak, not 0.25. An earlier version of this comment and of the key
-// claimed the second, which was a precise statement that did not survive arithmetic;
-// the test named for it now pins the law the code actually implements.
+//	r = HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) · ln(value/least) / ln(peak/least)
 //
-// Exact proportionality and a visible minimum cannot both hold — one of them has to
-// give at zero — and the minimum wins here, because a landscape is read for the nodes
-// on it as well as for the numbers. The floor is what breaks it, deliberately, and the
-// key says growth starts *from* a floor rather than implying it starts from nothing.
+// So equal steps of radius are equal *multiples* of the tally. A process running ten
+// instances stands as far above one running one as one running a hundred stands above
+// it. That is a ratio scale, and it is the right one for this quantity: an estate's
+// instance counts span one to several thousand, its incident counts one to a handful,
+// and its incident ages a minute to a fortnight — ranges no linear reading can carry,
+// because the top of each decides the scale and everything an order of magnitude below
+// it lands in the same place.
+//
+// **What this replaced, and what it gave up.** The radius used to rise with the square
+// root of the share of the peak, which makes a circle's *area* proportional to the
+// tally — the textbook encoding for a quantity drawn as a disc, and the one the eye is
+// calibrated against on a bubble chart. It answers "how much", and the arithmetic of
+// it was right. What it could not do is the thing this view is opened for. On a span
+// of thirty, a node at a hundredth of the peak was drawn three units above a node
+// carrying nothing at all, and a node at a thousandth was drawn one unit above it: the
+// whole quiet majority of a real landscape collapsed onto the floor, and the reader
+// could not tell a process running one from a process running none. The ratio scale
+// answers "how many times" instead, and that is the question an operator is actually
+// asking of a heatmap. It is a deliberate trade and the key says which one is on the
+// picture, because a radius means nothing without the law that produced it.
+//
+// **least** is the smallest tally a weighting distinguishes, declared by the weighting
+// rather than found on the landscape (see HEATS). One running instance, one incident,
+// one minute of age. Declaring it is what keeps the picture stable — a reading taken
+// off the landscape would rescale every node the moment one quiet process appeared —
+// and what keeps it honest for a duration, where the raw number is nanoseconds and
+// "one of them" means nothing to anybody.
+//
+// A landscape whose peak is at or below its least — every incident is the only
+// incident — has no range to speak of, and everything carrying anything is
+// simultaneously the smallest and the largest of it. They are drawn at the top,
+// because being the worst is what they are.
 //
 // A node with no tally at all — a worker, a decision, a deployment target, a draft,
 // a placeholder — sits on the floor rather than being sized as a zero, and that is
 // the same fact rather than a missing one: nothing is counted there because nothing
 // can be.
 export function radiusForHeat(node, peak, heat, at = Date.now()) {
-  const read = heatReader(heat);
-  const value = read ? Math.max(0, read(node, at) || 0) : 0;
-  if (!(peak > 0) || value <= 0) return HEAT_FLOOR;
-  return HEAT_FLOOR + HEAT_SPAN * Math.min(1, Math.sqrt(value / peak));
+  const entry = heatEntry(heat);
+  const value = entry?.of ? Math.max(0, entry.of(node, at) || 0) : 0;
+  if (value <= 0) return HEAT_FLOOR;
+  const least = heatLeast(entry);
+  // The top is never below the value in hand: a peak read from a landscape this node
+  // is no longer on would otherwise size it past the maximum.
+  const top = Math.max(peak || 0, value, least);
+  const rise = top > least
+    ? Math.log(Math.max(value, least) / least) / Math.log(top / least)
+    : 1;
+  return HEAT_FLOOR + HEAT_STEP + (HEAT_SPAN - HEAT_STEP) * Math.min(1, Math.max(0, rise));
+}
+
+// heatLeast is the smallest tally a weighting tells apart from the next one up. One,
+// for anything counted; a weighting that measures something continuous says so itself.
+function heatLeast(entry) {
+  return entry?.least > 0 ? entry.least : 1;
 }
 
 // heatReader resolves either spelling of a weighting — the entry itself, or the key
@@ -554,8 +618,14 @@ export function radiusForHeat(node, peak, heat, at = Date.now()) {
 // not know reads as none rather than as zero everywhere, so an unfamiliar saved view
 // draws the structural picture instead of a flat one.
 function heatReader(heat) {
-  const entry = typeof heat === "string" ? HEATS[heat] : heat;
-  return entry?.of || null;
+  return heatEntry(heat)?.of || null;
+}
+
+// heatEntry resolves either spelling of a weighting to the weighting itself, which is
+// what the size law needs: it reads the tally *and* the smallest tally that weighting
+// distinguishes, and the two have to come from the same place or they can disagree.
+function heatEntry(heat) {
+  return (typeof heat === "string" ? HEATS[heat] : heat) || null;
 }
 
 // A target is not part of the dependency graph — no edge is derived to it, because
@@ -2266,12 +2336,14 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
   // would read its absence as "not measured", which is the one thing it does not mean.
   if (heat) {
     notes.push(peak > 0
-      ? `<p class="mesh-note"><b>${heat.heading}</b> A node grows from the floor with the
-         <b>square root</b> of its share of ${heat.peakPhrase(peak)} — the root rather
-         than the number itself, because a circle's area goes up with the square of its
-         radius, so a radius taken straight from the count would read as far more than
-         it stands for. ${heat.floorNote} Kind is still carried by shape and
-         colour.</p>`
+      ? `<p class="mesh-note"><b>${heat.heading}</b> A node carrying nothing sits at the
+         floor. ${esc(heat.leastPhrase)} is already a step above it, and from there the
+         size grows with each <b>tenfold</b> rather than with the count itself — so
+         equal steps of size are equal multiples, and the largest node here is
+         ${heat.peakPhrase(peak)}. ${heat.floorNote} That means the area is not the
+         tally: this scale answers <em>how many times</em>, which is the question a
+         landscape spanning one to a thousand can be asked. Kind is still carried by
+         shape and colour.</p>`
       : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
          colour.</p>`);
     notes.push(`<p class="mesh-note">${heat.absent}</p>`);

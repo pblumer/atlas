@@ -440,10 +440,13 @@ _Changed_ / _Removed_ for each version.
   The panel states the exact age for whichever node is selected (**"Oldest still parked
   5 d ago"**), which is the number a circle cannot give.
 
-  On any of them a node grows from a floor with the **square root** of its share of the
-  largest node on the landscape. The root rather than the number itself, because a
-  circle's area goes up with the square of its radius: a circle drawn straight from the
-  count would read as four times the quantity at twice the number.
+  On any of them the size is a **ratio scale**. A node carrying nothing sits at a floor;
+  a node carrying the least the weighting counts — one running instance, one incident, a
+  minute stuck — is already a clear step above it; and from there the size grows with
+  each *tenfold*, so equal steps of size are equal multiples of the tally and the largest
+  node on the landscape is the largest circle. That is the question a heatmap is opened
+  with: an estate's instance counts run from one to several thousand, and what an
+  operator wants of a circle is how many times, not how much.
 
   Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
   idle process, a worker, a decision and an application whose load sits on the processes

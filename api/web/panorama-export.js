@@ -111,6 +111,7 @@ export function exportName(extension, at = new Date()) {
 const HEAT_STAMPS = {
   instances: {
     heading: "Size is load here, not structure:",
+    leastPhrase: "one running instance",
     peakPhrase: (peak) => `the busiest one on this landscape, which is running ` +
       `${fmtCount(peak)}`,
     floorNote: `Anything with no running instances of its own sits at the floor — a ` +
@@ -123,6 +124,7 @@ const HEAT_STAMPS = {
   },
   "incident-age": {
     heading: "Size is age here, not structure:",
+    leastPhrase: "a minute stuck",
     peakPhrase: (peak) => `the longest-parked one on this landscape, which has been ` +
       `stuck ${spanText(peak)}`,
     floorNote: `Everything with nothing parked on it sits at the floor. A process that ` +
@@ -136,6 +138,7 @@ const HEAT_STAMPS = {
   },
   incidents: {
     heading: "Size is trouble here, not structure:",
+    leastPhrase: "one incident",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding ` +
       `${fmtCount(peak)}`,
     floorNote: `Everything with nothing parked on it sits at the floor, so a healthy ` +
@@ -205,10 +208,13 @@ export function stampLines(meta = {}) {
   const heat = HEAT_STAMPS[meta.heat] || (meta.instances ? HEAT_STAMPS.instances : null);
   if (heat) {
     lines.push({ text: meta.peak > 0
-      ? `${heat.heading} A node grows from the floor with the square root of its ` +
-        `share of ${heat.peakPhrase(meta.peak)} — the root rather than the number ` +
-        `itself, because a circle's area goes up with the square of its radius. ` +
-        `${heat.floorNote} Kind is still carried by shape and colour.`
+      ? `${heat.heading} A node carrying nothing sits at the floor; ` +
+        `${heat.leastPhrase} is already a step above it, and from there the size ` +
+        `grows with each tenfold rather than with the count itself, so equal steps ` +
+        `of size are equal multiples. The largest node here is ` +
+        `${heat.peakPhrase(meta.peak)}. ${heat.floorNote} The area is therefore not ` +
+        `the tally: this scale answers how many times. ` +
+        `Kind is still carried by shape and colour.`
       : `${heat.quiet} Kind is still carried by shape and colour.` });
     lines.push({ text: heat.absent });
   }
