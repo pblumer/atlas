@@ -46,7 +46,8 @@ func keyArg(desc string) map[string]any {
 func defaultTools() []Tool {
 	tools := append(runtimeTools(), authoringTools()...)
 	tools = append(tools, collabTools()...)
-	return append(tools, infomodelTools()...)
+	tools = append(tools, infomodelTools()...)
+	return append(tools, capabilityTools()...)
 }
 
 // runtimeTools are the deploy/instance/inspect tools.

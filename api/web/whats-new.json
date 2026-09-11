@@ -157,6 +157,82 @@
       }
     },
     {
+      "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A capability now says when somebody last read it and meant it",
+        "de": "Eine Geschäftsfähigkeit sagt jetzt, wann sie zuletzt jemand gelesen und bestätigt hat"
+      },
+      "summary": {
+        "en": "Atlas can check whether the process a capability names is deployed. It cannot check who owns the capability, what it is responsible for, or what it promised — and those are the fields anybody acts on. A map whose realisations are all green and whose owners left two years ago is worse than no map. Both records now carry a confirmation: when, by whom, who they asked, and a line on what the review found. Only confirming sets it — no edit does, because a date refreshed by a typo fix would claim every field had been re-read. What lapses turns up as a review backlog, one query, the twin of the one for work nobody has automated. The interval is twelve months by default and yours to change.",
+        "de": "Atlas kann prüfen, ob der Prozess, den eine Fähigkeit nennt, deployt ist. Wer sie fachlich verantwortet, wofür sie zuständig ist und was sie zugesagt hat, kann Atlas nicht prüfen — und genau das sind die Felder, nach denen jemand handelt. Eine Landkarte mit lauter grünen Umsetzungen und Verantwortlichen, die vor zwei Jahren gegangen sind, ist schlechter als keine. Beide Datensatzarten tragen jetzt eine Bestätigung: wann, von wem, wen man gefragt hat und eine Zeile zum Ergebnis der Prüfung. Gesetzt wird sie nur durch das Bestätigen selbst, nie durch eine Bearbeitung: Ein Datum, das eine Tippfehlerkorrektur auffrischt, behauptete, jedes Feld sei neu gelesen worden. Was abläuft, erscheint als Prüfrückstand, eine einzige Abfrage, das Gegenstück zu der nach nicht automatisierter Arbeit. Die Frist beträgt standardmässig zwölf Monate und lässt sich ändern."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Architecture",
+        "API"
+      ],
+      "tutorial": {
+        "en": [
+          "Confirm a record you have just re-read: POST /api/v1/capabilities/{key}/confirmation with {\"with\": \"Head of Credit Risk\", \"note\": \"SLA renegotiated to 3 days\"}. Both fields are optional.",
+          "Name who you asked in \"with\". Leaving it empty says you spoke for the record alone, which is legitimate and weaker — the record says which.",
+          "Ask GET /api/v1/capabilities?stale=true for the review backlog.",
+          "GET /api/v1/business-architecture/gaps reports what has lapsed, and names the interval it judged against.",
+          "An administrator can change that interval with PUT /api/v1/settings/confirmation."
+        ],
+        "de": [
+          "Einen soeben erneut gelesenen Datensatz bestätigen: POST /api/v1/capabilities/{key}/confirmation mit {\"with\": \"Leiter Kreditrisiko\", \"note\": \"SLA auf 3 Tage neu verhandelt\"}. Beide Felder sind optional.",
+          "In \"with\" eintragen, wen man gefragt hat. Leer lassen heisst, man stand allein für den Datensatz ein; das ist zulässig und schwächer, und der Datensatz sagt welches von beidem.",
+          "GET /api/v1/capabilities?stale=true liefert den Prüfrückstand.",
+          "GET /api/v1/business-architecture/gaps meldet, was abgelaufen ist, und nennt die zugrunde gelegte Frist.",
+          "Eine Administratorin ändert diese Frist mit PUT /api/v1/settings/confirmation."
+        ]
+      }
+    },
+    {
+      "id": "atlas-now-holds-what-the-organisation-must-be-able-to-do-not",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas now holds what your business must be able to do, not only what it runs",
+        "de": "Atlas hält jetzt fest, was Ihr Geschäft können muss, nicht nur was es ausführt"
+      },
+      "summary": {
+        "en": "A deployed process could be found by its name and by nothing else — not by the business capability it realises, not by who owns that capability, not by what would stall without it. Two new records close that: a business capability says what has to be done, independently of how, with its scope, its owner, what it requires from others and what it has promised; a value stream is the ordered activity that meets a customer need, its stages naming the capabilities that perform them. A capability can be realised by a process here, by a Worker, by a purchased system, or by a person — and the ones nobody has automated are the point, because \"what do we still do by hand?\" is now one query. Ask for the gaps and Atlas compares the whole map against what this server actually runs: capabilities nothing realises, processes no capability claims, and a call activity crossing a boundary nobody declared.",
+        "de": "Ein deployter Prozess war über seinen Namen auffindbar und sonst über nichts: nicht über die Geschäftsfähigkeit, die er umsetzt, nicht über deren Verantwortliche, nicht darüber, was ohne ihn stillstünde. Zwei neue Datensätze schliessen diese Lücke. Eine Geschäftsfähigkeit beschreibt, was getan werden muss, unabhängig davon wie: mit Geltungsbereich, fachlicher Verantwortung, den benötigten anderen Fähigkeiten und den zugesagten Service Levels. Ein Wertstrom ist die geordnete Abfolge, die einen Kundenbedarf erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Eine Fähigkeit kann durch einen Prozess hier, einen Worker, ein gekauftes System oder durch Menschen erbracht werden — und gerade die nicht automatisierten sind der Zweck der Sache, denn „was machen wir noch von Hand?“ ist jetzt eine einzige Abfrage. Der Lückenbericht vergleicht die gesamte Landkarte mit dem, was dieser Server tatsächlich ausführt: Fähigkeiten ohne Umsetzung, Prozesse, die keine Fähigkeit beansprucht, und Aufrufe über eine Grenze, die niemand deklariert hat."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Architecture",
+        "API"
+      ],
+      "tutorial": {
+        "en": [
+          "The registry is served over the HTTP API and as MCP tools; there is no Console page for it yet.",
+          "Read the vocabularies first: GET /api/v1/business-architecture/subset.",
+          "File a capability with POST /api/v1/capabilities — only key and name are required. Leave the realizations empty if nobody automates it yet; that is a valid and useful record.",
+          "Ask GET /api/v1/capabilities?realized=false for the adoption backlog.",
+          "Ask GET /api/v1/business-architecture/gaps to compare the map against what this server runs."
+        ],
+        "de": [
+          "Die Registry wird über die HTTP-API und als MCP-Werkzeuge bereitgestellt; eine Konsolen-Seite dafür gibt es noch nicht.",
+          "Zuerst die Vokabulare lesen: GET /api/v1/business-architecture/subset.",
+          "Eine Fähigkeit anlegen mit POST /api/v1/capabilities — erforderlich sind nur key und name. Die Umsetzungen leer lassen, wenn noch nichts automatisiert ist; das ist ein gültiger und nützlicher Datensatz.",
+          "GET /api/v1/capabilities?realized=false liefert den Rückstand an nicht automatisierten Fähigkeiten.",
+          "GET /api/v1/business-architecture/gaps vergleicht die Landkarte mit dem, was dieser Server ausführt."
+        ]
+      }
+    },
+    {
       "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
       "version": "Unreleased",
       "date": null,
@@ -312,72 +388,6 @@
       "tags": [
         "Connectors",
         "Modeler"
-      ]
-    },
-    {
-      "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See where an order got to — on the lifecycle its class declares",
-        "de": "Sehen, wo eine Bestellung steht — auf dem Lebenszyklus ihrer Klasse"
-      },
-      "summary": {
-        "en": "Open a running or finished instance and the Data tab now has a third view: the state machine the class declares, with the states this particular datum has been through filled in, the one it is in right now ringed, and every step labelled with the task that made it. Where something went a way the model does not allow, the drawing says so in a dashed line and names it underneath — which is how you find a process writing a state that does not exist, or one that was built before anyone drew the lifecycle.",
-        "de": "Beim Öffnen einer laufenden oder beendeten Instanz hat der Reiter Daten jetzt eine dritte Ansicht: die Zustandsmaschine, die die Klasse deklariert — mit den Zuständen, die genau dieses Datum durchlaufen hat, dem aktuellen hervorgehoben und jedem Schritt beschriftet mit der Aufgabe, die ihn ausgelöst hat. Ist etwas einen Weg gegangen, den das Modell nicht vorsieht, zeigt die Zeichnung das als gestrichelte Linie und benennt es darunter — so findet man einen Prozess, der einen Zustand schreibt, den es nicht gibt, oder einen, der schon vor dem Lebenszyklus gebaut wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations and click an instance to replay it.",
-          "Switch to the Data tab and choose Lifecycle.",
-          "Filled states are ones this datum has been through; the ringed one is where it is now. Each arrow it travelled names the element that moved it.",
-          "Carrying several data objects? Pick which one to draw with the selector on the right.",
-          "Nothing there? The class needs a lifecycle first — draw one under Data › Model, on the class itself."
-        ],
-        "de": [
-          "Unter Betrieb eine Instanz anklicken, um sie abzuspielen.",
-          "Auf den Reiter Daten wechseln und Lebenszyklus wählen.",
-          "Gefüllte Zustände hat dieses Datum durchlaufen; der umrandete ist der aktuelle. Jeder durchlaufene Pfeil nennt das Element, das den Schritt ausgelöst hat.",
-          "Mehrere Datenobjekte? Rechts auswählen, welches gezeichnet wird.",
-          "Nichts zu sehen? Dann hat die Klasse noch keinen Lebenszyklus — unter Daten › Modell an der Klasse selbst zeichnen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Betrieb öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-deploy-says-when-a-searchable-declaration-cannot-be-hono",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The deploy answers with the same reading, for models it never sees in the Modeler",
-        "de": "Das Deployment gibt dieselbe Einschätzung, auch ohne Modeler"
-      },
-      "summary": {
-        "en": "The marker under the field only helps whoever is looking at the diagram. A model deployed from a pipeline or over the API never passes through the Modeler at all, so the deploy response now carries the same reading as a warning beside the ones it already gives. It never refuses the deploy. A name the model itself declares as a JSON input is always reported; a name nothing in the model produces is reported only where the model has stated its inputs, and the sentence says plainly that a worker writing it makes the case fine.",
-        "de": "Die Markierung unter dem Feld hilft nur, wer das Diagramm vor sich hat. Ein Modell, das aus einer Pipeline oder über die API deployt wird, sieht den Modeler nie. Deshalb enthält die Deploy-Antwort jetzt dieselbe Einschätzung als Warnung, neben den Warnungen, die sie ohnehin ausgibt. Abgelehnt wird nie. Ein Name, den das Modell selbst als JSON-Eingabe deklariert, wird immer gemeldet; ein Name, den nichts im Modell erzeugt, nur dann, wenn das Modell seine Eingaben überhaupt benannt hat — und der Satz sagt ausdrücklich, dass ein Worker, der ihn schreibt, den Fall in Ordnung macht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Deployment"
       ]
     }
   ]
