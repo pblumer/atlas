@@ -30,16 +30,22 @@ _Changed_ / _Removed_ for each version.
   hundred and twenty-five covered 17%. The floor is gone, and the same five nodes now
   cover 18% — the same picture, at the size it should always have been drawn.
 
-  The second is the stranded node. A process attached to nothing is held near the
-  picture only by the pull toward its centre, against a repulsion that falls away with
-  distance, and that balance puts it a long way out. The cost is not the node itself:
-  the view is framed from the box that contains everything, so one node far out decides
-  how small the rest is drawn. On the shape this was reported on — one application with
-  its processes around it, plus one process attached to nothing — the straggler sat at
-  2.07 times the picture's own spacing. It is now bounded at 1.5: it is still the
-  outlying thing it is, on the side it settled on, but it no longer sets the scale for
-  everything else. Nothing moves in a landscape that has no straggler, and nothing moves
-  at all once you have arranged the picture by hand.
+  The second is the stranded piece. A process attached to nothing — or a handful of
+  processes that call each other and nothing else, which is what a conformance sample
+  or a test flow looks like — is held near the picture only by the pull toward its
+  centre, against a repulsion that falls away with distance, and that balance puts it
+  a long way out. The cost is not the piece itself: the view is framed from the box
+  that contains everything, so one thing far out decides how small the rest is drawn.
+  On the shapes this was reported on, the furthest piece sat at two to three times the
+  picture's own spacing. It is now bounded at 1.5, and the whole piece moves together
+  so that nothing the diagram says about the processes inside it changes. It is still
+  the outlying thing it is, on the side it settled on, but it no longer sets the scale
+  for everything else. Nothing moves in a landscape that has none, and nothing moves at
+  all once you have arranged the picture by hand.
+
+  Both corrections are in the layout, which is one function for every notation, so the
+  Instances and Incidents heatmaps and the ArchiMate and C4 projections get them too:
+  there was never a per-view layout to fix.
 
 - **A script's liveness probe read a zombie as a running process.** ADR-0303 made a
   timed-out script take its whole process group with it, and

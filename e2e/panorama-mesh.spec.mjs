@@ -3756,12 +3756,38 @@ async function drawnPicture(page) {
     const near = at.map((a) => Math.min(...at.filter((b) => b !== a)
       .map((b) => Math.hypot(a.x - b.x, a.y - b.y))));
     const sorted = [...near].sort((p, q) => p - q);
+    const median = sorted[Math.floor(sorted.length / 2)];
+
+    // The same measure one level up: how far the furthest *piece* of the picture
+    // sits from everything outside it. Pieces are read off the drawn edges rather
+    // than off the payload, so this measures the picture and not the fixture.
+    const index = new Map(at.map((a, i) => [a.id, i]));
+    const parent = at.map((_, i) => i);
+    const root = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    for (const edge of document.querySelectorAll(".mesh-edge")) {
+      const a = index.get(edge.getAttribute("data-from")), b = index.get(edge.getAttribute("data-to"));
+      if (a === undefined || b === undefined) continue;
+      const ra = root(a), rb = root(b);
+      if (ra !== rb) parent[ra] = rb;
+    }
+    const piece = at.map((_, i) => root(i));
+    const outside = new Map();
+    for (let i = 0; i < at.length; i++) {
+      for (let j = i + 1; j < at.length; j++) {
+        if (piece[i] === piece[j]) continue;
+        const d = Math.hypot(at[i].x - at[j].x, at[i].y - at[j].y);
+        if (!outside.has(piece[i]) || d < outside.get(piece[i])) outside.set(piece[i], d);
+        if (!outside.has(piece[j]) || d < outside.get(piece[j])) outside.set(piece[j], d);
+      }
+    }
     return {
       nodes: at.length,
+      pieces: new Set(piece).size,
       cover: covered / (cols * rows),
       // Screen pixels per world unit, which is what decides how big a name is drawn.
       scale: surface.width / vw,
-      ratio: sorted[sorted.length - 1] / sorted[Math.floor(sorted.length / 2)],
+      ratio: sorted[sorted.length - 1] / median,
+      adrift: outside.size ? Math.max(...outside.values()) / median : 0,
     };
   });
 }
@@ -3779,7 +3805,7 @@ function installShifting(page, hold) {
   });
 }
 
-function landscapeOf(apps, per, loose) {
+function landscapeOf(apps, per, loose, islands = []) {
   const mesh = { nodes: [], edges: [], restricted: 0, clustered: false };
   for (let a = 1; a <= apps; a++) {
     mesh.nodes.push({ id: `application:a${a}`, kind: "application", name: `App ${a}`, provenance: "derived" });
@@ -3788,10 +3814,22 @@ function landscapeOf(apps, per, loose) {
       mesh.nodes.push({ id, kind: "process", name: `Proc ${a}.${p}`, provenance: "derived", processId: id, version: 1 });
       mesh.edges.push({ from: `application:a${a}`, to: id, kind: "contains" });
     }
+    // One call between neighbouring applications, so the estate has a mass rather
+    // than several equal islands: what a piece is measured against is the rest.
+    if (a > 1) mesh.edges.push({ from: `process:${a - 1}_1`, to: `process:${a}_2`, kind: "calls" });
   }
   for (let i = 1; i <= loose; i++) {
     mesh.nodes.push({ id: `process:free${i}`, kind: "process", name: `Frei ${i}`, provenance: "derived", processId: `f${i}`, version: 1 });
   }
+  // Self-contained clusters: a conformance sample, a test flow and its subprocess —
+  // processes that call each other and nothing else. Real estates are full of them.
+  islands.forEach((size, c) => {
+    for (let i = 0; i < size; i++) {
+      const id = `process:island${c}_${i}`;
+      mesh.nodes.push({ id, kind: "process", name: `Insel ${c}.${i}`, provenance: "derived", processId: id, version: 1 });
+      if (i) mesh.edges.push({ from: `process:island${c}_${i - 1}`, to: id, kind: "calls" });
+    }
+  });
   return mesh;
 }
 
@@ -3873,6 +3911,44 @@ test("no node is drawn further from the picture than the picture's own spacing",
     const drawn = await drawnPicture(page);
     // 1.5 is the ceiling; the tolerance is for the separation pass, which runs after
     // the gather and may push a pair a little further apart than it found them.
+    expect(drawn.ratio, `${drawn.nodes} nodes`).toBeLessThan(1.55);
+  }
+});
+
+// The same ceiling, one level up: on *pieces* of the picture rather than on nodes.
+//
+// A per-node rule cannot see this and the test above it cannot either. Two processes
+// that call each other and nothing else are each other's nearest neighbour at a
+// spring's rest length, so by that measure neither is far from anything — and the
+// pair sails past the ceiling together and goes on holding the canvas open behind it.
+// That is not a contrived shape: a landscape is full of conformance samples, test
+// flows and one-off processes that touch nothing else, and it was those pairs and
+// triples that were still stranded at the edges after the per-node ceiling shipped.
+//
+// Measured on these four estates before the piece ceiling: the furthest piece sat at
+// 2.1 to 3.1 times the picture's own spacing. The reading is taken off the drawn
+// edges, so what is being checked is the picture rather than the fixture.
+test("no piece of the picture is drawn adrift from the rest of it", async ({ page }) => {
+  const hold = { mesh: null };
+  installShifting(page, hold);
+  const estates = [
+    [3, 8, 0, [2, 2, 2]],
+    [4, 7, 0, [2, 3, 2, 3]],
+    [2, 9, 0, [2, 2, 3, 2, 4]],
+    [8, 12, 0, [2, 3, 2, 4, 2, 3]],
+  ];
+  for (const [apps, per, loose, islands] of estates) {
+    hold.mesh = landscapeOf(apps, per, loose, islands);
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.goto("about:blank");
+    await page.goto("/index.html#/panorama/starmap");
+    await expect(page.locator(".mesh-canvas")).toHaveCount(1);
+    await page.waitForTimeout(400);
+    const drawn = await drawnPicture(page);
+    expect(drawn.pieces, "the estate has pieces to be adrift").toBeGreaterThan(1);
+    expect(drawn.adrift, `${drawn.nodes} nodes in ${drawn.pieces} pieces`).toBeLessThan(1.55);
+    // And the per-node ceiling still holds: the two halves of the pass are not
+    // alternatives. Dropping the node half took this to 1.9 on the last estate here.
     expect(drawn.ratio, `${drawn.nodes} nodes`).toBeLessThan(1.55);
   }
 });

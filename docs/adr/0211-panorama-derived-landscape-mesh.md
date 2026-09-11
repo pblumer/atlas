@@ -1082,6 +1082,42 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, second): the ceiling is on pieces of the picture, not on
+> nodes.**
+> The ceiling the amendment below introduced measured each node against its own
+> nearest neighbour, which catches a lone node and nothing else. Two processes that
+> call each other and nothing else are each other's nearest neighbour at a spring's
+> rest length, so by that measure neither is far from anything — the pair sails past
+> the ceiling together and goes on deciding the scale for the whole canvas. That was
+> reported from a real landscape, and it is not a rare shape: an estate is full of
+> conformance samples, test flows and one-off processes that touch nothing else.
+>
+> So the unit is the connected component. Everything the edges tie together is one
+> piece; a piece is measured against everything outside it; a piece over the ceiling
+> is translated *rigidly* toward whatever is nearest to it until the gap is exactly
+> the ceiling. Rigidly, because every distance inside a component is something the
+> springs are saying, where the gap between two components is an artifact of where
+> the repulsion and the pull happened to balance — nothing was being said, so nothing
+> is being overruled. The largest component never moves; something has to hold still.
+>
+> Both halves run, and neither replaces the other. A piece is measured against what
+> is outside it, so a node stretched away from its own neighbours *inside* a large
+> component is invisible to the piece half; a node is measured against its nearest
+> neighbour, so a pair adrift together is invisible to the node half. Measured on a
+> 120-node estate with six small islands, dropping the node half took the worst
+> node's distance from 1.5 times the median to 1.9. Across eight estate shapes at two
+> window sizes the piece ceiling takes the furthest piece from 2.0–3.1 times the
+> median to 1.5, leaves the median spacing the picture is drawn at unchanged or
+> slightly larger, and moves nothing at all on an estate whose pieces were already
+> within it.
+>
+> The layout is one function for every notation, so this reaches the heatmap
+> projections and the ArchiMate and C4 views by construction rather than by being
+> repeated. Measured on one 212-node estate across all four: coverage 0.165 / 0.163 /
+> 0.163 / 0.171 and an identical furthest-piece figure. There is no per-view layout
+> to fix, and a report that one view is worse than another is a report about the
+> estate or about the build, not about the projection.
+
 > **Amendment (2026-09-11): the opening view uses the window, whatever the estate's
 > size.**
 > §7 sizes the world from the content and then shows the whole of it, so the world's

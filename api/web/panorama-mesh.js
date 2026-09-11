@@ -837,59 +837,146 @@ function separate(nodes, radii, gap, rounds = 24) {
 const GATHER_REACH = 1.5;
 
 // gather is the dual of separate: separate puts a floor under how close two nodes
-// may be drawn, gather puts a ceiling on how far one may drift from the rest.
+// may be drawn, gather puts a ceiling on how far one *piece* of the picture may
+// drift from the rest of it.
 //
 // It exists because the forces cannot promise this and the framing cannot survive
-// without it. A node the springs do not hold — one with no edges, or one in a small
-// component of its own — sits where the centring pull balances a repulsion that
-// falls off as 1/d², and that balance is a cube root of the constants: it lands far
-// out, and tuning the pull moves it by very little (LOOSE_PULL is that tuning, and
-// the worst case in its own table is still 3.1× the median). What happens next is
-// the expensive part. fitToFrame scales the *bounding box* onto the world, so one
-// node a long way out is not merely a node a long way out — it is the thing that
-// decides the scale, and everything else is squeezed into the fraction of the canvas
-// it leaves. That is the picture this was reported as: a cluster in one third of the
-// window, a single node hard against the far edge, and two thirds of the canvas
-// empty.
+// without it. A piece the springs do not tie to anything else — a node with no
+// edges, or a small cluster joined only to itself — sits where the centring pull
+// balances a repulsion falling off as 1/d², and that balance is a cube root of the
+// constants: it lands far out, and tuning the pull moves it by very little
+// (LOOSE_PULL is that tuning, and the worst case in its own table is still 3.1× the
+// median). What happens next is the expensive part. fitToFrame scales the *bounding
+// box* onto the world, so a piece a long way out is not merely a piece a long way
+// out — it is the thing that decides the scale, and everything else is squeezed into
+// the fraction of the canvas it leaves. That is the picture this was reported as
+// twice: a mass in part of the window, stragglers against the far edges, and most of
+// the canvas empty.
 //
 // So it is bounded here, deterministically, in the same place and for the same
 // reason separate is: a guarantee the simulation cannot make is made afterwards, by
-// arithmetic. A node further than GATHER_REACH from its nearest neighbour is moved
-// along the line toward that neighbour until it is exactly that far — no further, so
-// it stays the outlying thing it is and stays on the side of the picture it settled
-// on. What it stops being is the thing that sets the scale for everybody else.
+// arithmetic.
 //
-// The reach is the picture's own median rather than a number, so it carries across
-// every world size and every estate: it says "further out than this landscape's own
-// spacing warrants", which is a statement about the landscape and not about pixels.
-// The median is taken once, before anything moves, so the pass cannot chase its own
-// tail.
+// **The piece, not the node.** The first version of this measured each node against
+// its own nearest neighbour, which catches a lone node and nothing else: two
+// processes that call each other and nothing else are each other's nearest
+// neighbour at a spring's rest length, so by that measure neither was far from
+// anything, and the pair sailed past the ceiling together. On a real estate that is
+// not the rare case — a landscape is full of test processes, conformance samples and
+// one-off flows that touch nothing else — and it was those pairs and triples, not
+// lone nodes, that were still holding the canvas open. So the unit is the connected
+// component: everything the edges tie together is one piece, and a piece is measured
+// against everything outside it.
 //
-// Held nodes do not move — somebody put them there — and the whole pass is skipped
-// while anything is pinned, exactly as the fit is, because both would slide a
-// hand-made arrangement out from under the hand that made it.
+// A piece over the ceiling is translated *rigidly* toward whatever is nearest to it,
+// until the gap is exactly the ceiling and no further. Rigidly, because every
+// distance inside a component is something the layout is saying — the springs put it
+// there — and a pass that squeezed a component would be editing the picture's
+// content rather than its placement. Between components there are no edges and so
+// nothing was being said: the gap is an artifact of where the repulsion and the pull
+// happened to balance, which is exactly the quantity that may be overruled. The
+// piece stays the outlying thing it is, on the side of the picture it settled on,
+// and stops being the thing that sets the scale for everybody else.
 //
-// What it deliberately does not catch: two nodes joined to each other and to nothing
-// else, out on their own. They are each other's nearest neighbour at a spring's rest
-// length, so by this measure neither is far from anything, and a pass that pulled
-// them in anyway would be measuring something else — how far a *component* is from
-// the mass. That is a larger claim and a more expensive one (it is single-linkage
-// clustering, not a pass over the pairs), and it is a rarer picture than the one
-// reported. Stating what is measured and what is not is worth more here than a
-// second mechanism that is nearly the first.
-function gather(nodes, radii, rounds = 4) {
+// The largest component never moves. It is the mass the rest is measured against,
+// and something has to hold still or the pass chases itself.
+//
+// The reach is the picture's own median nearest-neighbour distance rather than a
+// number, so it carries across every world size and every estate: it says "further
+// out than this landscape's own spacing warrants", which is a statement about the
+// landscape and not about pixels. The median is taken once, before anything moves,
+// so the pass cannot chase its own tail.
+//
+// Held nodes do not move — somebody put them there — so a component containing one
+// is left alone, and the whole pass is skipped while anything is pinned, exactly as
+// the fit is, because both would slide a hand-made arrangement out from under the
+// hand that made it.
+function gather(nodes, links, radii, rounds = 4) {
   // Below three nodes there is no median to speak of and nothing to be an outlier
   // from: two nodes are each other's nearest neighbour whatever the distance.
   if (nodes.length < 3) return nodes;
-  const near = nearestOf(nodes);
-  const sorted = [...near.map((n) => n.d)].sort((a, b) => a - b);
+  const sorted = nearestOf(nodes).map((n) => n.d).sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
   if (!(median > 0)) return nodes;
   const reach = GATHER_REACH * median;
+  gatherPieces(nodes, links, radii, reach, rounds);
+  gatherNodes(nodes, radii, reach, rounds);
+  return nodes;
+}
+
+// gatherPieces brings in whole components — the coarse half of the ceiling, and the
+// half a per-node rule cannot do.
+function gatherPieces(nodes, links, radii, reach, rounds) {
+  const piece = piecesOf(nodes.length, links);
+  // The mass: the piece with the most nodes in it. Ties go to the one whose first
+  // node comes first, so the same graph anchors on the same piece every time.
+  const count = new Map();
+  for (const p of piece) count.set(p, (count.get(p) || 0) + 1);
+  let mass = piece[0];
+  for (const [p, n] of count) if (n > count.get(mass)) mass = p;
+  if (count.get(mass) === nodes.length) return nodes;
+
+  // A piece somebody is holding by one of its nodes is not moved: the drag put it
+  // where it is, and dragging one node of a pair must not teleport the pair.
+  const pinned = new Set();
+  for (let i = 0; i < nodes.length; i++) if (nodes[i].held) pinned.add(piece[i]);
+
+  for (let round = 0; round < rounds; round++) {
+    // The nearest thing outside each piece, re-measured every round: moving one
+    // piece in changes what the next one is nearest to, and can bring a piece that
+    // was over the ceiling under it without touching it.
+    const out = new Map();
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (piece[i] === piece[j]) continue;
+        const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+        const room = radii[i] + radii[j] + NODE_ROOM;
+        const a = out.get(piece[i]), b = out.get(piece[j]);
+        if (!a || d < a.d) out.set(piece[i], { d, from: i, to: j, room });
+        if (!b || d < b.d) out.set(piece[j], { d, from: j, to: i, room });
+      }
+    }
+    let moved = false;
+    for (const [p, near] of out) {
+      if (p === mass || pinned.has(p)) continue;
+      // Never closer than the separation pass is about to insist on anyway, or the
+      // two would be pushed apart again and the round would have been wasted.
+      const want = Math.max(reach, near.room);
+      if (near.d <= want) continue;
+      const step = (near.d - want) / near.d;
+      const dx = (nodes[near.to].x - nodes[near.from].x) * step;
+      const dy = (nodes[near.to].y - nodes[near.from].y) * step;
+      for (let i = 0; i < nodes.length; i++) {
+        if (piece[i] !== p) continue;
+        nodes[i].x += dx;
+        nodes[i].y += dy;
+      }
+      moved = true;
+    }
+    if (!moved) return nodes;
+  }
+  return nodes;
+}
+
+// gatherNodes is the fine half: one node at a time, against whatever is nearest to
+// it, wherever that is.
+//
+// It is not made redundant by the piece pass and does not make it redundant. A piece
+// is measured against what is outside it, so a node stretched away from its own
+// neighbours *inside* a large component — a long call chain the springs did not pull
+// back in — is invisible to it; and a node is measured against its nearest
+// neighbour, so a pair adrift together is invisible to a per-node rule. Measured on
+// a 120-node estate with six small islands, dropping this half took the worst node's
+// distance from 1.5 times the median to 1.9. Both halves, or neither property holds.
+//
+// This one moves a node rather than a piece, and that does shorten whatever edge it
+// was stretched along — deliberately, and only past the ceiling, where the length
+// had stopped being a reading of the graph and started being a hole in the picture.
+function gatherNodes(nodes, radii, reach, rounds) {
   for (let round = 0; round < rounds; round++) {
     // Re-measured each round: pulling one node in can make it somebody else's
     // nearest neighbour, and can leave whoever it was furthest from on its own.
-    const at = round === 0 ? near : nearestOf(nodes);
+    const at = nearestOf(nodes);
     let moved = false;
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i], j = at[i].at;
@@ -907,6 +994,22 @@ function gather(nodes, radii, rounds = 4) {
     if (!moved) return nodes;
   }
   return nodes;
+}
+
+// piecesOf labels every node with the component it belongs to, as the index of one
+// representative node. Union-find over the edges, so a chain of a hundred calls is
+// one piece for the same cost as a pair.
+function piecesOf(count, links) {
+  const parent = new Int32Array(count);
+  for (let i = 0; i < count; i++) parent[i] = i;
+  const root = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  for (const [a, b] of links) {
+    const ra = root(a), rb = root(b);
+    if (ra !== rb) parent[ra] = rb;
+  }
+  const out = new Int32Array(count);
+  for (let i = 0; i < count; i++) out[i] = root(i);
+  return out;
 }
 
 // nearestOf reports, for every node, which node is closest to it and how far away
@@ -1207,7 +1310,7 @@ function layout(nodes, edges, { width, height, iterations = 220, pinned, from, m
   settle(nodes, links, radii, force, iterations - aimed);
   // Nothing may be left stranded off the side of the picture before it is framed,
   // because the framing is what turns one stranded node into an empty canvas.
-  if (!anchored) gather(nodes, radii);
+  if (!anchored) gather(nodes, links, radii);
   if (!anchored) fitToFrame(nodes, width, height, margin);
   // And once more where the circles are actually drawn. The fit scales positions
   // and leaves radii alone, so whatever the settle guaranteed is only true again
