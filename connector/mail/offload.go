@@ -155,10 +155,15 @@ func Run(ctx context.Context, j Job, reg *Registry) error {
 // parks the task with a message naming it, because a notification quietly sent to
 // nobody is the failure mode a notification exists to avoid.
 func lookUp(rcpts []string, dir Directory) ([]string, error) {
-	if dir == nil {
+	if dir == nil || len(rcpts) == 0 {
 		return rcpts, nil
 	}
-	out := make([]string, 0, len(rcpts))
+	// Declared rather than made: nothing resolved has to come back as nil and not
+	// as an empty list. A leased job's payload is JSON, where the two are `null`
+	// and `[]`, and an unresolved expression must travel as the absence of a value
+	// rather than as a value that happens to be empty — which is a contract a test
+	// holds and this function quietly broke.
+	var out []string
 	for _, r := range rcpts {
 		if strings.Contains(r, "@") {
 			out = append(out, r)
