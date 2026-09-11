@@ -1,7 +1,7 @@
 # ADR-DRAFT: A theme belongs to a catalogue, the sign-in screen belongs to the operator
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether the brand change at sign-in reads as a transition or as a
@@ -144,6 +144,20 @@ annotation and an upload check, not a redesign.
 - Good: no new public surface; reuses the whole existing path; the change is a field on
   a record.
 - Bad: a visible brand transition at sign-in, whose acceptability is the open question.
+
+## Implementation
+
+`Catalog.Theme` holds the source accent and one of the shipped typefaces;
+`PUT /api/v1/catalogs/{id}/theme` sets or clears it, administrator-gated as decision 12
+chose, and on ADR-0209's admin allowlist so opening it stayed a diff a reviewer sees.
+The portal page imports theme.js's derivation rather than repeating it, and a test
+refuses any assignment of a derived token in the page — naming one in a comment is how
+the rule is explained, assigning one is how it gets broken.
+
+**The logo is not built.** It needs an upload path, a content check and a serving route,
+none of which the accent and the typeface needed, and it is the half of the theme that a
+catalogue can do without for now. It reads as this record's first follow-up rather than
+as something finished.
 
 ## Links
 

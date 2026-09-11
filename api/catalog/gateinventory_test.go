@@ -65,6 +65,8 @@ var catalogGates = []handlerGate{
 	{name: "HandleImport", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `<?xml version="1.0" encoding="UTF-8"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="m"/>`,
 		id:   true},
+	{name: "HandleSetTheme", kind: gated, want: http.StatusNotFound, method: "PUT",
+		body: `{"accent":"#112233"}`, id: true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
 }

@@ -68,7 +68,8 @@
 </head>
 <body>
   <div id="app"></div>
-  <script src="/theme.js"></script>
-  <script src="/portal.js"></script>
+  <!-- A module: portal.js imports theme.js's palette derivation rather than
+       carrying a second copy of it. -->
+  <script type="module" src="/portal.js"></script>
 </body>
 </html>

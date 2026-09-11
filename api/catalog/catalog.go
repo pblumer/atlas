@@ -189,6 +189,10 @@ type Catalog struct {
 	// the way but not knowing an id — which ADR-0278 states plainly is not an
 	// access control.
 	Members []Member `json:"members,omitempty"`
+	// Theme is this catalogue's appearance, empty for the instance's own. Set by
+	// an administrator rather than by whoever maintains the catalogue
+	// (decision 12).
+	Theme Theme `json:"theme,omitempty"`
 	// Edges are the structure and precedence between the items this catalogue
 	// offers. They belong to the catalogue rather than to the items because they
 	// are what its release is computed from, and because the same two products can

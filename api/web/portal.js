@@ -1,5 +1,10 @@
 // The self-service portal (ADR-draft-portal-catalogue-order-inventory).
 //
+// A module, so it can reuse theme.js's palette derivation rather than repeat it.
+// That reuse is the point: --accent-ink decides whether a button's label is
+// readable on whatever colour somebody picked, and a second implementation of it
+// is a second place for that to be wrong.
+//
 // One page with two halves: the catalogue somebody is the audience for, and the
 // orders they placed. It reads five endpoints and holds no state the server does
 // not already have, which is why it can be reloaded at any point without losing
@@ -9,6 +14,8 @@
 // on the condition that record names: every string below exists in every locale
 // the page offers, held by TestPortalCatalogueIsComplete. A missing key would
 // otherwise reach a customer, who cannot act on a review signal.
+
+import { applyAccent } from './theme.js';
 
 const STRINGS = {
   de: {
@@ -115,6 +122,60 @@ function textOf(texts, fallback) {
   return texts[locale] || texts.de || texts.en || Object.values(texts)[0] || fallback;
 }
 
+// The typeface stacks the server ships, mirrored here because the page paints
+// with them. The server refuses a name that is not one of these, so the two
+// cannot drift into a catalogue naming a face the page has no stack for.
+const TYPEFACES = {
+  system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  humanist: '"Segoe UI", Candara, Optima, "Trebuchet MS", sans-serif',
+  serif: 'Georgia, Cambria, "Times New Roman", serif',
+  mono: 'ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace',
+};
+
+// applyTheme paints the catalogue's brand, deriving every shade from the one
+// colour that is stored.
+//
+// The derivation lives in theme.js and is reused rather than repeated: eleven
+// copies of it is eleven places for one to be wrong, and the one that matters is
+// --accent-ink, which decides whether a button's label is readable on whatever
+// colour somebody picked (ADR-0263).
+//
+// The sign-in screen keeps the operator's brand, because a catalogue is resolved
+// from who you are and nobody is signed in yet. So a first-time visitor sees the
+// operator's face until their catalogue answers; a returning one is painted from
+// the cache before the first frame, which is what the cache is for.
+function applyTheme(catalog) {
+  const theme = (catalog && catalog.theme) || {};
+  const root = document.documentElement;
+
+  // applyAccent with nothing clears the overrides, which falls back to the
+  // instance brand this page already declared — the right answer for a catalogue
+  // that has no face of its own.
+  applyAccent(theme.accent || '');
+  if (theme.typeface && TYPEFACES[theme.typeface]) {
+    root.style.setProperty('--font-sans', TYPEFACES[theme.typeface]);
+  }
+  try {
+    // Remember which catalogue this was painted for. Without the id the cache
+    // would repaint a returning visitor in somebody else's brand after their
+    // assignment changed — worse than the flash it exists to prevent.
+    localStorage.setItem('portal.theme', JSON.stringify({
+      id: catalog && catalog.id, accent: theme.accent, typeface: theme.typeface,
+    }));
+  } catch { /* private window */ }
+}
+
+// paintFromCache runs before anything is fetched, so a returning visitor sees
+// their own brand from the first frame. The server always wins: applyTheme
+// overwrites this once the catalogue answers, and an unreachable server leaves
+// the cached paint intact — the discipline ADR-0113 established.
+function paintFromCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('portal.theme') || 'null');
+    if (cached) applyTheme({ id: cached.id, theme: cached });
+  } catch { /* nothing cached, or no storage */ }
+}
+
 const state = {
   catalog: null,
   release: null,
@@ -139,6 +200,7 @@ async function load() {
     // failure: the page says so rather than showing an error.
     state.catalog = null;
   }
+  applyTheme(state.catalog);
   if (state.catalog) {
     const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
     state.release = releases && releases.length ? releases[0] : null;
@@ -295,6 +357,7 @@ function render() {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.lang = locale;
+  paintFromCache();
   render();
   load().catch((e) => { state.error = `${t('portal.failed')} ${e.message}`; render(); });
 });

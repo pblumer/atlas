@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/catalog"
 )
 
 // The portal offers its interface in the visitor's own language, and it may only
@@ -112,8 +114,45 @@ func TestPortalDeclaresTheBrandTokens(t *testing.T) {
 			t.Errorf("portal.html does not declare %s, so theme.js has nothing to override", token)
 		}
 	}
-	if !strings.Contains(page, "/theme.js") {
-		t.Error("portal.html does not load theme.js, so it would show the stock blue " +
-			"whatever brand the operator set")
+	if !strings.Contains(page, `type="module" src="/portal.js"`) {
+		t.Error("portal.html does not load portal.js as a module, so its import of " +
+			"theme.js's palette derivation cannot resolve and the page would show the " +
+			"stock blue whatever brand was set")
+	}
+}
+
+// TestPortalDerivesNoPaletteOfItsOwn: the accent's hover, soft and ink shades are
+// computed in one place. The ink in particular decides whether a label stays
+// readable on a brand colour, and a second implementation of that is a second
+// place for it to be wrong (ADR-0263).
+func TestPortalDerivesNoPaletteOfItsOwn(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	if !strings.Contains(src, `from './theme.js'`) {
+		t.Fatal("portal.js does not import theme.js — if it now derives the palette " +
+			"itself, that derivation exists twice")
+	}
+	// Naming a derived token in a comment is how the rule is explained; assigning
+	// one is how it gets broken. Only the assignment is the defect.
+	for _, token := range []string{"--accent-hover", "--accent-soft", "--accent-ink"} {
+		for _, form := range []string{
+			`setProperty("` + token, `setProperty('` + token, token + `:`,
+		} {
+			if strings.Contains(src, form) {
+				t.Errorf("portal.js assigns %s, which theme.js derives. Setting it here "+
+					"means computing it here.", token)
+			}
+		}
+	}
+}
+
+// TestPortalTypefacesMatchTheServer: the page paints with a stack, the server
+// refuses a name that is not one, and a catalogue naming a face the page has no
+// stack for would silently render in the default one.
+func TestPortalTypefacesMatchTheServer(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	for name := range catalog.Typefaces {
+		if !strings.Contains(src, name+":") {
+			t.Errorf("the server offers the typeface %q and portal.js has no stack for it", name)
+		}
 	}
 }
