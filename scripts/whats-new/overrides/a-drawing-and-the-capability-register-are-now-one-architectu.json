@@ -1,0 +1,25 @@
+{
+  "tags": ["Panorama", "Architecture"],
+  "title": {
+    "en": "Link a diagram to the capability it draws",
+    "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
+  },
+  "summary": {
+    "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
+    "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
+  },
+  "tutorial": {
+    "en": [
+      "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
+      "Open the Panorama model and select the Capability element that draws it.",
+      "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
+      "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
+    ],
+    "de": [
+      "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
+      "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
+      "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
+      "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
+    ]
+  }
+}

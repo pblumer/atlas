@@ -35,7 +35,16 @@ package panorama
 // SubsetVersion is the version of the table below. It is a public contract — a
 // palette and a rule the browser enforces — so a change to what is permitted is a
 // version bump rather than a quiet redefinition.
-const SubsetVersion = 1
+//
+// Version 2 adds ValueStream (ADR-0308).
+// This one *is* a bump where the binding
+// contract's addition was not, and the difference is what each number promises. The
+// binding contract says which keys a client may rely on finding, and adding one takes
+// nothing away from that. This table says what Atlas will create and which
+// connections the canvas will refuse mid-drag — so a browser holding version 1 and a
+// server on version 2 disagree about a live rule, and the browser would refuse an
+// arrow the server permits. The version is how the two notice.
+const SubsetVersion = 2
 
 // The ArchiMate layers this subset spans, in the order the palette shows them:
 // motivation-free, top-down, the way the standard's own layer diagram reads.
@@ -74,6 +83,18 @@ const (
 // authorable is the subset, in palette order.
 var authorable = []ElementKind{
 	{Type: "Capability", Label: "Capability", Layer: LayerStrategy, Aspect: AspectBehavior},
+	// A value stream is the ordered activity that meets a customer need, and its
+	// stages name the capabilities that perform them (ADR-0305), and it is bound by
+	// ADR-0308. The validator has
+	// always accepted one in a document it read; until this entry existed the palette
+	// offered no way to create one, so a model containing value streams could be
+	// opened and edited around but never added to.
+	//
+	// Strategy layer, behaviour aspect — where ArchiMate 3.2 puts it, and where
+	// Capability already sits. Those two fields are the whole of what decides every
+	// relationship it can carry, because the rules below are predicates over layer and
+	// aspect rather than a table of type pairs. Nothing else here changes.
+	{Type: "ValueStream", Label: "Value stream", Layer: LayerStrategy, Aspect: AspectBehavior},
 
 	{Type: "BusinessActor", Label: "Business actor", Layer: LayerBusiness, Aspect: AspectActive},
 	{Type: "BusinessRole", Label: "Business role", Layer: LayerBusiness, Aspect: AspectActive},
