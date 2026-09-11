@@ -1626,12 +1626,20 @@ the method and how to work it with Atlas as it stands are in
   **coverage** read: the resolved
   realisations, what the capability depends on and what each has promised, who depends
   on it, and the value-stream stages it performs.
-- 🔲 **B5 — The milestone event compiles.** A **none intermediate throw event** — an
+- ✅ **B5 — The milestone event compiles.** A **none intermediate throw event** — an
   event whose only job is to leave a trace in the engine's history — is the method's
-  milestone marker, and today the compiler refuses it (*"only message, signal,
-  compensation, escalation, and link events are supported yet"*). It compiles to a
-  pass-through node, which the link throw event already does. Small, and it is what
-  makes "identity verification started" a readable business state where no task sits.
+  milestone marker, and the compiler refused it. It is now `TypeNoneThrowEvent`, a
+  pass-through node like the link throw event, and its product is not its execution but
+  its record: the visit counters count it, the step trail carries it in order, the
+  Operations overlay lights it up. That is what makes "identity verification started" a
+  readable business state where no task sits.
+
+  A type of its own rather than a reused task or link throw, because everything that
+  reads a compiled node back reads its type, and a milestone stored as a task would be
+  drawn and described as one. The change also splits a state that used to be single: an
+  intermediate throw event carrying a definition this compiler does not implement is now
+  refused by name, so making the empty case compile did not quietly make the wrong case
+  compile too ([ADR-0307](docs/adr/0307-the-milestone-event-compiles.md)).
 - 🔲 **B6 — Panorama meets the registry.** Binding keys `atlas.capabilityKey` on an
   ArchiMate `Capability` and `atlas.valueStreamKey` on a `ValueStream`, so the drawing
   and the registry are the same architecture seen twice rather than two architectures.

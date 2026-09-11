@@ -169,6 +169,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A milestone is an element you can draw now.** BPMN's marker for a point on the path
+  where no work sits is a **none intermediate throw event**: an intermediate throw event
+  with no event definition, named after the point it marks. *Identity verification
+  started* is one — the work is what follows it, so there is no task there to record.
+  Atlas refused it, and refused it at Deploy rather than at author time: the Modeler drew
+  one, validated it and said nothing, because the element was never in the list of things
+  bpmn-js can draw that the engine cannot run.
+
+  It compiles. It waits for nothing and needs no worker, so its execution is the same as
+  having drawn nothing at all — and that is not what it is for. What it produces is the
+  record: the per-definition visit counters count it, the instance's step trail carries it
+  in order, and the Operations overlay lights it up. That is the whole difference between
+  a milestone and a label on a sequence flow, and it is what makes "when did this case
+  reach verification" answerable per case rather than only where a task happens to sit.
+
+  It is a node type of its own rather than a reused undefined task or link throw, because
+  everything that reads a compiled node back reads its type — the overlay, the step
+  replay, the process documentation, a migration plan matching elements across versions.
+  A milestone stored as a task would be drawn and described as a task.
+
+  **Making the empty case compile did not make the wrong case compile.** "No event
+  definition this compiler implements" and "no event definition at all" used to be one
+  state, and both were refused; with the second one compiling, the first would have become
+  a pass-through that silently does nothing the model asked for. A throw event carrying a
+  timer — which BPMN allows only on a catch — would have run straight through instead of
+  waiting. So an unmatched `*EventDefinition` child is now refused by name, and by its
+  suffix rather than by a list of the five that are wrong today, because such a list goes
+  stale silently and in the direction of accepting something.
+
 - **A capability record now says when somebody last read it and meant it.** The gap
   report checks a realisation against what is deployed, because that is a fact Atlas can
   see. The rest of a capability — who owns it, what it is and is not responsible for,

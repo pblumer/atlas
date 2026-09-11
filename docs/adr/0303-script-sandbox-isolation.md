@@ -100,10 +100,26 @@ are not a reliable assumption for the supported container and Kubernetes path.
 - **Negative / trade-offs accepted:** Landlock restricts access rather than creating a
   new filesystem image. Some path metadata may remain observable even though file
   contents and directory listings are denied.
-- **Follow-ups / risks to watch:** add model-level capability declarations before
-  making strict the default; place script Worker Instances in dedicated cgroups or
-  workloads for aggregate memory and CPU accounting; add a distinct OS identity and
-  optional network egress policy for scripts that legitimately need selected services.
+- **Known defect in what landed:** the strict allowlist omits `/proc` and `/etc/passwd`,
+  which the .NET runtime requires, so PowerShell does not start under `strict` at all. The
+  failure surfaces on the first script job rather than at startup, because `CheckSandbox`
+  proves the Landlock ABI and never that an enabled interpreter can start. Python and
+  JavaScript are unaffected ([#892](https://github.com/pblumer/atlas/issues/892)).
+- **Follow-ups / risks to watch.** Each one now has an issue, so it can be picked up by
+  somebody who never reads this record:
+  - **Model-level capability declarations**, so a profile is chosen per script rather than
+    per installation. Until then the installation-wide setting follows its most demanding
+    script, which is what keeps `off` the default
+    ([#895](https://github.com/pblumer/atlas/issues/895)).
+  - **Dedicated cgroups or workloads** for aggregate memory and CPU accounting. Landlock
+    restricts access, not consumption, so the wall-clock timeout is the only bound a
+    script's memory use has ([#896](https://github.com/pblumer/atlas/issues/896)).
+  - **A distinct OS identity** for script Worker Instances. Sharing the engine's uid is
+    what makes every file the engine can read readable by a script as well
+    ([#897](https://github.com/pblumer/atlas/issues/897)).
+  - **An optional network egress policy**, so a script that legitimately calls one service
+    is not pushed back to `off` by the all-or-nothing socket ban
+    ([#898](https://github.com/pblumer/atlas/issues/898)).
 
 ## Pros and cons of the options
 

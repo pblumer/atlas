@@ -2476,6 +2476,15 @@ func (b *Builder) AddLinkThrowEvent() int32 { return b.addNode(TypeLinkThrowEven
 // Returns its element id.
 func (b *Builder) AddLinkCatchEvent() int32 { return b.addNode(TypeLinkCatchEvent, -1) }
 
+// AddNoneThrowEvent adds an intermediate throw event with no event definition — the
+// milestone marker (ADR-0307). It carries no detail and runs
+// as a pass-through, flowing
+// straight on its outgoing sequence flow. What distinguishes it from having drawn nothing
+// at all is not its execution but its record: activating and completing it writes element
+// events under its own id, so the visit counters (ADR-0080), the instance timeline and the
+// Operations overlay all carry a point the business named. Returns its element id.
+func (b *Builder) AddNoneThrowEvent() int32 { return b.addNode(TypeNoneThrowEvent, -1) }
+
 // AddBoundaryEscalationEvent adds an escalation boundary event attached to host that catches
 // an escalation propagating up to the host whose code matches escalationCode ("" is a
 // catch-all). Unlike an error boundary it honors interrupting: an interrupting escalation
