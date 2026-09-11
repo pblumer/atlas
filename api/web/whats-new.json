@@ -24,6 +24,44 @@
       ]
     },
     {
+      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-relations",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Starmap's ArchiMate view now draws the relationships too",
+        "de": "Die ArchiMate-Ansicht der Starmap zeichnet jetzt auch die Beziehungen"
+      },
+      "summary": {
+        "en": "The nodes were already drawn in ArchiMate's own symbols; the lines between them were still Atlas's — one solid, one dashed, one dotted. For a reader who works in the notation that is half the alphabet, because ArchiMate tells Assignment, Triggering and Serving apart by what sits at the ends of an otherwise identical solid line. Each is now drawn that way: a ball at the source and a filled arrowhead at the target for Assignment, a filled arrowhead for Triggering, an open one for Serving. The lines are solid, and that is not a detail — in ArchiMate a dashed line with an open arrowhead is a Flow and a dotted one a Realization, so keeping Atlas's own dash would not have been a missing statement but a wrong one. A Serving relationship points the other way from the fact it comes from: ArchiMate runs Serving from the provider to the consumer, so the arrowhead sits on the process rather than on the worker it names — the same reversal the exported document has always made. The key says that in words as well, for the reader who does not know the notation by sight, and the marks travel into an exported file where there is no key to hover over. Three relationships is all there can be: Atlas knows that an application holds a process, that a process calls another, and that a process uses a worker or a decision. Nothing here is a Flow or a Realization, and an absent relationship type means Atlas cannot see one, never that there is none. Atlas's own picture is unchanged — the dash is a free channel there, because the vocabulary has no opinion about it.",
+        "de": "Die Knoten wurden bereits in den Symbolen von ArchiMate gezeichnet, die Linien dazwischen jedoch weiterhin in der Darstellung von Atlas: eine durchgezogen, eine gestrichelt, eine gepunktet. Für Lesende, die in dieser Notation arbeiten, fehlt damit das halbe Alphabet, denn ArchiMate unterscheidet Assignment, Triggering und Serving allein danach, was an den Enden einer ansonsten identischen durchgezogenen Linie steht. Genau so wird jetzt gezeichnet: eine Kugel am Ausgangspunkt und eine gefüllte Pfeilspitze am Ziel für Assignment, eine gefüllte Pfeilspitze für Triggering, eine offene für Serving. Die Linien sind durchgezogen, und das ist kein Detail — in ArchiMate ist eine gestrichelte Linie mit offener Pfeilspitze ein Flow und eine gepunktete eine Realization. Die Strichelung von Atlas beizubehalten wäre also keine fehlende, sondern eine falsche Aussage gewesen. Eine Serving-Beziehung zeigt in die Gegenrichtung der Tatsache, aus der sie stammt: ArchiMate führt Serving vom Anbieter zum Nutzer, die Pfeilspitze sitzt daher am Prozess und nicht am Worker, den er benennt — dieselbe Umkehrung, die das exportierte Dokument seit jeher vornimmt. Die Legende sagt das zusätzlich in Worten, für Lesende, welche die Notation nicht auf den ersten Blick kennen, und die Marken wandern in eine exportierte Datei, in der es keine Legende zum Nachschlagen gibt. Mehr als drei Beziehungen kann es nicht geben: Atlas weiss, dass eine Anwendung einen Prozess hält, dass ein Prozess einen anderen aufruft und dass ein Prozess einen Worker oder eine Entscheidung nutzt. Nichts hier ist ein Flow oder eine Realization, und ein fehlender Beziehungstyp bedeutet, dass Atlas keinen erkennen kann — nie, dass es keinen gibt. Die eigene Darstellung von Atlas bleibt unverändert: Dort ist die Strichelung ein freier Kanal, weil das Vokabular dazu keine Aussage trifft."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Architecture"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Panorama; the Starmap is its landing view.",
+          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
+          "Look at the ends of the lines: a ball and a filled arrowhead is an Assignment, a filled arrowhead alone is a Triggering, an open one is a Serving.",
+          "Follow a Serving line: the arrowhead is on the process, not on the worker. The key row says \"drawn from the provider\" for exactly that reason.",
+          "Export the picture as SVG or PNG — the marks and the key travel with the file."
+        ],
+        "de": [
+          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
+          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
+          "Auf die Linienenden achten: Kugel und gefüllte Pfeilspitze bedeuten Assignment, eine gefüllte Pfeilspitze allein Triggering, eine offene Serving.",
+          "Einer Serving-Linie folgen: Die Pfeilspitze sitzt am Prozess, nicht am Worker. Die Legende vermerkt dazu „drawn from the provider“.",
+          "Das Bild als SVG oder PNG exportieren — Marken und Legende wandern mit der Datei."
+        ]
+      }
+    },
+    {
       "id": "the-starmap-s-archimate-view-now-draws-archimate-s-own-symbo",
       "version": "Unreleased",
       "date": null,
@@ -347,49 +385,6 @@
           "GET /api/v1/capabilities?realized=false liefert den Rückstand an nicht automatisierten Fähigkeiten.",
           "GET /api/v1/business-architecture/gaps vergleicht die Landkarte mit dem, was dieser Server ausführt."
         ]
-      }
-    },
-    {
-      "id": "a-lifecycle-can-now-take-its-states-from-an-enumeration-you-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Write your states once, as an enumeration, and use them as the lifecycle",
-        "de": "Zustände einmal schreiben, als Enumeration, und als Lebenszyklus nutzen"
-      },
-      "summary": {
-        "en": "If you already wrote your states as an «enumeration» — with the documentation on each one — that enumeration can now be the lifecycle of a business object. Its literals are the states, so each name lives in one place. Rename a literal and the state and its transitions follow; remove one and its arrows go too. What an enumeration cannot say stays on the lifecycle: where instances start, where the life ends, and what may follow what. The class diagram shows the tie as a dashed «lifecycle» line.",
-        "de": "Wenn Sie Ihre Zustände bereits als «enumeration» geschrieben haben — samt Dokumentation zu jedem —, kann diese Enumeration jetzt der Lebenszyklus eines Geschäftsobjekts sein. Ihre Literale sind die Zustände, jeder Name steht also nur an einer Stelle. Ein umbenanntes Literal benennt den Zustand und seine Übergänge mit um; ein gelöschtes nimmt seine Pfeile mit. Was eine Enumeration nicht sagen kann, bleibt am Lebenszyklus: wo Instanzen starten, wo das Leben endet und was worauf folgen darf. Das Klassendiagramm zeigt die Verbindung als gestrichelte «lifecycle»-Linie."
-      },
-      "link": {
-        "label": "ADR-0259",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0259-data-object-lifecycle.md"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, open your information model, and click the business object whose life you want to declare.",
-          "Under Lifecycle, pick your enumeration in the States from list. Its literals become the states at once.",
-          "Open the lifecycle and draw the arrows — the order is the half no enumeration can hold. Move the starting state if the first literal is not it.",
-          "Back on the class diagram, the dashed «lifecycle» line says which enumeration is which class's life."
-        ],
-        "de": [
-          "Unter Daten das Informationsmodell öffnen und das Geschäftsobjekt anklicken, dessen Leben Sie festlegen wollen.",
-          "Unter Lifecycle in der Liste States from die Enumeration wählen. Ihre Literale werden sofort zu den Zuständen.",
-          "Den Lebenszyklus öffnen und die Pfeile zeichnen — die Reihenfolge ist die Hälfte, die keine Enumeration tragen kann. Den Startzustand verschieben, falls es nicht das erste Literal ist.",
-          "Zurück im Klassendiagramm zeigt die gestrichelte «lifecycle»-Linie, welche Enumeration das Leben welcher Klasse ist."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

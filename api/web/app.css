@@ -4222,6 +4222,25 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 .mesh-edge { stroke: var(--mesh-line); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .mesh-edge-uses { stroke-dasharray: 6 4; }
 .mesh-edge-contains { stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round; }
+/* A line a notation has named. The dash is the derived picture's free channel and
+   ArchiMate's is spoken for — a dashed line with an open arrowhead is a Flow there,
+   and a dotted one a Realization — so an ArchiMate line is solid and its two ends
+   carry the whole distinction. After the per-kind rules, which is what lets one
+   class undo all three of them. */
+.mesh-edge-marked { stroke-dasharray: none; opacity: 1; }
+/* The marks on those ends. context-stroke takes the colour from the line the marker
+   is drawn on, so a hovered edge lit in the accent is lit to its point; where it is
+   not understood the fill and stroke attributes on the marks stand and they are the
+   resting line colour. Neither reading can be the wrong relationship — that is the
+   shape's job, not the colour's. */
+.mesh-edge-mark { fill: context-stroke; }
+.mesh-edge-mark-open {
+  fill: none; stroke: context-stroke; stroke-width: 1.2;
+  /* The head of a hairline is a hairline. The line it ends keeps one width at every
+     zoom, and an outline that thickened with the picture would read as a different
+     mark the further in somebody went. */
+  vector-effect: non-scaling-stroke;
+}
 /* Labels (ADR-0211 §7's legibility half). A few hundred names on one canvas is a
    wall of text with circles behind it, so most names are revealed rather than
    painted: the element is always in the DOM — screen readers and the node's
