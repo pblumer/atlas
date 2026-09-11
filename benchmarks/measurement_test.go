@@ -2,6 +2,9 @@ package benchmarks
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
@@ -43,9 +46,33 @@ import (
 // making the smoke run in CI (`-benchtime=1x`, which still pays the setup) slow: the
 // whole file populates about 11k self-completing instances.
 //
-// A larger population is a deliberate local run, not a committed default. See
-// README.md — a number here is specific to one machine and one commit.
-var measurementPopulations = []int{100, 1_000, 10_000}
+// A larger population is a deliberate local run, not a committed default: set
+// ATLAS_BENCH_POPULATIONS to a comma-separated list to override. The override exists
+// because the interesting question here is where a curve *goes*, and answering it by
+// editing this line would mean the run that produced a published number is not the
+// code that was committed. See README.md — a number here is specific to one machine
+// and one commit.
+var measurementPopulations = populationsFromEnv()
+
+func populationsFromEnv() []int {
+	raw := strings.TrimSpace(os.Getenv("ATLAS_BENCH_POPULATIONS"))
+	if raw == "" {
+		return []int{100, 1_000, 10_000}
+	}
+	var out []int
+	for _, field := range strings.Split(raw, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(field))
+		if err != nil || n <= 0 {
+			// A malformed override is not a reason to silently measure the default:
+			// the whole point of the variable is that somebody is chasing a specific
+			// size, and answering a different question would be worse than not
+			// answering. panic is the only signal available before a *testing.B exists.
+			panic("ATLAS_BENCH_POPULATIONS: " + raw + " is not a comma-separated list of positive integers")
+		}
+		out = append(out, n)
+	}
+	return out
+}
 
 // populated runs n instances of cp to completion and returns the store holding them.
 // Every instance is finished, which is what a KPI reads: an in-flight case has no
