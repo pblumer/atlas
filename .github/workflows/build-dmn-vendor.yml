@@ -52,7 +52,7 @@ jobs:
             "github:pblumer/dmn-moddle#$DMN_MODDLE_SHA"
           test "$(readlink -f node_modules/dmn-js)" = "/tmp/dmn-js/packages/dmn-js"
 
-          cat > /tmp/atlas-dmn-vendor-entry.js <<'EOF'
+          cat > atlas-dmn-vendor-entry.js <<'EOF'
           import Modeler from 'dmn-js/lib/Modeler';
           import {
             DmnPropertiesPanelModule,
@@ -70,7 +70,7 @@ jobs:
           };
           EOF
 
-          npx esbuild /tmp/atlas-dmn-vendor-entry.js \
+          npx esbuild atlas-dmn-vendor-entry.js \
             --bundle \
             --format=iife \
             --global-name=AtlasDmn \
