@@ -5,6 +5,7 @@
                   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                   xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
                   id="Definitions_atlas-genehmigung-vorgesetzter"
                   targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:process id="atlas-genehmigung-vorgesetzter" name="Portal: Genehmigung (Linienvorgesetzter)" isExecutable="true">
@@ -42,7 +43,7 @@ Schreibt: vorgesetzter.</bpmn:documentation>
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Start_Ad</bpmn:incoming>
-      <bpmn:outgoing>F_Ad_Task</bpmn:outgoing>
+      <bpmn:outgoing>F_Start_Split</bpmn:outgoing>
     </bpmn:serviceTask>
 
     <bpmn:userTask id="Genehmigen" name="Genehmigen">
@@ -53,7 +54,7 @@ Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begrün
         <zeebe:formDefinition formId="genehmigung" />
         <zeebe:assignmentDefinition assignee="=vorgesetzter" />
       </bpmn:extensionElements>
-      <bpmn:incoming>F_Ad_Task</bpmn:incoming>
+      <bpmn:incoming>F_Split_Task</bpmn:incoming>
       <bpmn:outgoing>F_Task_Gw</bpmn:outgoing>
     </bpmn:userTask>
 
@@ -110,7 +111,43 @@ Der Genehmiger ist der Vorgesetzte, den der erste Schritt gelesen hat: die Aufga
     </bpmn:endEvent>
 
     <bpmn:sequenceFlow id="F_Start_Ad" sourceRef="Start" targetRef="Vorgesetzter" />
-    <bpmn:sequenceFlow id="F_Ad_Task" sourceRef="Vorgesetzter" targetRef="Genehmigen" />
+    <bpmn:parallelGateway id="Split" name="Aufgabe und Nachricht">
+      <bpmn:documentation>Die Benachrichtigung l&#228;uft neben der Aufgabe und nicht vor ihr. Vor ihr h&#228;tte sie die Entscheidung aufgehalten: ein Mail-Worker, der nicht konfiguriert ist, h&#228;lt den Token an, und dann g&#228;be es die Genehmigung gar nicht, &#252;ber die niemand benachrichtigt wurde. Eine Genehmigung, von der niemand wei&#223;, ist immer noch besser als keine — sie steht in der Liste des Genehmigers.</bpmn:documentation>
+      <bpmn:incoming>F_Start_Split</bpmn:incoming>
+      <bpmn:outgoing>F_Split_Task</bpmn:outgoing>
+      <bpmn:outgoing>F_Split_Mail</bpmn:outgoing>
+    </bpmn:parallelGateway>
+
+    <bpmn:serviceTask id="Benachrichtigen" name="Genehmiger benachrichtigen">
+      <bpmn:documentation>Schickt die Nachricht mit dem Link auf die Genehmigungsseite.
+
+Die Adressatin ist der Linienvorgesetzte, den die Verzeichnisabfrage davor gelesen hat — dieselbe Person, an die auch die Aufgabe geht.
+
+Der Empf&#228;nger ist eine Referenz und keine Adresse: der Server schl&#228;gt sie beim Versand im Konto nach. So steht in keiner Prozessvariablen und in keinem Auftrag eine Mailadresse — dieselbe Regel, nach der das Portal Personen nur &#252;ber ihre Kennung f&#252;hrt.
+
+Der Link nennt Auftrag und Leistung und nicht die Aufgabe: einen Aufgabenschl&#252;ssel gibt es noch nicht, wenn diese Nachricht geschrieben wird, und er &#228;ndert sich, wenn die Aufgabe neu zugewiesen wird. Auftrag und Leistung bleiben.
+
+Ist portalBaseUrl leer — der Betreiber hat keine externe Adresse gesetzt —, nennt die Nachricht das Portal statt einen Link, den niemand aufrufen kann.
+
+Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;portal&#8220;.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="portal"
+          to="=vorgesetzter"
+          subject="=&#34;Genehmigung n&#246;tig: &#34; + itemId"
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie im Genehmigungsportal dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/genehmigung.html?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Split_Mail</bpmn:incoming>
+      <bpmn:outgoing>F_Mail_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndeMail" name="Benachrichtigt">
+      <bpmn:incoming>F_Mail_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F_Start_Split" sourceRef="Vorgesetzter" targetRef="Split" />
+    <bpmn:sequenceFlow id="F_Split_Task" sourceRef="Split" targetRef="Genehmigen" />
+    <bpmn:sequenceFlow id="F_Split_Mail" sourceRef="Split" targetRef="Benachrichtigen" />
+    <bpmn:sequenceFlow id="F_Mail_Ende" sourceRef="Benachrichtigen" targetRef="EndeMail" />
     <bpmn:sequenceFlow id="F_Task_Gw" sourceRef="Genehmigen" targetRef="Gw" />
     <bpmn:sequenceFlow id="F_Gw_Provisionieren" name="ja" sourceRef="Gw" targetRef="Provisionieren">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=genehmigt = true</bpmn:conditionExpression>
@@ -147,11 +184,34 @@ Der Genehmiger ist der Vorgesetzte, den der erste Schritt gelesen hat: die Aufga
         <bpmndi:BPMNLabel><dc:Bounds x="790" y="225" width="60" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
+      <bpmndi:BPMNShape id="S_Split" bpmnElement="Split">
+        <dc:Bounds x="215" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Mail" bpmnElement="Benachrichtigen">
+        <dc:Bounds x="300" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeMail" bpmnElement="EndeMail">
+        <dc:Bounds x="450" y="62" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="436" y="105" width="70" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="E_Split_Task" bpmnElement="F_Split_Task">
+        <di:waypoint x="265" y="200" />
+        <di:waypoint x="300" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Mail" bpmnElement="F_Split_Mail">
+        <di:waypoint x="240" y="175" />
+        <di:waypoint x="240" y="80" />
+        <di:waypoint x="300" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Mail_Ende" bpmnElement="F_Mail_Ende">
+        <di:waypoint x="400" y="80" />
+        <di:waypoint x="450" y="80" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Start" bpmnElement="F_Start_Ad">
         <di:waypoint x="188" y="200" />
         <di:waypoint x="250" y="200" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="E_Ad_Task" bpmnElement="F_Ad_Task">
+      <bpmndi:BPMNEdge id="E_Ad_Task" bpmnElement="F_Start_Split">
         <di:waypoint x="350" y="200" />
         <di:waypoint x="400" y="200" />
       </bpmndi:BPMNEdge>

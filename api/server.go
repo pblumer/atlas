@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1350,10 +1351,22 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogStore, s.orderStore = catalogStore, orderStore
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
-		func(message, orderID string) error {
-			s.do(func() { s.proc.PublishMessage(message, orderID) })
+		func(message, orderID string, vars map[string]string) error {
+			start := make([]model.VariableValue, 0, len(vars))
+			for name, value := range vars {
+				start = append(start, model.VariableValue{Name: name, Kind: model.VarString, Text: value})
+			}
+			// A map has no order and start variables are written in the order given,
+			// so sort: the same order must produce the same log, live and on replay.
+			sort.Slice(start, func(i, j int) bool { return start[i].Name < start[j].Name })
+			s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
 			return s.drive()
-		})
+		},
+		// The notification's link is built on the operator's configured origin and
+		// on nothing else. Deriving it from whichever host the orderer happened to
+		// reach would put an internal address in a mail to somebody who cannot
+		// resolve it.
+		func() string { return s.externalURL })
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the

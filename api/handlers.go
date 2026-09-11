@@ -5774,7 +5774,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The message travels; the SMTP host and password do not. What names the
 		// credential is the worker's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
-		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey, mailDirectory{s})
 		if err != nil {
 			return nil
 		}

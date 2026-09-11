@@ -174,7 +174,9 @@ var managedConnectorKinds = append([]managedConnectorKind{
 			s.mailOutbox = mail.NewOutbox(0)
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.Handle(compiler.MailJobTypeIndex, func(rd state.Reader) job.Handler { return mail.Handler(rd, s.processLookup, s.mailRegistry) })
+			s.jobRunner.Handle(compiler.MailJobTypeIndex, func(rd state.Reader) job.Handler {
+				return mail.Handler(rd, s.processLookup, s.mailRegistry, mailDirectory{s})
+			})
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildMailClients()

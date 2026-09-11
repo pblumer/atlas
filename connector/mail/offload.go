@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/model"
@@ -54,15 +55,33 @@ type Job struct {
 	MessageID string `json:"messageId,omitempty"`
 }
 
+// Directory resolves a recipient that is not a mail address — a person or a group
+// this installation knows — to the addresses it should reach.
+//
+// It exists so a model can address somebody it only holds a *reference* to. The
+// portal names people by principal id and by nothing else, and resolves a name or
+// an address from the account at the moment a screen is rendered, never copying
+// one into an order or a variable (ADR-draft-portal-personal-data). A notification
+// is that rule applied to a message instead of a screen: the model writes
+// `to="=approvalRef"`, the address is looked up here, at send time, and it exists
+// nowhere else.
+//
+// A nil Directory resolves nothing and leaves every recipient as written, which is
+// what this did before the interface existed.
+type Directory interface {
+	Recipients(ref string) ([]string, error)
+}
+
 // Resolve turns a compiled mail task into a [Job]: the authored fields
-// evaluated against the scope's variables. It is engine work by necessity — FEEL is
-// compiled at deploy (ADR-0008/0015) and the scope lives in the store.
+// evaluated against the scope's variables, with any recipient that is a reference
+// rather than an address resolved through dir. It is engine work by necessity —
+// FEEL is compiled at deploy (ADR-0008/0015) and the scope lives in the store.
 //
 // It deliberately does not validate that there is a recipient. That check belongs
 // with the send, after the worker lookup, so an operator with both an
 // unconfigured worker and an empty recipient list hears about the configuration
 // first — that being the one they can act on.
-func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64) (Job, error) {
+func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64, dir Directory) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("mail: task has no detail")
 	}
@@ -74,12 +93,24 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		return Job{}, fmt.Errorf("mail: read variables for element %d: %w", elementInstanceKey, err)
 	}
 	piKey := ei.ProcessInstanceKey // binds the processInstanceKey builtin; not the read scope
+	to, err := lookUp(splitAddrs(resolveValue(detail.To, piKey, scopeVars)), dir)
+	if err != nil {
+		return Job{}, err
+	}
+	cc, err := lookUp(splitAddrs(resolveValue(detail.Cc, piKey, scopeVars)), dir)
+	if err != nil {
+		return Job{}, err
+	}
+	bcc, err := lookUp(splitAddrs(resolveValue(detail.Bcc, piKey, scopeVars)), dir)
+	if err != nil {
+		return Job{}, err
+	}
 	return Job{
 		Connector: cp.Intern(detail.Connector),
 		From:      resolveValue(detail.From, piKey, scopeVars),
-		To:        splitAddrs(resolveValue(detail.To, piKey, scopeVars)),
-		Cc:        splitAddrs(resolveValue(detail.Cc, piKey, scopeVars)),
-		Bcc:       splitAddrs(resolveValue(detail.Bcc, piKey, scopeVars)),
+		To:        to,
+		Cc:        cc,
+		Bcc:       bcc,
 		Subject:   resolveValue(detail.MailSubject, piKey, scopeVars),
 		Body:      resolveValue(detail.Body, piKey, scopeVars),
 		HTML:      resolveValue(detail.BodyHTML, piKey, scopeVars),
@@ -112,4 +143,35 @@ func Run(ctx context.Context, j Job, reg *Registry) error {
 		HTML:      j.HTML,
 		MessageID: j.MessageID,
 	})
+}
+
+// lookUp turns a recipient list into addresses: an entry with an "@" is already
+// one, anything else is a reference for the directory to resolve.
+//
+// The test is deliberately that crude. A mail address is the thing with an "@" in
+// it, and every string without one is something this server would have handed to
+// SMTP to be rejected — so treating it as a reference takes nothing away and needs
+// no new syntax in the model. A reference nobody answers to fails the job, which
+// parks the task with a message naming it, because a notification quietly sent to
+// nobody is the failure mode a notification exists to avoid.
+func lookUp(rcpts []string, dir Directory) ([]string, error) {
+	if dir == nil {
+		return rcpts, nil
+	}
+	out := make([]string, 0, len(rcpts))
+	for _, r := range rcpts {
+		if strings.Contains(r, "@") {
+			out = append(out, r)
+			continue
+		}
+		found, err := dir.Recipients(r)
+		if err != nil {
+			return nil, fmt.Errorf("mail: recipient %q: %w", r, err)
+		}
+		if len(found) == 0 {
+			return nil, fmt.Errorf("mail: recipient %q is neither an address nor anybody this server knows", r)
+		}
+		out = append(out, found...)
+	}
+	return out, nil
 }

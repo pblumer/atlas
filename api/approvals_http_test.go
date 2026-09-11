@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/api"
@@ -413,5 +414,159 @@ func TestTheShippedGroupApprovalNamesTheGroupTheProductChose(t *testing.T) {
 	}
 	if len(tasks) != 1 || tasks[0].CandidateGroups != "einkauf" {
 		t.Fatalf("candidate groups = %v, want einkauf (%s)", tasks, body)
+	}
+}
+
+// The notification, end to end: the approval process tells the approver, by a
+// reference the server resolves at send time, with a link that names the order
+// line rather than the task.
+
+type outboxMail struct {
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	Body    string   `json:"body"`
+}
+
+func outbox(t *testing.T, ts *httptest.Server, c *http.Client) []outboxMail {
+	t.Helper()
+	code, body := cReq(t, c, ts, "GET", "/api/v1/mail/outbox", "")
+	if code != http.StatusOK {
+		t.Fatalf("read outbox: %d (%s)", code, body)
+	}
+	var out struct {
+		Messages []outboxMail `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode outbox: %v (%s)", err, body)
+	}
+	return out.Messages
+}
+
+func TestTheApproverIsToldWithALinkToTheirOwnPage(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses(),
+		api.WithExternalURL("https://atlas.example.ch"))
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/users",
+		`{"username":"alice","password":"password1","email":"alice@example.ch"}`); code != http.StatusCreated {
+		t.Fatalf("create alice: %d (%s)", code, b)
+	}
+	// A mail worker by the name the shipped approval models address.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/configured-workers",
+		`{"name":"portal","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
+		t.Fatalf("create the mail worker: %d (%s)", code, b)
+	}
+
+	start := `{"processId":"atlas-genehmigung-fix","variables":{
+		"orderId":"ord_4711","itemId":"vpn","approvalRef":"alice",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root",
+		"portalBaseUrl":"https://atlas.example.ch"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start the approval: %d (%s)", code, b)
+	}
+
+	msgs := outbox(t, ts, admin)
+	if len(msgs) != 1 {
+		t.Fatalf("the outbox holds %d message(s), want 1 — the approver was not told", len(msgs))
+	}
+	m := msgs[0]
+
+	// The model wrote a *username*. What went out is the address on that account,
+	// looked up at send time — so no address was ever in a variable or an order.
+	if len(m.To) != 1 || m.To[0] != "alice@example.ch" {
+		t.Errorf("to = %v, want alice's address resolved from her account", m.To)
+	}
+	if !strings.Contains(m.Subject, "vpn") {
+		t.Errorf("subject = %q; it should say what is waiting", m.Subject)
+	}
+	want := "https://atlas.example.ch/genehmigung.html?order=ord_4711&item=vpn"
+	if !strings.Contains(m.Body, want) {
+		t.Errorf("the mail carries no usable link.\n got: %s\nwant it to contain: %s", m.Body, want)
+	}
+
+	// And the task itself exists and is hers: the notification runs *beside* the
+	// approval and not in front of it. In front, an unconfigured mail worker would
+	// hold the token and there would be no approval at all — worse than an
+	// approval nobody was told about, which at least stands in the approver's list.
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d (%s)", code, body)
+	}
+	var tasks []struct {
+		Assignee string `json:"assignee"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 || tasks[0].Assignee != "alice" {
+		t.Fatalf("tasks = %v, want one assigned to alice (%s)", tasks, body)
+	}
+}
+
+// TestAGroupApprovalTellsEveryoneWhoMayDecideIt: the role variant addresses a
+// group, and the people told have to be the people who may act — a mail to
+// somebody who then cannot decide is worse than no mail.
+func TestAGroupApprovalTellsEveryoneWhoMayDecideIt(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses(),
+		api.WithExternalURL("https://atlas.example.ch"))
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	ids := map[string]string{}
+	for _, u := range []string{"anna", "bruno"} {
+		code, b := cReq(t, admin, ts, "POST", "/api/v1/users",
+			`{"username":"`+u+`","password":"password1","email":"`+u+`@example.ch"}`)
+		if code != http.StatusCreated {
+			t.Fatalf("create %s: %d (%s)", u, code, b)
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(b, &created); err != nil {
+			t.Fatalf("decode %s: %v", u, err)
+		}
+		ids[u] = created.ID
+	}
+	code, b := cReq(t, admin, ts, "POST", "/api/v1/groups", `{"name":"einkauf"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create group: %d (%s)", code, b)
+	}
+	var grp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &grp); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	for _, u := range []string{"anna", "bruno"} {
+		if code, b := cReq(t, admin, ts, "PUT",
+			"/api/v1/groups/"+grp.ID+"/members/"+ids[u], ""); code != http.StatusNoContent && code != http.StatusOK {
+			t.Fatalf("add %s: %d (%s)", u, code, b)
+		}
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/configured-workers",
+		`{"name":"portal","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
+		t.Fatalf("create the mail worker: %d (%s)", code, b)
+	}
+
+	start := `{"processId":"atlas-genehmigung-rolle","variables":{
+		"orderId":"ord_4711","itemId":"vpn","approvalRef":"einkauf",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root",
+		"portalBaseUrl":"https://atlas.example.ch"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start: %d (%s)", code, b)
+	}
+
+	msgs := outbox(t, ts, admin)
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %d, want 1", len(msgs))
+	}
+	got := strings.Join(msgs[0].To, ",")
+	for _, want := range []string{"anna@example.ch", "bruno@example.ch"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("to = %q, missing %s — the group was not resolved to its members", got, want)
+		}
 	}
 }

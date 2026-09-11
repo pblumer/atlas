@@ -117,8 +117,11 @@ approving their own order.
   JavaScript, held in step by tests rather than by sharing. The listing walks the open
   tasks and is paged like the inbox; an approver on an instance with a task flood sees a
   "there are more" line rather than a complete list.
-- **Follow-ups / risks to watch:** The open question above. A notification carrying the
-  `?task=` link does not exist yet — the page supports the arrival, nothing sends it.
+- **Follow-ups / risks to watch:** The open question above. The notification names the
+  ordered product by id rather than by name: the approval process holds an `itemId` and
+  the release that knows the word for it is not something the process reads. The page
+  shows the name; the mail does not. Resolving it would mean either the orchestrator
+  passing the text in or the mail reaching back for it, and neither is obviously right.
 
 ## Implementation
 
@@ -146,11 +149,57 @@ interned the model's string verbatim, so the task was assigned to the literal
 activation and frozen into the job, so all three reach their approver — a test starts
 each of the two that can be started without a directory and checks who holds the task.
 
+### The notification, and the link it carries
+
+The page is reached from a message, and the message is sent by the approval process —
+not by the server. Which approver is told, and what the message says, is part of what an
+approval *is*, and an installation that replaces the shipped approval models replaces
+its notification with them. A server that sent it instead would be a second author of
+the same act.
+
+It runs **beside** the task rather than in front of it, on a parallel branch. In front,
+an unconfigured mail worker would hold the token and there would be no approval at all.
+An approval nobody was told about is worse than an approval nobody was told about
+*existing* — the approver still finds it in their list — so the notification may fail
+without taking the decision with it. What it costs is that the mail is written in the
+same drive as the task activation: a task whose assignment then fails to resolve leaves
+a message about an approval that parked. The operator sees the incident.
+
+**The link names the order line, not the task.** A task key does not exist when the
+message is written, and it changes when a task is reassigned or retried; an order and a
+product are what the approver was told about and they are stable. So the page takes
+`?order=&item=` and finds the approval in the list it fetches anyway. A link naming an
+approval the reader does not hold — decided already, or never theirs — falls back to
+their list with a line saying so, because there is nothing else they can do about it.
+
+**The recipient is a reference, not an address.** The model writes `to="=approvalRef"` —
+the person or group the *product* named — and the server resolves it in the account at
+send time, through `mail.Directory`. That is
+[ADR-draft-portal-personal-data](draft-portal-personal-data.md)'s rule applied to a
+message instead of a screen: no mail address enters a process variable, an order or the
+event log. The residue is the resolved job and the SMTP conversation, which is the least
+any mail can be sent with.
+
+The four spellings the directory accepts — username, principal id, group id, group name
+— are deliberately the four [ADR-0042](0042-user-task-assignment-and-claim.md)'s
+`holdsTask` accepts. The people told and the people who may act have to be the same set,
+or the message reaches somebody who can do nothing with it.
+
+**The origin comes from the operator's configuration and nothing else.** `portalBaseUrl`
+is `--external-url` (ADR-0200), carried into the order's fulfilment as a start variable
+and on into the approval. Deriving it from whichever host the orderer happened to reach
+would put an internal address into a mail to somebody who cannot resolve it. Unset, it
+is an empty string rather than absent, and the model says where to go instead of
+printing a link nobody can follow.
+
 ## Links
 
 - needs [ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md) — an approval a customer can grant themselves is not an approval
 - brands from [ADR-draft-portal-theme-per-catalogue](draft-portal-theme-per-catalogue.md) — the same accent, typeface and mark, resolved from the order instead of the visitor
 - decides the orders of [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
 - keeps [ADR-0113](0113-org-wide-ui-theme.md) untouched — the Console stays the operator's
-- uses [ADR-0042](0042-user-task-assignment-and-claim.md) — who holds a task
+- uses [ADR-0042](0042-user-task-assignment-and-claim.md) — who holds a task, and the four spellings the notification resolves
+- honours [ADR-draft-portal-personal-data](draft-portal-personal-data.md) — a recipient is a reference, resolved at send time
+- extends [ADR-0079](0079-outbound-mail-connector.md) — a mail recipient may be somebody this server knows rather than an address
+- needs [ADR-0200](0200-mcp-oauth-resource-server.md)'s configured origin — a link has to be one somebody else can follow
 - needs [ADR-draft-user-task-assignment-expressions](draft-user-task-assignment-expressions.md) — without it no shipped approval reaches an approver

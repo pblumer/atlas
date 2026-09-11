@@ -46,7 +46,9 @@ type Service struct {
 	// the catalogue service dispatches onto the loop itself and a nested Do would
 	// deadlock.
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error)
-	// wake tells the fulfilment process that an order moved.
+	// wake tells the fulfilment process that an order moved. The variables it
+	// carries are the message's start variables, which is how the orchestrator
+	// learns anything beyond the order id it correlates on.
 	//
 	// Without a call activity the orchestrator does not wait on a child, so
 	// something has to say that a line settled. The line's own provisioning
@@ -56,7 +58,13 @@ type Service struct {
 	//
 	// Called outside this service's loop closure: publishing runs the processor,
 	// which is a visit to the loop of its own.
-	wake func(message, orderID string) error
+	wake func(message, orderID string, vars map[string]string) error
+	// portalBase is the origin a notification's link is built on: the operator's
+	// configured external URL, or empty when none is set. It is a function rather
+	// than a string so a server that learns it later is not frozen at
+	// construction, and empty is a supported answer — a model that finds it empty
+	// says where to go instead of printing a link nobody can follow.
+	portalBase func() string
 }
 
 // The two messages that drive fulfilment, correlated on the order id.
@@ -76,9 +84,10 @@ const (
 func New(loop *runloop.Loop, store *Store, now func() int64,
 	release func(id string) (catalog.Release, bool, error),
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error),
-	wake func(message, orderID string) error) *Service {
+	wake func(message, orderID string, vars map[string]string) error,
+	portalBase func() string) *Service {
 	return &Service{loop: loop, store: store, now: now,
-		release: release, mayOrderFrom: mayOrderFrom, wake: wake}
+		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase}
 }
 
 func newID(prefix string) (string, error) {
@@ -191,7 +200,19 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// (I2): the order stands whether or not this succeeds, and a failure here
 		// is an order nothing is working on — which the placer must be told about,
 		// because replacing it is what they would do next.
-		if err := s.wake(PlacedMessage, out.ID); err != nil {
+		// The orchestrator's start variables. Its model documents orderer and
+		// recipient as such and never received them: the wake carried the
+		// correlation key and nothing else, so both arrived null and every notice
+		// the fulfilment ever sent would have been addressed to nobody.
+		//
+		// portalBaseUrl is what a notification's link is built on. It is the
+		// operator's configured origin or empty; a model that finds it empty says
+		// where to go instead of printing a link nobody can follow.
+		if err := s.wake(PlacedMessage, out.ID, map[string]string{
+			"orderer":       out.Orderer,
+			"recipient":     out.Recipient,
+			"portalBaseUrl": s.portalBase(),
+		}); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the order was placed, but fulfilment could not be started: "+err.Error())
 			return
@@ -414,7 +435,7 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 		// fails, the order has moved and nothing is coming to move it again, so
 		// this is an error rather than a 200 — the reporter is the one thing that
 		// can retry, and recording the same outcome twice changes nothing.
-		if err := s.wake(AdvancedMessage, id); err != nil {
+		if err := s.wake(AdvancedMessage, id, nil); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the outcome was recorded, but the fulfilment process could not be woken: "+err.Error())
 			return
@@ -490,7 +511,7 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 	default:
 		// A refusal settles a line exactly as a provisioning outcome does, so what
 		// waited on it has to be told.
-		if err := s.wake(AdvancedMessage, id); err != nil {
+		if err := s.wake(AdvancedMessage, id, nil); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the decision was recorded, but the fulfilment process could not be woken: "+err.Error())
 			return

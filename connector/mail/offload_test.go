@@ -29,7 +29,7 @@ func resolveFixture(t *testing.T, cfg compiler.MailConfig, vars ...model.Variabl
 	// Drive the process with a handler that resolves rather than sends, so the
 	// resolution runs against a real instance's variables and element instance.
 	driveResolving(t, cp, jobType, store, log, func(ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64, detail *compiler.ConnectorTaskDetail) {
-		resolved, resolveErr = mail.Resolve(store, cp, detail, ei, elementInstanceKey, jobKey)
+		resolved, resolveErr = mail.Resolve(store, cp, detail, ei, elementInstanceKey, jobKey, nil)
 		captured = true
 	}, vars...)
 	if !captured {

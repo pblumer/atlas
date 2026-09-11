@@ -41,6 +41,7 @@ const STRINGS = {
     'appr.retry': 'Erneut versuchen',
     'appr.back': 'Alle Genehmigungen',
     'appr.more': 'Es gibt weitere offene Aufgaben, als diese Seite auf einmal durchsucht.',
+    'appr.stale': 'Die verlinkte Genehmigung ist nicht mehr offen oder nicht Ihre.',
   },
   en: {
     'appr.title': 'Approvals',
@@ -61,6 +62,7 @@ const STRINGS = {
     'appr.retry': 'Try again',
     'appr.back': 'All approvals',
     'appr.more': 'There are more open tasks than this page searches at once.',
+    'appr.stale': 'The approval that link named is no longer open, or is not yours.',
   },
 };
 
@@ -155,6 +157,7 @@ function renderMark(approval) {
 const state = {
   approvals: [],
   selected: null,
+  stale: false,
   reason: '',
   busy: false,
   decided: false,
@@ -176,9 +179,24 @@ async function load() {
 
   // A link from a notification names one approval. That is the arrival this page
   // is built for: one decision, already open, in the right colours.
-  const wanted = new URLSearchParams(location.search).get('task');
-  const pick = wanted && state.approvals.find((a) => String(a.task.key) === wanted);
+  //
+  // It names the *order line* and not the task, because the notification is sent
+  // by the approval process and a task key does not exist until the task the
+  // notification is about has activated. An order and a product do exist by then,
+  // they are what the approver was told about, and they are stable — a task
+  // reassigned or retried keeps them while its key changes.
+  const q = new URLSearchParams(location.search);
+  const order = q.get('order');
+  const item = q.get('item');
+  const pick = order && state.approvals.find(
+    (a) => a.orderId === order && (!item || a.itemId === item),
+  );
   state.selected = pick || (state.approvals.length === 1 ? state.approvals[0] : null);
+  // A link that names an approval this person does not hold — decided already,
+  // reassigned, or never theirs — falls back to their list rather than to an
+  // error. There is nothing they can do about it and the list is what they came
+  // for.
+  state.stale = Boolean(order && !pick);
   applyTheme(state.selected);
   render();
 }
@@ -300,6 +318,7 @@ function render() {
         onclick: () => setLocale(l),
       }, l.toUpperCase())))),
     state.error ? el('p', { class: 'error' }, state.error) : null,
+    state.stale ? el('p', { class: 'muted' }, t('appr.stale')) : null,
     state.truncated ? el('p', { class: 'muted' }, t('appr.more')) : null,
     a ? renderDecision() : renderList(),
     a && !state.decided && state.approvals.length > 1

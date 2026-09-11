@@ -78,7 +78,8 @@ func newService(t *testing.T) *Service {
 		// These tests are about placing and reading orders; the catalogue gate and
 		// the wake have their own cases below.
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error { return nil })
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" })
 }
 
 func do(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, body string, vals ...string) *httptest.ResponseRecorder {
@@ -297,7 +298,8 @@ func serviceGatedBy(t *testing.T, allow bool) *Service {
 			}
 			return allow, nil
 		},
-		func(message, orderID string) error { return nil })
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" })
 }
 
 // TestOrderingNeedsAccessToTheCatalogue is the gap this closes: the release id
@@ -346,7 +348,8 @@ func TestAFailingAccessCheckIsAnError(t *testing.T) {
 		func(*httpapi.Principal, string) (bool, error) {
 			return false, errTest
 		},
-		func(message, orderID string) error { return nil })
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" })
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if rec.Code != http.StatusInternalServerError {
@@ -368,7 +371,8 @@ func TestAFailingReleaseLookupIsAnError(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return catalog.Release{}, false, errTest },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error { return nil })
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" })
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if rec.Code != http.StatusInternalServerError {
@@ -414,7 +418,8 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error { return nil })
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" })
 
 	for _, tt := range []struct {
 		name string
@@ -579,10 +584,11 @@ func TestReportingWakesTheFulfilmentProcess(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error {
+		func(message, orderID string, vars map[string]string) error {
 			woken = append(woken, message+":"+orderID)
 			return nil
-		})
+		},
+		func() string { return "https://atlas.example.ch" })
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`))
@@ -623,12 +629,13 @@ func TestAFailedWakeIsReported(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error {
+		func(message, orderID string, vars map[string]string) error {
 			if message == AdvancedMessage {
 				return errTest
 			}
 			return nil
-		})
+		},
+		func() string { return "https://atlas.example.ch" })
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`))
@@ -665,7 +672,8 @@ func TestAnOrderNobodyWillFulfilIsReported(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error { return errTest })
+		func(message, orderID string, vars map[string]string) error { return errTest },
+		func() string { return "https://atlas.example.ch" })
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`)
@@ -749,7 +757,11 @@ func TestARejectionWakesTheFulfilmentProcess(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
-		func(message, orderID string) error { woken = append(woken, message); return nil })
+		func(message, orderID string, vars map[string]string) error {
+			woken = append(woken, message)
+			return nil
+		},
+		func() string { return "https://atlas.example.ch" })
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["workplace"]}`))
@@ -828,5 +840,77 @@ func TestAnInstallationMayNameItsOwnApprovalProcess(t *testing.T) {
 	}
 	if got := (Line{}).ApprovalProcess(); got != "" {
 		t.Errorf("a line with no approval routes to %q, want nothing", got)
+	}
+}
+
+// TestPlacingCarriesTheOrchestratorsStartVariables.
+//
+// The fulfilment model documents orderer and recipient as start variables and
+// never received them: the wake carried the correlation key and nothing else, so
+// both arrived null. Every notice the orchestrator or an approval ever sent would
+// have been addressed to nobody, and nothing said so, because a null variable in
+// FEEL is not an error — it is a null.
+func TestPlacingCarriesTheOrchestratorsStartVariables(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	var got map[string]string
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string, vars map[string]string) error {
+			if message == PlacedMessage {
+				got = vars
+			}
+			return nil
+		},
+		func() string { return "https://atlas.example.ch" })
+
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
+		`{"releaseId":"rel_1","items":["account"]}`))
+
+	if got["orderer"] != placed.Orderer || got["orderer"] == "" {
+		t.Errorf("orderer = %q, want %q", got["orderer"], placed.Orderer)
+	}
+	if got["recipient"] != placed.Recipient || got["recipient"] == "" {
+		t.Errorf("recipient = %q, want %q", got["recipient"], placed.Recipient)
+	}
+	// And the origin a notification builds its link on.
+	if got["portalBaseUrl"] != "https://atlas.example.ch" {
+		t.Errorf("portalBaseUrl = %q", got["portalBaseUrl"])
+	}
+}
+
+// TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence: a model that finds it
+// empty says where to go instead of printing a link nobody can follow, and it can
+// only do that if the variable is there to be empty.
+func TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := testRelease(t)
+	var got map[string]string
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string, vars map[string]string) error { got = vars; return nil },
+		func() string { return "" })
+
+	do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
+	if v, ok := got["portalBaseUrl"]; !ok || v != "" {
+		t.Errorf("portalBaseUrl = %q (present=%v), want an empty string that is there", v, ok)
 	}
 }
