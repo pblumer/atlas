@@ -24,6 +24,42 @@
       ]
     },
     {
+      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-own-symbo",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Starmap's ArchiMate view is drawn in ArchiMate's own symbols",
+        "de": "Die ArchiMate-Ansicht der Starmap wird in ArchiMate-Symbolen gezeichnet"
+      },
+      "summary": {
+        "en": "Picking ArchiMate 3.2 under Notation already mapped every node to an ArchiMate element type and wrote that type under its name — and then drew Atlas's own circles and squares. For the one reader that view exists for, that was the vocabulary without the script. The five mapped kinds are now drawn as the elements themselves: an Application Component with its two lugs, an Application Process as an arrow, an Application Service as a rounded lozenge, an Application Function as a chevron, and a deployment target as a Node's three-dimensional box. The standard allows either a box with a small type icon in the corner or the icon at full size; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node, and the written type stays beside it for readers who do not know the notation by sight. The fills are the layer colours everyone recognises — Application #B5FFFF, Technology #C9E7B7 — and the key says plainly what they are: ArchiMate 3.2 defines no colours at all, and these are the convention its own figures and the Archi tool use. They are pale by design, so a red or amber finding still reads above them. A draft, a restricted placeholder and an unresolved dependency keep Atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would claim something the notation does not.",
+        "de": "Die Auswahl von ArchiMate 3.2 unter „Notation“ ordnete bisher jedem Knoten einen ArchiMate-Elementtyp zu und schrieb diesen Typ unter den Namen — gezeichnet wurden dann aber weiterhin die Kreise und Quadrate von Atlas. Für die Leserschaft, für die diese Ansicht existiert, war das die Sprache ohne die Schrift. Die fünf zugeordneten Arten werden jetzt als die Elemente selbst gezeichnet: eine Application Component mit ihren zwei Laschen, ein Application Process als Pfeil, ein Application Service als abgerundete Raute, eine Application Function als Winkel und ein Deployment-Ziel als dreidimensionaler Kasten eines Node. Der Standard erlaubt beide Formen — einen Kasten mit kleinem Typsymbol in der Ecke oder das Symbol in voller Grösse; in der Grösse, in der ein Knoten hier gezeichnet wird, wären es ein bis zwei Pixel, also ist das Symbol der Knoten. Der geschriebene Typ bleibt daneben stehen, für Lesende, die die Notation nicht auf den ersten Blick erkennen. Die Füllungen sind die bekannten Ebenenfarben — Application #B5FFFF, Technology #C9E7B7 — und die Legende sagt ausdrücklich, was sie sind: ArchiMate 3.2 definiert überhaupt keine Farben; diese sind die Konvention der Abbildungen des Standards und des Werkzeugs Archi. Sie sind bewusst blass gehalten, damit ein roter oder gelber Befund weiterhin darüber lesbar bleibt. Ein Entwurf, ein eingeschränkter Platzhalter und eine nicht aufgelöste Abhängigkeit behalten Form und Farbe von Atlas, denn ArchiMate hat für sie kein Element, und sie als eines zu zeichnen wäre eine Aussage, die die Notation nicht macht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Architecture"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Panorama; the Starmap is its landing view.",
+          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
+          "The picture is redrawn in ArchiMate's symbols, in the Application and Technology layer fills.",
+          "Read the loss list under the picture: it names what the projection cannot say, including that the colours are convention rather than standard and that drafts, restricted placeholders and unresolved dependencies keep Atlas's own shape."
+        ],
+        "de": [
+          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
+          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
+          "Das Bild wird in den Symbolen von ArchiMate gezeichnet, in den Füllfarben der Ebenen Application und Technology.",
+          "Die Verlustliste unter dem Bild lesen: Sie nennt, was die Projektion nicht ausdrücken kann — unter anderem, dass die Farben Konvention und nicht Standard sind und dass Entwürfe, eingeschränkte Platzhalter und nicht aufgelöste Abhängigkeiten die Form von Atlas behalten."
+        ]
+      }
+    },
+    {
       "id": "the-starmap-opens-using-the-whole-window-whatever-the-size-o",
       "version": "Unreleased",
       "date": null,
@@ -347,49 +383,6 @@
           "de": "Dashboard öffnen"
         },
         "route": "#/console"
-      }
-    },
-    {
-      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See the classes and states your processes already carry — without modelling first",
-        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
-      },
-      "summary": {
-        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
-        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
-      },
-      "link": {
-        "label": "ADR draft",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and press As built…, then pick the application you want to read.",
-          "The class diagram is what that application's processes carry — no model of yours is involved.",
-          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
-          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
-        ],
-        "de": [
-          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
-          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
-          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
-          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

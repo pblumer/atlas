@@ -430,7 +430,8 @@ test("no shape leaves the circle the layout reserved for it", async ({ page }) =
     // included: a projection that let a corner out of the reserved circle would
     // break the separation guarantee for a picture the reader only switched the
     // vocabulary of.
-    for (const shape of ["circle", "square", "triangle", "hexagon", "diamond", "pentagon", "box", "rounded"]) {
+    for (const shape of ["circle", "square", "triangle", "hexagon", "diamond", "pentagon",
+      "box", "rounded", "am-component", "am-process", "am-service", "am-function", "am-node"]) {
       let far = 0;
       for (const r of [1, 11, 12, 17, 30, 42]) {
         for (const [x, y] of window.shapeVertices(shape, r)) {
@@ -448,7 +449,8 @@ test("no shape leaves the circle the layout reserved for it", async ({ page }) =
     expect(reach, shape).toBeLessThanOrEqual(1.0001);
   }
   expect(worst.circle).toBe(0);
-  for (const shape of ["square", "triangle", "hexagon", "diamond", "pentagon", "box", "rounded"]) {
+  for (const shape of ["square", "triangle", "hexagon", "diamond", "pentagon", "box", "rounded",
+    "am-component", "am-process", "am-service", "am-function", "am-node"]) {
     expect(worst[shape], shape).toBeCloseTo(1, 5);
   }
 });

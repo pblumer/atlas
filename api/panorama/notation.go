@@ -80,7 +80,9 @@ var notations = []Notation{
 			"A worker becomes an Application Service with nothing behind it. Atlas holds the worker's name and type and never what is on the other side, so there is no Technology Service to realize it.",
 			"Restricted placeholders have no ArchiMate element — they stand for resources this reader may not see, which is a fact about the reader rather than about the architecture — and are absent from the exported document.",
 			"Drafts are absent too. The document describes what this server runs; a saved diagram nobody has deployed is a plan, and giving it the same element type as a deployed process would put an intention into a file that reads as a record.",
-			"The type is written out rather than drawn as ArchiMate's corner icon.",
+			"The picture uses ArchiMate's icon-only notation — the element's own symbol at full size with the name beneath it — rather than the boxed notation with the type icon in the corner. Both are the standard's; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node and the type is written under the name as well.",
+			"The layer colours are convention, not standard. ArchiMate 3.2 states that colour carries no formal semantics and defines none; the fills here are the ones the specification's own figures and the Archi tool use, so a reader recognises the layers at a glance. Nothing in the exported document depends on them.",
+			"Only the five kinds this table names are drawn as ArchiMate elements. A draft, a restricted placeholder and an unresolved dependency keep Atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would be a claim the notation does not make.",
 		},
 	},
 	{
