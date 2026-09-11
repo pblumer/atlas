@@ -297,7 +297,7 @@ ol.steps li { margin: 6px 0; }
    glyph here too — only larger, and the heading's bottom margin moves to the row. */
 .welcome-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
 .welcome-head h1 { margin: 0; }
-.welcome-mark { width: 40px; height: 40px; border-radius: 8px; flex: none; }
+.welcome-mark { width: 48px; height: 48px; border-radius: 10px; flex: none; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;

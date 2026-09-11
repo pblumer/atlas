@@ -352,7 +352,7 @@ _Changed_ / _Removed_ for each version.
 - **The Console landing page carries the brand mark.** "Welcome to Atlas" opened on a
   bare heading, so the one page a newcomer lands on was the one page that showed no
   mark at all — the glyph sat in the top bar above it and nowhere in the card itself.
-  The heading now leads with the same `.mark` box the bar uses, at 40px. It is the
+  The heading now leads with the same `.mark` box the bar uses, at 48px. It is the
   shared box rather than a copy of the glyph, so an organisation that has uploaded its
   own logo (ADR-0148) sees that logo here too, and a later upload or removal repaints
   this mark along with every other one. The logo setting names the landing page along
