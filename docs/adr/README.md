@@ -373,7 +373,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Accepted | Landed |
 | [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Accepted | Landed |
 | [0287](0287-create-the-worker-from-the-incident.md) | Create the worker from the incident, and run the deploy preflight on every deploy path | Accepted | Landed |
-| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Accepted | Landed |
+| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Deprecated | Not started |
 | [0289](0289-worker-type-setup-in-the-panel.md) | A Worker Type carries its own setup, in the panel where it is chosen | Accepted | Landed |
 | [0290](0290-per-flow-join-counting.md) | A join counts tokens per incoming flow | Accepted | Landed |
 | [0291](0291-one-place-for-budgets.md) | One place names every resource budget, and one way sets them | Accepted | Landed |
