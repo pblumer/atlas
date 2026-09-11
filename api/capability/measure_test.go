@@ -322,3 +322,15 @@ func TestOnlyProcessRealizationsAreMeasured(t *testing.T) {
 		t.Errorf("resolver was asked about %v, want only the process realization", asked)
 	}
 }
+
+// A window whose ends are equal or reversed spans no days. Days is what a response
+// reports as "what was measured", so a nonsensical window must report zero rather than
+// a negative or a wrapped number — and a Window can be built by hand, not only through
+// ParseWindow, which is why this is asserted rather than assumed from the constructor.
+func TestWindowDaysOfAnEmptySpanIsZero(t *testing.T) {
+	for _, w := range []Window{{From: 100, To: 100}, {From: 200, To: 100}} {
+		if got := w.Days(); got != 0 {
+			t.Errorf("Window%+v.Days() = %d, want 0", w, got)
+		}
+	}
+}

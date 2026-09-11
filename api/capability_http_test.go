@@ -1211,3 +1211,97 @@ func TestMeasurementWindowExcludesWhatItShould(t *testing.T) {
 		t.Errorf("a 400-day window should hold the one case that just ran: %+v", got.Processes[0])
 	}
 }
+
+// A cancelled case is reported, and this is the only test that produces one. The
+// measurement reports cancellations beside outcomes because a token that left an
+// element cancelled did not complete it — and a capability whose cases are being
+// abandoned looks healthy in an outcome distribution that only counts endings.
+func TestMeasurementCountsACancelledCase(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Onboarding"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct{ ID, Key string }
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	// capabilityBPMN parks on a service task, which is what makes it cancellable: a
+	// self-completing process leaves nothing to cancel.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		capabilityBPMN("parks"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), `{}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create instance: %d %s", code, body)
+	}
+	// The create does not return the instance key, so it is read back from the list —
+	// the same way every other cancellation test in this package finds one.
+	_, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	var insts []struct {
+		Key   uint64 `json:"key"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 || insts[0].State != "active" {
+		t.Fatalf("instances = %+v, want one parked on the service task", insts)
+	}
+	if code, b := doReq(t, ts, http.MethodDelete,
+		fmt.Sprintf("/api/v1/instances/%d", insts[0].Key), "", ""); code != http.StatusOK {
+		t.Fatalf("cancel instance: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"parks","name":"Parks",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"parks"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/parks/measurement?windowDays=1", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Processes []struct {
+			Cancellations []struct {
+				ElementID string `json:"elementId"`
+				Count     int64  `json:"count"`
+			} `json:"cancellations"`
+			Outcomes []struct{} `json:"outcomes"`
+		} `json:"processes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v — %s", err, body)
+	}
+	p := got.Processes[0]
+	if len(p.Cancellations) == 0 {
+		t.Fatalf("no cancellation reported, but the parked instance was cancelled: %+v", p)
+	}
+	var onTask int64
+	for _, c := range p.Cancellations {
+		if c.ElementID == "task" {
+			onTask = c.Count
+		}
+	}
+	if onTask != 1 {
+		t.Errorf("cancellations on the parked task = %d, want 1 (got %+v)", onTask, p.Cancellations)
+	}
+	// And no ending was recorded, which is the point: a cancelled case is invisible to
+	// an outcome distribution, so the two are reported side by side.
+	if len(p.Outcomes) != 0 {
+		t.Errorf("outcomes = %+v, want none: the case never reached an end event", p.Outcomes)
+	}
+}
