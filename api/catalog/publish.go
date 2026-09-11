@@ -55,10 +55,17 @@ type Input struct {
 // Release is a frozen, published catalogue: what may be ordered, in what order it
 // is fulfilled, and what it grants without asking anybody.
 type Release struct {
-	// Order is every item in the input, arranged so that an item's preconditions
-	// precede it. An order names one release and follows this sequence; it never
-	// recomputes it.
-	Order []string `json:"order"`
+	// Waves is every item in the input, grouped into rounds: nothing in a wave
+	// depends on anything in the same wave, and everything it does depend on is in
+	// an earlier one. An order names one release and follows this schedule; it
+	// never recomputes it.
+	//
+	// A flat sequence was the first shape and could not carry the failure
+	// behaviour the portal requires: a failing line must stop only the lines that
+	// depend on it, and a list has already discarded the reason each item sits
+	// where it does. Waves keep it — a failure stops its own successors, and the
+	// rest of its wave and every independent branch continue.
+	Waves [][]string `json:"waves"`
 	// WithoutApproval names every item orderable with no approval at all, sorted.
 	// It is a standing list rather than a report somebody has to think to run,
 	// because the role that defines approval rules is the role that publishes them.
@@ -95,7 +102,7 @@ func Publish(in Input) (Release, []Problem) {
 	}
 
 	return Release{
-		Order:           fulfilmentOrder(in),
+		Waves:           schedule(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
 	}, nil
 }
@@ -241,16 +248,27 @@ func cycleIn(edges []Edge, byID map[string]Item, keep func(EdgeKind) bool) (stuc
 	return stuck, false
 }
 
-// fulfilmentOrder arranges every item so that an item's preconditions precede it.
+// schedule groups every item into waves: a wave holds items that depend on
+// nothing in the same wave, and on nothing in any later one.
 //
-// Kahn's algorithm with the ready set kept sorted, which is what makes the result
-// deterministic: a release that reordered between two publishes of the same input
-// would make a diff of two releases unreadable and would fulfil the same order
-// differently twice. Items with no precedence at all keep sorted order for the
-// same reason.
-func fulfilmentOrder(in Input) []string {
-	out := map[string][]string{}
+// An item's wave is one past the latest of its preconditions — not one past the
+// first satisfied, which is the mistake a plain breadth-first walk makes when an
+// item waits on two things scheduled at different depths. Computing it as a
+// longest path is what makes "everything this needs has already run" true of the
+// wave boundary, which is the property the fulfilment process relies on to start a
+// whole wave at once.
+//
+// Within a wave items are sorted, and the waves themselves come out in depth
+// order, so the schedule is deterministic: one that reordered between two
+// publishes of the same input would make a diff of two releases unreadable and
+// would fulfil the same order differently twice.
+//
+// The input is known acyclic here — Publish returns before reaching this on any
+// problem — so the relaxation below terminates.
+func schedule(in Input) [][]string {
+	dependents := map[string][]string{}
 	indeg := map[string]int{}
+	depth := map[string]int{}
 
 	all := make([]string, 0, len(in.Items))
 	for _, it := range in.Items {
@@ -259,16 +277,12 @@ func fulfilmentOrder(in Input) []string {
 	}
 	sort.Strings(all)
 
-	// No guard against an unknown endpoint here: Publish returns before reaching
-	// this on any problem, and checkEdges has already refused every edge that does
-	// not land on a known item. A defensive skip would be a branch no input can
-	// take, which is worse than absent — it reads as a case somebody handled.
 	for _, e := range in.Edges {
 		if e.Kind != EdgeRequires {
 			continue
 		}
 		// The dependent waits for its precondition, so the edge points To -> From.
-		out[e.To] = append(out[e.To], e.From)
+		dependents[e.To] = append(dependents[e.To], e.From)
 		indeg[e.From]++
 	}
 
@@ -279,19 +293,31 @@ func fulfilmentOrder(in Input) []string {
 		}
 	}
 
-	order := make([]string, 0, len(all))
+	deepest := -1
 	for len(ready) > 0 {
-		sort.Strings(ready)
 		id := ready[0]
 		ready = ready[1:]
-		order = append(order, id)
-		for _, m := range out[id] {
-			if indeg[m]--; indeg[m] == 0 {
-				ready = append(ready, m)
+		if depth[id] > deepest {
+			deepest = depth[id]
+		}
+		for _, dep := range dependents[id] {
+			if d := depth[id] + 1; d > depth[dep] {
+				depth[dep] = d
+			}
+			if indeg[dep]--; indeg[dep] == 0 {
+				ready = append(ready, dep)
 			}
 		}
 	}
-	return order
+
+	if deepest < 0 {
+		return nil
+	}
+	waves := make([][]string, deepest+1)
+	for _, id := range all {
+		waves[depth[id]] = append(waves[depth[id]], id)
+	}
+	return waves
 }
 
 // itemsWithoutApproval names every item that provisions with nobody asked.

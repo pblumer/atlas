@@ -35,6 +35,40 @@ func contains(t *testing.T, got []Problem, want string) {
 	t.Fatalf("no problem mentioning %q; got %v", want, got)
 }
 
+// waveOf reports which wave an item was scheduled into, or -1.
+func waveOf(rel Release, id string) int {
+	for i, wave := range rel.Waves {
+		for _, got := range wave {
+			if got == id {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// scheduled counts how many times an item appears across every wave.
+func scheduled(rel Release, id string) int {
+	n := 0
+	for _, wave := range rel.Waves {
+		for _, got := range wave {
+			if got == id {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// flatten renders the schedule as "a,b|c" so two can be compared as one string.
+func flatten(rel Release) string {
+	var waves []string
+	for _, wave := range rel.Waves {
+		waves = append(waves, strings.Join(wave, ","))
+	}
+	return strings.Join(waves, "|")
+}
+
 func mustPublish(t *testing.T, in Input) Release {
 	t.Helper()
 	rel, problems := Publish(in)
@@ -44,9 +78,9 @@ func mustPublish(t *testing.T, in Input) Release {
 	return rel
 }
 
-// TestOrderPutsPreconditionsFirst is the property the whole precomputation exists
-// for: the release carries a sequence, so ordering never walks the graph.
-func TestOrderPutsPreconditionsFirst(t *testing.T) {
+// TestPreconditionsLandInEarlierWaves is the property the whole precomputation
+// exists for: the release carries a schedule, so ordering never walks the graph.
+func TestPreconditionsLandInEarlierWaves(t *testing.T) {
 	// vpn requires laptop; mailbox requires account; nothing else relates.
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
@@ -56,25 +90,64 @@ func TestOrderPutsPreconditionsFirst(t *testing.T) {
 	}
 	rel := mustPublish(t, in)
 
-	pos := map[string]int{}
-	for i, id := range rel.Order {
-		pos[id] = i
+	if waveOf(rel, "laptop") >= waveOf(rel, "vpn") {
+		t.Errorf("laptop must be in an earlier wave than vpn: %v", rel.Waves)
 	}
-	if len(rel.Order) != 4 {
-		t.Fatalf("order has %d items, want 4: %v", len(rel.Order), rel.Order)
-	}
-	if pos["laptop"] > pos["vpn"] {
-		t.Errorf("laptop must precede vpn: %v", rel.Order)
-	}
-	if pos["account"] > pos["mailbox"] {
-		t.Errorf("account must precede mailbox: %v", rel.Order)
+	if waveOf(rel, "account") >= waveOf(rel, "mailbox") {
+		t.Errorf("account must be in an earlier wave than mailbox: %v", rel.Waves)
 	}
 }
 
-// TestOrderIsDeterministic: two publishes of the same catalogue produce the same
-// sequence. A release that reordered between publishes would make a diff of two
+// TestIndependentItemsShareAWave is why a schedule replaced a flat sequence.
+// Order 20 says a failing line must not stop lines that do not depend on it, and
+// a flat list cannot express that — it has already thrown away the reason each
+// item sits where it does. Items that need nothing from each other run together,
+// so one failure stops its own successors and nothing else.
+func TestIndependentItemsShareAWave(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"laptop", "vpn", "account", "mailbox"}}},
+		Items: []Item{item("laptop"), item("vpn"), item("account"), item("mailbox")},
+		Edges: []Edge{requires("vpn", "laptop"), requires("mailbox", "account")},
+	}
+	rel := mustPublish(t, in)
+
+	if len(rel.Waves) != 2 {
+		t.Fatalf("want 2 waves, got %d: %v", len(rel.Waves), rel.Waves)
+	}
+	if got := strings.Join(rel.Waves[0], ","); got != "account,laptop" {
+		t.Errorf("first wave = %s, want account,laptop", got)
+	}
+	if got := strings.Join(rel.Waves[1], ","); got != "mailbox,vpn" {
+		t.Errorf("second wave = %s, want mailbox,vpn", got)
+	}
+}
+
+// TestItemWaitsForItsLatestPrecondition: two preconditions in different waves
+// means the dependent goes after the later one, not after the first satisfied.
+func TestItemWaitsForItsLatestPrecondition(t *testing.T) {
+	// desk needs nothing; account needs nothing; laptop needs desk;
+	// workplace needs account (wave 0) and laptop (wave 1) -> wave 2.
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"desk", "account", "laptop", "workplace"}}},
+		Items: []Item{item("desk"), item("account"), item("laptop"), item("workplace")},
+		Edges: []Edge{
+			requires("laptop", "desk"),
+			requires("workplace", "account"),
+			requires("workplace", "laptop"),
+		},
+	}
+	rel := mustPublish(t, in)
+	if got := waveOf(rel, "workplace"); got != 2 {
+		t.Fatalf("workplace in wave %d, want 2: %v", got, rel.Waves)
+	}
+}
+
+// TestScheduleIsDeterministic: two publishes of the same catalogue produce the
+// same schedule. One that reordered between publishes would make a diff of two
 // releases unreadable, and the same order would fulfil differently twice.
-func TestOrderIsDeterministic(t *testing.T) {
+func TestScheduleIsDeterministic(t *testing.T) {
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
 			Items: []string{"c", "a", "b", "d"}}},
@@ -83,9 +156,8 @@ func TestOrderIsDeterministic(t *testing.T) {
 	}
 	first := mustPublish(t, in)
 	for i := 0; i < 5; i++ {
-		again := mustPublish(t, in)
-		if strings.Join(again.Order, ",") != strings.Join(first.Order, ",") {
-			t.Fatalf("order %v differs from %v", again.Order, first.Order)
+		if again := flatten(mustPublish(t, in)); again != flatten(first) {
+			t.Fatalf("schedule %s differs from %s", again, flatten(first))
 		}
 	}
 }
@@ -303,8 +375,8 @@ func TestEmptyCatalogPublishes(t *testing.T) {
 	rel := mustPublish(t, Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}}},
 	})
-	if len(rel.Order) != 0 {
-		t.Fatalf("Order = %v, want empty", rel.Order)
+	if len(rel.Waves) != 0 {
+		t.Fatalf("Waves = %v, want empty", rel.Waves)
 	}
 }
 
@@ -319,14 +391,8 @@ func TestItemInSeveralCatalogsIsOrderedOnce(t *testing.T) {
 		Items: []Item{item("shared"), item("x"), item("y")},
 	}
 	rel := mustPublish(t, in)
-	seen := 0
-	for _, id := range rel.Order {
-		if id == "shared" {
-			seen++
-		}
-	}
-	if seen != 1 {
-		t.Fatalf("shared appears %d times in %v, want once", seen, rel.Order)
+	if seen := scheduled(rel, "shared"); seen != 1 {
+		t.Fatalf("shared scheduled %d times in %v, want once", seen, rel.Waves)
 	}
 }
 
@@ -403,9 +469,10 @@ func TestStructuralKindsAreStructural(t *testing.T) {
 	}
 }
 
-// TestLongPrecedenceChainKeepsItsOrder: three links deep, given in the wrong
-// order, still comes back with every precondition ahead of its dependent.
-func TestLongPrecedenceChainKeepsItsOrder(t *testing.T) {
+// TestLongPrecedenceChainBecomesOneItemPerWave: three links deep, given in the
+// wrong order, yields four waves of one — nothing here can run alongside
+// anything else, and the schedule says so.
+func TestLongPrecedenceChainBecomesOneItemPerWave(t *testing.T) {
 	in := Input{
 		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
 			Items: []string{"d", "c", "b", "a"}}},
@@ -413,7 +480,7 @@ func TestLongPrecedenceChainKeepsItsOrder(t *testing.T) {
 		Edges: []Edge{requires("d", "c"), requires("c", "b"), requires("b", "a")},
 	}
 	rel := mustPublish(t, in)
-	if got := strings.Join(rel.Order, ","); got != "a,b,c,d" {
-		t.Fatalf("Order = %s, want a,b,c,d", got)
+	if got := flatten(rel); got != "a|b|c|d" {
+		t.Fatalf("schedule = %s, want a|b|c|d (one item per wave)", got)
 	}
 }

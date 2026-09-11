@@ -131,11 +131,12 @@ A `CatalogRelease` is a frozen, published version, following the shape applicati
 already have ([ADR-0128](0128-process-applications.md)). **Publishing is where the work
 happens**, and this is I5 applied to a catalogue:
 
-- both graphs are checked for cycles, and the precedence graph is **topologically
-  sorted**, so the fulfilment order is computed once, not derived per order. The sort
-  keeps its ready set ordered, so the sequence is deterministic: a release that
-  reordered between two publishes of one input would make a diff of two releases
-  unreadable and fulfil the same order differently twice;
+- both graphs are checked for cycles, and the precedence graph is resolved into
+  **waves** — rounds in which nothing depends on anything else in the same round, and
+  everything it does depend on has already run. Computed once, never derived per
+  order, and deterministic: a schedule that reordered between two publishes of one
+  input would make a diff of two releases unreadable and fulfil the same order
+  differently twice;
 - every binding is resolved — a process that no longer exists fails the publish;
 - every item has both processes, and translations for every declared language;
 - ranks are unique.
@@ -156,10 +157,20 @@ an approval was pending.
 
 An `OrderLine` per position carries its own status, its own approval and its resolved
 variant, because a single order can require several independent approvals. A generic
-fulfilment process starts each line's provisioning process as a call activity in the
-order the release precomputed. When a line fails, every line that does not depend on it
-continues; dependent lines stop and raise an incident. Partial fulfilment is the
-intended behaviour, not a degraded mode.
+fulfilment process works the release's waves: every line in a wave starts its
+provisioning process as a call activity, and the next wave begins when the current one
+settles. When a line fails, every line that does not depend on it continues; dependent
+lines stop and raise an incident. Partial fulfilment is the intended behaviour, not a
+degraded mode.
+
+**The schedule is waves rather than a sequence precisely because of that failure
+rule.** A flat topological list answers "what before what" and nothing else — it has
+already discarded the reason each item sits where it does, so a failure in the middle
+of it stops everything after, including branches that never depended on the failure.
+The first implementation of this record built the list, and the gap surfaced when the
+fulfilment process was designed against it. An item's wave is one past the *latest* of
+its preconditions, so "everything this needs has already run" is true at every wave
+boundary.
 
 Two resolutions happen in the basket, before the order exists, and both are shown to
 the person rather than decided for them: a service the ordering user **already holds**
@@ -260,9 +271,9 @@ discrepancy, which no other system in the estate can do.
 
 ## Implementation
 
-`api/catalog` carries the catalogue model and `Publish` — the validation and the
-topological sort described above. The order, the basket and the inventory are not
-built yet, which is why this record reads `Partial`.
+`api/catalog` carries the catalogue model and `Publish` — the validation and the wave
+schedule described above. The order, the basket and the inventory are not built yet,
+which is why this record reads `Partial`.
 
 ## Links
 
