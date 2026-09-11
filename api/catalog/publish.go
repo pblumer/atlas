@@ -55,6 +55,19 @@ type Input struct {
 // Release is a frozen, published catalogue: what may be ordered, in what order it
 // is fulfilled, and what it grants without asking anybody.
 type Release struct {
+	// ID, CatalogID and CreatedAt identify the release. They are assigned by
+	// whoever publishes it; [Publish] computes the rest.
+	ID        string `json:"id,omitempty"`
+	CatalogID string `json:"catalogId,omitempty"`
+	CreatedAt int64  `json:"createdAt,omitempty"`
+	// Items are the item definitions as they stood when this was published, sorted
+	// by id, and they are copies rather than references.
+	//
+	// This is the whole of the snapshot rule. An order names one release; if the
+	// release pointed at rows that keep changing, an approval pending for a week
+	// could be approving something else by the time it is granted. Only value data
+	// is copied, so an edit to the catalogue afterwards cannot reach in here.
+	Items []Item `json:"items,omitempty"`
 	// Waves is every item in the input, grouped into rounds: nothing in a wave
 	// depends on anything in the same wave, and everything it does depend on is in
 	// an earlier one. An order names one release and follows this schedule; it
@@ -113,6 +126,7 @@ func Publish(in Input) (Release, []Problem) {
 	}
 
 	return Release{
+		Items:           freeze(in.Items),
 		Waves:           schedule(in),
 		Requires:        preconditions(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
@@ -396,6 +410,41 @@ func preconditions(in Input) map[string][]string {
 		sort.Strings(needs)
 	}
 	return req
+}
+
+// freeze copies the items into the release, sorted by id, deep enough that a later
+// edit to the catalogue cannot reach into a published release through a shared map
+// or slice.
+func freeze(items []Item) []Item {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]Item, len(items))
+	for i, it := range items {
+		it.Texts = copyTexts(it.Texts)
+		if len(it.Variants) > 0 {
+			vs := make([]Variant, len(it.Variants))
+			for j, v := range it.Variants {
+				v.Texts = copyTexts(v.Texts)
+				vs[j] = v
+			}
+			it.Variants = vs
+		}
+		out[i] = it
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })
+	return out
+}
+
+func copyTexts(in map[string]string) map[string]string {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 // itemsWithoutApproval names every item that provisions with nobody asked.
