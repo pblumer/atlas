@@ -2,6 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -81,4 +85,139 @@ func TestKeyFeaturesJSONIsValid(t *testing.T) {
 			t.Errorf("feature %d (%s): German title is %d chars; too long for the tile's grid", i, f.ID, n)
 		}
 	}
+}
+
+// The tile enumerates what Atlas *is*, and the product grows. Nothing about a
+// feature landing makes the tile wrong in a way anything notices: the page still
+// renders, the fourteen entries still read well, and the capability nobody
+// mentioned is simply absent. That is the same silent staleness the handbook's
+// screenshots have (see .github/workflows/nuggets-check.yml), except the fix is a
+// sentence rather than a re-shoot — so it is worth catching where it is cheap,
+// which is on the change that introduces it.
+//
+// So the tile carries a marker: `reviewedThrough` names the newest CHANGELOG
+// `### Added` bullet somebody has held against it. A change that adds a bullet
+// above that marker has to move it, and moving it is the moment to ask the only
+// question that matters — does this change what Atlas is? Most bullets do not,
+// and answering "no" costs one line. What the marker buys is that the question
+// gets asked at all, by the person who knows the feature, instead of by nobody.
+//
+// It is deliberately not a check that the tile *mentions* each feature: sixteen
+// evergreen statements are not a feature list, and a test that demanded coverage
+// would force the tile to become one.
+//
+// Two branches that each move the marker conflict on one line, and whichever
+// resolution wins, the one it did not keep is simply pending again for the next
+// change — the failure mode is a question asked twice, never one skipped.
+func TestKeyFeaturesTileIsReviewedAgainstTheChangelog(t *testing.T) {
+	raw, err := webFS.ReadFile("web/key-features.json")
+	if err != nil {
+		t.Fatalf("read embedded key-features.json: %v", err)
+	}
+	var doc struct {
+		ReviewedThrough string `json:"reviewedThrough"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("key-features.json is not valid JSON: %v", err)
+	}
+	if strings.TrimSpace(doc.ReviewedThrough) == "" {
+		t.Fatal("key-features.json has no reviewedThrough; it must name the newest CHANGELOG 'Added' bullet the tile has been held against")
+	}
+
+	added := changelogAddedTitles(t, filepath.Join("..", "CHANGELOG.md"))
+	if len(added) == 0 {
+		t.Fatal("no '### Added' bullets found in CHANGELOG.md; the parser above no longer matches the file")
+	}
+
+	at := -1
+	for i, title := range added {
+		if title == doc.ReviewedThrough {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		t.Fatalf("key-features.json reviewedThrough names %q, which is not an 'Added' bullet in CHANGELOG.md.\n"+
+			"An entry was renamed or removed after it was reviewed. Point it at the newest bullet the tile "+
+			"still holds for — the current newest is:\n  %q", doc.ReviewedThrough, added[0])
+	}
+	if at == 0 {
+		return // nothing has landed since the last review
+	}
+
+	pending := added[:at]
+	shown := pending
+	if len(shown) > 10 {
+		shown = shown[:10]
+	}
+	var b strings.Builder
+	for _, title := range shown {
+		b.WriteString("\n  - ")
+		b.WriteString(title)
+	}
+	if len(pending) > len(shown) {
+		fmt.Fprintf(&b, "\n  … and %d more", len(pending)-len(shown))
+	}
+	t.Fatalf("%d feature(s) have landed since the Console's key-features tile was last reviewed:%s\n\n"+
+		"For each, ask only: does it change what Atlas *is*? If it does, edit api/web/key-features.json "+
+		"(both languages, see its _comment). Most do not, and then there is nothing to write.\n"+
+		"Either way, record that the question was asked by setting reviewedThrough to:\n  %q",
+		len(pending), b.String(), added[0])
+}
+
+// changelogAddedTitles returns the bold headline of every bullet under a
+// "### Added" heading, in document order — which CHANGELOG.md keeps newest-first.
+//
+// It mirrors how scripts/whats-new/gen.mjs reads the same file, including the one
+// non-obvious part: a bullet's bold headline may wrap across lines, so the bullet's
+// first paragraph is joined before the headline is cut out of it. Headlines are
+// matched by text rather than by the generator's slug so that this test does not
+// have to keep a second copy of the slug rule in step with it.
+func changelogAddedTitles(t *testing.T, path string) []string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var (
+		version  = regexp.MustCompile(`^## \[([^\]]+)\]`)
+		category = regexp.MustCompile(`^### (\w+)`)
+		bullet   = regexp.MustCompile(`^-\s+\*\*`)
+		headline = regexp.MustCompile(`^-\s+\*\*(.+?)\*\*`)
+		spaces   = regexp.MustCompile(`\s+`)
+	)
+
+	lines := strings.Split(string(raw), "\n")
+	var out []string
+	inVersion, inAdded := false, false
+	for i := 0; i < len(lines); i++ {
+		line := lines[i]
+		switch {
+		case version.MatchString(line):
+			inVersion, inAdded = true, false
+			continue
+		case category.MatchString(line):
+			inAdded = category.FindStringSubmatch(line)[1] == "Added"
+			continue
+		case !inVersion || !bullet.MatchString(line):
+			continue
+		}
+
+		// The bullet's first paragraph: this line plus its continuations.
+		block := []string{line}
+		j := i + 1
+		for ; j < len(lines); j++ {
+			l := lines[j]
+			if strings.TrimSpace(l) == "" || strings.HasPrefix(l, "- ") || strings.HasPrefix(l, "#") {
+				break
+			}
+			block = append(block, l)
+		}
+		i = j - 1
+
+		if m := headline.FindStringSubmatch(strings.Join(block, " ")); m != nil && inAdded {
+			out = append(out, strings.TrimSpace(spaces.ReplaceAllString(m[1], " ")))
+		}
+	}
+	return out
 }

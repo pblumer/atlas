@@ -7,8 +7,8 @@
     "de": "Die Console-Startseite sagt, was Atlas ist — zweisprachig"
   },
   "summary": {
-    "en": "A Key features tile below the dashboard tiles sums up in fourteen short entries what Atlas actually is — from the single binary and durable execution to DMN, connectors and what is ready for production. EN/DE like What's New, and collapsible once you have read it.",
-    "de": "Eine Kachel Kernmerkmale unterhalb der Dashboard-Kacheln fasst in vierzehn kurzen Punkten zusammen, was Atlas ausmacht — vom Single Binary und der ausfallsicheren Ausführung über DMN und Konnektoren bis zu dem, was betriebsreif ist. EN/DE wie bei Neu in Atlas, und einklappbar, wenn man es gelesen hat."
+    "en": "A Key features tile below the dashboard tiles sums up in sixteen short entries what Atlas actually is — from the single binary and durable execution to DMN, connectors and what is ready for production. EN/DE like What's New, and collapsible once you have read it.",
+    "de": "Eine Kachel Kernmerkmale unterhalb der Dashboard-Kacheln fasst in sechzehn kurzen Punkten zusammen, was Atlas ausmacht — vom Single Binary und der ausfallsicheren Ausführung über DMN und Konnektoren bis zu dem, was betriebsreif ist. EN/DE wie bei Neu in Atlas, und einklappbar, wenn man es gelesen hat."
   },
   "try": {
     "label": {

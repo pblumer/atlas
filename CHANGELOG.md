@@ -82,13 +82,22 @@ _Changed_ / _Removed_ for each version.
 - **The Console landing page says what Atlas is, in both languages**: the dashboard
   opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
   what they are running. A **Key features / Kernmerkmale** tile now sits below the
-  dashboard's own tiles: fourteen short entries (one binary, durability, the compiler,
-  throughput, the Modeler, token visibility, human work, DMN, checkable BPMN coverage,
-  integrations, agents, operations, deployment, licence), collapsible and carrying the
+  dashboard's own tiles: sixteen short entries (one binary, durability, the compiler,
+  throughput, the Modeler, token visibility, Panorama, human work, DMN, the information
+  model, checkable BPMN coverage, integrations, agents, operations, deployment, licence), collapsible and carrying the
   same EN/DE toggle as What's New. The copy is a static asset
   (`api/web/key-features.json`, guarded by a test) rather than markup, and the landing
   page's two bilingual sections now share one language setting, so it is never half
   English and half German.
+
+  A tile that enumerates what a product *is* goes stale the way the handbook's
+  screenshots do — silently, because the page still renders and the capability nobody
+  mentioned is simply absent. So the file carries a `reviewedThrough` marker naming the
+  newest `### Added` bullet it has been held against, and `go test ./api` fails while
+  bullets sit above it. The question a feature has to answer is one line long — does
+  this change what Atlas is? — and the usual answer is no, which moves the marker and
+  writes nothing. What the marker buys is that it is asked by the person who knows the
+  feature rather than by nobody.
 
 - **The information model can now be read off the processes instead of typed in beside
   them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
