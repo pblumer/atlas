@@ -269,6 +269,12 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 	// catalogue depends on (ADR-draft-portal-roles-and-responsibilities). A home
 	// that does not exist is refused rather than tolerated: a product belonging to
 	// nothing is a product nobody is responsible for.
+	//
+	// Both sides are checked, and the losing one is the half that is easy to miss.
+	// Changing a product is a write on the catalogue responsible for it *now*, not
+	// on the one the request would like it to belong to — otherwise a product is
+	// taken by writing it back under somebody else's home, while whoever was
+	// responsible for it keeps carrying it and is never told.
 	p := httpapi.PrincipalFrom(r.Context())
 	var (
 		home    Catalog
@@ -284,6 +290,32 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		if allowed = s.mayEdit(home, p); !allowed {
 			return
 		}
+
+		// The losing side, when there is one. A product whose home no longer
+		// resolves has nobody responsible for it, so demanding that side's
+		// permission would freeze it forever — nobody can satisfy a check against
+		// a catalogue that is not there. The gaining side is still checked, so
+		// that is an adoption rather than a free-for-all.
+		var (
+			prev   Item
+			prevOK bool
+		)
+		if prev, prevOK, opErr = s.store.Item(in.ID); opErr != nil {
+			return
+		}
+		if prevOK && prev.HomeCatalog != in.HomeCatalog {
+			was, wasOK, e := s.store.Catalog(prev.HomeCatalog)
+			if e != nil {
+				opErr = e
+				return
+			}
+			if wasOK {
+				if allowed = s.mayEdit(was, p); !allowed {
+					return
+				}
+			}
+		}
+
 		opErr = s.store.SaveItem(in)
 	})
 

@@ -213,3 +213,102 @@ func TestReadingStaysOpen(t *testing.T) {
 		})
 	}
 }
+
+// Changing a product is a write on the catalogue responsible for it — which is
+// the one it belongs to *now*, not the one the request would like it to belong
+// to. Checking only the incoming home is how a product gets taken: write it back
+// naming your own catalogue, and it is yours, while whoever was responsible for
+// it keeps carrying it in their catalogue and is never told.
+
+// productBody renders a saveable product.
+func productBody(id, home string) string {
+	return `{"id":"` + id + `","homeCatalog":"` + home + `","state":"active",` +
+		`"texts":{"de":"X"},"approval":{"kind":"none"},` +
+		`"provisionProcess":"p","deprovisionProcess":"d"}`
+}
+
+// TestAProductCannotBeTakenByRehomingIt is the gap this closes.
+func TestAProductCannotBeTakenByRehomingIt(t *testing.T) {
+	s := serviceWithAdmin(t)
+	theirs := makeCatalog(t, s, user("usr_a"))
+	mine := makeCatalog(t, s, user("usr_b"))
+
+	if rec := as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", theirs.ID)); rec.Code != http.StatusOK {
+		t.Fatalf("owner creating it got %d (%s)", rec.Code, rec.Body)
+	}
+
+	// usr_b edits every catalogue they own, and none they do not.
+	rec := as(t, s.HandleSaveItem, user("usr_b"), "POST", productBody("laptop", mine.ID))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("rehoming somebody else's product got %d (%s), want 403", rec.Code, rec.Body)
+	}
+
+	// And it did not move.
+	items := decode[[]Item](t, as(t, s.HandleListItems, user("usr_b"), "GET", ""))
+	if len(items) != 1 || items[0].HomeCatalog != theirs.ID {
+		t.Fatalf("product home = %v, want it still with %s", items, theirs.ID)
+	}
+}
+
+// TestRehomingNeedsBothSides: giving a product away is a write on the catalogue
+// losing it as much as on the one gaining it.
+func TestRehomingNeedsBothSides(t *testing.T) {
+	s := serviceWithAdmin(t)
+	from := makeCatalog(t, s, user("usr_a"))
+	to := makeCatalog(t, s, user("usr_b"))
+
+	as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", from.ID))
+
+	// usr_a holds the losing side but not the gaining one.
+	if rec := as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", to.ID)); rec.Code != http.StatusForbidden {
+		t.Errorf("one-sided rehoming got %d, want 403", rec.Code)
+	}
+
+	// Share the gaining catalogue with usr_a, and now they hold both.
+	share := `{"members":[{"ref":{"type":"user","id":"usr_a"},"role":"editor"}]}`
+	as(t, s.HandleUpdateCatalog, user("usr_b"), "PATCH", share, "id", to.ID)
+
+	if rec := as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", to.ID)); rec.Code != http.StatusOK {
+		t.Fatalf("rehoming with both sides got %d (%s), want 200", rec.Code, rec.Body)
+	}
+}
+
+// TestEditingInPlaceNeedsTheCurrentHome: the ordinary case, where the home does
+// not change at all, still checks the catalogue responsible for it.
+func TestEditingInPlaceNeedsTheCurrentHome(t *testing.T) {
+	s := serviceWithAdmin(t)
+	home := makeCatalog(t, s, user("usr_a"))
+	as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", home.ID))
+
+	if rec := as(t, s.HandleSaveItem, user("usr_stranger"), "POST", productBody("laptop", home.ID)); rec.Code != http.StatusForbidden {
+		t.Errorf("stranger editing in place got %d, want 403", rec.Code)
+	}
+	if rec := as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", home.ID)); rec.Code != http.StatusOK {
+		t.Errorf("owner editing in place got %d, want 200", rec.Code)
+	}
+}
+
+// TestAnOrphanedProductIsAdoptableByTheGainingSideAlone.
+//
+// A product whose home no longer resolves has nobody responsible for it, so
+// demanding the losing side's permission would freeze it forever — nobody could
+// ever satisfy a check against a catalogue that is not there. The gaining side is
+// still checked, so this is an adoption and not a free-for-all.
+func TestAnOrphanedProductIsAdoptableByTheGainingSideAlone(t *testing.T) {
+	s := serviceWithAdmin(t)
+	mine := makeCatalog(t, s, user("usr_b"))
+
+	// An item whose home never existed, written past the handler.
+	orphan := newItem("stray")
+	orphan.HomeCatalog = "cat_gone"
+	if err := s.store.SaveItem(orphan); err != nil {
+		t.Fatalf("SaveItem: %v", err)
+	}
+
+	if rec := as(t, s.HandleSaveItem, user("usr_b"), "POST", productBody("stray", mine.ID)); rec.Code != http.StatusOK {
+		t.Fatalf("adopting an orphan got %d (%s), want 200", rec.Code, rec.Body)
+	}
+	if rec := as(t, s.HandleSaveItem, user("usr_c"), "POST", productBody("stray", "cat_gone")); rec.Code != http.StatusNotFound {
+		t.Errorf("adopting into a home that does not exist got %d, want 404", rec.Code)
+	}
+}
