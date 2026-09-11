@@ -195,11 +195,21 @@ async function findProcess(){
   if (!mine.length) throw new Error(`Prozess "${PROCESS_ID}" ist nicht deployed. Bitte examples/reisebuchung/fall-a zuerst deployen (siehe README).`);
   return mine[0].key;
 }
+// Scope the listing to THIS definition. The bare /instances listing is capped — 1000
+// rows per half — and its active half comes back oldest-key-first, so the newest
+// instance is the first row the cap drops: on a server holding more active instances
+// than the cap, the one we just started is never on the page and the diff below comes
+// back empty. ?process= reads this definition's own index instead, newest first.
+async function instancesOfProcess(defKey){
+  return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
+}
 async function startInstance(defKey){
-  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{}});
-  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
-  return (after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0]).key;
+  const after = await instancesOfProcess(defKey);
+  const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
+  if (!fresh) throw new Error("Die Instanz wurde gestartet, ist aber nicht auffindbar. Bitte die Seite neu laden.");
+  return fresh.key;
 }
 async function firstTask(){
   const raw = await api("GET",`/tasks?processInstance=${instanceKey}`);

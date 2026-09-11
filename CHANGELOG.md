@@ -14,6 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The hosted example apps find the instance they just started again, on an engine of
+  any size.** Each of them — `reisebuchung-kunde.html`, `reisebuchung-einschritt-kunde.html`,
+  `order-to-cash-live.html` and `order-to-cash-jobs.html` — located its own process
+  instance by reading `GET /api/v1/instances` and searching the result. That listing is
+  a page, not the set: unscoped it is capped at 1000 rows per half, and its active half
+  is scanned in ascending instance-key order — oldest first — so the newest instance is
+  the first row the cap drops.
+
+  On a server holding more than a thousand active instances the page therefore cannot
+  contain the instance the app has just created. The diff came back empty and the start
+  failed with `Cannot read properties of undefined (reading 'key')`, while the instance
+  itself was running correctly and sitting on its first user task. Nothing in the pages
+  had changed; the number of instances in front of them had.
+
+  They now read what they actually need. `GET /instances?process=<defKey>` lists one
+  definition's instances off its own index, newest first, and is what the start diff
+  compares; `GET /instances/search?q=<instanceKey>` is a point read of a single
+  instance, live or finished, and is what the poll for "has my instance ended" asks.
+  Both are index-backed, so neither grows with the engine. A start that still cannot
+  find its instance now says so in words rather than throwing on an undefined row.
+
+  Three tests hold this down, because the failure is invisible in any environment small
+  enough to develop against: a page that reads the unscoped listing passes every manual
+  check on a fresh engine and then breaks months later, in production, without a deploy.
+  A browser test drives the real wizard against a mocked engine whose bare listing is
+  full and never carries the instance; a Go test pins the two endpoints the pages now
+  rely on; and a guard over the embedded pages refuses the pattern's return.
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything

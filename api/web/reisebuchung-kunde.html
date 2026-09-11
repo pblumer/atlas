@@ -211,12 +211,28 @@ async function findProcess(){
   return mine[0].key;
 }
 
-// START — the create response carries no instance key, so diff /instances.
+// Reading instances without scanning the engine. The bare /instances listing is
+// capped — 1000 rows per half — and its active half comes back oldest-key-first, so
+// the newest instance is the first row the cap drops. On a server holding more active
+// instances than the cap, ours is simply not on that page, and a client that searches
+// the page concludes an instance that is running fine does not exist. Both reads here
+// are index-backed instead: ?process= reads one definition's own index, newest first,
+// and /instances/search?q=<key> is a point read of one instance, live or finished.
+async function instancesOfProcess(defKey){
+  return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
+}
+async function readInstance(key){
+  return (await api("GET",`/instances/search?q=${key}`)).find(i=>i.key===key) || null;
+}
+
+// START — the create response carries no instance key, so diff the scoped listing
+// before and after.
 async function startInstance(defKey){
-  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{}});
-  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
+  const after = await instancesOfProcess(defKey);
   const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
+  if (!fresh) throw new Error("Die Instanz wurde gestartet, ist aber nicht auffindbar. Bitte die Seite neu laden.");
   return fresh.key;
 }
 
@@ -236,7 +252,7 @@ async function advance(){
   const tasks = await openTasks();
   if (tasks.length){ renderStep(tasks[0]); return; }
   // no open task: either the engine is still computing, or the instance ended.
-  const inst = (await api("GET","/instances")).find(i=>i.key===instanceKey);
+  const inst = await readInstance(instanceKey);
   if (inst && inst.state !== "active") renderDone();
   else renderWaiting();
 }

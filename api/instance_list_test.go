@@ -518,3 +518,135 @@ func TestListInstancesStateFiltersHalves(t *testing.T) {
 		}
 	}
 }
+
+// secondWaiterBPMN parks like timerWaitBPMN but under a second process id, so a test
+// can hold live instances of two definitions at once.
+const secondWaiterBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="waiter-two" name="Waiter Two" isExecutable="true">
+    <startEvent id="s"/>
+    <intermediateCatchEvent id="w"><timerEventDefinition><timeDuration>PT3600S</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <endEvent id="e"/>
+    <sequenceFlow id="f1" sourceRef="s" targetRef="w"/>
+    <sequenceFlow id="f2" sourceRef="w" targetRef="e"/>
+  </process>
+</definitions>`
+
+// TestANewInstanceIsOffTheCappedListingButOnItsOwnDefinitionsPage pins the contract
+// the hosted apps under api/web depend on to find the instance they just started.
+//
+// The unscoped listing is a page, not the set. It is capped, and its active half is
+// scanned in ascending instance-key order — oldest first — so the newest instance is
+// the first row the cap drops. A client that starts an instance and then looks for it
+// on that page therefore finds nothing on any engine holding more active instances
+// than the cap, and reports an instance that is running perfectly well as missing.
+//
+// That is a production failure rather than a hypothesis: reisebuchung-kunde.html
+// located its instance by diffing the unscoped listing, and stopped working the day a
+// load test left tens of thousands of active instances in front of it — without a
+// deploy, and with the page's own code unchanged for weeks.
+//
+// Two reads answer the question without a scan, and this pins both: the listing
+// scoped with ?process=, which reads one definition's own index newest-first, and
+// /instances/search?q=<key>, which is a point read of one instance.
+//
+// The cap is driven with ?limit= rather than by creating maxInstanceListDefault
+// instances. The ordering is the property under test; how many rows it takes to reach
+// the cap is not, and a thousand instances would buy nothing but a slow test.
+func TestANewInstanceIsOffTheCappedListingButOnItsOwnDefinitionsPage(t *testing.T) {
+	ts := newTestServer(t)
+
+	deploy := func(bpmn string) uint64 {
+		t.Helper()
+		code, body := doReq(t, ts, http.MethodPost, "/api/v1/deployments", bpmn, "application/xml")
+		if code != http.StatusOK {
+			t.Fatalf("deploy status=%d body=%s", code, body)
+		}
+		var dep struct {
+			Key uint64 `json:"key"`
+		}
+		if err := json.Unmarshal(body, &dep); err != nil {
+			t.Fatalf("decode deploy: %v", err)
+		}
+		return dep.Key
+	}
+	start := func(defKey uint64) {
+		t.Helper()
+		path := fmt.Sprintf("/api/v1/processes/%d/instances", defKey)
+		if code, b := doReq(t, ts, http.MethodPost, path, "{}", "application/json"); code != http.StatusOK {
+			t.Fatalf("create instance of %d: status=%d body=%s", defKey, code, b)
+		}
+	}
+	list := func(query string) []instanceRow {
+		t.Helper()
+		_, body := doReq(t, ts, http.MethodGet, "/api/v1/instances"+query, "", "")
+		var rows []instanceRow
+		if err := json.Unmarshal(body, &rows); err != nil {
+			t.Fatalf("decode /instances%s: %v (%s)", query, err, body)
+		}
+		return rows
+	}
+
+	// Three instances of one definition stand in for the engine's existing population,
+	// then one instance of another is the one a client just started. It is the newest,
+	// so it carries the highest key.
+	noise, mine := deploy(timerWaitBPMN), deploy(secondWaiterBPMN)
+	for i := 0; i < 3; i++ {
+		start(noise)
+	}
+	start(mine)
+
+	// Scoped to its definition, the new instance is simply there — this is the read a
+	// client should be making.
+	scoped := list(fmt.Sprintf("?process=%d", mine))
+	if len(scoped) != 1 {
+		t.Fatalf("?process=%d returned %d rows, want exactly the one instance started", mine, len(scoped))
+	}
+	fresh := scoped[0]
+	if fresh.ProcessDefKey != mine || fresh.State != "active" {
+		t.Fatalf("scoped row = %+v, want defKey %d in state active", fresh, mine)
+	}
+
+	// Unscoped and capped, it is not — the page is filled by the older instances of the
+	// other definition, and the caller is given no row for the instance it just made.
+	res, err := http.Get(ts.URL + "/api/v1/instances?limit=3")
+	if err != nil {
+		t.Fatalf("GET instances?limit=3: %v", err)
+	}
+	var page []instanceRow
+	if err := json.NewDecoder(res.Body).Decode(&page); err != nil {
+		res.Body.Close()
+		t.Fatalf("decode capped page: %v", err)
+	}
+	truncated := res.Header.Get("X-Instances-Truncated")
+	res.Body.Close()
+	if len(page) != 3 {
+		t.Fatalf("capped page = %d rows, want 3", len(page))
+	}
+	if truncated != "true" {
+		t.Fatalf("truncation header = %q, want true — a client cannot even tell the page is partial", truncated)
+	}
+	for _, r := range page {
+		if r.Key == fresh.Key {
+			t.Fatalf("the capped page still carries the newest instance %d; the active half is "+
+				"supposed to be scanned oldest-key-first, and this test no longer reproduces "+
+				"the failure it exists for", fresh.Key)
+		}
+	}
+
+	// And the point read answers for one key without reference to any page at all.
+	_, body := doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/instances/search?q=%d", fresh.Key), "", "")
+	var found []instanceRow
+	if err := json.Unmarshal(body, &found); err != nil {
+		t.Fatalf("decode search: %v (%s)", err, body)
+	}
+	if len(found) != 1 || found[0].Key != fresh.Key || found[0].State != "active" {
+		t.Fatalf("search?q=%d = %+v, want the one live instance", fresh.Key, found)
+	}
+}
+
+// instanceRow is the part of an instance listing row these assertions read.
+type instanceRow struct {
+	Key           uint64 `json:"key"`
+	ProcessDefKey uint64 `json:"processDefKey"`
+	State         string `json:"state"`
+}

@@ -284,13 +284,28 @@ async function ensureDeployed(){
   return dep.key;
 }
 
+// Reading instances without scanning the engine. The bare /instances listing is
+// capped — 1000 rows per half — and its active half comes back oldest-key-first, so
+// the newest instance is the first row the cap drops. On a server holding more active
+// instances than the cap, ours is simply not on that page, and a client that searches
+// the page concludes an instance that is running fine does not exist. Both reads here
+// are index-backed instead: ?process= reads one definition's own index, newest first,
+// and /instances/search?q=<key> is a point read of one instance, live or finished.
+async function instancesOfProcess(defKey){
+  return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
+}
+async function readInstance(key){
+  return (await api("GET",`/instances/search?q=${key}`)).find(i=>i.key===key) || null;
+}
+
 // 2) START — hand Atlas the cart as instance variables. The create response does
-// not carry the instance key, so we diff /instances before and after.
+// not carry the instance key, so we diff the scoped listing before and after.
 async function startInstance(defKey){
-  const before = new Set((await api("GET","/instances")).filter(i=>i.processDefKey===defKey).map(i=>i.key));
+  const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{positions:cart.positions, customerType:cart.customerType}});
-  const after = (await api("GET","/instances")).filter(i=>i.processDefKey===defKey);
+  const after = await instancesOfProcess(defKey);
   const fresh = after.find(i=>!before.has(i.key)) || after.sort((a,b)=>b.key-a.key)[0];
+  if (!fresh) throw new Error("Die Instanz wurde gestartet, ist aber nicht auffindbar. Bitte die Seite neu laden.");
   return fresh.key;
 }
 
@@ -299,12 +314,14 @@ async function startInstance(defKey){
 // instance (service tasks AND the approval user task) — the read side that makes
 // the operator complete endpoint usable from a client.
 async function refresh(){
-  const [vars, jobs, instances] = await Promise.all([
+  const [vars, jobs, inst] = await Promise.all([
     api("GET",`/instances/${instanceKey}/variables`),
     api("GET",`/instances/${instanceKey}/jobs`),
-    api("GET","/instances"),
+    // The instance listing is capped and its active half comes back oldest-key-first,
+    // so read our own instance by key rather than hunt for it on a page of other
+    // people's.
+    readInstance(instanceKey),
   ]);
-  const inst = instances.find(i=>i.key===instanceKey);
   renderLive(vars, jobs, inst);
   if (inst && inst.state !== "active"){ clearInterval(polling); polling=null; }
 }
