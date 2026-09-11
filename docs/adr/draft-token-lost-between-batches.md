@@ -1,4 +1,4 @@
-# ADR-DRAFT: Token lost between the batch that completes an element and the batch that activates its successor
+# ADR-DRAFT: A follow-up command is not durable, so a crash between two batches loses or strands a token
 
 - **Status:** Draft
 - **Date:** 2026-09-07
@@ -70,7 +70,28 @@ it.
 
 ## Reproduction
 
-Deterministic, three batches, no load needed. `engine/zz_handoff_internal_test.go`:
+Deterministic, no load needed. `engine/zz_window_internal_test.go` drives a fresh
+engine to a chosen crash point, drops it, and recovers from the log alone. Both
+variants fail:
+
+```
+=== TestCrashBeforeActivatingLosesTheToken
+    A: active element instances after recovery: map[]
+    A: TOKEN LOST - catchB not active
+
+=== TestCrashBeforeCompletingStrandsTheToken
+    B: before publishing again: map[1:1]
+    B: after publishing "go" again: map[1:1]
+    B: INSTANCE STUCK - the message is consumed, the token sits on catchA, nothing moves it
+```
+
+Variant A fails identically whether recovery replays into a fresh store or
+reopens the one the crashed process left, so the failure is not an artefact of how
+the test simulates the crash.
+
+The tests are deliberately **not** in the tree: they document a defect that has no
+fix yet, and a repository carries neither a red test nor a skipped one. They
+belong with the change that fixes it.
 
 ```go
 package engine
@@ -85,15 +106,13 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-type stepClock struct{ t int64 }
+type winClock struct{ t int64 }
 
-func (c *stepClock) Now() int64 { c.t++; return c.t }
+func (c *winClock) Now() int64 { c.t++; return c.t }
 
-// handoff: start -> catchA("go") -> catchB("never") -> end.
-// catchA completing hands the token to catchB, exactly like s_aktivieren -> rt_aktiv.
-func handoffProcess(t *testing.T, key uint64) (*compiler.CompiledProcess, int32) {
+func winProcess(t *testing.T, key uint64) (*compiler.CompiledProcess, int32, int32) {
 	t.Helper()
-	b := compiler.NewBuilder(key, "handoff", 1)
+	b := compiler.NewBuilder(key, "window", 1)
 	st := b.AddStartEvent()
 	a := b.AddMessageCatchEvent("go", nil)
 	bb := b.AddMessageCatchEvent("never", nil)
@@ -105,13 +124,44 @@ func handoffProcess(t *testing.T, key uint64) (*compiler.CompiledProcess, int32)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	return cp, bb
+	return cp, a, bb
 }
 
-func TestTokenSurvivesCrashBetweenCompletedAndActivating(t *testing.T) {
+// runUntilHead runs batches until the queue head matches want, then stops without
+// processing it — the crash point.
+func runUntilHead(t *testing.T, p *Processor, intent model.Intent, element int32) {
+	t.Helper()
+	for i := 0; i < 20 && len(p.queue) > 0; i++ {
+		c := p.queue[0]
+		if c.ValueType == model.VTElementInstance && c.Intent == intent && c.Value.element.ElementId == element {
+			return
+		}
+		if err := p.processBatch(); err != nil {
+			t.Fatalf("processBatch: %v", err)
+		}
+	}
+	t.Fatalf("never reached %v of element %d (queue len %d)", intent, element, len(p.queue))
+}
+
+func activeByElement(t *testing.T, s *state.Store) map[int32]int {
+	t.Helper()
+	found := map[int32]int{}
+	if err := s.ActiveElementInstances(func(k uint64, v *model.ElementInstanceValue) error {
+		found[v.ElementId]++
+		return nil
+	}); err != nil {
+		t.Fatalf("ActiveElementInstances: %v", err)
+	}
+	return found
+}
+
+// crashAt drives a fresh engine to the given crash point, then returns a recovered
+// processor and its store, rebuilt from the log alone.
+func crashAt(t *testing.T, intent model.Intent, element int32) (*Processor, *state.Store, int32, int32) {
+	t.Helper()
 	dir := t.TempDir()
 	const defKey = 42
-	cp, catchB := handoffProcess(t, defKey)
+	cp, catchA, catchB := winProcess(t, defKey)
 
 	log1, err := wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")})
 	if err != nil {
@@ -121,7 +171,7 @@ func TestTokenSurvivesCrashBetweenCompletedAndActivating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("state.Open: %v", err)
 	}
-	p1 := New(1, log1, store1, &stepClock{})
+	p1 := New(1, log1, store1, &winClock{})
 	p1.Deploy(cp)
 	if err := p1.Recover(); err != nil {
 		t.Fatalf("Recover 1: %v", err)
@@ -130,24 +180,8 @@ func TestTokenSurvivesCrashBetweenCompletedAndActivating(t *testing.T) {
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
-
 	p1.PublishMessage("go", "")
-	// Run batch by batch and stop *before* the batch that would activate catchB.
-	stopped := false
-	for i := 0; i < 20 && len(p1.queue) > 0; i++ {
-		c := p1.queue[0]
-		if c.ValueType == model.VTElementInstance && c.Intent == model.IntentActivating && c.Value.element.ElementId == catchB {
-			stopped = true
-			break
-		}
-		if err := p1.processBatch(); err != nil {
-			t.Fatalf("processBatch: %v", err)
-		}
-	}
-	if !stopped {
-		t.Fatalf("never reached the pending activation of catchB (queue len %d)", len(p1.queue))
-	}
-	// Crash: the log holds every committed event; the pending command dies with the process.
+	runUntilHead(t, p1, intent, element)
 	_ = store1.Close()
 	_ = log1.Close()
 
@@ -159,43 +193,78 @@ func TestTokenSurvivesCrashBetweenCompletedAndActivating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("state.Open 2: %v", err)
 	}
-	defer func() { _ = store2.Close(); _ = log2.Close() }()
-	p2 := New(1, log2, store2, &stepClock{})
+	t.Cleanup(func() { _ = store2.Close(); _ = log2.Close() })
+	p2 := New(1, log2, store2, &winClock{})
 	p2.Deploy(cp)
 	if err := p2.Recover(); err != nil {
 		t.Fatalf("Recover 2: %v", err)
 	}
+	return p2, store2, catchA, catchB
+}
 
-	found := map[int32]int{}
-	if err := store2.ActiveElementInstances(func(k uint64, v *model.ElementInstanceValue) error {
-		found[v.ElementId]++
-		return nil
-	}); err != nil {
-		t.Fatalf("ActiveElementInstances: %v", err)
-	}
+// A: crash between the predecessor's Completed and the successor's Activating.
+func TestCrashBeforeActivatingLosesTheToken(t *testing.T) {
+	_, store2, _, catchB := crashAt(t, model.IntentActivating, 2)
+	found := activeByElement(t, store2)
+	t.Logf("A: aktive Element-Instanzen nach Recovery: %v", found)
 	if found[catchB] == 0 {
-		t.Fatalf("token lost: catchB (%d) is not active after recovery; active: %v", catchB, found)
+		t.Fatalf("A: TOKEN VERLOREN — catchB nicht aktiv; aktiv: %v", found)
+	}
+}
+
+// B: crash between the correlation (which durably deletes the subscription) and the
+// catch event's Completing. The token is still there, but nothing can move it again.
+func TestCrashBeforeCompletingStrandsTheToken(t *testing.T) {
+	p2, store2, catchA, catchB := crashAt(t, model.IntentCompleting, 1)
+	t.Logf("B: vor dem zweiten Publish: %v", activeByElement(t, store2))
+	p2.PublishMessage("go", "")
+	if err := p2.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle 2: %v", err)
+	}
+	found := activeByElement(t, store2)
+	t.Logf("B: nach erneutem Publish von \"go\": %v (catchA=%d catchB=%d)", found, catchA, catchB)
+	if found[catchB] == 0 {
+		t.Fatalf("B: INSTANZ STECKT — die Nachricht ist verbraucht, der Token steht auf catchA und nichts bewegt ihn; aktiv: %v", found)
 	}
 }
 ```
 
-Output:
+## The defect is wider than one sequence flow
+
+The first draft of this record scoped the hole to the handoff between a completing
+element and its successor. Reading the command path shows that is one instance of
+a class. Every in-flight transition is scheduled the same way —
+`AppendElementCommand` appends to `p.followups`, and nothing in `followups` is
+durable:
+
+| caller | what the next batch owes |
+|---|---|
+| `activateElement` | the successor of a taken sequence flow |
+| `armBoundaryEvents` | a host activity's boundary events |
+| `seedMultiInstance` | a multi-instance body's iterations |
+| `correlateMessage` | the `Completing` of the catch the message hit |
+| job completion, timer fired, scope drained | the `Completing` of the waiting element |
+
+So the window is not "between `Completed` and `Activated`". It is "between any
+batch and the follow-ups it scheduled".
+
+A second reproduction makes the consequence concrete, and it is worse than the
+first. Crashing one batch earlier — between the correlation and the catch event's
+`Completing` — leaves this:
 
 ```
-batch 0: head vt=Message         intent=MessagePublished element=0
-batch 1: head vt=ElementInstance intent=Completing      element=1
-batch 2: head vt=ElementInstance intent=Activating      element=2   <- crash here
-active element instances after recovery: map[]
---- FAIL: token lost
+B: active element instances after recovery: map[1:1]     token still on catchA
+B: after publishing "go" again:             map[1:1]     nothing moves
 ```
 
-It fails identically whether recovery replays into a fresh store or reopens the
-store the crashed process left behind, so the failure is not an artefact of how
-the test simulates the crash.
+`IntentSubscriptionCorrelated` deletes the message subscription in the batch that
+correlates, durably. The `Completing` it scheduled dies with the process. The
+token is still on the catch event, but its subscription is gone, so no further
+publish can ever move it. The instance is stuck forever.
 
-The test is deliberately **not** in the tree: it documents a defect that has no
-fix yet, and a repository does not carry a red test or a skipped one. It belongs
-with the change that fixes it.
+That variant is the dangerous one for operations: the token still exists, so every
+counter balances. The arithmetic that exposed the lost tokens on server01 —
+instances times tokens against the element totals — would never have shown it.
 
 ## What is not the cause
 
@@ -206,31 +275,53 @@ duplicate events, not lost ones.
 
 ## Options
 
+Option 1 below was chosen before the second reproduction existed. It fixes the
+sequence-flow handoff and nothing else, so it is left here for the record but it
+is no longer a candidate on its own.
+
 1. **Keep the completing element instance alive until its successor commits.**
-   Do not delete on `Completed`; delete when the successor's `Activated` is
-   applied. Recovery then finds an element instance in a completed state and
-   re-drives `takeOutgoingFlows`. This restores the ADR-0108 property — every
-   point a token can rest at is durable event-derived state — and leaves I6
-   untouched, at the cost of one extra live record per in-flight transition and a
-   recovery pass that re-drives them.
+   Restores the handoff, but only the handoff. It does nothing for a boundary event
+   that was never armed, a multi-instance body whose iterations were never seeded,
+   or the stranded catch event above — each would need its own bespoke pending
+   record. Generalised over every follow-up kind, it *becomes* option 3 with extra
+   steps.
 
-2. **Emit the successor's `Activated` in the same batch as the predecessor's
-   `Completed`.** No window at all. It means draining followups within the batch
-   rather than after it, which changes what `maxBatchSize` bounds and how the
-   group commit is reasoned about (ADR-0005).
+2. **Drain follow-ups inside the batch.** Phase 1 keeps consuming until no
+   follow-ups remain, so one batch spans the whole chain from an external command
+   to the next durable resting point — a parked element instance, an open job, an
+   armed timer or subscription — and one fsync covers it. A crash then either
+   loses the whole chain (and with it the external command, which was never
+   acknowledged) or none of it. This is the "a record batch ends at a wait state"
+   design, and it likely *reduces* fsyncs.
 
-3. **Persist the pending followups with the batch and re-queue them on
-   recovery** — a durable outbox. Simple, but it makes commands durable, which is
-   exactly what I6 says they are not.
+   It is not complete on its own. A chain that does not reach a wait state within
+   the batch cap has to commit and carry the rest, which reopens the same window
+   for that case. `maxBatchSize` today bounds commands consumed, not follow-ups
+   produced; a 5,000-iteration multi-instance fan-out is one batch's worth of
+   follow-ups.
 
-Option 1 looks right: it is the smallest change that restores the stated
-guarantee, and it keeps the distinction between events and commands intact.
+3. **Persist the pending follow-ups with the batch and re-queue them on
+   recovery** — a durable outbox, one record per batch rather than one per
+   transition. This is the only option that closes the window for every follow-up
+   kind, including the overflow case option 2 leaves open.
+
+   It is also the one that touches an invariant. I6 says commands are never
+   persisted and never replayed. The outbox can be read as persisting an *effect*
+   the committed batch owes rather than a command a client submitted — but that is
+   a reading, and the invariant deserves to be amended explicitly rather than
+   quietly reinterpreted.
+
+**Recommendation:** option 3, optionally with option 2 layered on as an
+optimisation once the correctness hole is closed. Option 3 needs a decision on I6
+first, which is why this record stops here rather than carrying a patch.
 
 ## Consequences
 
 Until this is fixed, any crash or hard restart under load silently drops every
-token that is mid-transition at that instant, with no incident and no trace other
-than an instance that stops moving. On server01 that was 1,850 identities that
-can no longer be given an exit date.
+token that is mid-transition at that instant, and strands every instance whose
+trigger was consumed in the batch before. Neither raises an incident. On server01
+the first kind cost 1,850 identities that can no longer be given an exit date; the
+second kind leaves no arithmetic trace at all, so how many instances it has
+stranded there is not known.
 
 The 1,850 affected instances on server01 are left as they are, as evidence.
