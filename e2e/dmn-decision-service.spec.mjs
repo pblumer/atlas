@@ -108,8 +108,13 @@ test("vendored dmn-js preserves DMN 1.5 Decision Services through modeling and r
     const modeling = viewer.get("modeling");
     const commandStack = viewer.get("commandStack");
 
+    // Decision Service references describe membership. Their serialized order is
+    // not semantically meaningful, so snapshots compare a canonical ordering.
     const refs = (element, property) =>
-      element.businessObject.get(property).map((reference) => reference.href);
+      element.businessObject
+        .get(property)
+        .map((reference) => reference.href)
+        .sort();
 
     const snapshot = () => {
       const approval = elementRegistry.get("id_approval");
@@ -180,7 +185,7 @@ test("vendored dmn-js preserves DMN 1.5 Decision Services through modeling and r
   const importedServices = expectedServices(210);
   const reclassifiedServices = expectedServices(
     250,
-    ["#id_route", "#id_elig"],
+    ["#id_elig", "#id_route"],
     [],
   );
 
