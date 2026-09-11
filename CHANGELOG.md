@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Starmap's ArchiMate view now draws ArchiMate's own symbols and layer colours.**
+  Picking **ArchiMate 3.2** under Notation mapped each node to an ArchiMate element type
+  and wrote that type under its name — and then drew Atlas's own circles and squares.
+  For the one reader that view exists for, that is the vocabulary without the script:
+  ArchiMate is recognised by its silhouettes.
+
+  The five mapped kinds are now drawn as the elements themselves — an Application
+  Component with its two lugs, an Application Process as an arrow, an Application
+  Service as a rounded lozenge, an Application Function as a chevron, and a deployment
+  target as a Node's three-dimensional box. The standard allows either a box with a
+  small type icon in the corner or the icon at full size; at the size a node is drawn
+  here the corner icon would be a pixel or two, so the icon is the node. The written
+  type stays beside it for readers who do not know the notation by sight.
+
+  The fills are the layer colours everyone recognises — Application `#B5FFFF`,
+  Technology `#C9E7B7` — and the key says plainly what they are: **ArchiMate 3.2
+  defines no colours at all**, and these are the convention its own figures and the
+  Archi tool use. They are pale by design, so a red or amber finding still stands out
+  above them. A draft, a restricted placeholder and an unresolved dependency keep
+  Atlas's own shape and colour: ArchiMate has no element for them, and dressing them as
+  one would claim something the notation does not.
+
 - **The Starmap opens using the whole window, whatever the size of the estate.** A
   landscape of a handful of nodes was drawn as a handful of small circles adrift in an
   empty canvas, and a single unattached process could sit out at the far edge holding
@@ -580,6 +602,31 @@ _Changed_ / _Removed_ for each version.
   ship unauthorable (`api/moddle_drift_test.go`, `e2e/searchable-modeler.spec.mjs`).
 
 ### Changed
+
+- **The class canvas's palette is drawn in the notation now, not in Unicode.** Its marks
+  were characters — `▭` for a business object, `▢` for a value type, `☰` for an
+  enumeration, `◇` and `◆` for the two kinds of whole. That was a defensible trade when
+  there was nothing to vendor: bpmn-js ships an icon font for BPMN's shapes and there is
+  no UML equivalent, and four kilobytes of font for eight marks buys little. What it cost
+  was that a palette entry looked like whatever the reader's system had for that
+  codepoint, and that the three classifiers were three near-identical rectangles.
+
+  Each entry is now a miniature of the shape the click produces, drawn as inline SVG in
+  the stylesheet. No font, no image files, nothing to fetch — the same reasoning that
+  keeps the canvases buildless ([ADR-0012](docs/adr/0012-web-ui-app-shell.md)). There is
+  no official UML icon set to take: the standard fixes the shapes on the *diagram* and
+  says nothing about a toolbar, so the miniatures are drawn from the notation itself.
+
+  The entries split in two, and the split is what each entry *is* rather than a
+  preference. A classifier is a button — one click adds one, it has no state — so it
+  carries its kind in colour: a business object with the key knocked out of its name
+  compartment, because identity is what makes it one; a value type with that compartment
+  empty, because nothing identifies it; an «enumeration» whose body is a list of literals
+  rather than rows of attributes; a data store as its cylinder. A relationship is a
+  *mode*: one of them is armed while the next two clicks draw that line, and the armed
+  entry has to be recoloured to say so — which a baked-in colour cannot do. So the four
+  relationships and the two tools are stencils that take the palette's own colour, and
+  they keep lighting on hover and reversing out of the accent when armed.
 
 - **A refused write through MCP now says why, not just that.** A validation refusal has
   always carried every reason at once — an author fixing a form should not make one round
