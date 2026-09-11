@@ -87,35 +87,49 @@ func (e *CmdExec) probeSandbox() error {
 }
 
 // CheckSandboxLanguages proves at startup that each language this process will serve
-// can start under mode. Empty names mean every supported language, matching an
-// external worker's default of serving all three.
+// can start under mode, by starting it. It is called once by the command layer, where
+// this process's own executable is the Atlas binary that implements the launcher.
 //
-// Only ErrSandboxInterpreter is returned: a language whose interpreter is simply not
-// installed keeps parking its jobs, as it always has, because that is a host that was
-// never going to run them rather than a sandbox that does not work.
+// A language whose interpreter is simply not installed is skipped rather than
+// refused: that host parks those jobs, as it always has, and is not a sandbox that
+// does not work.
 func CheckSandboxLanguages(mode SandboxMode, names []string) error {
-	if mode == "" || mode == SandboxOff {
-		return nil
-	}
-	langs := Langs
-	if len(names) > 0 {
-		langs = make([]Lang, 0, len(names))
-		for _, name := range names {
-			lang, ok := LangByName(strings.ToLower(strings.TrimSpace(name)))
-			if !ok {
-				return fmt.Errorf("script: unknown language %q", name)
-			}
-			langs = append(langs, lang)
-		}
+	langs, err := sandboxLanguages(mode, names)
+	if err != nil {
+		return err
 	}
 	for _, lang := range langs {
 		e := New(lang)
 		e.Sandbox = mode
-		if err := e.Check(); err != nil && errors.Is(err, ErrSandboxInterpreter) {
+		if err := e.Check(); err != nil {
+			continue
+		}
+		if err := e.probeSandbox(); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// sandboxLanguages resolves the operator's language list for a profile that has to be
+// proved. It returns nothing at all for off, so a compatible installation launches no
+// interpreter at startup and keeps exactly the boot it had before.
+func sandboxLanguages(mode SandboxMode, names []string) ([]Lang, error) {
+	if mode == "" || mode == SandboxOff {
+		return nil, nil
+	}
+	if len(names) == 0 {
+		return Langs, nil // an external worker with no filter serves all three
+	}
+	langs := make([]Lang, 0, len(names))
+	for _, name := range names {
+		lang, ok := LangByName(strings.ToLower(strings.TrimSpace(name)))
+		if !ok {
+			return nil, fmt.Errorf("script: unknown language %q", name)
+		}
+		langs = append(langs, lang)
+	}
+	return langs, nil
 }
 
 // CheckSandboxDataPath prevents a strict filesystem allowlist from accidentally

@@ -471,24 +471,24 @@ func environmentMap(env []string) map[string]string {
 	return out
 }
 
-// Startup refuses a profile that cannot run a language it was told to serve, and
-// refuses nothing else. A host that simply lacks an interpreter still boots and
-// parks that language's jobs, exactly as it did before there was a sandbox.
-func TestCheckSandboxLanguagesOnlyRefusesASandboxTheInterpreterCannotStart(t *testing.T) {
-	if err := CheckSandboxLanguages(SandboxOff, nil); err != nil {
-		t.Errorf("off refused startup: %v", err)
+// The startup proof resolves what it will launch before it launches anything, and
+// resolves nothing at all for a compatible profile — an installation on off must keep
+// exactly the boot it had before the sandbox existed.
+func TestSandboxLanguagesResolveOnlyForAProfileThatMustBeProved(t *testing.T) {
+	for _, mode := range []SandboxMode{"", SandboxOff} {
+		langs, err := sandboxLanguages(mode, []string{"python"})
+		if err != nil || langs != nil {
+			t.Errorf("mode %q resolved %v (err %v), want nothing to launch", mode, langs, err)
+		}
 	}
-	if err := CheckSandboxLanguages("", []string{"python"}); err != nil {
-		t.Errorf("empty mode refused startup: %v", err)
+	langs, err := sandboxLanguages(SandboxStrict, nil)
+	if err != nil || len(langs) != len(Langs) {
+		t.Errorf("strict with no filter resolved %d languages (err %v), want all %d", len(langs), err, len(Langs))
 	}
-	err := CheckSandboxLanguages(SandboxStrict, []string{"powershell", "klingon"})
-	if err == nil || !strings.Contains(err.Error(), "klingon") {
+	if langs, err := sandboxLanguages(SandboxStrict, []string{" PowerShell "}); err != nil || len(langs) != 1 || langs[0].Name != "powershell" {
+		t.Errorf("resolved %v (err %v), want powershell alone", langs, err)
+	}
+	if _, err := sandboxLanguages(SandboxStrict, []string{"powershell", "klingon"}); err == nil || !strings.Contains(err.Error(), "klingon") {
 		t.Errorf("error = %v, want the unknown language named", err)
-	}
-	// Whatever this host has installed, neither a missing interpreter nor a kernel
-	// that cannot enforce Landlock is this check's business — both are reported
-	// elsewhere, and only ErrSandboxInterpreter stops a start.
-	if err := CheckSandboxLanguages(SandboxStrict, []string{"python"}); err != nil {
-		t.Errorf("strict refused startup for a reason that is not the interpreter: %v", err)
 	}
 }

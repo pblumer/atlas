@@ -305,6 +305,14 @@ func runServe(args []string) error {
 		if err := script.CheckSandboxDataPath(scriptSandbox, *dataDir); err != nil {
 			return err
 		}
+		// A profile that cannot start an enabled interpreter is refused here rather
+		// than left to surface one failed job at a time. ADR-0303 makes strict a
+		// fail-closed contract, and a language it can never run is that contract
+		// broken, not a host that happens to lack a runtime.
+		if err := script.CheckSandboxLanguages(scriptSandbox, enabledScriptLanguages(enabled)); err != nil {
+			return fmt.Errorf("%w; run it under a kernel and runtime the profile can start, "+
+				"turn that language off with its --<language>=false flag, or select --script-sandbox=off", err)
+		}
 	}
 	osCfg := opensearch.Config{
 		URL:      strings.TrimSpace(*osURL),
@@ -674,14 +682,6 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		ex.MaxOutput = budgets.Payload
 		ex.Sandbox = scriptSandbox
 		if err := ex.Check(); err != nil {
-			// A sandbox that cannot start an enabled interpreter is refused here rather
-			// than left to surface one failed job at a time. ADR-0303 makes strict a
-			// fail-closed contract, and a profile under which a language can never run
-			// is that contract broken, not a host that happens to lack a runtime.
-			if errors.Is(err, script.ErrSandboxInterpreter) {
-				return fmt.Errorf("%w; run it under a kernel and runtime the profile can start, "+
-					"turn the language off with --%s=false, or select --script-sandbox=off", err, lang.Name)
-			}
 			logging.Warn(logging.ScriptWorkerMissing,
 				"script worker enabled but its interpreter was not found on PATH; its script tasks "+
 					"will park until it is installed",

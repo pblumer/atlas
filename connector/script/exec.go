@@ -164,27 +164,23 @@ func (e *CmdExec) maxOutput() int64 {
 	return defaultMaxOutput
 }
 
-// Check reports whether the interpreter is resolvable on PATH and, under a strict
-// sandbox, whether it can actually start inside the policy. The server calls it once
-// at startup so an operator whose host lacks the interpreter sees a clear warning,
-// rather than watching script tasks park silently.
+// Check reports whether the interpreter is resolvable on PATH and whether the host
+// can enforce the selected profile at all. The server calls it once at startup so an
+// operator whose host lacks the interpreter sees a clear warning, rather than
+// watching script tasks park silently.
 //
-// The two failures are not the same and must not be reported as one. A missing
-// interpreter parks that language's jobs on a host that was never going to run them.
-// An installed interpreter that the profile prevents from starting is the operator's
-// security choice being broken, and it is fatal: it arrives as ErrSandboxInterpreter
-// so the call site can tell them apart.
+// It deliberately stays a cheap predicate and launches nothing. Whether the
+// interpreter can actually start *inside* the profile is a separate question, asked
+// once per process by CheckSandboxLanguages, because answering it means spawning the
+// sandbox launcher — which only the Atlas executable is.
 func (e *CmdExec) Check() error {
 	if _, err := exec.LookPath(e.bin()); err != nil {
 		return err
 	}
-	if e.Sandbox != SandboxStrict {
-		return nil
+	if e.Sandbox == SandboxStrict {
+		return sandboxSupport()
 	}
-	if err := sandboxSupport(); err != nil {
-		return err
-	}
-	return e.probeSandbox()
+	return nil
 }
 
 func (e *CmdExec) runner() func(context.Context, string, []string, []string) ([]byte, error) {

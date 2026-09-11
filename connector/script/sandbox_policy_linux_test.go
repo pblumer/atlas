@@ -380,13 +380,12 @@ func TestStrictSandboxAllowsTheProcessMetadataAnInterpreterReads(t *testing.T) {
 }
 
 // An installed interpreter the sandbox cannot start is a different failure from a
-// missing one. A missing interpreter parks that language's jobs and is a warning;
-// a strict profile that the interpreter cannot start under is the operator's
-// explicit choice being broken, so the call site has to be able to tell them apart
-// rather than logging both as "not installed".
-func TestStrictSandboxCheckSeparatesARefusingInterpreterFromAMissingOne(t *testing.T) {
-	probe := func(t *testing.T, run func() ([]byte, error)) error {
-		t.Helper()
+// missing one. A missing interpreter parks that language's jobs and is a warning; a
+// profile the interpreter cannot start under is the operator's explicit choice being
+// broken, so the startup proof reports it as its own kind of error rather than as
+// "not installed".
+func TestSandboxProbeSeparatesARefusingInterpreterFromAMissingOne(t *testing.T) {
+	probe := func(run func() ([]byte, error)) error {
 		e := New(Python)
 		e.Bin = "/bin/true" // resolves inside the runtime allowlist on every Linux host
 		e.Sandbox = SandboxStrict
@@ -397,7 +396,7 @@ func TestStrictSandboxCheckSeparatesARefusingInterpreterFromAMissingOne(t *testi
 		t.Skipf("no /bin/true to stand in for an interpreter: %v", err)
 	}
 
-	err := probe(t, func() ([]byte, error) {
+	err := probe(func() ([]byte, error) {
 		return nil, errors.New("exit status 255: Failed to create CoreCLR, HRESULT: 0x8007000E")
 	})
 	if err == nil {
@@ -410,26 +409,27 @@ func TestStrictSandboxCheckSeparatesARefusingInterpreterFromAMissingOne(t *testi
 		t.Errorf("error %q names neither the language nor the interpreter's own diagnosis", err)
 	}
 
-	if err := probe(t, func() ([]byte, error) { return nil, nil }); err != nil {
+	if err := probe(func() ([]byte, error) { return nil, nil }); err != nil {
 		t.Errorf("an interpreter that starts was rejected: %v", err)
 	}
 }
 
-// The probe is only ever run for the profile that asks for it: off must keep the
-// historical startup, which never launched an interpreter to find out.
-func TestSandboxOffProbesNothing(t *testing.T) {
+// Check stays a cheap predicate. It once grew the startup proof, which launches the
+// sandbox launcher — and under `go test` os.Executable() is the test binary, which
+// ignores the launcher's argv and runs the suite until the probe's deadline. The
+// proof lives in CheckSandboxLanguages, called where the executable really is Atlas.
+func TestCheckLaunchesNothing(t *testing.T) {
 	launched := false
 	e := New(Python)
 	e.Bin = "/bin/true"
+	e.Sandbox = SandboxStrict
 	e.run = func(context.Context, string, []string, []string) ([]byte, error) {
 		launched = true
 		return nil, nil
 	}
-	if err := e.Check(); err != nil {
-		t.Fatalf("Check: %v", err)
-	}
+	_ = e.Check() // an unsupported kernel is a legitimate answer here; launching is not
 	if launched {
-		t.Error("off launched the interpreter at startup")
+		t.Error("Check launched an interpreter")
 	}
 }
 
