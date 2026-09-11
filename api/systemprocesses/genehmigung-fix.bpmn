@@ -121,6 +121,71 @@ Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;portal&#8220;.</bpmn
       <bpmn:incoming>F_Mail_Ende</bpmn:incoming>
     </bpmn:endEvent>
 
+    <bpmn:boundaryEvent id="Erinnerung" name="Erinnerungsfrist" attachedToRef="Genehmigen" cancelActivity="false">
+      <bpmn:documentation>Nicht unterbrechend: die Aufgabe bleibt offen, es kommt nur eine Erinnerung dazu. Unterbrechend w&#228;re dieser Timer das Gegenteil von hilfreich — er schl&#246;sse die Aufgabe, deren Erledigung er anmahnt.
+
+Eine unbeachtete Genehmigung ist die leisere H&#228;lfte des Problems: ein h&#228;ngender Incident f&#228;llt in einer Betriebssicht auf, eine liegengebliebene Aufgabe sieht aus wie jede andere im Postkorb.</bpmn:documentation>
+      <bpmn:outgoing>F_Erinnerung_Mail</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>P3D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:serviceTask id="Erinnern" name="Erinnerung senden">
+      <bpmn:documentation>Dieselbe Nachricht wie am Anfang, an dieselbe Referenz — der Server schl&#228;gt die Adresse beim Versand nach.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="portal"
+          to="=approvalRef"
+          subject="=&#34;Erinnerung: Genehmigung n&#246;tig f&#252;r &#34; + itemId"
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie im Genehmigungsportal dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/genehmigung.html?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Erinnerung_Mail</bpmn:incoming>
+      <bpmn:outgoing>F_Erinnerung_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndeErinnerung" name="Erinnert">
+      <bpmn:incoming>F_Erinnerung_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:boundaryEvent id="Frist" name="Eskalationsfrist" attachedToRef="Genehmigen" cancelActivity="false">
+      <bpmn:documentation>Reicht die Genehmigung nicht weiter, sondern h&#228;lt fest, dass sie liegenbleibt. Die am Produkt hinterlegte Person ist eine stehende Zust&#228;ndigkeit und keine Stelle in einer Linie; ihre Warteschlange an ihren eigenen Vorgesetzten zu geben w&#228;re nicht offensichtlich richtig. Wer hier einspringen soll, entscheidet ein Mensch — daf&#252;r gibt es POST .../reassign.
+
+Nicht unterbrechend, und das ist die wichtigste Eigenschaft dieses Timers: er darf die Aufgabe nicht schliessen. Schweigen ist keine Ablehnung. Eine Frist, die entscheidet, tr&#252;ge in einen dauerhaft aufbewahrten Nachweis eine Entscheidung ein, die niemand getroffen hat.</bpmn:documentation>
+      <bpmn:outgoing>F_Frist_Eskalieren</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>P7D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+
+    <bpmn:serviceTask id="Eskalieren" name="Genehmigung weiterreichen">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/escalate. Ein Aufruf ist ein Sprung, weil ein Aufruf eine abgelaufene Frist ist.
+
+Wer der Vorgesetzte ist, beantwortet der Aufrufer: eine Verzeichnisabfrage geh&#246;rt ins Modell, nicht in den Server — der h&#228;tte daf&#252;r weder die Konfiguration noch die Zugangsdaten. Ob der Sprung stattfinden darf, entscheidet Atlas: eine Schleife im Verzeichnis, jemand der sie schon hatte, eine Kette am Ende.
+
+Ist die Antwort „stalled&#34;, bleibt die Genehmigung, wo sie ist, und der Umstand ist festgehalten. Er steht dann unter GET /api/v1/approvals/stalled — eine Genehmigung, die niemand weiterreichen kann und auf die niemand schaut, ist genau die Art, wie ein Auftrag ewig wartet.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + itemId + &#34;/escalate&#34;" target="path" />
+          <zeebe:input source="={superior: &#34;&#34;}" target="body" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>F_Frist_Eskalieren</bpmn:incoming>
+      <bpmn:outgoing>F_Frist_Ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="EndeFrist" name="Weitergereicht">
+      <bpmn:incoming>F_Frist_Ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="F_Erinnerung_Mail" sourceRef="Erinnerung" targetRef="Erinnern" />
+    <bpmn:sequenceFlow id="F_Erinnerung_Ende" sourceRef="Erinnern" targetRef="EndeErinnerung" />
+    <bpmn:sequenceFlow id="F_Frist_Eskalieren" sourceRef="Frist" targetRef="Eskalieren" />
+    <bpmn:sequenceFlow id="F_Frist_Ende" sourceRef="Eskalieren" targetRef="EndeFrist" />
     <bpmn:sequenceFlow id="F_Start_Split" sourceRef="Start" targetRef="Split" />
     <bpmn:sequenceFlow id="F_Split_Task" sourceRef="Split" targetRef="Genehmigen" />
     <bpmn:sequenceFlow id="F_Split_Mail" sourceRef="Split" targetRef="Benachrichtigen" />
@@ -168,6 +233,40 @@ Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;portal&#8220;.</bpmn
         <dc:Bounds x="450" y="62" width="36" height="36" />
         <bpmndi:BPMNLabel><dc:Bounds x="436" y="105" width="70" height="14" /></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnerung" bpmnElement="Erinnerung">
+        <dc:Bounds x="282" y="222" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnern" bpmnElement="Erinnern">
+        <dc:Bounds x="250" y="430" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeErinnerung" bpmnElement="EndeErinnerung">
+        <dc:Bounds x="400" y="452" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Frist" bpmnElement="Frist">
+        <dc:Bounds x="322" y="222" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Eskalieren" bpmnElement="Eskalieren">
+        <dc:Bounds x="250" y="560" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeFrist" bpmnElement="EndeFrist">
+        <dc:Bounds x="400" y="582" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Mail" bpmnElement="F_Erinnerung_Mail">
+        <di:waypoint x="300" y="258" />
+        <di:waypoint x="300" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Ende" bpmnElement="F_Erinnerung_Ende">
+        <di:waypoint x="350" y="470" />
+        <di:waypoint x="400" y="470" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Ende" bpmnElement="F_Frist_Ende">
+        <di:waypoint x="350" y="600" />
+        <di:waypoint x="400" y="600" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Eskalieren" bpmnElement="F_Frist_Eskalieren">
+        <di:waypoint x="340" y="258" />
+        <di:waypoint x="340" y="560" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="E_Split_Task" bpmnElement="F_Split_Task">
         <di:waypoint x="265" y="200" />
         <di:waypoint x="300" y="200" />

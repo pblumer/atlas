@@ -481,6 +481,43 @@ approval along, make it visible when it can go no further, and let a person rest
 — without anything there ever deciding it. The inventory is not built yet, which is why
 this record reads `Partial`.
 
+**The deadline that drives them is a boundary timer on the approval task**, because a
+deadline is a modelled fact: an installation changes P3D and P7D by editing its copy of
+the approval, not by changing Go. Both timers are **non-interrupting**, and that is the
+whole of "a clock never decides" expressed as a shape — an interrupting one would close
+the task whose completion it is chasing, and whatever its path then did would be the
+answer. A test refuses an interrupting deadline on an approval, and a second refuses any
+deadline branch reaching the task that records a refusal.
+
+`POST /orders/{id}/lines/{item}/escalate` is one hop, because one call is one elapsed
+deadline. **The caller names the superior.** Who somebody reports to is a question for a
+directory, and Atlas asks a directory through a worker, from a model; a server-side path
+to one would be a configuration nobody set up and a credential the server does not hold.
+What Atlas decides is whether the hop may happen — the loop guard, the already-held
+guard, the end of the chain — and that stays in `Escalate`, pure. An empty superior is
+not an error but the answer "nobody", and it stalls.
+
+The assignment is written **when something first moves an approval**, not when the order
+is placed: at placement the approver of a `superior` line is not known, and until
+something moves it the live task's assignee is the whole truth. What outlives the task
+is the history, and that is what is stored. It is written **before** the task is
+reassigned (I2): a recorded hop with a task that did not move is repairable and visible;
+a moved task with no record explaining it is not.
+
+Two deviations from the design above, both deliberate. **Only the `superior` variant
+escalates up a chain.** That variant *is* the line, so a step up it is the same
+mechanism one step further, and it already requires the directory. A `fixed` approver is
+a standing responsibility rather than a position in a line — handing their queue to
+their own line manager is not obviously right, and the answer for a stuck one is that a
+person reassigns it. A `role` approver is a group, which has no superior at all. Both
+therefore remind and then **stall**, which is the same visibility by a shorter road; an
+installation that wants the chain for its `fixed` approvals adds the lookup to its copy
+of the model, exactly as the `superior` variant has it.
+
+And **stalling is visible through `GET /api/v1/approvals/stalled`**. A stall records a
+fact, and a fact nobody queries is not visible — which is the failure this whole
+mechanism exists to prevent, one level up.
+
 **Which process decides a line is resolved when fulfilment asks, and was wrong at
 first.** The model built an approval's process id by concatenating the catalogue's
 kind onto a prefix — `"atlas-genehmigung-" + "fixed"` — and the three approval
