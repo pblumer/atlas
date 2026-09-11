@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       identifier="id-model">
+  <name xml:lang="de">Leistungskatalog</name>
+  <elements>
+    <element identifier="id-wp" xsi:type="Product">
+      <name xml:lang="de">Arbeitsplatz</name>
+      <name xml:lang="en">Workplace</name>
+    </element>
+    <element identifier="id-acc" xsi:type="BusinessService">
+      <name xml:lang="de">Benutzerkonto</name>
+    </element>
+    <element identifier="id-lap" xsi:type="BusinessService">
+      <name xml:lang="de">Notebook</name>
+    </element>
+    <element identifier="id-scr" xsi:type="BusinessService">
+      <name xml:lang="de">Zweitbildschirm</name>
+    </element>
+    <element identifier="id-actor" xsi:type="BusinessActor">
+      <name xml:lang="de">Personalabteilung</name>
+    </element>
+  </elements>
+  <relationships>
+    <relationship identifier="r1" source="id-wp" target="id-acc" xsi:type="Composition"/>
+    <relationship identifier="r2" source="id-wp" target="id-lap" xsi:type="Composition"/>
+    <relationship identifier="r3" source="id-wp" target="id-scr" xsi:type="Aggregation"/>
+    <relationship identifier="r4" source="id-actor" target="id-wp" xsi:type="Association"/>
+    <relationship identifier="r5" source="id-wp" target="id-actor" xsi:type="Composition"/>
+  </relationships>
+</model>

@@ -62,6 +62,9 @@ var catalogGates = []handlerGate{
 		why: "lists only products whose home the caller maintains; the outsider case is an empty list, proved in TestProductListingFollowsTheHomeCatalogue"},
 	{name: "HandleSaveItem", kind: gated, want: http.StatusNotFound, method: "POST",
 		body: `{"id":"x","homeCatalog":"CAT","state":"active","texts":{"de":"X"},"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d"}`},
+	{name: "HandleImport", kind: gated, want: http.StatusNotFound, method: "POST",
+		body: `<?xml version="1.0" encoding="UTF-8"?><model xmlns="http://www.opengroup.org/xsd/archimate/3.0/" identifier="m"/>`,
+		id:   true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
 }

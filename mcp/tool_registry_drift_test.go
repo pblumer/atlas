@@ -133,6 +133,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/catalogs":               "portal catalogue surface still being built; a tool is a public contract",
 	"GET /api/v1/catalogs/{id}":           "portal catalogue surface still being built; a tool is a public contract",
 	"PATCH /api/v1/catalogs/{id}":         "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs/{id}/import":   "portal catalogue surface still being built; a tool is a public contract",
 	"POST /api/v1/catalogs/{id}/releases": "portal catalogue surface still being built; a tool is a public contract",
 	"GET /api/v1/catalogs/{id}/releases":  "portal catalogue surface still being built; a tool is a public contract",
 	"GET /api/v1/catalog-products":        "portal catalogue surface still being built; a tool is a public contract",

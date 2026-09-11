@@ -106,6 +106,18 @@ two graphs answering two different questions:
   another is. This is the edge the fulfilment order is computed over, and the only one
   whose direction means "after".
 
+**The import reads the model in the architect's own vocabulary.** A Product or a
+Business Service is something offered; a composition is a part that comes with the
+whole, an aggregation one offered beside it. That is the same distinction the catalogue
+makes, which is the whole reason to read a model rather than retype a list of names.
+Everything arrives as a **draft**, so importing makes nothing orderable — publishing
+refuses a draft, and that is the safeguard, not a nuisance. A product already stored is
+left exactly as it is: the model is where a catalogue starts, not something it follows,
+and a second import after somebody bound processes and activated a product must not undo
+that work. What the import could not take, and what it deliberately left alone, it names
+— a silent drop is the failure mode of every importer, and an architect who modelled
+something and cannot find it concludes the import is broken.
+
 Writing this record, the two were conflated: it named the structural edges and then
 spoke of "the dependency graph" as though that were the same thing. It is not, and
 reading them as one graph refuses ordinary catalogues — a workplace that *contains* an
@@ -448,7 +460,7 @@ discrepancy, which no other system in the estate can do.
 
 ## Implementation
 
-`api/catalog` carries the catalogue model and `Publish` — the validation, the wave
+`api/catalog` carries the catalogue model, the ArchiMate import and `Publish` — the validation, the wave
 schedule and the preconditions described above, with `Release.Blocked` answering which
 lines a failure stops. `api/order` carries the order model, the propagation and the orchestrator's two
 questions:

@@ -748,6 +748,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		// ordered cannot change because somebody edited a product while an approval
 		// was pending. Reading is confined to your own orders by the handler, not by
 		// the role: an order somebody else placed is not yours to see.
+		{"POST", "/api/v1/catalogs/{id}/import", s.catalogs.HandleImport, apiOp{
+			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
+			resp: jsonBody("What was imported, and what was skipped", tObject())}},
 		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
