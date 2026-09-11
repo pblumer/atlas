@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -19,11 +21,15 @@ import (
 // picking an owner arbitrarily. Releases are separate again because they are
 // immutable once written, where the other two are edited continuously.
 
-// Store holds a catalogue's three kinds of record.
+// Store holds a catalogue's three kinds of record, and the one thing a catalogue
+// owns that is not a record: its brand mark (see logo.go).
 type Store struct {
 	catalogs *sidecar.Store[Catalog]
 	items    *sidecar.Store[Item]
 	releases *sidecar.Store[Release]
+	// logos is the directory the marks live in — image files rather than JSON, so
+	// they are kept beside the stores rather than in one.
+	logos string
 }
 
 // NewStore opens (creating if needed) the directories backing a catalogue.
@@ -53,7 +59,11 @@ func NewStore(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{catalogs: catalogs, items: items, releases: releases}, nil
+	logos := filepath.Join(dir, "logos")
+	if err := os.MkdirAll(logos, 0o755); err != nil {
+		return nil, fmt.Errorf("catalogstore: create logo dir: %w", err)
+	}
+	return &Store{catalogs: catalogs, items: items, releases: releases, logos: logos}, nil
 }
 
 // SaveCatalog writes a catalogue, replacing any record with the same id.

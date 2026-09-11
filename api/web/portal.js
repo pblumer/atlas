@@ -339,12 +339,53 @@ function renderOrders() {
       l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null))))));
 }
 
+// The brand mark, and the order it is looked for in: the catalogue's own, then
+// the operator's, then none at all.
+//
+// Nothing in the catalogue record says whether a mark exists — the file on the
+// server is the fact, and a second copy of that fact is a second copy to be wrong
+// after a restore that brought the record and not the image. So the page asks for
+// the image and reads a 404 as "there is none", which is what the console already
+// does with the instance's own (logo.js).
+//
+// The built-in Atlas glyph is deliberately *not* the last step, though the console
+// falls back to it. This is a customer-facing page: when neither the catalogue nor
+// the operator has a mark it shows none, rather than branding somebody's service
+// catalogue with the name of the engine underneath it.
+const INSTANCE_MARK = '/api/v1/settings/logo';
+let mark = null;
+
+function renderMark() {
+  if (!state.catalog) return null;
+  if (!mark) {
+    // Rendered through an <img> and never inlined, so a script inside an uploaded
+    // SVG has no context to run in; the server serves it sandboxed as well.
+    // Decorative: the heading beside it already names the catalogue, so a screen
+    // reader that announced the mark too would read it twice.
+    mark = el('img', { class: 'mark', alt: '', 'aria-hidden': 'true' });
+    mark.addEventListener('error', () => {
+      if (mark.src.endsWith(INSTANCE_MARK)) mark.hidden = true;
+      else mark.src = INSTANCE_MARK;
+    });
+  }
+  // Assigning src re-requests the image, and render runs on every repaint — so it
+  // is assigned when the catalogue changes and not when the basket does.
+  if (mark.dataset.for !== state.catalog.id) {
+    mark.dataset.for = state.catalog.id;
+    mark.hidden = false;
+    mark.src = `/api/v1/catalogs/${encodeURIComponent(state.catalog.id)}/logo`;
+  }
+  return mark;
+}
+
 function render() {
   const root = document.getElementById('app');
   if (!root) return;
   root.replaceChildren(
     el('header', {},
-      el('h1', {}, state.catalog ? textOf(state.catalog.texts, t('portal.title')) : t('portal.title')),
+      el('div', { class: 'brand' },
+        renderMark(),
+        el('h1', {}, state.catalog ? textOf(state.catalog.texts, t('portal.title')) : t('portal.title'))),
       el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
         class: l === locale ? 'lang on' : 'lang',
         onclick: () => setLocale(l),

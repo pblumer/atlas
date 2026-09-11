@@ -98,6 +98,11 @@ var wantAdminRoutes = []string{
 	// several brands, and it stays with the administrator for the same reason the
 	// instance one does (ADR-0113, decision 12).
 	"PUT /api/v1/catalogs/{id}/theme",
+	// And its brand mark, on the same gate and for one more reason: it is the only
+	// place in the catalogue where somebody hands the server bytes it will serve
+	// back to a browser.
+	"PUT /api/v1/catalogs/{id}/logo",
+	"DELETE /api/v1/catalogs/{id}/logo",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",

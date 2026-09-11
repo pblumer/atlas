@@ -221,43 +221,6 @@ func TestSettingsStoreLogoRoundTrip(t *testing.T) {
 	}
 }
 
-// TestValidLogo covers the byte-level sanity gate for each accepted type and the
-// default (unknown type) branch.
-func TestValidLogo(t *testing.T) {
-	pngOK := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0}
-	for _, tc := range []struct {
-		name string
-		ct   string
-		data []byte
-		want bool
-	}{
-		{"png ok", "image/png", pngOK, true},
-		{"png bad magic", "image/png", []byte("not-a-png"), false},
-		{"svg ok", "image/svg+xml", []byte(`<svg></svg>`), true},
-		{"svg no root", "image/svg+xml", []byte("<html></html>"), false},
-		{"svg invalid utf8", "image/svg+xml", []byte{0xff, 0xfe, '<', 's', 'v', 'g'}, false},
-		{"unknown type", "image/gif", pngOK, false},
-	} {
-		if got := validLogo(tc.ct, tc.data); got != tc.want {
-			t.Errorf("%s: validLogo = %v; want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
-// TestNormalizeLogoType strips media-type parameters and canonicalises case.
-func TestNormalizeLogoType(t *testing.T) {
-	for in, want := range map[string]string{
-		"image/png":                    "image/png",
-		"IMAGE/PNG":                    "image/png",
-		"image/svg+xml; charset=utf-8": "image/svg+xml",
-		"  image/svg+xml ":             "image/svg+xml",
-	} {
-		if got := normalizeLogoType(in); got != want {
-			t.Errorf("normalizeLogoType(%q) = %q; want %q", in, got, want)
-		}
-	}
-}
-
 // TestSetLogoRejectsUnreadableBody covers handleSetLogo's read-body error branch,
 // which returns 400 before any store access (a bare Server with auth off suffices).
 func TestSetLogoRejectsUnreadableBody(t *testing.T) {

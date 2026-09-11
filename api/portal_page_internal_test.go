@@ -156,3 +156,41 @@ func TestPortalTypefacesMatchTheServer(t *testing.T) {
 		}
 	}
 }
+
+// TestPortalMarkCascadeStopsAtTheOperator holds the one decision in the brand
+// mark that is not obvious from reading the code: what the portal shows when
+// nobody has set one.
+//
+// The console falls back to the built-in Atlas glyph, which is right there — it is
+// the operator's own tool. The portal is a customer-facing page, and branding
+// somebody's service catalogue with the name of the engine underneath it is a
+// disclosure nobody asked for. So the cascade is catalogue, then operator, then
+// nothing, and a future edit that "fixes the empty box" by importing the glyph
+// fails here instead of shipping.
+func TestPortalMarkCascadeStopsAtTheOperator(t *testing.T) {
+	src := readWeb(t, "portal.js")
+
+	if !strings.Contains(src, "/logo`") {
+		t.Error("portal.js asks for no catalogue mark, so a catalogue's own logo is never shown")
+	}
+	if !strings.Contains(src, "/api/v1/settings/logo") {
+		t.Error("portal.js does not fall back to the operator's mark")
+	}
+	// Matched as code and not as a mention: the comment above renderMark names
+	// logo.js as the thing it is deliberately *not* importing, and a check that
+	// could not tell the two apart would forbid explaining the decision.
+	for _, forbidden := range []string{"BUILTIN_MARK", "'./logo.js'", `"./logo.js"`} {
+		if strings.Contains(src, forbidden) {
+			t.Errorf("portal.js reaches for %s: the portal is a customer-facing page and "+
+				"the engine's own glyph does not belong on it", forbidden)
+		}
+	}
+	// An uploaded SVG is scriptable. It is safe in an <img> and in nothing else, so
+	// the page must never put those bytes into the document.
+	for _, forbidden := range []string{"innerHTML", "insertAdjacentHTML"} {
+		if strings.Contains(src, forbidden) {
+			t.Errorf("portal.js uses %s; a mark is rendered through an <img> and never "+
+				"inlined, or an uploaded SVG's script runs in the page", forbidden)
+		}
+	}
+}

@@ -89,6 +89,47 @@ Contrast needs no new thinking: `--accent-ink` is computed from whichever accent
 active, so the tenth brand is as legible as the first. That is the property ADR-0263
 bought, and this is the first place it pays.
 
+### Where the mark lives, and who may see it
+
+The accent and the typeface are two short strings and ride in the catalogue record.
+The mark cannot. It is up to half a megabyte of opaque bytes, and the record is read
+on the path that resolves a visitor's catalogue on *every* portal load — putting the
+image there would put it into the answer to a question nobody asked with it, and into
+every maintenance listing besides. So the mark is a file beside the catalogue's three
+stores, named by the catalogue it belongs to, exactly as ADR-0148 stores the
+instance's beside its settings.
+
+Nothing in the record says whether a catalogue has one. The file is the fact; a flag
+would be a second copy of that fact, to be wrong after a restore that carried the JSON
+and not the image. The portal asks for the mark and reads a 404 as "there is none",
+which is what the console already does with the instance's.
+
+Two things about it are *not* copied from ADR-0148, and both are deliberate.
+
+**The read is not public.** The instance mark has to be reachable before anybody is
+known — it is on the sign-in screen. A catalogue's is shown inside the portal, to the
+group that catalogue is for. An open endpoint here would answer "does catalogue X
+exist" to anyone who asked, which is the catalogue-name oracle this record refused to
+open when it left sign-in instance-branded; it would also hand one customer's mark to
+every other customer on the instance. So it takes the catalogue's own read right, and
+a catalogue somebody may not read answers **404 and not 403** — the two have to be
+indistinguishable, or the status code is the oracle the missing endpoint would have
+been.
+
+**The fallback stops at the operator.** The console's cascade ends at the built-in
+Atlas glyph, which is right: it is the operator's own tool. The portal's ends one step
+earlier. When neither the catalogue nor the operator has a mark it shows none, rather
+than branding somebody's service catalogue with the name of the engine underneath it.
+A test holds that, because "fix the empty box by importing the glyph" is a plausible
+and wrong future edit.
+
+What the two marks *do* share is the check. Which formats are accepted, whether the
+bytes are really that format, and the headers the stored image travels back under —
+nosniff and a sandboxed `default-src 'none'` — are one decision in `api/brandimage`,
+read by both. That pair is the whole mitigation for an uploaded SVG, which is a
+scriptable document and cannot be made safe by inspection; two copies of it is one
+copy that a later hardening misses.
+
 ### How it is applied without a flash
 
 The no-flash bootstrap in `index.html` applies a cached variable map under the
@@ -126,7 +167,12 @@ annotation and an upload check, not a redesign.
 - **Follow-ups / risks to watch:** The open question above. Whether the theme should
   travel in the design-time backup allowlist (ADR-0107) as `settings/theme.json` does —
   it should, and the catalogue record carrying it means it does so for free, which is
-  worth a test rather than an assumption.
+  worth a test rather than an assumption. *(Checked: the record travels, and so does
+  the mark's file — a test now holds both rather than the reasoning.)* What remains is
+  the portable export's other half: a design-time backup is meant to move between
+  installations, and it now carries up to half a megabyte of image per catalogue.
+  Nobody has measured whether that matters at ten catalogues; it plainly would at a
+  thousand.
 
 ## Pros and cons of the options
 
@@ -154,10 +200,22 @@ The portal page imports theme.js's derivation rather than repeating it, and a te
 refuses any assignment of a derived token in the page — naming one in a comment is how
 the rule is explained, assigning one is how it gets broken.
 
-**The logo is not built.** It needs an upload path, a content check and a serving route,
-none of which the accent and the typeface needed, and it is the half of the theme that a
-catalogue can do without for now. It reads as this record's first follow-up rather than
-as something finished.
+The mark is built. `GET/PUT/DELETE /api/v1/catalogs/{id}/logo` store and serve it,
+the two writes administrator-gated beside the theme on ADR-0209's allowlist and the
+read on the catalogue's own visibility. The bytes live in `catalog/logos/`, named by
+the hex encoding of the catalogue id — the scheme `sidecar` uses, because a
+request-supplied string that reaches a filename is a path and hex is the encoding
+under which `../secret` is a name. The format check and the response headers moved to
+`api/brandimage`, which the instance mark now reads too, so there is one answer rather
+than two that agree today.
+
+A test asserts the archive carries `catalog/logos/`, which is the follow-up below
+turned from an assumption into a check: the accent travels because the record does,
+and the mark had no such guarantee.
+
+There is still **no upload screen**, for the mark or for the theme. Both are set
+through the API, and a screen for them belongs with the rest of catalogue
+administration rather than alone.
 
 ## Links
 

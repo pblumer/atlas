@@ -41,10 +41,12 @@ type handlerGate struct {
 	// the object must not be shown to exist, 403 where it may be seen but not
 	// changed — here always 404, because an outsider sees nothing.
 	want int
-	// method, body and id describe how to call it.
-	method string
-	body   string
-	id     bool
+	// method, body and id describe how to call it. contentType is set only for the
+	// handlers that read raw bytes and take the format from the header.
+	method      string
+	contentType string
+	body        string
+	id          bool
 	// why explains an ungated handler. Empty for gated ones.
 	why string
 }
@@ -67,6 +69,14 @@ var catalogGates = []handlerGate{
 		id:   true},
 	{name: "HandleSetTheme", kind: gated, want: http.StatusNotFound, method: "PUT",
 		body: `{"accent":"#112233"}`, id: true},
+	{name: "HandleGetLogo", kind: gated, want: http.StatusNotFound, method: "GET", id: true},
+	// The body is a real PNG and the header is right, so what the outsider meets is
+	// the gate and not the format check. That order matters for the test and not for
+	// the endpoint: a 415 is decided by the caller's own header and says nothing
+	// about whether the catalogue exists.
+	{name: "HandleSetLogo", kind: gated, want: http.StatusNotFound, method: "PUT",
+		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true},
+	{name: "HandleDeleteLogo", kind: gated, want: http.StatusNotFound, method: "DELETE", id: true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
 }
@@ -135,9 +145,9 @@ func TestEveryGatedHandlerRefusesAnOutsider(t *testing.T) {
 			outsider := &httpapi.Principal{UserID: "usr_out", Roles: []string{"productmanager"},
 				GroupIDs: []string{"grp_elsewhere"}}
 
-			var rec = as(t, h, outsider, g.method, body)
+			var rec = asTyped(t, h, outsider, g.method, g.contentType, body)
 			if g.id {
-				rec = as(t, h, outsider, g.method, body, "id", cat.ID)
+				rec = asTyped(t, h, outsider, g.method, g.contentType, body, "id", cat.ID)
 			}
 			if rec.Code != g.want {
 				t.Fatalf("%s gave an outsider %d (%s), want %d",

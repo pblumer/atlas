@@ -742,18 +742,20 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
-		// Portal orders (ADR-draft-portal-catalogue-order-inventory). An order names
-		// exactly one release and carries the schedule that release computed, so
-		// fulfilment reads one record and never recomputes a graph — and what was
-		// ordered cannot change because somebody edited a product while an approval
-		// was pending. Reading is confined to your own orders by the handler, not by
-		// the role: an order somebody else placed is not yours to see.
 		{"PUT", "/api/v1/catalogs/{id}/theme", s.catalogs.HandleSetTheme, apiOp{
 			summary: "Set or clear a catalogue's appearance: the source accent colour and one of the shipped typefaces. Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
 			req: jsonBody("Theme", schemaObj(map[string]any{
 				"accent": tString(), "typeface": tString(),
 			})),
 			resp: jsonBody("The updated catalogue", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleGetLogo, apiOp{
+			summary: "A catalogue's brand mark; 404 when it has none, and 404 too for a catalogue you may not read — unlike the instance logo this one is not public", tag: "Catalogue", role: roleAny,
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleSetLogo, apiOp{
+			summary: "Upload a catalogue's brand mark — raw PNG or SVG body, max 512 KiB. Administration, like the appearance it belongs to", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleDeleteLogo, apiOp{
+			summary: "Remove a catalogue's brand mark, so the portal falls back to the operator's", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalogs/{id}/import", s.catalogs.HandleImport, apiOp{
 			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
@@ -761,6 +763,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
+		// Portal orders (ADR-draft-portal-catalogue-order-inventory). An order names
+		// exactly one release and carries the schedule that release computed, so
+		// fulfilment reads one record and never recomputes a graph — and what was
+		// ordered cannot change because somebody edited a product while an approval
+		// was pending. Reading is confined to your own orders by the handler, not by
+		// the role: an order somebody else placed is not yours to see.
 		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
 			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
 			req: jsonBody("Order", schemaObj(map[string]any{

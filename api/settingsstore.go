@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pblumer/atlas/api/brandimage"
 	"github.com/pblumer/atlas/api/sidecar"
 	"github.com/pblumer/atlas/connector/ldif"
 )
@@ -237,15 +238,13 @@ func (s *settingsStore) saveOIDCMapping(m oidcMapping) error {
 // for its type, so no metadata sidecar is needed — the logo is stored as exactly
 // "logo.png" or "logo.svg".
 
-// logoExts is the fixed, ordered set of logo file extensions. Iterating a slice
-// (not the maps below) keeps getLogo deterministic if both files ever coexist.
-var logoExts = []string{"png", "svg"}
-
-// logoExtByType maps an accepted upload content type to its stored extension, and
-// logoTypeByExt is the reverse used to report the type on read.
+// The accepted formats and their stored extensions come from [brandimage], which
+// is also what a catalogue's own mark reads: one decision about what an uploaded
+// brand image may be, in one place.
 var (
-	logoExtByType = map[string]string{"image/png": "png", "image/svg+xml": "svg"}
-	logoTypeByExt = map[string]string{"png": "image/png", "svg": "image/svg+xml"}
+	logoExts      = brandimage.Exts
+	logoExtByType = brandimage.ExtByType
+	logoTypeByExt = brandimage.TypeByExt
 )
 
 func (s *settingsStore) logoPath(ext string) string {

@@ -6,12 +6,13 @@
 <title>Leistungsportal</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
 <style>
-  /* The same token set app.css and the public form declare. theme.js overwrites
-     the accent trio on the root once the server answers, so this page carries the
-     operator's brand without knowing anything about it.
+  /* The same token set app.css and the public form declare. What is written here
+     is the instance's brand — the operator's — and portal.js overwrites the accent
+     trio and the typeface on the root once the visitor's catalogue answers, so a
+     catalogue with a face of its own shows it and one without falls back to this.
 
-     A per-catalogue theme is a separate record and not built yet: until it is,
-     a portal visitor sees the instance's brand, which is the operator's. */
+     The brand mark follows the same cascade and is not a token: it is an image,
+     fetched in renderMark. */
   :root {
     --bg:#f3f4f6; --surface:#ffffff;
     --border:#e2e4e9; --border-strong:#cdd0d6;
@@ -23,8 +24,13 @@
   * { box-sizing: border-box; }
   body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
   #app { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
-  header { display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+  header { display:flex; align-items:center; justify-content:space-between; gap:16px;
            flex-wrap:wrap; margin-bottom:8px; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  /* Bounded in both directions: a mark is somebody's own image at whatever size
+     they uploaded it, and a page that let it set its own height would be laid out
+     by the upload. */
+  .mark { height:32px; width:auto; max-width:180px; display:block; }
   h1 { font-size:22px; margin:0; }
   h2 { font-size:15px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
        margin:32px 0 12px; font-weight:600; }

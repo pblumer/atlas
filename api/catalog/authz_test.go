@@ -35,7 +35,17 @@ func serviceWithAdmin(t *testing.T) *Service {
 // as runs a handler as a given principal.
 func as(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, body string, vals ...string) *httptest.ResponseRecorder {
 	t.Helper()
+	return asTyped(t, h, p, method, "", body, vals...)
+}
+
+// asTyped is as with a media type on the request, for the handlers that take raw
+// bytes rather than JSON and decide the format from the header.
+func asTyped(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, contentType, body string, vals ...string) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequest(method, "/x", strings.NewReader(body))
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	if p != nil {
 		req = req.WithContext(httpapi.WithPrincipal(context.Background(), p))
 	}
