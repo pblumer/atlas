@@ -59,22 +59,37 @@ func (s *Service) mayEdit(c Catalog, p *httpapi.Principal) bool {
 	if c.OwnerID != "" && c.OwnerID == p.UserID {
 		return true
 	}
+	return grantedRole(c, p) == RoleEditor
+}
+
+// grantedRole returns the strongest member role this principal holds on the
+// catalogue, or "" for none. Editor outranks viewer, so a person granted both
+// directly and through a group gets the stronger of the two rather than whichever
+// entry happens to come first.
+func grantedRole(c Catalog, p *httpapi.Principal) MemberRole {
+	if p == nil {
+		return ""
+	}
+	var best MemberRole
 	for _, m := range c.Members {
-		if m.Role != RoleEditor {
-			continue
-		}
+		matches := false
 		switch m.Ref.Type {
 		case "user":
-			if m.Ref.ID == p.UserID {
-				return true
-			}
+			matches = m.Ref.ID == p.UserID
 		case "group":
-			if p.InGroup(m.Ref.ID) {
-				return true
-			}
+			matches = p.InGroup(m.Ref.ID)
+		}
+		if !matches {
+			continue
+		}
+		if m.Role == RoleEditor {
+			return RoleEditor
+		}
+		if m.Role == RoleViewer {
+			best = RoleViewer
 		}
 	}
-	return false
+	return best
 }
 
 // newID mints an opaque id with a self-describing prefix, so a bare id in a log
@@ -94,11 +109,26 @@ func decodeBody(r *http.Request, into any) error {
 	return nil
 }
 
-// HandleListCatalogs lists every catalogue, lowest rank first.
+// HandleListCatalogs lists the catalogues the caller maintains, lowest rank
+// first. It is the maintenance sight, not the portal one: being the audience for
+// a catalogue puts nothing in this list, and GET /portal/catalog answers that
+// question instead. A customer must not learn from a listing which other
+// customers exist.
 func (s *Service) HandleListCatalogs(w http.ResponseWriter, r *http.Request) {
+	p := httpapi.PrincipalFrom(r.Context())
 	out := []Catalog{}
 	var loadErr error
-	s.loop.Do(func() { out, loadErr = s.store.Catalogs() })
+	s.loop.Do(func() {
+		var all []Catalog
+		if all, loadErr = s.store.Catalogs(); loadErr != nil {
+			return
+		}
+		for _, c := range all {
+			if s.mayEdit(c, p) {
+				out = append(out, c)
+			}
+		}
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list catalogues: "+loadErr.Error())
 		return
@@ -138,12 +168,21 @@ func (s *Service) HandleCreateCatalog(w http.ResponseWriter, r *http.Request) {
 // with nothing in it".
 func (s *Service) HandleGetCatalog(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	p := httpapi.PrincipalFrom(r.Context())
 	var (
 		got     Catalog
 		found   bool
 		loadErr error
 	)
-	s.loop.Do(func() { got, found, loadErr = s.store.Catalog(id) })
+	s.loop.Do(func() {
+		if got, found, loadErr = s.store.Catalog(id); loadErr != nil || !found {
+			return
+		}
+		// A catalogue somebody may not see reads as absent. A refusal that
+		// distinguishes "not yours" from "no such thing" answers the question it
+		// was meant to withhold.
+		found = s.mayRead(got, p)
+	})
 	switch {
 	case loadErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read catalogue: "+loadErr.Error())
@@ -190,6 +229,12 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		if loadErr != nil || !found {
 			return
 		}
+		// Not being allowed to see it hides it; being allowed to see but not
+		// change it is a plain refusal, because by then its existence is no longer
+		// the secret — only the authority is.
+		if found = s.mayRead(got, p); !found {
+			return
+		}
 		if allowed = s.mayEdit(got, p); !allowed {
 			return
 		}
@@ -229,11 +274,38 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleListItems lists every product, by id.
+// HandleListItems lists the products whose home catalogue the caller maintains.
+// A product's rules — its approval, its process bindings — belong to whoever is
+// responsible for it, and the portal reads what it may order from a release
+// rather than from here.
 func (s *Service) HandleListItems(w http.ResponseWriter, r *http.Request) {
+	p := httpapi.PrincipalFrom(r.Context())
 	out := []Item{}
 	var loadErr error
-	s.loop.Do(func() { out, loadErr = s.store.Items() })
+	s.loop.Do(func() {
+		var all []Item
+		if all, loadErr = s.store.Items(); loadErr != nil {
+			return
+		}
+		// One lookup per home catalogue rather than per product: a maintainer's
+		// products share a handful of homes.
+		seen := map[string]bool{}
+		for _, it := range all {
+			ok, known := seen[it.HomeCatalog]
+			if !known {
+				cat, found, e := s.store.Catalog(it.HomeCatalog)
+				if e != nil {
+					loadErr = e
+					return
+				}
+				ok = found && s.mayEdit(cat, p)
+				seen[it.HomeCatalog] = ok
+			}
+			if ok {
+				out = append(out, it)
+			}
+		}
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list products: "+loadErr.Error())
 		return
@@ -287,6 +359,12 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		if opErr != nil || !homeOK {
 			return
 		}
+		// A home the caller cannot see reads as absent, as everywhere else: a
+		// refusal that says "it exists, just not for you" answers the question the
+		// gate withholds.
+		if homeOK = s.mayRead(home, p); !homeOK {
+			return
+		}
 		if allowed = s.mayEdit(home, p); !allowed {
 			return
 		}
@@ -310,6 +388,12 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if wasOK {
+				// The losing side hides itself the same way: somebody who cannot
+				// see the catalogue a product belongs to is told the product is
+				// not there, not that it is somebody else's.
+				if homeOK = s.mayRead(was, p); !homeOK {
+					return
+				}
 				if allowed = s.mayEdit(was, p); !allowed {
 					return
 				}
@@ -358,6 +442,9 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		if cat, found, opErr = s.store.Catalog(id); opErr != nil || !found {
 			return
 		}
+		if found = s.mayRead(cat, p); !found {
+			return
+		}
 		// Publishing is what makes a catalogue orderable, so it is a write on it
 		// and needs the same authority as changing it.
 		if allowed = s.mayEdit(cat, p); !allowed {
@@ -392,12 +479,29 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 // HandleListReleases lists a catalogue's releases, newest first.
 func (s *Service) HandleListReleases(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	p := httpapi.PrincipalFrom(r.Context())
 	out := []Release{}
-	var loadErr error
-	s.loop.Do(func() { out, loadErr = s.store.ReleasesOf(id) })
-	if loadErr != nil {
+	var (
+		visible bool
+		loadErr error
+	)
+	s.loop.Do(func() {
+		cat, found, e := s.store.Catalog(id)
+		if e != nil {
+			loadErr = e
+			return
+		}
+		if visible = found && s.mayRead(cat, p); !visible {
+			return
+		}
+		out, loadErr = s.store.ReleasesOf(id)
+	})
+	switch {
+	case loadErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "list releases: "+loadErr.Error())
-		return
+	case !visible:
+		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
+	default:
+		httpapi.JSON(w, http.StatusOK, out)
 	}
-	httpapi.JSON(w, http.StatusOK, out)
 }

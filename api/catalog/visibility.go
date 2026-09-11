@@ -61,6 +61,23 @@ func Resolve(catalogs []Catalog, groups []string) (Catalog, bool) {
 	return reached[0], true
 }
 
+// mayRead reports whether p may see this catalogue at all.
+//
+// Two sights of the same store. The portal one is the catalogue you are the
+// audience for; the maintenance one is a catalogue you maintain. A catalogue
+// carries its audience, its approval rules, its product list and its process
+// bindings, so at ten of them named after customers the listing alone tells one
+// customer who the others are.
+func (s *Service) mayRead(c Catalog, p *httpapi.Principal) bool {
+	if p == nil {
+		return false
+	}
+	// A viewer is by definition somebody who may read it — the first cut of this
+	// check asked only for edit rights and hid the catalogue from the very people
+	// it had been shared with.
+	return c.ReachedBy(p.GroupIDs) || s.mayEdit(c, p) || grantedRole(c, p) == RoleViewer
+}
+
 // MayOrderFrom reports whether this principal may place an order against the
 // given catalogue.
 //
