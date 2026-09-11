@@ -300,6 +300,10 @@ const HEATS = {
     // and it is a real thing rather than a rounding: a process running one is running.
     least: 1,
     leastPhrase: "one running instance",
+    // What the nothing-at-all mark on the scale selects, in this weighting's own
+    // words. "Nothing instances at all" is what a generic phrasing produces, and a
+    // control that reads like that is one nobody trusts.
+    bandNone: "Nothing running at all",
     ...counted("running"),
     // What size means, in one sentence, for the key and for whoever has to read the
     // picture after it has been pasted somewhere with no key beside it.
@@ -331,6 +335,7 @@ const HEATS = {
     // One incident is one incident. There is no smaller amount of trouble.
     least: 1,
     leastPhrase: "one incident",
+    bandNone: "Nothing parked at all",
     ...counted("incident(s)"),
     heading: "Size is trouble here, not structure.",
     peakPhrase: (peak) => `the worst one on this landscape, which is holding
@@ -368,6 +373,7 @@ const HEATS = {
     // the raw number here is nanoseconds, where "one" means nothing to anybody.
     least: 60_000,
     leastPhrase: "a minute stuck",
+    bandNone: "Nothing parked at all",
     text: (ms) => `stuck ${spanText(ms)}`,
     rich: (ms) => `stuck <b>${esc(spanText(ms))}</b>`,
     tick: (ms) => spanText(ms),
@@ -2212,9 +2218,20 @@ const CONTEXT_HOPS = 1;
 // A search is the viewer's own choice, unlike a sharing scope, so what is left out
 // here is not a lie — but the header still reports how much is hidden, because a
 // filtered mesh looks exactly like a small one.
-function filterGraph(graph, term) {
-  if (!term) return graph;
-  const matched = new Set(graph.nodes.filter((n) => matches(n, term)).map((n) => n.id));
+// filterGraph narrows the landscape to what the reader has asked for: a term typed
+// into the box, a band chosen off the scale in the key, or both.
+//
+// Both at once is an *intersection*, and it goes through one walk rather than two.
+// Narrowing twice would take the context of the context — a node two hops from
+// something that merely explains a match — and the picture would grow as the question
+// got narrower, which is the opposite of what was asked. So the two criteria pick the
+// seeds together and `around` is called once, exactly as it is for a term alone.
+function filterGraph(graph, { term, band, heat, at = Date.now() } = {}) {
+  if (!term && !band) return graph;
+  const read = band && heat?.of ? (n) => heat.of(n, at) : null;
+  const matched = new Set(graph.nodes
+    .filter((n) => (!term || matches(n, term)) && (!read || inBand(read(n), band)))
+    .map((n) => n.id));
   return around(graph, matched, CONTEXT_HOPS);
 }
 
@@ -2395,31 +2412,100 @@ const HEAT_SCALE_SHRINK = 0.5;
 // The nothing-at-all circle comes first and carries no number, because that is what
 // it means. It is the one a reader needs most: the whole complaint this scale answers
 // was that a node running one could not be told from a node running none.
-function heatScaleMarks(heat, peak) {
+export function heatScaleMarks(heat, peak) {
   const ticks = heatTicks(peak, heat);
   if (!ticks.length) return [];
   const tick = heat.tick || ((n) => fmtCount(n));
   return [
-    { label: "none", r: radiusForTally(0, peak, heat) },
-    ...ticks.map((value) => ({ label: tick(value), r: radiusForTally(value, peak, heat) })),
+    { tally: 0, label: "none", r: radiusForTally(0, peak, heat) },
+    ...ticks.map((tally) => ({ tally, label: tick(tally), r: radiusForTally(tally, peak, heat) })),
   ];
 }
 
+// heatBand is what one mark on the scale stands for, as a range of tallies.
+//
+// A mark owns everything from itself up to the next mark, and the last one owns
+// everything above it — which is the only reading that covers the whole landscape
+// without overlapping, and the only one under which the marks partition it. The
+// nothing-at-all mark is its own case: it means a tally of zero, not "less than the
+// smallest thing that counts", because those are different facts and the picture
+// keeps them apart everywhere else (see HEAT_FLOOR).
+//
+// `at` is the mark's own tally, which is what the row stores rather than its
+// position: the marks are recomputed from the landscape on every paint, and a
+// landscape whose peak has moved has different marks in different places. A tally
+// survives that where an index does not — and when the tally is no longer a mark at
+// all, the caller can see that and let go of the band rather than filter by something
+// the reader can no longer point at.
+export function heatBand(marks, at) {
+  if (at === null || at === undefined) return null;
+  if (at === 0) return { from: 0, to: 0 };
+  const i = marks.findIndex((m) => m.tally === at);
+  if (i < 0) return null;
+  return { from: at, to: i + 1 < marks.length ? marks[i + 1].tally : Infinity };
+}
+
+// inBand is the test itself. Zero is only ever in the nothing-at-all band, and a node
+// that cannot carry a tally at all — a worker, a decision — reads as zero here, which
+// is the same answer the picture gives it: it sits on the floor.
+export function inBand(value, band) {
+  if (!band) return true;
+  const tally = Math.max(0, value || 0);
+  if (band.to === 0) return tally <= 0;
+  return tally >= band.from && tally < band.to;
+}
+
 // heatScaleHTML is that row, for the key beside the canvas.
-function heatScaleHTML(heat, peak) {
+// heatScaleHTML is that row, for the key beside the canvas — where it is also the
+// control that narrows the picture to one band of it.
+//
+// A scale a reader can measure by is a scale they will want to point at: "show me the
+// ones running a hundred or more" is the question the row makes askable, and it is
+// the question this landscape is opened with. So each mark is a button rather than a
+// label, and the picture narrows to the tallies that mark stands for.
+//
+// Buttons rather than clickable spans, because that is the whole of the keyboard and
+// screen-reader behaviour for free, and `aria-pressed` because a filter is a state
+// rather than an action. The row loses its `role="img"`: it is a group of controls
+// now, and each one carries the band it selects as its own label — "from 100 up to
+// 4 200" rather than "100", because the number under a circle is only half a range
+// and the half a reader cannot see is the half the button acts on.
+function heatScaleHTML(heat, peak, chosen = null) {
   const marks = heatScaleMarks(heat, peak);
   if (!marks.length) return "";
   const box = Math.ceil((HEAT_FLOOR + HEAT_SPAN) * 2 * HEAT_SCALE_SHRINK) + 4;
   const style = KIND.process;
-  const step = (mark) => `<span class="mesh-scale-step">
-    <svg width="${box}" height="${box}" aria-hidden="true"><circle
-      cx="${box / 2}" cy="${box / 2}" r="${(mark.r * HEAT_SCALE_SHRINK).toFixed(1)}"
-      fill="${style.fill}" stroke="${style.stroke}" stroke-width="1"/></svg>
-    <span class="mesh-scale-tick">${esc(mark.label)}</span></span>`;
-  return `<div class="mesh-scale" role="img"
-    aria-label="Size scale: ${esc(marks.map((m) => m.label).join(", "))}.">
+  const step = (mark) => {
+    const band = heatBand(marks, mark.tally);
+    const on = chosen !== null && chosen === mark.tally;
+    return `<button type="button" class="mesh-scale-step${on ? " mesh-scale-on" : ""}"
+      data-tally="${mark.tally}" aria-pressed="${on}"
+      title="${esc(bandPhrase(heat, marks, mark.tally))}"
+      aria-label="${esc(bandPhrase(heat, marks, mark.tally))}">
+      <svg width="${box}" height="${box}" aria-hidden="true"><circle
+        cx="${box / 2}" cy="${box / 2}" r="${(mark.r * HEAT_SCALE_SHRINK).toFixed(1)}"
+        fill="${style.fill}" stroke="${style.stroke}" stroke-width="1"/></svg>
+      <span class="mesh-scale-tick">${esc(mark.label)}</span>
+    </button>`;
+  };
+  return `<div class="mesh-scale" role="group"
+    aria-label="Size scale — choose a band to narrow the picture to it.">
     ${marks.map(step).join("")}
   </div>`;
+}
+
+// bandPhrase says what one mark selects, in the weighting's own words. It is the
+// button's title and the only thing a reader who cannot compare two circles has to go
+// on, so it says the range rather than repeating the number under the circle.
+function bandPhrase(heat, marks, tally) {
+  const i = marks.findIndex((m) => m.tally === tally);
+  if (i < 0) return "";
+  if (tally === 0) return heat.bandNone || "Nothing at all";
+  const tick = heat.tick || ((n) => fmtCount(n));
+  const next = marks[i + 1];
+  return next
+    ? `From ${tick(tally)} up to ${tick(next.tally)}`
+    : `${tick(tally)} and above`;
 }
 
 // heatScaleEntries is the same row for a file, in the shape the export's key lays out.
@@ -2447,7 +2533,7 @@ export function heatScaleEntries(heat, peak) {
   }));
 }
 
-function legendHTML(graph, layoutMs, notation, peak = 0) {
+function legendHTML(graph, layoutMs, notation, peak = 0, band = null) {
   const spoken = notationOf(notation?.id ?? notation);
   const heat = heatOf(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
@@ -2482,14 +2568,16 @@ function legendHTML(graph, layoutMs, notation, peak = 0) {
          equal steps of size are equal multiples, and the largest node here is
          ${heat.peakPhrase(peak)}. ${heat.floorNote} That means the area is not the
          tally: the scale answers <em>how many times</em> rather than how much, which
-         is the question an estate spanning orders of magnitude can be asked. Kind is
+         is the question an estate spanning orders of magnitude can be asked. The
+         circles below are that scale, and each one is a control: click it to narrow
+         the picture to the band it stands for, and click it again to widen. Kind is
          still carried by shape and colour.</p>`
       : `<p class="mesh-note">${heat.quiet} Kind is still carried by shape and
          colour.</p>`);
     // Under the sentence that explains it rather than up among the kinds: a scale is
     // read against its own caption, and the swatch rows above are about what a node
     // *is* where this row is about how much is on it.
-    const scale = heatScaleHTML(heat, peak);
+    const scale = heatScaleHTML(heat, peak, band);
     if (scale) notes.push(scale);
     notes.push(`<p class="mesh-note">${heat.absent}</p>`);
   }
@@ -3438,6 +3526,20 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // nobody asked for and nobody can undo.
   let trail = [];
   const drilledAt = () => (trail.length ? trail[trail.length - 1] : null);
+  // bandAt is the mark on the scale in the key the reader has chosen, as that mark's
+  // own tally — 0 for the nothing-at-all circle, null for none chosen.
+  //
+  // The tally rather than the mark's position, because the marks are derived from the
+  // landscape and a landscape whose peak has moved has different marks: a tally is
+  // still the same question afterwards where an index is a different one. paint()
+  // checks it against the marks it just computed and lets go of it when it is no
+  // longer one of them.
+  //
+  // It narrows the picture the way the search box does — same walk, same context, and
+  // an intersection when both are in force — because they are two ways of asking the
+  // same kind of question and answering them differently would be two filters a
+  // reader has to hold apart.
+  let bandAt = null;
   // pinned holds every node somebody has dragged, by id, at the world coordinates
   // they dropped it on. It is the whole of the arrangement: the layout reads it on
   // every paint, so a hand-placed node survives filtering, selecting and resizing —
@@ -3604,7 +3706,29 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       trail = trail.slice(0, -1);
       toast("That node is no longer in this starmap.");
     }
-    shown = drilledGraph || filterGraph(graph, term);
+    // The vocabulary, the moment and the reference, before the narrowing rather than
+    // after it — the band the reader may have chosen off the scale is a criterion in
+    // those terms, so they have to exist before there is anything to filter by.
+    //
+    // The reference the radii are drawn against comes from the whole landscape, not
+    // from what the filter has left on screen: narrowing to two nodes must not make
+    // the smaller of them swell into the worst thing on the estate.
+    //
+    // And one moment for the whole repaint, because a duration weighting measures
+    // against a clock: the canvas, the key, the ranking beside them and the filter
+    // that chose what is on the canvas have to be four readings of one instant, or
+    // the picture disagrees with its own caption.
+    const spoken = notationOf(notationPick.value);
+    measuredAt = Date.now();
+    const heatNow = heatOf(spoken);
+    const peak = heatPeak(graph, heatNow, measuredAt);
+    // The scale's marks are recomputed from the landscape on every paint, so a band
+    // chosen against a peak that has since moved may no longer be a mark anybody can
+    // point at. It is let go of rather than quietly filtered by: a picture narrowed by
+    // a criterion with no control showing it is a picture nobody can widen again.
+    const band = heatNow ? heatBand(heatScaleMarks(heatNow, peak), bandAt) : null;
+    if (!band) bandAt = null;
+    shown = drilledGraph || filterGraph(graph, { term, band, heat: heatNow, at: measuredAt });
     paintDrillChip();
     // A selection that the filter removed is no longer selected: highlighting a node
     // that is not on screen would leave the panel describing something invisible.
@@ -3614,17 +3738,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // Where everything currently is, so a repaint while something is pinned carries
     // the picture on screen forward instead of settling a fresh one around the pins.
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
-    const spoken = notationOf(notationPick.value);
     laidOut = frame;
-    // The reference the radii are drawn against comes from the whole landscape, not
-    // from what the filter has left on screen: narrowing to two nodes must not make
-    // the smaller of them swell into the worst thing on the estate.
-    //
-    // And one moment for the whole repaint, because a duration weighting measures
-    // against a clock: the canvas, the key and the ranking beside them have to be
-    // three readings of one instant, or the picture disagrees with its own caption.
-    measuredAt = Date.now();
-    const peak = heatPeak(graph, heatOf(spoken), measuredAt);
     const painted = renderGraph(shown, 0, frame, {
       pinned, from, notation: spoken, peak, at: measuredAt,
     });
@@ -3635,7 +3749,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     at = new Map(placed.map((n) => [n.id, n]));
     surface.innerHTML = shown.nodes.length
       ? svg
-      : `<p class="mesh-empty-filter">Nothing matches “${esc(term)}”.</p>`;
+      : `<p class="mesh-empty-filter">Nothing matches ${
+        term ? `“${esc(term)}”` : "that"}${band && term ? " in that band" : ""}.</p>`;
     index();
     nameTheNodes();
     // The rendered SVG carries none of the hover highlight, so the record of what is
@@ -3644,7 +3759,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt);
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // The freshness line, on every repaint as well as on every tick: a repaint that
@@ -3659,9 +3774,16 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       count.textContent = `${context} of ${graph.nodes.length} node(s) within ` +
         `${depthAny.checked ? "any" : depthValue()} hop(s)`;
     } else {
-      count.textContent = term
-        ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match` +
-          (context ? `, ${context} shown for context` : "")
+      // Two criteria, one sentence, and it names them: a count on its own over a
+      // picture narrowed by a circle somebody clicked reads as a landscape that
+      // shrank by itself.
+      const asked = [
+        term ? `“${term}”` : null,
+        band ? bandPhrase(heatNow, heatScaleMarks(heatNow, peak), bandAt).toLowerCase() : null,
+      ].filter(Boolean);
+      count.textContent = asked.length
+        ? `${shown.matched?.size ?? 0} of ${graph.nodes.length} node(s) match ` +
+          `${asked.join(" and ")}` + (context ? `, ${context} shown for context` : "")
         : `${graph.nodes.length} node(s), ${graph.edges.length} edge(s)`;
     }
     refresh();
@@ -4193,9 +4315,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   function drillTo(id) {
     const seen = trail.indexOf(id);
     trail = seen >= 0 ? trail.slice(0, seen + 1) : [...trail, id];
-    // The search box and the drilldown are two ways of asking the same kind of
-    // question, so entering one clears the other rather than compounding with it.
+    // The search box, the scale's bands and the drilldown are three ways of asking
+    // the same kind of question, so entering one clears the others rather than
+    // compounding with them.
     search.value = "";
+    bandAt = null;
     picked = [id];
     // Refitted, because the picture that comes back is a different graph in a
     // different world, and a frame from the old one lands on nothing.
@@ -4378,6 +4502,29 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
   }
 
+  // Choosing a band off the scale in the key. Delegated on the slot rather than bound
+  // to the buttons, because the key is written afresh on every paint and a listener
+  // on a button that no longer exists is a control that stopped working silently.
+  //
+  // Clicking the mark that is already chosen widens the picture again. A filter you
+  // can only turn on is a trap, and the mark itself is the only obvious place to look
+  // for the way out of it.
+  legendSlot.addEventListener("click", (event) => {
+    const step = event.target.closest(".mesh-scale-step");
+    if (!step) return;
+    const tally = Number(step.dataset.tally);
+    if (!Number.isFinite(tally)) return;
+    bandAt = bandAt === tally ? null : tally;
+    // Asking about the whole landscape again, exactly as typing in the box does:
+    // leaving the trail in force would filter inside a drilldown while the key says
+    // otherwise, and the drilldown is what the picture would actually be showing.
+    trail = [];
+    // A narrowing changes what is on screen, so a frame the reader had zoomed into is
+    // about a picture that no longer exists.
+    frameView = null;
+    paint();
+  });
+
   // A different vocabulary is a different drawing, so the picture is painted again.
   // The arrangement survives it: paint() carries the positions on screen forward and
   // every notation's shape is inscribed in the same reserved circle, so nothing moves
@@ -4528,6 +4675,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       }
     }
     search.value = v.term || "";
+    // A band saved against a landscape whose peak has since moved is let go of by
+    // paint(), which checks it against the marks it has just computed. Restoring it
+    // here and letting that check decide is the same rule the live picture follows.
+    bandAt = Number.isFinite(v.band) && v.band >= 0 ? v.band : null;
     dirSelect.value = v.direction || "dependents";
     setDepth(v.depth ?? "2");
     // A view saved before notations existed carries none, and the derived drawing is
@@ -4612,6 +4763,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const captured = captureView({
       name: viewName.value,
       term: search.value.trim(),
+      band: bandAt,
       direction: dirSelect.value,
       depth: depthValue(),
       notation: notationPick.value,
