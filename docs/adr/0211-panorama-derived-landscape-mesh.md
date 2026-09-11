@@ -1082,6 +1082,36 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, fifth): the scale is also the control.**
+> A scale a reader can measure by is one they will want to point at. "Show me the
+> ones running a hundred or more" is the question the row of reference circles makes
+> askable, and it is a question a landscape is opened with — so each mark is a button,
+> and clicking it narrows the picture to the band that mark stands for.
+>
+> A mark owns everything from itself up to the next mark, and the last one owns
+> everything above it: the only reading under which the marks partition the landscape
+> without overlapping. The nothing-at-all mark is its own case and means a tally of
+> zero, not "below the smallest thing that counts", because the picture keeps those
+> two apart everywhere else.
+>
+> It narrows through the same walk the search box uses, with the same one hop of
+> context and the same matched/context distinction in the counter, because they are
+> two ways of asking the same kind of question and answering them differently would be
+> two filters a reader has to hold apart. Both at once is an **intersection** through
+> *one* walk: narrowing twice would take the context of the context, and the picture
+> would grow as the question got narrower. Clicking the chosen mark again widens —
+> a filter you can only turn on is a trap, and the mark is the only obvious place to
+> look for the way out.
+>
+> The band is held as the mark's own **tally**, not as its position on the row. The
+> marks are derived from the landscape and the landscape moves, so a tally is still
+> the same question after a re-read where an index is a different one; and when the
+> tally is no longer a mark at all — the peak moved, or the notation changed to one
+> with no scale — it is let go of rather than quietly filtered by, because a picture
+> narrowed by a criterion with no control showing it is a picture nobody can widen
+> again. A saved view carries it for the reason it carries the term: a view is the
+> whole question somebody saved.
+
 > **Amendment (2026-09-11, fourth): the key carries the scale, not only a sentence
 > about it.**
 > The amendment below states the sizing law in the key and in the export stamp, in

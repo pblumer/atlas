@@ -454,6 +454,12 @@ _Changed_ / _Removed_ for each version.
   arithmetic the nodes did, so a circle in the key is the circle on the picture, and
   the row travels into an exported file as well, where there is no key to scroll to.
 
+  Each circle is also a **filter**. Click the one marked 100 and the picture narrows to
+  the nodes running between a hundred and the next mark, with their neighbours kept for
+  context exactly as a search keeps them; click it again to widen. It combines with the
+  search box rather than replacing it — a term and a band together show what matches
+  both — and a saved view remembers which band it was looking at.
+
   Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
   idle process, a worker, a decision and an application whose load sits on the processes
   it holds are all still nodes somebody can see and click, and "nothing here" stays

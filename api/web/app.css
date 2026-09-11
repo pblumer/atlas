@@ -4120,8 +4120,21 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    line of text and threading them among the kinds would push the shapes off the line.
    Baseline-aligned at the bottom rather than centred, so the numbers under them form
    one line however far apart the circles are in size. */
-.mesh-scale { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
-.mesh-scale-step { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.mesh-scale { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+/* Each mark is a button: clicking it narrows the picture to the band it stands for.
+   Styled back down to the shape it had as a label — the affordance is the pointer and
+   the hover, because a row of framed buttons would read as chrome and compete with
+   the circles, which are the thing being compared. */
+.mesh-scale-step {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 2px 6px; cursor: pointer; font: inherit; color: inherit;
+}
+.mesh-scale-step:hover { background: var(--hover, rgba(0, 0, 0, 0.04)); }
+.mesh-scale-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The chosen band, marked the way the rest of this view marks a chosen thing. */
+.mesh-scale-step[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft, rgba(0, 0, 0, 0.06)); }
+.mesh-scale-step[aria-pressed="true"] .mesh-scale-tick { color: var(--text); font-weight: 600; }
 /* The circles carry their own fill and stroke, read off the process kind where the
    picture reads them (see heatScaleMarks): a second copy here would be a colour that
    could drift from the nodes the scale is for. */
