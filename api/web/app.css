@@ -5300,31 +5300,52 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* The class canvas's palette is diagram-js's, the same one bpmn-js and dmn-js put
    down their left edge — its frame, its groups and its separators all come from
    vendor/canvas/diagram-js.css, so there is nothing to restate here. What is Atlas's
-   is which glyph stands for which entry, and that the armed relationship is lit.
+   is which mark stands for which entry, and that the armed relationship is lit.
 
-   Glyphs rather than an icon font: bpmn-js ships one for BPMN's shapes and there is
-   no UML equivalent to vendor, and four kilobytes of font for eight marks would be a
-   poor trade when the notation's own marks are in Unicode already. */
+   Every mark is a miniature of the shape the click produces, drawn from the OMG
+   notation. There is no official UML icon set to vendor — the standard fixes the
+   shapes on the diagram and says nothing about a toolbar — so they are drawn here, as
+   inline SVG in the stylesheet. No font, no image files, nothing to fetch: the same
+   reasoning that keeps the canvases buildless (ADR-0012).
+
+   The entries split in two, and the split is what each entry *is* rather than a
+   preference. A classifier is a button: one click adds one, it has no state, so it
+   carries its kind in colour. A relationship is a *mode*: one of them is armed while
+   the next two clicks draw that line, and the armed entry is recoloured to say so —
+   which a baked-in colour cannot do. So the modes are masks in currentColor and
+   follow hover and the armed state; the classifiers are painted. */
 .uml-pi::before {
-  font: 17px/1 system-ui, sans-serif; color: var(--text);
-  display: flex; align-items: center; justify-content: center; height: 100%;
+  content: ""; display: block; height: 100%; width: 100%;
+  background-repeat: no-repeat; background-position: center; background-size: 19px 19px;
 }
-.uml-pi-businessObject::before { content: "▭"; }
-.uml-pi-valueType::before { content: "▢"; }
-.uml-pi-enumeration::before { content: "☰"; font-size: 14px; }
-.uml-pi-store::before { content: "⛁"; }
-/* The four relationships carry the mark that tells them apart on the drawing, so the
-   palette and the diagram say the same thing about which is which. */
-.uml-pi-association::before { content: "─"; }
-.uml-pi-aggregation::before { content: "◇"; }
-.uml-pi-composition::before { content: "◆"; }
-.uml-pi-generalization::before { content: "△"; }
-.uml-pi-lasso::before { content: "⬚"; }
-.djs-palette .uml-pi:hover::before { color: var(--accent); }
+/* The modes: the mark is a stencil and the colour is the palette's, so hovering and
+   arming reach it. */
+.uml-pi-association::before, .uml-pi-aggregation::before, .uml-pi-composition::before,
+.uml-pi-generalization::before, .uml-pi-transition::before, .uml-pi-lasso::before {
+  background-color: var(--text);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: 19px 19px; mask-size: 19px 19px;
+}
+/* The classifiers, each in the colour of its kind. */
+.uml-pi-businessObject::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%232d7d9a%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20fill-rule%3D%22evenodd%22%20fill%3D%22%232d7d9a%22%20d%3D%22M2.1%203.1h11.8v3.1H2.1z%20M4.6%203.55a1.1%201.1%200%201%200%200%202.2%201.1%201.1%200%201%200%200-2.2z%20M5.75%204.25h3.4v0.8h-1.2v0.75h-0.85v-0.75h-1.35z%22%2F%3E%3Cpath%20d%3D%22M4%209h8M4%2011.4h5.5%22%20stroke%3D%22%232d7d9a9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-valueType::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%237a5ea8%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.1%206.2h11.8%22%20stroke%3D%22%237a5ea8%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M4%209h8M4%2011.4h5.5%22%20stroke%3D%22%237a5ea89c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-enumeration::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%234a8c3f%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.1%203.1h11.8v3.1H2.1z%22%20fill%3D%22%234a8c3f%22%2F%3E%3Ccircle%20cx%3D%224.3%22%20cy%3D%229%22%20r%3D%221.05%22%20fill%3D%22%234a8c3f%22%2F%3E%3Cpath%20d%3D%22M6.5%209h5.8%22%20stroke%3D%22%234a8c3f9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%224.3%22%20cy%3D%2211.7%22%20r%3D%221.05%22%20fill%3D%22%234a8c3f%22%2F%3E%3Cpath%20d%3D%22M6.5%2011.7h3.9%22%20stroke%3D%22%234a8c3f9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-store::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.5%204.2c0-1%202.4-1.8%205.5-1.8s5.5.8%205.5%201.8v7.6c0%201-2.4%201.8-5.5%201.8s-5.5-.8-5.5-1.8z%22%20fill%3D%22none%22%20stroke%3D%22%23a36a2c%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.5%204.2c0%201%202.4%201.8%205.5%201.8s5.5-.8%205.5-1.8%22%20fill%3D%22none%22%20stroke%3D%22%23a36a2c%22%20stroke-width%3D%221.2%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-state::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.8%22%20y%3D%224%22%20width%3D%2212.4%22%20height%3D%228%22%20rx%3D%223.2%22%20fill%3D%22none%22%20stroke%3D%22%232d7d9a%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E"); }
+/* The four relationships and the two tools, as stencils. */
+.uml-pi-association::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h12%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h12%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-aggregation::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-composition::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-generalization::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.7%208h6.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M8.1%203.7L14.4%208l-6.3%204.3z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M1.7%208h6.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M8.1%203.7L14.4%208l-6.3%204.3z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-transition::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h9.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M9.6%205.2L14%208l-4.4%202.8%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h9.6%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M9.6%205.2L14%208l-4.4%202.8%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
+.uml-pi-lasso::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%222.2%22%20y%3D%223.2%22%20width%3D%2211.6%22%20height%3D%229.6%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%222.6%202%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%222.2%22%20y%3D%223.2%22%20width%3D%2211.6%22%20height%3D%229.6%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%222.6%202%22%2F%3E%3C%2Fsvg%3E"); }
+.djs-palette .uml-pi:hover::before { background-color: var(--accent); }
 /* An armed relationship is a mode, and a mode has to be visible or it is a trap: the
    entry stays lit for exactly as long as the next two clicks draw that line. */
 .djs-palette .uml-pi.active { background: var(--accent); border-radius: 4px; }
-.djs-palette .uml-pi.active::before { color: var(--accent-ink); }
+.djs-palette .uml-pi.active::before { background-color: var(--accent-ink); }
+
 .im-dirty { font: 11px/1.5 system-ui, sans-serif; color: var(--muted); font-style: italic; }
 
 .im-body { display: flex; flex: 1; min-height: 0; border: 1px solid var(--border); }
@@ -5441,9 +5462,6 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 }
 .uml-transition.undeclared .uml-transition-by { fill: var(--danger); }
 
-/* The palette's marks for this notation. */
-.uml-pi-state::before { content: "▢"; }
-.uml-pi-transition::before { content: "→"; }
 .uml-end-label { fill: var(--muted); font: 11px/1.4 ui-monospace, monospace; text-anchor: middle; }
 
 /* A store is kept visibly unlike a class, because it is not one: a cylinder, joined

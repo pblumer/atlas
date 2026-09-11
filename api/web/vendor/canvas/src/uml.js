@@ -270,7 +270,7 @@ UmlRenderer.prototype.drawConnection = function(parent, connection) {
   // from, are annotations rather than relationships: a store and its class do not
   // relate, one *is kept in* the other (ADR-0230 §7), and a class does not relate to an
   // enumeration, it *takes its states from* one
-  // (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). Neither is an
+  // (ADR-0306). Neither is an
   // association, so nothing that counts relationships counts them.
   const derived = bo.element === "store-link" || bo.element === "lifecycle-link";
   const g = svg("g", {
