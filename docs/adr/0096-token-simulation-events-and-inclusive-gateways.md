@@ -110,6 +110,17 @@ the lesson.
   in the UI) over creeping toward a browser engine. Multi-instance and event-subprocess
   (ADR-0082) triggers are the natural next increments within the same module.
 
+- **Corrected since (message 1:1, and the task forms):** this ADR specified a throw reaching
+  every catch that names the same **message (1:1)** or **signal (broadcast to all)**, but the
+  implementation delivered to every same-named catch either way. That erased the one property
+  that tells the two apart: a message now goes to exactly one catch, chosen by who is actually
+  waiting (a parked catch or receive task, then an armed boundary, then a live handler, then a
+  start event — a message with no one waiting begins an instance), and only a signal fans out.
+  Separately, the message name was read only off a `<messageEventDefinition>`, while a **receive
+  or send task** carries a `messageRef` of its own and no event definition at all — so a send
+  task threw nothing and no throw could reach a receive task, the two halves of one omission.
+  Both names are now read the way the compiler reads them.
+
 ## Pros and cons of the options
 
 ### Events — option 1, manual fire (chosen)

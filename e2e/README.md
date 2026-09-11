@@ -96,6 +96,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
+- **`message-signal.spec.mjs`** ([ADR-0088](../docs/adr/0088-signal-events.md),
+  [ADR-0101](../docs/adr/0101-token-simulation-throw-delivers-to-waiting-catch.md)): the two
+  things that separate a message from a signal. A **send task** delivers to the **receive task**
+  waiting for its message — both carry a `messageRef` of their own rather than an event
+  definition, and reading only event definitions left that pair dead. And a **signal reaches
+  every** catch waiting for it while a **message reaches exactly one**, which is the property
+  that tells the elements apart.
 - **`link-conditional.spec.mjs`** ([ADR-0132](../docs/adr/0132-link-events.md),
   [ADR-0137](../docs/adr/0137-conditional-events.md)): a **link throw** jumps to its catch and
   the flow carries on there, neither half of the pair parks or offers a fire glyph, and nothing

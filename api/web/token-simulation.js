@@ -41,7 +41,17 @@ const defName = (el, defType, ref) => {
   const d = eventDefs(el).find((x) => x.$type === defType);
   return (d && d[ref] && d[ref].name) || null;
 };
-const messageName = (el) => defName(el, "bpmn:MessageEventDefinition", "messageRef");
+// A message name lives in one of two places, depending on what carries it: an *event*
+// references the message through its <messageEventDefinition>, while a receive or send *task*
+// carries a messageRef of its own and has no event definition at all. The compiler reads both,
+// so this does too — reading only the event definition left a send task throwing nothing and a
+// receive task no throw could ever reach, which are the two halves of one omission.
+const messageName = (el) => {
+  const fromDef = defName(el, "bpmn:MessageEventDefinition", "messageRef");
+  if (fromDef) return fromDef;
+  const ref = el.businessObject && el.businessObject.messageRef;
+  return (ref && ref.name) || null;
+};
 const signalName = (el) => defName(el, "bpmn:SignalEventDefinition", "signalRef");
 
 // A link event (ADR-0132) is BPMN's off-page connector, and the one throw/catch pair with no
@@ -730,11 +740,23 @@ TokenSimulation.prototype._throwEvent = function (el) {
   const mName = messageName(el);
   const sName = signalName(el);
   if (!mName && !sName) return;
-  const from = centerOf(el);
+  const signalled = [];
+  const messaged = [];
   this._registry.forEach((t) => {
     if (t === el || !isCatchLike(t)) return;
-    const match = (mName && messageName(t) === mName) || (sName && signalName(t) === sName);
-    if (!match) return;
+    if (sName && signalName(t) === sName) signalled.push(t);
+    else if (mName && messageName(t) === mName) messaged.push(t);
+  });
+  // A signal is a broadcast and a message is not: the engine delivers a signal to every
+  // subscription of that name and correlates a message to exactly one. Names are all the
+  // simulation matches on — correlation keys are the engine's job — but *how many* catches a
+  // throw reaches is the one property that tells the two apart, so showing a message fanning
+  // out to three pools would teach the opposite of what the element means.
+  const targets = signalled;
+  const one = this._correlate(messaged);
+  if (one) targets.push(one);
+  const from = centerOf(el);
+  for (const t of targets) {
     const epoch = this._epoch;
     this._animateDot([from, centerOf(t)], () => this._epoch !== epoch, "atlas-sim-msg-dot").then(
       () => {
@@ -742,7 +764,36 @@ TokenSimulation.prototype._throwEvent = function (el) {
         this._deliverToCatch(t);
       },
     );
-  });
+  }
+};
+
+// _correlate picks the single catch a thrown message goes to, standing in for the correlation
+// the engine does on keys the simulation never evaluates. It prefers whoever is actually
+// waiting — a parked catch or receive task first, then an armed boundary on a running activity,
+// then a handler whose scope is live — and falls back to a start event, which is what a message
+// with no one waiting does: it begins an instance. With none of those it is the first match,
+// which can only be pinged.
+TokenSimulation.prototype._correlate = function (candidates) {
+  if (candidates.length <= 1) return candidates[0] || null;
+  const rank = (t) => {
+    if (isCatch(t)) return (this._resting.get(t.id) || 0) > 0 ? 0 : 4;
+    if (isBoundary(t)) {
+      const host = t.host || (t.businessObject && t.businessObject.attachedToRef);
+      return host && (this._resting.get(host.id) || 0) > 0 ? 1 : 4;
+    }
+    if (isEventSubStart(t)) return this._totalLive() > 0 ? 2 : 4;
+    return 3; // a process start: no one is waiting, so the message begins an instance
+  };
+  let best = candidates[0];
+  let bestRank = rank(best);
+  for (const t of candidates.slice(1)) {
+    const r = rank(t);
+    if (r < bestRank) {
+      best = t;
+      bestRank = r;
+    }
+  }
+  return best;
 };
 
 // _deliverToCatch resolves a thrown message/signal that has reached a target element.

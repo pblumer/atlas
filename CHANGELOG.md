@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The token simulation tells a message from a signal again, and sees the task forms of
+  both.** Two things separate the two events, and the Design-view simulation had lost both.
+
+  A **signal is a broadcast and a message is not**: the engine delivers a signal to every
+  subscription of that name and correlates a message to exactly one. The simulation delivered
+  both to every same-named catch, so a diagram with two branches waiting on the same message
+  released both — teaching that a message fans out, which is precisely what it does not do.
+  A message now reaches one catch, chosen by who is actually waiting: a parked catch or
+  receive task first, then an armed boundary, then a live handler, and failing all of those a
+  start event, because a message with nobody waiting is what begins an instance. Only a signal
+  still fans out. Matching is still by name alone — correlation keys stay the engine's job.
+
+  A **send task and a receive task** carry their `messageRef` on the task itself and have no
+  event definition at all. The simulation read the name only off a `<messageEventDefinition>`,
+  so a send task threw nothing and no throw could ever reach a receive task: two halves of one
+  omission that left the most ordinary "two pools talking" shape silently dead, with the
+  receiving branch parked for ever. Both names are now read the way the compiler reads them.
+
 - **The token simulation now crosses a link event instead of stopping at it.** A link event
   is BPMN's off-page connector: a throw and a catch of the same name, standing in for a
   sequence flow the author chose not to draw. The Design-view simulation treated the throw as
