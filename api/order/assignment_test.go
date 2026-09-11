@@ -377,3 +377,49 @@ func TestEscalationResumesAfterAReassignment(t *testing.T) {
 		t.Fatalf("approver = %s, want usr_newboss", got.Approver)
 	}
 }
+
+// The order is where an assignment lives, and reading one back is how anything
+// later knows an approval ever moved.
+
+func TestAnOrderCarriesAtMostOneAssignmentPerLine(t *testing.T) {
+	o := Order{ID: "ord_1"}
+	if _, ok := o.AssignmentFor("vpn"); ok {
+		t.Error("a fresh order already carries an assignment")
+	}
+
+	first := Assign("vpn", "alice", 100)
+	o = o.WithAssignment(first)
+	o = o.WithAssignment(Assign("laptop", "bruno", 100))
+
+	got, ok := o.AssignmentFor("vpn")
+	if !ok || got.Approver != "alice" {
+		t.Fatalf("= %+v, %v", got, ok)
+	}
+	if len(o.Assignments) != 2 {
+		t.Fatalf("assignments = %d, want one per line", len(o.Assignments))
+	}
+
+	// Replacing rather than appending: an approval that moved twice is one
+	// approval with two hops, not two approvals.
+	moved, err := Escalate(first, func(string) string { return "carla" }, 200)
+	if err != nil {
+		t.Fatalf("Escalate: %v", err)
+	}
+	o = o.WithAssignment(moved)
+	if len(o.Assignments) != 2 {
+		t.Fatalf("assignments = %d after a hop, want still one per line", len(o.Assignments))
+	}
+	if got, _ := o.AssignmentFor("vpn"); got.Approver != "carla" {
+		t.Errorf("vpn is with %q, want carla", got.Approver)
+	}
+
+	// A copy, so a caller holding the previous order keeps its own history.
+	before := Order{Assignments: []Assignment{first}}
+	after := before.WithAssignment(moved)
+	if before.Assignments[0].Approver != "alice" {
+		t.Error("the earlier order was rewritten underneath its holder")
+	}
+	if after.Assignments[0].Approver != "carla" {
+		t.Error("the new order does not carry the hop")
+	}
+}

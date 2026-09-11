@@ -476,3 +476,60 @@ func TestFailedHasAnOutcomeButIsNotTerminal(t *testing.T) {
 		t.Error("failed must not be terminal — the incident can still be repaired")
 	}
 }
+
+// TestAWithdrawnOrderSaysSoRatherThanSayingItFailed.
+//
+// "Not fulfilled" is what an order says when it tried and did not manage. Telling
+// somebody that about their own cancellation invites them to ask why it failed,
+// which is the support call the cancellation was supposed to replace.
+func TestAWithdrawnOrderSaysSoRatherThanSayingItFailed(t *testing.T) {
+	withdrawn := func(ids ...string) []Line {
+		out := make([]Line, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, Line{ItemID: id, Status: StatusCancelled, DecidedBy: "usr_1", DecidedAt: 7})
+		}
+		return out
+	}
+
+	if got := Derive(withdrawn("a", "b")); got != OrderCancelled {
+		t.Errorf("everything withdrawn = %q, want cancelled", got)
+	}
+	// Half delivered and then withdrawn is partly fulfilled, and nothing more
+	// honest than that: something was provisioned and the recipient holds it.
+	half := append(withdrawn("b"), Line{ItemID: "a", Status: StatusDone})
+	if got := Derive(half); got != OrderPartial {
+		t.Errorf("half delivered then withdrawn = %q, want partial", got)
+	}
+	// And a refusal is still unfulfilled: somebody considered it and said no.
+	refused := []Line{{ItemID: "a", Status: StatusRejected, DecidedBy: "usr_b", DecidedAt: 7, Reason: "nein"}}
+	if got := Derive(refused); got != OrderUnfulfilled {
+		t.Errorf("refused = %q, want unfulfilled", got)
+	}
+}
+
+// TestAWithdrawnPreconditionStopsWhatWaitedOnIt: a cancelled line is not coming,
+// so a line requiring it is waiting for nothing — the same shape as a refusal, and
+// it does not lift either.
+func TestAWithdrawnPreconditionStopsWhatWaitedOnIt(t *testing.T) {
+	lines := []Line{
+		{ItemID: "account", Status: StatusCancelled, DecidedBy: "usr_1", DecidedAt: 7},
+		{ItemID: "laptop", Status: StatusPending},
+	}
+	got := Propagate(lines, map[string][]string{"laptop": {"account"}})
+
+	var laptop Line
+	for _, l := range got {
+		if l.ItemID == "laptop" {
+			laptop = l
+		}
+	}
+	if laptop.Status != StatusBlocked {
+		t.Fatalf("laptop = %q, want blocked behind the withdrawn account", laptop.Status)
+	}
+	if len(laptop.BlockedBy) != 1 || laptop.BlockedBy[0] != "account" {
+		t.Errorf("blockedBy = %v, want the withdrawn line named", laptop.BlockedBy)
+	}
+	if !laptop.TerminallyBlocked {
+		t.Error("the block is not terminal; a withdrawal does not lift the way a repaired incident does")
+	}
+}

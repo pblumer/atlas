@@ -50,9 +50,11 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 		found := map[string]bool{}
 		for _, need := range requires[id] {
 			switch s := status[need]; {
-			case s == StatusFailed || s == StatusRejected || s == StatusAbandoned:
+			case s == StatusFailed || s == StatusRejected || s == StatusAbandoned || s == StatusCancelled:
 				// A direct cause. It is the root: it has a fault or a decision of
-				// its own, not an inherited one.
+				// its own, not an inherited one. A withdrawn precondition counts
+				// the same way — it is not coming, and the line waiting on it is
+				// waiting for nothing.
 				found[need] = true
 			case s.Satisfied(), s == "":
 				// Met, or not part of this order at all. Either way it stops
@@ -99,7 +101,7 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 			// incident is one nobody is repairing. Either way there is nothing left
 			// to wait for.
 			for _, c := range blocking {
-				if s := status[c]; s == StatusRejected || s == StatusAbandoned {
+				if s := status[c]; s == StatusRejected || s == StatusAbandoned || s == StatusCancelled {
 					out[i].TerminallyBlocked = true
 					break
 				}
@@ -117,7 +119,7 @@ func Propagate(in []Line, requires map[string][]string) []Line {
 // lives. It settles once every line has either an outcome of its own or a blockage
 // that will not lift.
 func Derive(ls []Line) Status {
-	provisioned, settled := 0, 0
+	provisioned, cancelled, settled := 0, 0, 0
 	for _, l := range ls {
 		if !l.Terminal() {
 			return OrderRunning
@@ -126,15 +128,26 @@ func Derive(ls []Line) Status {
 		if l.Status.Satisfied() {
 			provisioned++
 		}
+		if l.Status == StatusCancelled {
+			cancelled++
+		}
 	}
 	switch {
 	case provisioned == settled:
 		// Also the empty order, which is complete rather than unfulfilled: nothing
 		// was asked for and nothing is outstanding.
 		return OrderCompleted
+	case cancelled == settled:
+		// Everything was withdrawn. Reported as its own thing and not as
+		// unfulfilled, because "not fulfilled" is what an order says when it tried
+		// and did not manage — and this one was taken back before it tried.
+		return OrderCancelled
 	case provisioned == 0:
 		return OrderUnfulfilled
 	default:
+		// Some provisioned and some not, whatever the reason — including an order
+		// half delivered and then withdrawn, which is partly fulfilled and nothing
+		// more honest than that.
 		return OrderPartial
 	}
 }

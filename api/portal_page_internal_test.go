@@ -1,6 +1,8 @@
 package api
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -228,6 +230,59 @@ func TestPageBuildersDropAnUnsetAttribute(t *testing.T) {
 			t.Errorf("%s's el() sets every attribute it is given, including a nullish one. "+
 				"A conditional attribute then renders as the string \"null\", which for "+
 				"disabled means permanently disabled.", page)
+		}
+	}
+}
+
+// TestPortalNamesEveryStatusTheServerCanProduce.
+//
+// The portal renders a line's status by looking up "status.<value>" and an
+// order's by "order.<value>", so a status the server can produce and the page has
+// no word for reaches a customer as a bare key. Adding one means touching two
+// files in two languages, which is exactly the kind of thing that gets done once
+// and remembered twice.
+//
+// The set is read out of the order package's source rather than written here, so
+// this cannot go stale the way a hand-kept list would.
+func TestPortalNamesEveryStatusTheServerCanProduce(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("order", "order.go"))
+	if err != nil {
+		t.Fatalf("read the order model: %v", err)
+	}
+	catalogue := stringsCatalogue(t, "portal.js")
+	if len(catalogue) == 0 {
+		t.Fatal("the portal declares no locales")
+	}
+
+	for _, tc := range []struct {
+		kind   string
+		prefix string
+		re     *regexp.Regexp
+	}{
+		{"line status", "status.", regexp.MustCompile(`Status\w+ LineStatus = "(\w+)"`)},
+		{"order status", "order.", regexp.MustCompile(`Order\w+ Status = "(\w+)"`)},
+	} {
+		found := tc.re.FindAllSubmatch(src, -1)
+		if len(found) < 4 {
+			t.Fatalf("only %d %s constants found; the pattern has gone stale and a green "+
+				"result here would mean nothing", len(found), tc.kind)
+		}
+		for _, m := range found {
+			want := tc.prefix + string(m[1])
+			for locale, keys := range catalogue {
+				has := false
+				for _, k := range keys {
+					if k == want {
+						has = true
+						break
+					}
+				}
+				if !has {
+					t.Errorf("locale %q has no word for the %s %q.\n"+
+						"The portal renders it by key, so a customer would read %q.",
+						locale, tc.kind, string(m[1]), want)
+				}
+			}
 		}
 	}
 }

@@ -58,12 +58,17 @@
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--border-strong); }
   .dot.done, .dot.skipped { background:var(--ok); }
   .dot.failed, .dot.abandoned { background:var(--danger); }
-  .dot.rejected { background:var(--muted); }
+  .dot.rejected, .dot.cancelled { background:var(--muted); }
   .dot.blocked { background:var(--accent-soft); border:1px solid var(--border-strong); }
   .dot.running { background:var(--accent); }
   button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
                    border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; margin-top:8px; }
-  button.primary:disabled { opacity:.55; cursor:default; }
+  /* Withdrawing is a plain button, not a red one. Taking back something you
+     ordered a minute ago is an ordinary act, and dressing it as dangerous is how
+     somebody ends up telephoning instead. */
+  button.secondary { background:var(--surface); color:var(--text); border:1px solid var(--border-strong);
+                     border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; margin-top:8px; }
+  button.primary:disabled, button.secondary:disabled { opacity:.55; cursor:default; }
   .empty { background:var(--surface); border:1px dashed var(--border-strong); border-radius:10px;
            padding:24px; text-align:center; }
   .empty p { margin:4px 0; }

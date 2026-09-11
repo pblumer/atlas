@@ -137,6 +137,7 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/catalogs/{id}/theme":                "an instance's appearance is an operator's choice, not an agent's",
 	"POST /api/v1/instances":                         "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
 	"GET /api/v1/approvals/stalled":                  "an operations list still settling with the portal around it; a tool is a public contract",
+	"POST /api/v1/orders/{id}/cancel":                "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
 	"POST /api/v1/orders/{id}/lines/{item}/escalate": "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
 	"POST /api/v1/orders/{id}/lines/{item}/reassign": "same: an intervention records the person who made it, and an agent is not one",
 	"GET /api/v1/approvals":                          "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",

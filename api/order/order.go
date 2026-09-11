@@ -47,6 +47,17 @@ const (
 	// order, because the incident is the thing that is actually stuck; the order
 	// follows it here.
 	StatusAbandoned LineStatus = "abandoned"
+	// StatusCancelled is a line the person who ordered it withdrew before it was
+	// provisioned.
+	//
+	// It is a fifth value and not a reuse of Rejected for the reason the three
+	// above are three: they differ in who has to do something about it. A
+	// rejection is somebody refusing a request that was made; a cancellation is
+	// the request being taken back, and nobody has to act on it at all. Filed as a
+	// rejection it would say in a record kept for years that an approver turned
+	// down a colleague's laptop, when what happened is that the colleague changed
+	// their mind.
+	StatusCancelled LineStatus = "cancelled"
 	// StatusBlocked is a line that cannot be attempted because something it
 	// requires is Failed or Rejected. See Line.BlockedBy.
 	//
@@ -69,10 +80,25 @@ func (s LineStatus) Satisfied() bool { return s == StatusDone || s == StatusSkip
 // on its causes rather than on itself: see [Line.Terminal].
 func (s LineStatus) Settled() bool {
 	switch s {
-	case StatusDone, StatusSkipped, StatusFailed, StatusRejected, StatusAbandoned:
+	case StatusDone, StatusSkipped, StatusFailed, StatusRejected, StatusAbandoned, StatusCancelled:
 		return true
 	}
 	return false
+}
+
+// Cancellable reports whether a line can still be withdrawn.
+//
+// Two things cannot. One with an outcome already is finished — including a failed
+// one, whose incident is a decision of its own: somebody has to give up on it
+// ([Abandon]), and calling that a cancellation would file a repair nobody finished
+// as a change of mind. And a running line is with a provisioning process now,
+// which is a conversation with a system this server does not control; stopping it
+// halfway is not withdrawal but a half-provisioned account nobody owns.
+//
+// What is left is exactly what has not happened yet: a line still waiting its
+// turn, and one blocked behind something else.
+func (s LineStatus) Cancellable() bool {
+	return s == StatusPending || s == StatusBlocked
 }
 
 // Line is one ordered position.
@@ -122,12 +148,17 @@ type Line struct {
 	// ADR-draft-portal-personal-data.
 	AbandonedBy string `json:"abandonedBy,omitempty"`
 	AbandonedAt int64  `json:"abandonedAt,omitempty"`
-	// DecidedBy and DecidedAt record who refused this line's approval and when,
-	// and Reason carries their words. All three are required on a rejected line.
+	// DecidedBy and DecidedAt record who decided this line's fate and when, and
+	// Reason carries their words. All three are required on a rejected line; a
+	// cancelled one requires the first two.
 	//
-	// A rejection kept forever without an author is a decision nobody made, and
-	// one without a reason produces the message that generates a phone call:
-	// "your request was declined", and nothing else. DecidedBy is a principal id.
+	// The two decisions share these fields because they are the same kind of fact —
+	// somebody, at a moment, settled this line without it being provisioned — and
+	// the status says which kind. A rejection kept forever without an author is a
+	// decision nobody made, and one without a reason produces the message that
+	// generates a phone call: "your request was declined", and nothing else. A
+	// cancellation needs no reason, because the person reading it is the person who
+	// made it. DecidedBy is a principal id.
 	DecidedBy string `json:"decidedBy,omitempty"`
 	DecidedAt int64  `json:"decidedAt,omitempty"`
 	Reason    string `json:"reason,omitempty"`
@@ -236,6 +267,13 @@ const (
 	OrderPartial Status = "partial"
 	// OrderUnfulfilled settled with nothing provisioned at all.
 	OrderUnfulfilled Status = "unfulfilled"
+	// OrderCancelled settled because every line was withdrawn.
+	//
+	// Distinct from unfulfilled, which is what an order says when it tried and did
+	// not manage. This one was taken back before it tried, and telling somebody
+	// their own cancellation "was not fulfilled" invites them to ask why it
+	// failed.
+	OrderCancelled Status = "cancelled"
 )
 
 // Order is one order against one catalogue release.

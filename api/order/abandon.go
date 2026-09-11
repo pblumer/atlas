@@ -84,6 +84,17 @@ func (l Line) Valid() error {
 		}
 		return nil
 	}
+	if l.Status == StatusCancelled {
+		// An author and a moment, and no reason required: the person a
+		// cancellation is explained to is the person who made it.
+		if l.DecidedBy == "" {
+			return fmt.Errorf("order: line %s is cancelled without naming who withdrew it", l.ItemID)
+		}
+		if l.DecidedAt == 0 {
+			return fmt.Errorf("order: line %s is cancelled without a moment", l.ItemID)
+		}
+		return nil
+	}
 	if l.Status == StatusRejected {
 		if l.DecidedBy == "" {
 			return fmt.Errorf("order: line %s is rejected without naming who decided it", l.ItemID)

@@ -769,6 +769,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		// The approver's page (ADR-draft-portal-approval-page). One call answers
 		// everything it shows, because the chain behind an approval — task, order,
 		// release, catalogue — is one the approver may walk no step of themselves.
+		{"POST", "/api/v1/orders/{id}/cancel", s.handleCancelOrder, apiOp{
+			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
+			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
 			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
 			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{

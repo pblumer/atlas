@@ -36,6 +36,10 @@ const STRINGS = {
     'portal.reason': 'Begründung',
     'portal.retry': 'Erneut versuchen',
     'portal.failed': 'Das hat nicht geklappt.',
+    'portal.cancel': 'Stornieren',
+    'portal.cancelling': 'Wird storniert …',
+    'order.cancelled': 'Storniert',
+    'status.cancelled': 'Storniert',
     'status.pending': 'Wartet',
     'status.running': 'Läuft',
     'status.done': 'Erledigt',
@@ -67,6 +71,10 @@ const STRINGS = {
     'portal.reason': 'Reason',
     'portal.retry': 'Try again',
     'portal.failed': 'That did not work.',
+    'portal.cancel': 'Cancel',
+    'portal.cancelling': 'Cancelling …',
+    'order.cancelled': 'Cancelled',
+    'status.cancelled': 'Cancelled',
     'status.pending': 'Waiting',
     'status.running': 'In progress',
     'status.done': 'Done',
@@ -319,15 +327,51 @@ function renderCatalogue() {
 function deriveStatus(order) {
   const lines = order.lines || [];
   let provisioned = 0;
+  let cancelled = 0;
   for (const l of lines) {
     const terminal = l.status === 'blocked'
       ? !!l.terminallyBlocked
-      : ['done', 'skipped', 'rejected', 'abandoned'].includes(l.status);
+      : ['done', 'skipped', 'rejected', 'abandoned', 'cancelled'].includes(l.status);
     if (!terminal) return 'order.running';
     if (l.status === 'done' || l.status === 'skipped') provisioned++;
+    if (l.status === 'cancelled') cancelled++;
   }
   if (!lines.length || provisioned === lines.length) return 'order.completed';
+  // Withdrawn in full is its own answer. "Not fulfilled" is what an order says
+  // when it tried and did not manage, and telling somebody that about their own
+  // cancellation invites them to ask why it failed.
+  if (cancelled === lines.length) return 'order.cancelled';
   return provisioned ? 'order.partial' : 'order.unfulfilled';
+}
+
+// cancellable mirrors the server's rule: what can still be taken back is what has
+// not happened yet. Shown rather than hidden when nothing can be — an order that
+// offers no way to withdraw it, with no word about why, is the case that produces
+// the telephone call this whole thing exists to prevent.
+function cancellable(order) {
+  return (order.lines || []).some((l) => l.status === 'pending' || l.status === 'blocked');
+}
+
+// cancel withdraws an order, then reloads: what the server did to each line is
+// what the page then shows, rather than what the page assumed it would do.
+async function cancel(order) {
+  if (state.busy) return;
+  state.busy = true;
+  state.error = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    state.busy = false;
+    await load();
+  } catch (e) {
+    state.busy = false;
+    state.error = `${t('portal.failed')} ${e.message}`;
+    render();
+  }
 }
 
 function renderOrders() {
@@ -338,6 +382,13 @@ function renderOrders() {
     el('div', { class: 'row' },
       el('strong', {}, t(deriveStatus(o))),
       el('span', { class: 'muted' }, `${t('portal.placed')} ${new Date(o.createdAt / 1e6).toLocaleDateString(locale)}`)),
+    cancellable(o)
+      ? el('button', {
+        class: 'secondary',
+        disabled: state.busy,
+        onclick: () => cancel(o),
+      }, state.busy ? t('portal.cancelling') : t('portal.cancel'))
+      : null,
     el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
       el('span', { class: `dot ${l.status}` }),
       ' ', l.itemId, ' — ', t(`status.${l.status}`),

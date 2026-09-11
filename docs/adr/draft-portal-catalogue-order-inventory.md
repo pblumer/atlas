@@ -518,6 +518,42 @@ And **stalling is visible through `GET /api/v1/approvals/stalled`**. A stall rec
 fact, and a fact nobody queries is not visible — which is the failure this whole
 mechanism exists to prevent, one level up.
 
+### Taking an order back
+
+The likeliest support call a self-service portal receives is somebody who ordered the
+wrong thing a minute ago. Until `POST /orders/{id}/cancel` the only answer was to
+telephone the approver and ask them to refuse it — which files a decision nobody made,
+in a record kept for years, in the place a reader goes to find out whether that
+colleague's laptop was turned down.
+
+A withdrawal is therefore its own line status and not a reuse of rejection, for the
+reason the three failure statuses are three: they differ in who has to act. A rejection
+is somebody refusing a request that was made; a cancellation is the request being taken
+back, and nobody has to act on it at all. It carries an author and a moment like every
+other way a line settles unprovisioned, and — unlike a rejection — no reason, because the
+person a cancellation is explained to is the person who made it.
+
+**What it takes back is exactly what has not happened.** A running line is with a
+provisioning process now, which is a conversation with a system Atlas does not control;
+stopping it halfway is not withdrawal but a half-provisioned account nobody owns. A
+failed one has a decision of its own waiting — somebody gives up on it — and filing that
+as a change of mind would record a repair nobody finished as one. A provisioned one is
+held by the recipient, and undoing it is **deprovisioning**: it runs the process the
+order froze for exactly that purpose, and it belongs with the inventory rather than
+here. So the answer names both halves, because "your order is cancelled" when a laptop
+is already on its way is the sentence that produces the second support call.
+
+Two things follow that are not the order's own record. A cancelled line's **approval
+instance is cancelled with it**: left standing it is a task asking somebody to decide a
+request that no longer exists, and eventually they do. And the **orchestrator is woken**,
+or it waits for a line that will never start.
+
+A withdrawn line is a root cause like a refused one — anything requiring it is waiting
+for nothing, and the block does not lift — and an order withdrawn in full reports
+`cancelled` rather than `unfulfilled`. "Not fulfilled" is what an order says when it
+tried and did not manage; telling somebody that about their own cancellation invites
+them to ask why it failed, which is the call this was supposed to replace.
+
 **Which process decides a line is resolved when fulfilment asks, and was wrong at
 first.** The model built an approval's process id by concatenating the catalogue's
 kind onto a prefix — `"atlas-genehmigung-" + "fixed"` — and the three approval
