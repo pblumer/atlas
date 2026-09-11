@@ -107,7 +107,8 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 				func(string) (catalog.Release, bool, error) { return rel, true, nil },
 				func(*httpapi.Principal, string) (bool, error) { return true, nil },
 				func(message, orderID string, vars map[string]string) error { return nil },
-				func() string { return "https://atlas.example.ch" })
+				func() string { return "https://atlas.example.ch" },
+				ignoreGrant, ignoreRevoke)
 			theirs := decode[Order](t, do(t, insider.HandlePlace, someone("usr_in"), "POST",
 				`{"releaseId":"rel_1","items":["account"]}`))
 
@@ -116,7 +117,8 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 				func(string) (catalog.Release, bool, error) { return rel, true, nil },
 				func(*httpapi.Principal, string) (bool, error) { return false, nil },
 				func(message, orderID string, vars map[string]string) error { return nil },
-				func() string { return "https://atlas.example.ch" })
+				func() string { return "https://atlas.example.ch" },
+				ignoreGrant, ignoreRevoke)
 
 			h := reflect.ValueOf(s).MethodByName(g.name).
 				Interface().(func(http.ResponseWriter, *http.Request))

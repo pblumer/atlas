@@ -65,6 +65,16 @@ type Service struct {
 	// construction, and empty is a supported answer — a model that finds it empty
 	// says where to go instead of printing a link nobody can follow.
 	portalBase func() string
+	// grant and revoke keep the inventory in step with what fulfilment actually
+	// did: a line that reaches done records a right, a line that is given back
+	// removes it. See [Grant] for why only those two transitions do.
+	//
+	// They are functions for the same reason release is: this package needs the
+	// two facts written, not the engine that writes them. Called outside this
+	// service's loop closure — writing an engine fact runs the processor, which
+	// is a visit to the loop of its own, and a nested Do would deadlock.
+	grant  func(Grant) error
+	revoke func(principal, itemID string) error
 }
 
 // The two messages that drive fulfilment, correlated on the order id.
@@ -85,9 +95,12 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 	release func(id string) (catalog.Release, bool, error),
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error),
 	wake func(message, orderID string, vars map[string]string) error,
-	portalBase func() string) *Service {
+	portalBase func() string,
+	grant func(Grant) error,
+	revoke func(principal, itemID string) error) *Service {
 	return &Service{loop: loop, store: store, now: now,
-		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase}
+		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase,
+		grant: grant, revoke: revoke}
 }
 
 func newID(prefix string) (string, error) {
@@ -431,6 +444,17 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 		}
 		httpapi.Error(w, http.StatusBadRequest, applyErr.Error())
 	default:
+		// The inventory is brought in step before the process is woken, for the
+		// same reason the order is saved before either: what somebody holds is a
+		// fact, and the wake is only a prompt to go and look. A model woken first
+		// could ask what the recipient holds and be told the truth from one moment
+		// ago. A failure here is the caller's to retry, like the wake below —
+		// granting the same right twice writes the same record.
+		if invErr := s.recordInventory(got, item, req.Status); invErr != nil {
+			httpapi.Error(w, http.StatusInternalServerError,
+				"the outcome was recorded, but the inventory could not be updated: "+invErr.Error())
+			return
+		}
 		// The outcome is durable before anything is woken (I2). If the wake then
 		// fails, the order has moved and nothing is coming to move it again, so
 		// this is an error rather than a 200 — the reporter is the one thing that
@@ -442,6 +466,37 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 		}
 		httpapi.JSON(w, http.StatusOK, got)
 	}
+}
+
+// recordInventory tells the inventory what one settled line changed about the
+// rights its recipient holds.
+//
+// The moment it records is the order's own UpdatedAt, which [Apply] has just set
+// from the server clock, so the order and the right it produced never disagree
+// about when it started.
+//
+// Every other outcome returns nothing to do, and does so by naming no case rather
+// than by listing the ones it ignores: a status added later has to be considered
+// here on purpose, and a switch that fell through a default would quietly decide
+// for it.
+func (s *Service) recordInventory(o Order, itemID string, status LineStatus) error {
+	switch status {
+	case StatusDone:
+		var variant string
+		for _, l := range o.Lines {
+			if l.ItemID == itemID {
+				variant = l.VariantID
+				break
+			}
+		}
+		return s.grant(Grant{
+			Principal: o.Recipient, ItemID: itemID, VariantID: variant,
+			OrderID: o.ID, At: o.UpdatedAt,
+		})
+	case StatusReturned:
+		return s.revoke(o.Recipient, itemID)
+	}
+	return nil
 }
 
 // decideReq is an approver's refusal: who decided, and in their own words why.

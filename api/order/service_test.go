@@ -79,7 +79,8 @@ func newService(t *testing.T) *Service {
 		// the wake have their own cases below.
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
 		func(message, orderID string, vars map[string]string) error { return nil },
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 }
 
 func do(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, body string, vals ...string) *httptest.ResponseRecorder {
@@ -299,7 +300,8 @@ func serviceGatedBy(t *testing.T, allow bool) *Service {
 			return allow, nil
 		},
 		func(message, orderID string, vars map[string]string) error { return nil },
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 }
 
 // TestOrderingNeedsAccessToTheCatalogue is the gap this closes: the release id
@@ -349,7 +351,8 @@ func TestAFailingAccessCheckIsAnError(t *testing.T) {
 			return false, errTest
 		},
 		func(message, orderID string, vars map[string]string) error { return nil },
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if rec.Code != http.StatusInternalServerError {
@@ -372,7 +375,8 @@ func TestAFailingReleaseLookupIsAnError(t *testing.T) {
 		func(string) (catalog.Release, bool, error) { return catalog.Release{}, false, errTest },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
 		func(message, orderID string, vars map[string]string) error { return nil },
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if rec.Code != http.StatusInternalServerError {
@@ -419,7 +423,8 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
 		func(message, orderID string, vars map[string]string) error { return nil },
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	for _, tt := range []struct {
 		name string
@@ -588,7 +593,8 @@ func TestReportingWakesTheFulfilmentProcess(t *testing.T) {
 			woken = append(woken, message+":"+orderID)
 			return nil
 		},
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`))
@@ -635,7 +641,8 @@ func TestAFailedWakeIsReported(t *testing.T) {
 			}
 			return nil
 		},
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`))
@@ -673,7 +680,8 @@ func TestAnOrderNobodyWillFulfilIsReported(t *testing.T) {
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
 		func(message, orderID string, vars map[string]string) error { return errTest },
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	rec := do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`)
@@ -761,7 +769,8 @@ func TestARejectionWakesTheFulfilmentProcess(t *testing.T) {
 			woken = append(woken, message)
 			return nil
 		},
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["workplace"]}`))
@@ -871,7 +880,8 @@ func TestPlacingCarriesTheOrchestratorsStartVariables(t *testing.T) {
 			}
 			return nil
 		},
-		func() string { return "https://atlas.example.ch" })
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke)
 
 	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_1"), "POST",
 		`{"releaseId":"rel_1","items":["account"]}`))
@@ -907,10 +917,19 @@ func TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence(t *testing.T) {
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
 		func(message, orderID string, vars map[string]string) error { got = vars; return nil },
-		func() string { return "" })
+		func() string { return "" },
+		ignoreGrant, ignoreRevoke)
 
 	do(t, s.HandlePlace, someone("usr_1"), "POST", `{"releaseId":"rel_1","items":["account"]}`)
 	if v, ok := got["portalBaseUrl"]; !ok || v != "" {
 		t.Errorf("portalBaseUrl = %q (present=%v), want an empty string that is there", v, ok)
 	}
 }
+
+// A test that is not about the inventory still has to supply its two
+// collaborators. The service calls them unguarded on purpose: a nil check would
+// turn "nobody wired the inventory" into a right that is silently never
+// recorded, which is the one failure an access record must not have. These say
+// out loud that a given test does not look at that.
+func ignoreGrant(Grant) error           { return nil }
+func ignoreRevoke(string, string) error { return nil }

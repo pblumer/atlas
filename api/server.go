@@ -1366,7 +1366,26 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// on nothing else. Deriving it from whichever host the orderer happened to
 		// reach would put an internal address in a mail to somebody who cannot
 		// resolve it.
-		func() string { return s.externalURL })
+		func() string { return s.externalURL },
+		// The inventory. A right the portal granted is engine state, not order
+		// state, because it outlives the order: the instance that produced it is
+		// eligible for retention deletion long before the right ends, and a record
+		// that cannot be rebuilt after that is not a record. Origin is set here and
+		// not by the order service — an order can only ever produce an ordered
+		// right, and a package that cannot name another origin cannot mislabel one.
+		func(g order.Grant) error {
+			s.do(func() {
+				s.proc.GrantEntitlement(model.EntitlementValue{
+					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
+					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
+				})
+			})
+			return s.drive()
+		},
+		func(principal, itemID string) error {
+			s.do(func() { s.proc.RevokeEntitlement(principal, itemID) })
+			return s.drive()
+		})
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the
