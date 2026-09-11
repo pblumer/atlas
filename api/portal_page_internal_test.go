@@ -24,18 +24,22 @@ var (
 	portalStringKey   = regexp.MustCompile(`'([^']+)':`)
 )
 
-func portalCatalogue(t *testing.T) map[string][]string {
+// stringsCatalogue reads one page's message catalogue: locale to sorted keys. It
+// is shared by the portal and the approval page because both offer the browser's
+// language under the same condition, and a second copy of the parser is a second
+// thing to keep pointed at the right place.
+func stringsCatalogue(t *testing.T, file string) map[string][]string {
 	t.Helper()
-	src := readWeb(t, "portal.js")
+	src := readWeb(t, file)
 
 	start := strings.Index(src, "const STRINGS = {")
 	if start < 0 {
-		t.Fatal("portal.js declares no STRINGS catalogue — if it moved, this test now " +
-			"passes vacuously and must be pointed at the new place")
+		t.Fatalf("%s declares no STRINGS catalogue — if it moved, this test now "+
+			"passes vacuously and must be pointed at the new place", file)
 	}
 	end := strings.Index(src[start:], "\n};")
 	if end < 0 {
-		t.Fatal("the STRINGS catalogue is not closed where this test expects")
+		t.Fatalf("%s: the STRINGS catalogue is not closed where this test expects", file)
 	}
 
 	out := map[string][]string{}
@@ -50,11 +54,13 @@ func portalCatalogue(t *testing.T) map[string][]string {
 	return out
 }
 
-func TestPortalCatalogueIsComplete(t *testing.T) {
-	got := portalCatalogue(t)
+// assertCatalogueIsComplete holds the condition the language record names: every
+// string exists in every locale the page offers.
+func assertCatalogueIsComplete(t *testing.T, page string, got map[string][]string) {
+	t.Helper()
 	if len(got) < 2 {
-		t.Fatalf("the portal declares %d locale(s); with one there is nothing to guess "+
-			"between and the browser need not be consulted at all", len(got))
+		t.Fatalf("%s declares %d locale(s); with one there is nothing to guess "+
+			"between and the browser need not be consulted at all", page, len(got))
 	}
 
 	// Every locale against every other: "complete" is not a property of one of
@@ -79,12 +85,16 @@ func TestPortalCatalogueIsComplete(t *testing.T) {
 		}
 		sort.Strings(missing)
 		if len(missing) > 0 {
-			t.Errorf("locale %q is missing %v.\n"+
-				"The portal reads the browser's language, and it may only do that while "+
+			t.Errorf("%s: locale %q is missing %v.\n"+
+				"The page reads the browser's language, and it may only do that while "+
 				"every string exists in every locale it offers. Translate them, or drop "+
-				"the locale.", locale, missing)
+				"the locale.", page, locale, missing)
 		}
 	}
+}
+
+func TestPortalCatalogueIsComplete(t *testing.T) {
+	assertCatalogueIsComplete(t, "portal.js", stringsCatalogue(t, "portal.js"))
 }
 
 // TestPortalRendersNoUntranslatedText: the boundary ADR-0267 draws holds here

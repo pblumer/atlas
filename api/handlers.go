@@ -2445,50 +2445,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var (
-		found   bool
-		notExec bool
-		runErr  error
-		statErr error
-		stats   statsResp
-	)
-	var driveNeeded bool
-	s.do(func() {
-		d, ok := s.deployments[key]
-		if !ok {
-			return
-		}
-		found = true
-		// A non-executable process is descriptive-only; refuse to start it (the UI
-		// also hides it, but this guards the API and public start paths directly).
-		if d.cp != nil && !d.cp.IsExecutable() {
-			notExec = true
-			return
-		}
-		s.proc.CreateInstance(key, startVars...)
-		driveNeeded = true
-	})
-	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop — and the
-	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-0266).
-	if driveNeeded {
-		if runErr = s.drive(); runErr == nil {
-			stats, statErr = s.statsOffLoop()
-		}
-	}
-	switch {
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
-	case notExec:
-		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
-	case runErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
-	case statErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
-	}
+	s.startInstance(w, key, startVars)
 }
 
 // parseStartVariables reads {"variables": {name: value}} from a request body

@@ -1,0 +1,159 @@
+# ADR-DRAFT: The approver decides on a page of their own, in the customer's colours
+
+- **Status:** Accepted
+- **Implementation:** Partial
+- **Date:** 2026-09-11
+- **Deciders:** Atlas maintainers
+- **Open question:** Whether an approver should be able to ask a question back — "what
+  is this for?" — without refusing. Today the two answers are approve and refuse, and a
+  refusal with a reason is the only way to say anything at all, which turns a question
+  into a rejection the orderer has to re-place. A third outcome is a change to the
+  approval models and to the order's line statuses, not to this page.
+- **Question checked:** 2026-09
+
+## Context and problem statement
+
+An approval is a user task, and the Console can work one. For most of the people who
+receive one, the Console is the wrong place to be.
+
+The three approval kinds a catalogue can bind describe three different populations. A
+*fixed* approver is an integration manager, permanently responsible for a service and
+plausibly a Console user. A *role* approver is whoever holds a named group. A *superior*
+approver is the line manager the directory resolved for whoever ordered — an ordinary
+employee who will approve perhaps four times a year, and for whom a tool whose
+navigation reads Deployments, Instances, Incidents and Workers is a tool they will ask a
+colleague to operate for them.
+
+Branding that tool in the customer's colours does not fix it. It is still the operator's
+instrument, it still shows every other task on the instance, and its chrome belongs to
+the organisation running the server rather than to the customer whose order is waiting.
+
+There is also something the Console cannot show. An approval names an order, and the
+order names a release, and the release names a catalogue — and the approver may walk
+none of those links. They are not the orderer, so the order is not theirs to read; they
+are not the catalogue's audience, so the catalogue is not theirs either. In the Console
+an approval therefore reads as `vpn` for `usr_3f2a`, which is an id and a stranger.
+
+## Decision drivers
+
+- The decision should look like the customer it is being taken for. An approver holding
+  requests from three customer groups should be able to tell them apart without reading.
+- None of the refusals above should be relaxed. A customer's brand is not shown to other
+  customers; that is what the catalogue's own logo gate exists for.
+- A person who approves four times a year should need no training and should see nothing
+  they cannot act on.
+- What a decision *means* stays in the model. A page that wrote the order itself would
+  be a second implementation of the approval process.
+
+## Considered options
+
+1. **Brand the Console's task pane** — the task detail carries the catalogue's accent,
+   typeface and mark, scoped to that panel, inside a Console that stays the operator's.
+2. **A page of its own**, reached from the notification, carrying the brand of the order
+   it is deciding.
+3. **Both**, the pane first.
+
+## Decision outcome
+
+Chosen option: **a page of its own** — `api/web/genehmigung.html` and `genehmigung.js`,
+reading `GET /api/v1/approvals`.
+
+Option 1 was the cheaper half and is the one a *fixed* approver would notice least:
+they are in the Console anyway. It does nothing for the case that actually needs it,
+which is the line manager, and it would have put a catalogue's brand inside the
+operator's own instrument — the one place [ADR-0113](0113-org-wide-ui-theme.md)'s
+reasoning still holds unchanged.
+
+### The brand follows the decision, not the visitor
+
+The portal resolves a brand from *who you are*: a visitor's catalogue is a fact about
+their groups, so it is cached and painted before the first frame. This page resolves it
+from *what you are working on*. An approver holds requests from several customer groups
+at once and there is no one brand for that list; the brand belongs to the decision.
+
+So nothing is cached here, deliberately, and a test holds that. A cached paint would
+open the page in the colours of whoever was approved last — telling an approver, in
+colour, that this request belongs to a customer it does not.
+
+A list with nothing open carries the operator's brand, which is the honest answer: no
+decision is open, so no customer is being decided for.
+
+### The join happens on the server
+
+`GET /api/v1/approvals` answers everything the page shows: the tasks addressed to the
+caller, the order line each decides, the product named as the release froze it, and the
+catalogue's brand. It does the walk the approver may not do, under the one right they
+actually hold, and opens nothing else — the catalogue stays 404 to them, which a test
+asserts alongside the brand arriving.
+
+The mark travels the same way, from `GET /api/v1/approvals/{key}/logo` rather than from
+the catalogue's own route. Widening the catalogue's would hand one customer's mark to
+everybody who ever holds a task.
+
+What makes a task an approval is not its name or its process id but the order: the
+instance carries an `orderId` and an `itemId`, the order has that line, and the line
+says this process is what decides it. That is general on purpose — an installation
+approving through its own model binds a product to it by name and lands here unchanged.
+
+### Deciding is completing the task
+
+The page posts the answer to `POST /api/v1/tasks/{key}/complete` and writes no order.
+What a decision means — start provisioning, or record the refusal and tell the orderer —
+is modelled in the approval process. A page that also wrote it would be a second answer
+to one question, and the two would eventually disagree.
+
+That endpoint had to be closed first: before
+[ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md),
+any signed-in account could complete any open task, which for a portal customer meant
+approving their own order.
+
+### Consequences
+
+- **Positive:** The approver sees what was ordered, for whom, in the customer's colours,
+  with two buttons and no training. No new authority is granted to anybody: the page
+  reads what the task already entitles its holder to.
+- **Negative / trade-offs accepted:** A second page to keep in step with the portal —
+  the locale machinery, the typeface mirror and the mark cascade are now stated twice in
+  JavaScript, held in step by tests rather than by sharing. The listing walks the open
+  tasks and is paged like the inbox; an approver on an instance with a task flood sees a
+  "there are more" line rather than a complete list.
+- **Follow-ups / risks to watch:** The open question above. A notification carrying the
+  `?task=` link does not exist yet — the page supports the arrival, nothing sends it.
+
+## Implementation
+
+`api/approvals.go` holds both routes and the join; `api/web/genehmigung.{html,js}` is the
+page. Eight tests hold the page's properties (catalogue completeness, no palette of its
+own, the typeface mirror, the mark cascade, no cached brand, deciding through the
+process) and two hold the endpoints end to end: an approver sees their request with the
+catalogue's texts and theme while the catalogue itself stays 404 to them, and the mark
+arrives under the task's gate while the catalogue's own logo route refuses them.
+
+**Three defects in the fulfilment slice were found while building this, because nothing
+had ever run it end to end.** Two are fixed here or beside it: the approval process id
+was assembled by string concatenation and named nothing deployed, and
+`POST /api/v1/instances` — which every provisioning run and every approval start posts
+to — did not exist, because Atlas could only start an instance by *definition key* and a
+model knows an id. `TestEverySystemProcessCallsARouteThatExists` now walks every REST
+call in every system process against the route table, which is what should have caught
+both.
+
+The third is **not fixed and blocks the three shipped approval models.** They address
+their task with `assignee="=approvalRef"`, and Atlas does not evaluate an expression in
+an assignment definition: `engine/behavior.go` interns the model's string verbatim, so
+the task is assigned to the literal `=approvalRef` and no person holds it. The same gap
+stops `genehmigung-rolle` naming a group and `genehmigung-vorgesetzter` using the
+manager it read from the directory. Closing it is a compiler and engine change — compile
+the attribute as an expression when it begins with `=`, evaluate it at activation and
+freeze the result into the job-created event, as the due date already is — and it is a
+decision of its own rather than a detail of this page. Until it is made, an installation
+reaches this page by binding a product to its own approval model with a static
+assignment, which is the path the tests take.
+
+## Links
+
+- needs [ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md) — an approval a customer can grant themselves is not an approval
+- brands from [ADR-draft-portal-theme-per-catalogue](draft-portal-theme-per-catalogue.md) — the same accent, typeface and mark, resolved from the order instead of the visitor
+- decides the orders of [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+- keeps [ADR-0113](0113-org-wide-ui-theme.md) untouched — the Console stays the operator's
+- uses [ADR-0042](0042-user-task-assignment-and-claim.md) — who holds a task

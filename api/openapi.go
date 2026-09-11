@@ -250,6 +250,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
 
+		{"POST", "/api/v1/instances", s.handleCreateInstanceByProcessID, apiOp{
+			summary: "Start the newest deployed version of a process by its BPMN process id — the way a model addresses another process, which knows an id and must not pin a version (a definition key pins one; use the route below for that)", tag: "Instances", role: RoleOperator,
+			req: jsonBody("Process id and initial variables", schemaObj(map[string]any{
+				"processId": tString(), "variables": tObject(),
+			}, "processId")),
+			resp: jsonBody("Created instance", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances", s.handleCreateInstance, apiOp{
 			summary: "Start a process instance", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
@@ -760,6 +766,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
 			resp: jsonBody("What was imported, and what was skipped", tObject())}},
+		// The approver's page (ADR-draft-portal-approval-page). One call answers
+		// everything it shows, because the chain behind an approval — task, order,
+		// release, catalogue — is one the approver may walk no step of themselves.
+		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
+			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
+			resp: jsonBody("Approvals", tArray())}},
+		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
+			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
 		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Genehmigungen</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M128 26 244 214 12 214ZM128 172 178 214 78 214ZM111 72H145V99H172V133H145V160H111V133H84V99H111Z'/%3E%3C/svg%3E" />
+<style>
+  /* The same token set app.css, the public form and the portal declare. What is
+     written here is the instance's brand — the operator's — and genehmigung.js
+     overwrites the accent trio and the typeface once an approval is open, so the
+     decision is taken in the colours of the catalogue it belongs to.
+
+     Keyed to the approval and not to the page: an approver holds requests from
+     several customer groups at once, and a list of them has no one brand. */
+  :root {
+    --bg:#f3f4f6; --surface:#ffffff;
+    --border:#e2e4e9; --border-strong:#cdd0d6;
+    --text:#14161a; --muted:#62666d;
+    --accent:#0b5cff; --accent-hover:#0a4ad1; --accent-soft:#eaf0ff; --accent-ink:#ffffff;
+    --ok:#2d8a4e; --danger:#c0392b;
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
+  #app { max-width: 680px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:16px;
+           flex-wrap:wrap; margin-bottom:16px; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  /* Bounded in both directions: a mark is somebody's own image at whatever size
+     they uploaded it, and a page that let it set its own height would be laid out
+     by the upload. */
+  .mark { height:32px; width:auto; max-width:180px; display:block; }
+  h1 { font-size:22px; margin:0; }
+  h3 { font-size:17px; margin:0 0 12px; }
+  .langs { display:flex; gap:4px; }
+  .lang { border:1px solid var(--border-strong); background:var(--surface); color:var(--muted);
+          border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer; }
+  .lang.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:4px 16px; margin:0 0 20px; font-size:14px; }
+  dt { color:var(--muted); }
+  dd { margin:0; }
+  .reason { display:block; margin-bottom:20px; font-size:14px; }
+  .reason > span { display:block; }
+  .reason > span:first-child { margin-bottom:4px; }
+  .reason > span:last-child { color:var(--muted); font-size:13px; margin-top:4px; }
+  textarea { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--border-strong);
+             border-radius:8px; background:var(--surface); color:var(--text); resize:vertical; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; }
+  button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
+                   border-radius:8px; padding:8px 16px; font:inherit; cursor:pointer; }
+  /* A refusal is a decision and not a mishap, so it is a plain button rather than
+     a red one. The colour would tell an approver that one of the two answers is
+     the dangerous one, which is not true of either. */
+  button.secondary { background:var(--surface); color:var(--text); border:1px solid var(--border-strong);
+                     border-radius:8px; padding:8px 16px; font:inherit; cursor:pointer; }
+  button.primary:disabled, button.secondary:disabled { opacity:.55; cursor:default; }
+  .list { list-style:none; margin:0; padding:0; }
+  .list li { margin-bottom:8px; }
+  .pick { display:block; width:100%; text-align:left; background:var(--surface);
+          border:1px solid var(--border); border-radius:10px; padding:14px 16px;
+          font:inherit; color:var(--text); cursor:pointer; }
+  .pick:hover { border-color:var(--accent); }
+  .muted { color:var(--muted); font-size:13px; }
+  .empty { background:var(--surface); border:1px dashed var(--border-strong); border-radius:10px;
+           padding:24px; text-align:center; }
+  .empty p { margin:4px 0; }
+  .error { background:#fdecea; border:1px solid var(--danger); color:var(--danger);
+           border-radius:8px; padding:10px 14px; }
+  a { color:var(--accent-hover); }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <!-- A module: genehmigung.js imports theme.js's palette derivation rather than
+       carrying a second copy of it. -->
+  <script type="module" src="/genehmigung.js"></script>
+</body>
+</html>
