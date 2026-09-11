@@ -1664,7 +1664,7 @@ the method and how to work it with Atlas as it stands are in
   are runtime health and a capability has none; the event-log context now says in its
   own words that it can be asked about the processes realising a capability and not
   about the capability itself
-  ([ADR-draft-panorama-binds-the-capability-register](docs/adr/draft-panorama-binds-the-capability-register.md)).
+  ([ADR-0308](docs/adr/0308-panorama-binds-the-capability-register.md)).
 - 🔲 **B7 — Measurement.** Compute a capability's declared KPIs and SLAs from the data
   Atlas already keeps: outcome distribution from the per-element visit counters
   ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) over distinctly named end

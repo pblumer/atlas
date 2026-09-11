@@ -136,7 +136,7 @@ func (s *Server) collectBindingCatalog(r *http.Request) (panorama.Catalog, error
 	}
 
 	// The business-architecture register (ADR-0305), resolved as
-	// ADR-draft-panorama-binds-the-capability-register decides. A binding carries the
+	// ADR-0308 decides. A binding carries the
 	// record's
 	// key, which is its identity: the filename on disk, not renameable in place, and
 	// what an export carries. The name is what the server supplies here.

@@ -1,4 +1,4 @@
-# ADR-DRAFT: Panorama binds the capability register
+# ADR-0308: Panorama binds the capability register
 
 - **Status:** Accepted
 - **Implementation:** Landed

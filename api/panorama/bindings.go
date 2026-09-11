@@ -23,7 +23,7 @@ import (
 // to their meaning is a version bump rather than a quiet redefinition.
 //
 // Adding a key is not such a change, and the business-architecture keys were added
-// without one (ADR-draft-panorama-binds-the-capability-register). Version 1 says what
+// without one (ADR-0308). Version 1 says what
 // a client may rely on finding, and every promise it made still holds: no key's
 // meaning moved, none was removed, and a
 // document carrying the new keys reads correctly under the old contract — the
@@ -45,7 +45,7 @@ const (
 	KeyRuntimeID          = "atlas.runtimeId"
 	KeyDeploymentTargetID = "atlas.deploymentTargetId"
 	KeyReleaseID          = "atlas.releaseId"
-	// The business architecture (ADR-draft-panorama-binds-the-capability-register;
+	// The business architecture (ADR-0308;
 	// the register itself is ADR-0305). A capability record is what has to be
 	// done, stated independently of how; an ArchiMate Capability is the architect's
 	// drawing of the same thing. Bound, they are one architecture seen twice. Unbound,

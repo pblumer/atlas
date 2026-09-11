@@ -36,7 +36,7 @@ package panorama
 // palette and a rule the browser enforces — so a change to what is permitted is a
 // version bump rather than a quiet redefinition.
 //
-// Version 2 adds ValueStream (ADR-draft-panorama-binds-the-capability-register).
+// Version 2 adds ValueStream (ADR-0308).
 // This one *is* a bump where the binding
 // contract's addition was not, and the difference is what each number promises. The
 // binding contract says which keys a client may rely on finding, and adding one takes
@@ -85,7 +85,7 @@ var authorable = []ElementKind{
 	{Type: "Capability", Label: "Capability", Layer: LayerStrategy, Aspect: AspectBehavior},
 	// A value stream is the ordered activity that meets a customer need, and its
 	// stages name the capabilities that perform them (ADR-0305), and it is bound by
-	// ADR-draft-panorama-binds-the-capability-register. The validator has
+	// ADR-0308. The validator has
 	// always accepted one in a document it read; until this entry existed the palette
 	// offered no way to create one, so a model containing value streams could be
 	// opened and edited around but never added to.

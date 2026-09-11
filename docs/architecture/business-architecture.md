@@ -429,7 +429,7 @@ above. **So are Panorama's binding keys**: an ArchiMate `Capability` carries
 and this register are the same architecture seen twice. The key travels in the exchange
 document as an ordinary ArchiMate property; the record's name is resolved on every read,
 so the drawing cannot go stale about the register
-([ADR-draft-panorama-binds-the-capability-register](../adr/draft-panorama-binds-the-capability-register.md)).
+([ADR-0308](../adr/0308-panorama-binds-the-capability-register.md)).
 
 **Not built, each a named slice on [Milestone B](../../ROADMAP.md):**
 

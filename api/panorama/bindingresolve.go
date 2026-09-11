@@ -55,7 +55,7 @@ type Catalog struct {
 	Targets      map[string]ResourceRef
 	Releases     map[string]ResourceRef
 	// Capabilities and ValueStreams are the business-architecture register (ADR-0305),
-	// bound as ADR-draft-panorama-binds-the-capability-register decides. Unlike the maps above they are not filtered per caller, and that is
+	// bound as ADR-0308 decides. Unlike the maps above they are not filtered per caller, and that is
 	// a property of the register rather than an omission here: a capability record is
 	// readable by any signed-in identity, because it says what the organisation must
 	// be able to do and nothing about what this server runs. What *is* scoped are the
