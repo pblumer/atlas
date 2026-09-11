@@ -1385,6 +1385,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		func(principal, itemID string) error {
 			s.do(func() { s.proc.RevokeEntitlement(principal, itemID) })
 			return s.drive()
+		},
+		// And what they already hold, for the basket's second resolution. Read off
+		// the loop: it is one person's inventory, but it is a scan (ADR-0239).
+		func(principal string) (map[string]bool, error) {
+			out := map[string]bool{}
+			err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+				return rv.EntitlementsOf(principal, func(v *model.EntitlementValue) error {
+					out[v.ItemID] = true
+					return nil
+				})
+			})
+			return out, err
 		})
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the

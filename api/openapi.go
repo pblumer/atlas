@@ -797,6 +797,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
 			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
 			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"GET", "/api/v1/inventory", s.handleInventory, apiOp{
+			summary: "What you hold today: every entitlement recorded against you, newest first, with where the knowledge came from (ordered, adopted or legacy) and the order that granted it. An administrator may ask about somebody else with ?principal=. Read from the inventory and never from orders — an order is deleted by retention long before the access it granted ends", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("One principal's inventory", tObject())}},
 		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},

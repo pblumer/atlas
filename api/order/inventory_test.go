@@ -56,7 +56,7 @@ func inventoryFixture(t *testing.T, lines ...Line) (*Service, *Store, *recordedI
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
 		func(message, orderID string, vars map[string]string) error { wakes++; return nil },
 		func() string { return "https://atlas.example.ch" },
-		inv.grant, inv.revoke)
+		inv.grant, inv.revoke, holdsNothing)
 
 	if err := store.Save(Order{
 		ID: "ord_1", ReleaseID: "rel_1", Orderer: "usr_chef", Recipient: "usr_ada",
@@ -208,5 +208,139 @@ func TestAnInventoryThatRefusesStopsTheReport(t *testing.T) {
 	}
 	if *wakes != 0 {
 		t.Errorf("the process was woken %d times although the right was not recorded", *wakes)
+	}
+}
+
+// basketRelease is a catalogue with one item that may be held once and one that
+// may be held twice, so the second resolution has both cases to decide.
+func basketRelease(t *testing.T) catalog.Release {
+	t.Helper()
+	items := []catalog.Item{
+		{ID: "vpn", HomeCatalog: "cat", State: catalog.StateActive,
+			Texts: map[string]string{"de": "VPN"}, Approval: catalog.Approval{Kind: catalog.KindNone},
+			ProvisionProcess: "prov", DeprovisionProcess: "deprov"},
+		{ID: "lizenz", HomeCatalog: "cat", State: catalog.StateActive,
+			Texts: map[string]string{"de": "Lizenz"}, Approval: catalog.Approval{Kind: catalog.KindNone},
+			ProvisionProcess: "prov", DeprovisionProcess: "deprov", MultipleAllowed: true},
+	}
+	rel, problems := catalog.Publish(catalog.Input{
+		Catalogs: []catalog.Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"vpn", "lizenz"}}},
+		Items: items,
+	})
+	if len(problems) != 0 {
+		t.Fatalf("Publish: %v", problems)
+	}
+	rel.ID, rel.CatalogID, rel.CreatedAt = "rel_1", "cat", 1000
+	return rel
+}
+
+// basketService is a service whose caller already holds whatever holds names.
+func basketService(t *testing.T, holds ...string) (*Service, *Store) {
+	t.Helper()
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := basketRelease(t)
+	has := map[string]bool{}
+	for _, id := range holds {
+		has[id] = true
+	}
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke,
+		func(string) (map[string]bool, error) { return has, nil })
+	return s, store
+}
+
+func lineStatusOf(t *testing.T, o Order, itemID string) LineStatus {
+	t.Helper()
+	for _, l := range o.Lines {
+		if l.ItemID == itemID {
+			return l.Status
+		}
+	}
+	t.Fatalf("order carries no line for %s: %+v", itemID, o.Lines)
+	return ""
+}
+
+// The basket's second resolution: something the recipient already holds, and may
+// not hold twice, is ordered as skipped rather than provisioned again.
+//
+// Skipped and not dropped. The request was made, and an order that silently
+// omitted it could not answer "I ordered a VPN, where is it" — the honest answer
+// is "you already had one", and only a recorded line can give it.
+func TestSomethingAlreadyHeldIsOrderedAsSkipped(t *testing.T) {
+	s, _ := basketService(t, "vpn")
+
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_ada"), "POST",
+		`{"releaseId":"rel_1","items":["vpn","lizenz"]}`))
+
+	if got := lineStatusOf(t, placed, "vpn"); got != StatusSkipped {
+		t.Errorf("the vpn is %s, want skipped — the recipient already holds one", got)
+	}
+	// Nothing is started for it either: a skipped line is settled, not waiting.
+	for _, id := range Next(placed) {
+		if id == "vpn" {
+			t.Error("the vpn is offered for provisioning although it is already held")
+		}
+	}
+}
+
+// An item that says it may be held more than once is ordered again, held or not.
+// Two licences and two mailboxes are ordinary, and a portal that refused the
+// second would be answering from its own tidiness rather than from the catalogue.
+func TestSomethingThatMayBeHeldTwiceIsOrderedAgain(t *testing.T) {
+	s, _ := basketService(t, "vpn", "lizenz")
+
+	placed := decode[Order](t, do(t, s.HandlePlace, someone("usr_ada"), "POST",
+		`{"releaseId":"rel_1","items":["vpn","lizenz"]}`))
+
+	if got := lineStatusOf(t, placed, "lizenz"); got != StatusPending {
+		t.Errorf("the licence is %s, want pending — the catalogue allows a second", got)
+	}
+}
+
+// An unreadable inventory refuses the order rather than placing one that would
+// provision a second copy of something. Ordering twice is visible in a target
+// system and undoing it is somebody's afternoon; refusing is a retry.
+func TestAnUnreadableInventoryRefusesTheOrder(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+
+	rel := basketRelease(t)
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "" },
+		ignoreGrant, ignoreRevoke,
+		func(string) (map[string]bool, error) { return nil, errors.New("the store is gone") })
+
+	rec := do(t, s.HandlePlace, someone("usr_ada"), "POST", `{"releaseId":"rel_1","items":["vpn"]}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("place = %d, want 500: %s", rec.Code, rec.Body)
+	}
+	all, err := store.All()
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	if len(all) != 0 {
+		t.Errorf("%d orders were placed although the inventory could not be read", len(all))
 	}
 }

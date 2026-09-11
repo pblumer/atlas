@@ -75,6 +75,14 @@ type Service struct {
 	// is a visit to the loop of its own, and a nested Do would deadlock.
 	grant  func(Grant) error
 	revoke func(principal, itemID string) error
+	// held answers what one principal already holds, as a set of item ids. It is
+	// what makes the basket's second resolution possible — an item the recipient
+	// already has and may not have twice is ordered as skipped rather than
+	// provisioned again.
+	//
+	// Called outside this service's loop closure: reading the inventory takes a
+	// read view, which is taken on the loop (ADR-0239).
+	held func(principal string) (map[string]bool, error)
 }
 
 // The two messages that drive fulfilment, correlated on the order id.
@@ -97,10 +105,11 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 	wake func(message, orderID string, vars map[string]string) error,
 	portalBase func() string,
 	grant func(Grant) error,
-	revoke func(principal, itemID string) error) *Service {
+	revoke func(principal, itemID string) error,
+	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
 		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase,
-		grant: grant, revoke: revoke}
+		grant: grant, revoke: revoke, held: held}
 }
 
 func newID(prefix string) (string, error) {
@@ -177,6 +186,17 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// What the recipient already holds, read before the loop is entered for the
+	// same reason the catalogue gate is. An unreadable inventory refuses the order
+	// rather than placing one that would provision a second copy of something:
+	// ordering twice is visible in a target system and undoing it is somebody's
+	// afternoon.
+	has, heldErr := s.held(recipient)
+	if heldErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read inventory: "+heldErr.Error())
+		return
+	}
+
 	var (
 		out   Order
 		empty bool
@@ -194,7 +214,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 
 		out = Order{
 			ID: id, ReleaseID: rel.ID, Orderer: p.UserID, Recipient: recipient,
-			Lines:     linesFor(rel, ordered),
+			Lines:     linesFor(rel, ordered, has),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
 			CreatedAt: s.now(),
@@ -234,9 +254,19 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// linesFor turns the resolved product ids into pending lines, each carrying the
-// processes its product is bound to as the release froze them.
-func linesFor(rel catalog.Release, ordered []string) []Line {
+// linesFor turns the resolved product ids into lines, each carrying the processes
+// its product is bound to as the release froze them.
+//
+// A line starts pending unless the recipient already holds the item and the item
+// says it may not be held twice, in which case it starts skipped — the basket's
+// second resolution (ADR-draft-portal-catalogue-order-inventory).
+//
+// Skipped rather than dropped, on purpose. The request was made and the record
+// should say so: "you asked for this and already had it" is a different sentence
+// from silence, and a reader of the order months later can tell the two apart.
+// Skipped also counts as satisfied, so a line that requires this one is not left
+// waiting for something nobody is going to provision.
+func linesFor(rel catalog.Release, ordered []string, held map[string]bool) []Line {
 	bound := make(map[string]catalog.Item, len(rel.Items))
 	for _, it := range rel.Items {
 		bound[it.ID] = it
@@ -244,7 +274,11 @@ func linesFor(rel catalog.Release, ordered []string) []Line {
 	out := make([]Line, len(ordered))
 	for i, id := range ordered {
 		it := bound[id]
-		out[i] = Line{ItemID: id, Status: StatusPending,
+		status := StatusPending
+		if held[id] && !it.MultipleAllowed {
+			status = StatusSkipped
+		}
+		out[i] = Line{ItemID: id, Status: status,
 			ProvisionProcess:   it.ProvisionProcess,
 			DeprovisionProcess: it.DeprovisionProcess,
 			Approval: Approval{

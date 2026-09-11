@@ -51,6 +51,10 @@
   button.linkish:disabled { opacity:.55; cursor:default; text-decoration:none; }
   .pill { display:inline-block; background:var(--accent-soft); color:var(--accent-hover);
           border-radius:999px; padding:2px 10px; font-size:12px; margin:0 0 8px; }
+  /* What somebody already holds, in the same green a settled line uses. Deliberately
+     not a warning colour: having a thing is not a problem, and a mark that looked
+     like one would make the catalogue read as a list of complaints. */
+  .pill.ok { background:#e7f6ec; color:var(--ok); }
   .row { display:flex; justify-content:space-between; align-items:baseline; gap:12px;
          margin-bottom:8px; flex-wrap:wrap; }
   .lines { margin:0; padding-left:0; list-style:none; font-size:14px; }

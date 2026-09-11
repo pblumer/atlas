@@ -154,9 +154,15 @@ var mcpOmittedRoutes = map[string]string{
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.
 	"GET /api/v1/portal/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
-	"POST /api/v1/orders":        "portal ordering surface still being built; a tool is a public contract",
-	"GET /api/v1/orders":         "portal ordering surface still being built, and an order is read as the person who placed it",
-	"GET /api/v1/orders/{id}":    "portal ordering surface still being built, and an order is read as the person who placed it",
+	// The inventory. Same shape as the catalogue above — it answers about the
+	// caller — with one more reason on top: a list of somebody's access is exactly
+	// the read that should need a person behind it, and an agent acting as a server
+	// identity is not one. The ?principal= form an administrator uses would hand
+	// every agent the whole estate's access map through one tool call.
+	"GET /api/v1/inventory":   "what one person holds; an agent has no inventory of its own, and the administrator's form of it reads somebody else's access",
+	"POST /api/v1/orders":     "portal ordering surface still being built; a tool is a public contract",
+	"GET /api/v1/orders":      "portal ordering surface still being built, and an order is read as the person who placed it",
+	"GET /api/v1/orders/{id}": "portal ordering surface still being built, and an order is read as the person who placed it",
 	// The orchestrator pair. These drive real provisioning, and an agent that
 	// could report a line as provisioned could make an order say something no
 	// target system ever did — the one place in this surface where a wrong call

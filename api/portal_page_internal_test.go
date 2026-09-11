@@ -286,3 +286,29 @@ func TestPortalNamesEveryStatusTheServerCanProduce(t *testing.T) {
 		}
 	}
 }
+
+// TestThePortalMarksWhatIsAlreadyHeldFromTheInventory pins where the marking gets
+// its facts.
+//
+// Deriving "already held" from the orders the page has just fetched would look
+// identical and work for ninety days. Then retention deletes the order, the right
+// is still held, and the catalogue quietly stops marking it — the exact failure
+// the three-model split exists to prevent
+// (ADR-draft-portal-catalogue-order-inventory). So the source of the marking is
+// the inventory route, and this says so in the one form that cannot be satisfied
+// by a comment: the fetch itself.
+func TestThePortalMarksWhatIsAlreadyHeldFromTheInventory(t *testing.T) {
+	src := readWeb(t, "portal.js")
+	if !strings.Contains(src, `api('/api/v1/inventory')`) {
+		t.Fatal("portal.js does not read /api/v1/inventory. If the catalogue's " +
+			"already-held marking is derived from the orders on the page instead, it " +
+			"stops marking the day retention deletes the order that granted the right")
+	}
+	// The catalogue's own answer decides whether a mark is even meaningful: an item
+	// that may be held twice is orderable again, and marking it would train people
+	// to ignore the mark.
+	if !strings.Contains(src, "multipleAllowed") {
+		t.Error("portal.js marks held items without consulting multipleAllowed, so a " +
+			"second licence looks like a mistake")
+	}
+}

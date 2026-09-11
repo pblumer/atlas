@@ -32,6 +32,8 @@ const STRINGS = {
     'portal.noOrders': 'Sie haben noch nichts bestellt.',
     'portal.placed': 'Bestellt am',
     'portal.approval': 'Genehmigung nötig',
+    'portal.held': 'Haben Sie bereits',
+    'portal.held.since': 'seit',
     'portal.blockedBy': 'Wartet auf',
     'portal.reason': 'Begründung',
     'portal.retry': 'Erneut versuchen',
@@ -73,6 +75,8 @@ const STRINGS = {
     'portal.noOrders': 'You have not ordered anything yet.',
     'portal.placed': 'Ordered on',
     'portal.approval': 'Needs approval',
+    'portal.held': 'You already have this',
+    'portal.held.since': 'since',
     'portal.blockedBy': 'Waiting for',
     'portal.reason': 'Reason',
     'portal.retry': 'Try again',
@@ -200,6 +204,12 @@ const state = {
   catalog: null,
   release: null,
   orders: [],
+  // held is what the inventory says this person already has, as itemId -> since.
+  // It is read from the inventory and not derived from the orders on this page:
+  // the order that granted a right is deleted by retention long before the right
+  // ends, and a catalogue that marked from orders would stop marking on the
+  // ninetieth day (ADR-draft-portal-catalogue-order-inventory).
+  held: new Map(),
   chosen: new Set(),
   busy: false,
   error: '',
@@ -226,6 +236,8 @@ async function load() {
     state.release = releases && releases.length ? releases[0] : null;
   }
   state.orders = await api('/api/v1/orders');
+  const inv = await api('/api/v1/inventory');
+  state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
   render();
 }
 
@@ -286,6 +298,27 @@ function el(tag, attrs, ...children) {
   return node;
 }
 
+// heldPill marks what the person already has, with the day it started.
+//
+// It marks and does not disable. A card orders a product *and* whatever options
+// are ticked under it, so a bundle somebody already holds may still have an
+// option they do not — and a button greyed out for the whole card would make that
+// option unreachable. The server does the deciding: an item already held and not
+// repeatable is ordered as a skipped line, which says "you asked, you had it"
+// rather than silently dropping the request.
+//
+// An item the catalogue marks repeatable gets no pill even when it is held:
+// holding a second licence is the ordinary case there, and a mark that means
+// nothing trains people to ignore the mark.
+function heldPill(item) {
+  if (!item || item.multipleAllowed) return null;
+  const since = state.held.get(item.id);
+  if (since == null) return null;
+  return el('p', { class: 'pill ok' },
+    `${t('portal.held')} — ${t('portal.held.since')} `
+    + new Date(since / 1e6).toLocaleDateString(locale));
+}
+
 function renderCatalogue() {
   if (!state.catalog) {
     return el('div', { class: 'empty' },
@@ -306,6 +339,7 @@ function renderCatalogue() {
       el('h3', {}, textOf(p.texts, p.id)),
       p.approval && p.approval.kind && p.approval.kind !== 'none'
         ? el('p', { class: 'pill' }, t('portal.approval')) : null,
+      heldPill(p),
       includes.length ? el('div', { class: 'parts' },
         el('span', { class: 'muted' }, t('portal.includes')),
         el('ul', {}, includes.map((id) => el('li', {}, textOf((by[id] || {}).texts, id))))) : null,
@@ -322,7 +356,8 @@ function renderCatalogue() {
                   if (e.target.checked) state.chosen.add(key); else state.chosen.delete(key);
                 },
               }),
-              ' ', textOf((by[id] || {}).texts, id)));
+              ' ', textOf((by[id] || {}).texts, id)),
+            heldPill(by[id] || { id }));
         }))) : null,
       el('button', {
         class: 'primary',

@@ -92,7 +92,29 @@ func (v *EntitlementValue) decode(src []byte) error {
 	v.Origin = EntitlementOrigin(src[8])
 
 	rest := src[entitlementFixed:]
-	for _, into := range []*string{&v.Principal, &v.ItemID, &v.VariantID, &v.OrderID} {
+	// The two that make the record mean anything are required: a truncated record
+	// that decoded to "nobody holds nothing" would be counted by every reader.
+	for _, into := range []*string{&v.Principal, &v.ItemID} {
+		s, next, err := readString(rest)
+		if err != nil {
+			return err
+		}
+		*into, rest = s, next
+	}
+	// The rest are append-compatible, as the other values in this package are: a
+	// record written before a field simply ends, and the field decodes empty.
+	//
+	// This matters more here than elsewhere. The record this family implements
+	// warns in as many words that a field added later costs a migration of an
+	// append-only column family, and it names the fields it expects to want —
+	// which target system a right lives in, what state it is in there — that
+	// reconciliation will need and that nothing yet constrains well enough to
+	// define. Ending early rather than erroring is what lets them be added without
+	// one.
+	for _, into := range []*string{&v.VariantID, &v.OrderID} {
+		if len(rest) == 0 {
+			return nil
+		}
 		s, next, err := readString(rest)
 		if err != nil {
 			return err

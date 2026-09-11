@@ -4,10 +4,11 @@
 - **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
-- **Open question:** Whether a column family holding millions of entitlements stays
-  within a workable checkpoint. The inventory is engine state by this record, so it
-  is written into every checkpoint ([ADR-0131](0131-engine-recovery-checkpoints-and-wal-compaction.md)),
-  and nobody has measured what that costs at the scale this record sizes for.
+- **Open question:** Whether reconciliation against the target systems can be run
+  over the whole estate without the comparison becoming a population-sized job. The
+  checkpoint question this record opened is answered and measured — see
+  *Measured, not assumed* below — but nothing yet reads the inventory whole, and the
+  one place that will is the one nobody has built.
 - **Question checked:** 2026-09
 
 ## Context and problem statement
@@ -478,8 +479,9 @@ storing it, `Abandon` and `Reject` are the transitions into the two
 decided outcomes, `Line.Valid` holds their rules at the persistence boundary, `Notices` reports what a change owes the orderer, and
 `Assign`, `Escalate`, `Stall` and `Reassign` move an unanswered
 approval along, make it visible when it can go no further, and let a person restart it
-— without anything there ever deciding it. The inventory is not built yet, which is why
-this record reads `Partial`.
+— without anything there ever deciding it. The inventory is built (below); what keeps
+this record at `Partial` is reconciliation, adoption and the commissioning load, none of
+which exists yet.
 
 **The deadline that drives them is a boundary timer on the approval task**, because a
 deadline is a modelled fact: an installation changes P3D and P7D by editing its copy of
@@ -626,6 +628,128 @@ is approved under — because a catalogue edit must not change a pending order. 
 model implements that rule is this installation's wiring, and freezing it would mean
 an operator who redeploys an approval process breaks every order already waiting on
 one.
+
+### The inventory, built
+
+`model.EntitlementValue` is one thing one principal holds — principal, item, variant,
+order, since, origin — in column family `0x2A`, keyed by principal and then item. It is
+written only by the fold, through two intents (`IntentEntitlementGranted`,
+`IntentEntitlementRevoked`) and no third for editing one: a correction is a revocation
+and a grant, both of which say when they happened. The day somebody can edit an
+entitlement directly is the day the inventory stops being evidence and becomes an
+opinion.
+
+The key's prefix carries a `0x00` separator, because no principal id contains a zero
+byte and `usr_al` must not be able to scan into `usr_alice`'s rights. The value's decoder
+is **append-compatible**: the two fields that make the record mean anything are required,
+and a record that ends before the later ones leaves them empty. That is not tidiness.
+This record warns in as many words that a field added later costs a migration of an
+append-only column family, and it names the fields reconciliation will want — which
+target system a right lives in, what state it is in there — which nothing yet constrains
+well enough to define. A decoder that errored on a short record would make adding one a
+migration of every row ever written.
+
+**What writes it is fulfilment, at exactly two transitions.** A line reaching `done`
+grants; a line reported `returned` revokes. Both go through injected functions on the
+order service, called outside its own run-loop closure, because writing an engine fact
+runs the processor and a nested `Do` is a deadlock.
+
+Three decisions in that seam are load-bearing and none is obvious:
+
+- The right is recorded against the **recipient**, not the orderer. An integration
+  manager who orders a laptop for a new colleague does not thereby hold a laptop, and an
+  inventory that confused the two would put access on the wrong person — silently, and in
+  the direction an audit discovers rather than a user.
+- **Only those two transitions move it.** A `skipped` line is satisfied precisely because
+  the recipient already had the item; recording it as a grant would make a right that
+  predates this portal look like one the portal handed out, which is the distinction
+  `origin` exists to keep. A `returnFailed` line leaves the right standing, because the
+  target system has not been told otherwise and an access record may not say a privilege
+  ended when it did not.
+- The moment recorded is the **order's own `UpdatedAt`**, not a second clock reading. Two
+  records of one event that disagree about when it happened are worse than one, because
+  an audit has to decide which of them lies.
+
+The inventory is written **before** the fulfilment process is woken and refuses loudly: a
+failed write is a 500 with no wake, so the reporter — the only party that can retry —
+retries. A 200 there would leave the order saying the laptop is provisioned and the
+inventory saying nobody holds one, with nothing to reconcile them.
+
+**`GET /api/v1/inventory`** answers what one principal holds, read off the loop
+([ADR-0239](0239-off-loop-queries.md)) — one person's inventory is bounded, but it is
+still a scan. By default the subject is the caller; an administrator may ask about
+somebody else with `?principal=`, which is what a leaver process and an audit need.
+Anybody else is **refused rather than silently narrowed** to their own: an answer that
+quietly changes the question is how somebody comes to believe they read a colleague's
+access and found it empty. It is deliberately not an MCP tool, for the reason the
+ordering surface is not: reading a list of somebody's access should need a person behind
+it, and the `?principal=` form would hand an agent the estate's whole access map in one
+call.
+
+**The retention exemption is now a test, not a promise.** `PurgeInstanceHistory` deletes
+an explicit list of instance-keyed prefixes and the entitlement family is not among them;
+a test purges an instance and reads the right it granted back whole. That is the
+amendment to [ADR-0115](0115-history-retention-hard-delete.md) and
+[ADR-0144](0144-per-definition-history-ttl.md) made checkable rather than asserted.
+
+**The basket's second resolution is server-side.** An item the recipient already holds,
+whose catalogue entry does not say `multipleAllowed`, is ordered as a **skipped** line
+rather than provisioned again — and skipped, not dropped, because the request was made
+and the record should say so. "You asked for this and already had it" is a different
+sentence from silence, and `skipped` counts as satisfied, so a line requiring it is not
+left waiting for something nobody will provision. An unreadable inventory refuses the
+order: placing one that provisions a second copy is visible in a target system and
+undoing it is somebody's afternoon.
+
+The portal marks what is held and **does not disable the button**. A card orders a
+product and whatever options are ticked under it, so a bundle somebody already holds may
+still carry an option they do not; a greyed-out card would make that option unreachable.
+The marking reads the inventory route and not the orders on the page — deriving it from
+orders would look identical and work for ninety days, and then retention would delete the
+order, the right would still be held, and the catalogue would quietly stop marking it.
+A test pins the fetch, because that is the difference a comment cannot hold.
+
+**The one omission worth naming, because it was mine.** The first cut carried the new
+value type through the model, the state store and `applyToState` — but not through the
+two switches in `engine/value.go` that hand a payload to the fold. An entitlement was
+granted, logged, read back, and rebuilt as an empty record on recovery. Nothing failed to
+compile and nothing errored; the state after replay simply stopped equalling the state
+built live (I4), and only restarting the engine showed it.
+`TestEveryPayloadValueTypeSurvivesRecovery` now compares the case labels of
+`model.newValue` against both switches rather than trusting a hand-kept list, and fails
+loudly if either goes stale, so it cannot quietly degrade into checking nothing.
+
+### Measured, not assumed
+
+This record opened with a question: whether a column family holding millions of
+entitlements stays within a workable checkpoint, to be measured *before* the inventory is
+built rather than after. It was, with
+`ATLAS_MEASURE=1 go test ./state/ -run TestMeasureEntitlementCheckpoint`, which is kept
+in the tree so the numbers below can be reproduced rather than believed.
+
+**2,000,000 entitlements — 100,000 people holding 20 each:**
+
+| | |
+|---|---|
+| write, 100k transactions | 2.4 s |
+| full count (`EntitlementCount`, a whole-family scan) | ~0.35 s |
+| checkpoint (`Store.Snapshot`) | 19 ms |
+| on-disk footprint, live store / checkpoint | 57.4 / 47.3 MiB |
+| one person's 20 rights (`EntitlementsOf`) | 78 µs |
+
+The checkpoint figure needs its caveat stated rather than hidden: **all 107 sst files in
+the checkpoint were hard links**, which the measurement checks rather than assumes. A
+Pebble checkpoint costs a link per file, not a copy per byte, so 19 ms is a measurement
+of linking and grows with the file count, not with the estate. What *does* grow with the
+estate is the 47 MiB a backup has to copy off the machine — and 47 MiB for two million
+rights is not a number that changes any decision here.
+
+So the answer is that the concern was misplaced, and the honest reading of why: the
+worry was about checkpoint *cost*, and checkpoints are cheap by construction
+([ADR-0131](0131-engine-recovery-checkpoints-and-wal-compaction.md)). The scan that
+actually costs something is the whole-family one, at roughly a third of a second per two
+million rows — which is why no request path does one, and why the open question above is
+now about reconciliation, the one thing that will want to.
 
 ## Links
 
