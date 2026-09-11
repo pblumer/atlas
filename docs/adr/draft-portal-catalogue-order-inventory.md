@@ -208,8 +208,17 @@ automated caller has no call to make, and the same rule is re-checked where a li
 arrives as JSON. An incident already carries `RaisedAt`, frozen into its event, so the
 deadline needs no new state to measure against. A generic
 fulfilment process works the release's waves: every line in a wave starts its
-provisioning process as a call activity, and the next wave begins when the current one
-settles. When a line fails, every line that does not depend on it continues; dependent
+provisioning process, and the next wave begins when the current one settles.
+
+**Not as a call activity, and that took building it to find out.** `<zeebe:calledElement
+processId=…>` is a static attribute: the called process is fixed when the model is
+authored, and the operator-level override (ADR-0105) redirects one process id to another
+for the whole server rather than per instance. An order's line knows its process only at
+runtime, from the release. So the fulfilment process starts each line's provisioning
+process through the API instead — the same REST Worker it already uses to ask which
+lines are ready, and to report what came back. The cost is that engine-level parent and
+child are not related, so the order is what ties them together; it already does, since
+every line carries its process and its outcome. When a line fails, every line that does not depend on it continues; dependent
 lines stop and raise an incident. Partial fulfilment is the intended behaviour, not a
 degraded mode.
 
@@ -408,9 +417,12 @@ discrepancy, which no other system in the estate can do.
 
 `api/catalog` carries the catalogue model and `Publish` — the validation, the wave
 schedule and the preconditions described above, with `Release.Blocked` answering which
-lines a failure stops. `api/order` carries the order model and the propagation:
-`Propagate` marks what a settled outcome stopped, `Derive` reads an order's own
-standing off its lines rather than storing it, `Abandon` and `Reject` are the transitions into the two
+lines a failure stops. `api/order` carries the order model, the propagation and the orchestrator's two
+questions:
+`Next` and `Ready` say which lines may start — `Ready` with the process and variant an
+orchestrator needs — `Apply` records what came back, `Propagate` marks what a settled
+outcome stopped, `Derive` reads an order's own standing off its lines rather than
+storing it, `Abandon` and `Reject` are the transitions into the two
 decided outcomes, `Line.Valid` holds their rules at the persistence boundary, `Notices` reports what a change owes the orderer, and
 `Assign`, `Escalate`, `Stall` and `Reassign` move an unanswered
 approval along, make it visible when it can go no further, and let a person restart it
