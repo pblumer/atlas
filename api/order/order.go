@@ -253,8 +253,51 @@ type Order struct {
 	// the lines this order actually carries. The release computed them; the order
 	// records them rather than recomputing later against a catalogue that may have
 	// moved on, and so that fulfilment reads one record instead of two.
-	Waves     [][]string          `json:"waves,omitempty"`
-	Requires  map[string][]string `json:"requires,omitempty"`
-	CreatedAt int64               `json:"createdAt"`
-	UpdatedAt int64               `json:"updatedAt"`
+	Waves    [][]string          `json:"waves,omitempty"`
+	Requires map[string][]string `json:"requires,omitempty"`
+	// Assignments is where each approval sits and every hop it took to get there
+	// (assignment.go). There is at most one per line, and only for lines that
+	// needed approving.
+	//
+	// It is written when a deadline first moves an approval and not when the order
+	// is placed, because at placement the approver of a "superior" line is not
+	// known — the directory has not been asked yet. Until something moves it, the
+	// live task's assignee is the whole truth and copying it here would be a second
+	// one. What cannot be derived from the task is the *history*: who it started
+	// with, every hop, and whether the chain ran out. That is what this holds, and
+	// it outlives the task.
+	Assignments []Assignment `json:"assignments,omitempty"`
+	CreatedAt   int64        `json:"createdAt"`
+	UpdatedAt   int64        `json:"updatedAt"`
+}
+
+// AssignmentFor returns the recorded approval for one line, and whether there is
+// one. A line whose approval has never moved has none.
+func (o Order) AssignmentFor(itemID string) (Assignment, bool) {
+	for _, a := range o.Assignments {
+		if a.ItemID == itemID {
+			return a, true
+		}
+	}
+	return Assignment{}, false
+}
+
+// WithAssignment returns a copy of the order carrying this approval, replacing any
+// record for the same line. A copy, so a caller holding the previous order keeps
+// its own slice rather than sharing the array under it.
+func (o Order) WithAssignment(a Assignment) Order {
+	out := make([]Assignment, 0, len(o.Assignments)+1)
+	replaced := false
+	for _, have := range o.Assignments {
+		if have.ItemID == a.ItemID {
+			out, replaced = append(out, a), true
+			continue
+		}
+		out = append(out, have)
+	}
+	if !replaced {
+		out = append(out, a)
+	}
+	o.Assignments = out
+	return o
 }

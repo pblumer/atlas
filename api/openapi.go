@@ -769,6 +769,21 @@ func (s *Server) apiRoutes() []apiRoute {
 		// The approver's page (ADR-draft-portal-approval-page). One call answers
 		// everything it shows, because the chain behind an approval — task, order,
 		// release, catalogue — is one the approver may walk no step of themselves.
+		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
+			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{
+				"superior": tString(),
+			})),
+			resp: jsonBody("Where the approval sits now, and whether it can go further", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/reassign", s.handleReassignApproval, apiOp{
+			summary: "Give a stuck approval to somebody a person chose, recording who intervened. Refuses to give it to the caller themselves: the escalation path exists so a stalled approval reaches somebody who will act on it", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom to give it to", schemaObj(map[string]any{
+				"to": tString(),
+			}, "to")),
+			resp: jsonBody("Where the approval sits now", tObject())}},
+		{"GET", "/api/v1/approvals/stalled", s.handleStalledApprovals, apiOp{
+			summary: "Every approval that can escalate no further — the chain ran out or the directory looped. A stall records a fact, and this is where somebody who can act reads it; an approval nobody can escalate and nobody is looking at is how an order waits forever", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Stalled approvals", tArray())}},
 		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
 			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
 			resp: jsonBody("Approvals", tArray())}},

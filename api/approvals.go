@@ -65,6 +65,11 @@ type approvalResp struct {
 	// Theme is the catalogue's brand. The mark is not here — it is bytes, served
 	// from this approval's own logo route under this same gate.
 	Theme catalog.Theme `json:"theme"`
+	// Assignment is where this approval has been, when a deadline or a person has
+	// moved it (escalation.go). Absent while it is still with whoever it started
+	// with, which is the ordinary case — and its absence is therefore the answer
+	// "nobody has had to chase this".
+	Assignment *order.Assignment `json:"assignment,omitempty"`
 }
 
 // handleListApprovals answers the approval page: every open approval the caller
@@ -193,6 +198,9 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 	a := approvalResp{
 		Task: tr, OrderID: ord.ID, ItemID: line.ItemID, VariantID: vars["variantId"],
 		Recipient: vars["recipient"], Orderer: vars["orderer"],
+	}
+	if as, ok := ord.AssignmentFor(line.ItemID); ok {
+		a.Assignment = &as
 	}
 	rel, ok, err := s.catalogStore.Release(ord.ReleaseID)
 	if err != nil {

@@ -30,7 +30,18 @@ var ErrNoFurtherEscalation = errors.New("order: the approval can escalate no fur
 
 // Escalation is one hop of an approval from one holder to the next.
 type Escalation struct {
-	// From and To are principal ids — never names (ADR-draft-portal-personal-data).
+	// From and To identify people the way a *task* does, which is by the username
+	// its assignment names (ADR-0042). That is forced rather than chosen: an
+	// assignment is written back onto the task it belongs to, so it has to speak
+	// the identifier the task is addressed by, and a principal id written there
+	// would address nobody.
+	//
+	// It is not a widening of what the portal holds about a person
+	// (ADR-draft-portal-personal-data): a username is a login identifier the
+	// account already carries into every task's assignee field and into the event
+	// log with it. What stays out of here is what that record is about — names,
+	// mail addresses, departments — which are resolved from the account when
+	// something is rendered or sent, and never copied.
 	From string `json:"from"`
 	To   string `json:"to"`
 	At   int64  `json:"at"`
@@ -44,7 +55,7 @@ type Escalation struct {
 // every hop between.
 type Assignment struct {
 	ItemID string `json:"itemId"`
-	// Approver is the principal the approval is with now.
+	// Approver is who the approval is with now, as the task names them.
 	Approver string `json:"approver"`
 	// Original is who it was first assigned to. It survives every escalation,
 	// because an approval that travelled must still say where it started — a
