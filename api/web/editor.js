@@ -1076,7 +1076,16 @@ function wireProblems(root, modeler, api, applicationId) {
     caretEl.style.visibility = total === 0 ? "hidden" : "";
 
     if (total === 0) {
-      summaryEl.textContent = "No problems";
+      // "No problems" is a claim, and it is only true when something looked. A diagram
+      // filed under no application is resolved against no information model, so every
+      // data check — the declared class, the members a write targets, the data states —
+      // is skipped rather than passed. Reporting that as a clean bill is the one
+      // reading a reader must not be given, because it is indistinguishable from
+      // having earned it.
+      summaryEl.textContent = applicationId ? "No problems" : "No problems found — data not checked";
+      summaryEl.title = applicationId ? ""
+        : "This diagram is not filed under an application, so there is no information model to check "
+          + "its data objects against. Open it from its application, or deploy it from there.";
     } else {
       const parts = [];
       if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
@@ -6385,11 +6394,30 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // never matches anything again. Where a lifecycle exists the states are a closed
       // set of facts about that class, so they are offered as one.
       const declared = (known && known.lifecycle && known.lifecycle.states) || [];
+      // Why the picker is not a picker, when it is not one. Until now the field simply
+      // became plain text and the panel said nothing at all — and the two reasons for
+      // that are completely different remedies, so leaving the reader to guess between
+      // them was the worst of the three possible answers.
+      //
+      // The one that actually bites: a diagram deployed outside an application has no
+      // application, so it has no information model, so nothing resolves — and the
+      // Problems panel says "No problems" for the same reason, which reads as a clean
+      // model rather than as a check that never ran. Neither field is broken; there is
+      // simply nothing behind them, and now the panel says so and says what to do.
+      const noApplication = !projectId;
+      const nothingModelled = projectId && vocab.loaded && !vocab.classes.length;
       html += `<h3>Data object</h3>
-        <label class="field"><span>Type <span class="muted">(the class this datum is)</span></span>
+        <label class="field"><span>Class <span class="muted">(what this datum is)</span></span>
           ${vocab.classes.length ? classSelectHTML(itemType)
             : `<input type="text" id="f-itemtype" value="${esc(itemType)}" placeholder="Order"/>`}</label>
         ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", "Class name", "Order") : ""}
+        ${noApplication ? `<p class="im-nomatch">This diagram is not filed under an application, so there is
+          no information model to resolve a class against — and nothing here can be checked, which is why the
+          Problems panel is empty rather than clean. Open this process's <b>draft</b> from its application, or
+          deploy it from there, and the classes it models are offered here.</p>` : ""}
+        ${nothingModelled ? `<p class="im-nomatch">This application models no data yet, so there is no class to
+          point at. Draw one under <b>Data › Model</b> and it is offered here.
+          <a href="#/data" target="_blank" rel="noopener">Open Data ↗</a></p>` : ""}
         ${known ? classCardHTML(known) : ""}
         ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
           application yet — the Problems panel lists it, and a deploy is not refused for it.
@@ -6410,7 +6438,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           target="_blank" rel="noopener">open it ↗</a> to add one.</p>` : ""}
         <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
         ${pointsTo}
-        <p class="muted" style="font-size:12px">The <b>Type</b> is the class this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+        <p class="muted" style="font-size:12px">The <b>Class</b> is what this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
     }
 
     // A data association is the arrow between an activity and a data object — it is

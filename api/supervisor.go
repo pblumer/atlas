@@ -77,6 +77,26 @@ type SuperviseSpec struct {
 	// ScriptLanguages is the enabled subset passed to a script worker. It stays
 	// empty for every other Worker Type and never carries request-supplied data.
 	ScriptLanguages []string
+	// ScriptSandbox is the operator-selected profile passed only to a script
+	// Worker Instance. Empty is the compatible off mode.
+	ScriptSandbox string
+}
+
+func supervisedWorkerArgs(server string, spec SuperviseSpec, handles []string) []string {
+	args := []string{"worker", "--server", server, "--id", spec.ID}
+	for _, h := range handles {
+		args = append(args, "--handle", h)
+	}
+	if len(spec.Connectors) > 0 {
+		args = append(args, "--connector", strings.Join(spec.Connectors, ","))
+	}
+	if len(spec.ScriptLanguages) > 0 {
+		args = append(args, "--script-languages", strings.Join(spec.ScriptLanguages, ","))
+	}
+	if strings.TrimSpace(spec.ScriptSandbox) != "" {
+		args = append(args, "--script-sandbox", spec.ScriptSandbox)
+	}
+	return args
 }
 
 // childStatus is one supervised worker as the console sees it.

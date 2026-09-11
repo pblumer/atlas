@@ -40,6 +40,7 @@ import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML 
 // is a self-contained page and this file is long enough; it takes its dependencies
 // as arguments so the import stays one-directional, like every other module here.
 import { viewAIAccess } from "./aiaccess.js";
+import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 
 const view = document.getElementById("view");
 
@@ -1085,6 +1086,18 @@ function wnSetLang(l) {
   try { localStorage.setItem("atlas.whatsnew.lang", l); } catch { /* ignore */ }
 }
 
+// The landing page carries two bilingual sections — What's New and the key-features
+// tile — and they share one language: switching either toggle repaints both, so the
+// page is never half English and half German. wnEntries caches what renderWhatsNew
+// fetched, so the repaint costs nothing.
+let wnEntries = [];
+function setConsoleLang(l) {
+  wnSetLang(l);
+  const wn = document.getElementById("whats-new-slot");
+  if (wn && wnEntries.length) paintWhatsNew(wn, wnEntries, l);
+  paintKeyFeatures(document.getElementById("key-features-slot"), l, setConsoleLang);
+}
+
 // wnText resolves a {en, de} field for the active language, falling back to English.
 const wnText = (b, lang) => (b && (b[lang] != null ? b[lang] : b.en)) || "";
 
@@ -1097,6 +1110,7 @@ async function renderWhatsNew(slot) {
     doc = await res.json();
   } catch { return; } // offline or malformed — the landing page works without it
   const entries = (doc && Array.isArray(doc.entries)) ? doc.entries : [];
+  wnEntries = entries;
   if (entries.length) paintWhatsNew(slot, entries, wnLang());
 }
 
@@ -1149,13 +1163,11 @@ function paintWhatsNew(slot, entries, lang) {
     `</details></div>`;
 
   // The language toggle lives inside the <summary>; stop the click from also toggling
-  // the section open/closed, switch language, remember it, and repaint in place.
+  // the section open/closed, and switch the whole landing page's language.
   slot.querySelectorAll(".wn-lang button").forEach((b) => b.addEventListener("click", (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
-    const l = b.dataset.lang;
-    wnSetLang(l);
-    paintWhatsNew(slot, entries, l);
+    setConsoleLang(b.dataset.lang);
   }));
   const more = slot.querySelector(".wn-more");
   if (more) more.addEventListener("click", () => {
@@ -1169,7 +1181,12 @@ function paintWhatsNew(slot, entries, lang) {
 async function viewConsoleDashboard() {
   view.innerHTML = `
     <div class="card">
-      <h1>Welcome to Atlas</h1>
+      <div class="welcome-head">
+        <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
+          hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
+        }</span>
+        <h1>Welcome to Atlas</h1>
+      </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
       from a single self-contained binary. This Console manages deployments and shows engine health;
       the Modeler lets you design and deploy BPMN models in the browser.</p>
@@ -1198,8 +1215,13 @@ async function viewConsoleDashboard() {
           <div class="stat"><b id="s-ei">0</b><span>active element instances</span></div>
         </div>
       </div>
-    </div>`;
+    </div>
+    <div id="key-features-slot"></div>`;
   renderWhatsNew(document.getElementById("whats-new-slot")); // fills its own slot; safe if it fails
+  // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
+  // someone who arrived here without having read the README. Fills its own slot,
+  // and is silent if the asset is missing.
+  renderKeyFeatures(document.getElementById("key-features-slot"), wnLang(), setConsoleLang);
   try {
     const [procs, stats] = await Promise.all([
       api("GET", "/api/v1/processes"),
@@ -2469,7 +2491,8 @@ function appearanceCard() {
         <div class="between"><h3 style="margin:0">Logo</h3>
           <button type="button" class="btn ghost sm" id="logo-remove"${hasLogoCached() ? "" : " hidden"} title="Remove the uploaded logo and restore the built-in mark">Remove logo</button></div>
         <p class="muted" style="margin:6px 0 12px">Replace the built-in mark with your organisation's logo —
-        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
+        a PNG or SVG up to 512&nbsp;KiB, shown in the top bar, on the Console's landing page and on the
+        login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
             hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
@@ -7961,7 +7984,10 @@ async function viewInfoModels() {
       <td><div class="artifact-name"><span class="chip">UML</span>
         <a href="#/data/m/${encodeURIComponent(m.id)}"><b>${esc(m.name)}</b></a></div>
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
-      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}` : `<span class="muted">Missing application</span>`}</td>
+      <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}
+        <a class="dm-link" href="#/data/derived/${encodeURIComponent(app.id)}"
+           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>`
+        : `<span class="muted">Missing application</span>`}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>
       <td class="muted">r${m.revision}</td>
@@ -7980,6 +8006,8 @@ async function viewInfoModels() {
       ${writable.length ? `<div style="display:flex; gap:8px; align-items:center">
         <button class="btn ghost" data-act="import-im"
           title="Read a class diagram somebody already drew: Atlas's own JSON, or the XMI a UML tool exports">Import…</button>
+        <button class="btn ghost" data-act="derived-im"
+          title="Read what an application's processes already imply, without modelling anything">As built…</button>
         <button class="btn" data-act="new-im">Create new</button>
       </div>` : ""}
     </div>
@@ -8035,6 +8063,22 @@ async function viewInfoModels() {
         app: target, file, api, toast,
         navigate: (id) => { location.hash = `#/data/m/${encodeURIComponent(id)}`; },
       });
+      return;
+    }
+    // "As built" is scoped to an application, not to a model — an application with no
+    // model at all is exactly the case it exists for, and that case has no row to
+    // hang a link on. Every application is offered, not only the writable ones:
+    // reading what a process implies changes nothing.
+    if (e.target.closest('[data-act="derived-im"]')) {
+      const picked = await openPickModal({
+        title: "As built",
+        label: "Application",
+        options: applications.map((app) => ({ value: app.id, label: app.name })),
+        hint: "Read what this application's processes already imply about its data. Nothing is modelled and nothing is written.",
+        okLabel: "Read it",
+      });
+      if (!picked) return;
+      location.hash = `#/data/derived/${encodeURIComponent(picked.option.value)}`;
       return;
     }
     const btn = e.target.closest('[data-act="new-im"]');
@@ -8241,6 +8285,22 @@ async function viewDataInstances() {
     if (e.key === "Enter" && e.target.closest(".di-field")) apply();
   });
   enhanceViewTables();
+}
+
+// viewDerivedModel opens the *as built* reading of one application: the classes,
+// members and states its processes imply, with nothing modelled by hand
+// (ADR-0301). It is the counterpart of
+// viewInfoModel, not a mode of it — the two are different statements about the same
+// subject, and keeping them apart is the whole point.
+async function viewDerivedModel(applicationId) {
+  const gen = navGen;
+  const mod = await import("./derived-model.js");
+  const application = await resolveProject(applicationId);
+  if (superseded(gen)) return;
+  // Two live diagram-js instances stand on this page, so leaving it has to take them
+  // down rather than leave them bound to markup that is gone.
+  window.__atlasCleanup = mod.cleanupDerivedModel;
+  await mod.mountDerivedModel(view, { api, applicationId, application });
 }
 
 // viewInfoModel opens one model on the class canvas, which lives in its own module
@@ -8951,6 +9011,8 @@ async function route() {
     if (path === "#/data/instances") return await viewDataInstances();
     const imm = path.match(/^#\/data\/m\/(.+)$/);
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
+    const imd = path.match(/^#\/data\/derived\/(.+)$/);
+    if (imd) return await viewDerivedModel(decodeURIComponent(imd[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

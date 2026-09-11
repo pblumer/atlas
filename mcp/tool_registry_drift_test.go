@@ -128,6 +128,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_data_objects":                 "GET /api/v1/data-objects",
 	"atlas_instance_object_graph":        "GET /api/v1/instances/{key}/object-graph",
 	"atlas_instance_lifecycle":           "GET /api/v1/instances/{key}/lifecycle",
+	"atlas_derived_information_model":    "GET /api/v1/infomodel/derived",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,

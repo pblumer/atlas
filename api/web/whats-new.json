@@ -2,6 +2,125 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-starmap-opens-using-the-whole-window-whatever-the-size-o",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Starmap opens using the whole window",
+        "de": "Die Starmap nutzt beim Öffnen das ganze Fenster"
+      },
+      "summary": {
+        "en": "A small landscape used to open as a few small circles adrift in an empty canvas, and a process attached to nothing — or a handful that call each other and nothing else, like a test flow — could sit at the far edge holding two thirds of the window open behind it. The picture is now drawn at the same density whatever the size of the estate (five nodes fill as much of the window as a hundred and twenty-five do), and nothing is left far enough from the rest of the picture to decide how small everything else is drawn. It applies to every notation, including the Instances and Incidents heatmaps.",
+        "de": "Eine kleine Landschaft wurde bisher als ein paar kleine Kreise auf einer weitgehend leeren Fläche geöffnet, und ein Prozess ohne Verbindung — oder eine Handvoll, die nur sich gegenseitig aufrufen, etwa ein Testablauf — konnte am äusseren Rand sitzen und zwei Drittel des Fensters leer halten. Das Bild wird jetzt unabhängig von der Grösse der Landschaft in derselben Dichte gezeichnet (fünf Knoten füllen so viel Fenster wie hundertfünfundzwanzig), und nichts liegt mehr so weit vom Rest entfernt, dass es bestimmt, wie klein alles andere gezeichnet wird. Das gilt für jede Notation, auch für die Heatmaps Instances und Incidents."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama"
+      ]
+    },
+    {
+      "id": "removing-someone-from-an-application-now-takes-their-starmap",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Removing someone from an application takes effect on the Starmap at once",
+        "de": "Wer aus einer Applikation entfernt wird, verliert die Starmap sofort"
+      },
+      "summary": {
+        "en": "The Starmap holds a short reading of what this server is, so that twenty people with the view open cost the engine one reading rather than twenty. It decided who may see what on every request — but from that held reading, and the reading included the application records themselves. An application's members are written on the application, so re-deciding against a record half a minute old gave the answer from half a minute ago. Somebody you removed from an application, an application you sealed to private, an ownership transfer, an application you deleted: in each case the person who had just lost access kept receiving that application's processes for the rest of the window — process names and ids, what calls what, running and finished instance counts, incident counts and ages, and the incident details with their raw error text from workers. That is the material the Starmap otherwise replaces with an anonymous placeholder, and the view's own automatic refresh reached the window without anybody doing anything, because an open tab re-reads on its own. The two stores a sharing scope lives in — applications and workers — are now read on every request, exactly as every other list on this server reads them, so a change of access takes effect on the next request as it does everywhere else. Only structure that carries no sharing scope is still held briefly, so the reason for holding it is intact. Two things get better with it: an application or a worker you create or delete now appears on the Starmap at once instead of within half a minute, and a task pointing at a worker you have just deleted stops pointing at it.",
+        "de": "Die Starmap hält kurz fest, was dieser Server ist, damit zwanzig geöffnete Ansichten die Engine einmal statt zwanzigmal kosten. Wer was sehen darf, wurde bei jeder Anfrage neu entschieden — aber anhand dieses festgehaltenen Standes, und der enthielt die Applikations-Datensätze selbst. Die Mitglieder einer Applikation stehen an der Applikation; eine Entscheidung gegen einen eine halbe Minute alten Datensatz liefert also die Antwort von vor einer halben Minute. Wen Sie aus einer Applikation entfernt, welche Applikation Sie auf privat gestellt, übertragen oder gelöscht haben: Die betroffene Person erhielt die Prozesse dieser Applikation für den Rest des Fensters weiter — Prozessnamen und -IDs, wer wen aufruft, laufende und abgeschlossene Instanzzahlen, Incident-Zahlen und -Alter sowie die Incident-Details mit den unveränderten Fehlermeldungen aus Workern. Genau dieses Material ersetzt die Starmap sonst durch einen anonymen Platzhalter, und die automatische Aktualisierung der Ansicht erreichte das Fenster von selbst, weil ein offener Tab eigenständig nachliest. Die beiden Ablagen, in denen eine Freigabe lebt — Applikationen und Worker —, werden jetzt bei jeder Anfrage gelesen, genau wie jede andere Liste dieses Servers es tut; eine Zugriffsänderung wirkt damit ab der nächsten Anfrage, wie überall sonst. Festgehalten wird nur noch Struktur ohne Freigabe, der Grund für das Festhalten bleibt also bestehen. Zwei Dinge werden dabei besser: Eine Applikation oder ein Worker, die Sie anlegen oder löschen, erscheinen auf der Starmap jetzt sofort statt innerhalb einer halben Minute, und ein Task, der auf einen soeben gelöschten Worker zeigte, zeigt nicht mehr darauf."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama",
+        "Security"
+      ],
+      "tutorial": {
+        "en": [
+          "Nothing to configure — the change is in how the Starmap answers.",
+          "If you have removed anyone from an application recently and want to be sure: open the application under Applications, check its members, and the Starmap will match on its next read.",
+          "If you administer this server, note that a person's session and role are unaffected — only their view of applications and workers changes, and only in the direction of less."
+        ],
+        "de": [
+          "Nichts einzurichten — die Änderung betrifft, wie die Starmap antwortet.",
+          "Falls Sie kürzlich jemanden aus einer Applikation entfernt haben und sichergehen wollen: Applikation unter Applications öffnen, Mitglieder prüfen — die Starmap stimmt ab dem nächsten Lesen damit überein.",
+          "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
+        ]
+      }
+    },
+    {
+      "id": "switching-drafts-on-the-starmap-while-it-happens-to-be-refre",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Drafts switch on the Starmap stays where you put it",
+        "de": "Der Drafts-Schalter der Starmap bleibt, wo Sie ihn hinstellen"
+      },
+      "summary": {
+        "en": "The Starmap re-reads the landscape on its own while you have it open. That read and the one the Drafts switch makes could be in flight at the same time, and if the automatic one happened to land second it overwrote the picture and put the switch back — the drafts appeared and then vanished again under the hand that had just asked for them, with nothing said about why. Your answer wins now: an automatic read that arrives after you have asked for a different landscape is dropped rather than applied, and the timer does not start one while the switch's own request is still running.",
+        "de": "Die Starmap liest die Landschaft von selbst nach, solange sie offen ist. Dieses Lesen und das des Drafts-Schalters konnten gleichzeitig unterwegs sein, und traf das automatische zufällig als Zweites ein, überschrieb es das Bild und stellte den Schalter zurück — die Drafts erschienen und verschwanden wieder unter der Hand, die sie gerade angefordert hatte, ohne jeden Hinweis. Jetzt gewinnt Ihre Antwort: Ein automatisches Lesen, das eintrifft, nachdem Sie eine andere Landschaft angefordert haben, wird verworfen statt angewendet, und der Zeitgeber startet keines, solange die Anfrage des Schalters noch läuft."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Panorama"
+      ]
+    },
+    {
+      "id": "a-diagram-filed-under-no-application-no-longer-answers-with-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The Modeler now says when it cannot check your data",
+        "de": "Der Modeler sagt jetzt, wenn er Ihre Daten nicht prüfen kann"
+      },
+      "summary": {
+        "en": "If a diagram is not filed under an application there is no information model behind it, so nothing about its data objects can be resolved or checked. That used to look like everything being fine: the class field was a plain text box and the Problems panel said \"No problems\". Now the panel names the reason and what to do about it, and an unchecked diagram says \"No problems found — data not checked\" instead of claiming a clean bill it never earned.",
+        "de": "Liegt ein Diagramm unter keiner Anwendung, steht kein Informationsmodell dahinter — nichts an seinen Datenobjekten lässt sich auflösen oder prüfen. Bisher sah das aus, als wäre alles in Ordnung: Das Klassenfeld war ein einfaches Textfeld, und die Problemliste meldete „No problems\". Jetzt nennt das Panel den Grund und den Weg heraus, und ein ungeprüftes Diagramm sagt „No problems found — data not checked\", statt eine Unbedenklichkeit zu behaupten, die es nie erworben hat."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and select a data object.",
+          "If the Class field is a plain text box, read the note under it: either the diagram is filed under no application, or the application models nothing yet — two different remedies.",
+          "For the first: open the process's draft from its application, or deploy it from there.",
+          "The Problems bar tells you the same thing from the other side — it now distinguishes \"nothing wrong\" from \"nothing looked\"."
+        ],
+        "de": [
+          "Einen Prozess im Modeler öffnen und ein Datenobjekt auswählen.",
+          "Ist das Feld Class ein einfaches Textfeld, sagt der Hinweis darunter warum: entweder liegt das Diagramm unter keiner Anwendung, oder die Anwendung modelliert noch nichts — zwei verschiedene Wege heraus.",
+          "Für den ersten Fall: den Draft des Prozesses aus seiner Anwendung heraus öffnen oder von dort deployen.",
+          "Die Problemleiste sagt dasselbe von der anderen Seite — sie unterscheidet jetzt „nichts gefunden\" von „nichts geprüft\"."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
       "version": "Unreleased",
       "date": null,
@@ -78,6 +197,164 @@
       }
     },
     {
+      "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Run scripts in a locked-down OS sandbox",
+        "de": "Skripte in einer abgeschotteten OS-Sandbox ausführen"
+      },
+      "summary": {
+        "en": "A new strict Linux profile gives every PowerShell, Python or JavaScript run its own temporary workspace, blocks access to Atlas data and other host files, and denies network sockets. It is opt-in so existing scripts keep working; once a process needs only its variables, enable it with --script-sandbox=strict.",
+        "de": "Ein neues striktes Linux-Profil gibt jedem PowerShell-, Python- oder JavaScript-Lauf ein eigenes temporäres Arbeitsverzeichnis, sperrt Atlas-Daten und andere Host-Dateien und blockiert Netzwerk-Sockets. Es ist bewusst opt-in, damit bestehende Skripte weiterlaufen; braucht ein Prozess nur seine Variablen, wird es mit --script-sandbox=strict aktiviert."
+      },
+      "link": {
+        "label": "ADR",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
+      },
+      "tags": [
+        "Security",
+        "Scripts"
+      ]
+    },
+    {
+      "id": "the-console-landing-page-says-what-atlas-is-in-both-language",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The Console landing page says what Atlas is, in both languages",
+        "de": "Die Console-Startseite sagt, was Atlas ist — zweisprachig"
+      },
+      "summary": {
+        "en": "A Key features tile below the dashboard tiles sums up in sixteen short entries what Atlas actually is — from the single binary and durable execution to DMN, connectors and what is ready for production. EN/DE like What's New, and collapsible once you have read it.",
+        "de": "Eine Kachel Kernmerkmale unterhalb der Dashboard-Kacheln fasst in sechzehn kurzen Punkten zusammen, was Atlas ausmacht — vom Single Binary und der ausfallsicheren Ausführung über DMN und Konnektoren bis zu dem, was betriebsreif ist. EN/DE wie bei Neu in Atlas, und einklappbar, wenn man es gelesen hat."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Dashboard",
+          "de": "Dashboard öffnen"
+        },
+        "route": "#/console"
+      }
+    },
+    {
+      "id": "the-information-model-can-now-be-read-off-the-processes-inst",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See the classes and states your processes already carry — without modelling first",
+        "de": "Klassen und Zustände sehen, die Ihre Prozesse schon tragen — ohne vorher zu modellieren"
+      },
+      "summary": {
+        "en": "Data → As built reads an application's processes and draws what they actually carry: a class per data object, a member per write, and the states each class moves through. Nothing has to be modelled first and nothing is written — it is what is built, next to the model you author, which is what you want. The difference between the two is your backlog. What the reading cannot see it says above the drawing: no business key, and no attribute types.",
+        "de": "Daten → As built liest die Prozesse einer Anwendung und zeichnet, was sie tatsächlich tragen: eine Klasse je Datenobjekt, ein Attribut je Zuweisung und die Zustände, die jede Klasse durchläuft. Nichts muss vorher modelliert werden, und nichts wird geschrieben — es ist das Gebaute, neben dem Modell, das Sie zeichnen und das das Gewollte ist. Die Differenz der beiden ist Ihr Backlog. Was die Ableitung nicht sehen kann, steht über der Zeichnung: kein Geschäftsschlüssel und keine Attributtypen."
+      },
+      "link": {
+        "label": "ADR draft",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data and press As built…, then pick the application you want to read.",
+          "The class diagram is what that application's processes carry — no model of yours is involved.",
+          "Click a class: beside it you get the states its processes actually write, and the moves between them.",
+          "Read the notes above the drawing and per class — they say what derivation could not see, starting with the business key you still have to add by hand."
+        ],
+        "de": [
+          "Unter Daten auf As built… klicken und die zu lesende Anwendung wählen.",
+          "Das Klassendiagramm zeigt, was die Prozesse dieser Anwendung tragen — Ihr eigenes Modell ist daran nicht beteiligt.",
+          "Eine Klasse anklicken: daneben erscheinen die Zustände, die ihre Prozesse wirklich schreiben, samt Übergängen.",
+          "Die Hinweise über der Zeichnung und je Klasse lesen — sie nennen, was die Ableitung nicht sehen kann, allen voran den Geschäftsschlüssel, den Sie weiterhin von Hand setzen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
+      "id": "a-lifecycle-that-is-ahead-of-the-processes-that-write-it-now",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas now tells you when a state nothing ever reaches",
+        "de": "Atlas sagt jetzt, wenn ein Zustand nie erreicht wird"
+      },
+      "summary": {
+        "en": "If a class says an order can be cancelled and no process in the application ever cancels one, you now hear about it — at deploy and in the Modeler's Problems panel. Either a process is missing or the model is describing a plan rather than what is built, and both are worth knowing. It is a note, never a refusal, and it stays quiet about a class no process handles yet: drawing a lifecycle before the process that writes it is the normal way round.",
+        "de": "Wenn eine Klasse sagt, eine Bestellung könne storniert werden, aber kein Prozess der Anwendung storniert je eine, erfahren Sie das jetzt — beim Deploy und in der Problemliste des Modelers. Entweder fehlt ein Prozess, oder das Modell beschreibt einen Plan statt des Gebauten; beides ist wissenswert. Es ist ein Hinweis, nie eine Ablehnung, und über eine Klasse, die noch kein Prozess anfasst, schweigt es: einen Lebenszyklus vor dem Prozess zu zeichnen, der ihn schreibt, ist die normale Reihenfolge."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, pick your information model, and give a business object a lifecycle with more states than your processes currently write.",
+          "Open a process of the same application in the Modeler.",
+          "The Problems panel names the class and every state nothing reaches, in one line.",
+          "Add the data association that writes that state — or a process that does — and the line goes away."
+        ],
+        "de": [
+          "Unter Daten das Informationsmodell öffnen und einem Geschäftsobjekt einen Lebenszyklus mit mehr Zuständen geben, als die Prozesse derzeit schreiben.",
+          "Einen Prozess derselben Anwendung im Modeler öffnen.",
+          "Die Problemliste nennt die Klasse und jeden nie erreichten Zustand in einer Zeile.",
+          "Die Datenzuweisung ergänzen, die diesen Zustand schreibt — oder den fehlenden Prozess —, und die Zeile verschwindet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
+      "id": "an-openapi-document-can-configure-the-task-that-calls-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Turn an API's operations into ready-made task settings",
+        "de": "Aus den Operationen einer API fertige Task-Einstellungen machen"
+      },
+      "summary": {
+        "en": "Configuring a REST task means reading the API's documentation and typing what it says: the method, the address, which values the process has to supply. Atlas can now read that file for you and write out one ready-made setting sheet per operation — the method already chosen, the address already filled in, and a note saying which values your process needs to hold. What the file cannot decide, such as which login to use, is deliberately left blank rather than guessed. One honest catch: nothing in Atlas can apply these sheets to a task yet, so for now they are files to keep or to hand on — the command tells you so when it writes them.",
+        "de": "Einen REST-Task einzurichten heisst bisher, die Dokumentation der API zu lesen und abzutippen: Methode, Adresse, welche Werte der Prozess mitbringen muss. Atlas kann diese Datei jetzt für Sie lesen und pro Operation ein fertiges Einstellungsblatt schreiben — Methode schon gewählt, Adresse schon eingetragen, dazu ein Hinweis, welche Werte Ihr Prozess bereithalten muss. Was die Datei nicht entscheiden kann, etwa welche Anmeldung zu verwenden ist, bleibt bewusst leer statt geraten. Ein ehrlicher Haken: Atlas kann diese Blätter noch an keinen Task anlegen — vorerst sind es Dateien zum Aufbewahren oder Weitergeben, und der Befehl sagt das beim Schreiben."
+      },
+      "link": {
+        "label": "ADR-0300",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0300-openapi-element-templates.md"
+      },
+      "tags": [
+        "Connectors",
+        "Modeler"
+      ]
+    },
+    {
       "id": "an-instance-s-data-objects-are-drawn-on-the-lifecycle-their-",
       "version": "Unreleased",
       "date": null,
@@ -120,267 +397,6 @@
           "de": "Betrieb öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-deploy-says-when-a-searchable-declaration-cannot-be-hono",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The deploy answers with the same reading, for models it never sees in the Modeler",
-        "de": "Das Deployment gibt dieselbe Einschätzung, auch ohne Modeler"
-      },
-      "summary": {
-        "en": "The marker under the field only helps whoever is looking at the diagram. A model deployed from a pipeline or over the API never passes through the Modeler at all, so the deploy response now carries the same reading as a warning beside the ones it already gives. It never refuses the deploy. A name the model itself declares as a JSON input is always reported; a name nothing in the model produces is reported only where the model has stated its inputs, and the sentence says plainly that a worker writing it makes the case fine.",
-        "de": "Die Markierung unter dem Feld hilft nur, wer das Diagramm vor sich hat. Ein Modell, das aus einer Pipeline oder über die API deployt wird, sieht den Modeler nie. Deshalb enthält die Deploy-Antwort jetzt dieselbe Einschätzung als Warnung, neben den Warnungen, die sie ohnehin ausgibt. Abgelehnt wird nie. Ein Name, den das Modell selbst als JSON-Eingabe deklariert, wird immer gemeldet; ein Name, den nichts im Modell erzeugt, nur dann, wenn das Modell seine Eingaben überhaupt benannt hat — und der Satz sagt ausdrücklich, dass ein Worker, der ihn schreibt, den Fall in Ordnung macht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Deployment"
-      ]
-    },
-    {
-      "id": "a-searchable-declaration-that-indexes-nothing-now-says-so",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A name that will never be found is marked while you type it",
-        "de": "Ein Name, der nie gefunden wird, wird beim Tippen markiert"
-      },
-      "summary": {
-        "en": "Naming a variable as searchable is accepted whatever you write, so a typo, or a name holding a whole JSON structure, produced a search that stays empty forever with nothing saying why. Each name now gets a small marker under the field. Red where it is settled: the same name twice, or a name the model itself says holds a structure, which cannot be indexed. Amber where it is a question: nothing in this diagram writes that name — usually a typo, but a worker or an outside caller can write a name the diagram never mentions. Hover a marker for the reason.",
-        "de": "Eine als suchbar benannte Variable wurde bisher unbesehen übernommen. Ein Tippfehler oder ein Name, der eine ganze JSON-Struktur hält, führte damit zu einer Suche, die dauerhaft leer bleibt, ohne dass irgendwo stand, warum. Jeder Name erhält nun eine kleine Markierung unter dem Feld. Rot, wo die Sache klar ist: derselbe Name zweimal, oder ein Name, von dem das Modell selbst sagt, dass er eine Struktur hält, die nicht indexiert werden kann. Bernstein, wo es eine Frage ist: Nichts in diesem Diagramm schreibt diesen Namen — meist ein Tippfehler, aber ein Worker oder ein Aufruf von aussen kann einen Namen schreiben, den das Diagramm nie erwähnt. Der Grund steht im Tooltip der Markierung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-migration-now-re-indexes-what-its-target-declares",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Migrated instances are found by the version they moved to",
-        "de": "Migrierte Instanzen werden von ihrer neuen Version gefunden"
-      },
-      "summary": {
-        "en": "An instance carries the searchable declaration of the version that wrote its values. Moving it to a version that declares more, or fewer, left that answer behind: a search over the new version simply did not return it, which reads like the instance is not there rather than like a stale index. A migration now brings the instance's searchability along, in both directions. For instances migrated before this, an administrator can repair a whole version in bounded batches; running that twice writes nothing the second time.",
-        "de": "Eine Instanz trägt die Suchbarkeits-Angabe der Version, die ihre Werte geschrieben hat. Wurde sie auf eine Version verschoben, die mehr oder weniger deklariert, blieb diese Angabe zurück: Eine Suche über die neue Version lieferte die Instanz schlicht nicht — was so aussieht, als gäbe es sie nicht, und nicht wie ein veralteter Index. Eine Migration zieht die Suchbarkeit jetzt mit, in beide Richtungen. Für Instanzen, die vorher migriert wurden, kann eine Administratorin oder ein Administrator eine ganze Version in begrenzten Schritten nachziehen; ein zweiter Durchlauf schreibt nichts mehr."
-      },
-      "link": {
-        "label": "ADR-0244",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
-      },
-      "tags": [
-        "Operations",
-        "Migration"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
-      }
-    },
-    {
-      "id": "the-modeler-can-now-say-what-a-process-is-found-by",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Say what a process should be findable by, in the Modeler",
-        "de": "Im Modeler festlegen, wonach ein Prozess gefunden wird"
-      },
-      "summary": {
-        "en": "Searching a version's instances by a business value — \"where is MT-1998?\" — is a single read instead of a walk through every instance, but only for the variables the process says it wants to be found by. Until now that declaration existed only as an attribute in the BPMN file, so making one meant editing the exported XML by hand. The process properties now carry a Searchable variables field beside the two retention fields: select nothing in the diagram, open the Process group, and name the one or two business keys you actually search by.",
-        "de": "Die Suche nach einem Geschäftswert in den Instanzen einer Version — «wo ist MT-1998?» — ist ein einzelner Lesezugriff statt eines Durchlaufs durch alle Instanzen, aber nur für die Variablen, die der Prozess dafür benennt. Diese Angabe gab es bisher nur als Attribut in der BPMN-Datei, man musste also das exportierte XML von Hand bearbeiten. Die Prozess-Eigenschaften haben jetzt ein Feld «Searchable variables» neben den beiden Aufbewahrungsfeldern: nichts im Diagramm auswählen, die Gruppe «Process» öffnen und die ein bis zwei Geschäftsschlüssel eintragen, nach denen Sie tatsächlich suchen."
-      },
-      "link": {
-        "label": "ADR-0244",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0244-searchable-variables.md"
-      },
-      "tags": [
-        "Modeler",
-        "Operations"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the Modeler and load the process you want to find instances of.",
-          "Click on empty canvas so nothing is selected — the panel then shows the process itself.",
-          "Open the Process group and find Searchable variables under Instance TTL and History TTL.",
-          "Type the variable names, separated by commas, for example: identityId, item.",
-          "Deploy. From then on, searching identityId=MT-1998 in Operations answers from the index."
-        ],
-        "de": [
-          "Öffnen Sie den Modeler und laden Sie den Prozess, dessen Instanzen Sie finden wollen.",
-          "Klicken Sie auf eine leere Stelle der Zeichenfläche, damit nichts ausgewählt ist — das Panel zeigt dann den Prozess selbst.",
-          "Öffnen Sie die Gruppe «Process»; «Searchable variables» steht unter «Instance TTL» und «History TTL».",
-          "Tragen Sie die Variablennamen kommagetrennt ein, zum Beispiel: identityId, item.",
-          "Deployen Sie. Danach beantwortet die Suche identityId=MT-1998 in Operations der Index."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-refused-write-through-mcp-now-says-why-not-just-that",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A refused write through MCP now says why, not just that it was refused",
-        "de": "Ein über MCP abgelehnter Schreibvorgang nennt jetzt den Grund, nicht nur die Ablehnung"
-      },
-      "summary": {
-        "en": "A validation refusal has always carried every reason at once, so somebody fixing a form does not make one round trip per mistake. The MCP client read only the one-line summary out of it, so an AI assistant saving an information model got \"the model is not valid\" and nothing else — and, having no form to read the details out of, retried blind. The reasons now travel with the message.",
-        "de": "Eine Validierungsablehnung enthielt schon immer alle Gründe auf einmal, damit beim Korrigieren eines Formulars nicht pro Fehler ein Durchgang nötig ist. Der MCP-Client las daraus nur die einzeilige Zusammenfassung. Ein KI-Assistent, der ein Informationsmodell speicherte, erhielt daher „das Modell ist nicht gültig“ und sonst nichts und versuchte es blind erneut. Die Gründe werden jetzt mit der Meldung übertragen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "MCP"
-      ]
-    },
-    {
-      "id": "a-worker-type-s-setup-folds-away-once-you-have-set-it-up",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The setup notes fold away once you no longer need them",
-        "de": "Die Einrichtungshinweise lassen sich zuklappen, sobald Sie sie nicht mehr brauchen"
-      },
-      "summary": {
-        "en": "The notes beside a worker type — where its work runs, what has to exist at the provider before it runs at all — sat open above the fields on every task. Useful the first time, in the way ever after: on a narrow panel they fill most of the screen. They are now a section you can fold, with the same chevron as Operation or Failure handling, and folding it stays folded as you move from task to task. It still opens by itself where it helps: when this server has no worker of that type configured yet. Types that configure nothing at all — a REST call, a mockup — start folded, since their notes are worth a single read.",
-        "de": "Die Hinweise neben einem Worker-Typ — wo seine Arbeit läuft, was beim Anbieter vorhanden sein muss, damit sie überhaupt läuft — standen bei jedem Task offen über den Feldern. Beim ersten Mal nützlich, danach im Weg: Auf einem schmalen Panel füllen sie den halben Bildschirm. Jetzt sind sie ein Abschnitt zum Zuklappen, mit demselben Pfeil wie „Operation\" oder „Failure handling\", und zugeklappt bleiben sie es auch beim Wechsel auf den nächsten Task. Von selbst geöffnet wird weiterhin dort, wo es hilft: wenn dieser Server noch keinen Worker dieses Typs konfiguriert hat. Typen, die gar nichts zu konfigurieren haben — ein REST-Aufruf, ein Mockup —, starten zugeklappt, denn ihre Hinweise liest man einmal."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open a service task",
-          "de": "Service-Task öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "model-authored-scripts-no-longer-inherit-atlas-credentials",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Security",
-      "title": {
-        "en": "Scripts no longer receive Atlas credentials",
-        "de": "Scripts erhalten keine Atlas-Zugangsdaten mehr"
-      },
-      "summary": {
-        "en": "Script workers and interpreters now start with restricted environments, and their token can reach only the worker API. Existing scripts remain enabled unless every language is switched off.",
-        "de": "Script-Worker und Interpreter starten neu mit eingeschränkten Umgebungen; ihr Token erreicht nur noch die Worker-API. Bestehende Scripts bleiben aktiv, solange nicht alle Sprachen ausgeschaltet werden."
-      },
-      "link": {
-        "label": "ADR-0297",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0297-confine-internal-worker-token.md"
-      },
-      "tags": [
-        "Security",
-        "Scripts"
-      ]
-    },
-    {
-      "id": "one-place-names-every-resource-budget-and-one-way-sets-them",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "Every size limit has a name, and one way to change it",
-        "de": "Jede Obergrenze hat einen Namen — und einen Weg, sie zu ändern"
-      },
-      "summary": {
-        "en": "Atlas caps what it accepts from outside in about ninety places — how large an upload may be, how many rows a query may return, how much output a script may produce. Each cap was sensible on its own, but nobody could list them, and a list nobody can read is a list nobody notices a hole in. They now sit in one place with the numbers they always had, and each can be raised or lowered with an ATLAS_LIMIT_ environment variable. A value that is missing or nonsensical leaves the default in place and says so when the server starts, and no limit can be switched off entirely. One honest gap: workers running as their own process use the standard values rather than what you configured on the server, because the server's settings do not reach them.",
-        "de": "Atlas begrenzt an rund neunzig Stellen, was es von aussen annimmt — wie gross ein Upload sein darf, wie viele Zeilen eine Abfrage liefern darf, wie viel ein Skript ausgeben darf. Jede Grenze war für sich sinnvoll, aber niemand konnte sie aufzählen — und eine Liste, die niemand lesen kann, ist eine Liste, in der niemand eine Lücke bemerkt. Sie stehen jetzt an einer Stelle, mit genau den Zahlen, die sie immer hatten, und jede lässt sich über eine Umgebungsvariable ATLAS_LIMIT_ anheben oder senken. Ein fehlender oder unsinniger Wert lässt die Voreinstellung stehen und wird beim Start protokolliert; abschalten lässt sich keine Grenze. Eine ehrliche Lücke: Worker, die als eigener Prozess laufen, verwenden die Standardwerte statt Ihrer Serverkonfiguration, weil die Einstellungen des Servers sie nicht erreichen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Operations",
-        "Configuration"
-      ]
-    },
-    {
-      "id": "a-class-says-which-states-its-instances-move-through-and-the",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "A business object can now say which states it moves through",
-        "de": "Ein Geschäftsobjekt sagt jetzt selbst, welche Zustände es durchläuft"
-      },
-      "summary": {
-        "en": "BPMN lets a data object carry a state — order [received] → [approved] — but never said which states exist or which may follow which, so it was a string somebody typed and got right from memory. A business object in your information model can now declare its own lifecycle: the states it moves through, where instances start, where they end. Draw it once and the Modeler offers those states instead of an empty box, the Problems panel says when a process writes one that does not exist, and the class a data object is is picked from a list rather than remembered.",
-        "de": "BPMN erlaubt einem Datenobjekt einen Zustand — Bestellung [erfasst] → [freigegeben] —, hat aber nie gesagt, welche Zustände es gibt und welcher auf welchen folgen darf: Es war eine Zeichenkette, die jemand aus dem Gedächtnis richtig tippen musste. Ein Geschäftsobjekt im Informationsmodell kann jetzt seinen eigenen Lebenszyklus erklären: die Zustände, die es durchläuft, wo Instanzen beginnen und wo sie enden. Einmal gezeichnet, bietet der Modeler genau diese Zustände an statt eines leeren Feldes, die Problemliste meldet einen Zustand, den es nicht gibt, und die Klasse eines Datenobjekts wird aus einer Liste gewählt statt erinnert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#0-6-0"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, pick an information model and click a business object on the canvas.",
-          "In its panel, under Lifecycle, choose \"Draw a lifecycle\".",
-          "Add states from the palette on the left; the first one is marked as where instances start. Mark the ones nothing leaves as final.",
-          "Click the transition tool, then two states in turn, to draw the move from one to the other. Save.",
-          "Open a process in the Modeler, select a data object, and set its Type to that class — its Data state is now a list of exactly those states."
-        ],
-        "de": [
-          "Unter Daten ein Informationsmodell öffnen und auf der Zeichenfläche ein Geschäftsobjekt anklicken.",
-          "Im Panel unter Lebenszyklus auf „Lebenszyklus zeichnen“ klicken.",
-          "Zustände über die Palette links hinzufügen; der erste ist als Startzustand markiert. Zustände, die nichts mehr verlässt, als final markieren.",
-          "Das Übergangs-Werkzeug wählen und nacheinander zwei Zustände anklicken, um den Übergang zu zeichnen. Speichern.",
-          "Im Modeler einen Prozess öffnen, ein Datenobjekt auswählen und als Typ diese Klasse setzen — der Datenzustand ist nun eine Liste genau dieser Zustände."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

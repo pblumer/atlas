@@ -215,6 +215,8 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 - **Followup commands vs. events.** Emitting an event mutates state now and is persisted now. Scheduling a followup command defers work to the next batch. Don't confuse them; see `ProcessingContext` in [`processor.md`](docs/architecture/processor.md).
 - **Element IDs are integer indices**, not strings, everywhere in engine code. Strings are interned at compile time. Don't reintroduce string handling on the hot path.
 - **Keys encode the partition** in their high bits. Don't invent keys by hand; use the key generator.
+- **A user-facing feature owes a look at the key-features tile.** The Console's landing page says what Atlas *is* in fourteen evergreen statements ([`api/web/key-features.json`](api/web/key-features.json)), and a product that grows makes that list quietly incomplete — nothing renders wrong, the capability is simply missing. So the file carries a `reviewedThrough` marker naming the newest CHANGELOG `### Added` bullet it has been held against, and `go test ./api` fails while bullets sit above it. Ask the one question — does this change what Atlas is? — then edit the tile (both languages) if it does, and move the marker either way. "No, nothing to add" is the normal answer and costs one line.
+
 - **A new job type owes a registry row.** Adding a name to `compiler.ReservedJobTypes` is what brings a Worker Type into existence, so `api/releasedkinds.go` needs a row for it saying which ADR decided it, what class it is, and which Repository package advertises it. `go test ./api` fails until it does ([ADR-0167](docs/adr/0167-released-connectors-ship-in-the-marketplace.md)). A connector kind whose record is `Accepted` owes a package too; the count of kinds still missing one is pinned in that file and may only fall.
 
 ## Style
@@ -262,44 +264,19 @@ it will be read by humans.
 
 ## Commit attribution
 
-A commit an agent makes here is authored by the person who asked for it and
-committed by the agent. `.claude/hooks/commit-identity.sh` sets that up at
-session start, using the address the session is signed in with. Nothing
-happens in a clone where a human's own git identity is configured.
+A commit is made under whatever git identity the session or the person running it
+already has, and every commit an agent makes keeps its `Co-Authored-By:` trailer.
+That trailer and the committer field are the record of what produced the change;
+nothing in this repository rewrites the author field, and no check inspects it.
 
-`.claude/commit-identities` is a correction, not a registry: add a row only
-when your sign-in address is not one your GitHub account carries, mapping it
-to one that is. Nobody needs a row to be attributed correctly, and a person
-the table does not know is never attributed to somebody else.
+Between 2026-09-08 and 2026-09-11 a session hook and a CI check did, so that GitHub
+would count an agent's commit for the person who asked for it. Both are gone: the only
+repair the check could offer was a history rewrite of the whole branch, which kept
+reopening conflicts on branches that were mergeable before it ran. ADR-0288 still holds
+the argument for the split; ADR-0302 says why it is no
+longer enforced here.
 
-The reason is narrow: GitHub attributes a commit to the account holding the
-*author* address, and `noreply@anthropic.com` is the account `claude`. Every
-commit still names the model in a `Co-Authored-By:` trailer and still records
-the agent as its committer — the split changes who the contribution counts
-for, not who wrote the code. Do not rewrite the author of commits that are
-already on `main`. See ADR-0288 for why the split
-rather than the alternatives.
-
-**The hook is not the guarantee; CI is.** A hook fails silently — the session
-predates it, the environment stops setting `CLAUDE_CODE_USER_EMAIL`, a future
-version does not run project hooks — and the only symptom is a statistic
-drifting back over months. Eight agent-authored commits reached `main` in the
-four hours after the hook landed, from sessions cloned before it existed. So
-`.github/workflows/attribution.yml` fails any PR that would add a commit
-authored by an agent identity, and — second step — any whose author address
-no GitHub account holds, which counts for nobody just as quietly. If either
-fails on your branch, the fix is on the branch, not in the check:
-
-```bash
-.claude/hooks/commit-identity.sh   # sets author.* / committer.* for this repo
-git rebase origin/main --exec \
-  'git commit --amend --no-edit --author="$(git config author.name) <$(git config author.email)>"'
-git push --force-with-lease
-```
-
-Not `--reset-author`: that copies the *committer* onto the author, and the
-committer is the agent. If the hook printed nothing, the session has no entry
-in `.claude/commit-identities` — add one rather than working around the check.
+Do not rewrite the author of commits that are already on `main`.
 
 ## Pointers
 

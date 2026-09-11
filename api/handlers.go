@@ -963,6 +963,10 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 				return deployed, nil, fmt.Errorf("register dmn model for %s: %w", pid, err)
 			}
 		}
+		// The Starmap's collection no longer describes this server. Deploying is the
+		// change a person makes and then immediately goes looking for, so it is the
+		// one that does not wait out the TTL (see forgetLandscape).
+		s.forgetLandscape()
 		s.deployments[key] = &deployment{
 			Key:        key,
 			ProcessID:  pid,
@@ -1271,6 +1275,7 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.proc.Undeploy(key)
+		s.forgetLandscape()
 		delete(s.deployments, key)
 		for i, k := range s.order {
 			if k == key {
@@ -3034,19 +3039,29 @@ func (s *Server) annotateDataObjects(key uint64, byName map[string]*dataObjectVi
 	}
 }
 
-// handleInstanceObjectGraph derives one instance's object diagram: its data objects
-// as UML object nodes, linked by the class model's associations resolved through
-// the objects' own values (ADR-0230, slice 4).
+// handleDerivedModel answers what the application's processes imply about its data,
+// without anyone having modelled it (ADR-0301).
 //
-// UML draws types and instances as two different diagrams, and that distinction is
-// why a class diagram was the right notation for Atlas at all: it falls on the
-// design-time/run-time line the engine already has. The class diagram says what an
-// Order is; this says which orders are here and how they hang together.
+// The derived model is what is *built*. What a person authors under Data is a
+// different statement — a target, not yet reality — and this reads the first without
+// touching the second: no model is created, seeded or updated, and the response is
+// never stored. Their difference is the interesting part, and it is work not yet done
+// rather than drift to be reconciled away.
 //
-// It is derived on the server rather than in the browser for the same reason the
-// authoring subset is served rather than duplicated: the rules for what relates to
-// what are model semantics, and a second copy of them in JavaScript is a second
-// place for them to be wrong. The browser gets nodes and lines to draw.
+// Per application by construction: one application's processes are what imply one
+// vocabulary, so without one there is no set to read and the request is refused
+// rather than answered with an accidental empty.
+func (s *Server) handleDerivedModel(w http.ResponseWriter, r *http.Request) {
+	applicationID := r.URL.Query().Get("applicationId")
+	if strings.TrimSpace(applicationID) == "" {
+		httpapi.Error(w, http.StatusBadRequest, "applicationId is required — a derived model is read from one application's processes")
+		return
+	}
+	var cps []*compiler.CompiledProcess
+	s.do(func() { cps = s.applicationProcessesOnLoop(applicationID) })
+	httpapi.JSON(w, http.StatusOK, infomodel.Derive(cps))
+}
+
 // lifecycleView is one data object's declared lifecycle with its own life drawn on
 // it (ADR-0259 §4). The trace is inlined rather than nested under a key, because the
 // caller's question is about the object and the machine is the answer, not a
@@ -3156,6 +3171,19 @@ func lifecycleTrail(o *dataObjectView) []infomodel.TrailEntry {
 	return trail
 }
 
+// handleInstanceObjectGraph derives one instance's object diagram: its data objects
+// as UML object nodes, linked by the class model's associations resolved through
+// the objects' own values (ADR-0230, slice 4).
+//
+// UML draws types and instances as two different diagrams, and that distinction is
+// why a class diagram was the right notation for Atlas at all: it falls on the
+// design-time/run-time line the engine already has. The class diagram says what an
+// Order is; this says which orders are here and how they hang together.
+//
+// It is derived on the server rather than in the browser for the same reason the
+// authoring subset is served rather than duplicated: the rules for what relates to
+// what are model semantics, and a second copy of them in JavaScript is a second
+// place for them to be wrong. The browser gets nodes and lines to draw.
 func (s *Server) handleInstanceObjectGraph(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {

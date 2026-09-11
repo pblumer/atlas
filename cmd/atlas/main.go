@@ -11,10 +11,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,6 +38,7 @@ import (
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
 	"github.com/pblumer/atlas/connector/rest/openapimock"
+	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/jobtype"
@@ -81,6 +84,10 @@ func main() {
 			}
 			fatal("atlas worker", err)
 		}
+	case "script-sandbox":
+		if err := script.RunSandbox(args); err != nil {
+			fatal("atlas script-sandbox", err)
+		}
 	case "version", "-v", "--version":
 		printVersion(os.Stdout)
 	case "reset-password":
@@ -102,6 +109,10 @@ func main() {
 	case "mock-openapi":
 		if err := runMockOpenAPI(args); err != nil {
 			fatal("atlas mock-openapi", err)
+		}
+	case "openapi-template":
+		if err := runOpenAPITemplate(args, os.Stdout); err != nil {
+			fatal("atlas openapi-template", err)
 		}
 	case "playground":
 		if err := runPlaygroundScenario(args, os.Stdout); err != nil {
@@ -157,6 +168,7 @@ Usage:
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker
   atlas mock-openapi   [flags]      Serve a mock REST API from an OpenAPI document
+  atlas openapi-template [flags]    Generate element templates from an OpenAPI document
   atlas playground     [flags]      Run a saved Playground scenario and exit on its verdict
   atlas version                     Print the version and build metadata
 
@@ -229,6 +241,7 @@ func runServe(args []string) error {
 	python := fs.Bool("python", true, "run Python script tasks by shelling out to python3; on by default, --python=false to disable (executes arbitrary interpreter code)")
 	javascript := fs.Bool("javascript", true, "run JavaScript script tasks by shelling out to node; on by default, --javascript=false to disable (executes arbitrary interpreter code)")
 	scriptTimeout := fs.Duration("script-timeout", 30*time.Second, "wall-clock limit for a single script task in any language; an overrunning script is killed and its job left pending")
+	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for PowerShell, Python and JavaScript: off preserves existing file/network access; strict is Linux-only and permits only the installed runtime plus private scratch, with no sockets (or ATLAS_SCRIPT_SANDBOX)")
 	// OpenSearch event exporter (ADR-0114): opt-in, off unless a URL is set. The URL
 	// and index accept a flag (defaulting to the env var) for discoverability; the
 	// credentials are env-only so a secret never lands in the process arguments.
@@ -281,6 +294,18 @@ func runServe(args []string) error {
 		return err
 	}
 	enabled := map[string]bool{"powershell": *powershell, "python": *python, "javascript": *javascript}
+	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
+	if err != nil {
+		return err
+	}
+	if len(enabledScriptLanguages(enabled)) > 0 {
+		if err := script.CheckSandbox(scriptSandbox); err != nil {
+			return err
+		}
+		if err := script.CheckSandboxDataPath(scriptSandbox, *dataDir); err != nil {
+			return err
+		}
+	}
 	osCfg := opensearch.Config{
 		URL:      strings.TrimSpace(*osURL),
 		Username: os.Getenv("ATLAS_OPENSEARCH_USERNAME"),
@@ -321,7 +346,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -398,7 +423,7 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -647,6 +672,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		ex := script.New(lang)
 		ex.Timeout = scriptTimeout
 		ex.MaxOutput = budgets.Payload
+		ex.Sandbox = scriptSandbox
 		if err := ex.Check(); err != nil {
 			logging.Warn(logging.ScriptWorkerMissing,
 				"script worker enabled but its interpreter was not found on PATH; its script tasks "+
@@ -697,7 +723,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !inProcessConnectors {
 		defaults := api.DefaultOffloadedKinds()
 		offloadKinds = append(defaults, offloadKinds...)
-		defaultSpecs := defaultSuperviseSpecs(defaults, scriptLangs)
+		defaultSpecs := defaultSuperviseSpecs(defaults, scriptLangs, scriptSandbox)
 		specs = append(specs, defaultSpecs...)
 		for range defaultSpecs {
 			handles = append(handles, nil)
@@ -716,7 +742,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	// Kinds the operator asked this server to run a worker for. After the defaults, so
 	// asking for one of them is the no-op it should be rather than a second worker
 	// racing the first for the same jobs.
-	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs, scriptLangs)
+	askedSpecs, askedOffload, err := superviseConnectorSpecs(superviseConnectors, specs, scriptLangs, scriptSandbox)
 	if err != nil {
 		return err
 	}
@@ -874,12 +900,17 @@ func splitList(v string) []string {
 // configuration. Script is the one kind with a finer-grained enablement contract:
 // its three language flags must select the handlers in the child process too, and
 // disabling all three means no arbitrary-code worker is started at all.
-func defaultSuperviseSpecs(kinds []string, scriptLangs map[string]bool) []api.SuperviseSpec {
+func defaultSuperviseSpecs(kinds []string, scriptLangs map[string]bool, sandbox ...script.SandboxMode) []api.SuperviseSpec {
+	sandboxMode := script.SandboxOff
+	if len(sandbox) > 0 {
+		sandboxMode = sandbox[0]
+	}
 	specs := make([]api.SuperviseSpec, 0, len(kinds))
 	for _, kind := range kinds {
 		spec := api.SuperviseSpec{ID: kind, Kinds: []string{kind}, Connectors: []string{kind}}
 		if kind == "script" {
 			spec.ScriptLanguages = enabledScriptLanguages(scriptLangs)
+			spec.ScriptSandbox = string(sandboxMode)
 			if len(spec.ScriptLanguages) == 0 {
 				continue
 			}
@@ -919,7 +950,11 @@ func enabledScriptLanguages(enabled map[string]bool) []string {
 // worker-only kind (entra) is supervised without being offloaded — there are no
 // in-process handlers to remove, and naming it in the offload list is refused at
 // startup as an unknown kind.
-func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scriptLangs map[string]bool) ([]api.SuperviseSpec, []string, error) {
+func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scriptLangs map[string]bool, sandbox ...script.SandboxMode) ([]api.SuperviseSpec, []string, error) {
+	sandboxMode := script.SandboxOff
+	if len(sandbox) > 0 {
+		sandboxMode = sandbox[0]
+	}
 	var (
 		specs   []api.SuperviseSpec
 		offload []string
@@ -942,6 +977,7 @@ func superviseConnectorSpecs(kinds []string, supervised []api.SuperviseSpec, scr
 		}
 		if kind == "script" {
 			spec.ScriptLanguages = enabledScriptLanguages(scriptLangs)
+			spec.ScriptSandbox = string(sandboxMode)
 			if len(spec.ScriptLanguages) == 0 {
 				continue
 			}
@@ -1073,10 +1109,20 @@ func runWorker(args []string) error {
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
 	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and _CLIENT_SECRET, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an Atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker Atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
 	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
+	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for script interpreters: off or strict (Linux Landlock/seccomp; or ATLAS_SCRIPT_SANDBOX)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	kinds := splitList(*connectors)
+	scriptSandbox, err := script.ParseSandboxMode(*scriptSandboxRaw)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(kinds, "script") {
+		if err := script.CheckSandbox(scriptSandbox); err != nil {
+			return err
+		}
+	}
 	// The workers are built from the environment alone, and one of them has to know
 	// this worker's own id: a mock AD directory is reported to the Console under it
 	// (ADR-0213). --id is therefore read back out of
@@ -1089,6 +1135,9 @@ func runWorker(args []string) error {
 		}
 		if name == script.LanguagesEnv && strings.TrimSpace(*scriptLanguages) != "" {
 			return *scriptLanguages
+		}
+		if name == script.SandboxEnv {
+			return string(scriptSandbox)
 		}
 		return os.Getenv(name)
 	}
@@ -1605,4 +1654,67 @@ func fatal(command string, err error) {
 	logging.Error(logging.CommandFailed, command+" failed",
 		slog.String("command", command), slog.String("error", err.Error()))
 	os.Exit(1)
+}
+
+// runOpenAPITemplate writes one element-template package per operation of an OpenAPI
+// document, in the shape the repository catalog uses (ADR-0027/0081). It is the reader
+// behind `atlas mock-openapi` pointed the other way: the same file that makes the API
+// answer also configures the task that calls it.
+//
+// What it writes cannot be applied to a task yet — the applier is ADR-0212, proposed
+// and not started — and cannot be loaded into a running server, whose catalog is
+// compiled in. The banner says so, because a directory of files nobody can use is worth
+// one line of explanation at the moment it appears.
+func runOpenAPITemplate(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("openapi-template", flag.ExitOnError)
+	specPath := fs.String("spec", "", "path to the OpenAPI 3 document (JSON or YAML) to generate from — required")
+	outDir := fs.String("out", "", "directory to write the packages into, created if missing — required")
+	specRoot := fs.String("spec-root", "", "directory the document's $refs to other files may read (default: the document's own directory)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*specPath) == "" {
+		return errors.New("--spec is required: the OpenAPI document to generate from")
+	}
+	if strings.TrimSpace(*outDir) == "" {
+		return errors.New("--out is required: the directory to write the packages into")
+	}
+	root := *specRoot
+	if strings.TrimSpace(root) == "" {
+		root = filepath.Dir(*specPath)
+	}
+	spec, err := openapimock.LoadFileUnder(*specPath, root)
+	if err != nil {
+		return err
+	}
+	packages := openapitemplate.Packages(spec)
+	if len(packages) == 0 {
+		return fmt.Errorf("%s describes no operations", *specPath)
+	}
+	if err := os.MkdirAll(*outDir, 0o750); err != nil {
+		return err
+	}
+	for _, pkg := range packages {
+		// Encoded rather than marshalled, with HTML escaping off: the default turns
+		// the engineCompat ">=0.9" into "\u003e=0.9", which is valid JSON and wrong
+		// beside the hand-written packages these sit next to and are read with.
+		var body bytes.Buffer
+		enc := json.NewEncoder(&body)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(pkg); err != nil {
+			return fmt.Errorf("render %s: %w", pkg.ID, err)
+		}
+		path := filepath.Join(*outDir, pkg.Filename())
+		if err := os.WriteFile(path, body.Bytes(), 0o600); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(out, "atlas openapi-template: %s — %s written to %s\n",
+		spec.Name(), plural(len(packages), "package"), *outDir)
+	fmt.Fprintln(out, "  each one configures a REST connector task for one operation: method fixed, URL filled in,")
+	fmt.Fprintln(out, "  headers, authentication and the credential reference left for you.")
+	fmt.Fprintln(out, "  applying one to a task is ADR-0212, which is not built yet, and a running server's catalog")
+	fmt.Fprintln(out, "  is compiled in — so these are files to commit or to keep, not to install.")
+	return nil
 }

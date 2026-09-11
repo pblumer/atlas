@@ -373,7 +373,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0285](0285-wal-batch-envelope.md) | A batch is one framed unit in the log | Accepted | Landed |
 | [0286](0286-a-list-carries-its-own-search.md) | A list carries its own search | Accepted | Landed |
 | [0287](0287-create-the-worker-from-the-incident.md) | Create the worker from the incident, and run the deploy preflight on every deploy path | Accepted | Landed |
-| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Accepted | Landed |
+| [0288](0288-agent-commit-attribution.md) | An agent's commit is authored by the person who asked for it | Deprecated | Not started |
 | [0289](0289-worker-type-setup-in-the-panel.md) | A Worker Type carries its own setup, in the panel where it is chosen | Accepted | Landed |
 | [0290](0290-per-flow-join-counting.md) | A join counts tokens per incoming flow | Accepted | Landed |
 | [0291](0291-one-place-for-budgets.md) | One place names every resource budget, and one way sets them | Accepted | Landed |
@@ -384,6 +384,11 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0296](0296-a-loop-records-its-element.md) | A loop records the element it produced, not the collection so far | Accepted | Landed |
 | [0297](0297-confine-internal-worker-token.md) | Confine the internal worker token to the worker protocol | Accepted | Landed |
 | [0298](0298-two-states-for-a-record.md) | A record has two states — whether the decision holds, and whether it is built | Accepted | Landed |
+| [0299](0299-worker-type-admission-criteria.md) | What earns a Worker Type — admission criteria for a new kind | Proposed | Not started |
+| [0300](0300-openapi-element-templates.md) | An OpenAPI document as element templates | Accepted | Landed |
+| [0301](0301-derive-the-model-from-the-processes.md) | Derive the information model from the processes that use it | Accepted | Landed |
+| [0302](0302-withdrawing-commit-attribution.md) | The repository stops rewriting who authored an agent's commit | Accepted | Landed |
+| [0303](0303-script-sandbox-isolation.md) | Isolate general-purpose script tasks inside a restrictive OS sandbox | Accepted | Partial |
 
 ## The two states of a record
 

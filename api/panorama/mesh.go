@@ -159,6 +159,11 @@ type Process struct {
 	// it, carried as a number so a reader can sort by it and a picture can show
 	// which of two degraded processes is the worse one.
 	Incidents int
+	// OldestIncident is when the earliest of them was raised, as Unix nanoseconds,
+	// and zero where there are none — or where every one of them predates the field
+	// (ADR-0272's RaisedAt), which is a fact about the record rather than about the
+	// process and must not be read as "raised at the epoch".
+	OldestIncident int64
 	// Sites are the places in this process where that work is parked.
 	Sites []IncidentSite
 	// Runtime is what the engine has recorded about this definition's instances:
@@ -253,6 +258,16 @@ type Landscape struct {
 	// knows it, and it must reach the payload: without it a process the scan never
 	// reached would be published as healthy on no evidence at all.
 	PartialStatus bool
+	// ObservedAt is when these facts were read off the server, in Unix seconds, and
+	// zero from a collector that does not date its work.
+	//
+	// It is on the landscape rather than only in [Options] because a collector may
+	// answer from something it read earlier: the facts are what is dated, and a
+	// picture stamped with the moment it was *served* would claim a freshness nobody
+	// measured — the undated "all green" of §10, with a timestamp on it, which is
+	// worse than none. A collector that reads afresh every time sets it to now and
+	// nothing changes.
+	ObservedAt int64
 }
 
 // ModelElement is one bound ArchiMate element: what the architect called it, and
@@ -352,6 +367,25 @@ type Node struct {
 	// node is in, and this says how much of it there is. A node with a count is
 	// always in a state that reports one, so the two can never disagree.
 	Incidents int `json:"incidents,omitempty"`
+	// OldestIncident is when the earliest unresolved incident on this node was
+	// raised, as Unix nanoseconds. It is the one number that says *how long this has
+	// been wrong*, which is the question a count cannot answer: four hundred
+	// incidents raised in the last five minutes is a worker that has just fallen
+	// over, and three standing since Friday is a process nobody is coming back to.
+	//
+	// The oldest rather than the newest, and rather than an average. The newest says
+	// only that something happened lately, which Runtime.LastActivity already says
+	// better; an average is not a fact about any incident, so nothing can be pointed
+	// at. The oldest is the age of the *problem* — a process where one token parked
+	// on Friday and three hundred piled up behind it has been stuck since Friday.
+	//
+	// A collapsed application carries the earliest of the processes it stands for,
+	// by the same argument its summed count makes: it is standing in for them.
+	//
+	// Absent rather than zero where there is nothing to date, which includes an
+	// incident raised before the engine recorded the moment: "not known" and "raised
+	// at the epoch" are different facts and only one of them is drawable.
+	OldestIncident int64 `json:"oldestIncident,omitempty"`
 	// Sites are where in the process that work is parked (see [IncidentSite]).
 	//
 	// Only a process node carries them, and a collapsed application deliberately
@@ -534,7 +568,8 @@ func DeriveGraph(land Landscape, opts Options) Graph {
 		node := Node{
 			ID: processNodeID(p.Key), Kind: KindProcess, Name: p.Name,
 			Provenance: ProvenanceDerived, ProcessID: p.ProcessID, Version: p.Version,
-			State: p.State, Reason: p.Reason, Incidents: p.Incidents, Sites: p.Sites,
+			State: p.State, Reason: p.Reason, Incidents: p.Incidents,
+			OldestIncident: p.OldestIncident, Sites: p.Sites,
 			Runtime: p.Runtime,
 		}
 		if _, ok := visibleApps[p.ApplicationID]; ok {
@@ -832,6 +867,10 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 	// a collapsed application stands for all of them, and reporting one child's
 	// number against the whole would understate what is parked behind it.
 	incidents := map[string]int{}
+	// And their age survives as the *earliest* of them, for the same reason read the
+	// other way round: the collapsed node stands for all of them, so how long it has
+	// been in trouble is how long the longest-parked of its processes has been.
+	oldest := map[string]int64{}
 	// And so does the instance tally, summed for the same reason: the collapsed node
 	// stands for all of them. LastActivity is the latest of theirs rather than a sum,
 	// because a timestamp is not a quantity — the question it answers is "has
@@ -844,6 +883,10 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 		children[p.ApplicationID]++
 		processChildren[p.ApplicationID]++
 		incidents[p.ApplicationID] += p.Incidents
+		if p.OldestIncident > 0 && (oldest[p.ApplicationID] == 0 ||
+			p.OldestIncident < oldest[p.ApplicationID]) {
+			oldest[p.ApplicationID] = p.OldestIncident
+		}
 		if p.Runtime != nil {
 			acc := runtime[p.ApplicationID]
 			if acc == nil {
@@ -884,6 +927,7 @@ func cluster(full Graph, visible []Process, drafts []Draft, appIDs []string,
 			node.Reason = fmt.Sprintf("worst of %d collapsed process(es): %s",
 				processChildren[id], p.Reason)
 			node.Incidents = incidents[id]
+			node.OldestIncident = oldest[id]
 		}
 		out.Nodes = append(out.Nodes, node)
 	}

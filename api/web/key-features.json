@@ -1,0 +1,201 @@
+{
+  "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
+  "reviewedThrough": "A capability record now says when somebody last read it and meant it.",
+  "title": {
+    "en": "Key features",
+    "de": "Kernmerkmale"
+  },
+  "intro": {
+    "en": "What Atlas is, in short: a durable, high-throughput BPMN 2.x workflow engine in a single self-contained binary.",
+    "de": "Was Atlas ausmacht, kurz gefasst: eine ausfallsichere, hochperformante BPMN-2.x-Workflow-Engine in einer einzigen, abhängigkeitsfreien Binärdatei."
+  },
+  "features": [
+    {
+      "id": "one-binary",
+      "title": {
+        "en": "One binary, no infrastructure",
+        "de": "Ein Binary, keine Infrastruktur"
+      },
+      "text": {
+        "en": "Engine, REST API, OpenAPI explorer, Modeler, Operations, the Tasks app and the MCP adapter ship in one file — pure Go, no CGO, an embedded state store. No database, no message broker, no sidecar.",
+        "de": "Engine, REST-API, OpenAPI-Explorer, Modeler, Operations, Tasks-App und MCP-Adapter stecken in einer Datei — pures Go, kein CGO, eingebetteter State-Store. Keine Datenbank, kein Message-Broker, kein Sidecar."
+      }
+    },
+    {
+      "id": "durable",
+      "title": {
+        "en": "Durable by construction",
+        "de": "Ausfallsicher by Design"
+      },
+      "text": {
+        "en": "Every state transition is an append-only event. Nothing becomes visible before it is on disk, and crash recovery is simply a replay of the log.",
+        "de": "Jeder Zustandsübergang ist ein Event in einem Append-only-Log. Nichts wird sichtbar, bevor es auf der Platte liegt; Crash-Recovery ist schlicht ein Replay des Logs."
+      }
+    },
+    {
+      "id": "compiled",
+      "title": {
+        "en": "Compiled, not interpreted",
+        "de": "Kompiliert statt interpretiert"
+      },
+      "text": {
+        "en": "BPMN is compiled once at deploy time into a flat, integer-indexed graph with pre-compiled FEEL expressions — no XML parsing and no string lookups on the hot path.",
+        "de": "BPMN wird einmal beim Deployment in einen flachen, integer-indizierten Graphen mit vorkompilierten FEEL-Ausdrücken übersetzt — zur Laufzeit kein XML-Parsing, keine String-Lookups."
+      }
+    },
+    {
+      "id": "throughput",
+      "title": {
+        "en": "Built for throughput",
+        "de": "Auf Durchsatz ausgelegt"
+      },
+      "text": {
+        "en": "A single writer per partition (lock-free and deterministic), group commit with one fsync per batch, and an allocation-free hot path. Scale by adding partitions, not threads.",
+        "de": "Ein Single Writer pro Partition (lockfrei und deterministisch), Group Commit mit einem fsync pro Batch und ein allokationsfreier Hot Path. Skaliert über Partitionen statt Threads."
+      }
+    },
+    {
+      "id": "modeler",
+      "title": {
+        "en": "Model in the browser",
+        "de": "Modellieren im Browser"
+      },
+      "text": {
+        "en": "A full BPMN modeler with a properties panel, versioned validation against the engine that will run the model, auto-layout, version history, live collaboration and a token simulation you can play before deploying.",
+        "de": "Ein vollständiger BPMN-Modeler mit Properties-Panel, versionierter Validierung gegen die reale Engine, Auto-Layout, Versionshistorie, Live-Kollaboration und einer Token-Simulation schon vor dem Deployment."
+      }
+    },
+    {
+      "id": "tokens",
+      "title": {
+        "en": "See every token",
+        "de": "Jeden Token sehen"
+      },
+      "text": {
+        "en": "A live view of all running instances on the diagram, step-by-step replay of any single instance with per-step variable snapshots and the DMN rules that fired, and instance search over the business data a process declares searchable.",
+        "de": "Eine Live-Ansicht aller laufenden Instanzen auf dem Diagramm, ein Schritt-für-Schritt-Replay jeder einzelnen Instanz mit Variablen-Snapshots je Schritt und den ausgelösten DMN-Regeln, und eine Instanzsuche über die Geschäftsdaten, die ein Prozess als suchbar deklariert."
+      }
+    },
+    {
+      "id": "panorama",
+      "title": {
+        "en": "The whole estate on one map",
+        "de": "Die ganze Landschaft auf einer Karte"
+      },
+      "text": {
+        "en": "Panorama draws every application and process of a server as one landscape with the calls and messages between them, sized by what is running on it or by where work is stuck, so the question \"what do we actually operate\" has a picture.",
+        "de": "Panorama zeichnet alle Applikationen und Prozesse eines Servers als eine Landschaft mit ihren Aufrufen und Nachrichten, skaliert nach dem, was darauf läuft, oder danach, wo Arbeit hängt — damit die Frage «was betreiben wir eigentlich» ein Bild hat."
+      }
+    },
+    {
+      "id": "business-architecture",
+      "title": {
+        "en": "Business capabilities, not only processes",
+        "de": "Business Capabilities, nicht nur Prozesse"
+      },
+      "text": {
+        "en": "A flat, tagged register of what the organisation must be able to do, each capability with its scope, its business owner, what it requires of others, and how it is done today \u2014 a process here, a worker, a purchased system or a person. What nothing yet automates is a list you can read, and every record says when somebody last confirmed it still describes reality.",
+        "de": "Ein flaches, getaggtes Verzeichnis dessen, was die Organisation k\u00f6nnen muss: jede Capability mit ihrem Scope, ihrem fachlichen Owner, dem, was sie von anderen ben\u00f6tigt, und der Art, wie sie heute erbracht wird \u2014 ein Prozess hier, ein Worker, ein zugekauftes System oder ein Mensch. Was noch nichts automatisiert, ist eine lesbare Liste, und jeder Eintrag sagt, wann ihn zuletzt jemand best\u00e4tigt hat."
+      }
+    },
+    {
+      "id": "human-work",
+      "title": {
+        "en": "Human work included",
+        "de": "Menschliche Arbeit inklusive"
+      },
+      "text": {
+        "en": "User tasks with real forms, claim and assign, candidate groups, due dates and priorities, a Tasks app — and public start links for people without an account.",
+        "de": "User Tasks mit echten Formularen, Claim und Zuweisung, Candidate Groups, Fälligkeit und Priorität, eine eigene Tasks-App — und öffentliche Start-Links für Personen ohne Konto."
+      }
+    },
+    {
+      "id": "decisions",
+      "title": {
+        "en": "Decisions as tables",
+        "de": "Entscheidungen als Tabellen"
+      },
+      "text": {
+        "en": "DMN business rule tasks with an embedded decision-table editor. Domain experts change the rules without redeploying the process, and every evaluation is recorded with inputs, outputs and the rule that hit.",
+        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Fachleute ändern die Regeln ohne Redeploy des Prozesses, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
+      }
+    },
+    {
+      "id": "data",
+      "title": {
+        "en": "Data with a model behind it",
+        "de": "Daten mit einem Modell dahinter"
+      },
+      "text": {
+        "en": "An information model of classes, their members and the lifecycle each one moves through — modelled by hand, or read back off the processes that actually write it. The deploy checks the models against it and says where the two disagree.",
+        "de": "Ein Informationsmodell aus Klassen, ihren Attributen und dem Lebenszyklus, den jede durchläuft — von Hand modelliert oder aus den Prozessen zurückgelesen, die es tatsächlich schreiben. Das Deployment prüft die Modelle dagegen und sagt, wo beide auseinanderlaufen."
+      }
+    },
+    {
+      "id": "coverage",
+      "title": {
+        "en": "BPMN coverage you can check",
+        "de": "Nachprüfbare BPMN-Abdeckung"
+      },
+      "text": {
+        "en": "All four gateway kinds, subprocesses, interrupting and non-interrupting boundary events, multi-instance, compensation, lanes and collaborations — backed by a conformance suite with five independent oracles, including replay equivalence.",
+        "de": "Alle vier Gateway-Typen, Subprozesse, interrupting und non-interrupting Boundary Events, Multi-Instance, Kompensation, Lanes und Collaborations — belegt durch eine Conformance-Suite mit fünf unabhängigen Oracles, darunter Replay-Äquivalenz."
+      }
+    },
+    {
+      "id": "integration",
+      "title": {
+        "en": "Work that leaves the engine",
+        "de": "Integration nach aussen"
+      },
+      "text": {
+        "en": "Job workers over HTTP, polyglot script tasks (JavaScript, Python, PowerShell), connectors for REST, mail, SharePoint, BMC Remedy, web scraping and CSV, an encrypted secret vault, script execution that can be confined to a fail-closed OS sandbox, and mockup service tasks for end-to-end runs before the integrations exist.",
+        "de": "Job-Worker über HTTP, polyglotte Script Tasks (JavaScript, Python, PowerShell), Konnektoren für REST, Mail, SharePoint, BMC Remedy, Web-Scraping und CSV, ein verschlüsselter Secret-Vault, eine fail-closed OS-Sandbox, in die sich die Skriptausführung sperren lässt, sowie Mockup-Service-Tasks für End-to-End-Läufe vor der Integration."
+      }
+    },
+    {
+      "id": "agents",
+      "title": {
+        "en": "Made for AI agents",
+        "de": "Für KI-Agenten gebaut"
+      },
+      "text": {
+        "en": "An MCP adapter exposes the HTTP API as tools, so an agent can author, deploy, run and inspect processes through exactly the surface a human uses. An assistant is granted its own OAuth access on a screen of its own, and a process can call an agent as a task.",
+        "de": "Ein MCP-Adapter stellt die HTTP-API als Tools bereit: Ein Agent kann Prozesse über dieselbe Oberfläche wie ein Mensch erstellen, deployen, starten und inspizieren. Einer Assistenz wird der Zugang per OAuth auf einem eigenen Bildschirm erteilt, und ein Prozess kann einen Agenten als Task aufrufen."
+      }
+    },
+    {
+      "id": "operations",
+      "title": {
+        "en": "Ready for operations",
+        "de": "Betriebsreife Werkzeuge"
+      },
+      "text": {
+        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
+        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
+      }
+    },
+    {
+      "id": "deployment",
+      "title": {
+        "en": "Runs where you need it",
+        "de": "Läuft, wo es gebraucht wird"
+      },
+      "text": {
+        "en": "The single binary runs on Linux, Windows and macOS; a container image and a Helm chart cover Kubernetes.",
+        "de": "Das Single Binary läuft auf Linux, Windows und macOS; für Kubernetes gibt es ein Container-Image und ein Helm-Chart."
+      }
+    },
+    {
+      "id": "license",
+      "title": {
+        "en": "Open source, developer preview",
+        "de": "Open Source, Developer Preview"
+      },
+      "text": {
+        "en": "Licensed AGPL-3.0-only. Atlas is a 0.x developer preview: broad BPMN coverage on a single node, but the API and on-disk formats are still changing.",
+        "de": "Lizenziert unter AGPL-3.0-only. Atlas ist eine 0.x-Developer-Preview: breite BPMN-Abdeckung auf einem Knoten, API- und On-Disk-Formate ändern sich aber noch."
+      }
+    }
+  ]
+}

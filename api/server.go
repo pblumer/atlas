@@ -203,6 +203,12 @@ type Server struct {
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	// landscapes is what the Starmap last read this server's *structure* as
+	// (ADR-0211 §7). It holds no health and nobody's view of anything — see
+	// [meshFacts] — and it lives here, under the same single-owner discipline as the
+	// registry above, which is also what makes it single-flight: two readers arriving
+	// together are two loop turns, and the second finds what the first left.
+	landscapes meshCollection
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.
@@ -1674,22 +1680,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if len(s.SuperviseSpecs) > 0 {
 		s.supervisor = newSupervisor(quit)
 		for i, spec := range s.SuperviseSpecs {
-			args := []string{"worker", "--server", s.superviseURL, "--id", spec.ID}
-			for _, h := range s.superviseHandles[i] {
-				args = append(args, "--handle", h)
-			}
-			// A supervised worker may also serve built-in worker kinds. It is a
-			// child of this process, so it inherits the environment any of them read
-			// their configuration from — and for a kind whose configuration lives in
-			// the worker store instead, the engine adds it to that environment at
-			// spawn (see superviseEnv). Together that is what makes the default set
-			// work with nothing configured at all.
-			if len(spec.Connectors) > 0 {
-				args = append(args, "--connector", strings.Join(spec.Connectors, ","))
-			}
-			if len(spec.ScriptLanguages) > 0 {
-				args = append(args, "--script-languages", strings.Join(spec.ScriptLanguages, ","))
-			}
+			// The argv is derived only from typed server configuration. A request
+			// can restart this fixed worker, never add an argument or command.
+			args := supervisedWorkerArgs(s.superviseURL, spec, s.superviseHandles[i])
 			s.supervisor.add(spec, args, s.superviseEnv(spec))
 		}
 		s.supervisor.start()

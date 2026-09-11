@@ -66,6 +66,14 @@ func (s *Server) incidentsByDefinition() (map[uint64]incidentTally, bool, error)
 		}
 		tally := out[pi.ProcessDefKey]
 		tally.Count++
+		// The earliest raise wins, and a record with no moment on it is skipped
+		// rather than treated as the earliest of all: RaisedAt is frozen into the
+		// event when the incident is raised, so a zero is an incident written before
+		// the engine recorded it, and letting the epoch win would date every process
+		// holding one to 1970.
+		if v.RaisedAt > 0 && (tally.OldestRaisedAt == 0 || v.RaisedAt < tally.OldestRaisedAt) {
+			tally.OldestRaisedAt = v.RaisedAt
+		}
 		out[pi.ProcessDefKey] = tally
 		s.recordIncidentSite(sites, pi.ProcessDefKey, v)
 		return nil
@@ -85,7 +93,13 @@ func (s *Server) incidentsByDefinition() (map[uint64]incidentTally, bool, error)
 // there are, and where in its diagram they are parked.
 type incidentTally struct {
 	Count int
-	Sites []panorama.IncidentSite
+	// OldestRaisedAt is when the earliest of them was raised, as Unix nanoseconds,
+	// and zero where none of them carries the moment. It costs nothing to collect —
+	// the scan already reads every incident, and the field is on the record it reads
+	// — and it is the one thing the count cannot say: whether this is a worker that
+	// fell over five minutes ago or a process nobody has come back to since Friday.
+	OldestRaisedAt int64
+	Sites          []panorama.IncidentSite
 }
 
 // maxIncidentSites bounds how many elements one process reports. A process with

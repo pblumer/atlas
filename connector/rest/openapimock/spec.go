@@ -71,6 +71,11 @@ type Spec struct {
 	// written against https://api.example.com/v1 mocks /v1/… exactly as the real API
 	// does and a task's URL needs only its host changed.
 	BasePath string
+	// ServerURL is that same first server URL whole — scheme, host and path, without
+	// a trailing slash. The mock does not need it (it serves on an address of its
+	// own), but anything generating a URL a task should *call* does, and throwing the
+	// host away here would make it unrecoverable.
+	ServerURL string
 	// Operations are ordered most-specific first, which is also the order the matcher
 	// walks: /pets/mine must be tried before /pets/{petId} or the literal path is
 	// unreachable.
@@ -187,7 +192,7 @@ func compile(data []byte, path, root string) (*Spec, error) {
 		spec.Title, _ = info["title"].(string)
 		spec.Version, _ = info["version"].(string)
 	}
-	if spec.BasePath, err = basePath(doc); err != nil {
+	if spec.BasePath, spec.ServerURL, err = servers(doc); err != nil {
 		return nil, err
 	}
 
@@ -270,23 +275,24 @@ func normalize(value any) any {
 	}
 }
 
-// basePath is the path of the first server URL, trimmed of its trailing slash. A
-// document with no servers, or one whose server is a bare host, mocks at the root.
-func basePath(doc map[string]any) (string, error) {
-	servers, _ := doc["servers"].([]any)
-	if len(servers) == 0 {
-		return "", nil
+// servers reads the first server URL: its path, which is where this mock serves, and
+// the URL whole, which is where the real API answers. A document with no servers, or
+// one whose server is a bare host, mocks at the root.
+func servers(doc map[string]any) (base, server string, err error) {
+	entries, _ := doc["servers"].([]any)
+	if len(entries) == 0 {
+		return "", "", nil
 	}
-	first, _ := servers[0].(map[string]any)
+	first, _ := entries[0].(map[string]any)
 	raw, _ := first["url"].(string)
 	if raw == "" {
-		return "", nil
+		return "", "", nil
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("server url %q: %w", raw, err)
+		return "", "", fmt.Errorf("server url %q: %w", raw, err)
 	}
-	return strings.TrimSuffix(parsed.Path, "/"), nil
+	return strings.TrimSuffix(parsed.Path, "/"), strings.TrimSuffix(raw, "/"), nil
 }
 
 // compilePathItem compiles every operation on one path.

@@ -46,7 +46,17 @@
   the kind fills are drawn at a weight and a strength the canvas can carry, measured
   against WCAG 2.1's 3:1 for a graphical object; amended 2026-09-07 — a double-click
   goes inside, and for a process and a decision the inside is their Operations view
-  rather than a smaller starmap around them)
+  rather than a smaller starmap around them; amended 2026-09-10 — §8's picker offers
+  ways of *drawing* rather than only vocabularies: the running tally leaves its
+  checkbox for an entry in that list and sizes the nodes by how much is running on
+  them, and the incident count and the age of the oldest one are offered beside it as
+  the same choice about different quantities; §6's ranking column follows whichever
+  weighting is chosen, with the blast radius kept as the second number on a row;
+  amended 2026-09-10 — §7's picture states when it was read and re-reads itself on a
+  cadence paced by what the derive costs, and the server reads its structure once for
+  every reader while reading each one's health and visibility afresh; amended
+  2026-09-10 — §7's cache holds nothing a visibility decision reads either, so a
+  revocation takes effect on the next request as it does everywhere else)
 - **Date:** 2026-08-31
 - **Deciders:** Atlas maintainers
 
@@ -1072,6 +1082,356 @@ instances, the fallback is server-side layout — the pipeline in `api/layout`
 > so a view derived per call would shift the coordinate system under the pointer as
 > the node crossed it.
 
+> **Amendment (2026-09-11, fifth): the scale is also the control.**
+> A scale a reader can measure by is one they will want to point at. "Show me the
+> ones running a hundred or more" is the question the row of reference circles makes
+> askable, and it is a question a landscape is opened with — so each mark is a button,
+> and clicking it narrows the picture to the band that mark stands for.
+>
+> A mark owns everything from itself up to the next mark, and the last one owns
+> everything above it: the only reading under which the marks partition the landscape
+> without overlapping. The nothing-at-all mark is its own case and means a tally of
+> zero, not "below the smallest thing that counts", because the picture keeps those
+> two apart everywhere else.
+>
+> It narrows through the same walk the search box uses, with the same one hop of
+> context and the same matched/context distinction in the counter, because they are
+> two ways of asking the same kind of question and answering them differently would be
+> two filters a reader has to hold apart. Both at once is an **intersection** through
+> *one* walk: narrowing twice would take the context of the context, and the picture
+> would grow as the question got narrower. Clicking the chosen mark again widens —
+> a filter you can only turn on is a trap, and the mark is the only obvious place to
+> look for the way out.
+>
+> The band is held as the mark's own **tally**, not as its position on the row. The
+> marks are derived from the landscape and the landscape moves, so a tally is still
+> the same question after a re-read where an index is a different one; and when the
+> tally is no longer a mark at all — the peak moved, or the notation changed to one
+> with no scale — it is let go of rather than quietly filtered by, because a picture
+> narrowed by a criterion with no control showing it is a picture nobody can widen
+> again. A saved view carries it for the reason it carries the term: a view is the
+> whole question somebody saved.
+
+> **Amendment (2026-09-11, fourth): the key carries the scale, not only a sentence
+> about it.**
+> The amendment below states the sizing law in the key and in the export stamp, in
+> words. Words are not a scale. A reader looking at a node cannot tell from a sentence
+> whether it is running ten or a thousand — they can tell it by holding the node
+> against a circle with a number under it, which is what a bubble chart has always
+> done and what this was missing.
+>
+> So the key gains a row of reference circles: the nothing-at-all one first, then the
+> tallies the scale is marked at, each drawn at the radius the law gives it. The marks
+> are powers of ten from the weighting's `least` upward and then the peak, because the
+> law is logarithmic and the marks a reader interpolates between on a logarithmic
+> scale are the decades; a linear set would be four of them crowded at one end. When
+> there are more decades than the row has places the rungs are thinned by a *constant*
+> stride rather than by picking evenly, because a ladder of ten, then a hundredfold,
+> then fourfold is three rules on one line and a reader carries none of them. Both
+> ends always survive: the smallest tally that counts, and the largest there is.
+>
+> What makes it a scale rather than a decoration is that the circles come out of the
+> same function the nodes did (`radiusForTally`, which `radiusForHeat` now calls). One
+> law, one implementation, so the key cannot drift from the canvas — and the e2e test
+> states exactly that, by measuring a node and its reference circle off the rendered
+> picture and requiring the same ratio.
+>
+> It travels into the file too, for the reason §10 gives for the stamp: beside the
+> canvas the key is one scroll away, and in a file pasted into a ticket there is
+> nothing to scroll to. In the artifact the marks are drawn inside the same 16-unit
+> box the export's key scales every swatch from, so what the file carries is the
+> ratios rather than the screen's pixels — which is what a ratio scale is read by.
+
+> **Amendment (2026-09-11, third): the heat weightings are a ratio scale.**
+> §8 sized a node by the square root of its share of the peak, which makes a circle's
+> *area* proportional to the tally — the textbook encoding for a quantity drawn as a
+> disc, and arithmetically what it claimed to be. It answers "how much". That is not
+> the question a heatmap is opened with, and the numbers say why. On a span of thirty
+> units, a node at a hundredth of the peak was drawn three units above a node carrying
+> nothing at all, and one at a thousandth was drawn one unit above it. An estate's
+> instance counts run from one to several thousand, so the quiet majority of a real
+> landscape collapsed onto the floor and a process running one could not be told from
+> a process running none — which is the first thing a reader wants from this picture,
+> and it was reported as missing.
+>
+> So the law is now:
+>
+>     value 0      →  r = floor
+>     value least  →  r = floor + step
+>     value peak   →  r = floor + span
+>
+>     r = floor + step + (span − step) · ln(value ÷ least) ÷ ln(peak ÷ least)
+>
+> Equal steps of radius are equal *multiples* of the tally: a process running ten
+> stands as far above one running one as one running a hundred stands above it. The
+> scale answers "how many times".
+>
+> Two things it needs that the old law did not, and both are stated to the reader
+> rather than left implicit:
+>
+> - **A step.** On a ratio scale the smallest tally is the origin, so "one" and "none"
+>   would be drawn alike. The step is what "this one is doing something" costs, before
+>   the weighting has said how much. Six units, which puts the smallest node carrying
+>   anything at 17 against a floor of 11 — two and a third times the area, and exactly
+>   the gap between a worker and a process on the structural picture, so it reads at
+>   the same glance as a change of kind.
+> - **A least.** The bottom of the scale, declared by the weighting rather than read
+>   off the landscape: one running instance, one incident, one minute of age. Declared,
+>   because a reading taken off the landscape would rescale every node the moment one
+>   quiet process appeared, and because the raw number for a duration is nanoseconds,
+>   where "one of them" means nothing.
+>
+> What it gives up is stated in the key and in the export stamp beside what it gains:
+> the area is no longer the tally. A landscape with no range at all — every process
+> running one, every node holding its only incident — has a peak equal to its least,
+> and everything carrying anything is drawn at the top, because being the worst is
+> what it is. That is the one case where the scale is louder than the difference it is
+> reporting, and the ranking column beside the picture carries the actual numbers.
+
+> **Amendment (2026-09-11, second): the ceiling is on pieces of the picture, not on
+> nodes.**
+> The ceiling the amendment below introduced measured each node against its own
+> nearest neighbour, which catches a lone node and nothing else. Two processes that
+> call each other and nothing else are each other's nearest neighbour at a spring's
+> rest length, so by that measure neither is far from anything — the pair sails past
+> the ceiling together and goes on deciding the scale for the whole canvas. That was
+> reported from a real landscape, and it is not a rare shape: an estate is full of
+> conformance samples, test flows and one-off processes that touch nothing else.
+>
+> So the unit is the connected component. Everything the edges tie together is one
+> piece; a piece is measured against everything outside it; a piece over the ceiling
+> is translated *rigidly* toward whatever is nearest to it until the gap is exactly
+> the ceiling. Rigidly, because every distance inside a component is something the
+> springs are saying, where the gap between two components is an artifact of where
+> the repulsion and the pull happened to balance — nothing was being said, so nothing
+> is being overruled. The largest component never moves; something has to hold still.
+>
+> Both halves run, and neither replaces the other. A piece is measured against what
+> is outside it, so a node stretched away from its own neighbours *inside* a large
+> component is invisible to the piece half; a node is measured against its nearest
+> neighbour, so a pair adrift together is invisible to the node half. Measured on a
+> 120-node estate with six small islands, dropping the node half took the worst
+> node's distance from 1.5 times the median to 1.9. Across eight estate shapes at two
+> window sizes the piece ceiling takes the furthest piece from 2.0–3.1 times the
+> median to 1.5, leaves the median spacing the picture is drawn at unchanged or
+> slightly larger, and moves nothing at all on an estate whose pieces were already
+> within it.
+>
+> The layout is one function for every notation, so this reaches the heatmap
+> projections and the ArchiMate and C4 views by construction rather than by being
+> repeated. Measured on one 212-node estate across all four: coverage 0.165 / 0.163 /
+> 0.163 / 0.171 and an identical furthest-piece figure. There is no per-view layout
+> to fix, and a report that one view is worse than another is a report about the
+> estate or about the build, not about the projection.
+
+> **Amendment (2026-09-11): the opening view uses the window, whatever the estate's
+> size.**
+> §7 sizes the world from the content and then shows the whole of it, so the world's
+> size is what decides the magnification. Two rules were quietly working against
+> that, and both were reported as one symptom: on first opening "Atlas (derived)",
+> the landscape sat in a fraction of the window with a single node stranded at the
+> far edge of it.
+>
+> - **The world had a floor of a frame's worth of area.** It was put there so a
+>   handful of nodes would not be changed by the switch to a content-sized world, on
+>   the reasoning that the small case was comfortable already. It was not. With the
+>   cells a node needs at about 98 units square, the floor stopped binding only past
+>   roughly twenty-five nodes, so every smaller landscape was laid out in a world
+>   several times larger than its content and drawn at the scale that fits that world
+>   into the canvas. Measured on the rendered page at 1400x900, as the share of the
+>   window the nodes' own footprints cover: five nodes 7%, eight nodes 11%, fourteen
+>   nodes 16%, and forty or a hundred and twenty-five nodes 17%. The floor is gone.
+>   One density law now applies at every size, and the same measurements read 18%,
+>   18%, 18%, 17%, 17%.
+> - **Nothing bounded how far one node could be drawn from the rest.** A node the
+>   springs do not hold sits where the centring pull balances a repulsion falling off
+>   as 1/d², which is a cube root of the constants: it lands far out, and tuning the
+>   pull (which is what LOOSE_PULL is) moves it very little. The cost is not the node
+>   — it is that the fit scales the *bounding box* onto the world, so one straggler
+>   decides the scale and everything else is squeezed into the fraction of the canvas
+>   it leaves. On the reported shape, one application with its processes around it
+>   and one process attached to nothing, the straggler settled at 2.07 times the
+>   picture's own median spacing. A pass named `gather` now bounds it at 1.5, moving
+>   an offender along the line toward its nearest neighbour until it is exactly that
+>   far and no further, so it stays the outlying thing it is without setting the
+>   scale for the rest. It is the dual of the separation pass and sits in the same
+>   place for the same reason: a guarantee the simulation cannot make is made
+>   afterwards, by arithmetic, and it is skipped while anything is pinned because it
+>   would slide a hand-made arrangement out from under the hand that made it.
+>
+> One correction was tried and rejected on the measurements. The pull's aim at the
+> frame's aspect ratio is applied once and demonstrably undershoots (a graph asked
+> for 1.71:1 went 0.93 → 1.21). Closing it into a loop of repeated corrections fixes
+> that case and overshoots others — the simulation answers with a lag, so the loop
+> rings — and on the 36-node estate §7's own fill test uses it took the span from
+> 0.80 of the canvas to 0.68. The single correction stands.
+
+> **Amendment (2026-09-10): the picture says when it was read, and keeps itself
+> true.**
+> §10 argues that an undated "all green" picture circulates inside an organization
+> long after it stopped being true, and is believed because it looks like evidence —
+> which is why the observation time is rendered *into* the exported image. The same
+> argument applies to the screen that export is taken from, and it was not being made
+> there. Everything on this canvas has a shelf life: §4's severity is an observation,
+> the incident counts move as an operator works through them, and §8's three
+> weightings are live quantities, one of them measured against a clock, so its labels
+> go wrong while nothing on the page changes at all. A landscape opened at nine and
+> still open at eleven showed two-hour-old numbers with nothing saying so.
+>
+> Two answers, and the split is the point, because they cost different amounts:
+>
+> - **The freshness is stated, always, and cheaply.** The landscape's observation time
+>   is on the page beside the node count, rewritten every ten seconds. Writing a
+>   sentence costs nothing, and this sentence is the one that must never be wrong.
+> - **The landscape re-reads itself while it is being looked at**, on a cadence paced
+>   by what it costs. That is the part §7 is about: the mesh is derived on the run loop,
+>   which is why the size budget exists at all, so the interval is a **multiple of what
+>   the last derive actually cost** (a twentieth of it) rather than a constant somebody
+>   guessed — floored at thirty seconds, ceilinged at five minutes. A landscape that
+>   derives in 40 ms is re-read on the floor; one that takes four seconds backs off to
+>   well over a minute by itself. A fixed interval would be exactly wrong on the
+>   estates where the cost mattered most.
+>
+> The floor is not arbitrary either: it is inside the granularity of every number on
+> the picture — the age weighting's finest bucket is "under 2 min" — so asking faster
+> would buy nothing a reader could see.
+>
+> Four rules keep the re-read from being worse than the staleness it fixes:
+>
+> - **Nothing is asked behind a hidden tab**, and nothing under the reader's hand: a
+>   re-layout in the middle of a drag or a pan takes the picture out from under the
+>   gesture moving it.
+> - **A refusal keeps the picture and says so.** A landscape that blanked itself
+>   because one request failed would throw away a true answer for an error. The
+>   freshness line gains "could not re-read", because "four minutes old" and "four
+>   minutes old and no longer being kept up" are different facts and only the second is
+>   a reason to stop believing the drawing. The cadence goes straight to the ceiling: a
+>   server that is down does not want thirty requests a minute from every open tab.
+> - **Everything the reader arranged survives it** — the filter, the drilldown, the
+>   selection, the pins, the zoom — because it goes through the same path the drafts
+>   switch does.
+> - **It can be turned off**, and it is the *default that needs the argument*, not the
+>   switch. On, because a status view that looks live and is not is worse than a
+>   picture that moves; off exists because reading one picture carefully is a thing
+>   people do, and a canvas that re-lays-out mid-thought is its own kind of wrong.
+>   Turning it back on asks at once rather than waiting out another interval.
+>
+> The timer ends itself when the card it painted leaves the document. Unlike the
+> resize observer beside it, an interval outlives its view: left running it would ask
+> the server for a picture nobody is looking at for as long as the tab is open. What it
+> checks is the card, not the element the router handed the view — that one is the
+> router's and outlives every route it holds.
+
+> **Amendment (2026-09-10): the structure is read once for everybody; the health is
+> read for each of them.**
+> The amendment above made every open Starmap a reader that comes back. That turns a
+> cost this section was already careful about into one that scales with the audience:
+> a landscape is derived on the run loop — the single writer (I3) — and reading one
+> costs a directory listing and a JSON decode per record across four sidecar stores,
+> plus a walk of every compiled process. One reader paid it; twenty tabs paid it
+> twenty times, and twenty tabs is one operations team with the view open, competing
+> for the loop that executes process instances.
+>
+> The answer is a cache, and the whole of its design is **what it is allowed to
+> hold**. It holds structure — the applications, the deployed processes and what each
+> calls, the workers, the drafts, the peers — for thirty seconds. It holds nothing
+> else, and the two exclusions are the load-bearing part:
+>
+> - **Health is never cached.** Which processes have work parked, how much, how long
+>   it has been standing, how many instances are live, which workers have polled: all
+>   read fresh on every request. They are the answer an operator opens this view for,
+>   and they are engine point reads rather than disk — bounded by design
+>   (`maxStatusIncidentScan`) and cheap beside a directory listing. A status view that
+>   made trouble wait out a timer would be saving the wrong cost, and a reload that
+>   could not tell the truth is worse than a slow one.
+> - **Visibility is never cached.** Every `CanView` is decided on the request, from
+>   the request. A cache holding a *filtered* landscape would be one principal's view
+>   served to another the moment a key collided or a scope changed, and there is no
+>   cache key that makes that safe — so the shape removes the question rather than
+>   answering it. The reading carries the *inputs* a decision is made from, and never
+>   a decision.
+>
+> Thirty seconds is the view's own re-read floor, and that is not a coincidence: a TTL
+> shorter than the poll bounds nothing, because readers do not poll in step — twenty of
+> them at random phases would miss a five-second entry almost every time. At the floor,
+> the cost of the structure stops depending on how many people are looking, which is
+> the property worth having.
+>
+> The cache is loop-owned state, like the deployment registry, so it needs no lock —
+> and the loop is also the single-flight: two readers arriving together are two turns,
+> and the second finds what the first left.
+>
+> Its only key is whether drafts were asked for, because that is the only thing that
+> changes what is *read* rather than who may see it.
+>
+> **Invalidation is narrow on purpose.** A deployment arriving or being removed, a call
+> override written or dropped, a deployment target created or deleted: those are the
+> changes a person makes and then immediately goes looking for *on this picture*, and
+> they drop the reading at once. Everything else — a new application, a new worker —
+> appears within the TTL. That is a deliberate refusal of a general invalidation
+> protocol: a protocol every future writer has to remember is one that a future writer
+> forgets, and the landscape it produces is silently wrong, where a TTL everybody is
+> subject to cannot be forgotten.
+>
+> And the staleness that remains is *stated*. The landscape carries the moment its
+> structure was read, and the answer is dated by it — the oldest fact in it, not the
+> youngest — so the freshness line the amendment above put on the picture tells the
+> truth about a cached answer as much as a fresh one. A reader is never told a picture
+> is current when it is not, which is the condition under which caching a view like
+> this is honest at all.
+
+> **Amendment (2026-09-10): "visibility is never cached" was half a rule, and the
+> missing half was the one that mattered.**
+> The amendment above claimed the split made a leak impossible because every `CanView`
+> is decided on the request. That is true and it was not enough, which a security
+> review of the merged change established. Deciding per request buys nothing if the
+> record the decision *reads* is half a minute old: `project.effectiveRole` answers
+> from the project's own `Members`, `Visibility` and `OwnerID`, so re-running the
+> function against a held record returns the answer from before a revocation. The
+> reading held `projs` and the worker records — the inputs to every decision — and so
+> a member removed from an application kept receiving its processes, their call graph,
+> their instance counts and their incident sites, including raw worker error text, for
+> the remainder of the TTL. The auto-refresh made that window reach itself: an open
+> tab re-polls on its own.
+>
+> That was a real deviation, not a trade-off. Every other listing on this server reads
+> the project store inside its own request turn, and the auth layer states the property
+> in as many words: a change takes effect "on their next request without a re-login".
+> This view is not the place to make an exception, and the previous amendment named
+> "a scope changed" as the thing the split was supposed to make impossible.
+>
+> **The rule is now the whole rule: nothing a visibility decision reads is cached
+> either.** The project store and the worker store are read per request, in
+> `collectLandscape`, exactly as every other listing reads them. What stays cached is
+> structure that carries no scope: the deployed processes and what each calls, the
+> drafts, the overrides, the peers, the targets.
+>
+> Two consequences worth stating, because they are improvements rather than costs:
+>
+> - **An application or a worker created or deleted now appears on the next request**,
+>   not within the TTL. The earlier amendment listed that lag as an accepted cost; it
+>   was a symptom of the same defect and it is gone.
+> - **Which configured worker a task's `connector="…"` name resolves to is decided per
+>   request too.** The *reference* is structure and stays cached; the *resolution*
+>   reads a store that carries a sharing scope, so an id resolved half a minute ago
+>   could name a worker since deleted or re-scoped.
+>
+> The alternative — a `forgetLandscape()` hook on all eight scope-writing handlers —
+> was rejected on this section's own argument, turned around: a protocol every future
+> writer has to remember is one a future writer forgets, and while forgetting a
+> *correctness* hook draws a stale picture, forgetting an *authorization* hook is a
+> hole. It would also still miss a record changed outside those handlers. Reading the
+> two stores per request removes the class rather than one instance of it, and they are
+> the two cheapest of the five — the draft store with its XML and the walk of every
+> compiled process, which are what the cache exists for, are untouched.
+>
+> The lesson for the test, which is the part most worth carrying: the original test
+> proved two *concurrent* principals were filtered apart, and that is a property a
+> cache of decision inputs satisfies perfectly while leaking. What catches this is a
+> revocation — warm the reading as a member, change the record, and require the very
+> next request to refuse — and it is asserted against a record written directly rather
+> than through a handler, because that also covers the handler nobody has written yet.
+
 ### 8. C4 is a read-only projection, not a theme
 
 Panorama may render a **C4 projection** of an ArchiMate model. It is constrained so
@@ -1189,6 +1549,133 @@ open that door.
 > that offers what another surface contradicts is a promise the server breaks. Each
 > row carries both what a person is shown and the notation's own machine token, since
 > the two readers need different halves of one fact.
+
+> **Amendment (2026-09-10): the picker offers ways of drawing, not only vocabularies
+> — and two of them size the landscape by a quantity.**
+> The instance counts were a checkbox beside the picker — an overlay ticked onto
+> whatever was being drawn. That is this section's own failure mode approached from
+> the other side. Not a renderer toggle wearing a notation's clothes, but a rendering
+> decision left *outside* the one control that owns rendering decisions, and offering
+> a combination with no reading: size on this landscape is a single channel and it
+> already carried connectivity (§7), so a picture with the box ticked had radii
+> meaning structure while its labels meant load. The one question somebody turns the
+> counts on to ask — *where is the work* — was the one the picture could not answer.
+>
+> So the tally becomes an entry in the picker, and the picker becomes what it had
+> already grown into: **how this landscape is drawn**, of which "in whose vocabulary"
+> is one case. Choosing such an entry is choosing what size means, which is why these
+> **heat weightings** exclude the projections and each other rather than combining
+> with them.
+>
+> There are two, because they are different questions and the second is asked more
+> often:
+>
+> - `instances` — **where is the work.** The engine's running tally: capacity, reading
+>   a load test, finding the process actually carrying the estate.
+> - `incidents` — **where is it stuck.** The unresolved incidents the engine holds
+>   against a node. §4's severity badges already say *which* nodes have a finding;
+>   what they cannot say is how much is parked behind each, and a process holding four
+>   hundred stuck tokens wears the same badge as one holding a single retry. The badge
+>   stays the classification and the size becomes the magnitude — two channels saying
+>   different things about one node, which is the arrangement §4 asks for rather than
+>   a second encoding of the same fact.
+> - `incident-age` — **how long has it been stuck**, and this is the one that changes a
+>   decision. Four hundred incidents raised in the last five minutes is a worker that
+>   has just fallen over and will drain itself once somebody restarts it; three
+>   standing since Friday is a process nobody is coming back to. The count ranks those
+>   the wrong way round, every time — which is why the age is a weighting of its own
+>   rather than a tie-break inside the count.
+>
+> The third one needs a fact the payload did not carry, and §4's node gains it:
+> **`oldestIncident`, the moment the earliest unresolved incident on this node was
+> raised**, as Unix nanoseconds. Four decisions in it are worth stating, because each
+> has a wrong answer that looks reasonable:
+>
+> - **The oldest, not the newest and not an average.** The newest says only that
+>   something happened lately, which the runtime tally's `lastActivity` already says
+>   better; an average is not a fact about any incident, so nothing can be pointed at.
+>   The oldest is the age of the *problem* — a process where one token parked on Friday
+>   and three hundred piled up behind it has been stuck since Friday.
+> - **A moment, not an age.** An age computed on the server is stale by the time it is
+>   drawn, and a moment is the same fact for every reader wherever their clock is.
+> - **Absent rather than zero where there is nothing to date**, which includes an
+>   incident raised before the engine recorded the moment. "Not known" and "raised at
+>   the epoch" are different facts, and only one of them is drawable — a zero would
+>   date the process to 1970 and draw it as the oldest trouble on the estate.
+> - **A collapsed application carries the earliest of its processes**, by the same
+>   argument its summed count makes, read the other way round: it stands for them, so
+>   how long it has been in trouble is how long the longest-parked of them has been.
+>
+> It costs nothing to collect. The incident scan §4 already pays for reads every
+> record, and the raise time is a field on the record it is already reading.
+>
+> All three obey the same rules, and they are one implementation rather than three, so
+> that a reader cannot be shown pictures that mean subtly different things:
+>
+> - **Size is the quantity, and nothing else.** A node's radius rises from the floor
+>   with the **square root** of its share of the largest node on the landscape —
+>   `r = floor + span · √(value ÷ peak)`. The root, because a circle's area goes up
+>   with the square of its radius: a radius taken straight from the count reads as four
+>   times the quantity at twice the number. Kind is unaffected — it was never carried
+>   by size alone, and shape and colour still carry it (§4).
+>
+>   Stated that way rather than as "the area above the floor is the share", which is
+>   what this record and the key first said and which does not survive arithmetic: the
+>   floor offsets the relation, so at a quarter of the peak's tally the ring above the
+>   floor is about 0.36 of the ring at the peak, not 0.25. What is exactly proportional
+>   to the share is `((r − floor) ÷ span)²`. The rule below is where the discrepancy
+>   comes from and it is deliberate; the claim about it was not.
+> - **There is a floor, and it is load-bearing.** Every node keeps a minimum radius,
+>   whatever its tally. A size that were purely the count would draw the quiet half of
+>   an estate at nothing, and a picture with its context deleted cannot distinguish
+>   "nothing here" from "not on this server". Exact proportionality and a visible
+>   minimum cannot both hold at zero; the minimum wins, and the key states the encoding
+>   it wins against rather than implying one that is not there. On the incident
+>   weighting the floor also makes the healthy case legible: a flat picture is the
+>   answer, and the key says so rather than leaving a reader to wonder whether anything
+>   was measured at all.
+> - **The reference is the whole landscape, and it is named.** The largest node is the
+>   reference, taken before the filter and the drilldown, so narrowing to two nodes
+>   cannot swell the smaller of them into the worst thing on the estate. A constant
+>   would not do here as `DEGREE_FULL` does for connectivity: twelve dependencies is a
+>   lot on every Atlas ever deployed, while "a lot of running instances" is three on one
+>   server and forty thousand on the next, and "a lot of incidents" is one on an estate
+>   that has never had any. A constant would draw one server as uniformly quiet and the
+>   next as uniformly saturated. The price is that a radius means something only against
+>   a stated reference, so the legend and the export stamp both state it — an area with
+>   no unit is a decoration.
+> - **A duration is measured against one moment per repaint.** The age weighting is the
+>   only one read against a clock rather than off the node, and the canvas, the key and
+>   the ranking beside them have to be three readings of one instant. Taken per node,
+>   the reference would be a few milliseconds older than the node that set it, and the
+>   largest node would come out larger than the whole it is a share of.
+> - **They claim nothing about vocabulary.** None is a projection: no mapping, no
+>   loss list, and every node keeps Atlas's own name for itself. The ArchiMate document
+>   is untouched — an element's type does not change because the picture was sized by
+>   load — so these entries export no document, and the constraints above about
+>   authoring and round trips have nothing to bind.
+>
+> **The ranking beside the picture follows the weighting.** §6's ranking answers "where
+> is the risk" by blast radius, with nothing selected. With a weighting on, the canvas
+> ranks the estate by a tally while that column ranked it by radius, so the largest
+> circle and the first row were routinely different nodes — two orderings on one
+> screen, with nothing on it to say they answer different questions. The column now
+> ranks by the tally the picture is drawn with, and it is not a re-listing of the
+> picture: a circle gives neither the exact number (nobody reads 41 against 38 off two
+> areas) nor the name, which at a zoomed-out magnification is not painted at all.
+>
+> §6's radius survives as the *second* number on each row, measured by the same
+> direction and depth controls as everything else in this column, and that is the part
+> that turns a count into a priority: forty incidents on a leaf process is a contained
+> problem, twelve on something two hundred things need is an outage. Rows with nothing
+> to count are absent rather than listed as zeroes, and a landscape with none of them
+> says so as an answer — on the incident weighting that sentence is the good news, and
+> an empty column would have buried it.
+>
+> The entries are defined in the browser, beside the shapes, rather than in the served
+> table. That is the same split the amendment above draws and not an exception to it:
+> what a node is **called** is the server's fact, and how large it is **drawn** is the
+> renderer's.
 
 ### 9. Placement in the shell
 

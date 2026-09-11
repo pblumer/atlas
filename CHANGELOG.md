@@ -12,6 +12,119 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Starmap opens using the whole window, whatever the size of the estate.** A
+  landscape of a handful of nodes was drawn as a handful of small circles adrift in an
+  empty canvas, and a single unattached process could sit out at the far edge holding
+  two thirds of the window open behind it. Both come from how the picture is scaled:
+  the graph is laid out in a world sized from its own content, the opening view shows
+  the whole of that world, and so the world's size decides the magnification.
+
+  Two things were working against that. The world had a floor of a window's worth of
+  area, put there so that small landscapes would not change when the world became
+  content-sized — but the floor stopped binding only past about twenty-five nodes, so
+  every smaller estate was laid out in a world several times larger than it needed and
+  shown correspondingly small. Measured on the rendered page at 1400x900, as the share
+  of the window the nodes and their spacing occupy: five nodes covered 7% where a
+  hundred and twenty-five covered 17%. The floor is gone, and the same five nodes now
+  cover 18% — the same picture, at the size it should always have been drawn.
+
+  The second is the stranded piece. A process attached to nothing — or a handful of
+  processes that call each other and nothing else, which is what a conformance sample
+  or a test flow looks like — is held near the picture only by the pull toward its
+  centre, against a repulsion that falls away with distance, and that balance puts it
+  a long way out. The cost is not the piece itself: the view is framed from the box
+  that contains everything, so one thing far out decides how small the rest is drawn.
+  On the shapes this was reported on, the furthest piece sat at two to three times the
+  picture's own spacing. It is now bounded at 1.5, and the whole piece moves together
+  so that nothing the diagram says about the processes inside it changes. It is still
+  the outlying thing it is, on the side it settled on, but it no longer sets the scale
+  for everything else. Nothing moves in a landscape that has none, and nothing moves at
+  all once you have arranged the picture by hand.
+
+  Both corrections are in the layout, which is one function for every notation, so the
+  Instances and Incidents heatmaps and the ArchiMate and C4 projections get them too:
+  there was never a per-view layout to fix.
+
+- **A script's liveness probe read a zombie as a running process.** ADR-0303 made a
+  timed-out script take its whole process group with it, and
+  `TestTimeoutKillsTheInterpretersWholeProcessGroup` checks that by asking whether the
+  descendant is still there — with `kill(pid, 0)`, which is the one question that
+  cannot distinguish the two states that matter. The same signal that kills the
+  descendant orphans it onto PID 1, and until PID 1 reaps it, it keeps an entry in the
+  process table that `kill(2)` goes on addressing. Whether that reap is prompt belongs
+  to the environment's init, not to Atlas: under an init that reaps (a CI runner) the
+  test passes, and under one that does not (a container started from a plain process,
+  a devbox) it fails on a kill that worked perfectly. `processExists` now reads the
+  process state from `/proc` after the probe and reports a zombie as gone, which is
+  what it is; where `/proc` is absent — macOS, the BSDs — the probe behaves exactly as
+  before. A new test states that contract directly against a zombie made on purpose,
+  so the property is checked everywhere rather than only where init is slow.
+
+- **Removing someone from an application now takes their Starmap away on their next
+  request.** The Starmap holds a 30-second reading of what this server is, so that
+  twenty people with the view open cost the engine one reading rather than twenty. It
+  decided who may see what on every request — but from that held reading, and the held
+  reading included the application records themselves. An application's members are
+  written on the application, so re-deciding against a record that is half a minute old
+  gives the answer from half a minute ago: somebody removed from an application, an
+  application sealed to private, an ownership transfer, an application deleted — in
+  each case the person who just lost access kept receiving that application's processes
+  for the rest of the window. What they received is the material the Starmap otherwise
+  replaces with an anonymous placeholder: process names and ids, the call graph,
+  running and finished instance counts, incident counts and ages, and the incident
+  sites with their raw worker error text. The view's own auto-refresh reached the
+  window without anybody doing anything, since an open tab re-polls on its own.
+
+  The two stores a sharing scope lives in — applications and workers — are now read on
+  every request, exactly as every other listing on this server reads them. Only
+  structure that carries no scope stays cached, so the reason the cache exists is
+  intact: the draft store with its diagrams and the walk of every deployed process are
+  the expensive part, and they are untouched.
+
+  Two things get better with it. An application or a worker you create or delete now
+  appears on the Starmap at once instead of within half a minute. And which configured
+  worker a task's `connector="…"` name points at is resolved per request, so a worker
+  deleted a moment ago is no longer pointed at (ADR-0211 §7).
+
+- **A Starmap left open against a server that is down asks once every five minutes
+  again, not six times a minute.** The view backs off when the server will not answer,
+  and the back-off was measured from the last *successful* read. During an outage there
+  is no successful read, so the measured age only grew: past the five-minute ceiling
+  every ten-second tick counted as due, and the view a page was left open on hammered a
+  server that was already in trouble. It is measured from the last *attempt* now.
+  The freshness line still counts from the last success, which is the number it is
+  about — a failed attempt must never let a stale picture claim to be current.
+
+- **Switching Drafts on the Starmap while it happens to be refreshing no longer undoes
+  itself.** The view re-reads the landscape on its own, and that read and the Drafts
+  switch's read could be in flight at the same time. If the automatic one landed second
+  it overwrote the picture and put the switch back, with nothing said — the drafts
+  appeared and then vanished under the hand that had just asked for them. The
+  reader's answer wins now: an automatic read that lands after they asked for a
+  different landscape is dropped, and the timer does not start one while the switch's
+  own request is still running.
+
+- **A diagram filed under no application no longer answers with silence.** A process
+  deployed outside an application has no application, so it has no information model,
+  so nothing about its data can be resolved — and until now the Modeler said so
+  nowhere. The class field quietly became plain text, the class card and the "no such
+  class" note never appeared, and the Problems panel read **"No problems"**, which is
+  the one reading a person must not be given: a clean bill that was never earned looks
+  exactly like one that was.
+
+  Both now say what is happening. The panel names the reason and the remedy — open the
+  process's draft from its application, or deploy it from there — and distinguishes it
+  from the other reason the picker can be empty, an application that models nothing
+  yet, because the two need different remedies. The Problems summary reads **"No
+  problems found — data not checked"** when there is no model behind the diagram, so
+  an empty list is never mistaken for a checked one.
+
+  The field is also called **Class** now rather than *Type*: what it holds is the class
+  from the information model, and calling it by that name is a shorter explanation than
+  the paragraph underneath (ADR-0230).
+
 ### Added
 
 - **A capability record now says when somebody last read it and meant it.** The gap
@@ -120,6 +233,128 @@ _Changed_ / _Removed_ for each version.
   Prometheus surface is operational rather than business-level, so a KPI dashboard
   planned against `/metrics` will not find what it needs.
 
+- **General-purpose scripts now have an opt-in, fail-closed OS sandbox.**
+  `--script-sandbox=strict` (or `ATLAS_SCRIPT_SANDBOX=strict`) gives every
+  PowerShell, Python and JavaScript execution private scratch, restricts file reads
+  and execution to the installed runtime with Linux Landlock, and denies creation
+  of network and Unix-domain sockets with seccomp. Atlas checks for Landlock ABI 3+
+  before starting a strict server or worker; it never silently falls back. The
+  initial default is `off`, deliberately, so upgrading does not break deployed
+  scripts that intentionally use mounted files or services. Independently of that
+  setting, a script timeout on Unix now kills the interpreter's complete process
+  group, so a spawned child cannot survive its timed-out parent.
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md))
+
+- **The Console landing page says what Atlas is, in both languages**: the dashboard
+  opened on "Welcome to Atlas" and three steps — it told a newcomer what to click, not
+  what they are running. A **Key features / Kernmerkmale** tile now sits below the
+  dashboard's own tiles: sixteen short entries (one binary, durability, the compiler,
+  throughput, the Modeler, token visibility, Panorama, human work, DMN, the information
+  model, checkable BPMN coverage, integrations, agents, operations, deployment, licence), collapsible and carrying the
+  same EN/DE toggle as What's New. The copy is a static asset
+  (`api/web/key-features.json`, guarded by a test) rather than markup, and the landing
+  page's two bilingual sections now share one language setting, so it is never half
+  English and half German.
+
+  A tile that enumerates what a product *is* goes stale the way the handbook's
+  screenshots do — silently, because the page still renders and the capability nobody
+  mentioned is simply absent. So the file carries a `reviewedThrough` marker naming the
+  newest `### Added` bullet it has been held against, and `go test ./api` fails while
+  bullets sit above it. The question a feature has to answer is one line long — does
+  this change what Atlas is? — and the usual answer is no, which moves the marker and
+  writes nothing. What the marker buys is that it is asked by the person who knows the
+  feature rather than by nobody.
+
+- **The information model can now be read off the processes instead of typed in beside
+  them.** [ADR-0230](docs/adr/0230-process-information-model.md) and
+  [ADR-0259](docs/adr/0259-data-object-lifecycle.md) both run in one direction: a person
+  models the vocabulary, and the processes are checked against it. Neither record priced
+  what that puts in front of the first user, which is a blank page — until classes exist,
+  the Modeler's class picker is empty, the data-state field is free text, and the Problems
+  panel reports nothing because there is nothing to report against. Meanwhile the engine
+  already knew most of it: a data object declares a name and often a type, every data
+  output association names the path it writes (`customer.name`), every data object may
+  carry a data state, and the compiled graph already says which writes can follow which.
+
+  **Data → As built** draws what an application's processes actually carry. A class per
+  data object, named by its `itemSubjectRef` or, failing that, by the object itself; a
+  member per write path; and, per class, the state machine its data states imply, with a
+  transition wherever the compiled graph says one write can precede another. It is a read
+  over the newest active version of each of the application's processes — the same set
+  the deploy checks assemble — so it costs a request and no storage, and it is drawn on
+  the same two canvases the authored model and the run-time overlay use, in their
+  read-only mode.
+
+  The two readings are deliberately different statements rather than two copies of one.
+  What is derived is what is **built**; what somebody models by hand is what is
+  **wanted**. Neither is written into the other, because the point is not to make them
+  agree — their difference is the work not yet done. A `cancelled` state in the model that
+  no process ever writes is a backlog item, which is the same fact `data.unreachable-state`
+  reports from the other side.
+
+  What derivation cannot see is said above the drawing rather than under it, because a
+  derived picture mistaken for a complete one is worse than no picture. No derived class
+  carries a business key — nothing in BPMN says which attribute identifies a thing, and
+  it is the one fact every cross-process capability rests on, so it stays the first thing
+  to add by hand. Attributes are untyped, since a FEEL expression's result type is not a
+  static fact of the model. Per class it also says when the name came from the data object
+  rather than a declared type, which is the case most likely to be spelled wrongly, and
+  when a dotted write path proved a member has members of its own that nothing in BPMN
+  names. Nothing on the view is editable: it is evidence about the processes, not a
+  document about the business.
+
+  Also readable as `GET /api/v1/infomodel/derived?applicationId=…` and, for agents, as the
+  MCP tool `atlas_derived_information_model`.
+
+- **A lifecycle that is ahead of the processes that write it now says so.** A class can
+  declare that an order may be `cancelled`; whether anything ever cancels one is a
+  question about the *application*, not about any one process, so it could not be asked
+  where the other two lifecycle checks live — `CheckDataFlow` reads one compiled process
+  at a time, and "nothing ever writes this" is false until every process has been looked
+  at. Asking it there would mean either passing the other processes into a per-process
+  check, where the same finding repeats once per process and is attached to whichever one
+  happened to be deployed, or answering it wrong.
+
+  It is asked once, of the set: the newest version of each of the application's
+  processes, minus the deactivated ones, plus whatever is being deployed or drawn right
+  now — so the process that finally cancels an order clears the finding as it arrives
+  rather than one deploy later. The result is one sentence per class naming every state
+  nothing reaches, carrying no element, because it is a fact about the model rather than
+  about any element of any process. Like its two siblings it is a warning and refuses
+  nothing: a lifecycle is routinely drawn before the process that will write it.
+
+  The state instances are created in counts as reached, since every instance begins
+  there — so a data object that carries no data state at all leaves the lifecycle's own
+  starting state unreached, which is worth saying because the remedy is one field in the
+  Modeler. A class no process handles is not reported at all: that is a lifecycle drawn
+  before its processes, which is the normal order of work rather than a defect
+  (`data.unreachable-state`, ADR-0259).
+
+- **An OpenAPI document can configure the task that calls it.** `atlas openapi-template
+  --spec petstore.yaml --out ./packages` writes one element-template package per
+  operation, in the shape the repository catalog already uses
+  ([ADR-0300](docs/adr/0300-openapi-element-templates.md)).
+
+  It is the reader behind `atlas mock-openapi` pointed the other way: the same document
+  that makes an API answer now also fills in the task that calls it. Method is fixed to
+  the operation's; the URL is the document's server plus the path, literal where there
+  is nothing to substitute and a FEEL expression where there is —
+  `="https://api.digitalocean.com/v2/droplets/" + string(droplet_id)` — with the
+  description naming each variable the process must hold. A URL that carries no host is
+  called out, including the relative-server case (`/api/v3`) that looks filled in and is
+  not.
+
+  What the document cannot decide stays empty: headers, authentication and the
+  credential reference. Security schemes are deliberately not mapped onto Atlas's auth
+  types, because the useful ones need a token endpoint and a client id that live on the
+  server, and a guess there is a wrong answer wearing a filled-in field.
+
+  **What you can do with the result today is limited, and the command says so where it
+  writes them.** Applying a template to a task is
+  [ADR-0212](docs/adr/0212-element-template-applier.md), which is not built, and a
+  running server's catalog is compiled in — so these are files to commit or to keep,
+  not to install.
+
 - **An instance's data objects are drawn on the lifecycle their class declares.** The
   state trail was already on disk — every durable write, with the element that made it
   — and the state machine was already in the information model. Nothing read them
@@ -148,7 +383,6 @@ _Changed_ / _Removed_ for each version.
   `applyToState`: it is a read over what the log already said. `GET
   /api/v1/instances/{key}/lifecycle` serves it, and `atlas_instance_lifecycle` puts the
   same answer in front of an agent (ADR-0259).
-
 - **The deploy says when a searchable declaration cannot be honoured.** The Modeler marks
   such a name while it is typed, but a model deployed from a pipeline or over the API
   never passes through the Modeler, and `atlas:searchable` is accepted whatever it names:
@@ -229,6 +463,152 @@ _Changed_ / _Removed_ for each version.
   tool surface exists to avoid. The shared client now appends the findings to the message,
   reading both shapes in use, and skips a finding it cannot parse rather than losing the
   whole refusal to one odd entry.
+
+- **The Console landing page carries the brand mark.** "Welcome to Atlas" opened on a
+  bare heading, so the one page a newcomer lands on was the one page that showed no
+  mark at all — the glyph sat in the top bar above it and nowhere in the card itself.
+  The heading now leads with the same `.mark` box the bar uses, at 48px. It is the
+  shared box rather than a copy of the glyph, so an organisation that has uploaded its
+  own logo (ADR-0148) sees that logo here too, and a later upload or removal repaints
+  this mark along with every other one. The logo setting names the landing page along
+  with the top bar and the login screen, so what it promises is what it does.
+
+- **The Starmap reads its structure once for everybody, and everybody's health for
+  themselves.** With every open Starmap now re-reading itself, the cost of deriving one
+  scaled with the audience: a landscape is built on the engine's run loop — the single
+  writer — and costs a directory listing and a JSON decode per record across four
+  stores, plus a walk of every compiled process. Twenty tabs is one operations team,
+  and it was twenty of those readings, competing for the loop that executes process
+  instances.
+
+  The server now holds that reading for **30 seconds** — the view's own re-read floor,
+  deliberately: a shorter one bounds nothing, because readers do not poll in step. What
+  it holds is the whole design:
+
+  - **Health is never cached.** Parked work, incident ages, running instances, which
+    workers have polled — all read fresh on every request. They are what an operator
+    opens the view for, and they are engine point reads rather than disk. A status view
+    that made trouble wait out a timer would be saving the wrong cost.
+  - **Visibility is never cached.** Every access decision is made on the request, from
+    the request. The held reading carries the *inputs* a decision is made from and
+    never a decision, so one person's landscape can never be served to another.
+
+  Deploying a process, writing a call override and creating a deployment target drop
+  the reading at once — those are the changes somebody makes and then immediately looks
+  for on this picture. A new application or worker appears within the 30 seconds, and
+  the picture says how old it is while it waits: the landscape is dated by when its
+  *structure* was read, not by when the answer was served, so the freshness line is
+  true of a cached answer as much as a fresh one (ADR-0211 §7).
+
+- **The Starmap says when it was read, and keeps itself true.** Everything on that
+  canvas has a shelf life — the severity badges are an observation, the incident counts
+  move as an operator works through them, and the three new weightings below are live
+  quantities, one of them measured against a clock. A landscape opened at nine and
+  still open at eleven showed two-hour-old numbers with nothing on the page saying so,
+  which is the failure the export's stamp already exists to prevent, happening on the
+  screen the stamp is copied from.
+
+  The observation time is now on the page beside the node count (**"observed 4 min
+  ago"**), rewritten every ten seconds, and a **Live** switch beside it — on by
+  default — re-reads the landscape from the server while the view is open.
+
+  The cadence is paced by what the picture costs rather than by a constant: the mesh is
+  derived on the engine's run loop, so the interval is a twentieth of what the last
+  derive actually took, floored at 30 seconds and ceilinged at 5 minutes. A landscape
+  that derives in 40 ms is re-read on the floor; one that takes four seconds backs off
+  to well over a minute by itself. Nothing is asked behind a hidden tab, or while a
+  node is being dragged. A refusal keeps the picture, says **"could not re-read"**, and
+  backs off to the ceiling — a server that is down does not want thirty requests a
+  minute from every open tab. The filter, the drilldown, the selection, the pins and
+  the zoom all survive a re-read. Turning Live off stops it; turning it back on asks at
+  once rather than waiting out another interval (ADR-0211 §7).
+
+- **The Starmap can be sized by what is running on it, by what is stuck on it, or by
+  how long it has been stuck.** The instance counts were a checkbox beside the Notation
+  picker — an overlay ticked onto
+  whatever was on screen — and that offered a picture with no reading. Size on the
+  Starmap is one channel and it already carried connectivity, so a landscape with the
+  box ticked had radii meaning structure while its labels meant load, and the one
+  question somebody ticks it to ask, *where is the work*, was the one it could not
+  answer.
+
+  The checkbox is gone. The Notation picker now offers two **heatmaps** beside *Atlas
+  (derived)* and the two projections, because every entry there decides how the
+  landscape is drawn and only one of them can be chosen at a time:
+
+  - **Instances (heatmap)** — *where is the work.* A node's size is what is running on
+    it: capacity, reading a load test, finding the process actually carrying the estate.
+  - **Incidents (heatmap)** — *where is it stuck.* A node's size is how many unresolved
+    incidents the engine holds against it. The severity badges already said **which**
+    nodes have a finding; what they could not say is how much is parked behind each,
+    and a process holding four hundred stuck tokens wore the same badge as one holding
+    a single retry. The badge stays the classification; the size is now the magnitude.
+  - **Incident age (heatmap)** — *how long has it been stuck.* A node's size is how long
+    its earliest unresolved incident has been standing. This is the one that changes a
+    decision: four hundred incidents from the last five minutes is a worker that has
+    just fallen over and drains itself once somebody restarts it, and three standing
+    since Friday is a process nobody is coming back to. The count ranks those the wrong
+    way round, every time.
+
+  For the third one the mesh payload carries a new fact: **`oldestIncident`**, the
+  moment a node's earliest unresolved incident was raised. The oldest rather than the
+  newest, because that is the age of the *problem* — a process where one token parked
+  on Friday and three hundred piled up behind it has been stuck since Friday. It is
+  absent, never zero, where there is nothing to date, including an incident raised
+  before the engine recorded the moment: "not known" and "raised at the epoch" are
+  different facts, and a zero would draw the process as the oldest trouble on the
+  estate. A collapsed application carries the earliest of the processes it stands for.
+  Collecting it costs nothing — the incident scan already reads every record, and the
+  raise time is a field on the record it is reading.
+
+  The panel states the exact age for whichever node is selected (**"Oldest still parked
+  5 d ago"**), which is the number a circle cannot give.
+
+  On any of them the size is a **ratio scale**. A node carrying nothing sits at a floor;
+  a node carrying the least the weighting counts — one running instance, one incident, a
+  minute stuck — is already a clear step above it; and from there the size grows with
+  each *tenfold*, so equal steps of size are equal multiples of the tally and the largest
+  node on the landscape is the largest circle. That is the question a heatmap is opened
+  with: an estate's instance counts run from one to several thousand, and what an
+  operator wants of a circle is how many times, not how much.
+
+  The key **draws** that scale rather than only describing it: a row of reference
+  circles — nothing at all, then the tallies the scale is marked at, up to the busiest
+  node — each at the size a node carrying that much is drawn. They come out of the same
+  arithmetic the nodes did, so a circle in the key is the circle on the picture, and
+  the row travels into an exported file as well, where there is no key to scroll to.
+
+  Each circle is also a **filter**. Click the one marked 100 and the picture narrows to
+  the nodes running between a hundred and the next mark, with their neighbours kept for
+  context exactly as a search keeps them; click it again to widen. It combines with the
+  search box rather than replacing it — a term and a band together show what matches
+  both — and a saved view remembers which band it was looking at.
+
+  Every node keeps a **floor**, whatever its tally, so nothing drops off the picture: an
+  idle process, a worker, a decision and an application whose load sits on the processes
+  it holds are all still nodes somebody can see and click, and "nothing here" stays
+  distinguishable from "not on this server". On the incident picture that also makes the
+  good news legible — a flat landscape is the answer, and the key says so rather than
+  leaving you to wonder whether anything was measured. Kind is unaffected: it was never
+  carried by size alone, and shape and colour still carry it.
+
+  The reference is the largest node on the **whole** landscape rather than on what the
+  filter has left on screen, so narrowing to two nodes cannot swell the smaller of them
+  into the worst thing on the estate — and it is named in the key and in the export's
+  stamp, because an area with no stated reference is a decoration rather than a
+  quantity. A saved view stored while the counts were a switch reopens as the weighting
+  it stood for.
+
+  **The ranking column follows the weighting too.** It ranks by blast radius on the
+  derived drawing, as it always has; with a heatmap on it ranks by the same quantity
+  the canvas is sized by, so the largest circle and the first row are the same node.
+  Two orderings on one screen, with nothing on it saying they answer different
+  questions, is a contradiction a reader cannot resolve. It is not a re-listing of the
+  picture: a circle gives neither the exact number — nobody reads 41 against 38 off two
+  areas — nor the name, which zoomed out is not painted at all. The blast radius stays
+  as the second number on each row, which is what turns a count into a priority: forty
+  incidents on a leaf process is a contained problem, twelve on something two hundred
+  things need is an outage (ADR-0211 §6, §8).
 
 - **A Worker Type's setup folds away once you have set it up.** The section that says
   where a type's work runs and what has to exist at the provider stood open above the

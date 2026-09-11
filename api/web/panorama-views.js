@@ -94,7 +94,7 @@ export function removeView(views, id) {
 // graph and the shape of the window, so a coordinate captured on one screen means
 // somewhere else on another — and a saved view that reopened on empty space would be
 // worse than no saved view. The pins go the same way, for the same reason.
-export function captureView({ name, term, direction, depth, notation, selected, picked, instances, drafts, trail, frameView, world, pinned, at, id }) {
+export function captureView({ name, term, band, direction, depth, notation, selected, picked, instances, drafts, trail, frameView, world, pinned, at, id }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -105,6 +105,17 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     name: name.trim().slice(0, MAX_NAME),
     at: at ?? Date.now(),
     term: term || "",
+    // The band of the heat scale the picture was narrowed to, as that mark's own
+    // tally — 0 for the nothing-at-all circle, null for the whole landscape. Stored
+    // for the same reason the term is: a view is the whole question somebody saved,
+    // and reopening "the processes running a hundred or more" as the whole estate
+    // answers a different one.
+    //
+    // The tally rather than the mark's position on the row, because the marks are
+    // derived from the landscape and the landscape moves. A tally that is no longer a
+    // mark is dropped when the view is opened, which is the honest outcome: the band
+    // it named is not a band of this landscape.
+    band: Number.isFinite(band) && band >= 0 ? band : null,
     direction: direction || "dependents",
     depth: depth ?? "2",
     // The vocabulary the picture was read in. A view is the whole question somebody
@@ -119,9 +130,11 @@ export function captureView({ name, term, direction, depth, notation, selected, 
     // so that everything reading it, the frame anchor included, keeps meaning one
     // thing; a window carries its members here instead.
     picked: Array.isArray(picked) && picked.length > 1 ? [...picked] : null,
-    // Whether the picture was carrying running-instance counts. It changes what the
-    // nodes say and how much room the layout gives them, so a view that reopened
-    // without it would reopen a different picture.
+    // Whether the picture was sized by how much is running on it. The notation above
+    // now carries that — it is an entry in the same list (ADR-0211 §8) — and this
+    // stays beside it for two readers that ask the question directly: the summary
+    // line under a saved view's name, and a view stored while the counts were still a
+    // switch of their own, which reopens as the weighting it stood for.
     instances: Boolean(instances),
     // Whether saved-but-undeployed diagrams were on the picture. It is the one
     // setting whose restoration costs a fetch — the drafts are not in the payload

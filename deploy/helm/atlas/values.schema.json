@@ -71,7 +71,8 @@
             "powershell": { "type": "boolean" },
             "python": { "type": "boolean" },
             "javascript": { "type": "boolean" },
-            "timeout": { "type": "string" }
+            "timeout": { "type": "string" },
+            "sandbox": { "type": "string", "enum": ["off", "strict"] }
           }
         },
         "shutdownTimeout": { "type": "string" },
