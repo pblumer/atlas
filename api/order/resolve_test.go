@@ -174,7 +174,9 @@ func TestOrderStatusIsDerived(t *testing.T) {
 		{"nothing reached yet", lines("a", StatusPending), OrderRunning},
 		{"all provisioned", lines("a", StatusDone, "b", StatusDone), OrderCompleted},
 		{"skipped counts as provisioned", lines("a", StatusSkipped, "b", StatusDone), OrderCompleted},
-		{"some through, some not", lines("a", StatusDone, "b", StatusFailed), OrderPartial},
+		{"an open incident keeps it running", lines("a", StatusDone, "b", StatusFailed), OrderRunning},
+		{"some through, some refused", lines("a", StatusDone, "b", StatusRejected), OrderPartial},
+		{"nothing through", lines("a", StatusRejected), OrderUnfulfilled},
 		{"an empty order is complete", nil, OrderCompleted},
 	}
 	for _, tt := range tests {
@@ -316,8 +318,16 @@ func TestARejectionAmongTheCausesSettlesTheLine(t *testing.T) {
 	if by := blockedBy(got, "z"); by != "x,y" {
 		t.Fatalf("z blocked by %q, want x,y", by)
 	}
-	if s := Derive(got); s != OrderUnfulfilled {
-		t.Fatalf("Derive = %s, want unfulfilled — y will not change", s)
+	// z is finished whatever happens to x: repairing an incident cannot undo y.
+	for _, l := range got {
+		if l.ItemID == "z" && !l.Terminal() {
+			t.Fatal("z must be terminally blocked — the rejection will not lift")
+		}
+	}
+	// The order itself is still running, because x's incident is still open and
+	// x can still provision. Only z is finished.
+	if s := Derive(got); s != OrderRunning {
+		t.Fatalf("Derive = %s, want running — x is repairable", s)
 	}
 }
 
@@ -407,8 +417,14 @@ func TestAbandonedAmongTheCausesSettlesTheLine(t *testing.T) {
 	if by := blockedBy(got, "z"); by != "x,y" {
 		t.Fatalf("z blocked by %q, want x,y", by)
 	}
-	if s := Derive(got); s != OrderUnfulfilled {
-		t.Fatalf("Derive = %s, want unfulfilled — y will not lift", s)
+	// Same as a rejection: z is finished whatever happens to x.
+	for _, l := range got {
+		if l.ItemID == "z" && !l.Terminal() {
+			t.Fatal("z must be terminally blocked — an abandoned incident does not lift")
+		}
+	}
+	if s := Derive(got); s != OrderRunning {
+		t.Fatalf("Derive = %s, want running — x is still repairable", s)
 	}
 }
 
@@ -432,5 +448,31 @@ func TestAbandonedPredicates(t *testing.T) {
 	}
 	if StatusAbandoned.Satisfied() {
 		t.Error("abandoned must not satisfy a dependent — it was never provisioned")
+	}
+}
+
+// TestAnOpenIncidentKeepsTheOrderRunning: the same rule that keeps a blocked line
+// open applies to the failure itself, and more directly. A line whose incident is
+// being repaired can still provision, so the order it belongs to has not
+// finished — reporting it as settled would tell the orderer the outcome is final
+// while somebody is working on it.
+func TestAnOpenIncidentKeepsTheOrderRunning(t *testing.T) {
+	if s := Derive(lines("a", StatusFailed)); s != OrderRunning {
+		t.Fatalf("Derive = %s, want running — the incident is open", s)
+	}
+	if s := Derive(lines("a", StatusAbandoned)); s != OrderUnfulfilled {
+		t.Fatalf("Derive = %s, want unfulfilled — the incident was given up on", s)
+	}
+}
+
+// TestFailedHasAnOutcomeButIsNotTerminal pins the distinction the two predicates
+// carry: propagation must leave a failure alone, and Derive must keep waiting on
+// it.
+func TestFailedHasAnOutcomeButIsNotTerminal(t *testing.T) {
+	if !StatusFailed.Settled() {
+		t.Error("failed must be settled — propagation must not overwrite it")
+	}
+	if (Line{ItemID: "a", Status: StatusFailed}).Terminal() {
+		t.Error("failed must not be terminal — the incident can still be repaired")
 	}
 }

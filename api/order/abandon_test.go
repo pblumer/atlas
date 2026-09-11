@@ -81,6 +81,17 @@ func TestValidHoldsTheRuleAtThePersistenceBoundary(t *testing.T) {
 			Line{ItemID: "a", Status: StatusFailed, AbandonedBy: "usr_7"}, false},
 		{"an ordinary failure", Line{ItemID: "a", Status: StatusFailed}, true},
 		{"a line with no item", Line{Status: StatusPending}, false},
+		{"rejected with an author, a moment and words",
+			Line{ItemID: "a", Status: StatusRejected, DecidedBy: "usr_9",
+				DecidedAt: 1700, Reason: "no budget"}, true},
+		{"rejected with nobody",
+			Line{ItemID: "a", Status: StatusRejected, DecidedAt: 1700, Reason: "x"}, false},
+		{"rejected with no moment",
+			Line{ItemID: "a", Status: StatusRejected, DecidedBy: "usr_9", Reason: "x"}, false},
+		{"rejected with no reason — the orderer is told it",
+			Line{ItemID: "a", Status: StatusRejected, DecidedBy: "usr_9", DecidedAt: 1700}, false},
+		{"a decision on a line nobody decided",
+			Line{ItemID: "a", Status: StatusDone, DecidedBy: "usr_9"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

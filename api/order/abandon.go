@@ -38,8 +38,36 @@ func Abandon(l Line, by string, at int64) (Line, error) {
 	return l, nil
 }
 
+// Reject refuses a line's approval, recording who decided, when, and why.
+//
+// The same shape as [Abandon] and for the same reason: this is a decision, so it
+// has an author, and the record keeps both forever. The reason is required rather
+// than optional because the orderer is told it — a refusal with no words is a
+// message that produces a phone call instead of an understanding.
+//
+// Only a line still on its way can be rejected. Refusing one already provisioned
+// would deny work that happened, and refusing one already settled would overwrite
+// somebody else's decision.
+func Reject(l Line, by string, at int64, reason string) (Line, error) {
+	if l.Status != StatusPending && l.Status != StatusRunning {
+		return l, fmt.Errorf("order: cannot reject a %s line", l.Status)
+	}
+	if by == "" {
+		return l, fmt.Errorf("order: rejecting a line needs the principal who decided it")
+	}
+	if at == 0 {
+		return l, fmt.Errorf("order: rejecting a line needs the moment it was decided")
+	}
+	if reason == "" {
+		return l, fmt.Errorf("order: rejecting a line needs a reason — the orderer is told it")
+	}
+	l.Status = StatusRejected
+	l.DecidedBy, l.DecidedAt, l.Reason = by, at, reason
+	return l, nil
+}
+
 // Valid holds the same rules where a line arrives as JSON rather than through
-// [Abandon] — from a store, an API payload, a restored backup. A serialised line
+// [Abandon] or [Reject] — from a store, an API payload, a restored backup. A serialised line
 // never went through that function, so the invariant is checked again at the
 // boundary it enters through rather than assumed from the one place that upholds
 // it.
@@ -55,6 +83,21 @@ func (l Line) Valid() error {
 			return fmt.Errorf("order: line %s is abandoned without a moment", l.ItemID)
 		}
 		return nil
+	}
+	if l.Status == StatusRejected {
+		if l.DecidedBy == "" {
+			return fmt.Errorf("order: line %s is rejected without naming who decided it", l.ItemID)
+		}
+		if l.DecidedAt == 0 {
+			return fmt.Errorf("order: line %s is rejected without a moment", l.ItemID)
+		}
+		if l.Reason == "" {
+			return fmt.Errorf("order: line %s is rejected without a reason", l.ItemID)
+		}
+		return nil
+	}
+	if l.DecidedBy != "" || l.DecidedAt != 0 || l.Reason != "" {
+		return fmt.Errorf("order: line %s is %s but carries a rejection", l.ItemID, l.Status)
 	}
 	if l.AbandonedBy != "" || l.AbandonedAt != 0 {
 		// A line nobody abandoned that names somebody is a contradiction, and the

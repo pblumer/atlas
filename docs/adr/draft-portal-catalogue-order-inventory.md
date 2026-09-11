@@ -170,6 +170,14 @@ A fourth, *skipped*, is a line the recipient already holds; it satisfies its dep
 exactly as a provisioned one does, or the inventory would block a line for the reason
 that it was unnecessary.
 
+The same rule reaches the failure itself, not only the lines behind it: **an order
+carrying an open incident has not finished.** A failed line has an outcome of its own —
+which is why propagation leaves it alone — but it can still provision once somebody
+repairs it, so it is not terminal and the order waits. Only abandonment ends it. The
+first implementation conflated the two questions in one predicate and reported such an
+order as settled, telling the orderer the result was final while an operator was
+working on it.
+
 *Blocked* is therefore **derived, never stored**, and recomputed on every pass. That is
 what makes a repair effective: an operator who fixes the incident behind a failed
 precondition releases the line that was waiting on it, with nobody rewriting a status
@@ -231,6 +239,32 @@ is marked as held and skipped, and the same service pulled in twice in **differe
 variants** is a conflict the orderer resolves. Where the service arrived by composition
 it cannot be dropped, so only the variant is choosable; by aggregation, the optional
 position can be removed.
+
+### What reaches the person who ordered
+
+Three moments, and they are the three where knowing changes what the orderer does: a
+line was **rejected**, a line was **abandoned**, and the order **settled** — the closing
+message carrying what came and what did not.
+
+Nothing else. A failure and a blockage are addressed to whoever can act on them: an
+incident escalates to an operator, and telling the orderer that provisioning threw an
+error gives them a worry, no action, and a fresh message on every retry. A blocked line
+is a consequence whose cause was already notified.
+
+A notice is owed for a **transition**, never for a state, because propagation runs after
+every settled line and a function reporting what is true rather than what changed would
+send the same message on each pass.
+
+Two consequences for the model. A rejection carries **who decided, when and why**, in
+the same shape abandonment already had: a refusal kept forever without an author is a
+decision nobody made, and one without words is the message that produces a phone call
+instead of an understanding. And nothing in the order model sends anything — delivery is
+a mail task in the fulfilment process, which puts the side effect after fsync where it
+belongs (I2) and leaves the channel, the wording and the language to the model.
+
+The orderer is told, not the recipient. They are frequently the same person; where they
+are not, it is the orderer who is waiting and who can act — and a recipient onboarding
+next month may have no mailbox to write to yet.
 
 ### The inventory — engine state, its own column family
 
@@ -328,8 +362,9 @@ discrepancy, which no other system in the estate can do.
 schedule and the preconditions described above, with `Release.Blocked` answering which
 lines a failure stops. `api/order` carries the order model and the propagation:
 `Propagate` marks what a settled outcome stopped, `Derive` reads an order's own
-standing off its lines rather than storing it, and `Abandon` is the one transition into
-a given-up failure, with `Line.Valid` holding that rule at the persistence boundary. The order, the basket and the inventory are not built yet,
+standing off its lines rather than storing it, `Abandon` and `Reject` are the transitions into the two
+decided outcomes, `Line.Valid` holds their rules at the persistence boundary, and
+`Notices` reports what a change owes the orderer. The order, the basket and the inventory are not built yet,
 which is why this record reads `Partial`.
 
 ## Links

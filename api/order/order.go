@@ -107,13 +107,37 @@ type Line struct {
 	// ADR-draft-portal-personal-data.
 	AbandonedBy string `json:"abandonedBy,omitempty"`
 	AbandonedAt int64  `json:"abandonedAt,omitempty"`
+	// DecidedBy and DecidedAt record who refused this line's approval and when,
+	// and Reason carries their words. All three are required on a rejected line.
+	//
+	// A rejection kept forever without an author is a decision nobody made, and
+	// one without a reason produces the message that generates a phone call:
+	// "your request was declined", and nothing else. DecidedBy is a principal id.
+	DecidedBy string `json:"decidedBy,omitempty"`
+	DecidedAt int64  `json:"decidedAt,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
-// Terminal reports whether this line has finished moving: either it reached an
-// outcome of its own, or it is blocked by something that will not change.
+// Terminal reports whether this line has finished moving.
+//
+// Two statuses that have an outcome of their own are still not terminal, and both
+// follow from the same rule — an order stays open while something can still be
+// repaired:
+//
+//   - Failed is an open incident. Somebody repairs it and the line provisions
+//     after all, so an order carrying one is not finished. Only [Abandon] ends it.
+//   - Blocked depends on its causes: terminal when one of them was rejected or
+//     abandoned, open while they are live failures.
+//
+// This is a different question from [LineStatus.Settled], which asks whether a
+// line reached an outcome of its own — a failure has, and that is why propagation
+// leaves it alone.
 func (l Line) Terminal() bool {
-	if l.Status == StatusBlocked {
+	switch l.Status {
+	case StatusBlocked:
 		return l.TerminallyBlocked
+	case StatusFailed:
+		return false
 	}
 	return l.Status.Settled()
 }
