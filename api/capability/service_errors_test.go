@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -231,6 +232,7 @@ func TestAClosingLoopDoesNotAnswerSuccessfully(t *testing.T) {
 	close(quit) // the loop never runs
 	svc := New(runloop.New(quit), caps, streams,
 		func(*http.Request) (Landscape, error) { return Landscape{}, nil },
+		func() (int, error) { return DefaultHorizonMonths, nil },
 		func() time.Time { return time.Unix(0, 0) })
 
 	mux := http.NewServeMux()
@@ -283,3 +285,91 @@ func (b nopBody) Read(p []byte) (int, error) {
 	return n, io.EOF
 }
 func (nopBody) Close() error { return nil }
+
+// A confirmation that cannot be read, written or read back must report that rather than
+// answering as though somebody had stood behind the record. A confirmation reported as
+// made when it was not is the one failure this whole mechanism exists to prevent.
+func TestConfirmationFailuresAreReported(t *testing.T) {
+	t.Run("the store is gone", func(t *testing.T) {
+		fx := newFixture(t)
+		fx.do(t, "POST", "/api/v1/capabilities", Capability{Key: "a", Name: "A"})
+		fx.do(t, "POST", "/api/v1/value-streams", ValueStream{Key: "v", Name: "V"})
+		// A record still readable through the path the store knows, into a directory
+		// that is now a file: the read succeeds and only the write fails.
+		for _, dir := range []string{fx.svc.caps.Dir(), fx.svc.streams.Dir()} {
+			data, err := os.ReadFile(filepath.Join(dir, filepath.Base(dir)))
+			_ = data
+			_ = err
+		}
+		for _, tc := range []struct{ path string }{
+			{"/api/v1/capabilities/a/confirmation"},
+			{"/api/v1/value-streams/v/confirmation"},
+		} {
+			// Corrupt the record so the read inside the confirmation fails.
+			name := "a.json"
+			dir := fx.svc.caps.Dir()
+			if strings.Contains(tc.path, "value-streams") {
+				name, dir = "v.json", fx.svc.streams.Dir()
+			}
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("{"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if rec := fx.do(t, "POST", tc.path, map[string]any{}); rec.Code != http.StatusInternalServerError {
+				t.Errorf("%s over a corrupt record = %d %s", tc.path, rec.Code, rec.Body)
+			}
+		}
+	})
+
+	t.Run("the write cannot land", func(t *testing.T) {
+		fx := newFixture(t)
+		fx.do(t, "POST", "/api/v1/capabilities", Capability{Key: "a", Name: "A"})
+		// Replace the directory with a file: Get still resolves the path it knows and
+		// reads nothing, so the confirmation reports a miss rather than a false success.
+		dir := fx.svc.caps.Dir()
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dir, []byte("not a directory"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if rec := fx.do(t, "POST", "/api/v1/capabilities/a/confirmation", map[string]any{}); rec.Code == http.StatusOK {
+			t.Errorf("a confirmation that could not be written answered %d", rec.Code)
+		}
+	})
+
+	t.Run("an unreadable body", func(t *testing.T) {
+		fx := newFixture(t)
+		fx.do(t, "POST", "/api/v1/capabilities", Capability{Key: "a", Name: "A"})
+		req := httptest.NewRequest("POST", "/api/v1/capabilities/a/confirmation", io.Reader(failingBody{}))
+		rec := httptest.NewRecorder()
+		fx.mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("unreadable body = %d %s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("a closing loop", func(t *testing.T) {
+		caps, err := NewStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		streams, err := NewStreamStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		quit := make(chan struct{})
+		close(quit)
+		svc := New(runloop.New(quit), caps, streams,
+			func(*http.Request) (Landscape, error) { return Landscape{}, nil },
+			func() (int, error) { return DefaultHorizonMonths, nil },
+			func() time.Time { return time.Unix(0, 0) })
+		mux := http.NewServeMux()
+		mux.HandleFunc("POST /api/v1/capabilities/{key}/confirmation", svc.HandleConfirmCapability)
+		req := httptest.NewRequest("POST", "/api/v1/capabilities/a/confirmation", io.Reader(nopBody(`{}`)))
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code < 400 {
+			t.Errorf("a confirmation against a closing loop = %d, want a refusal", rec.Code)
+		}
+	})
+}

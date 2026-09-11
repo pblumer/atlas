@@ -22,6 +22,11 @@ type fixture struct {
 	quit chan struct{}
 	land Landscape
 	mux  *http.ServeMux
+	// now and horizonMonths are the two knobs a freshness test turns. The clock is
+	// injected rather than read, so a test about a lapsed confirmation does not have to
+	// wait a year (AGENTS.md: no test depends on the wall clock).
+	now           time.Time
+	horizonMonths int
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -39,10 +44,11 @@ func newFixture(t *testing.T) *fixture {
 	go loop.Run()
 	t.Cleanup(func() { close(quit) })
 
-	fx := &fixture{quit: quit}
+	fx := &fixture{quit: quit, now: time.Unix(1_700_000_000, 0), horizonMonths: DefaultHorizonMonths}
 	fx.svc = New(loop, caps, streams,
 		func(*http.Request) (Landscape, error) { return fx.land, nil },
-		func() time.Time { return time.Unix(1_700_000_000, 0) })
+		func() (int, error) { return fx.horizonMonths, nil },
+		func() time.Time { return fx.now })
 
 	fx.mux = http.NewServeMux()
 	fx.mux.HandleFunc("GET /api/v1/business-architecture/subset", fx.svc.HandleSubset)
@@ -53,6 +59,8 @@ func newFixture(t *testing.T) *fixture {
 	fx.mux.HandleFunc("PUT /api/v1/capabilities/{key}", fx.svc.HandleUpdateCapability)
 	fx.mux.HandleFunc("DELETE /api/v1/capabilities/{key}", fx.svc.HandleDeleteCapability)
 	fx.mux.HandleFunc("GET /api/v1/capabilities/{key}/coverage", fx.svc.HandleCoverage)
+	fx.mux.HandleFunc("POST /api/v1/capabilities/{key}/confirmation", fx.svc.HandleConfirmCapability)
+	fx.mux.HandleFunc("POST /api/v1/value-streams/{key}/confirmation", fx.svc.HandleConfirmValueStream)
 	fx.mux.HandleFunc("GET /api/v1/value-streams", fx.svc.HandleListValueStreams)
 	fx.mux.HandleFunc("POST /api/v1/value-streams", fx.svc.HandleCreateValueStream)
 	fx.mux.HandleFunc("GET /api/v1/value-streams/{key}", fx.svc.HandleGetValueStream)

@@ -1384,6 +1384,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		capabilityStore,
 		valueStreamStore,
 		s.collectCapabilityLandscape,
+		s.confirmationHorizon,
 		time.Now,
 	)
 	for _, opt := range opts {

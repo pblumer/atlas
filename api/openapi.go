@@ -697,7 +697,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Gap report", tObject())}},
 		{"GET", "/api/v1/capabilities", s.capabilities.HandleListCapabilities, apiOp{
-			summary: "List business capabilities. Filter with ?tag= (the only classification there is), ?state=, ?q= over name and key, and ?realized=false — which is the adoption backlog: everything nothing currently does",
+			summary: "List business capabilities. Filter with ?tag= (the only classification there is), ?state=, ?q= over name and key, ?realized=false — the adoption backlog, everything nothing currently does — and ?stale=true, its twin: everything nobody has confirmed within the installation's horizon",
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Capabilities", tArray())}},
 		{"POST", "/api/v1/capabilities", s.capabilities.HandleCreateCapability, apiOp{
@@ -722,12 +722,19 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Delete a capability. It does not cascade and does not refuse: the answer names the dependencies and value-stream stages now pointing at nothing",
 			tag:     "Business architecture", role: RoleModeler,
 			resp: jsonBody("What the delete left dangling", tObject())}},
+		{"POST", "/api/v1/capabilities/{key}/confirmation", s.capabilities.HandleConfirmCapability, apiOp{
+			summary: "Record that somebody has read this capability and says it still describes reality. It is its own call and no edit sets it: a save that refreshed the date would let a typo fix assert that the owner, the scope and every SLA had been re-read. Optionally name who was asked and what the review found — the confirmer is almost never the owner, and a confirmation that names nobody says so rather than implying otherwise",
+			tag:     "Business architecture", role: RoleModeler,
+			req: jsonBody("Confirmation", schemaObj(map[string]any{
+				"with": tString(), "note": tString(),
+			})),
+			resp: jsonBody("The confirmation, with the horizon it was judged against", tObject())}},
 		{"GET", "/api/v1/capabilities/{key}/coverage", s.capabilities.HandleCoverage, apiOp{
 			summary: "Resolve one capability against this server: what actually does it (with the deployed version and running instances, resolved now and stored nowhere), what it depends on and what those have promised, who depends on it, and which value-stream stages it performs. The KPIs and SLAs it carries are declarations — the answer says so",
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Coverage", tObject())}},
 		{"GET", "/api/v1/value-streams", s.capabilities.HandleListValueStreams, apiOp{
-			summary: "List value streams — the ordered activity that meets a customer need, whose stages name the capabilities performing them; filter with ?tag=",
+			summary: "List value streams — the ordered activity that meets a customer need, whose stages name the capabilities performing them; filter with ?tag= and ?stale=true",
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Value streams", tArray())}},
 		{"POST", "/api/v1/value-streams", s.capabilities.HandleCreateValueStream, apiOp{
@@ -746,6 +753,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Business architecture", role: RoleModeler,
 			req:  jsonBody("Value stream", tObject()),
 			resp: jsonBody("Value stream", tObject())}},
+		{"POST", "/api/v1/value-streams/{key}/confirmation", s.capabilities.HandleConfirmValueStream, apiOp{
+			summary: "Record that somebody has read this value stream and says it still describes reality — the twin of a capability's confirmation, for the same reason: a stream's owner and KPIs decay exactly as a capability's do",
+			tag:     "Business architecture", role: RoleModeler,
+			req: jsonBody("Confirmation", schemaObj(map[string]any{
+				"with": tString(), "note": tString(),
+			})),
+			resp: jsonBody("The confirmation, with the horizon it was judged against", tObject())}},
 		{"DELETE", "/api/v1/value-streams/{key}", s.capabilities.HandleDeleteValueStream, apiOp{
 			summary: "Delete a value stream", tag: "Business architecture", role: RoleModeler,
 			status: http.StatusNoContent}},
@@ -1194,6 +1208,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/settings/registration", s.handleDeleteRegistration, apiOp{
 			summary: "Switch self-service registration off (admin-only when auth is on) (ADR-0126)", tag: "System", role: RoleAdmin, status: http.StatusNoContent}},
 
+		{"GET", "/api/v1/settings/confirmation", s.handleGetConfirmation, apiOp{
+			summary: "Read how many months a business-architecture confirmation stays fresh before the gap report reports it, and whether that is this installation's decision or the built-in default",
+			tag:     "Settings", role: roleAny, resp: jsonBody("Confirmation horizon", tObject())}},
+		{"PUT", "/api/v1/settings/confirmation", s.handleSetConfirmation, apiOp{
+			summary: "Set the confirmation horizon in months. Zero restores the default; a negative value switches the freshness check off while a map is being built. A very long interval is accepted rather than capped — it silences the check, and the honest answer is that it is one visible number that travels with every report applying it",
+			tag:     "Settings", role: RoleAdmin,
+			req:  jsonBody("Horizon", schemaObj(map[string]any{"horizonMonths": tInteger()}, "horizonMonths")),
+			resp: jsonBody("Confirmation horizon", tObject())}},
 		{"GET", "/api/v1/settings/oidc-mapping", s.handleGetOIDCMapping, apiOp{
 			summary: "Read the rule set that turns an identity provider's claim into Atlas roles and group membership (ADR-0210)", tag: "Auth", role: RoleAdmin,
 			resp: jsonBody("Claim mapping", tObject())}},

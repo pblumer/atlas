@@ -94,6 +94,23 @@ func recordFromArgs(args map[string]any, props map[string]any) map[string]any {
 	return out
 }
 
+// confirm posts a confirmation for either record kind. Neither optional field is sent
+// when empty, so an omitted note clears nothing it did not mean to.
+func confirm(c *Client, args map[string]any, prefix string) (string, error) {
+	key, err := argString(args, "key")
+	if err != nil {
+		return "", err
+	}
+	payload := map[string]any{}
+	for _, name := range []string{"with", "note"} {
+		if v := optString(args, name); v != "" {
+			payload[name] = v
+		}
+	}
+	body, _ := json.Marshal(payload)
+	return asText(c.post(prefix+url.PathEscape(key)+"/confirmation", "application/json", body))
+}
+
 func capabilityTools() []Tool {
 	return []Tool{
 		{
@@ -112,8 +129,9 @@ func capabilityTools() []Tool {
 			Name: "atlas_list_capabilities",
 			Description: "List business capabilities: what the organisation must be able to do, stated " +
 				"independently of how. Each row says whether anything currently realizes it. Filter by " +
-				"tag, state, a substring of the name or key, and realized — realized=false is the " +
-				"adoption backlog, everything nothing currently does.",
+				"tag, state, a substring of the name or key, realized and stale. realized=false is the " +
+				"adoption backlog, everything nothing currently does; stale=true is its twin, the review " +
+				"backlog: everything nobody has confirmed within the installation's horizon.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -121,11 +139,13 @@ func capabilityTools() []Tool {
 					"state":    stringProp("Optional: proposed, active or deprecated."),
 					"q":        stringProp("Optional: a substring of the name or key."),
 					"realized": stringProp("Optional: \"false\" for the backlog, \"true\" for what is realized."),
+					"stale": stringProp("Optional: \"true\" for the review backlog — everything nobody has " +
+						"confirmed within the installation's horizon, which is the twin of realized=false."),
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				q := url.Values{}
-				for _, name := range []string{"tag", "state", "q", "realized"} {
+				for _, name := range []string{"tag", "state", "q", "realized", "stale"} {
 					if v := optString(args, name); v != "" {
 						q.Set(name, v)
 					}
@@ -231,13 +251,22 @@ func capabilityTools() []Tool {
 			Description: "List value streams: the ordered activity the organisation performs to meet a " +
 				"customer need, whose stages name the capabilities performing them.",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{"tag": stringProp("Optional: only streams carrying this exact tag.")},
+				"type": "object",
+				"properties": map[string]any{
+					"tag":   stringProp("Optional: only streams carrying this exact tag."),
+					"stale": stringProp("Optional: \"true\" for the ones nobody has confirmed recently."),
+				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				for _, name := range []string{"tag", "stale"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
 				path := "/api/v1/value-streams"
-				if tag := optString(args, "tag"); tag != "" {
-					path += "?tag=" + url.QueryEscape(tag)
+				if len(q) > 0 {
+					path += "?" + q.Encode()
 				}
 				return asText(c.get(path))
 			},
@@ -312,6 +341,47 @@ func capabilityTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_confirm_capability",
+			Description: "Record that you have READ a capability and that it still describes reality. " +
+				"It is its own call and no edit sets it: if saving refreshed the date, fixing a typo in " +
+				"the summary would assert that the owner, the scope and every SLA had been re-checked. " +
+				"Only confirm what you actually re-read — a date nobody looked behind tells the next " +
+				"reader it was verified when it was not. Name who you asked in `with` where somebody " +
+				"other than you stood behind it; leaving it empty says you spoke for the record alone, " +
+				"which is legitimate and weaker, and the record says so either way.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": stringProp("The capability key."),
+					"with": stringProp("Optional: who was asked — the business owner, a team lead. " +
+						"Empty means you spoke for the record alone."),
+					"note": stringProp("Optional: one line on what the review found, e.g. " +
+						"\"SLA renegotiated to 3 days\". It replaces the previous note rather than being appended."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return confirm(c, args, "/api/v1/capabilities/")
+			},
+		},
+		{
+			Name: "atlas_confirm_value_stream",
+			Description: "Record that you have read a value stream and that it still describes reality. " +
+				"The twin of atlas_confirm_capability, and the same rule: only confirm what you re-read.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":  stringProp("The value stream key."),
+					"with": stringProp("Optional: who was asked."),
+					"note": stringProp("Optional: one line on what the review found."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return confirm(c, args, "/api/v1/value-streams/")
+			},
+		},
+		{
 			Name: "atlas_business_architecture_gaps",
 			Description: "Compare the whole capability map against what this server actually runs. It " +
 				"reports capabilities nothing realizes (the work still done by hand), realizations " +
@@ -319,8 +389,12 @@ func capabilityTools() []Tool {
 				"stages with no capability, dependencies naming no capability, and — the one worth the " +
 				"most — a call activity crossing from one capability's process into another's that the " +
 				"caller never declared. It is a comparison, never a merge: a declared dependency with no " +
-				"call activity is the ordinary case and raises nothing. Nothing is stored; it also says " +
-				"how much your own access hid from it, and what it looked at.",
+				"call activity is the ordinary case and raises nothing. It also reports records nobody " +
+				"has confirmed within the installation's horizon — the one finding that is NOT something " +
+				"Atlas verified, because the owner, the scope and the SLAs are prose it cannot check, so " +
+				"the only honest thing it can say is that nobody has stood behind them. Nothing is " +
+				"stored; the answer says which horizon it applied, how much your own access hid from it, " +
+				"and what it looked at.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/business-architecture/gaps"))

@@ -2,6 +2,44 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A capability now says when somebody last read it and meant it",
+        "de": "Eine Geschäftsfähigkeit sagt jetzt, wann sie zuletzt jemand gelesen und bestätigt hat"
+      },
+      "summary": {
+        "en": "Atlas can check whether the process a capability names is deployed. It cannot check who owns the capability, what it is responsible for, or what it promised — and those are the fields anybody acts on. A map whose realisations are all green and whose owners left two years ago is worse than no map. Both records now carry a confirmation: when, by whom, who they asked, and a line on what the review found. Only confirming sets it — no edit does, because a date refreshed by a typo fix would claim every field had been re-read. What lapses turns up as a review backlog, one query, the twin of the one for work nobody has automated. The interval is twelve months by default and yours to change.",
+        "de": "Atlas kann prüfen, ob der Prozess, den eine Fähigkeit nennt, deployt ist. Wer sie fachlich verantwortet, wofür sie zuständig ist und was sie zugesagt hat, kann Atlas nicht prüfen — und genau das sind die Felder, nach denen jemand handelt. Eine Landkarte mit lauter grünen Umsetzungen und Verantwortlichen, die vor zwei Jahren gegangen sind, ist schlechter als keine. Beide Datensatzarten tragen jetzt eine Bestätigung: wann, von wem, wen man gefragt hat und eine Zeile zum Ergebnis der Prüfung. Gesetzt wird sie nur durch das Bestätigen selbst, nie durch eine Bearbeitung: Ein Datum, das eine Tippfehlerkorrektur auffrischt, behauptete, jedes Feld sei neu gelesen worden. Was abläuft, erscheint als Prüfrückstand, eine einzige Abfrage, das Gegenstück zu der nach nicht automatisierter Arbeit. Die Frist beträgt standardmässig zwölf Monate und lässt sich ändern."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Architecture",
+        "API"
+      ],
+      "tutorial": {
+        "en": [
+          "Confirm a record you have just re-read: POST /api/v1/capabilities/{key}/confirmation with {\"with\": \"Head of Credit Risk\", \"note\": \"SLA renegotiated to 3 days\"}. Both fields are optional.",
+          "Name who you asked in \"with\". Leaving it empty says you spoke for the record alone, which is legitimate and weaker — the record says which.",
+          "Ask GET /api/v1/capabilities?stale=true for the review backlog.",
+          "GET /api/v1/business-architecture/gaps reports what has lapsed, and names the interval it judged against.",
+          "An administrator can change that interval with PUT /api/v1/settings/confirmation."
+        ],
+        "de": [
+          "Einen soeben erneut gelesenen Datensatz bestätigen: POST /api/v1/capabilities/{key}/confirmation mit {\"with\": \"Leiter Kreditrisiko\", \"note\": \"SLA auf 3 Tage neu verhandelt\"}. Beide Felder sind optional.",
+          "In \"with\" eintragen, wen man gefragt hat. Leer lassen heisst, man stand allein für den Datensatz ein; das ist zulässig und schwächer, und der Datensatz sagt welches von beidem.",
+          "GET /api/v1/capabilities?stale=true liefert den Prüfrückstand.",
+          "GET /api/v1/business-architecture/gaps meldet, was abgelaufen ist, und nennt die zugrunde gelegte Frist.",
+          "Eine Administratorin ändert diese Frist mit PUT /api/v1/settings/confirmation."
+        ]
+      }
+    },
+    {
       "id": "atlas-now-holds-what-the-organisation-must-be-able-to-do-not",
       "version": "Unreleased",
       "date": null,
@@ -343,35 +381,6 @@
           "de": "Daten öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "the-handbook-s-worker-runbooks-say-when-they-were-last-check",
-      "version": "0.6.0",
-      "date": "2026-09-09",
-      "category": "Added",
-      "title": {
-        "en": "The handbook's worker runbooks are dated too",
-        "de": "Auch die Worker-Anleitungen im Handbuch sind jetzt datiert"
-      },
-      "summary": {
-        "en": "The short setup steps in the properties panel already told you which month they were last walked through at the provider. The handbook's full runbooks — the longer version of the same instructions, with the screenshots-in-words and the traps — said nothing about their own age, which made the more detailed of the two the one you could judge least. Every runbook now ends with the month it was last checked and the same plain statement: if it no longer matches what is in front of you, the section is out of date, not you. A check inside Atlas keeps the two dates in step, so one cannot quietly age while the other is kept fresh.",
-        "de": "Die kurzen Einrichtungsschritte im Eigenschaften-Panel nannten bereits den Monat, in dem sie zuletzt beim Anbieter durchgegangen wurden. Die ausführlichen Runbooks im Handbuch — dieselbe Anleitung in lang, mit den Fallstricken — sagten nichts über ihr eigenes Alter; ausgerechnet die detailliertere der beiden liess sich also am schlechtesten einschätzen. Jedes Runbook schliesst jetzt mit dem Monat der letzten Prüfung und demselben klaren Satz: Stimmt es nicht mehr mit dem überein, was Sie vor sich haben, ist der Abschnitt veraltet und nicht Sie. Eine Prüfung in Atlas hält beide Daten im Gleichschritt, damit nicht eines still altert, während das andere gepflegt wird."
-      },
-      "link": {
-        "label": "ADR-0289",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0289-worker-type-setup-in-the-panel.md"
-      },
-      "tags": [
-        "Handbook",
-        "Workers"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the runbooks",
-          "de": "Zu den Runbooks"
-        },
-        "route": "#/console"
       }
     }
   ]

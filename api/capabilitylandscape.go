@@ -146,3 +146,20 @@ func (s *Server) collectCapabilityLandscape(r *http.Request) (capability.Landsca
 	}
 	return land, nil
 }
+
+// confirmationHorizon reads how many months a business-architecture confirmation stays
+// fresh for. Run-loop goroutine only: it reads the settings store.
+//
+// An installation that has said nothing gets the default, which is the twelve months
+// ADR-0289 and ADR-0293 already use for the two other things this repository dates and
+// cannot verify.
+func (s *Server) confirmationHorizon() (int, error) {
+	setting, stored, err := s.settings.getConfirmation()
+	if err != nil {
+		return 0, err
+	}
+	if !stored || setting.HorizonMonths == 0 {
+		return capability.DefaultHorizonMonths, nil
+	}
+	return setting.HorizonMonths, nil
+}

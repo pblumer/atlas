@@ -138,6 +138,7 @@ column names what is not built rather than what is planned.
 | 5 Integration capabilities | Worker Types and Workers ([ADR-0203](../adr/0203-worker-execution-model.md)), nameable as a capability's realisation | nothing |
 | Realisation edge | on the capability, by portable key, resolved at read time and stored nowhere | a model-side declaration, so the claim travels with an exported process |
 | Ownership | the capability's **business owner**, beside the application's sharing scope ([ADR-0071](../adr/0071-sharing-scopes.md)) | nothing: the two are separate fields, which is the point |
+| Freshness | when somebody last said a record's prose is still true, who said it and who they asked, with a configurable horizon and a review backlog | nothing Atlas can check *itself* — it dates the claim, it cannot verify it |
 | Metrics | per-element visit and termination counters ([ADR-0080](../adr/0080-runtime-aggregate-counters.md)), the instance timeline, searchable variables ([ADR-0244](../adr/0244-searchable-variables.md)), the OpenSearch export ([ADR-0114](../adr/0114-opensearch-event-exporter.md)) | **nothing computes a declared KPI or SLA.** They are declarations, and the API says so in every answer that carries one |
 | Architecture drawing | Panorama's ArchiMate documents and derived mesh ([ADR-0189](../adr/0189-panorama-architecture-modeling-and-live-overlays.md), [ADR-0211](../adr/0211-panorama-derived-landscape-mesh.md)) | no binding between an ArchiMate `Capability` and the registry record |
 
@@ -230,6 +231,46 @@ home, but the process-level documentation is still where a reader in the Modeler
 so say there what the process does and which capability it realises, and keep the
 scope, the owner and the SLA in the record where they can be queried.
 
+### Keeping the map true
+
+The gap report checks a realisation against the deployment registry. It cannot check the
+owner, the scope or the SLAs, and those are the fields anybody acts on: the escalation
+goes to whoever `owner` names, and an end-to-end target is distributed against the SLAs
+beneath it. A map whose realisations are green and whose owners left two years ago is
+worse than no map.
+
+So every record carries **when somebody last said it is still true**, and who said it:
+
+```
+POST /api/v1/capabilities/{key}/confirmation   {"with": "Head of Credit Risk", "note": "SLA renegotiated to 3 days"}
+GET  /api/v1/capabilities?stale=true           the review backlog
+GET  /api/v1/settings/confirmation             the horizon this installation applies
+```
+
+Four rules make it worth something.
+
+**Only confirming confirms.** No edit sets the date, not even one that rewrites the
+owner or an SLA. If saving refreshed it, fixing a typo in the summary would assert that
+every field had been re-read. Creating a record does confirm it — somebody just wrote it
+down, which is an assertion.
+
+**Say who you asked.** The confirmer is almost never the owner, because the owner
+usually has no Atlas account. Leaving `with` empty is legitimate and says you spoke for
+the record alone; filling it in says somebody else stood behind it. The read shows both,
+alongside whether the confirmer is also the last person who edited it.
+
+**The horizon is yours.** Twelve months by default, the same interval this repository
+uses for the two other things it dates and cannot verify. An admin can set it to a
+quarter, or to something nothing outlives. That last one silences the check, and it is
+allowed — it is one visible number, and every report says which interval it applied.
+
+**A stale record is still served.** It is flagged everywhere it is read and never
+withheld. Hiding it would make the map least useful exactly when it needs attention.
+
+Nothing prevents somebody confirming without reading, and the API says so. What the
+mechanism buys is that confirming is a deliberate act with a name and a date on it,
+rather than the absence of one.
+
 ### Ownership: two different things, two different fields
 
 An application's `ownerId`, `visibility` and `members` decide **who may open and change
@@ -239,9 +280,9 @@ business owner often has no Atlas account at all — which is why that field is 
 with an optional account link rather than a principal.
 
 Free text is also why nothing checks it. The owner is the field that decays fastest and
-the one Atlas can least verify, and today the record carries no trace of when anybody
-last stood behind it. Until the confirmation date lands, treat an owner you did not
-write yourself as a lead rather than a fact.
+the one Atlas can least verify — which is why the record now carries when somebody last
+stood behind it, and who they asked. An owner on a record confirmed last month is worth
+more than one on a record nobody has read in two years, and the read tells you which.
 
 ### Name the outcome, not the shape
 
@@ -351,7 +392,7 @@ them once they exist, per the table above.
 **Built.** The capability record and the value-stream record, their stores and their
 routes; the realisation edge with every mutable fact resolved at read time; the
 per-capability coverage read; and the gap report, which compares the map against what
-this server actually runs and raises eight kinds of finding:
+this server actually runs and raises ten kinds of finding:
 
 | Finding | What it means |
 |---------|---------------|
@@ -363,9 +404,16 @@ this server actually runs and raises eight kinds of finding:
 | `stage.unknown` | a stage naming no capability |
 | `process.shared` | two capabilities claim the same deployed process |
 | `call.undeclared` | one capability's process calls another's, undeclared |
+| `capability.unconfirmed` | nobody has said this capability's prose is still true |
+| `value-stream.unconfirmed` | the same, for a value stream |
 
 The report also says how many references your own access hid from it, and what it
 looked at — so a suspiciously clean report can be told from an empty installation.
+
+Nine of the ten are facts Atlas checked. The tenth pair is not, and the report does not
+pretend otherwise: the owner, the scope and the SLAs are prose about people and
+promises, so the only honest thing it can say about them is that nobody has stood behind
+them lately. See [Keeping the map true](#keeping-the-map-true).
 
 Two things it deliberately never reports. A realisation by a purchased system or by a
 person is not checked, because Atlas cannot see either and reporting them would be
@@ -380,16 +428,6 @@ outside your sharing scope is reported as restricted, never as missing.
   [Modelling for measurement](#modelling-for-measurement) — but whether it can be
   aggregated at the instance volumes this is aimed at, without the OpenSearch exporter,
   is the open question the decision record carries.
-- **A confirmation date.** The gap report checks the realisation, because Atlas can see
-  deployments. It cannot check the owner, the scope or the SLAs — the half of a record
-  anybody acts on — so today those are taken on trust and decay silently. The planned
-  answer is the shape this repository already uses twice: a backward-looking date saying
-  somebody looked, an explicit confirmation that no ordinary edit can set, a horizon
-  defaulting to twelve months, and a ninth finding plus a `?stale=true` review backlog
-  beside the automation one. It also records *who was asked*, because the confirmer is
-  almost never the owner and a date that does not say so means something weaker than it
-  looks. See
-  [ADR-draft-a-capability-says-when-it-was-last-confirmed](../adr/draft-a-capability-says-when-it-was-last-confirmed.md).
 - **Document-level exchange** of the map on its own, with a dry-run import.
 - **The milestone event** — see [the gap above](#the-milestone-gap).
 - **Panorama binding keys**, so an ArchiMate `Capability` on a drawing names a registry

@@ -1,8 +1,8 @@
 # ADR-DRAFT: A capability record says when somebody last confirmed it
 
-- **Status:** Proposed
-- **Implementation:** Not started
-- **Date:** 2026-09-10
+- **Status:** Accepted
+- **Implementation:** Landed
+- **Date:** 2026-09-10 (built 2026-09-11)
 - **Deciders:** Atlas maintainers
 
 ## Context and problem statement
@@ -228,6 +228,14 @@ hundred lines to read.
 
 ### Consequences
 
+- **Built.** `Confirmation` on both records, set at creation and by
+  `POST …/{key}/confirmation` and by nothing else; the horizon as a settings record with
+  the default at twelve; `?stale=true` on both listings; the confirmation block on the
+  coverage read; and two gap findings, `capability.unconfirmed` and
+  `value-stream.unconfirmed`, taking the report to ten kinds. Exposed as two MCP tools,
+  whose descriptions say in as many words that only what was actually re-read may be
+  confirmed. The horizon is admin-only to set and readable by anyone, because every
+  answer that applies it already carries it.
 - **Positive.** The two halves of a capability record are finally treated alike: the
   realisation is checked against reality, and the prose is dated by whoever last stood
   behind it. Neither is taken on trust.

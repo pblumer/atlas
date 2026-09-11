@@ -1,6 +1,9 @@
 package capability
 
-import "sort"
+import (
+	"sort"
+	"time"
+)
 
 // Coverage: one capability with every mutable fact about it resolved at read time,
 // and nothing about it stored.
@@ -39,6 +42,12 @@ type CoverageReport struct {
 	// ValueStreams are the streams whose stages name this capability, with the stages
 	// themselves — an end-to-end capability is named by every stage it spans.
 	ValueStreams []StreamUse `json:"valueStreams"`
+	// Confirmation is the freshness half: when a person last said this record's prose
+	// still describes reality, who said it, who they asked, and whether that has
+	// lapsed. It sits beside the SLAs it is about — a reader looking at what a
+	// capability promised should see, in the same answer, when anybody last stood
+	// behind that.
+	Confirmation ConfirmationView `json:"confirmation"`
 	// Measurement is [MeasurementNotice]. See its comment for why it is on the wire.
 	Measurement string `json:"measurement"`
 }
@@ -106,7 +115,8 @@ type StageRef struct {
 //
 // Pure, like [Gaps], and for the same reason: it can then be tested against a
 // landscape written by hand, and it never needs the run loop.
-func Coverage(c Capability, all []Capability, streams []ValueStream, land Landscape) CoverageReport {
+func Coverage(c Capability, all []Capability, streams []ValueStream, land Landscape,
+	now time.Time, horizonMonths int) CoverageReport {
 	byKey := make(map[string]Capability, len(all))
 	for _, other := range all {
 		byKey[other.Key] = other
@@ -120,6 +130,7 @@ func Coverage(c Capability, all []Capability, streams []ValueStream, land Landsc
 		Requires:     make([]Dependency, 0, len(c.Requires)),
 		RequiredBy:   []Dependent{},
 		ValueStreams: []StreamUse{},
+		Confirmation: viewConfirmation(c.Confirmation, c.UpdatedBy, now, horizonMonths),
 		Measurement:  MeasurementNotice,
 	}
 

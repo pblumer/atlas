@@ -1,5 +1,7 @@
 package capability
 
+import "time"
+
 // The two records of the business architecture (ADR-draft-business-capabilities-and-value-streams):
 // a business capability, and the value stream whose stages are performed by
 // capabilities.
@@ -64,6 +66,10 @@ type Capability struct {
 	// State is where the capability is in its own life: proposed, active, deprecated.
 	// A field somebody sets, not a lifecycle Atlas drives.
 	State string `json:"state"`
+	// Confirmation is when a person last said this record still describes reality, and
+	// who said it. It is set by an explicit confirmation and by no edit — see
+	// [Confirmation] and ADR-draft-a-capability-says-when-it-was-last-confirmed.
+	Confirmation Confirmation `json:"confirmation"`
 	// Revision is optimistic concurrency: a write against a stale one is refused
 	// rather than silently overwriting somebody else's edit.
 	Revision  int64  `json:"revision"`
@@ -176,11 +182,14 @@ type ValueStream struct {
 	Stages      []Stage  `json:"stages,omitempty"`
 	KPIs        []KPI    `json:"kpis,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
-	Revision    int64    `json:"revision"`
-	CreatedAt   int64    `json:"createdAt"`
-	CreatedBy   string   `json:"createdBy,omitempty"`
-	UpdatedAt   int64    `json:"updatedAt"`
-	UpdatedBy   string   `json:"updatedBy,omitempty"`
+	// Confirmation is the same freshness record a capability carries, for the same
+	// reason: a stream's owner and KPIs decay exactly as a capability's do.
+	Confirmation Confirmation `json:"confirmation"`
+	Revision     int64        `json:"revision"`
+	CreatedAt    int64        `json:"createdAt"`
+	CreatedBy    string       `json:"createdBy,omitempty"`
+	UpdatedAt    int64        `json:"updatedAt"`
+	UpdatedBy    string       `json:"updatedBy,omitempty"`
 }
 
 // Stage is one step of a value stream and the capabilities that perform it.
@@ -189,6 +198,57 @@ type Stage struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description,omitempty"`
 	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// Confirmation is the freshness half of a record: when a person last said it still
+// describes reality, who said it, and who they asked.
+//
+// It exists because the gap report can check a realization against the deployment
+// registry and can check nothing else. The owner, the scope and the SLAs — the fields
+// anybody actually acts on — are prose about people and promises, and a map that is
+// confidently wrong about those is worse than no map. Atlas cannot verify them; it can
+// record when somebody last stood behind them, which is the honest thing it can do.
+//
+// The shape is the third instance of one pattern in this tree: a Worker Type's setup
+// steps carry a checked date (ADR-0289) and a decision record's open question carries
+// one (ADR-0293). Both of those are enforced by a Go test over content in this
+// repository. This one cannot be — it is runtime data in somebody else's installation —
+// so the gap report is the enforcement instead.
+type Confirmation struct {
+	// At is unix seconds, zero when the record has never been confirmed. Zero is not
+	// "confirmed at the epoch": it is the honest statement that nobody has said this is
+	// true since the field existed, and the report distinguishes the two in words.
+	At int64 `json:"at,omitempty"`
+	// By is the principal who confirmed. Empty on an unconfirmed record, and empty on a
+	// confirmation made with auth off, where there is no principal to name.
+	By string `json:"by,omitempty"`
+	// With names who was *asked*, where that is somebody other than the confirmer.
+	// Empty means the confirmer spoke for the record alone — a legitimate confirmation
+	// and a weaker one, which this says rather than implying the opposite.
+	//
+	// It is another claim Atlas cannot verify, and it earns its place for the reason
+	// Owner does: the alternative is that who was asked lives only in the head of
+	// whoever asked them.
+	With string `json:"with,omitempty"`
+	// Note is one line saying what the review found, replaced on each confirmation
+	// rather than appended. This area is a correlation surface, not a log (ADR-0189).
+	Note string `json:"note,omitempty"`
+}
+
+// Confirmed reports whether anybody has ever confirmed the record.
+func (c Confirmation) Confirmed() bool { return c.At > 0 }
+
+// StaleAt reports whether the confirmation has lapsed as of now, given the
+// installation's horizon in months. A record nobody has ever confirmed is stale: the
+// whole point is that nobody has asserted it.
+func (c Confirmation) StaleAt(now time.Time, horizonMonths int) bool {
+	if !c.Confirmed() {
+		return true
+	}
+	if horizonMonths <= 0 {
+		return false // a horizon of zero or less switches the check off
+	}
+	return time.Unix(c.At, 0).AddDate(0, horizonMonths, 0).Before(now)
 }
 
 // CapabilitySummary is the list representation: enough to render a row and decide
@@ -202,23 +262,29 @@ type CapabilitySummary struct {
 	Tags    []string `json:"tags,omitempty"`
 	// RealizationCount and Realized answer the one question a list of capabilities is
 	// opened to ask: which of these is anybody actually doing anything about.
-	RealizationCount int    `json:"realizationCount"`
-	Realized         bool   `json:"realized"`
-	RequiresCount    int    `json:"requiresCount"`
-	KPICount         int    `json:"kpiCount"`
-	SLACount         int    `json:"slaCount"`
-	Revision         int64  `json:"revision"`
-	UpdatedAt        int64  `json:"updatedAt"`
-	UpdatedBy        string `json:"updatedBy,omitempty"`
+	RealizationCount int  `json:"realizationCount"`
+	Realized         bool `json:"realized"`
+	RequiresCount    int  `json:"requiresCount"`
+	KPICount         int  `json:"kpiCount"`
+	SLACount         int  `json:"slaCount"`
+	// ConfirmedAt and Stale are the review half of the row, the twin of Realized: one
+	// list answers "what does nobody automate", the other "what has nobody re-read".
+	ConfirmedAt int64  `json:"confirmedAt,omitempty"`
+	Stale       bool   `json:"stale"`
+	Revision    int64  `json:"revision"`
+	UpdatedAt   int64  `json:"updatedAt"`
+	UpdatedBy   string `json:"updatedBy,omitempty"`
 }
 
-func summarizeCapability(c Capability) CapabilitySummary {
+func summarizeCapability(c Capability, now time.Time, horizonMonths int) CapabilitySummary {
 	return CapabilitySummary{
 		Key: c.Key, Name: c.Name, Summary: c.Summary, Owner: c.Owner,
 		State: c.State, Tags: c.Tags,
 		RealizationCount: len(c.Realizations), Realized: len(c.Realizations) > 0,
 		RequiresCount: len(c.Requires), KPICount: len(c.KPIs), SLACount: len(c.SLAs),
-		Revision: c.Revision, UpdatedAt: c.UpdatedAt, UpdatedBy: c.UpdatedBy,
+		ConfirmedAt: c.Confirmation.At,
+		Stale:       c.Confirmation.StaleAt(now, horizonMonths),
+		Revision:    c.Revision, UpdatedAt: c.UpdatedAt, UpdatedBy: c.UpdatedBy,
 	}
 }
 
@@ -234,12 +300,14 @@ type ValueStreamSummary struct {
 	// stream's breadth, which the stage count alone does not give.
 	CapabilityCount int    `json:"capabilityCount"`
 	KPICount        int    `json:"kpiCount"`
+	ConfirmedAt     int64  `json:"confirmedAt,omitempty"`
+	Stale           bool   `json:"stale"`
 	Revision        int64  `json:"revision"`
 	UpdatedAt       int64  `json:"updatedAt"`
 	UpdatedBy       string `json:"updatedBy,omitempty"`
 }
 
-func summarizeValueStream(v ValueStream) ValueStreamSummary {
+func summarizeValueStream(v ValueStream, now time.Time, horizonMonths int) ValueStreamSummary {
 	seen := map[string]bool{}
 	for _, st := range v.Stages {
 		for _, key := range st.Capabilities {
@@ -249,6 +317,8 @@ func summarizeValueStream(v ValueStream) ValueStreamSummary {
 	return ValueStreamSummary{
 		Key: v.Key, Name: v.Name, Description: v.Description, Owner: v.Owner, Tags: v.Tags,
 		StageCount: len(v.Stages), CapabilityCount: len(seen), KPICount: len(v.KPIs),
-		Revision: v.Revision, UpdatedAt: v.UpdatedAt, UpdatedBy: v.UpdatedBy,
+		ConfirmedAt: v.Confirmation.At,
+		Stale:       v.Confirmation.StaleAt(now, horizonMonths),
+		Revision:    v.Revision, UpdatedAt: v.UpdatedAt, UpdatedBy: v.UpdatedBy,
 	}
 }

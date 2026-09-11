@@ -9,7 +9,7 @@ func TestCoverageResolvesAProcessRealization(t *testing.T) {
 		{ApplicationKey: "kyc", ApplicationName: "KYC", ProcessID: "idv", Name: "Identity Verification",
 			Version: 4, ActiveInstances: 17, CanView: true},
 	}}
-	cov := Coverage(c, nil, nil, land)
+	cov := Coverage(c, nil, nil, land, testNow, 12)
 	if len(cov.Realizations) != 1 {
 		t.Fatalf("realizations = %+v", cov.Realizations)
 	}
@@ -35,7 +35,7 @@ func TestCoverageResolvesTheNewestVersion(t *testing.T) {
 		{ApplicationKey: "a", ProcessID: "p", Version: 7, CanView: true},
 		{ApplicationKey: "a", ProcessID: "p", Version: 3, CanView: true},
 	}}
-	if got := Coverage(c, nil, nil, land).Realizations[0].Version; got != 7 {
+	if got := Coverage(c, nil, nil, land, testNow, 12).Realizations[0].Version; got != 7 {
 		t.Errorf("resolved version = %d, want the newest (7)", got)
 	}
 }
@@ -43,7 +43,7 @@ func TestCoverageResolvesTheNewestVersion(t *testing.T) {
 func TestCoverageMarksAnUnresolvedRealization(t *testing.T) {
 	c := Capability{Key: "b", Name: "B", Realizations: []Realization{
 		{Kind: RealizationProcess, ApplicationKey: "gone", ProcessID: "p"}}}
-	cov := Coverage(c, nil, nil, Landscape{})
+	cov := Coverage(c, nil, nil, Landscape{}, testNow, 12)
 	if cov.Realizations[0].Resolved {
 		t.Error("a realization pointing at nothing resolved")
 	}
@@ -58,7 +58,7 @@ func TestCoverageMarksARestrictedRealizationSeparatelyFromAMissingOne(t *testing
 	land := Landscape{Processes: []Process{
 		{ApplicationKey: "fin", ProcessID: "p", Name: "Secret", Version: 2, ActiveInstances: 9, CanView: false},
 	}}
-	r := Coverage(c, nil, nil, land).Realizations[0]
+	r := Coverage(c, nil, nil, land, testNow, 12).Realizations[0]
 	if !r.Restricted {
 		t.Fatal("a realization the caller may not see was not marked restricted")
 	}
@@ -74,7 +74,7 @@ func TestCoverageResolvesAWorkerRealization(t *testing.T) {
 	c := Capability{Key: "n", Name: "Notify", Realizations: []Realization{
 		{Kind: RealizationWorker, WorkerRef: "mail-desk"}}}
 	land := Landscape{Workers: []Worker{{Ref: "mail-desk", Name: "Service desk mail", Type: "mail", CanView: true}}}
-	r := Coverage(c, nil, nil, land).Realizations[0]
+	r := Coverage(c, nil, nil, land, testNow, 12).Realizations[0]
 	if !r.Resolved || r.Name != "Service desk mail" || r.WorkerType != "mail" {
 		t.Errorf("realization = %+v", r)
 	}
@@ -87,7 +87,7 @@ func TestCoverageTreatsASystemOrManualRealizationAsResolved(t *testing.T) {
 		{Kind: RealizationSystem, Note: "Acme SaaS"},
 		{Kind: RealizationManual, Note: "Branch clerk"},
 	}}
-	cov := Coverage(c, nil, nil, Landscape{})
+	cov := Coverage(c, nil, nil, Landscape{}, testNow, 12)
 	for _, r := range cov.Realizations {
 		if !r.Resolved {
 			t.Errorf("%s realization reported unresolved", r.Kind)
@@ -110,7 +110,7 @@ func TestCoverageResolvesDependenciesBothWays(t *testing.T) {
 			SLAs:         []SLA{{Name: "Decision", Metric: "cycleTime", Threshold: "10 min", Scope: SLAInternal}}},
 		{Key: "loan-application", Name: "Loan Application", Requires: []string{"onboarding"}},
 	}
-	cov := Coverage(onboarding, all, nil, Landscape{})
+	cov := Coverage(onboarding, all, nil, Landscape{}, testNow, 12)
 
 	if len(cov.Requires) != 2 {
 		t.Fatalf("requires = %+v", cov.Requires)
@@ -144,7 +144,7 @@ func TestCoverageNamesTheValueStreamsAndStagesThatUseIt(t *testing.T) {
 		}},
 		{Key: "mortgage", Name: "Mortgage", Stages: []Stage{{Key: "x", Name: "X", Capabilities: []string{"other"}}}},
 	}
-	cov := Coverage(c, nil, streams, Landscape{})
+	cov := Coverage(c, nil, streams, Landscape{}, testNow, 12)
 	if len(cov.ValueStreams) != 1 {
 		t.Fatalf("valueStreams = %+v", cov.ValueStreams)
 	}
@@ -161,7 +161,7 @@ func TestCoverageIsDeterministic(t *testing.T) {
 	c := Capability{Key: "a", Name: "A", Requires: []string{"z", "b"}}
 	all := []Capability{c, {Key: "b", Name: "B"}, {Key: "z", Name: "Z"},
 		{Key: "y", Name: "Y", Requires: []string{"a"}}, {Key: "x", Name: "X", Requires: []string{"a"}}}
-	first, second := Coverage(c, all, nil, Landscape{}), Coverage(c, all, nil, Landscape{})
+	first, second := Coverage(c, all, nil, Landscape{}, testNow, 12), Coverage(c, all, nil, Landscape{}, testNow, 12)
 	if first.Requires[0].Key != "b" || first.Requires[1].Key != "z" {
 		t.Errorf("requires are not in key order: %+v", first.Requires)
 	}
@@ -178,7 +178,7 @@ func TestCoverageSaysNothingIsMeasured(t *testing.T) {
 	// it will be because a measurement slice landed — until then the answer has to say
 	// so, or a client will render a goal as though it were an achievement.
 	cov := Coverage(Capability{Key: "a", Name: "A",
-		KPIs: []KPI{{Name: "Speed", Metric: "cycleTime", Goal: "< 3 d"}}}, nil, nil, Landscape{})
+		KPIs: []KPI{{Name: "Speed", Metric: "cycleTime", Goal: "< 3 d"}}}, nil, nil, Landscape{}, testNow, 12)
 	if cov.Measurement == "" {
 		t.Fatal("coverage does not say whether its KPIs are measured")
 	}

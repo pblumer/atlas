@@ -4,7 +4,19 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
+
+// testNow is the wall clock every test in this package reads, so a freshness rule that
+// depends on the date is still deterministic (AGENTS.md: tests must not depend on the
+// clock). Records built in these tests carry no confirmation, which makes them stale by
+// construction — the tests that care say so explicitly.
+var testNow = time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+
+// confirmedNow is a confirmation made at testNow, for the records a test needs fresh.
+func confirmedNow() Confirmation {
+	return Confirmation{At: testNow.Unix(), By: "architect"}
+}
 
 // kindsOf reduces a report to the finding kinds it raised, for tests that care about
 // what was found rather than how it was worded.
@@ -37,16 +49,20 @@ func findingsOf(rep GapReport, kind string) []Finding {
 }
 
 func TestGapsOnACompleteMapFindsNothing(t *testing.T) {
+	// Confirmed, because "complete" now includes somebody having stood behind the prose:
+	// a record nobody has confirmed is a finding of its own.
 	caps := []Capability{
 		{Key: "onboarding", Name: "Customer Onboarding", State: StateActive,
 			Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "crm", ProcessID: "onboarding"}},
-			Requires:     []string{"identity"}},
+			Requires:     []string{"identity"}, Confirmation: confirmedNow()},
 		{Key: "identity", Name: "Identity Verification", State: StateActive,
-			Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "crm", ProcessID: "identity"}}},
+			Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "crm", ProcessID: "identity"}},
+			Confirmation: confirmedNow()},
 	}
-	streams := []ValueStream{{Key: "consumer-loan", Name: "Consumer Loan", Stages: []Stage{
-		{Key: "apply", Name: "Apply", Capabilities: []string{"onboarding"}},
-	}}}
+	streams := []ValueStream{{Key: "consumer-loan", Name: "Consumer Loan", Confirmation: confirmedNow(),
+		Stages: []Stage{
+			{Key: "apply", Name: "Apply", Capabilities: []string{"onboarding"}},
+		}}}
 	land := Landscape{
 		Processes: []Process{
 			{ApplicationKey: "crm", ProcessID: "onboarding", Name: "Onboarding", Version: 1, CanView: true},
@@ -54,7 +70,7 @@ func TestGapsOnACompleteMapFindsNothing(t *testing.T) {
 		},
 		Calls: []Call{{CallerProcessID: "onboarding", ElementID: "call-1", CalledProcessID: "identity", Resolved: true}},
 	}
-	rep := Gaps(caps, streams, land)
+	rep := Gaps(caps, streams, land, testNow, 12)
 	if len(rep.Findings) != 0 {
 		t.Fatalf("a complete map reported %d findings: %+v", len(rep.Findings), rep.Findings)
 	}
@@ -70,7 +86,7 @@ func TestGapsReportsAnUnrealizedCapability(t *testing.T) {
 	// The most useful finding in the whole report: the work still done by hand, or by
 	// a system nobody has written down.
 	caps := []Capability{{Key: "underwriting", Name: "Loan Underwriting", State: StateActive}}
-	rep := Gaps(caps, nil, Landscape{})
+	rep := Gaps(caps, nil, Landscape{}, testNow, 12)
 	fs := findingsOf(rep, FindingUnrealized)
 	if len(fs) != 1 {
 		t.Fatalf("findings = %+v, want exactly one unrealized capability", rep.Findings)
@@ -88,7 +104,7 @@ func TestGapsDoesNotReportADeprecatedCapabilityAsUnrealized(t *testing.T) {
 	// would fill the backlog with rows nobody intends to act on, which is how a report
 	// stops being read.
 	caps := []Capability{{Key: "fax-intake", Name: "Fax Intake", State: StateDeprecated}}
-	rep := Gaps(caps, nil, Landscape{})
+	rep := Gaps(caps, nil, Landscape{}, testNow, 12)
 	if has(rep, FindingUnrealized) {
 		t.Errorf("a deprecated capability was reported as unrealized: %+v", rep.Findings)
 	}
@@ -97,7 +113,7 @@ func TestGapsDoesNotReportADeprecatedCapabilityAsUnrealized(t *testing.T) {
 func TestGapsReportsAMissingRealization(t *testing.T) {
 	caps := []Capability{{Key: "billing", Name: "Billing", State: StateActive,
 		Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "fin", ProcessID: "invoice"}}}}
-	rep := Gaps(caps, nil, Landscape{})
+	rep := Gaps(caps, nil, Landscape{}, testNow, 12)
 	fs := findingsOf(rep, FindingRealizationMissing)
 	if len(fs) != 1 {
 		t.Fatalf("findings = %+v, want one missing realization", rep.Findings)
@@ -115,7 +131,7 @@ func TestGapsReportsAMissingRealization(t *testing.T) {
 func TestGapsReportsAMissingWorkerRealization(t *testing.T) {
 	caps := []Capability{{Key: "notify", Name: "Notify", State: StateActive,
 		Realizations: []Realization{{Kind: RealizationWorker, WorkerRef: "mail-service-desk"}}}}
-	rep := Gaps(caps, nil, Landscape{Workers: []Worker{{Ref: "mail-other", CanView: true}}})
+	rep := Gaps(caps, nil, Landscape{Workers: []Worker{{Ref: "mail-other", CanView: true}}}, testNow, 12)
 	if !has(rep, FindingRealizationMissing) {
 		t.Fatalf("findings = %+v, want the unknown worker reported", rep.Findings)
 	}
@@ -125,11 +141,12 @@ func TestGapsNeverChecksASystemOrManualRealization(t *testing.T) {
 	// Atlas has no way to know whether a purchased system or a clerk is doing the
 	// work. Reporting them as missing would be reporting the limits of Atlas's
 	// eyesight as a defect in somebody's architecture.
-	caps := []Capability{{Key: "kyc", Name: "KYC", State: StateActive, Realizations: []Realization{
-		{Kind: RealizationSystem, Note: "Acme KYC SaaS"},
-		{Kind: RealizationManual, Note: "Branch clerk"},
-	}}}
-	rep := Gaps(caps, nil, Landscape{})
+	caps := []Capability{{Key: "kyc", Name: "KYC", State: StateActive, Confirmation: confirmedNow(),
+		Realizations: []Realization{
+			{Kind: RealizationSystem, Note: "Acme KYC SaaS"},
+			{Kind: RealizationManual, Note: "Branch clerk"},
+		}}}
+	rep := Gaps(caps, nil, Landscape{}, testNow, 12)
 	if len(rep.Findings) != 0 {
 		t.Errorf("findings = %+v, want none: Atlas cannot see a SaaS or a clerk", rep.Findings)
 	}
@@ -143,7 +160,7 @@ func TestGapsReportsARealizationTheCallerMayNotSee(t *testing.T) {
 	land := Landscape{Processes: []Process{
 		{ApplicationKey: "fin", ProcessID: "invoice", Version: 1, CanView: false},
 	}}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	if has(rep, FindingRealizationMissing) {
 		t.Errorf("a realization the caller cannot see was reported as missing: %+v", rep.Findings)
 	}
@@ -159,7 +176,7 @@ func TestGapsReportsAnUnclaimedProcess(t *testing.T) {
 	}}
 	caps := []Capability{{Key: "onboarding", Name: "Onboarding", State: StateActive,
 		Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "crm", ProcessID: "onboarding"}}}}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	fs := findingsOf(rep, FindingProcessUnclaimed)
 	if len(fs) != 1 || fs[0].ProcessID != "orphan" {
 		t.Fatalf("findings = %+v, want the orphan process reported once", rep.Findings)
@@ -170,7 +187,7 @@ func TestGapsDoesNotClaimAProcessTheCallerCannotSee(t *testing.T) {
 	land := Landscape{Processes: []Process{
 		{ApplicationKey: "hr", ProcessID: "secret", Version: 1, CanView: false},
 	}}
-	rep := Gaps(nil, nil, land)
+	rep := Gaps(nil, nil, land, testNow, 12)
 	if has(rep, FindingProcessUnclaimed) {
 		t.Errorf("a process the caller cannot see was reported as unclaimed: %+v", rep.Findings)
 	}
@@ -180,7 +197,7 @@ func TestGapsReportsAnUnknownRequirement(t *testing.T) {
 	caps := []Capability{{Key: "onboarding", Name: "Onboarding", State: StateActive,
 		Realizations: []Realization{{Kind: RealizationManual, Note: "clerk"}},
 		Requires:     []string{"identity"}}}
-	rep := Gaps(caps, nil, Landscape{})
+	rep := Gaps(caps, nil, Landscape{}, testNow, 12)
 	fs := findingsOf(rep, FindingRequiresUnknown)
 	if len(fs) != 1 || fs[0].RequiredKey != "identity" {
 		t.Fatalf("findings = %+v, want the dangling requirement reported", rep.Findings)
@@ -192,7 +209,7 @@ func TestGapsReportsAnEmptyAndAnUnknownStage(t *testing.T) {
 		{Key: "empty", Name: "Nobody does this"},
 		{Key: "ghost", Name: "Ghost", Capabilities: []string{"missing"}},
 	}}}
-	rep := Gaps(nil, streams, Landscape{})
+	rep := Gaps(nil, streams, Landscape{}, testNow, 12)
 	if !has(rep, FindingStageEmpty) || !has(rep, FindingStageUnknown) {
 		t.Fatalf("findings = %v, want both an empty stage and an unknown capability", kindsOf(rep))
 	}
@@ -220,7 +237,7 @@ func TestGapsReportsAnUndeclaredCallAcrossCapabilities(t *testing.T) {
 		},
 		Calls: []Call{{CallerProcessID: "onboarding", ElementID: "call-idv", CalledProcessID: "identity", Resolved: true}},
 	}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	fs := findingsOf(rep, FindingCallUndeclared)
 	if len(fs) != 1 {
 		t.Fatalf("findings = %+v, want the undeclared call reported", rep.Findings)
@@ -237,14 +254,15 @@ func TestGapsAcceptsADeclaredDependencyWithNoCall(t *testing.T) {
 	// what somebody declared.
 	caps := []Capability{
 		{Key: "onboarding", Name: "Onboarding", State: StateActive, Requires: []string{"identity"},
-			Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "crm", ProcessID: "onboarding"}}},
-		{Key: "identity", Name: "Identity", State: StateActive,
+			Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "crm", ProcessID: "onboarding"}},
+			Confirmation: confirmedNow()},
+		{Key: "identity", Name: "Identity", State: StateActive, Confirmation: confirmedNow(),
 			Realizations: []Realization{{Kind: RealizationManual, Note: "clerk"}}},
 	}
 	land := Landscape{Processes: []Process{
 		{ApplicationKey: "crm", ProcessID: "onboarding", Version: 1, CanView: true},
 	}}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	if len(rep.Findings) != 0 {
 		t.Errorf("findings = %+v, want none", rep.Findings)
 	}
@@ -265,7 +283,7 @@ func TestGapsIgnoresACallWithinOneCapability(t *testing.T) {
 		},
 		Calls: []Call{{CallerProcessID: "onboarding", ElementID: "c", CalledProcessID: "onboarding-step", Resolved: true}},
 	}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	if has(rep, FindingCallUndeclared) {
 		t.Errorf("a call inside one capability was reported: %+v", rep.Findings)
 	}
@@ -285,7 +303,7 @@ func TestGapsIgnoresAnUnresolvedCall(t *testing.T) {
 		},
 		Calls: []Call{{CallerProcessID: "pa", ElementID: "c", CalledProcessID: "pb", Resolved: false}},
 	}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	if has(rep, FindingCallUndeclared) {
 		t.Errorf("an unresolved call was reported here rather than by the call inventory: %+v", rep.Findings)
 	}
@@ -296,6 +314,7 @@ func TestGapsCountsEveryKind(t *testing.T) {
 		[]Capability{{Key: "a", Name: "A", State: StateActive, Requires: []string{"nope"}}},
 		[]ValueStream{{Key: "s", Name: "S", Stages: []Stage{{Key: "e", Name: "E"}}}},
 		Landscape{Processes: []Process{{ApplicationKey: "x", ProcessID: "p", Version: 1, CanView: true}}},
+		testNow, 12,
 	)
 	for _, kind := range FindingKinds() {
 		if _, ok := rep.Counts[kind]; !ok {
@@ -333,8 +352,8 @@ func TestGapsOrdersFindingsDeterministically(t *testing.T) {
 		{Key: "zeta", Name: "Z", State: StateActive},
 		{Key: "alpha", Name: "A", State: StateActive},
 	}
-	first := Gaps(caps, nil, Landscape{})
-	second := Gaps(caps, nil, Landscape{})
+	first := Gaps(caps, nil, Landscape{}, testNow, 12)
+	second := Gaps(caps, nil, Landscape{}, testNow, 12)
 	if len(first.Findings) != len(second.Findings) {
 		t.Fatal("two identical reports differ in length")
 	}
@@ -399,7 +418,7 @@ func TestGapsReportsAProcessTwoCapabilitiesClaim(t *testing.T) {
 	land := Landscape{Processes: []Process{
 		{ApplicationKey: "fin", ProcessID: "invoice", Version: 1, CanView: true},
 	}}
-	rep := Gaps(caps, nil, land)
+	rep := Gaps(caps, nil, land, testNow, 12)
 	fs := findingsOf(rep, FindingProcessShared)
 	if len(fs) != 1 {
 		t.Fatalf("findings = %+v, want the contested process reported exactly once", rep.Findings)
@@ -428,7 +447,7 @@ func TestGapsResolvesAContestedProcessDeterministically(t *testing.T) {
 				{ApplicationKey: "x", ProcessID: "callee", Version: 1, CanView: true},
 			},
 			Calls: []Call{{CallerProcessID: "shared", ElementID: "c", CalledProcessID: "callee", Resolved: true}},
-		})
+		}, testNow, 12)
 	}
 	first := Capability{Key: "aaa", Name: "A", State: StateActive,
 		Realizations: []Realization{{Kind: RealizationProcess, ApplicationKey: "x", ProcessID: "shared"}}}

@@ -421,6 +421,11 @@ type AuthoringSubset struct {
 	// KeyPattern is the regular expression a key must match, so a form can refuse a
 	// bad key while it is being typed with the same rule the server writes through.
 	KeyPattern string `json:"keyPattern"`
+	// DefaultHorizonMonths is how long a confirmation stays fresh where an installation
+	// has not said otherwise. The horizon actually in force is an installation setting
+	// and travels with the answer that applied it, never with this one — the subset
+	// says what this build does, not how this server is configured.
+	DefaultHorizonMonths int `json:"defaultConfirmationHorizonMonths"`
 	// Hierarchy states, in the surface itself, that there is none. A client author
 	// looking for a parent field finds the reason instead of assuming an oversight.
 	Hierarchy string `json:"hierarchy"`
@@ -431,8 +436,9 @@ func Subset() AuthoringSubset {
 	return AuthoringSubset{
 		States: states, InterfaceKinds: interfaceKinds, ResourceKinds: resourceKinds,
 		RealizationKinds: realizationKinds, Directions: directions, SLAScopes: slaScopes,
-		FindingKinds: FindingKinds(),
-		KeyPattern:   keyPattern.String(),
+		FindingKinds:         FindingKinds(),
+		KeyPattern:           keyPattern.String(),
+		DefaultHorizonMonths: DefaultHorizonMonths,
 		Hierarchy: "none: capabilities are a flat list and are classified by tags. An end-to-end " +
 			"process is a capability carrying a tag, not a capability at a higher level.",
 	}

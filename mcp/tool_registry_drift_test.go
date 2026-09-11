@@ -51,6 +51,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_create_value_stream":          "POST /api/v1/value-streams",
 	"atlas_save_value_stream":            "PUT /api/v1/value-streams/{key}",
 	"atlas_delete_value_stream":          "DELETE /api/v1/value-streams/{key}",
+	"atlas_confirm_capability":           "POST /api/v1/capabilities/{key}/confirmation",
+	"atlas_confirm_value_stream":         "POST /api/v1/value-streams/{key}/confirmation",
 	"atlas_create_instance":              "POST /api/v1/processes/{key}/instances",
 	"atlas_list_instances":               "GET /api/v1/instances",
 	"atlas_cancel_instance":              "DELETE /api/v1/instances/{key}",
@@ -564,6 +566,13 @@ var mcpOmittedRoutes = map[string]string{
 	// operator's call about their forest, not an agent's. The state is not hidden
 	// from an agent either way: a mocked worker says so in the log atlas_workers
 	// returns, which is where it is worth reading anyway, next to what it did.
+	// The confirmation horizon is read out of every business-architecture answer that
+	// applies it, so an agent never needs to ask for it separately; and widening it is
+	// how somebody silences the freshness check, which is an operator's decision to make
+	// deliberately rather than a tool an agent can reach for when a report annoys it.
+	"GET /api/v1/settings/confirmation": "every gap report and coverage read already carries the horizon it applied",
+	"PUT /api/v1/settings/confirmation": "widening the horizon silences the freshness check; that is an operator decision, not an agent action",
+
 	"GET /api/v1/settings/ad-mock": "the AD mockup switch is a Console concern; its state shows in atlas_workers",
 	"PUT /api/v1/settings/ad-mock": "whether this instance writes to a real directory is an operator decision, not an agent action",
 

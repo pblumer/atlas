@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The gap report: the reverse of the realization edge, computed rather than stored.
@@ -55,6 +56,18 @@ const (
 	// opposite — so it is reported rather than resolved by whichever record happened to
 	// be read last.
 	FindingProcessShared = "process.shared"
+	// FindingUnconfirmed: nobody has said this record still describes reality within
+	// the installation's horizon — or nobody ever has.
+	//
+	// It is the one finding in this report that is *not* something Atlas verified.
+	// Every other one states a fact it checked against the deployment registry or the
+	// compiled model; this one states the absence of an assertion, which is the only
+	// thing Atlas can honestly say about the owner, the scope and the SLAs. The detail
+	// says which of the two it is, because "never confirmed" is a backlog to work
+	// through once and "lapsed" is a review that slipped.
+	FindingUnconfirmed = "capability.unconfirmed"
+	// FindingStreamUnconfirmed is the same for a value stream.
+	FindingStreamUnconfirmed = "value-stream.unconfirmed"
 )
 
 // FindingKinds is every kind, in report order. Served in the authoring subset so a
@@ -70,6 +83,8 @@ func FindingKinds() []string {
 		FindingStageUnknown,
 		FindingProcessShared,
 		FindingCallUndeclared,
+		FindingUnconfirmed,
+		FindingStreamUnconfirmed,
 	}
 }
 
@@ -101,6 +116,10 @@ type GapReport struct {
 	// kinds it happened to find would leave a UI unable to say "nothing wrong here".
 	Counts   map[string]int `json:"counts"`
 	Findings []Finding      `json:"findings"`
+	// HorizonMonths is the confirmation horizon this report applied. Published rather
+	// than assumed: it is an installation setting, so a reader seeing no unconfirmed
+	// findings is entitled to know whether the map is fresh or the horizon is a century.
+	HorizonMonths int `json:"horizonMonths"`
 	// Restricted is how many things in the landscape the caller's access hid from this
 	// comparison — counted once each, however many ways the comparison met them.
 	// Published rather than swallowed: a report that quietly checks less than it
@@ -123,9 +142,10 @@ type Checked struct {
 //
 // Pure: it reads its three arguments and touches nothing else, which is what lets it
 // be tested against a landscape written by hand and what keeps it off the run loop.
-func Gaps(caps []Capability, streams []ValueStream, land Landscape) GapReport {
+func Gaps(caps []Capability, streams []ValueStream, land Landscape, now time.Time, horizonMonths int) GapReport {
 	rep := GapReport{
-		Counts: make(map[string]int, len(FindingKinds())),
+		Counts:        make(map[string]int, len(FindingKinds())),
+		HorizonMonths: horizonMonths,
 		Checked: Checked{
 			Capabilities: len(caps), ValueStreams: len(streams),
 			Processes: len(land.Processes), Calls: len(land.Calls),
@@ -225,6 +245,15 @@ func Gaps(caps []Capability, streams []ValueStream, land Landscape) GapReport {
 					Detail: fmt.Sprintf("this capability requires %q, which is not in the map", key)})
 			}
 		}
+
+		// A deprecated capability is on its way out; nobody is going to re-read it, and
+		// saying so every month would fill the review backlog with rows nobody intends
+		// to act on. The same exemption capability.unrealized already makes.
+		if c.State != StateDeprecated && c.Confirmation.StaleAt(now, horizonMonths) {
+			add(Finding{Kind: FindingUnconfirmed, CapabilityKey: c.Key,
+				Detail: confirmationDetail(c.Confirmation, now, horizonMonths,
+					"the owner, the scope and the SLAs")})
+		}
 	}
 
 	// The other direction: what is running that nobody claims.
@@ -249,6 +278,11 @@ func Gaps(caps []Capability, streams []ValueStream, land Landscape) GapReport {
 	}
 
 	for _, v := range streams {
+		if v.Confirmation.StaleAt(now, horizonMonths) {
+			add(Finding{Kind: FindingStreamUnconfirmed, ValueStreamKey: v.Key,
+				Detail: confirmationDetail(v.Confirmation, now, horizonMonths,
+					"the owner, the stages and the KPIs")})
+		}
 		for _, st := range v.Stages {
 			if len(st.Capabilities) == 0 {
 				add(Finding{Kind: FindingStageEmpty, ValueStreamKey: v.Key, StageKey: st.Key,
@@ -322,6 +356,21 @@ func Gaps(caps []Capability, streams []ValueStream, land Landscape) GapReport {
 		rep.Counts[f.Kind]++
 	}
 	return rep
+}
+
+// confirmationDetail words a freshness finding. It distinguishes the two states behind
+// one kind, because they are different work: never confirmed is a backlog to go through
+// once, and lapsed is a review that slipped.
+func confirmationDetail(c Confirmation, now time.Time, horizonMonths int, fields string) string {
+	if !c.Confirmed() {
+		return fmt.Sprintf("nobody has confirmed this record. Atlas checks the realization "+
+			"against what is deployed; %s it cannot check at all, so the only thing it can "+
+			"report is that nobody has stood behind them", fields)
+	}
+	months := int(now.Sub(time.Unix(c.At, 0)).Hours() / 24 / 30)
+	return fmt.Sprintf("last confirmed about %d months ago, past the %d-month horizon. "+
+		"Read it and confirm it, or correct it — bumping the date without reading tells the "+
+		"next reader it was checked when it was not", months, horizonMonths)
 }
 
 // sortFindings gives the report a stable order: by the thing it is about, then by

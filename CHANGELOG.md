@@ -14,6 +14,51 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A capability record now says when somebody last read it and meant it.** The gap
+  report checks a realisation against what is deployed, because that is a fact Atlas can
+  see. The rest of a capability — who owns it, what it is and is not responsible for,
+  what it has promised — is prose about people and promises, and Atlas took all of it on
+  trust. A map whose realisations are green and whose owners left two years ago is worse
+  than no map: it is confidently wrong in exactly the fields somebody escalates against.
+
+  Both records now carry a confirmation: when, by whom, who they asked, and one line on
+  what the review found. `POST /api/v1/capabilities/{key}/confirmation` is the only
+  thing that sets it, and creating a record counts, because writing something down is an
+  assertion.
+
+  **No edit sets it** — not even one that rewrites the owner or an SLA. If saving
+  refreshed the date, fixing a typo in the summary would assert that every field had
+  been re-checked, which is precisely the lie the mechanism exists to prevent, made
+  automatic and leaving no diff in which anybody could have noticed it. For the same
+  reason there is no bulk confirm.
+
+  The confirmation also records **who was asked**. The confirmer is almost never the
+  owner, because the owner is free text precisely to accommodate people with no Atlas
+  account — so without that field the map confirms itself and a reader cannot tell that
+  from a review the owner sat in. Leaving it empty is a legitimate confirmation and a
+  weaker one, and the record says which. A self-confirmation is shown beside it and
+  never reported: in a four-person installation the architect is the only person who
+  *can* confirm, and a report that fires on the normal case stops being read.
+
+  A confirmation stays fresh for twelve months, the interval this repository already
+  uses for the two other things it dates and cannot verify. Unlike those, it is
+  configurable — `PUT /api/v1/settings/confirmation`, admin only — because those govern
+  content here and this governs a customer's map reviewed on their own cadence. Setting
+  it to something nothing outlives does silence the check, and that is allowed and made
+  legible instead: it is one visible number, and every report says which interval it
+  applied.
+
+  What lapses becomes two new gap findings and a `?stale=true` listing — the review
+  backlog, the exact twin of `?realized=false`, the automation one. A stale record is
+  flagged everywhere it is read and never withheld, because hiding it would make the map
+  least useful at the moment it most needs attention. Both are also MCP tools, whose
+  descriptions say in as many words that only what was actually re-read may be
+  confirmed.
+
+  Nine of the report's ten findings are facts Atlas checked. These two are not, and the
+  report does not pretend otherwise: the only honest thing it can say about prose is
+  that nobody has stood behind it lately.
+
 - **Atlas now holds what the organisation must be able to do, not only what it runs.** A
   deployed process could be found by its name and by nothing else: not by the business
   capability it realises, not by who owns that capability, and not by what would stall

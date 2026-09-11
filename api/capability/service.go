@@ -42,6 +42,20 @@ type LandscapeResolver func(r *http.Request) (Landscape, error)
 // Clock supplies timestamps, injected so tests are deterministic.
 type Clock func() time.Time
 
+// HorizonResolver reads how many months a confirmation stays fresh for, from the
+// installation's settings. Called from inside a loop turn, like the landscape resolver.
+//
+// It is a function rather than a field because an operator can change it while the
+// server runs, and a read that answered from a value captured at construction would
+// keep applying yesterday's policy.
+type HorizonResolver func() (int, error)
+
+// DefaultHorizonMonths is how long a confirmation stays fresh when an installation has
+// not said otherwise. Twelve, matching the two places this repository already dates
+// something it cannot verify: a Worker Type's setup steps (ADR-0289) and a decision
+// record's open question (ADR-0293). Inherited rather than invented.
+const DefaultHorizonMonths = 12
+
 // Service serves the business-architecture area. Build it with [New].
 type Service struct {
 	// loop is the single-writer boundary. Every store access below runs on it.
@@ -52,7 +66,9 @@ type Service struct {
 	// landscape is what the installation currently runs, resolved on the loop for the
 	// requesting principal. Nothing it returns is ever written down.
 	landscape LandscapeResolver
-	now       Clock
+	// horizon reads the confirmation horizon from the installation's settings.
+	horizon HorizonResolver
+	now     Clock
 
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own once it has read the
@@ -61,9 +77,28 @@ type Service struct {
 }
 
 // New builds the service over its two store directories.
-func New(loop *runloop.Loop, caps *Store, streams *StreamStore, landscape LandscapeResolver, now Clock) *Service {
-	return &Service{loop: loop, caps: caps, streams: streams, landscape: landscape, now: now,
-		Limits: limits.Default()}
+func New(loop *runloop.Loop, caps *Store, streams *StreamStore, landscape LandscapeResolver,
+	horizon HorizonResolver, now Clock) *Service {
+	return &Service{loop: loop, caps: caps, streams: streams, landscape: landscape,
+		horizon: horizon, now: now, Limits: limits.Default()}
+}
+
+// horizonMonths reads the configured horizon, falling back to the default when the
+// service was built without a resolver or the settings cannot be read.
+//
+// A failure here must not be fatal to a listing or a report. The horizon decides how
+// *loudly* a record is reported, never whether the answer is correct — so an unreadable
+// setting degrades to the default rather than refusing the read, and the answer says
+// which horizon it applied so a reader is never guessing.
+func (s *Service) horizonMonths() int {
+	if s.horizon == nil {
+		return DefaultHorizonMonths
+	}
+	months, err := s.horizon()
+	if err != nil || months == 0 {
+		return DefaultHorizonMonths
+	}
+	return months
 }
 
 // budgets is how this service reads a ceiling. It defaults a Service built as a
@@ -131,10 +166,12 @@ func (s *Service) HandleListCapabilities(w http.ResponseWriter, r *http.Request)
 	state := strings.TrimSpace(q.Get("state"))
 	search := strings.ToLower(strings.TrimSpace(q.Get("q")))
 	realized, hasRealized := boolParam(q.Get("realized"))
+	stale, hasStale := boolParam(q.Get("stale"))
 
 	out := []CapabilitySummary{}
 	var opErr error
 	if !s.dispatch(func() {
+		now, horizon := s.now(), s.horizonMonths()
 		all, err := s.caps.LoadAll()
 		if err != nil {
 			opErr = err
@@ -154,7 +191,11 @@ func (s *Service) HandleListCapabilities(w http.ResponseWriter, r *http.Request)
 				!strings.Contains(strings.ToLower(c.Key), search) {
 				continue
 			}
-			out = append(out, summarizeCapability(c))
+			row := summarizeCapability(c, now, horizon)
+			if hasStale && row.Stale != stale {
+				continue
+			}
+			out = append(out, row)
 		}
 	}) {
 		writeShuttingDown(w)
@@ -181,6 +222,10 @@ func (s *Service) HandleCreateCapability(w http.ResponseWriter, r *http.Request)
 	now := s.now().Unix()
 	actor := requestActor(r)
 	c.Revision, c.CreatedAt, c.CreatedBy, c.UpdatedAt, c.UpdatedBy = 1, now, actor, now, actor
+	// Creating a record confirms it: somebody just wrote it down, which is an
+	// assertion, and today is the honest date for it. Nothing is carried from the
+	// request — a client cannot post a confirmation date it did not make.
+	c.Confirmation = Confirmation{At: now, By: actor}
 
 	var exists bool
 	var opErr error
@@ -277,6 +322,11 @@ func (s *Service) HandleUpdateCapability(w http.ResponseWriter, r *http.Request)
 		}
 		next.Revision = current.Revision + 1
 		next.CreatedAt, next.CreatedBy = current.CreatedAt, current.CreatedBy
+		// The confirmation is carried over untouched, and a client cannot set it here.
+		// If a save refreshed the date, fixing a typo in the summary would assert that
+		// the owner, the scope and every SLA had been re-read — the lie ADR-0289 names,
+		// made automatic and therefore invisible. Confirming is its own call.
+		next.Confirmation = current.Confirmation
 		next.UpdatedAt, next.UpdatedBy = s.now().Unix(), requestActor(r)
 		if opErr = s.caps.Save(next); opErr == nil {
 			saved = next
@@ -414,7 +464,7 @@ func (s *Service) HandleCoverage(w http.ResponseWriter, r *http.Request) {
 			opErr = err
 			return
 		}
-		rep = Coverage(target, all, streams, land)
+		rep = Coverage(target, all, streams, land, s.now(), s.horizonMonths())
 	}) {
 		writeShuttingDown(w)
 		return
@@ -454,7 +504,7 @@ func (s *Service) HandleGaps(w http.ResponseWriter, r *http.Request) {
 			opErr = err
 			return
 		}
-		rep = Gaps(caps, streams, land)
+		rep = Gaps(caps, streams, land, s.now(), s.horizonMonths())
 	}) {
 		writeShuttingDown(w)
 		return
@@ -471,9 +521,11 @@ func (s *Service) HandleGaps(w http.ResponseWriter, r *http.Request) {
 // HandleListValueStreams lists the value streams, optionally by tag.
 func (s *Service) HandleListValueStreams(w http.ResponseWriter, r *http.Request) {
 	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
+	stale, hasStale := boolParam(r.URL.Query().Get("stale"))
 	out := []ValueStreamSummary{}
 	var opErr error
 	if !s.dispatch(func() {
+		now, horizon := s.now(), s.horizonMonths()
 		all, err := s.streams.LoadAll()
 		if err != nil {
 			opErr = err
@@ -483,7 +535,11 @@ func (s *Service) HandleListValueStreams(w http.ResponseWriter, r *http.Request)
 			if tag != "" && !hasTag(v.Tags, tag) {
 				continue
 			}
-			out = append(out, summarizeValueStream(v))
+			row := summarizeValueStream(v, now, horizon)
+			if hasStale && row.Stale != stale {
+				continue
+			}
+			out = append(out, row)
 		}
 	}) {
 		writeShuttingDown(w)
@@ -510,6 +566,7 @@ func (s *Service) HandleCreateValueStream(w http.ResponseWriter, r *http.Request
 	now := s.now().Unix()
 	actor := requestActor(r)
 	v.Revision, v.CreatedAt, v.CreatedBy, v.UpdatedAt, v.UpdatedBy = 1, now, actor, now, actor
+	v.Confirmation = Confirmation{At: now, By: actor}
 
 	var exists bool
 	var opErr error
@@ -595,6 +652,7 @@ func (s *Service) HandleUpdateValueStream(w http.ResponseWriter, r *http.Request
 		}
 		next.Revision = current.Revision + 1
 		next.CreatedAt, next.CreatedBy = current.CreatedAt, current.CreatedBy
+		next.Confirmation = current.Confirmation
 		next.UpdatedAt, next.UpdatedBy = s.now().Unix(), requestActor(r)
 		if opErr = s.streams.Save(next); opErr == nil {
 			saved = next

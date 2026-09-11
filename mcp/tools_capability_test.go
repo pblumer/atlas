@@ -184,3 +184,99 @@ func TestValidationFindingsReachTheAgent(t *testing.T) {
 		}
 	}
 }
+
+// Confirming through the tools: the act an agent has to perform deliberately, and the
+// review backlog it works down.
+func TestConfirmationTools(t *testing.T) {
+	ts := newAtlas(t)
+
+	if _, isErr := callText(t, ts, "atlas_create_capability", map[string]any{
+		"key": "underwriting", "name": "Underwriting", "state": "active",
+	}); isErr {
+		t.Fatal("create failed")
+	}
+
+	text, isErr := callText(t, ts, "atlas_confirm_capability", map[string]any{
+		"key": "underwriting", "with": "Head of Credit Risk", "note": "SLA unchanged",
+	})
+	if isErr {
+		t.Fatalf("confirm = %q", text)
+	}
+	for _, want := range []string{"Head of Credit Risk", "SLA unchanged", `"horizonMonths"`} {
+		if !strings.Contains(text, want) {
+			t.Errorf("confirmation %q does not carry %q", text, want)
+		}
+	}
+
+	// The note replaces rather than accumulates, and the record keeps it.
+	if _, isErr := callText(t, ts, "atlas_confirm_capability", map[string]any{
+		"key": "underwriting", "note": "reviewed, nothing changed",
+	}); isErr {
+		t.Fatal("second confirm failed")
+	}
+	text, _ = callText(t, ts, "atlas_get_capability", map[string]any{"key": "underwriting"})
+	if strings.Contains(text, "SLA unchanged") || !strings.Contains(text, "reviewed, nothing changed") {
+		t.Errorf("the record kept a log of notes rather than the last one: %q", text)
+	}
+
+	// A confirmation with nothing to say is the commonest one and must not need fields.
+	if text, isErr = callText(t, ts, "atlas_confirm_capability", map[string]any{"key": "underwriting"}); isErr {
+		t.Fatalf("a bare confirmation was refused: %q", text)
+	}
+
+	// The value stream twin.
+	if _, isErr := callText(t, ts, "atlas_create_value_stream", map[string]any{
+		"key": "consumer-loan", "name": "Consumer Loan",
+	}); isErr {
+		t.Fatal("create value stream failed")
+	}
+	if text, isErr = callText(t, ts, "atlas_confirm_value_stream", map[string]any{
+		"key": "consumer-loan", "with": "SVP Consumer Loans",
+	}); isErr || !strings.Contains(text, "SVP Consumer Loans") {
+		t.Fatalf("confirm value stream = (%q, isErr=%v)", text, isErr)
+	}
+
+	// Both backlogs are one call each, and a map written today is in neither.
+	for _, tool := range []string{"atlas_list_capabilities", "atlas_list_value_streams"} {
+		text, isErr = callText(t, ts, tool, map[string]any{"stale": "true"})
+		if isErr {
+			t.Fatalf("%s = %q", tool, text)
+		}
+		if strings.TrimSpace(text) != "[]" {
+			t.Errorf("%s?stale=true on a map written today = %q", tool, text)
+		}
+	}
+
+	// The gap report names the horizon it applied, whether or not it found anything.
+	text, isErr = callText(t, ts, "atlas_business_architecture_gaps", map[string]any{})
+	if isErr || !strings.Contains(text, `"horizonMonths"`) {
+		t.Errorf("gaps = (%q, isErr=%v)", text, isErr)
+	}
+}
+
+func TestConfirmationToolRefusals(t *testing.T) {
+	ts := newAtlas(t)
+	tests := []struct {
+		name, tool string
+		args       map[string]any
+		want       string
+	}{
+		{"no key", "atlas_confirm_capability", map[string]any{}, "key"},
+		{"no key, value stream", "atlas_confirm_value_stream", map[string]any{}, "key"},
+		{"unknown capability", "atlas_confirm_capability", map[string]any{"key": "ghost"}, "no such capability"},
+		{"unknown value stream", "atlas_confirm_value_stream", map[string]any{"key": "ghost"}, "no such value stream"},
+		{"a note that is a report", "atlas_confirm_capability",
+			map[string]any{"key": "ghost", "note": strings.Repeat("x", 600)}, "note is longer"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			text, isErr := callText(t, ts, tt.tool, tt.args)
+			if !isErr {
+				t.Fatalf("%s accepted %v: %q", tt.tool, tt.args, text)
+			}
+			if !strings.Contains(text, tt.want) {
+				t.Errorf("refusal %q does not mention %q", text, tt.want)
+			}
+		})
+	}
+}

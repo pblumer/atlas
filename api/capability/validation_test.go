@@ -314,13 +314,13 @@ func TestSummarize(t *testing.T) {
 		KPIs:         []KPI{{Name: "k", Metric: "m"}},
 		SLAs:         []SLA{{Name: "s", Metric: "m", Threshold: "t", Scope: SLAInternal}},
 	}
-	got := summarizeCapability(c)
+	got := summarizeCapability(c, testNow, 12)
 	if !got.Realized || got.RealizationCount != 1 || got.RequiresCount != 2 ||
 		got.KPICount != 1 || got.SLACount != 1 {
 		t.Errorf("summary = %+v", got)
 	}
 
-	unrealized := summarizeCapability(Capability{Key: "u", Name: "U"})
+	unrealized := summarizeCapability(Capability{Key: "u", Name: "U"}, testNow, 12)
 	if unrealized.Realized {
 		t.Error("a capability with no realization summarized as realized")
 	}
@@ -329,7 +329,7 @@ func TestSummarize(t *testing.T) {
 		{Key: "a", Name: "A", Capabilities: []string{"x", "y"}},
 		{Key: "b", Name: "B", Capabilities: []string{"y"}},
 	}}
-	vs := summarizeValueStream(v)
+	vs := summarizeValueStream(v, testNow, 12)
 	if vs.StageCount != 2 || vs.CapabilityCount != 2 {
 		t.Errorf("value stream summary = %+v, want 2 stages over 2 distinct capabilities", vs)
 	}

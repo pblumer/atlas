@@ -709,3 +709,146 @@ func TestGapsSeesAnUngroupedDeployment(t *testing.T) {
 		}
 	}
 }
+
+// The confirmation date, end to end against a real server: the field somebody sets, the
+// horizon an operator sets, and the finding that connects them.
+func TestConfirmationEndToEnd(t *testing.T) {
+	ts := newTestServer(t)
+
+	// The horizon is readable by anyone and says whether it is a decision or the default.
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/settings/confirmation", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("read horizon: %d %s", code, body)
+	}
+	var horizon struct {
+		HorizonMonths int  `json:"horizonMonths"`
+		Configured    bool `json:"configured"`
+		Default       int  `json:"default"`
+	}
+	if err := json.Unmarshal(body, &horizon); err != nil {
+		t.Fatal(err)
+	}
+	if horizon.HorizonMonths != 12 || horizon.Configured || horizon.Default != 12 {
+		t.Fatalf("horizon = %+v, want the built-in default and no decision recorded", horizon)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"key": "loan-underwriting", "name": "Loan Underwriting", "state": "active",
+		"owner": map[string]any{"name": "Head of Credit Risk"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/capabilities", string(payload), "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	var created struct {
+		Confirmation struct {
+			At int64  `json:"at"`
+			By string `json:"by"`
+		} `json:"confirmation"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Confirmation.At == 0 {
+		t.Fatalf("a freshly written record is unconfirmed: %s", body)
+	}
+
+	// Nothing is stale yet, and the report says against which interval.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/business-architecture/gaps", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("gaps: %d %s", code, body)
+	}
+	var rep struct {
+		Counts        map[string]int `json:"counts"`
+		HorizonMonths int            `json:"horizonMonths"`
+	}
+	if err := json.Unmarshal(body, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Counts["capability.unconfirmed"] != 0 || rep.HorizonMonths != 12 {
+		t.Fatalf("counts %v horizon %d on a map written moments ago", rep.Counts, rep.HorizonMonths)
+	}
+
+	// An operator narrows the horizon to something nothing can satisfy. The record was
+	// confirmed seconds ago and is now past a negative interval, so the finding appears
+	// without the test having to wait a year.
+	code, body = doReq(t, ts, http.MethodPut, "/api/v1/settings/confirmation",
+		`{"horizonMonths":-1}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("set horizon: %d %s", code, body)
+	}
+	// A negative horizon switches the check off rather than making everything stale,
+	// which is the safer reading of a number nobody can satisfy.
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/business-architecture/gaps", "", "")
+	if err := json.Unmarshal(body, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if code != http.StatusOK || rep.Counts["capability.unconfirmed"] != 0 {
+		t.Fatalf("a negative horizon reported findings: %s", body)
+	}
+
+	// Confirming through the API records who was asked, and leaves the revision alone.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/capabilities/loan-underwriting/confirmation",
+		`{"with":"Head of Credit Risk","note":"SLA renegotiated to 3 days"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("confirm: %d %s", code, body)
+	}
+	var view struct {
+		With          string `json:"with"`
+		Note          string `json:"note"`
+		Stale         bool   `json:"stale"`
+		Ever          bool   `json:"ever"`
+		SelfConfirmed bool   `json:"selfConfirmed"`
+		HorizonMonths int    `json:"horizonMonths"`
+	}
+	if err := json.Unmarshal(body, &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.With != "Head of Credit Risk" || view.Note == "" || !view.Ever || view.Stale {
+		t.Errorf("view = %+v", view)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet, "/api/v1/capabilities/loan-underwriting/coverage", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("coverage: %d %s", code, body)
+	}
+	if !strings.Contains(string(body), "Head of Credit Risk") || !strings.Contains(string(body), "horizonMonths") {
+		t.Errorf("coverage does not carry the confirmation: %s", body)
+	}
+}
+
+// The horizon is an admin's to set and everybody's to read: every report already
+// carries the interval it applied, so hiding the number would hide nothing.
+func TestTheHorizonIsAdminOnlyToSet(t *testing.T) {
+	ts, _ := newAuthServer(t, "admin", "password1")
+	admin := newClient(t)
+	if login(t, admin, ts, "admin", "password1") != http.StatusOK {
+		t.Fatal("admin login")
+	}
+	createUserWithRoles(t, admin, ts.URL, "architect", `["modeler"]`)
+	architect := signInAs(t, ts.URL, "architect", "a-password-that-is-long")
+
+	if code, body := cReq(t, architect, ts, "GET", "/api/v1/settings/confirmation", ""); code != http.StatusOK {
+		t.Errorf("a modeler cannot read the horizon: %d %s", code, body)
+	}
+	if code, _ := cReq(t, architect, ts, "PUT", "/api/v1/settings/confirmation", `{"horizonMonths":1200}`); code != http.StatusForbidden {
+		t.Errorf("a modeler set the horizon: %d", code)
+	}
+	if code, body := cReq(t, admin, ts, "PUT", "/api/v1/settings/confirmation", `{"horizonMonths":3}`); code != http.StatusOK {
+		t.Errorf("an admin could not set the horizon: %d %s", code, body)
+	}
+	// The bound is a sanity check, not a policy: past a century the number is not an
+	// interval anybody meant, and a negative value is the honest way to say "off".
+	if code, _ := cReq(t, admin, ts, "PUT", "/api/v1/settings/confirmation", `{"horizonMonths":99999}`); code != http.StatusBadRequest {
+		t.Errorf("an absurd horizon was accepted: %d", code)
+	}
+	if code, _ := cReq(t, admin, ts, "PUT", "/api/v1/settings/confirmation", `{}`); code != http.StatusBadRequest {
+		t.Errorf("an empty body was accepted: %d", code)
+	}
+	if code, _ := cReq(t, admin, ts, "PUT", "/api/v1/settings/confirmation", `{nope`); code != http.StatusBadRequest {
+		t.Errorf("a malformed body was accepted: %d", code)
+	}
+}

@@ -1654,7 +1654,7 @@ the method and how to work it with Atlas as it stands are in
   no local ids to remap and no positional identity to preserve, so the document is the
   records as they stand. Importing *another tool's* model — ArchiMate Open Exchange, or a
   BIAN/eTOM reference model onto tags — is a separate slice again.
-- 🔲 **B10 — A record says when somebody last confirmed it.** Every finding the gap
+- ✅ **B10 — A record says when somebody last confirmed it.** Every finding the gap
   report raises today is a fact Atlas checked. The half of a capability it cannot check
   is the half anybody acts on: who owns it, what it is and is not responsible for, and
   what it has promised. Those decay silently, and a map whose realisations are green
