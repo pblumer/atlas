@@ -9,7 +9,8 @@
 // ordering never interprets a graph (see [Publish]).
 package catalog
 
-// Lifecycle is the window in which an item may be ordered, in Unix seconds.
+// Lifecycle is the window in which an item may be ordered, in the server's own
+// Unix time (nanoseconds, as every other timestamp in this tree).
 //
 // Zero means unbounded on that side, which is the ordinary case: most products are
 // orderable from the moment they are published until somebody withdraws them. The
@@ -155,8 +156,13 @@ type Catalog struct {
 	// Items are the item ids this catalogue offers, whatever their home.
 	Items []string `json:"items"`
 	// Groups are the directory or Atlas groups whose members reach this catalogue.
-	Groups    []string `json:"groups,omitempty"`
-	OwnerID   string   `json:"ownerId,omitempty"`
-	CreatedAt int64    `json:"createdAt"`
-	UpdatedAt int64    `json:"updatedAt"`
+	Groups []string `json:"groups,omitempty"`
+	// Edges are the structure and precedence between the items this catalogue
+	// offers. They belong to the catalogue rather than to the items because they
+	// are what its release is computed from, and because the same two products can
+	// relate differently in two catalogues.
+	Edges     []Edge `json:"edges,omitempty"`
+	OwnerID   string `json:"ownerId,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }

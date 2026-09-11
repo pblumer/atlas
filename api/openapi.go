@@ -694,6 +694,54 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
 			summary: "Revoke a public start link", tag: "Forms", role: RoleModeler, resp: jsonBody("Revoked token", tObject())}},
 
+		// The self-service portal's catalogue
+		// (ADR-draft-portal-catalogue-order-inventory). Publishing is where the work
+		// happens: a release proves the graphs acyclic, resolves every process
+		// binding, checks the translations and the ranks, and computes the wave
+		// schedule an order follows — so ordering never interprets a graph, and a
+		// modelling error surfaces for whoever published it rather than as an
+		// incident for whoever orders at 23:00. Reading a catalogue is open to any
+		// signed-in identity because a portal user browses one; changing it needs
+		// the role that maintains them.
+		{"GET", "/api/v1/catalogs", s.catalogs.HandleListCatalogs, apiOp{
+			summary: "Every product catalogue, lowest rank first", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Catalogues", tArray())}},
+		{"POST", "/api/v1/catalogs", s.catalogs.HandleCreateCatalog, apiOp{
+			summary: "Create a product catalogue", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue", schemaObj(map[string]any{
+				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
+				"items": tArray(), "groups": tArray(),
+			})),
+			resp: jsonBody("The created catalogue", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}", s.catalogs.HandleGetCatalog, apiOp{
+			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("The catalogue", tObject())}},
+		{"PATCH", "/api/v1/catalogs/{id}", s.catalogs.HandleUpdateCatalog, apiOp{
+			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue changes", schemaObj(map[string]any{
+				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
+				"items": tArray(), "groups": tArray(), "edges": tArray(),
+			})),
+			resp: jsonBody("The updated catalogue", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/releases", s.catalogs.HandlePublish, apiOp{
+			summary: "Publish a catalogue: validate it and freeze a release, or answer with every problem that stops it (422)", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The published release", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
+			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
+			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Products", tArray())}},
+		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule and the processes that provision and deprovision it", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Product", schemaObj(map[string]any{
+				"id": tString(), "homeCatalog": tString(), "state": tString(),
+				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
+				"approval": tObject(), "provisionProcess": tString(),
+				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
+			}, "id")),
+			resp: jsonBody("The saved product", tObject())}},
+
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an
 		// immutable, per-process numbered version, optionally shared through a

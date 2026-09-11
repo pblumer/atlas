@@ -51,6 +51,21 @@ const (
 	// gets, and on its own it reaches nothing that changes a definition or an
 	// instance.
 	RoleUser = "user"
+
+	// RoleProductManager maintains the self-service portal's catalogues and the
+	// products in them, and publishes releases
+	// (ADR-draft-portal-roles-and-responsibilities).
+	//
+	// It is deliberately not `modeler`: binding a product to its provisioning and
+	// deprovisioning processes means choosing from processes already deployed,
+	// never deploying one, and `modeler` carries deploy — which is code execution.
+	// Which catalogues a holder may touch is the other axis, answered by the
+	// catalogue's own scope rather than by this role.
+	//
+	// It is never granted by the legacy-roles upgrade below: adding it there would
+	// hand catalogue control to every existing account on the day an operator
+	// installs the update.
+	RoleProductManager = "productmanager"
 )
 
 // legacyRoles is what an identity that predates the role model holds: everything a

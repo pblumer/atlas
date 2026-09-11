@@ -86,6 +86,7 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/formgen"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
@@ -264,6 +265,11 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
+	// catalogs serves the self-service portal's product catalogues and the releases
+	// published from them (ADR-draft-portal-catalogue-order-inventory). Another
+	// area service on the ADR-0147 shape: its own store, the run loop for every
+	// access, no engine state anywhere.
+	catalogs *catalog.Service
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// formGen writes a form from a description and from the process it belongs to
@@ -1097,6 +1103,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	catalogStore, err := catalog.NewStore(filepath.Join(dataDir, "catalog"))
+	if err != nil {
+		return nil, err
+	}
 	taskFolderStore, err := taskfolder.NewStore(filepath.Join(dataDir, "task-folders"))
 	if err != nil {
 		return nil, err
@@ -1309,6 +1319,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// The portal catalogue is another area service on the same shape: it takes the
+	// run loop, its store, and the server clock, and nothing else.
+	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() })
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the
