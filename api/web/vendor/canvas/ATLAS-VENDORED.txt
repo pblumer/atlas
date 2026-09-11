@@ -57,6 +57,11 @@ overlay (ADR-0259 §4) cost 358 more — 160,929 to 161,287 — because it is ma
 that same notation and not a fourth one: a state a datum has been through is still
 that state, so what it took was two class names and a label.
 
+The line from a class to the enumeration its states come from cost 367 more —
+161,287 to 161,654. It is not a fourth notation either: it is the store link's
+construction pointed at a different pair, so what it took was an open arrowhead, a
+keyword, and one more derived edge in the reconcile.
+
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
 built against the library, so folding them in would mean building bpmn-js from
@@ -76,4 +81,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-af011c4181836b198c222b0497cc1c1a5a389cd8f1b134e00d34c38329140a23
+929ccd06a7188f0c9b725b6bb5fa0682bb484d62752e7b90d83ba24d12981233

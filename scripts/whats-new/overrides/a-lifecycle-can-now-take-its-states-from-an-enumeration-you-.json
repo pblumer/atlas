@@ -1,0 +1,29 @@
+{
+  "tags": ["Data", "Modeler"],
+  "title": {
+    "en": "Write your states once, as an enumeration, and use them as the lifecycle",
+    "de": "Zustände einmal schreiben, als Enumeration, und als Lebenszyklus nutzen"
+  },
+  "summary": {
+    "en": "If you already wrote your states as an «enumeration» — with the documentation on each one — that enumeration can now be the lifecycle of a business object. Its literals are the states, so each name lives in one place. Rename a literal and the state and its transitions follow; remove one and its arrows go too. What an enumeration cannot say stays on the lifecycle: where instances start, where the life ends, and what may follow what. The class diagram shows the tie as a dashed «lifecycle» line.",
+    "de": "Wenn Sie Ihre Zustände bereits als «enumeration» geschrieben haben — samt Dokumentation zu jedem —, kann diese Enumeration jetzt der Lebenszyklus eines Geschäftsobjekts sein. Ihre Literale sind die Zustände, jeder Name steht also nur an einer Stelle. Ein umbenanntes Literal benennt den Zustand und seine Übergänge mit um; ein gelöschtes nimmt seine Pfeile mit. Was eine Enumeration nicht sagen kann, bleibt am Lebenszyklus: wo Instanzen starten, wo das Leben endet und was worauf folgen darf. Das Klassendiagramm zeigt die Verbindung als gestrichelte «lifecycle»-Linie."
+  },
+  "tutorial": {
+    "en": [
+      "Open Data, open your information model, and click the business object whose life you want to declare.",
+      "Under Lifecycle, pick your enumeration in the States from list. Its literals become the states at once.",
+      "Open the lifecycle and draw the arrows — the order is the half no enumeration can hold. Move the starting state if the first literal is not it.",
+      "Back on the class diagram, the dashed «lifecycle» line says which enumeration is which class's life."
+    ],
+    "de": [
+      "Unter Daten das Informationsmodell öffnen und das Geschäftsobjekt anklicken, dessen Leben Sie festlegen wollen.",
+      "Unter Lifecycle in der Liste States from die Enumeration wählen. Ihre Literale werden sofort zu den Zuständen.",
+      "Den Lebenszyklus öffnen und die Pfeile zeichnen — die Reihenfolge ist die Hälfte, die keine Enumeration tragen kann. Den Startzustand verschieben, falls es nicht das erste Literal ist.",
+      "Zurück im Klassendiagramm zeigt die gestrichelte «lifecycle»-Linie, welche Enumeration das Leben welcher Klasse ist."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open Data", "de": "Daten öffnen" },
+    "route": "#/data"
+  }
+}

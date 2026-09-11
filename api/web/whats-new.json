@@ -121,6 +121,49 @@
       }
     },
     {
+      "id": "a-lifecycle-can-now-take-its-states-from-an-enumeration-you-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Write your states once, as an enumeration, and use them as the lifecycle",
+        "de": "Zustände einmal schreiben, als Enumeration, und als Lebenszyklus nutzen"
+      },
+      "summary": {
+        "en": "If you already wrote your states as an «enumeration» — with the documentation on each one — that enumeration can now be the lifecycle of a business object. Its literals are the states, so each name lives in one place. Rename a literal and the state and its transitions follow; remove one and its arrows go too. What an enumeration cannot say stays on the lifecycle: where instances start, where the life ends, and what may follow what. The class diagram shows the tie as a dashed «lifecycle» line.",
+        "de": "Wenn Sie Ihre Zustände bereits als «enumeration» geschrieben haben — samt Dokumentation zu jedem —, kann diese Enumeration jetzt der Lebenszyklus eines Geschäftsobjekts sein. Ihre Literale sind die Zustände, jeder Name steht also nur an einer Stelle. Ein umbenanntes Literal benennt den Zustand und seine Übergänge mit um; ein gelöschtes nimmt seine Pfeile mit. Was eine Enumeration nicht sagen kann, bleibt am Lebenszyklus: wo Instanzen starten, wo das Leben endet und was worauf folgen darf. Das Klassendiagramm zeigt die Verbindung als gestrichelte «lifecycle»-Linie."
+      },
+      "link": {
+        "label": "ADR-0259",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0259-data-object-lifecycle.md"
+      },
+      "tags": [
+        "Data",
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, open your information model, and click the business object whose life you want to declare.",
+          "Under Lifecycle, pick your enumeration in the States from list. Its literals become the states at once.",
+          "Open the lifecycle and draw the arrows — the order is the half no enumeration can hold. Move the starting state if the first literal is not it.",
+          "Back on the class diagram, the dashed «lifecycle» line says which enumeration is which class's life."
+        ],
+        "de": [
+          "Unter Daten das Informationsmodell öffnen und das Geschäftsobjekt anklicken, dessen Leben Sie festlegen wollen.",
+          "Unter Lifecycle in der Liste States from die Enumeration wählen. Ihre Literale werden sofort zu den Zuständen.",
+          "Den Lebenszyklus öffnen und die Pfeile zeichnen — die Reihenfolge ist die Hälfte, die keine Enumeration tragen kann. Den Startzustand verschieben, falls es nicht das erste Literal ist.",
+          "Zurück im Klassendiagramm zeigt die gestrichelte «lifecycle»-Linie, welche Enumeration das Leben welcher Klasse ist."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "general-purpose-scripts-now-have-an-opt-in-fail-closed-os-sa",
       "version": "Unreleased",
       "date": null,
@@ -343,34 +386,6 @@
       "tags": [
         "Deployment"
       ]
-    },
-    {
-      "id": "a-searchable-declaration-that-indexes-nothing-now-says-so",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A name that will never be found is marked while you type it",
-        "de": "Ein Name, der nie gefunden wird, wird beim Tippen markiert"
-      },
-      "summary": {
-        "en": "Naming a variable as searchable is accepted whatever you write, so a typo, or a name holding a whole JSON structure, produced a search that stays empty forever with nothing saying why. Each name now gets a small marker under the field. Red where it is settled: the same name twice, or a name the model itself says holds a structure, which cannot be indexed. Amber where it is a question: nothing in this diagram writes that name — usually a typo, but a worker or an outside caller can write a name the diagram never mentions. Hover a marker for the reason.",
-        "de": "Eine als suchbar benannte Variable wurde bisher unbesehen übernommen. Ein Tippfehler oder ein Name, der eine ganze JSON-Struktur hält, führte damit zu einer Suche, die dauerhaft leer bleibt, ohne dass irgendwo stand, warum. Jeder Name erhält nun eine kleine Markierung unter dem Feld. Rot, wo die Sache klar ist: derselbe Name zweimal, oder ein Name, von dem das Modell selbst sagt, dass er eine Struktur hält, die nicht indexiert werden kann. Bernstein, wo es eine Frage ist: Nichts in diesem Diagramm schreibt diesen Namen — meist ein Tippfehler, aber ein Worker oder ein Aufruf von aussen kann einen Namen schreiben, den das Diagramm nie erwähnt. Der Grund steht im Tooltip der Markierung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

@@ -5457,6 +5457,13 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* A store's line to its class is an annotation, not a relationship: a store and its
    class do not relate, one *is kept in* the other (ADR-0230 §7). Dashed says so. */
 .uml-store-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+/* And a class's line to the enumeration its states come from, which is the same kind
+   of statement: the class does not relate to the enumeration, it *takes its states
+   from* one (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). Dashed
+   for the same reason; the «lifecycle» keyword on it is what says which dependency
+   this is, since UML allows many and draws them all the same way. */
+.uml-lifecycle-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+.uml-lifecycle-link .uml-edge-label { fill: var(--muted); font-size: 10.5px; }
 
 /* diagram-js draws the selection, so the box does not have to. A line gets no
    outline from the library, so which relationship is being edited is said here. */

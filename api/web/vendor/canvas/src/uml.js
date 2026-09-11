@@ -227,6 +227,10 @@ const MARKERS = {
   aggregation: { id: "uml-diamond-open", path: "M10,5 L5,9 L0,5 L5,1 Z", fill: "var(--surface)", at: "source" },
   composition: { id: "uml-diamond-solid", path: "M10,5 L5,9 L0,5 L5,1 Z", fill: "var(--text)", at: "source" },
   generalization: { id: "uml-triangle", path: "M0,0 L10,5 L0,10 Z", fill: "var(--surface)", at: "target" },
+  // A dependency's head is open — two strokes that do not close — which is what tells
+  // a reader it is a dependency and not a generalization. The path deliberately has no
+  // Z: closing it would draw the triangle that means "is a kind of".
+  "lifecycle-link": { id: "uml-open-arrow", path: "M0,0 L10,5 L0,10", fill: "none", at: "target" },
 };
 
 function ensureMarker(canvas, kind) {
@@ -262,8 +266,15 @@ UmlRenderer.prototype.drawConnection = function(parent, connection) {
   // A store's line to its class is an annotation, not a relationship — a store and
   // its class do not relate, one *is kept in* the other (ADR-0230 §7) — so it is not
   // one of the edges, and nothing that counts relationships counts it.
+  // A store's line to its class, and a class's line to the enumeration its states come
+  // from, are annotations rather than relationships: a store and its class do not
+  // relate, one *is kept in* the other (ADR-0230 §7), and a class does not relate to an
+  // enumeration, it *takes its states from* one
+  // (ADR-draft-a-lifecycle-may-take-its-states-from-an-enumeration). Neither is an
+  // association, so nothing that counts relationships counts them.
+  const derived = bo.element === "store-link" || bo.element === "lifecycle-link";
   const g = svg("g", {
-    class: bo.element === "store-link" ? "uml-store-link" : `uml-edge ${bo.kind || "association"}`,
+    class: derived ? `uml-${bo.element}` : `uml-edge ${bo.kind || "association"}`,
     "data-id": bo.id || "",
   }, parent);
   const line = svg("polyline", { points, class: "uml-edge-line" }, g);
@@ -274,15 +285,19 @@ UmlRenderer.prototype.drawConnection = function(parent, connection) {
   // marker does not, because which end carries it is what the notation *means*.
   const spec = ensureMarker(this.canvas, bo.kind);
   if (spec) line.setAttribute(spec.at === "source" ? "marker-start" : "marker-end", `url(#${spec.id})`);
-  if (bo.name) {
+  // The keyword is the notation here, the way the diamond is on an aggregation: a
+  // dashed line alone says only "depends on", and «lifecycle» is what says which of
+  // the many dependencies UML allows this one is.
+  const label = bo.element === "lifecycle-link" ? "\u00ABlifecycle\u00BB" : bo.name;
+  if (label) {
     const mid = connection.waypoints[Math.floor(connection.waypoints.length / 2)];
-    text(g, bo.name, { x: mid.x, y: mid.y - 4, class: "uml-edge-label", "text-anchor": "middle" });
+    text(g, label, { x: mid.x, y: mid.y - 4, class: "uml-edge-label", "text-anchor": "middle" });
   }
   // The ends carry the role and the multiplicity, which is the half of a class
   // diagram that says how many and in what capacity — "1 customer places 0..* orders"
   // is the sentence, and a line without them only says the two are related. A
   // generalization has neither: "is a kind of" is not a counted relationship.
-  if (bo.element !== "store-link" && bo.kind !== "generalization") {
+  if (!derived && bo.kind !== "generalization") {
     const wp = connection.waypoints;
     // Set in from the endpoint rather than on it, and along the segment that leaves
     // it: on the endpoint the label sits under the box it belongs to and under the
@@ -461,7 +476,8 @@ UmlRules.prototype.init = function() {
     return this.subset.allowedBetween(
       (source.businessObject || {}).stereotype, (target.businessObject || {}).stereotype).length > 0;
   });
-  this.addRule("elements.delete", ({ elements }) => elements.filter((e) => e.type !== "uml:store-link"));
+  this.addRule("elements.delete", ({ elements }) =>
+    elements.filter((e) => !/^uml:(store|lifecycle)-link$/.test(e.type || "")));
   this.addRule("shape.resize", () => false); // a class is as tall as its members make it
 };
 
@@ -700,7 +716,7 @@ export class ClassCanvas {
       if (!source || !target) return;
       const conn = this.factory.createConnection({
         id, type, source, target,
-        waypoints: route(source, target, drawn++, type === "uml:store-link"), businessObject,
+        waypoints: route(source, target, drawn++, /-link$/.test(type)), businessObject,
       });
       this.canvas.addConnection(conn, this.root);
       this.connections.set(id, conn);
@@ -714,6 +730,16 @@ export class ClassCanvas {
     for (const st of model.stores || []) {
       link(`link-${st.id}`, "uml:store-link", this.shapes.get(st.id), byName.get(st.class),
         { element: "store-link", kind: "store-link" });
+    }
+    // And the class's line to the enumeration its states come from — derived the same
+    // way, from the reference on the lifecycle, and never authored. `link` draws
+    // nothing when the name resolves to no shape, which is the half-written model the
+    // validator reports rather than the canvas hiding it.
+    for (const cls of model.classes || []) {
+      const from = cls.lifecycle && cls.lifecycle.statesFrom;
+      if (!from) continue;
+      link(`lclink-${cls.id}`, "uml:lifecycle-link", this.shapes.get(cls.id), byName.get(from),
+        { element: "lifecycle-link", kind: "lifecycle-link" });
     }
   }
 
