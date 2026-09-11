@@ -698,7 +698,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--python` | `true` | Run Python script tasks via `python3` |
 | `--javascript` | `true` | Run JavaScript script tasks via `node` |
 | `--script-timeout` | `30s` | Wall-clock limit for one script task |
-| `--script-sandbox` | `off` | `off` preserves existing filesystem/network access. `strict` (also `ATLAS_SCRIPT_SANDBOX=strict`) requires Linux Landlock ABI 3+, exposes only the installed runtime and private per-run scratch, denies socket creation, and fails closed when unavailable ([ADR-0303](adr/0303-script-sandbox-isolation.md)) |
+| `--script-sandbox` | `off` | `off` preserves existing filesystem/network access. `strict` (also `ATLAS_SCRIPT_SANDBOX=strict`) requires Linux Landlock ABI 3+, exposes only the installed runtime, the process metadata a runtime reads to start, and private per-run scratch; denies socket creation; and fails closed when unavailable. It starts each enabled interpreter once at boot and refuses to start if one cannot run inside the profile ([ADR-0303](adr/0303-script-sandbox-isolation.md)) |
 | `--checkpoint-interval` | `5m` | How often to snapshot applied state so restarts replay less log; `0` disables |
 | `--checkpoint-keep` | `3` | How many checkpoints to retain |
 | `--compact-wal` | `false` | Delete WAL segments already covered by a checkpoint and every consumer watermark. Irreversible, so opt-in; requires checkpointing |

@@ -83,7 +83,7 @@ test("the class the type points at is shown, so it can be checked without leavin
   const card = page.locator(".im-card");
   await expect(card.locator(".im-card-name")).toHaveText("Order");
   await expect(card.locator(".im-card-stereo")).toHaveText("«businessObject»");
-  await expect(card.locator(".im-card-attrs li")).toHaveCount(2);
+  await expect(card.locator(".im-card-attrs li")).toHaveCount(4);
   // The business key is marked here exactly as the canvas marks it: it is what makes
   // two of these the same one, and the reason to check the class at all.
   await expect(card.locator("li.key .n")).toHaveText("⚿ id");

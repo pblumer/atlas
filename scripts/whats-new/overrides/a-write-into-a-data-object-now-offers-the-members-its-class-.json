@@ -1,0 +1,29 @@
+{
+  "tags": ["Modeler", "Data"],
+  "title": {
+    "en": "Pick the field you are writing, instead of spelling it",
+    "de": "Das Feld, in das Sie schreiben, auswählen statt tippen"
+  },
+  "summary": {
+    "en": "When an activity writes one field of a data object, that field was free text — and a typo deploys, runs, and writes something nobody ever reads. It is a list now, built from the members the object's class declares, with the type, the multiplicity and the business key beside each one. Where a member is itself a class, its own fields are offered one level down. A name nothing models yet can still be typed, and comes back in the list saying so.",
+    "de": "Wenn eine Aktivität ein einzelnes Feld eines Datenobjekts schreibt, war dieses Feld freier Text — und ein Tippfehler wird deployed, läuft und schreibt etwas, das nie jemand liest. Jetzt ist es eine Liste aus den Attributen, die die Klasse des Objekts deklariert, mit Typ, Multiplizität und Geschäftsschlüssel daneben. Ist ein Attribut selbst eine Klasse, werden deren Felder eine Ebene tiefer angeboten. Ein noch nicht modellierter Name lässt sich weiterhin tippen und erscheint in der Liste mit dem Hinweis darauf."
+  },
+  "tutorial": {
+    "en": [
+      "In the Modeler, draw an arrow from an activity to a data object — that is the data output association.",
+      "Select the arrow. Under Writes data object you now find Target member as a list.",
+      "Pick the field to write, or leave it on the whole object. Members of a member appear indented under it.",
+      "The list only appears once the data object has a class: set it in the object's Class field first."
+    ],
+    "de": [
+      "Im Modeler einen Pfeil von einer Aktivität zu einem Datenobjekt ziehen — das ist die Datenausgabe-Zuweisung.",
+      "Den Pfeil auswählen. Unter Writes data object steht Target member jetzt als Liste bereit.",
+      "Das zu schreibende Feld wählen, oder auf dem ganzen Objekt belassen. Felder eines Feldes stehen eingerückt darunter.",
+      "Die Liste erscheint erst, wenn das Datenobjekt eine Klasse hat: diese zuerst im Feld Class setzen."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

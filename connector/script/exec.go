@@ -164,9 +164,15 @@ func (e *CmdExec) maxOutput() int64 {
 	return defaultMaxOutput
 }
 
-// Check reports whether the interpreter is resolvable on PATH. The server calls it
-// once at startup so an operator whose host lacks the interpreter sees a clear
-// warning, rather than watching script tasks park silently.
+// Check reports whether the interpreter is resolvable on PATH and whether the host
+// can enforce the selected profile at all. The server calls it once at startup so an
+// operator whose host lacks the interpreter sees a clear warning, rather than
+// watching script tasks park silently.
+//
+// It deliberately stays a cheap predicate and launches nothing. Whether the
+// interpreter can actually start *inside* the profile is a separate question, asked
+// once per process by CheckSandboxLanguages, because answering it means spawning the
+// sandbox launcher — which only the Atlas executable is.
 func (e *CmdExec) Check() error {
 	if _, err := exec.LookPath(e.bin()); err != nil {
 		return err

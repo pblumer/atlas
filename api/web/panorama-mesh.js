@@ -361,13 +361,151 @@ export function paintFor(node, notation) {
   return paint ? { ...style, ...paint } : style;
 }
 
+// ArchiMate's relationship notation, as the two ends of a line.
+//
+// The elements were already drawn in the notation's own symbols; the lines between
+// them were not, and for an ArchiMate reader that is the other half of the alphabet.
+// Serving, Triggering and Assignment are told apart by what sits at the ends of an
+// otherwise identical solid line: a filled arrowhead, an open one, and a ball at the
+// far end. Nothing else distinguishes them — not the colour, not the dash.
+//
+// Which is also why the dash has to go in this notation. Atlas's own picture draws
+// `uses` dashed and `contains` dotted, which is a free channel in a vocabulary that
+// has no opinion about it. ArchiMate has one: a dashed line with an open arrowhead
+// is a Flow, and a dotted line with a hollow triangle is a Realization. Keeping the
+// derived dash would not be a missing statement, it would be a wrong one — so in the
+// ArchiMate view all three are solid and the ends carry the whole distinction.
+//
+// The geometry is Archi's again, read off its connection figures rather than guessed:
+// Assignment is a BallEndpoint at the source and a filled PolygonDecoration at the
+// target, Triggering a filled PolygonDecoration, Serving an unfilled
+// PolylineDecoration — GEF's triangle at its default 7-by-3 scale, and a ball of
+// radius 3. The proportions below are that triangle; the size is smaller, because
+// Archi draws on boxes of a hundred and twenty pixels and a node here has a radius of
+// eleven, so Archi's own pixel count would put a third of a node on the end of every
+// line.
+const AM_HEAD = 6;        // how far an arrowhead reaches back along the line
+const AM_HALF = 2.6;      // half its width across the line — 6:2.6 is Archi's 7:3
+const AM_BALL = 2.6;      // Assignment's ball, at the relationship's source
+
+// RELATION_MARKS is what each ArchiMate relationship puts at each of its own ends.
+//
+// `tail` is the relationship's source and `head` its target, which is not the same
+// as the drawn line's two ends: a Serving runs from the provider to the consumer
+// while the derived edge runs the other way, and the served row's `flip` is what
+// maps one onto the other. Saying it in the relationship's own terms keeps that
+// reversal in one place instead of baked into a mark name.
+const RELATION_MARKS = {
+  Assignment: { tail: "ball", head: "filled" },
+  Triggering: { head: "filled" },
+  Serving: { head: "open" },
+};
+
+// MARKER_IDS resolves a mark and the end it lands on to the marker that draws it.
+//
+// Two entries per shape because an SVG marker points along the path, and a mark at
+// the *start* of a line has to point back into the node the line starts at. SVG 2's
+// `orient="auto-start-reverse"` says exactly that and is not old enough to rely on
+// here, so the reversed form is a second marker whose own geometry is mirrored —
+// which needs no feature at all.
+const MARKER_IDS = {
+  filled: { end: "am-head-filled", start: "am-head-filled-back" },
+  open: { end: "am-head-open", start: "am-head-open-back" },
+  // A ball is the same ball whichever end it sits on.
+  ball: { end: "am-ball", start: "am-ball" },
+};
+
+// MARKER_DEFS draws each of them, in world units.
+//
+// markerUnits is userSpaceOnUse rather than the default strokeWidth: the lines are
+// drawn with a non-scaling stroke, so tying the mark to the stroke would freeze it at
+// one size on screen while every node around it grew with the zoom. In user space it
+// scales with the picture, exactly as the node outlines do.
+//
+// The paint is a presentation attribute and the stylesheet raises it to
+// `context-stroke` (see .mesh-edge-mark): where that is understood a mark takes the
+// colour of the line it ends, including the accent a hovered edge is lit in, and
+// where it is not the attribute stands and the mark is the resting line colour. Both
+// are readable; neither can be the wrong relationship.
+const MARKER_DEFS = {
+  "am-head-filled": `<polygon class="mesh-edge-mark" fill="var(--mesh-line)"
+    points="0,0 ${AM_HEAD},${AM_HALF} 0,${2 * AM_HALF}"/>`,
+  "am-head-filled-back": `<polygon class="mesh-edge-mark" fill="var(--mesh-line)"
+    points="${AM_HEAD},0 0,${AM_HALF} ${AM_HEAD},${2 * AM_HALF}"/>`,
+  "am-head-open": `<polyline class="mesh-edge-mark mesh-edge-mark-open" fill="none"
+    stroke="var(--mesh-line)" points="0,0 ${AM_HEAD},${AM_HALF} 0,${2 * AM_HALF}"/>`,
+  "am-head-open-back": `<polyline class="mesh-edge-mark mesh-edge-mark-open" fill="none"
+    stroke="var(--mesh-line)" points="${AM_HEAD},0 0,${AM_HALF} ${AM_HEAD},${2 * AM_HALF}"/>`,
+  "am-ball": `<circle class="mesh-edge-mark" fill="var(--mesh-line)"
+    cx="${AM_BALL}" cy="${AM_BALL}" r="${AM_BALL}"/>`,
+};
+
+// markerElement is one <marker>, sized and anchored so the drawn point lands on the
+// line's end rather than beside it.
+function markerElement(id) {
+  const body = MARKER_DEFS[id];
+  if (!body) return "";
+  if (id === "am-ball") {
+    return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
+      markerWidth="${2 * AM_BALL}" markerHeight="${2 * AM_BALL}"
+      refX="${AM_BALL}" refY="${AM_BALL}">${body}</marker>`;
+  }
+  // refX is the tip: at the far end for a forward head, at the near end for the
+  // mirrored one, which is what puts both points exactly on the line's end.
+  const refX = id.endsWith("-back") ? 0 : AM_HEAD;
+  return `<marker id="${id}" markerUnits="userSpaceOnUse" orient="auto"
+    markerWidth="${AM_HEAD}" markerHeight="${2 * AM_HALF}"
+    refX="${refX}" refY="${AM_HALF}">${body}</marker>`;
+}
+
+// markEnds says which marker goes on which end of one drawn line.
+//
+// The drawn line runs from the derived edge's `from` to its `to`. A relationship the
+// notation runs the other way puts its head on `from` — the arrowhead moves rather
+// than the line, so the picture stays the landscape's own geometry and only the
+// claim on it is the notation's.
+export function markEnds(kind, notation) {
+  const relation = relationIn(kind, notation);
+  const mark = relation?.mark;
+  if (!mark) return null;
+  const headAt = relation.flip ? "start" : "end";
+  const tailAt = relation.flip ? "end" : "start";
+  const ends = { relation, start: null, end: null };
+  if (mark.head) ends[headAt] = MARKER_IDS[mark.head][headAt];
+  if (mark.tail) ends[tailAt] = MARKER_IDS[mark.tail][tailAt];
+  return ends;
+}
+
+// EDGE_TRIM_MOST is the most of a line either end may give up to the node it touches.
+//
+// A line is shortened by each node's reserved radius so the mark sits outside the
+// shape instead of under it. Two nodes closer together than their radii — which the
+// separation pass discourages and a drag can still produce — would shorten it past
+// its own midpoint and draw it inside out. The cap makes that case a short line with
+// its marks still the right way round.
+const EDGE_TRIM_MOST = 0.42;
+
+// trimEdge shortens one line to the two circles it runs between.
+export function trimEdge(a, b, ra, rb) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const d = Math.hypot(dx, dy);
+  if (!(d > 0)) return { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+  const ux = dx / d, uy = dy / d;
+  const cutA = Math.min(ra, d * EDGE_TRIM_MOST);
+  const cutB = Math.min(rb, d * EDGE_TRIM_MOST);
+  return {
+    x1: a.x + ux * cutA, y1: a.y + uy * cutA,
+    x2: b.x - ux * cutB, y2: b.y - uy * cutB,
+  };
+}
+
 // The landscape drawn as itself: Atlas's own kinds, no projection, nothing to
 // declare. It is here rather than fetched because it is what the view falls back to
 // when the mapping cannot be read at all — a picture in its own vocabulary is never
 // wrong about which vocabulary it is in.
 const DERIVED_NOTATION = {
   id: "atlas", label: "Atlas (derived)", short: "Atlas",
-  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: "degree",
+  projection: false, mappingVersion: 0, types: {}, relations: {}, loss: [], weigh: "degree",
 };
 
 // HEATS are the ways of drawing the same landscape with its *sizes* carrying a
@@ -547,7 +685,7 @@ export function heatOf(notation) {
 // so a weighting cannot exist as a picker entry the renderer has never heard of.
 const HEAT_NOTATIONS = Object.fromEntries(Object.values(HEATS).map((heat) => [heat.key, {
   id: heat.key, label: heat.label, short: heat.short,
-  projection: false, mappingVersion: 0, types: {}, loss: [], weigh: heat.key,
+  projection: false, mappingVersion: 0, types: {}, relations: {}, loss: [], weigh: heat.key,
 }]));
 
 // The local entries are held here rather than fetched, by the split this file already
@@ -579,6 +717,16 @@ export function useNotations(served) {
       // second, and they come from one row so the two cannot drift apart.
       types: Object.fromEntries(Object.entries(notation.types || {}).map(([kind, type]) =>
         [kind, { name: type?.name || kind, type: type?.type || "", shape: shapes[kind] || null }])),
+      // The same for the edges, with the mark this side draws each relationship
+      // with. Keyed by the notation's own machine token rather than by the derived
+      // edge kind: the served row already says which relationship an edge is, and
+      // reading the mark off that token is what makes the arrowhead on the picture
+      // and the xsi:type in the exported file two readings of one answer.
+      relations: Object.fromEntries(Object.entries(notation.relations || {}).map(([kind, rel]) =>
+        [kind, {
+          name: rel?.name || kind, type: rel?.type || "", flip: Boolean(rel?.flip),
+          mark: RELATION_MARKS[rel?.type] || null,
+        }])),
     };
   }
   notations = next;
@@ -602,6 +750,14 @@ export function notationOf(id) {
 // derived shape and the legend lists the kind as loss.
 export function typeIn(kind, notation) {
   return notationOf(notation?.id ?? notation).types[kind] || null;
+}
+
+// relationIn is what a notation calls this kind of edge, or null where it has no
+// word for it. Null draws the derived line, unmarked — the same answer typeIn gives
+// for a node the notation cannot name, and for the same reason: a mark invented here
+// would be a claim the notation does not make.
+export function relationIn(kind, notation) {
+  return notationOf(notation?.id ?? notation).relations[kind] || null;
 }
 
 // DEGREE_FULL is the number of dependencies at which a node is drawn at the top of
@@ -868,10 +1024,19 @@ const SEVERITY = {
 // legend draws its swatches with those classes rather than with a copy of them. The
 // order here is the order the key reads in, and it is deliberate: the two kinds that
 // carry a failure path first, the structure they hang on last.
+//
+// Two labels per kind, because the same claim is introduced by two different things.
+// In Atlas's own picture the line style is what a reader has to be told about, so the
+// row leads with it. In a notation that names the relationship, the name leads and the
+// line style is no longer the distinction — every ArchiMate line here is solid, and
+// the ends carry it.
 const EDGE_KEY = [
-  ["calls", "Solid line — calls: a process invokes another process"],
-  ["uses", "Dashed line — uses: a process depends on a worker or a decision"],
-  ["contains", "Dotted line — belongs to: an application and the processes it holds"],
+  ["calls", "Solid line — calls: a process invokes another process",
+    "a process invokes another process"],
+  ["uses", "Dashed line — uses: a process depends on a worker or a decision",
+    "a process depends on a worker or a decision"],
+  ["contains", "Dotted line — belongs to: an application and the processes it holds",
+    "an application and the processes it holds"],
 ];
 
 // PULSE_BUDGET is how many beating nodes the view will animate at once.
@@ -2468,12 +2633,23 @@ function legendEntries(graph, notation) {
   // That holds in an exported file too: the harvested stylesheet carries every
   // `.mesh-` rule, this one included.
   const edgeKinds = new Set((graph.edges || []).map((e) => e.kind));
-  for (const [kind, label] of EDGE_KEY) {
+  for (const [kind, label, claim] of EDGE_KEY) {
     if (!edgeKinds.has(kind)) continue;
+    // The notation's own name for the relationship where it has one, and the swatch
+    // drawn with the same marks the canvas puts on it — the key explains the picture
+    // beside it rather than a picture of its own. A relationship the notation runs
+    // backwards says so in words too: the arrowhead alone is a thing a reader has to
+    // already know the notation to read, and the row is for the one who does not.
+    const ends = markEnds(kind, spoken);
     entries.push({
       group: "edge", tone: "",
-      label,
-      mark: `<line x1="1" y1="8" x2="15" y2="8" class="mesh-edge mesh-edge-${kind}"/>`,
+      label: ends
+        ? `${ends.relation.name} — ${claim}${ends.relation.flip ? ", drawn from the provider" : ""}`
+        : label,
+      mark: `<line x1="2" y1="8" x2="14" y2="8"
+        class="mesh-edge mesh-edge-${kind}${ends ? " mesh-edge-marked" : ""}"${
+        ends?.start ? ` marker-start="url(#${ends.start})"` : ""}${
+        ends?.end ? ` marker-end="url(#${ends.end})"` : ""}/>`,
     });
   }
 
@@ -2828,14 +3004,37 @@ function renderGraph(graph, layoutMs, frame,
   // One class per derived kind; the stylesheet gives each its own stroke and EDGE_KEY
   // names it for the legend. A kind this build does not know still draws — as the
   // plain line, unexplained — rather than not drawing at all.
+  //
+  // A notation with a word for the edge marks its ends as well (see markEnds), and
+  // the line is then shortened to the two circles so the mark sits outside the shape
+  // rather than under it. Without a word it is the derived line, centre to centre,
+  // exactly as before: the geometry is the landscape's and only the marks on it are
+  // the notation's.
+  const marked = new Set();
   const edges = graph.edges.map((e) => {
     const a = at.get(e.from), b = at.get(e.to);
     if (!a || !b) return "";
-    return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}"
-      x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
-      data-from="${esc(e.from)}" data-to="${esc(e.to)}"
-      class="mesh-edge mesh-edge-${esc(e.kind || "calls")}"/>`;
+    const kind = e.kind || "calls";
+    const ends = markEnds(kind, spoken);
+    const line = ends ? trimEdge(a, b, radiusOf(a), radiusOf(b))
+      : { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+    let mark = "";
+    if (ends) {
+      if (ends.start) { marked.add(ends.start); mark += ` marker-start="url(#${ends.start})"`; }
+      if (ends.end) { marked.add(ends.end); mark += ` marker-end="url(#${ends.end})"`; }
+    }
+    return `<line x1="${line.x1.toFixed(1)}" y1="${line.y1.toFixed(1)}"
+      x2="${line.x2.toFixed(1)}" y2="${line.y2.toFixed(1)}"
+      data-from="${esc(e.from)}" data-to="${esc(e.to)}"${ends ? ' data-trimmed="1"' : ""}
+      class="mesh-edge mesh-edge-${esc(kind)}${ends ? " mesh-edge-marked" : ""}"${mark}/>`;
   }).join("");
+
+  // Only the markers this picture actually uses. They live inside the canvas SVG
+  // rather than in the page, which is what carries them into an exported file — the
+  // export serialises this element, and the key beside it references the same ids
+  // from the same document.
+  const defs = marked.size
+    ? `<defs>${[...marked].map(markerElement).join("")}</defs>` : "";
 
   const circles = nodes.map((n) => {
     // The notation's fill and outline where it has one for this kind, Atlas's own
@@ -2909,7 +3108,7 @@ function renderGraph(graph, layoutMs, frame,
   // picture is the entire landscape, filling the window.
   return { ms, world, nodes, margin, svg: `<svg class="mesh-canvas${
     beating && beating <= PULSE_BUDGET ? " mesh-beating" : ""}" viewBox="0 0 ${width} ${height}"
-    role="img" aria-label="Derived starmap">
+    role="img" aria-label="Derived starmap">${defs}
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
 
@@ -4086,8 +4285,15 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     for (const line of edgeEls) {
       const a = at.get(line.dataset.from), b = at.get(line.dataset.to);
       if (!a || !b) continue;
-      line.setAttribute("x1", a.x.toFixed(1)); line.setAttribute("y1", a.y.toFixed(1));
-      line.setAttribute("x2", b.x.toFixed(1)); line.setAttribute("y2", b.y.toFixed(1));
+      // A marked line stops at the two circles, and a drag moves the circles — so the
+      // trim is recomputed here rather than only at render, or the arrowhead would
+      // slide under the node the moment somebody moved it. One hypot per edge, in a
+      // loop the simulation already pays far more than that for.
+      const p = line.dataset.trimmed
+        ? trimEdge(a, b, radiusOf(a), radiusOf(b))
+        : { x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+      line.setAttribute("x1", p.x1.toFixed(1)); line.setAttribute("y1", p.y1.toFixed(1));
+      line.setAttribute("x2", p.x2.toFixed(1)); line.setAttribute("y2", p.y2.toFixed(1));
     }
   }
 

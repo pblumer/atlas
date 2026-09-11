@@ -14,6 +14,61 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
+  enabled interpreter refuses to boot.** The strict allowlist admitted the installed
+  runtimes, the loader and trust files, and a private scratch directory — everything
+  Python and JavaScript need to start. The .NET runtime behind `pwsh` needs more: it
+  sizes its heap from `/proc`, reads `/proc/mounts`, and resolves its user through
+  `/etc/passwd`. None of those were allowed, so CoreCLR refused to start with
+  `E_OUTOFMEMORY` and every PowerShell script task failed. The other two languages
+  worked throughout, which is the asymmetry that let this land unnoticed.
+
+  The allowlist now carries this process's own `/proc` entry, `/proc/meminfo`,
+  `/proc/mounts` and `/etc/passwd`. Its own entry and no other: a rule on `/proc` as a
+  whole would hand model-authored code every same-uid process's environment, which is
+  where the engine's token and its vault key are, and that is the opposite of what the
+  profile exists for.
+
+  Startup no longer takes the profile on trust either. It proved the Landlock ABI and
+  stopped there, so a language the sandbox could not run looked healthy until the first
+  job failed one at a time. Selecting `strict` now starts each enabled interpreter once,
+  inside the real policy, on an empty program. One that cannot start is a startup error
+  naming the language and the three ways out; one that is simply not installed stays the
+  warning it has always been, because that is a host that was never going to run it.
+  ([ADR-0303](docs/adr/0303-script-sandbox-isolation.md),
+  [issue #892](https://github.com/pblumer/atlas/issues/892))
+- **The Starmap's ArchiMate view now draws ArchiMate's relationships too.** The nodes
+  were already ArchiMate's own symbols; the lines between them were still Atlas's — one
+  solid, one dashed, one dotted. For a reader who works in the notation that is half
+  the alphabet: ArchiMate tells **Assignment**, **Triggering** and **Serving** apart by
+  what sits at the ends of an otherwise identical solid line.
+
+  Each is now drawn that way — a ball at the source and a filled arrowhead at the
+  target for Assignment, a filled arrowhead for Triggering, an open one for Serving —
+  and the lines are solid, because in ArchiMate a dashed line with an open arrowhead is
+  a Flow and a dotted one a Realization. Keeping Atlas's dash would not have been a
+  missing statement but a wrong one.
+
+  A Serving relationship points the other way from the fact it comes from: ArchiMate
+  runs Serving from the provider to the consumer, so the arrowhead sits on the process
+  rather than on the worker it names — the same reversal the exported document has
+  always made. The key says so in words as well, for the reader who does not already
+  know the notation by sight. The marks travel into an exported file, where there is no
+  key to hover over.
+
+  The relationship table is now served by the server alongside the element table,
+  instead of the browser keeping a second copy. A picture with Triggering's filled
+  arrowhead on an edge the exported file calls Serving would be two answers to one
+  question, and nothing on either surface would say which was true. Three relationships
+  is also all there can be: Atlas knows that an application holds a process, that a
+  process calls another, and that a process uses a worker or a decision. Nothing here
+  is a Flow or a Realization, and an absent relationship type means Atlas cannot see
+  one — never that there is none.
+
+  A served notation is also a copy now. The element table, the relationship table and
+  the loss list were shared with every caller, so an edit anywhere would have changed
+  the mapping for everybody, silently.
+
 - **The Starmap's ArchiMate view now draws ArchiMate's own symbols and layer colours.**
   Picking **ArchiMate 3.2** under Notation mapped each node to an ArchiMate element type
   and wrote that type under its name — and then drew Atlas's own circles and squares.
@@ -263,6 +318,32 @@ _Changed_ / _Removed_ for each version.
   predicates over layer and aspect rather than a table of type pairs, so it inherits
   exactly the rules a capability has and none were touched; a test holds the two to that
   equivalence across every relationship and every partner, in both directions.
+
+- **A write into a data object now offers the members its class declares.** A data
+  output association writes one member of a structured object — `customer.name`
+  ([ADR-0060](docs/adr/0060-data-object-write-paths.md)) — and the path was free text.
+  `customer.nmae` deploys, runs, and writes a member nobody will ever read. The class the
+  object's type points at already declares what its members *are*, so the field now asks
+  the same question the class picker and the data-state picker ask, the same way: a list,
+  with an escape for a member nothing models yet.
+
+  Each entry carries what the model says about it — the type, the multiplicity where it
+  is not one, and the key mark on an attribute that is part of the business key. Where a
+  member's own type is another class in the model, that class's members are offered one
+  level down as `customer.name`, because a dotted path is exactly the case where the
+  first segment is structured and something else says what is inside it. One level and no
+  further: below that the model repeats itself, and a picker that walks it forever is one
+  nobody can read. An **untyped** member offers nothing inside it, because nothing knows.
+
+  A path the class does not declare is kept and named rather than dropped — a diagram is
+  routinely drawn before the model catches up — and it comes back in the list saying it
+  is not a member of that class, instead of looking like any other entry.
+
+  **What this is not:** a data object is not a process variable. Nothing binds one into
+  the FEEL scope, so these members say what the write *target* is shaped like and nothing
+  about what the expression above them can read. The panel says so where it matters,
+  beside the field that takes a FEEL expression, because a member list read as a variable
+  list is exactly the wrong lesson to take from it.
 
 - **A milestone is an element you can draw now.** BPMN's marker for a point on the path
   where no work sits is a **none intermediate throw event**: an intermediate throw event

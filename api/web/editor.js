@@ -5969,6 +5969,63 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   //
   // Each option carries the business key, because that is the fact that tells two
   // similarly named classes apart, and the thing somebody is actually trying to recall.
+  // The members a write may target, offered rather than remembered
+  // (ADR-0060, and the second half of the question ADR-0230 exists for).
+  //
+  // A data output association writes into one member of a structured object, and the
+  // path was free text: `customer.nmae` deploys, runs, and writes a member nobody will
+  // ever read. The class already declares what the members *are*, so the field asks
+  // the same question the class picker and the state picker ask, the same way.
+  //
+  // This is a claim about the *shape of the target*, not about what a FEEL expression
+  // can see. A data object is not a process variable — nothing binds one into the
+  // expression scope — so the members belong here, on the path being written, and
+  // nowhere that would suggest they can be read (see the note on the field itself).
+  //
+  // One level of nesting, and the depth is the point rather than a shortcut: a dotted
+  // path proves the member is structured, and where its declared type is another class
+  // in the model, that class says what is inside it. Below that the model is saying the
+  // same thing again, and a picker that walks it forever is a picker nobody can read.
+  function memberOptionsHTML(cls, current) {
+    const seen = [];
+    const option = (path, label) => {
+      seen.push(path);
+      return `<option value="${esc(path)}"${path === current ? " selected" : ""}>${esc(label)}</option>`;
+    };
+    const shape = (a) => {
+      const mult = a.multiplicity && a.multiplicity !== "1" ? `[${a.multiplicity}]` : "";
+      // Joined rather than concatenated: an untyped member has a multiplicity and no
+      // type, and the two glued together read as a gap where a word should be.
+      const said = [a.type, mult].filter(Boolean).join(" ");
+      return said ? ` · ${esc(said)}` : "";
+    };
+    let out = "";
+    for (const a of cls.attributes || []) {
+      if (!a.name) continue;
+      const key = (cls.identity || []).includes(a.name) ? "⚿ " : "";
+      out += option(a.name, `${key}${a.name}${shape(a)}`);
+      // Only where the model says what is inside: an attribute typed as another class
+      // it knows. An untyped member is exactly the case the derived model reports as a
+      // gap, and guessing its members here would be the same false knowledge.
+      const inner = a.type && classNamed(a.type);
+      if (!inner || inner.stereotype === "enumeration") continue;
+      const nested = (inner.attributes || []).filter((x) => x.name)
+        .map((x) => option(`${a.name}.${x.name}`, `${a.name}.${x.name}${shape(x)}`)).join("");
+      if (nested) out += `<optgroup label="inside ${esc(a.name)} · ${esc(a.type)}">${nested}</optgroup>`;
+    }
+    return { html: out, lists: (path) => seen.includes(path) };
+  }
+
+  function memberSelectHTML(cls, current) {
+    const { html, lists } = memberOptionsHTML(cls, current);
+    if (!html) return "";
+    return `<select id="f-assoc-to" title="The members ${esc(cls.name)} declares">
+      <option value=""${current ? "" : " selected"}>— the whole object —</option>
+      ${html}${strayOptionHTML(current, lists(current), `not a member of ${cls.name}`)}
+      <option ${OTHER}>Another member, not modelled yet…</option>
+    </select>`;
+  }
+
   function classSelectHTML(current) {
     const byModel = new Map();
     for (const c of vocab.classes) {
@@ -6450,10 +6507,27 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const fromBody = (asg.from && asg.from.body) || "";
       const toBody = (asg.to && asg.to.body) || "";
       if (bo.$type === "bpmn:DataOutputAssociation") {
+        // The class of the object being written, so the member can be picked from what
+        // it declares rather than typed from memory. A reference bpmn-js hands back as
+        // a one-element list is unwrapped the way dataRefName unwraps it.
+        const targetRef = Array.isArray(bo.targetRef) ? bo.targetRef[0] : bo.targetRef;
+        const writes = classNamed(itemTypeOf(targetRef && targetRef.dataObjectRef));
+        if (!vocab.loaded && vocabReady) {
+          vocabReady.then(() => { try { show(element); } catch { /* the panel moved on */ } });
+        }
+        const memberPicker = writes ? memberSelectHTML(writes, toBody) : "";
         html += `<h3>Writes data object</h3>
           <label class="field"><span>FEEL value</span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=amount * 1.19"/></label>
-          <label class="field"><span>Target member <span class="muted">(optional)</span></span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/></label>
-          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>`;
+          <label class="field"><span>Target member <span class="muted">(optional)</span></span>
+            ${memberPicker || `<input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/>`}</label>
+          ${memberPicker ? otherFieldHTML("f-assoc-to-other", "Member path", "customer.name") : ""}
+          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>
+          ${memberPicker ? `<p class="muted" style="font-size:12px">The members offered are the ones
+            <b>${esc(writes.name)}</b> declares — <a href="#/data/m/${encodeURIComponent(writes.modelId)}"
+            target="_blank" rel="noopener">open it ↗</a> to add one. They say what this object is
+            <i>shaped</i> like, which is a different thing from what the <b>FEEL value</b> above can
+            read: that expression sees the instance's <b>variables</b>, and a data object is not one
+            of them.</p>` : ""}`;
       } else {
         html += `<h3>Reads data object</h3>
           <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
@@ -7137,12 +7211,26 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const assocFrom = body.querySelector("#f-assoc-from");
     const assocTo = body.querySelector("#f-assoc-to");
+    const assocToOther = body.querySelector("#f-assoc-to-other");
     if (assocFrom || assocTo) {
-      const applyAssoc = () => setAssignment(modeler, element, bo,
+      const applyAssoc = (member) => setAssignment(modeler, element, bo,
         assocFrom ? assocFrom.value.trim() : "",
-        assocTo ? assocTo.value.trim() : "");
-      if (assocFrom) assocFrom.addEventListener("change", applyAssoc);
-      if (assocTo) assocTo.addEventListener("change", applyAssoc);
+        member !== undefined ? member : (assocTo ? assocTo.value.trim() : ""));
+      if (assocFrom) assocFrom.addEventListener("change", () => applyAssoc());
+      if (assocTo) {
+        assocTo.addEventListener("change", (e) => {
+          if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal("f-assoc-to-other");
+          applyAssoc();
+        });
+      }
+      if (assocToOther) {
+        assocToOther.addEventListener("change", (e) => {
+          // Re-rendered rather than left as typed, so a path the class does not declare
+          // comes back in the list saying so instead of looking like any other member.
+          applyAssoc(e.target.value.trim());
+          show(element);
+        });
+      }
     }
 
     // The badges describe THIS server, which only the server knows, and the panel is

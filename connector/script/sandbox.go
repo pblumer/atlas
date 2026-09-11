@@ -1,12 +1,14 @@
 package script
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // SandboxMode selects the operating-system boundary around an interpreter.
@@ -51,6 +53,83 @@ func CheckSandbox(mode SandboxMode) error {
 		return fmt.Errorf("script: unknown sandbox mode %q", mode)
 	}
 	return sandboxSupport()
+}
+
+// ErrSandboxInterpreter marks an installed interpreter that cannot start inside the
+// selected profile. It is deliberately distinct from a missing interpreter: that one
+// parks a language's jobs and is worth a warning, while this one is the operator's
+// explicit security choice failing to work at all, and ADR-0303's contract is that
+// strict fails closed rather than degrading quietly.
+var ErrSandboxInterpreter = errors.New("script sandbox: interpreter cannot start inside the sandbox")
+
+// probeTimeout bounds the startup probe. It is not the script timeout: what is being
+// timed is an interpreter starting and running an empty program, so this is already
+// far past what any healthy host needs, cold start included.
+const probeTimeout = 15 * time.Second
+
+// probeSandbox runs the language's own bootstrap with an empty script through the
+// complete production path — prepareCommand, the launcher, Landlock, seccomp, exec —
+// and reports whether the interpreter survived it.
+//
+// Proving it by running it is the only check that stays true when a runtime, a
+// distribution or a kernel changes what an interpreter touches on the way up.
+// Comparing the allowlist against a list of expected paths would only ever confirm
+// what somebody already knew, which is exactly what missed CoreCLR's need for /proc.
+func (e *CmdExec) probeSandbox() error {
+	probe := *e
+	probe.Timeout = min(e.timeout(), probeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), probe.Timeout)
+	defer cancel()
+	if _, err := probe.Run(ctx, "", nil); err != nil {
+		return fmt.Errorf("%w: %s: %w", ErrSandboxInterpreter, e.Lang.Name, err)
+	}
+	return nil
+}
+
+// CheckSandboxLanguages proves at startup that each language this process will serve
+// can start under mode, by starting it. It is called once by the command layer, where
+// this process's own executable is the Atlas binary that implements the launcher.
+//
+// A language whose interpreter is simply not installed is skipped rather than
+// refused: that host parks those jobs, as it always has, and is not a sandbox that
+// does not work.
+func CheckSandboxLanguages(mode SandboxMode, names []string) error {
+	langs, err := sandboxLanguages(mode, names)
+	if err != nil {
+		return err
+	}
+	for _, lang := range langs {
+		e := New(lang)
+		e.Sandbox = mode
+		if err := e.Check(); err != nil {
+			continue
+		}
+		if err := e.probeSandbox(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sandboxLanguages resolves the operator's language list for a profile that has to be
+// proved. It returns nothing at all for off, so a compatible installation launches no
+// interpreter at startup and keeps exactly the boot it had before.
+func sandboxLanguages(mode SandboxMode, names []string) ([]Lang, error) {
+	if mode == "" || mode == SandboxOff {
+		return nil, nil
+	}
+	if len(names) == 0 {
+		return Langs, nil // an external worker with no filter serves all three
+	}
+	langs := make([]Lang, 0, len(names))
+	for _, name := range names {
+		lang, ok := LangByName(strings.ToLower(strings.TrimSpace(name)))
+		if !ok {
+			return nil, fmt.Errorf("script: unknown language %q", name)
+		}
+		langs = append(langs, lang)
+	}
+	return langs, nil
 }
 
 // CheckSandboxDataPath prevents a strict filesystem allowlist from accidentally
