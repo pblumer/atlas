@@ -349,7 +349,8 @@ _Changed_ / _Removed_ for each version.
   The heading now leads with the same `.mark` box the bar uses, at 40px. It is the
   shared box rather than a copy of the glyph, so an organisation that has uploaded its
   own logo (ADR-0148) sees that logo here too, and a later upload or removal repaints
-  this mark along with every other one.
+  this mark along with every other one. The logo setting names the landing page along
+  with the top bar and the login screen, so what it promises is what it does.
 
 - **The Starmap reads its structure once for everybody, and everybody's health for
   themselves.** With every open Starmap now re-reading itself, the cost of deriving one
