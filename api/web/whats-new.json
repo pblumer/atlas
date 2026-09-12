@@ -2,6 +2,56 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-write-arrow-can-set-several-members-of-a-data-object-at-on",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One arrow, as many fields as the step fills in",
+        "de": "Ein Pfeil, so viele Felder wie der Schritt ausfüllt"
+      },
+      "summary": {
+        "en": "A task that captures a name, a first name, a unit and a start date used to need four arrows to the same data object, one per field, and a diagram of them reads as a cable harness. The arrow now carries a list: add a row per field, pick the member, give it a value. They are applied in the order you list them and recorded as one change to the object, because the step did one thing. The alternative was to write the whole object from a single expression, which drew well and told Atlas nothing — what is inside an expression cannot be read before the process runs, so nothing checked those fields against the class and the class looked like it had none. Named on their own rows they count again: checked when you deploy, listed in the derived model, and compared against what you planned.",
+        "de": "Eine Aufgabe, die Name, Vorname, Organisationseinheit und Eintritt erfasst, brauchte bisher vier Pfeile auf dasselbe Datenobjekt, einen je Feld — ein Diagramm davon sieht aus wie ein Kabelbaum. Der Pfeil führt jetzt eine Liste: eine Zeile je Feld, Attribut auswählen, Wert angeben. Sie werden in der angegebenen Reihenfolge angewandt und als eine Änderung am Objekt festgehalten, denn der Schritt hat eine Sache getan. Die Alternative war, das ganze Objekt aus einem einzigen Ausdruck zu schreiben. Das zeichnet sich gut und sagt Atlas nichts: Was in einem Ausdruck steht, ist vor dem Lauf nicht lesbar, also prüfte niemand diese Felder gegen die Klasse, und die Klasse sah aus, als hätte sie keine. In eigenen Zeilen benannt zählen sie wieder — geprüft beim Deployen, im abgeleiteten Modell aufgeführt und gegen das Geplante verglichen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-data-object-whose-state-a-task-advances-is-no-longer-treat",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A state change is not a rewrite of the object",
+        "de": "Ein Zustandswechsel ist keine Neufassung des Objekts"
+      },
+      "summary": {
+        "en": "An arrow that only advances a data object's state leaves its value untouched. Atlas read it as a write that replaces the whole object, and then withheld the field comparison from that class — which would have quietly emptied the difference reading for almost every class, because almost every lifecycle is driven by exactly these arrows. Fixed before it reached a release.",
+        "de": "Ein Pfeil, der nur den Zustand eines Datenobjekts weiterschaltet, lässt dessen Wert unangetastet. Atlas las ihn als Schreibvorgang, der das ganze Objekt ersetzt, und nahm die Klasse daraufhin vom Feldvergleich aus. Das hätte den Abgleich für fast jede Klasse still geleert, denn fast jeder Lebenszyklus wird von genau solchen Pfeilen bewegt. Behoben, bevor es in ein Release kam."
+      },
+      "link": {
+        "label": "ADR-0301",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
+      },
+      "tags": [
+        "Data"
+      ]
+    },
+    {
       "id": "a-class-a-process-writes-whole-no-longer-fills-the-differenc",
       "version": "Unreleased",
       "date": null,
@@ -314,63 +364,6 @@
         },
         "route": "#/data"
       }
-    },
-    {
-      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Link a diagram to the capability it draws",
-        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
-      },
-      "summary": {
-        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
-        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
-          "Open the Panorama model and select the Capability element that draws it.",
-          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
-          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
-        ],
-        "de": [
-          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
-          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
-          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
-          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
-        ]
-      }
-    },
-    {
-      "id": "a-value-stream-is-an-element-you-can-draw",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Draw a value stream",
-        "de": "Einen Wertstrom zeichnen"
-      },
-      "summary": {
-        "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
-        "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
     }
   ]
 }

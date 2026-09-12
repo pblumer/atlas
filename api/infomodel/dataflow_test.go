@@ -532,3 +532,34 @@ func TestCheckDataFlowUnknownStateIsNotAlsoAnIllegalTransition(t *testing.T) {
 		t.Errorf("an undeclared state was reported twice: %+v", by[RuleDataIllegalTransition])
 	}
 }
+
+// TestCheckDataFlowChecksEveryWriteOnOneArrow is the guard that matters most for the
+// several-writes-per-arrow shape: the check must not stop at the first assignment.
+// One arrow with a good member and a bad one is a deploy that has to fail, and the
+// message has to name the member that is wrong rather than the arrow that carries it
+// (ADR-draft-a-write-arrow-may-set-several-members, ADR-0230 for the class).
+func TestCheckDataFlowChecksEveryWriteOnOneArrow(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociationWrites(write, "order", "approved", []compiler.DataWrite{
+		{Value: mustExpr(t, "amount"), TargetPath: "id"},          // the class has it
+		{Value: mustExpr(t, "amount"), TargetPath: "shipTo.city"}, // and this one
+		{Value: mustExpr(t, "amount"), TargetPath: "nmae"},        // and not this one
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataUnknownMember]
+	if len(found) != 1 {
+		t.Fatalf("expected one unknown-member problem, got %+v", CheckDataFlow(cp, salesVocabulary(t)))
+	}
+	if !strings.Contains(found[0].Message, "nmae") {
+		t.Errorf("message %q does not name the member that is wrong", found[0].Message)
+	}
+}

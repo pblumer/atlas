@@ -279,10 +279,6 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 	for id := int32(0); int(id) < cp.NodeCount(); id++ {
 		element := cp.ElementBpmnId(id)
 		for _, a := range cp.DataOutputAssociations(id) {
-			path := cp.Intern(a.TargetPath)
-			if path == "" {
-				continue // a whole-object write: the value is FEEL, not a member name
-			}
 			objName := cp.Intern(a.DataObject)
 			do, ok := byName[objName]
 			if !ok {
@@ -292,7 +288,15 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 			if !ok {
 				continue // untyped or unresolved: already reported, and nothing to check against
 			}
-			ps = append(ps, checkPath(vocab, class, objName, path, element)...)
+			// Every write on the arrow, because BPMN lets one carry several and each is
+			// a member target in its own right (ADR-draft-a-write-arrow-may-set-several-members).
+			for _, w := range a.Writes {
+				path := cp.Intern(w.TargetPath)
+				if path == "" {
+					continue // a whole-object write: the value is FEEL, not a member name
+				}
+				ps = append(ps, checkPath(vocab, class, objName, path, element)...)
+			}
 		}
 	}
 	return ps

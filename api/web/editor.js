@@ -4533,6 +4533,13 @@ function ioMapTitle(kind, target) {
   return t || (kind === "in" ? "Input mapping" : "Output mapping");
 }
 
+// dataWriteTitle is the collapsed-card label for one write of a data output
+// association: the member it targets, or what an empty target actually means — the
+// whole object, which is a different write and not a missing one.
+function dataWriteTitle(target) {
+  return (target || "").trim() || "the whole object";
+}
+
 // ioTrashIcon is the small trash glyph used to delete a mapping card (styled red by
 // .io-map-del). currentColor lets the CSS own the colour.
 const ioTrashIcon = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2.2h4M2.6 4.2h10.8M4.4 4.2l.5 8.4a1 1 0 0 0 1 .95h4.2a1 1 0 0 0 1-.95l.5-8.4M6.6 6.8v4.4M9.4 6.8v4.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -5777,26 +5784,38 @@ function dataObjectNames(procBo) {
 // target variable). Empty bodies clear the assignment, so a stateless association
 // carries no dangling element (ADR-0058/0059/0060).
 function setAssignment(modeler, element, bo, fromBody, toBody) {
+  setAssignments(modeler, element, bo, [{ from: fromBody, to: toBody }]);
+}
+
+// setAssignments rebuilds a data association's <assignment> list from panel rows.
+// BPMN declares `assignment [0..*]` on a data association, and a write arrow uses all
+// of it: one arrow may set several members of one object
+// (ADR-draft-a-write-arrow-may-set-several-members). A read uses one, and reaches here
+// through setAssignment with a single row.
+//
+// A row with neither a value nor a target is dropped rather than written as an empty
+// assignment — an association with no assignments at all is ADR-0058's state-only
+// transition, and an empty one would say the same thing less clearly.
+function setAssignments(modeler, element, bo, rows) {
   const modeling = modeler.get("modeling");
   const moddle = modeler.get("moddle");
   try {
-    if (!fromBody && !toBody) {
-      modeling.updateModdleProperties(element, bo, { assignment: [] });
-      return;
-    }
-    const asg = moddle.create("bpmn:Assignment", {});
-    asg.$parent = bo;
-    if (fromBody) {
-      const f = moddle.create("bpmn:FormalExpression", { body: fromBody });
-      f.$parent = asg;
-      asg.from = f;
-    }
-    if (toBody) {
-      const t = moddle.create("bpmn:FormalExpression", { body: toBody });
-      t.$parent = asg;
-      asg.to = t;
-    }
-    modeling.updateModdleProperties(element, bo, { assignment: [asg] });
+    const asgs = rows.filter((r) => r.from || r.to).map((r) => {
+      const asg = moddle.create("bpmn:Assignment", {});
+      asg.$parent = bo;
+      if (r.from) {
+        const f = moddle.create("bpmn:FormalExpression", { body: r.from });
+        f.$parent = asg;
+        asg.from = f;
+      }
+      if (r.to) {
+        const t = moddle.create("bpmn:FormalExpression", { body: r.to });
+        t.$parent = asg;
+        asg.to = t;
+      }
+      return asg;
+    });
+    modeling.updateModdleProperties(element, bo, { assignment: asgs });
   } catch { /* stale */ }
 }
 
@@ -6016,14 +6035,72 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     return { html: out, lists: (path) => seen.includes(path) };
   }
 
-  function memberSelectHTML(cls, current) {
+  // attrs is what identifies the control to its handlers. A write arrow carries a row
+  // per member now, so the id that was enough for one field is not enough for a list.
+  function memberSelectHTML(cls, current, attrs = `id="f-assoc-to"`) {
     const { html, lists } = memberOptionsHTML(cls, current);
     if (!html) return "";
-    return `<select id="f-assoc-to" title="The members ${esc(cls.name)} declares">
+    return `<select ${attrs} title="The members ${esc(cls.name)} declares">
       <option value=""${current ? "" : " selected"}>— the whole object —</option>
       ${html}${strayOptionHTML(current, lists(current), `not a member of ${cls.name}`)}
       <option ${OTHER}>Another member, not modelled yet…</option>
     </select>`;
+  }
+
+  // One write of a data output association: what goes in, and which member it lands in.
+  // BPMN gives a data association `assignment [0..*]`, so a step that captures a form's
+  // worth of fields is one arrow with a row per field rather than one arrow per field
+  // (ADR-draft-a-write-arrow-may-set-several-members). Before that the only one-arrow
+  // option was a FEEL context literal, which draws well and tells the model nothing —
+  // the members inside it cannot be read at deploy time, so the write is unchecked and
+  // the class derives as memberless.
+  //
+  // The card is the I/O mapping editor's, reused rather than restyled: the same
+  // question deserves the same control, and an author who has met one knows this one.
+  function dataWriteCardHTML(i, cls, fromBody, toBody) {
+    const picker = cls ? memberSelectHTML(cls, toBody, `class="dw-to"`) : "";
+    return `<div class="io-map" data-write="1" data-i="${i}">
+      <div class="io-map-head">
+        <span class="io-map-chevron" aria-hidden="true">▾</span>
+        <span class="io-map-title">${esc(dataWriteTitle(toBody))}</span>
+        <button type="button" class="io-map-del" title="Delete write" aria-label="Delete write">${ioTrashIcon}</button>
+      </div>
+      <div class="io-map-body">
+        <label class="field"><span>Target member <span class="muted">(optional)</span></span>
+          ${picker || `<input type="text" class="dw-to" value="${esc(toBody || "")}" placeholder="name"/>`}</label>
+        ${picker ? otherFieldHTML(`f-dw-other-${i}`, "Member path", "customer.name") : ""}
+        <label class="field"><span>FEEL value <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+          <input type="text" class="dw-from" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>
+      </div>
+    </div>`;
+  }
+
+  // dataWritesGroupHTML renders an arrow's writes as one collapsible group, the shape
+  // the I/O mapping and agent-parameter groups already use — so the add button, the
+  // count badge and the collapse memory behave the way an author knows.
+  //
+  // The badge earns its place here more than it does there. Five writes on one arrow
+  // are five rows behind a panel where five arrows were five things on the canvas, and
+  // the count is what the arrow can still say about itself without being opened.
+  // It is the whole panel, not a section of one: the group carries the heading the
+  // write arrow used to have, so there is no <h3> above it left holding nothing. A
+  // heading whose section is empty renders as a chevron that toggles nothing, which
+  // reads as broken — the same trap stKindHeadingHTML names.
+  function dataWritesGroupHTML(cls, assignments, objectName, hints) {
+    const cards = assignments.map((a, i) => dataWriteCardHTML(i, cls,
+      (a.from && a.from.body) || "", (a.to && a.to.body) || "")).join("");
+    return `<div class="io-group" data-write-group="1" data-group="Writes" data-standalone-group="1">
+      <div class="io-group-head">
+        <span class="io-group-title">Writes ${esc(objectName)}</span>
+        <button type="button" class="io-group-add" title="Add a write" aria-label="Add a write">＋</button>
+        <span class="io-group-count" title="Writes">${assignments.length}</span>
+        <span class="io-group-chevron" aria-hidden="true">▾</span>
+      </div>
+      <div class="io-group-body">
+        <div class="io-map-list" id="data-writes">${cards}</div>
+        ${hints}
+      </div>
+    </div>`;
   }
 
   function classSelectHTML(current) {
@@ -6515,19 +6592,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (!vocab.loaded && vocabReady) {
           vocabReady.then(() => { try { show(element); } catch { /* the panel moved on */ } });
         }
-        const memberPicker = writes ? memberSelectHTML(writes, toBody) : "";
-        html += `<h3>Writes data object</h3>
-          <label class="field"><span>FEEL value</span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=amount * 1.19"/></label>
-          <label class="field"><span>Target member <span class="muted">(optional)</span></span>
-            ${memberPicker || `<input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/>`}</label>
-          ${memberPicker ? otherFieldHTML("f-assoc-to-other", "Member path", "customer.name") : ""}
-          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>
-          ${memberPicker ? `<p class="muted" style="font-size:12px">The members offered are the ones
+        // One row per <assignment>, and one empty row for an arrow that has none yet,
+        // so the arrow that writes one member looks and edits as it always did.
+        const rows = (bo.assignment && bo.assignment.length) ? bo.assignment : [{}];
+        const hints = `<p class="muted io-group-hint">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: each write's <b>FEEL value</b> (over the instance's variables) goes into its <b>Target member</b>, and the object's data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field and keep the rest. Several writes are applied <b>in order</b> and recorded as <b>one</b> change to the object, so one activity that fills in a whole record is one arrow and not one arrow per field.</p>
+          ${writes ? `<p class="muted io-group-hint">The members offered are the ones
             <b>${esc(writes.name)}</b> declares — <a href="#/data/m/${encodeURIComponent(writes.modelId)}"
             target="_blank" rel="noopener">open it ↗</a> to add one. They say what this object is
-            <i>shaped</i> like, which is a different thing from what the <b>FEEL value</b> above can
+            <i>shaped</i> like, which is a different thing from what a <b>FEEL value</b> above can
             read: that expression sees the instance's <b>variables</b>, and a data object is not one
             of them.</p>` : ""}`;
+        html += dataWritesGroupHTML(writes, rows, dataRefName(bo.targetRef), hints);
       } else {
         html += `<h3>Reads data object</h3>
           <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
@@ -7231,6 +7306,92 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           show(element);
         });
       }
+    }
+
+    // The writes of a data output association: one row per <assignment>, which BPMN
+    // allows any number of (ADR-draft-a-write-arrow-may-set-several-members). The group
+    // behaves like an I/O mapping group — add, delete, collapse — because it is the
+    // same shape, and an author has already learned it.
+    const dwGroup = body.querySelector("[data-write-group]");
+    if (dwGroup) {
+      const dwList = dwGroup.querySelector("#data-writes");
+      const cards = () => [...dwList.querySelectorAll("[data-write]")];
+      const targetRef = Array.isArray(bo.targetRef) ? bo.targetRef[0] : bo.targetRef;
+      const writesClass = classNamed(itemTypeOf(targetRef && targetRef.dataObjectRef));
+      // A row sitting on "another member…" means the text field beside it, not the
+      // empty value that option carries — which is the value that means the whole
+      // object. Reading the select would silently turn a member write into one.
+      const rowTo = (card) => {
+        const to = card.querySelector(".dw-to");
+        if (to.tagName === "SELECT" && choseOther(to)) {
+          const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
+          return other ? other.value.trim() : "";
+        }
+        return (to.value || "").trim();
+      };
+      const readRows = () => cards().map((card) => ({
+        from: (card.querySelector(".dw-from").value || "").trim(),
+        to: rowTo(card),
+      }));
+      const saveWrites = () => savePreservingPanel(() => setAssignments(modeler, element, bo, readRows()));
+      const count = () => {
+        const c = dwGroup.querySelector(".io-group-count");
+        if (c) c.textContent = String(cards().length);
+      };
+      const wireRow = (card) => {
+        const to = card.querySelector(".dw-to");
+        const title = card.querySelector(".io-map-title");
+        card.querySelector(".io-map-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-map-del")) return;
+          card.classList.toggle("collapsed");
+        });
+        to.addEventListener("change", (e) => {
+          if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal(`f-dw-other-${card.dataset.i}`);
+          title.textContent = dataWriteTitle(rowTo(card));
+          saveWrites();
+        });
+        const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
+        if (other) {
+          other.addEventListener("change", () => {
+            saveWrites();
+            show(element);
+          });
+        }
+        card.querySelector(".dw-from").addEventListener("change", saveWrites);
+        card.querySelector(".io-map-del").addEventListener("click", (e) => {
+          e.stopPropagation();
+          card.remove();
+          count();
+          saveWrites();
+        });
+      };
+      cards().forEach(wireRow);
+      // Open by default, unlike the mapping groups it borrows its shape from. Those sit
+      // among a dozen sections on a task; this is the whole content of a write arrow's
+      // panel, and starting it folded would answer "what does this arrow write" with a
+      // chevron. An author's own toggle still wins.
+      groupCtl.setDefault("Writes", true);
+      dwGroup.classList.toggle("collapsed", groupCtl.isCollapsed(dwGroup.dataset.group || ""));
+      dwGroup.querySelector(".io-group-head").addEventListener("click", (e) => {
+        if (e.target.closest(".io-group-add")) return;
+        groupCtl.onToggle((dwGroup.dataset.group || "").trim(), dwGroup.classList.toggle("collapsed"));
+      });
+      dwGroup.querySelector(".io-group-add").addEventListener("click", (e) => {
+        e.stopPropagation();
+        dwGroup.classList.remove("collapsed");
+        groupCtl.onToggle((dwGroup.dataset.group || "").trim(), false);
+        // One past the highest index in the list, not the list's length: deleting a row
+        // and adding one would otherwise reuse an index still on screen, and two rows
+        // sharing an id is an escape field that opens the wrong row.
+        const next = cards().reduce((m, c) => Math.max(m, Number(c.dataset.i)), -1) + 1;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = dataWriteCardHTML(next, writesClass, "", "");
+        const card = tmp.firstElementChild;
+        dwList.appendChild(card);
+        wireRow(card);
+        count();
+        card.querySelector(".dw-from").focus();
+      });
     }
 
     // The badges describe THIS server, which only the server knows, and the panel is

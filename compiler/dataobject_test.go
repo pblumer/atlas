@@ -232,8 +232,8 @@ func TestParseDataOutputAssociation(t *testing.T) {
 	if got := cp.Intern(a.TargetState); got != "approved" {
 		t.Errorf("TargetState = %q, want approved", got)
 	}
-	if a.Value == nil {
-		t.Error("Value expr = nil, want compiled FEEL for =decision")
+	if len(a.Writes) != 1 || a.Writes[0].Value == nil {
+		t.Errorf("writes = %d, want one compiled FEEL write for =decision", len(a.Writes))
 	}
 }
 
@@ -275,10 +275,13 @@ func TestParseDataOutputAssociationTargetPath(t *testing.T) {
 	if len(assocs) != 1 {
 		t.Fatalf("associations = %d, want 1", len(assocs))
 	}
-	if got := cp.Intern(assocs[0].TargetPath); got != "name" {
+	if len(assocs[0].Writes) != 1 {
+		t.Fatalf("writes = %d, want 1", len(assocs[0].Writes))
+	}
+	if got := cp.Intern(assocs[0].Writes[0].TargetPath); got != "name" {
 		t.Errorf("TargetPath = %q, want name", got)
 	}
-	if assocs[0].Value == nil {
+	if assocs[0].Writes[0].Value == nil {
 		t.Error("Value expr = nil, want compiled FEEL for =customerName")
 	}
 }
@@ -323,8 +326,8 @@ func TestParseDataOutputAssociationDirectTarget(t *testing.T) {
 	if got := cp.Intern(assocs[0].TargetState); got != "" {
 		t.Errorf("TargetState = %q, want empty (direct target keeps state)", got)
 	}
-	if assocs[0].Value != nil {
-		t.Error("Value expr != nil, want nil (no assignment = state-only)")
+	if len(assocs[0].Writes) != 0 {
+		t.Errorf("writes = %d, want 0 (no assignment = state-only)", len(assocs[0].Writes))
 	}
 }
 
@@ -1000,4 +1003,104 @@ func TestParseDataAssociationErrorInNestedScope(t *testing.T) {
 	if _, err := compiler.Parse(1, 1, strings.NewReader(model)); err == nil {
 		t.Fatal("Parse accepted a data association naming an unknown target inside a subprocess")
 	}
+}
+
+// TestParseDataOutputAssociationSeveralAssignments is the shape BPMN always allowed
+// and Atlas read as one: a DataAssociation carries `assignment [0..*]`, and a step
+// that captures a form's worth of fields writes them from one arrow rather than from
+// one arrow per field (ADR-draft-a-write-arrow-may-set-several-members).
+//
+// What it is most careful about is order. The writes are applied in document order at
+// run time, so the order the parser records them in is not presentation: it decides
+// which of two writes to the same member wins.
+func TestParseDataOutputAssociationSeveralAssignments(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_identity" name="identity"/>
+    <startEvent id="Start"/>
+    <task id="Capture">
+      <dataOutputAssociation>
+        <targetRef>DataObject_identity</targetRef>
+        <assignment><from>=surname</from><to>surname</to></assignment>
+        <assignment><from>=firstName</from><to>firstName</to></assignment>
+        <assignment><from>=unit</from><to>org.unit</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Capture"/>
+    <sequenceFlow id="f2" sourceRef="Capture" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	assocs := cp.DataOutputAssociations(nodeNamed(t, cp, "Capture"))
+	// One arrow, not three: the drawing is what the author sees, and it did not grow.
+	if len(assocs) != 1 {
+		t.Fatalf("associations = %d, want 1 (one arrow carries all three writes)", len(assocs))
+	}
+	if got := len(assocs[0].Writes); got != 3 {
+		t.Fatalf("writes = %d, want 3 — a dropped assignment is a write the model says and the engine does not", got)
+	}
+	for i, want := range []string{"surname", "firstName", "org.unit"} {
+		if got := cp.Intern(assocs[0].Writes[i].TargetPath); got != want {
+			t.Errorf("write %d path = %q, want %q (document order decides which write wins)", i, got, want)
+		}
+		if assocs[0].Writes[i].Value == nil {
+			t.Errorf("write %d has no compiled value", i)
+		}
+	}
+}
+
+// TestParseDataOutputAssociationWholeAndMemberOnOneArrow pins the mixed arrow: a
+// write with no <to> replaces the object, and a later one with a <to> lands on that
+// new value. Both fall out of applying the writes in order; neither is a special case.
+func TestParseDataOutputAssociationWholeAndMemberOnOneArrow(t *testing.T) {
+	const model = `<?xml version="1.0"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true">
+    <dataObject id="DataObject_order" name="order"/>
+    <startEvent id="Start"/>
+    <task id="Reset">
+      <dataOutputAssociation>
+        <targetRef>DataObject_order</targetRef>
+        <assignment><from>={}</from></assignment>
+        <assignment><from>=amount</from><to>total</to></assignment>
+      </dataOutputAssociation>
+    </task>
+    <endEvent id="End"/>
+    <sequenceFlow id="f1" sourceRef="Start" targetRef="Reset"/>
+    <sequenceFlow id="f2" sourceRef="Reset" targetRef="End"/>
+  </process>
+</definitions>`
+
+	cp, err := compiler.Parse(1, 1, strings.NewReader(model))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	w := cp.DataOutputAssociations(nodeNamed(t, cp, "Reset"))[0].Writes
+	if len(w) != 2 {
+		t.Fatalf("writes = %d, want 2", len(w))
+	}
+	if got := cp.Intern(w[0].TargetPath); got != "" {
+		t.Errorf("first write path = %q, want empty (it replaces the whole value)", got)
+	}
+	if got := cp.Intern(w[1].TargetPath); got != "total" {
+		t.Errorf("second write path = %q, want total", got)
+	}
+}
+
+// nodeNamed resolves a BPMN element id to its compiled node index.
+func nodeNamed(t *testing.T, cp *compiler.CompiledProcess, id string) int32 {
+	t.Helper()
+	for n := int32(0); int(n) < cp.NodeCount(); n++ {
+		if cp.ElementBpmnId(n) == id {
+			return n
+		}
+	}
+	t.Fatalf("node %q not found", id)
+	return -1
 }

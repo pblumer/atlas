@@ -1222,23 +1222,36 @@ type CompiledDataStore struct {
 	ElementId int32
 }
 
+// DataObjectWrite is one <assignment> of a data output association: a value and the
+// member it goes into. Value is the FEEL expression (the assignment's <from>)
+// evaluated over the instance's variables to produce what is written.
+//
+// TargetPath is the interned member path (the assignment's <to>, e.g. "name" or
+// "customer.name") the write sets within a structured data object, -1 to write the
+// whole value (ADR-0060). A path write reads the object's current JSON, sets that
+// member, and keeps the rest.
+type DataObjectWrite struct {
+	Value      *expr.Compiled
+	TargetPath int32
+}
+
 // DataOutputAssociation is one compiled <dataOutputAssociation> on an activity: it
-// writes a value into a data object and advances that object's data state when the
-// activity completes (ADR-0058). DataObject is the interned target data-object
-// name; Value is the FEEL expression (the association's <assignment><from>)
-// evaluated over the instance's variables to produce the written value, nil for a
-// state-only transition; TargetState is the interned data state the write moves the
-// object into (from the target <dataObjectReference>'s <dataState>), -1 to keep the
-// object's current state.
+// writes a data object and advances that object's data state when the activity
+// completes (ADR-0058). DataObject is the interned target data-object name;
+// TargetState is the interned data state the write moves the object into (from the
+// target <dataObjectReference>'s <dataState>), -1 to keep the object's current state.
+//
+// Writes are the association's <assignment> elements, in document order — BPMN gives
+// a data association `assignment [0..*]`, so one arrow may set several members of one
+// object and a step that captures a form's worth of fields need not be drawn as one
+// arrow per field (ADR-draft-a-write-arrow-may-set-several-members). They are applied
+// in order onto one accumulating value and appended as one event, so the order is not
+// presentation: two writes to the same member mean the later one. Empty is ADR-0058's
+// state-only transition, which keeps the object's value and moves only its state.
 type DataOutputAssociation struct {
 	DataObject  int32 // interned target data-object name → index
-	Value       *expr.Compiled
 	TargetState int32
-	// TargetPath is the interned member path (the association's <assignment><to>,
-	// e.g. "name" or "customer.name") the write sets within a structured data
-	// object, -1 to write the whole value (ADR-0060). A path write reads the object's
-	// current JSON, sets that member, and writes the merged value back.
-	TargetPath int32
+	Writes      []DataObjectWrite
 }
 
 // DataInputAssociation is one compiled <dataInputAssociation> on an activity: it

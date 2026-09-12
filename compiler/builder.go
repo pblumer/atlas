@@ -2249,21 +2249,55 @@ func (b *Builder) AddDataInputAssociation(node int32, dataObject, variable strin
 	})
 }
 
+// DataWrite is one assignment as an author states it, before interning: a FEEL value
+// and the member path it targets (empty for the whole value). It is the builder's
+// argument shape; DataObjectWrite is the compiled one.
+type DataWrite struct {
+	Value      *expr.Compiled
+	TargetPath string
+}
+
 // AddDataOutputAssociation attaches a data-output association to activity node: when
 // the activity completes, the engine evaluates value (a FEEL expression over the
 // instance's variables, nil for a state-only transition) and writes it into the data
 // object named dataObject, advancing that object's data state to targetState (empty
 // keeps the object's current state) — ADR-0058. A non-empty targetPath writes only
-// that member of a structured object, keeping the rest (ADR-0060). Build groups a
-// node's associations into a shared array.
+// that member of a structured object, keeping the rest (ADR-0060).
+//
+// This is the one-write case of AddDataOutputAssociationWrites, which every caller
+// that has a single assignment to add says more plainly.
 func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value *expr.Compiled, targetState, targetPath string) {
+	b.AddDataOutputAssociationWrites(node, dataObject, targetState,
+		[]DataWrite{{Value: value, TargetPath: targetPath}})
+}
+
+// AddDataOutputAssociationWrites attaches a data-output association carrying several
+// writes — the association's <assignment> elements in document order, which BPMN
+// allows any number of (ADR-draft-a-write-arrow-may-set-several-members). They are
+// applied in order onto one value and appended as one event, so one activity writing
+// five members of one object is one arrow and one fact.
+//
+// A write with no value is not a write: it is how an association with no <assignment>
+// at all reaches here, and ADR-0058 makes that a state-only transition. Dropping it
+// keeps "has writes" and "writes something" the same question everywhere downstream.
+// Build groups a node's associations into a shared array.
+func (b *Builder) AddDataOutputAssociationWrites(node int32, dataObject, targetState string, writes []DataWrite) {
+	compiled := make([]DataObjectWrite, 0, len(writes))
+	for _, w := range writes {
+		if w.Value == nil {
+			continue
+		}
+		compiled = append(compiled, DataObjectWrite{Value: w.Value, TargetPath: b.intern(w.TargetPath)})
+	}
+	if len(compiled) == 0 {
+		compiled = nil
+	}
 	b.dataOutAssocs = append(b.dataOutAssocs, pendingDataOut{
 		node: node,
 		assoc: DataOutputAssociation{
 			DataObject:  b.intern(dataObject),
-			Value:       value,
 			TargetState: b.intern(targetState),
-			TargetPath:  b.intern(targetPath),
+			Writes:      compiled,
 		},
 	})
 }

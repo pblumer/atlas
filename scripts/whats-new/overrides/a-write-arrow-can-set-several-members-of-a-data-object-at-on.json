@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Data"
+  ],
+  "title": {
+    "en": "One arrow, as many fields as the step fills in",
+    "de": "Ein Pfeil, so viele Felder wie der Schritt ausfüllt"
+  },
+  "summary": {
+    "en": "A task that captures a name, a first name, a unit and a start date used to need four arrows to the same data object, one per field, and a diagram of them reads as a cable harness. The arrow now carries a list: add a row per field, pick the member, give it a value. They are applied in the order you list them and recorded as one change to the object, because the step did one thing. The alternative was to write the whole object from a single expression, which drew well and told Atlas nothing — what is inside an expression cannot be read before the process runs, so nothing checked those fields against the class and the class looked like it had none. Named on their own rows they count again: checked when you deploy, listed in the derived model, and compared against what you planned.",
+    "de": "Eine Aufgabe, die Name, Vorname, Organisationseinheit und Eintritt erfasst, brauchte bisher vier Pfeile auf dasselbe Datenobjekt, einen je Feld — ein Diagramm davon sieht aus wie ein Kabelbaum. Der Pfeil führt jetzt eine Liste: eine Zeile je Feld, Attribut auswählen, Wert angeben. Sie werden in der angegebenen Reihenfolge angewandt und als eine Änderung am Objekt festgehalten, denn der Schritt hat eine Sache getan. Die Alternative war, das ganze Objekt aus einem einzigen Ausdruck zu schreiben. Das zeichnet sich gut und sagt Atlas nichts: Was in einem Ausdruck steht, ist vor dem Lauf nicht lesbar, also prüfte niemand diese Felder gegen die Klasse, und die Klasse sah aus, als hätte sie keine. In eigenen Zeilen benannt zählen sie wieder — geprüft beim Deployen, im abgeleiteten Modell aufgeführt und gegen das Geplante verglichen."
+  },
+  "try": {
+    "label": {
+      "en": "Open the Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

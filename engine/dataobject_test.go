@@ -645,3 +645,110 @@ func TestDataObjectWriteAttribution(t *testing.T) {
 		t.Fatalf("replayed producer = %+v, want %d", replayed, producers[1])
 	}
 }
+
+// TestDataOutputAssociationWritesSeveralMembersInOneEvent is the run-time half of
+// ADR-draft-a-write-arrow-may-set-several-members: one arrow carrying several
+// <assignment>s writes all of them, and writes them as ONE fact.
+//
+// The event count is the assertion that matters, and it is why the writes were not
+// simply fanned out into one compiled association each. A task that captures four
+// fields did one thing. Four events would put three half-built identities into the
+// instance timeline and the variable audit — an identity with a surname and no first
+// name is not a state this business was ever in (invariant I6).
+func TestDataOutputAssociationWritesSeveralMembersInOneEvent(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "capture", 1)
+	start := b.AddStartEvent()
+	capture := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, capture)
+	b.Connect(capture, end)
+	b.AddDataObject("identity", "", "draft", false)
+	b.AddDataOutputAssociationWrites(capture, "identity", "captured", []compiler.DataWrite{
+		{Value: mustCompile(t, "surname"), TargetPath: "surname"},
+		{Value: mustCompile(t, "firstName"), TargetPath: "firstName"},
+		{Value: mustCompile(t, `"Sales"`), TargetPath: "org.unit"},
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	h := openHarness(t, dir)
+	defer h.close(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key,
+		model.VariableValue{Name: "surname", Kind: model.VarString, Text: "Blumer"},
+		model.VariableValue{Name: "firstName", Kind: model.VarString, Text: "Patrick"})
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+
+	scope := model.NewKey(1, 1)
+	live := readDataObject(t, h.store, scope, "identity")
+	if live == nil {
+		t.Fatal("data object 'identity' missing after run")
+	}
+	const want = `{"firstName":"Patrick","org":{"unit":"Sales"},"surname":"Blumer"}`
+	if live.Kind != model.VarJSON || live.Text != want {
+		t.Fatalf("identity = kind %v text %q, want VarJSON %s", live.Kind, live.Text, want)
+	}
+	if live.State != "captured" {
+		t.Errorf("state = %q, want captured", live.State)
+	}
+	// The seed, then one write. Not the seed and three.
+	var n int
+	if err := h.store.DataObjectSnapshotHistory(scope, func(_ int64, _ uint64, _ *model.DataObjectValue) error {
+		n++
+		return nil
+	}); err != nil {
+		t.Fatalf("DataObjectSnapshotHistory: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("history has %d entries, want 2 (the seed and one write) — one arrow is one fact", n)
+	}
+}
+
+// TestDataOutputAssociationWritesApplyInOrder pins the two things that follow from
+// applying an arrow's writes in document order, and that are therefore not special
+// cases: a later write to the same member wins, and a member write after a
+// whole-object write on the same arrow lands on the new value rather than the old.
+func TestDataOutputAssociationWritesApplyInOrder(t *testing.T) {
+	dir := t.TempDir()
+	b := compiler.NewBuilder(defKey, "order", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "", "", false)
+	b.AddDataOutputAssociationWrites(task, "order", "", []compiler.DataWrite{
+		{Value: mustCompile(t, `"stale"`), TargetPath: "note"},
+		{Value: mustCompile(t, `{"total": 1}`)}, // no path: replaces everything so far
+		{Value: mustCompile(t, `"fresh"`), TargetPath: "note"},
+		{Value: mustCompile(t, "2"), TargetPath: "total"}, // later write to the same member
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	h := openHarness(t, dir)
+	defer h.close(t)
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+	p.CreateInstance(cp.Key)
+	if err := p.RunUntilIdle(); err != nil {
+		t.Fatalf("RunUntilIdle: %v", err)
+	}
+	live := readDataObject(t, h.store, model.NewKey(1, 1), "order")
+	const want = `{"note":"fresh","total":2}`
+	if live == nil || live.Text != want {
+		t.Fatalf("order = %v, want %s — the whole-object write must clear what came before it", live, want)
+	}
+}

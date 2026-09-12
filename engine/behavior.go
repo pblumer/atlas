@@ -719,39 +719,47 @@ func applyDataOutputAssociations(c *ProcessingContext, ei *model.ElementInstance
 		name := cp.Intern(a.DataObject)
 		cur := c.GetDataObject(ei.ProcessInstanceKey, name)
 
+		// One arrow is one fact (invariant I6), whatever the number of members it sets:
+		// the writes accumulate into a single value here and are appended once below.
+		// An arrow with no writes is ADR-0058's state-only transition, and falls out of
+		// the same loop running zero times over the object's current value.
 		out := model.DataObjectValue{ScopeKey: ei.ProcessInstanceKey, Name: name}
-		switch {
-		case a.Value != nil:
-			result, err := a.Value.Eval(bindInputs(c, a.Value.Inputs(), ei.ProcessInstanceKey))
+		if cur != nil {
+			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+		}
+		for j := range a.Writes {
+			w := &a.Writes[j]
+			result, err := w.Value.Eval(bindInputs(c, w.Value.Inputs(), ei.ProcessInstanceKey))
 			if err != nil {
 				// Incidents are not modeled yet; FEEL is null-propagating, so a failed
 				// evaluation writes null rather than halting the processor.
 				result = expr.Null
 			}
-			if a.TargetPath >= 0 {
-				// Write only one member of the (structured) object, keeping the rest
-				// (ADR-0060): read the current JSON, set the member to the result, and
-				// write the merged canonical value back.
-				leaf, ok := expr.ToJSON(result)
-				if !ok {
-					leaf = "null"
-				}
-				current := ""
-				if cur != nil && cur.Kind == model.VarJSON {
-					current = cur.Text
-				}
-				if merged, err := setJSONMember(current, cp.Intern(a.TargetPath), leaf); err == nil {
-					out.Kind, out.Text = model.VarJSON, merged
-				} else if cur != nil {
-					out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
-				}
-			} else {
+			if w.TargetPath < 0 {
+				// No path: this write replaces the whole value, including whatever an
+				// earlier write on the same arrow put there (ADR-0058).
 				kind, b, text := expr.Classify(result)
 				out.Kind, out.Bool, out.Text = toVarKind(kind), b, text
+				continue
 			}
-		case cur != nil:
-			// State-only transition: keep the object's current value.
-			out.Kind, out.Bool, out.Text = cur.Kind, cur.Bool, cur.Text
+			// Write only one member of the (structured) object, keeping the rest
+			// (ADR-0060): read the value built so far, set the member to the result,
+			// and keep the merged canonical value. Reading what this loop has built
+			// rather than the stored object is what lets several members of one object
+			// be set from one arrow — and with one write the two are the same thing.
+			leaf, ok := expr.ToJSON(result)
+			if !ok {
+				leaf = "null"
+			}
+			current := ""
+			if out.Kind == model.VarJSON {
+				current = out.Text
+			}
+			if merged, err := setJSONMember(current, cp.Intern(w.TargetPath), leaf); err == nil {
+				out.Kind, out.Bool, out.Text = model.VarJSON, false, merged
+			}
+			// A merge that fails leaves the value as it stands — the same nothing an
+			// unmergeable write did before, now stated once rather than per write.
 		}
 
 		if a.TargetState >= 0 {

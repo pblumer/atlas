@@ -146,14 +146,23 @@ func Derive(cps []*compiler.CompiledProcess) Derivation {
 					if cp.Intern(a.DataObject) != object {
 						continue
 					}
-					// A path names a member of this class. A write with no path replaces
-					// the whole value and says nothing about what is inside it — which
-					// addPath refuses on the empty string it interns to. That refusal is
-					// itself a fact worth keeping, so it is recorded rather than dropped.
-					if path := cp.Intern(a.TargetPath); path == "" {
-						c.wroteWhole = true
-					} else {
-						c.addPath(path)
+					// Every write the arrow carries, because BPMN lets one carry several
+					// and each names a member in its own right
+					// (ADR-draft-a-write-arrow-may-set-several-members). A path names a
+					// member of this class; a write with no path replaces the whole value
+					// and says nothing about what is inside it, which addPath refuses on
+					// the empty string it interns to. That refusal is itself a fact worth
+					// keeping, so it is recorded rather than dropped.
+					//
+					// An arrow with no writes at all is a state-only transition: it
+					// replaces nothing, so it is not a whole-object write, and the loop
+					// running zero times says nothing about members — which is right.
+					for _, w := range a.Writes {
+						if path := cp.Intern(w.TargetPath); path == "" {
+							c.wroteWhole = true
+						} else {
+							c.addPath(path)
+						}
 					}
 					if a.TargetState < 0 {
 						continue
