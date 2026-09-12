@@ -224,6 +224,58 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A capability's service levels are measured, not only declared.** Every KPI and SLA
+  on a business capability was prose the API labelled as a declaration, because nothing
+  computed one. `GET /api/v1/capabilities/{key}/measurement?windowDays=N` now returns,
+  per realising process, how often each end event fired, how often a token was
+  cancelled, the cycle time over the window, and each declared SLA's attainment.
+
+  **The window is required, and that is a measured finding rather than a preference.**
+  The decision record behind the register carried an open question — whether this is
+  computable at volume without the OpenSearch exporter, which not every installation
+  runs — and required that it be answered by measurement. It was. The per-element
+  counters are flat: a thousandfold population leaves them in microseconds, and at
+  10 000 instances the outcome distribution is *faster* than at 1 000. The instance walk
+  is linear, costing 1.24 seconds over 100 000 finished instances. So an unbounded
+  reading is not offered: `windowDays` is required and at most 400, which is generous
+  enough for an annual SLA and small enough that seconds of waiting cannot be asked for
+  by accident. The exporter is an optimisation for unbounded historical analysis, not a
+  prerequisite.
+
+  **The response mixes two kinds of number on purpose and says which is which.** The
+  counts come from maintained counters and are all-time — a counter holds a total, not
+  a series — while the cycle time is windowed. Both are integers on a screen, so the
+  body carries a sentence for each basis rather than leaving a client to assume.
+
+  **An SLA is measured only where it carries a number.** The new optional
+  `thresholdSeconds` sits beside the prose threshold rather than replacing it: "within
+  five business days" is what the business agreed, and no parser should decide what a
+  business day means at your installation. One without it is listed under `notMeasured`
+  with the remedy — and every KPI is listed there too, because which recorded figure
+  "disburse within three days" refers to is a judgement, and a guess would put a number
+  somebody acts on under a name nobody authored.
+
+  Two kinds of absence stay distinct, as in the gap report: a realisation you may not
+  see is restricted, one this server does not deploy is not deployed, and neither is
+  zero-filled. An SLA over a window that held no case is not 100% attained and not 0%.
+
+  This is the one read in the area that runs off the run loop, because it is the one
+  whose work grows with the instance population.
+
+- **Per-phase duration was measured and left out, for a different reason than
+  expected.** It went into the measurement as the candidate for omission, on the
+  reasoning that its cost scales with the length of the process while cycle time's does
+  not. A second benchmark axis — the same population over processes of 1, 10 and 30
+  tasks — refuted that: a thirtyfold longer process costs it 1.4× more, and its ratio to
+  its own control *falls* from 2.4× to 1.9×. Within an instance the cost is the seek to
+  the prefix, not the walk under it.
+
+  So it is not omitted for cost. It is omitted because a phase is a span between two
+  points a reader names, and the register has no field naming them; offering the
+  duration between two element ids a caller passes in would be a process-analytics
+  endpoint wearing a capability's name. The cost question is settled and the modelling
+  question is not.
+
 - **Atlas now reads the difference between what your processes build and what your model
   plans.** [ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) settled that
   Atlas holds two statements about the same subject and must not merge them: the derived

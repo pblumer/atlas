@@ -394,6 +394,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0306](0306-a-lifecycle-may-take-its-states-from-an-enumeration.md) | A lifecycle may take its states from an «enumeration» | Accepted | Landed |
 | [0307](0307-the-milestone-event-compiles.md) | The milestone event compiles | Accepted | Landed |
 | [0308](0308-panorama-binds-the-capability-register.md) | Panorama binds the capability register | Accepted | Landed |
+| [0309](0309-measuring-a-capability.md) | Measuring a capability | Accepted | Landed |
 
 ## The two states of a record
 

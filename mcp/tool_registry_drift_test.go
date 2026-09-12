@@ -43,6 +43,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_capabilities":            "GET /api/v1/capabilities",
 	"atlas_get_capability":               "GET /api/v1/capabilities/{key}",
 	"atlas_capability_coverage":          "GET /api/v1/capabilities/{key}/coverage",
+	"atlas_measure_capability":           "GET /api/v1/capabilities/{key}/measurement",
 	"atlas_create_capability":            "POST /api/v1/capabilities",
 	"atlas_save_capability":              "PUT /api/v1/capabilities/{key}",
 	"atlas_delete_capability":            "DELETE /api/v1/capabilities/{key}",

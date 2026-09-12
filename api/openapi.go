@@ -739,6 +739,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Resolve one capability against this server: what actually does it (with the deployed version and running instances, resolved now and stored nowhere), what it depends on and what those have promised, who depends on it, and which value-stream stages it performs. The KPIs and SLAs it carries are declarations — the answer says so",
 			tag:     "Business architecture", role: roleAny,
 			resp: jsonBody("Coverage", tObject())}},
+		{"GET", "/api/v1/capabilities/{key}/measurement", s.capabilities.HandleMeasurement, apiOp{
+			summary: "Measure one capability against what actually ran: the outcome distribution and cancellation counts from the maintained per-element counters (all-time, because a counter holds a total and not a series), cycle time over the window, and each declared SLA's attainment where it carries a machine-readable thresholdSeconds. ?windowDays= is required and at most 400 — an unbounded reading costs seconds at volume, which is what the measurement behind ADR-0305 established. Every figure says which basis it rests on, and every declared figure Atlas could not compute is listed with the reason",
+			tag:     "Business architecture", role: roleAny,
+			resp: jsonBody("Measurement", tObject())}},
 		{"GET", "/api/v1/value-streams", s.capabilities.HandleListValueStreams, apiOp{
 			summary: "List value streams — the ordered activity that meets a customer need, whose stages name the capabilities performing them; filter with ?tag= and ?stale=true",
 			tag:     "Business architecture", role: roleAny,
