@@ -1665,17 +1665,36 @@ the method and how to work it with Atlas as it stands are in
   own words that it can be asked about the processes realising a capability and not
   about the capability itself
   ([ADR-0308](docs/adr/0308-panorama-binds-the-capability-register.md)).
-- 🔲 **B7 — Measurement.** Compute a capability's declared KPIs and SLAs from the data
-  Atlas already keeps: outcome distribution from the per-element visit counters
-  ([ADR-0080](docs/adr/0080-runtime-aggregate-counters.md)) over distinctly named end
-  events, timeout rates from the termination counters, cycle time and per-phase
-  duration from the instance timeline, and slicing by `atlas:searchable` variables
-  ([ADR-0244](docs/adr/0244-searchable-variables.md)). This slice carries the draft
-  record's open question, and it has to be answered by measurement rather than by
-  argument: whether that is computable at the instance volumes this is aimed at
-  *without* the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)),
-  which not every installation runs. Until it is answered, a KPI in the record is a
-  declaration and the API must not imply otherwise.
+- ✅ **B7 — Measurement.** A capability's declared SLAs are now checked against what
+  ran: `GET /api/v1/capabilities/{key}/measurement?windowDays=N` returns, per realising
+  process, the outcome distribution and cancellation counts from the maintained
+  per-element counters, the cycle time over the window, and each declared SLA's
+  attainment.
+
+  **The record's open question is answered, by measurement rather than by argument as
+  it required.** The counters are flat at any volume — a thousandfold population leaves
+  them in microseconds — and the instance walk is linear, costing 1.24 s over 100 000
+  finished instances. So: yes, computable without the OpenSearch exporter, provided the
+  readings that walk instances carry a **required** window. The exporter is an
+  optimisation for unbounded historical analysis, not a prerequisite
+  ([`benchmarks/results/measurement-381825f.md`](benchmarks/results/measurement-381825f.md)).
+
+  Two findings changed the shape of the slice. Per-phase duration went in as the
+  candidate for omission, on the reasoning that its cost scales with process length; a
+  second benchmark axis refuted that — the ratio is a constant near 2× and *falls* as
+  processes grow — so it is not dropped for cost. It is out of the response for a
+  different reason: a phase is a span between two points a reader names, and the
+  register has no field naming them. And the response mixes two kinds of number on
+  purpose, all-time counters and windowed walks, so every figure says which basis it
+  rests on in the body itself.
+
+  A declared figure Atlas cannot compute stays visible as a declaration: an SLA is
+  measured only where it carries the new optional `thresholdSeconds`, and every KPI is
+  listed as not measured with the reason, because guessing which recorded figure a goal
+  in the business's words refers to would put a number somebody acts on under a name
+  nobody authored. This is the one read in the area that runs off the run loop
+  ([ADR-0239](docs/adr/0239-off-loop-queries.md))
+  ([ADR-0309](docs/adr/0309-measuring-a-capability.md)).
 - 🔲 **B8 — The Console surface.** A capability list that is worth opening: filter by
   tag, sort by realisation state, and the gap report as the landing view rather than a
   report somebody has to find. German first ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)).

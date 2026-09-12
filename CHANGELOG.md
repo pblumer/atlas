@@ -224,6 +224,99 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A capability's service levels are measured, not only declared.** Every KPI and SLA
+  on a business capability was prose the API labelled as a declaration, because nothing
+  computed one. `GET /api/v1/capabilities/{key}/measurement?windowDays=N` now returns,
+  per realising process, how often each end event fired, how often a token was
+  cancelled, the cycle time over the window, and each declared SLA's attainment.
+
+  **The window is required, and that is a measured finding rather than a preference.**
+  The decision record behind the register carried an open question — whether this is
+  computable at volume without the OpenSearch exporter, which not every installation
+  runs — and required that it be answered by measurement. It was. The per-element
+  counters are flat: a thousandfold population leaves them in microseconds, and at
+  10 000 instances the outcome distribution is *faster* than at 1 000. The instance walk
+  is linear, costing 1.24 seconds over 100 000 finished instances. So an unbounded
+  reading is not offered: `windowDays` is required and at most 400, which is generous
+  enough for an annual SLA and small enough that seconds of waiting cannot be asked for
+  by accident. The exporter is an optimisation for unbounded historical analysis, not a
+  prerequisite.
+
+  **The response mixes two kinds of number on purpose and says which is which.** The
+  counts come from maintained counters and are all-time — a counter holds a total, not
+  a series — while the cycle time is windowed. Both are integers on a screen, so the
+  body carries a sentence for each basis rather than leaving a client to assume.
+
+  **An SLA is measured only where it carries a number.** The new optional
+  `thresholdSeconds` sits beside the prose threshold rather than replacing it: "within
+  five business days" is what the business agreed, and no parser should decide what a
+  business day means at your installation. One without it is listed under `notMeasured`
+  with the remedy — and every KPI is listed there too, because which recorded figure
+  "disburse within three days" refers to is a judgement, and a guess would put a number
+  somebody acts on under a name nobody authored.
+
+  Two kinds of absence stay distinct, as in the gap report: a realisation you may not
+  see is restricted, one this server does not deploy is not deployed, and neither is
+  zero-filled. An SLA over a window that held no case is not 100% attained and not 0%.
+
+  This is the one read in the area that runs off the run loop, because it is the one
+  whose work grows with the instance population.
+
+- **Per-phase duration was measured and left out, for a different reason than
+  expected.** It went into the measurement as the candidate for omission, on the
+  reasoning that its cost scales with the length of the process while cycle time's does
+  not. A second benchmark axis — the same population over processes of 1, 10 and 30
+  tasks — refuted that: a thirtyfold longer process costs it 1.4× more, and its ratio to
+  its own control *falls* from 2.4× to 1.9×. Within an instance the cost is the seek to
+  the prefix, not the walk under it.
+
+  So it is not omitted for cost. It is omitted because a phase is a span between two
+  points a reader names, and the register has no field naming them; offering the
+  duration between two element ids a caller passes in would be a process-analytics
+  endpoint wearing a capability's name. The cost question is settled and the modelling
+  question is not.
+
+- **Atlas now reads the difference between what your processes build and what your model
+  plans.** [ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) settled that
+  Atlas holds two statements about the same subject and must not merge them: the derived
+  model is what is *built*, the authored one is what is *wanted*, and their difference is
+  the work not yet done. It then stopped, because it could not settle the shape and
+  because it named a blocker — a comparison "needs a stable identity for a derived class
+  across two derivations, which nothing yet provides".
+
+  That blocker belonged to a *reconciliation*, which has to remember which change you
+  rejected last time. This reading remembers nothing: both sides are computed fresh and
+  compared by name, so there is no identity to keep across anything. And the names are
+  already the mechanism — `itemSubjectRef` resolves a class by name, a write path names a
+  member, and a lifecycle state's name **is** its identity because it is the string every
+  process writes.
+
+  **Data → Planned against built** shows two lists, never blended, because a reader acts
+  on them differently. *Planned, not built* is in the model and in no process: the
+  backlog, a decision taken and not yet implemented, and explicitly not a defect —
+  `data.unreachable-state` already reported exactly one case of this, and this generalises
+  it to members, states, transitions and whole classes. *Built, not described* is in the
+  processes and in no model, which usually means write it down and occasionally means a
+  process is doing something nobody agreed to.
+
+  **What it never compares is the half that makes it trustworthy**, and it is said where
+  it lists rather than in a footnote: the business key, attribute types and multiplicity,
+  which states are final, associations and documentation. Derivation cannot see any of
+  them ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md) §2), so a
+  difference there would be a fact about derivation rather than about your system — and
+  every one would sit on every class for ever. A short list is therefore not a clean bill,
+  and the screen says so.
+
+  Two more silences for the same reason. An «enumeration» is never reported as unbuilt: it
+  is machinery of the model — an attribute's type, or the states a lifecycle takes
+  ([ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md)) — and
+  no process carries one. And an application that models nothing produces no findings at
+  all, rather than a wall of rows that are only the absence of a document nobody has
+  started.
+
+  Also readable as `GET /api/v1/infomodel/difference?applicationId=…` and as the MCP tool
+  `atlas_model_difference`. Nothing is written to either model.
+
 - **A drawing and the capability register are now one architecture.** Panorama holds an
   architect's ArchiMate model; the register holds what has to be done, with an owner, a
   scope and SLAs. Draw *Underwrite a loan*, file a capability keyed `loan-underwriting`,

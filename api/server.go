@@ -1490,6 +1490,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		time.Now,
 	)
 	s.capabilityRecords, s.valueStreamRecords = capabilityStore, valueStreamStore
+	// Measuring is the one capability read that walks instances, so it is wired
+	// separately and runs off the loop (ADR-0239). Everything else in that area is
+	// design-time size and runs on it.
+	s.capabilities.SetMeasurementResolver(s.measureCapability)
 	for _, opt := range opts {
 		opt(s)
 	}

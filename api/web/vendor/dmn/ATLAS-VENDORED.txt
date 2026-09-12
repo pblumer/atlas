@@ -1,38 +1,36 @@
 dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
-  - dmn-js@17.10.0              (the DRD / decision-table / literal-expression Modeler)
+  - pblumer/dmn-js@17.10.2
+    commit: 214b15b86e213b8ea49640aa6c6b82f8c5e28ad2
+  - pblumer/dmn-moddle
+    commit: 23697fac646aaa0bc09d9ce3ae90c96769397bc6
   - dmn-js-properties-panel@3.11.1
   - @bpmn-io/properties-panel@3.48.0
   - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
 
-All bpmn.io / MIT (see LICENSE). It used to be the stock dmn-js UMD tarball
-(window.DmnJS), but the properties panel and the Modeler must share ONE dmn-js
-instance, which a drop-in UMD can't provide — so we bundle them together. The
-build is done offline and only its OUTPUT is committed, exactly like the stock
-UMD bundle was; nothing is built during Atlas's own build/CI (ADR-0012/0062:
-no CDN, no build step at runtime).
+The dmn-js fork is pinned to the exact commit above. Its dmn-js-shared package
+pins dmn-moddle to the exact commit above as well. The fork adds generic DMN 1.5
+Decision Service authoring, divider modeling and semantic roundtrip support; no
+Atlas-specific behavior is implemented inside dmn-js or dmn-moddle.
+
+All bpmn.io / MIT (see LICENSE). The properties panel and the Modeler must share
+ONE dmn-js instance, so they are bundled together. The build is done offline and
+only its OUTPUT is committed; nothing is built during Atlas's own build/CI
+(ADR-0012/0062: no CDN, no build step at runtime).
 
 window.AtlasDmn exposes: DmnJS (the Modeler), DmnPropertiesPanelModule,
 DmnPropertiesProviderModule, CamundaPropertiesProviderModule, CamundaModdleDescriptor.
 
-Do not edit dmn-modeler.js by hand. To rebuild (reproducible, offline):
+Do not edit dmn-modeler.js by hand. To reproduce the bundle, check out
+pblumer/dmn-js at 214b15b86e213b8ea49640aa6c6b82f8c5e28ad2 with Node 24, run npm ci and npm run build-distro,
+install the exact properties-panel / camunda-dmn-moddle / esbuild versions above,
+and bundle the same entry point documented in this repository's history with:
 
-  npm i dmn-js@17.10.0 dmn-js-properties-panel@3.11.1 \
-        @bpmn-io/properties-panel@3.48.0 camunda-dmn-moddle@1.3.1 esbuild@0.24.0
-  # src/index.js:
-  #   import Modeler from 'dmn-js/lib/Modeler';
-  #   import { DmnPropertiesPanelModule, DmnPropertiesProviderModule,
-  #            CamundaPropertiesProviderModule } from 'dmn-js-properties-panel';
-  #   import CamundaModdleDescriptor from 'camunda-dmn-moddle/resources/camunda.json';
-  #   export { Modeler as DmnJS, DmnPropertiesPanelModule, DmnPropertiesProviderModule,
-  #            CamundaPropertiesProviderModule, CamundaModdleDescriptor };
-  esbuild src/index.js --bundle --format=iife --global-name=AtlasDmn \
-        --loader:.json=json --minify --legal-comments=none --outfile=dmn-modeler.js
+  esbuild src/index.js --bundle --format=iife --global-name=AtlasDmn         --loader:.json=json --minify --legal-comments=none --outfile=dmn-modeler.js
 
-  # CSS: cp node_modules/@bpmn-io/properties-panel/dist/assets/properties-panel.css assets/
-
-assets/ also holds the dmn-js diagram/drd/decision-table/literal-expression CSS
-and the dmn icon font, copied from dmn-js@17.10.0/dist/assets.
+assets/ holds the dmn-js diagram/drd/decision-table/literal-expression CSS and
+icon font from the pinned fork distro, plus properties-panel.css from
+@bpmn-io/properties-panel@3.48.0.
 
 SHA-256 dmn-modeler.js:
-32f92ea2849af47c8405ca43d40741d2f3222cc21a822d85ad1e15bb1fbdae4c
+1930d61dd088f1f67d15ca46ef0234432fc34e789cc1ce0008a55fae1ffc4177

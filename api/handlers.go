@@ -3019,6 +3019,37 @@ func (s *Server) handleDerivedModel(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, infomodel.Derive(cps))
 }
 
+// handleModelDifference answers what the application's processes and its authored
+// model say differently (ADR-0310).
+//
+// It is stateless, which is what makes it possible: ADR-0301 §4 wanted an identity for a
+// derived element that survives a re-derivation, because a *reconciliation* has to
+// remember which change was rejected. Nothing here remembers anything — both sides are
+// computed fresh and compared by name — so there is no identity to keep.
+//
+// A read, like the derivation it stands beside: nothing is written to either model.
+func (s *Server) handleModelDifference(w http.ResponseWriter, r *http.Request) {
+	applicationID := r.URL.Query().Get("applicationId")
+	if strings.TrimSpace(applicationID) == "" {
+		httpapi.Error(w, http.StatusBadRequest, "applicationId is required — a difference is read between one application's processes and its own model")
+		return
+	}
+	var (
+		cps   []*compiler.CompiledProcess
+		vocab *infomodel.Vocabulary
+		err   error
+	)
+	s.do(func() {
+		cps = s.applicationProcessesOnLoop(applicationID)
+		vocab, err = s.infomodel.VocabularyOnLoop(applicationID)
+	})
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "could not read this application's information model")
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, infomodel.Difference(cps, vocab))
+}
+
 // lifecycleView is one data object's declared lifecycle with its own life drawn on
 // it (ADR-0259 §4). The trace is inlined rather than nested under a key, because the
 // caller's question is about the object and the machine is the answer, not a

@@ -5457,6 +5457,46 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .dm-card-head { display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
 .dm-gaps-inline { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
 
+/* Planned against built — the difference reading
+   (ADR-0310).
+
+   A list rather than a drawing, because a difference painted onto one of the two
+   pictures is exactly the confusion ADR-0301 names as the cost of having two. The two
+   sides sit as columns and are never blended: a reader acts on them differently, so the
+   layout has to make "which document is this about" answerable at a glance. */
+.md-root { padding: 18px 22px 26px; }
+.md-root .between .btn { white-space: nowrap; }
+.md-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
+@media (max-width: 900px) { .md-cols { grid-template-columns: 1fr; } }
+.md-col { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.md-col h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.md-count {
+  font: 600 11px/1 system-ui, sans-serif; padding: 3px 7px; border-radius: 999px;
+  background: var(--bg); color: var(--muted); border: 1px solid var(--border);
+}
+/* The backlog side carries the accent: it is the direction the pair exists for. The
+   other is information, not work, and is left neutral so it does not compete. */
+.md-col.planned { border-left: 3px solid var(--accent); }
+.md-meaning { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 0 0 12px; }
+.md-class { border-top: 1px solid var(--border); padding: 10px 0 2px; }
+.md-class-head { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; }
+.md-rows { list-style: none; margin: 6px 0 0; padding: 0; }
+.md-rows li {
+  display: grid; grid-template-columns: 74px 1fr; gap: 2px 10px;
+  padding: 6px 0; border-top: 1px dashed var(--border); font-size: 12.5px;
+}
+.md-rows li:first-child { border-top: none; }
+.md-what { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+.md-where { font-weight: 600; }
+.md-note { grid-column: 2; color: var(--muted); line-height: 1.45; }
+.md-none { color: var(--muted); font-size: 12.5px; font-style: italic; margin: 0; }
+.md-excluded {
+  margin-top: 18px; padding: 12px 16px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg); font-size: 12.5px;
+}
+.md-excluded ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
+.md-excluded li { margin: 4px 0; }
+
 /* The bar above the run-time overlay: which object is drawn, where it has got to,
    and — only when more than one object has a machine — which one to draw. */
 .lc-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px 0; font-size: 13px; }
