@@ -32,6 +32,7 @@ jobs:
       - name: Complete implementation
         run: |
           python3 scripts/finish-panorama-query.py
+          python3 scripts/finish-panorama-query-fix.py
           gofmt -w api/panorama/query_*.go
 
       - name: Build
@@ -64,7 +65,7 @@ jobs:
       - name: Commit completed slice
         run: |
           rm .github/workflows/panorama-query-finish.yml
-          rm scripts/finish-panorama-query.py
+          rm scripts/finish-panorama-query.py scripts/finish-panorama-query-fix.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
