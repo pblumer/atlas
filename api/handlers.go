@@ -3063,7 +3063,7 @@ func (s *Server) handleDerivedModel(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleModelDifference answers what the application's processes and its authored
-// model say differently (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned).
+// model say differently (ADR-0310).
 //
 // It is stateless, which is what makes it possible: ADR-0301 §4 wanted an identity for a
 // derived element that survives a re-derivation, because a *reconciliation* has to

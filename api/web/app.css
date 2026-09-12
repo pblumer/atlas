@@ -5458,7 +5458,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .dm-gaps-inline { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
 
 /* Planned against built — the difference reading
-   (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned).
+   (ADR-0310).
 
    A list rather than a drawing, because a difference painted onto one of the two
    pictures is exactly the confusion ADR-0301 names as the cost of having two. The two

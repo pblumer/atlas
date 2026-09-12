@@ -7,7 +7,7 @@ import (
 )
 
 // The difference between what an application builds and what it plans, end to end
-// (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned).
+// (ADR-0310).
 //
 // The rules of the comparison are held in api/infomodel. These are about the read
 // arriving whole, refusing what it cannot answer, and writing nothing.

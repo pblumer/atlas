@@ -1,5 +1,5 @@
 // Planned against built — the difference reading
-// (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned).
+// (ADR-0310).
 //
 // The list will be read as work, so what these tests hold is mostly about restraint:
 // that the two directions are never blended, that "planned" is not presented as a

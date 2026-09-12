@@ -1,5 +1,5 @@
 // The difference between what is built and what is planned
-// (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned).
+// (ADR-0310).
 //
 // ADR-0301 settled that Atlas holds two statements about the same subject and must not
 // merge them: the derived model is what is *built*, the authored one is what is

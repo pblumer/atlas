@@ -8306,7 +8306,7 @@ async function viewDerivedModel(applicationId) {
 }
 
 // viewModelDifference reads the authored model against what the processes build
-// (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned). It is the
+// (ADR-0310). It is the
 // third reading of one subject, and it is a list rather than a fourth drawing —
 // precisely so a reader cannot mistake it for either picture.
 async function viewModelDifference(applicationId) {

@@ -8,7 +8,7 @@ import (
 )
 
 // Reading the difference between what is built and what is planned
-// (ADR-draft-read-the-difference-between-what-is-built-and-what-is-planned).
+// (ADR-0310).
 //
 // The list will be read as work, so the thing these tests are most careful about is
 // what must *not* appear on it. A false backlog item is worse than a missing one: the
