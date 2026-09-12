@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A class a process writes whole no longer fills the difference reading with work that
+  is already done.** A write with no target path replaces a data object's entire value
+  with whatever a FEEL expression evaluates to at run time, so none of the fields it sets
+  can be read from the model. Derivation produced an empty member list for such a class,
+  and the difference between built and planned read that silence as an answer: every
+  member the model declared came back as *planned, not built*. On a real model one such
+  write invented five of them — exactly the kind of false backlog item that costs the
+  list its credibility.
+
+  Derivation now records the fact it could not see inside, as a gap stated on that class,
+  and the difference honours it: the member comparison is withheld and the exclusion says
+  so by name, in the same place it lists. The *states* of such a class are still compared,
+  because a data state is written on the object rather than inside its value, so a
+  whole-object write hides none of them.
+  ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md),
+  [ADR-0310](docs/adr/0310-read-the-difference-between-what-is-built-and-what-is-planned.md))
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything

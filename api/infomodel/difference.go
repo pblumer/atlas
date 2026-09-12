@@ -3,6 +3,7 @@ package infomodel
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 )
@@ -94,11 +95,39 @@ func Difference(cps []*compiler.CompiledProcess, vocab *Vocabulary) Diff {
 	if !d.Modeled {
 		return d
 	}
-	d.Excluded = excluded
+	// Copied, not aliased: the whole-object exclusion below appends a sentence about
+	// *this* application, and appending onto the package-level list would let one
+	// reading's sentence leak into the next one's.
+	d.Excluded = append([]string{}, excluded...)
 
+	// Derived once, not twice: both directions read the same reading, and deriving it
+	// again would be the same walk over the same processes for the same answer.
+	derived := Derive(cps)
 	built := map[string]Class{}
-	for _, c := range Derive(cps).Model.Classes {
+	for _, c := range derived.Model.Classes {
 		built[c.Name] = c
+	}
+
+	// A class some write replaces entirely is one derivation could not see inside. Its
+	// members are whatever a FEEL expression evaluates to at run time, so the empty
+	// member list is a silence rather than an answer — and comparing against it reports
+	// every field the model declares as unbuilt work the process is already doing. Found
+	// on a real model, where it would have invented five rows.
+	opaque := map[string]bool{}
+	for _, g := range derived.Gaps {
+		if g.Kind == GapWholeObjectWrite && g.Class != "" {
+			opaque[g.Class] = true
+		}
+	}
+	if len(opaque) > 0 {
+		names := make([]string, 0, len(opaque))
+		for n := range opaque {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		d.Excluded = append(d.Excluded, fmt.Sprintf("The members of %s. A process writes the whole "+
+			"value at once rather than naming a member, so what is inside it cannot be read from the "+
+			"model — and the fields declared there may well be written already.", strings.Join(names, ", ")))
 	}
 
 	for _, planned := range vocab.Classes() {
@@ -118,10 +147,10 @@ func Difference(cps []*compiler.CompiledProcess, vocab *Vocabulary) Diff {
 			// work is "build it", and a list of its parts is the same fact said again.
 			continue
 		}
-		d.comparePresent(planned, b, vocab)
+		d.comparePresent(planned, b, vocab, opaque[planned.Name])
 	}
 
-	for _, b := range Derive(cps).Model.Classes {
+	for _, b := range derived.Model.Classes {
 		if _, isPlanned := vocab.Class(b.Name); isPlanned {
 			continue
 		}
@@ -134,39 +163,13 @@ func Difference(cps []*compiler.CompiledProcess, vocab *Vocabulary) Diff {
 }
 
 // comparePresent compares a class both sides know, member by member and state by state.
-func (d *Diff) comparePresent(planned, built Class, vocab *Vocabulary) {
+func (d *Diff) comparePresent(planned, built Class, vocab *Vocabulary, opaque bool) {
 	name := planned.Name
 
-	// The business key is excluded, so the attributes that form it are too: nothing
-	// writes an identity through a data association, and reporting it would put the one
-	// fact derivation can never produce on the backlog of every class.
-	key := map[string]bool{}
-	for _, k := range planned.Identity {
-		key[k] = true
-	}
-	builtMembers := map[string]bool{}
-	for _, a := range built.Attributes {
-		builtMembers[a.Name] = true
-	}
-	for _, a := range vocab.Members(name) {
-		if key[a.Name] || builtMembers[a.Name] {
-			continue
-		}
-		d.Planned = append(d.Planned, DiffFinding{
-			Side: SidePlanned, Kind: KindDiffMember, Class: name, Name: a.Name,
-			Note: fmt.Sprintf("%s declares %s and no process writes it.", name, a.Name)})
-	}
-	plannedMembers := map[string]bool{}
-	for _, a := range vocab.Members(name) {
-		plannedMembers[a.Name] = true
-	}
-	for _, a := range built.Attributes {
-		if plannedMembers[a.Name] {
-			continue
-		}
-		d.Built = append(d.Built, DiffFinding{
-			Side: SideBuilt, Kind: KindDiffMember, Class: name, Name: a.Name,
-			Note: fmt.Sprintf("A process writes %s.%s and the class does not declare it.", name, a.Name)})
+	// Only the members are withheld. A data state is written on the object rather than
+	// inside its value, so a whole-object write hides nothing about states or moves.
+	if !opaque {
+		d.compareMembers(planned, built, vocab)
 	}
 
 	plannedStates, builtStates := map[string]bool{}, map[string]bool{}
@@ -252,4 +255,41 @@ func (d *Diff) sort() {
 	}
 	sort.SliceStable(d.Planned, less(d.Planned))
 	sort.SliceStable(d.Built, less(d.Built))
+}
+
+// compareMembers is the member half, split out because it is the one half a
+// whole-object write makes unanswerable.
+func (d *Diff) compareMembers(planned, built Class, vocab *Vocabulary) {
+	name := planned.Name
+	// The business key is excluded, so the attributes that form it are too: nothing
+	// writes an identity through a data association, and reporting it would put the one
+	// fact derivation can never produce on the backlog of every class.
+	key := map[string]bool{}
+	for _, k := range planned.Identity {
+		key[k] = true
+	}
+	builtMembers := map[string]bool{}
+	for _, a := range built.Attributes {
+		builtMembers[a.Name] = true
+	}
+	for _, a := range vocab.Members(name) {
+		if key[a.Name] || builtMembers[a.Name] {
+			continue
+		}
+		d.Planned = append(d.Planned, DiffFinding{
+			Side: SidePlanned, Kind: KindDiffMember, Class: name, Name: a.Name,
+			Note: fmt.Sprintf("%s declares %s and no process writes it.", name, a.Name)})
+	}
+	plannedMembers := map[string]bool{}
+	for _, a := range vocab.Members(name) {
+		plannedMembers[a.Name] = true
+	}
+	for _, a := range built.Attributes {
+		if plannedMembers[a.Name] {
+			continue
+		}
+		d.Built = append(d.Built, DiffFinding{
+			Side: SideBuilt, Kind: KindDiffMember, Class: name, Name: a.Name,
+			Note: fmt.Sprintf("A process writes %s.%s and the class does not declare it.", name, a.Name)})
+	}
 }

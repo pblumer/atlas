@@ -2,6 +2,27 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-class-a-process-writes-whole-no-longer-fills-the-differenc",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The difference reading no longer asks for work a process already does",
+        "de": "Der Abgleich verlangt keine Arbeit mehr, die längst erledigt ist"
+      },
+      "summary": {
+        "en": "A task can write a whole data object at once instead of naming a field — the value is an expression, and what it puts inside is decided while the process runs. Nothing in the model says what that is, so Atlas could see no fields at all for such an object. The difference between what is built and what is planned took that silence for an answer and listed every field the class declares as still to do. On a real model that was five fields a task was already writing. Now Atlas says plainly that it cannot see inside, leaves the fields of that class out of the comparison, and names the class among the things it did not compare. The states such an object moves through are still compared, because those are written on the object itself.",
+        "de": "Eine Aufgabe kann ein Datenobjekt als Ganzes schreiben, statt ein einzelnes Feld zu benennen — der Wert ist ein Ausdruck, und was darin steht, entscheidet sich erst zur Laufzeit. Im Modell steht davon nichts, also sah Atlas für ein solches Objekt überhaupt keine Felder. Der Abgleich zwischen Gebautem und Geplantem hielt dieses Schweigen für eine Antwort und führte jedes Feld der Klasse als offen. An einem echten Modell waren das fünf Felder, die eine Aufgabe längst schreibt. Jetzt sagt Atlas ausdrücklich, dass es nicht hineinsehen kann, lässt die Felder dieser Klasse aus dem Vergleich heraus und nennt die Klasse bei dem, was es nicht verglichen hat. Die Zustände, die ein solches Objekt durchläuft, werden weiterhin verglichen — die stehen am Objekt selbst."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data"
+      ]
+    },
+    {
       "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
       "version": "Unreleased",
       "date": null,
@@ -350,49 +371,6 @@
       "tags": [
         "Panorama"
       ]
-    },
-    {
-      "id": "a-write-into-a-data-object-now-offers-the-members-its-class-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Pick the field you are writing, instead of spelling it",
-        "de": "Das Feld, in das Sie schreiben, auswählen statt tippen"
-      },
-      "summary": {
-        "en": "When an activity writes one field of a data object, that field was free text — and a typo deploys, runs, and writes something nobody ever reads. It is a list now, built from the members the object's class declares, with the type, the multiplicity and the business key beside each one. Where a member is itself a class, its own fields are offered one level down. A name nothing models yet can still be typed, and comes back in the list saying so.",
-        "de": "Wenn eine Aktivität ein einzelnes Feld eines Datenobjekts schreibt, war dieses Feld freier Text — und ein Tippfehler wird deployed, läuft und schreibt etwas, das nie jemand liest. Jetzt ist es eine Liste aus den Attributen, die die Klasse des Objekts deklariert, mit Typ, Multiplizität und Geschäftsschlüssel daneben. Ist ein Attribut selbst eine Klasse, werden deren Felder eine Ebene tiefer angeboten. Ein noch nicht modellierter Name lässt sich weiterhin tippen und erscheint in der Liste mit dem Hinweis darauf."
-      },
-      "link": {
-        "label": "ADR-0060",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0060-data-object-write-paths.md"
-      },
-      "tags": [
-        "Modeler",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "In the Modeler, draw an arrow from an activity to a data object — that is the data output association.",
-          "Select the arrow. Under Writes data object you now find Target member as a list.",
-          "Pick the field to write, or leave it on the whole object. Members of a member appear indented under it.",
-          "The list only appears once the data object has a class: set it in the object's Class field first."
-        ],
-        "de": [
-          "Im Modeler einen Pfeil von einer Aktivität zu einem Datenobjekt ziehen — das ist die Datenausgabe-Zuweisung.",
-          "Den Pfeil auswählen. Unter Writes data object steht Target member jetzt als Liste bereit.",
-          "Das zu schreibende Feld wählen, oder auf dem ganzen Objekt belassen. Felder eines Feldes stehen eingerückt darunter.",
-          "Die Liste erscheint erst, wenn das Datenobjekt eine Klasse hat: diese zuerst im Feld Class setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
     }
   ]
 }

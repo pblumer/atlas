@@ -112,6 +112,13 @@ derivation and not about the system:
   process happens to do next.
 - **Associations** beyond the containment a dotted path implies, and **documentation**,
   which derivation can never produce.
+- **The members of a class some process writes whole.** ADR-0301 §2 records that a write
+  with no target path hides everything inside it. Comparing against that silence reports
+  every modelled field as unbuilt work the process is already doing — the exact kind of
+  false backlog item that costs the list its credibility. The member half is withheld for
+  such a class and the exclusion names it. Its *states* are still compared: a data state
+  is written on the object, not inside its value, so a whole-object write hides none of
+  them.
 
 The reading says this where it lists, not in a footnote: a reader who does not know what
 was excluded cannot tell a short list from a clean bill.

@@ -41,6 +41,11 @@ const (
 	// GapStructuredMember marks a member a dotted write path proved has members of its
 	// own, whose class nothing in BPMN names.
 	GapStructuredMember = "structured-member"
+	// GapWholeObjectWrite marks a class some write replaces entirely. The value is a
+	// FEEL expression evaluated at run time, so what is *inside* it cannot be read from
+	// the model at all — and a reader who takes the resulting empty member list for the
+	// class's members concludes that fields the process demonstrably writes are missing.
+	GapWholeObjectWrite = "whole-object-write"
 )
 
 // Gap is one thing the reading could not see. A gap with no Class is a fact about
@@ -70,6 +75,9 @@ type derivedClass struct {
 	attrs      []string
 	attrSeen   map[string]bool
 	structured []string
+	// wroteWhole records that some write replaced the object entirely rather than
+	// naming a member. It is the one thing the empty-path case *does* teach.
+	wroteWhole bool
 	states     []string
 	stateSeen  map[string]bool
 	initial    string
@@ -140,8 +148,13 @@ func Derive(cps []*compiler.CompiledProcess) Derivation {
 					}
 					// A path names a member of this class. A write with no path replaces
 					// the whole value and says nothing about what is inside it — which
-					// addPath refuses on the empty string it interns to.
-					c.addPath(cp.Intern(a.TargetPath))
+					// addPath refuses on the empty string it interns to. That refusal is
+					// itself a fact worth keeping, so it is recorded rather than dropped.
+					if path := cp.Intern(a.TargetPath); path == "" {
+						c.wroteWhole = true
+					} else {
+						c.addPath(path)
+					}
 					if a.TargetState < 0 {
 						continue
 					}
@@ -189,6 +202,12 @@ func Derive(cps []*compiler.CompiledProcess) Derivation {
 			d.Gaps = append(d.Gaps, Gap{Class: name, Kind: GapNamedAfterObject,
 				Note: fmt.Sprintf("Named after the data object %q, because no itemSubjectRef declared a type. "+
 					"The class a person would write is probably spelled differently.", name)})
+		}
+		if c.wroteWhole {
+			d.Gaps = append(d.Gaps, Gap{Class: name, Kind: GapWholeObjectWrite,
+				Note: fmt.Sprintf("A write replaces the whole value of %s rather than naming a member, "+
+					"so what is inside it cannot be read here. Its members are whatever that expression "+
+					"evaluates to at run time — this list is not them.", name)})
 		}
 		for _, member := range c.structured {
 			d.Gaps = append(d.Gaps, Gap{Class: name, Kind: GapStructuredMember,

@@ -280,6 +280,45 @@ func TestAWriteThatChangesNoStateStillNamesAMember(t *testing.T) {
 	}
 }
 
+// A whole-object write is the case that taught this rule, and it was found on a real
+// model rather than in a fixture: `= {id: identityId, nachname: nachname, …}` writes
+// every field at once, so derivation sees a class with no members at all. Saying
+// nothing about them is right; letting something downstream read that silence as
+// "this class has no members" is how a reader is told five fields are missing that the
+// process demonstrably writes.
+func TestAWholeObjectWriteIsReportedAsSomethingDerivationCannotSeeInto(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociation(task, "order", mustExpr(t, "amount"), "approved", "") // the whole value
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	d := Derive([]*compiler.CompiledProcess{cp})
+	whole := gapsOfKind(d, GapWholeObjectWrite)
+	if len(whole) != 1 || whole[0].Class != "Order" {
+		t.Fatalf("whole-object-write gaps = %+v, want one for Order", whole)
+	}
+	if !strings.Contains(whole[0].Note, "inside") {
+		t.Errorf("the note does not say what was not readable: %q", whole[0].Note)
+	}
+}
+
+func TestAMemberWriteIsNotAWholeObjectWrite(t *testing.T) {
+	// The other side of the rule: a class every write reaches through a path has been
+	// read all the way, so nothing is withheld about its members.
+	d := Derive([]*compiler.CompiledProcess{orderProcess(t)})
+	if got := gapsOfKind(d, GapWholeObjectWrite); len(got) != 0 {
+		t.Errorf("a class written only through paths was marked unreadable: %+v", got)
+	}
+}
+
 func TestAStructuredMemberIsSaidOnceHoweverOftenItIsWrittenInto(t *testing.T) {
 	// Two writes into the same member prove the same one fact. Saying it twice would
 	// read as two problems, and the qualifications are only useful while they are few.
