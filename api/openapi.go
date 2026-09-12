@@ -653,6 +653,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/models", s.infomodel.HandleList, apiOp{
 			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Information models", tArray())}},
+		{"GET", "/api/v1/infomodel/difference", s.handleModelDifference, apiOp{
+			summary: "Read the difference between what an application's processes build and what its information model plans — grouped as planned-but-not-built (the backlog) and built-but-not-described, with what derivation cannot see excluded and named. A reading over both, written to neither (?applicationId= required)", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Difference between the built and the planned model", tObject())}},
 		{"GET", "/api/v1/infomodel/derived", s.handleDerivedModel, apiOp{
 			summary: "Derive an application's information model from the processes that use it — the classes their data objects carry, the members their writes target, and the states and transitions they actually reach, with what could not be read (a business key above all) stated beside it. A reading of what is built, never written into an authored model (?applicationId= required)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Derived information model", tObject())}},

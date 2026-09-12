@@ -272,6 +272,34 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_model_difference",
+			Description: "Read the difference between what an application's processes *build* and what its " +
+				"information model *plans*. Two lists, never mixed: `planned` is in the model and in no " +
+				"process — the backlog, and the reason the pair exists — and `built` is in the processes " +
+				"and in no model, which usually means write it down and occasionally means a process is " +
+				"doing something nobody agreed to. Read `excluded` before concluding anything from a short " +
+				"list: derivation cannot see a business key, an attribute's type, or which states are " +
+				"final, so those are never compared and a clean list is not a clean bill. An application " +
+				"that models nothing returns no findings at all.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": map[string]any{
+						"type":        "string",
+						"description": "The process application to read (from atlas_list_applications).",
+					},
+				},
+				"required": []string{"applicationId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "applicationId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/infomodel/difference?applicationId=" + url.QueryEscape(id)))
+			},
+		},
+		{
 			Name: "atlas_derived_information_model",
 			Description: "Derive an application's information model from the processes that use it, without " +
 				"anyone having modelled anything: the classes their data objects carry, the members their " +

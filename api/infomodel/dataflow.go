@@ -604,3 +604,31 @@ func checkDataStores(cp *compiler.CompiledProcess, vocab *Vocabulary) []compiler
 	}
 	return ps
 }
+
+// Classes lists every authored class by name, in a settled order. The lookup above
+// answers "is this one modelled"; reading the difference between what is modelled and
+// what is built has to walk the other way too.
+func (v *Vocabulary) Classes() []Class {
+	if v == nil {
+		return nil
+	}
+	names := make([]string, 0, len(v.classes))
+	for name := range v.classes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]Class, 0, len(names))
+	for _, name := range names {
+		out = append(out, v.classes[name])
+	}
+	return out
+}
+
+// Members is a class's attributes with inherited ones first — what the class actually
+// has, rather than what its own definition lists.
+func (v *Vocabulary) Members(className string) []Attribute {
+	if v == nil {
+		return nil
+	}
+	return v.members[className]
+}

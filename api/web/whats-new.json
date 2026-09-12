@@ -253,6 +253,48 @@
       }
     },
     {
+      "id": "atlas-now-reads-the-difference-between-what-your-processes-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See what you have planned but not built yet",
+        "de": "Sehen, was geplant, aber noch nicht gebaut ist"
+      },
+      "summary": {
+        "en": "Your processes say what your data actually is; your information model says what you want it to be. Atlas now shows the difference, in two lists that are never mixed: what is planned and not built — your backlog, and explicitly not a defect — and what is built and not described, which usually means write it down. It also tells you plainly what it never compared, because derivation cannot see a business key or an attribute's type, so a short list is not a clean bill. Nothing is changed in either document.",
+        "de": "Ihre Prozesse sagen, was Ihre Daten tatsächlich sind; Ihr Informationsmodell sagt, was sie sein sollen. Atlas zeigt jetzt die Differenz, in zwei Listen, die nie vermischt werden: was geplant und nicht gebaut ist — Ihr Backlog, und ausdrücklich kein Fehler — und was gebaut und nicht beschrieben ist, was meist heisst: aufschreiben. Es sagt auch offen, was es nie verglichen hat, denn ein Geschäftsschlüssel oder ein Attributtyp lässt sich aus Prozessen nicht ablesen; eine kurze Liste ist also kein Freispruch. An beiden Dokumenten wird nichts geändert."
+      },
+      "link": {
+        "label": "ADR-0301",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
+      },
+      "tags": [
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data and press As built…, then pick your application.",
+          "Follow Planned against built in the header — or go straight there from the model list.",
+          "Left is your backlog: states, members and classes the model declares that no process builds yet.",
+          "Read the box at the bottom before concluding anything: it names what the comparison never looked at."
+        ],
+        "de": [
+          "Unter Daten auf As built… klicken und die Anwendung wählen.",
+          "Oben Planned against built folgen — oder direkt aus der Modellliste dorthin gehen.",
+          "Links steht Ihr Backlog: Zustände, Attribute und Klassen, die das Modell deklariert und noch kein Prozess baut.",
+          "Den Kasten unten lesen, bevor Sie etwas schliessen: er nennt, was der Vergleich nie angesehen hat."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
       "version": "Unreleased",
       "date": null,
@@ -350,44 +392,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-milestone-is-an-element-you-can-draw-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Mark a milestone where no task sits",
-        "de": "Einen Meilenstein setzen, wo keine Aufgabe steht"
-      },
-      "summary": {
-        "en": "Some points in a process are worth naming even though nobody does any work at them. \"Identity verification started\" is one: the work is what follows it, so there is no task there whose timestamps you could ask about later. BPMN's marker for exactly this is an intermediate throw event with no event definition, and until now Atlas refused it — at Deploy, after the Modeler had drawn it and reported no problems. It works now. Draw the event, leave it without a definition, name it after the point it marks. Nothing waits and no worker is needed; the token flows straight through. What you get is the record: the element is counted, it appears on the instance's timeline in order, and the live diagram lights it up as a token passes — so \"when did this case reach verification\" becomes a question you can answer for each case. A throw event that carries a definition the engine cannot run, such as a timer, is still refused, and now says which one.",
-        "de": "Manche Punkte in einem Prozess lohnt es sich zu benennen, obwohl dort niemand arbeitet. „Identitätsprüfung gestartet\" ist so einer: Die Arbeit folgt erst danach, es gibt dort also keine Aufgabe, nach deren Zeitstempeln man später fragen könnte. Die BPMN-Markierung dafür ist ein Zwischenereignis vom Typ «werfend» ohne Ereignisdefinition, und Atlas hat sie bisher abgelehnt — beim Deploy, nachdem der Modeler sie gezeichnet und keine Probleme gemeldet hatte. Jetzt funktioniert sie. Das Ereignis zeichnen, ohne Definition lassen, nach dem Punkt benennen, den es markiert. Es wartet auf nichts und braucht keinen Worker; der Token fliesst direkt hindurch. Was bleibt, ist die Aufzeichnung: Das Element wird gezählt, erscheint in der richtigen Reihenfolge auf der Zeitachse der Instanz, und das Live-Diagramm leuchtet auf, wenn ein Token vorbeikommt. „Wann hat dieser Fall die Prüfung erreicht?\" ist damit pro Fall beantwortbar. Ein werfendes Ereignis mit einer Definition, die die Engine nicht ausführen kann, etwa einem Timer, wird weiterhin abgelehnt — und sagt nun, welche."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and drop an intermediate event onto the sequence flow where the milestone belongs.",
-          "Leave its type as the plain throw event: do not give it a message, signal, timer or any other definition.",
-          "Name it after the point it marks, in the business's words — \"Identity verification started\", not \"Event_3\". The name is what you will read it by later.",
-          "Deploy and start an instance. The live diagram marks the milestone as the token passes it.",
-          "Open the instance's timeline to see it in order between the elements around it, or read the process's element counts to see how many cases reached it."
-        ],
-        "de": [
-          "Einen Prozess im Modeler öffnen und ein Zwischenereignis auf den Sequenzfluss setzen, wo der Meilenstein hingehört.",
-          "Den Typ als einfaches werfendes Ereignis belassen: keine Nachricht, kein Signal, kein Timer, keine andere Definition.",
-          "Nach dem Punkt benennen, den es markiert, in der Sprache des Fachbereichs — «Identitätsprüfung gestartet», nicht «Event_3». Über den Namen liest man es später.",
-          "Deployen und eine Instanz starten. Das Live-Diagramm markiert den Meilenstein, sobald der Token ihn passiert.",
-          "Die Zeitachse der Instanz öffnen, um ihn in der richtigen Reihenfolge zwischen den umliegenden Elementen zu sehen, oder die Elementzählung des Prozesses lesen, um zu sehen, wie viele Fälle ihn erreicht haben."
-        ]
       }
     }
   ]
