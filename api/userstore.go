@@ -54,7 +54,7 @@ const (
 
 	// RoleProductManager maintains the self-service portal's catalogues and the
 	// products in them, and publishes releases
-	// (ADR-draft-portal-roles-and-responsibilities).
+	// (ADR-0315).
 	//
 	// It is deliberately not `modeler`: binding a product to its provisioning and
 	// deprovisioning processes means choosing from processes already deployed,

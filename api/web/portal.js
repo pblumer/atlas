@@ -1,4 +1,4 @@
-// The self-service portal (ADR-draft-portal-catalogue-order-inventory).
+// The self-service portal (ADR-0312).
 //
 // A module, so it can reuse theme.js's palette derivation rather than repeat it.
 // That reuse is the point: --accent-ink decides whether a button's label is
@@ -10,7 +10,7 @@
 // not already have, which is why it can be reloaded at any point without losing
 // anything.
 //
-// Language follows the browser (ADR-draft-portal-language-follows-the-browser),
+// Language follows the browser (ADR-0313),
 // on the condition that record names: every string below exists in every locale
 // the page offers, held by TestPortalCatalogueIsComplete. A missing key would
 // otherwise reach a customer, who cannot act on a review signal.
@@ -208,7 +208,7 @@ const state = {
   // It is read from the inventory and not derived from the orders on this page:
   // the order that granted a right is deleted by retention long before the right
   // ends, and a catalogue that marked from orders would stop marking on the
-  // ninetieth day (ADR-draft-portal-catalogue-order-inventory).
+  // ninetieth day (ADR-0312).
   held: new Map(),
   chosen: new Set(),
   busy: false,

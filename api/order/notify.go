@@ -37,7 +37,7 @@ type Notice struct {
 	Kind NoticeKind `json:"kind"`
 	// OrderID and Recipient say which order and who is told. Recipient is a
 	// principal id — the message is addressed by the sender, not by this package,
-	// which never holds an address (ADR-draft-portal-personal-data).
+	// which never holds an address (ADR-0314).
 	OrderID   string `json:"orderId"`
 	Recipient string `json:"recipient"`
 	// ItemID names the line, empty on a settlement notice, which is about the

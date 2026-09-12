@@ -355,7 +355,7 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 
 	// A product is referenced by several catalogues and changed through exactly
 	// one — its home — so that a catalogue cannot alter a product another
-	// catalogue depends on (ADR-draft-portal-roles-and-responsibilities). A home
+	// catalogue depends on (ADR-0315). A home
 	// that does not exist is refused rather than tolerated: a product belonging to
 	// nothing is a product nobody is responsible for.
 	//

@@ -487,7 +487,7 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 	// difference in lifetime is the entire reason the inventory is its own family
 	// rather than something recoverable from the order. Purging an instance must
 	// therefore never reach it, which is an explicit amendment to ADR-0115 and
-	// ADR-0144 (see ADR-draft-portal-catalogue-order-inventory) and is held by a
+	// ADR-0144 (see ADR-0312) and is held by a
 	// test rather than by this comment.
 	return nil
 }

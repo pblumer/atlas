@@ -125,7 +125,7 @@ const (
 
 	// VTEntitlement is what somebody holds: a principal, a catalogue item, since
 	// when, and where the knowledge came from
-	// (ADR-draft-portal-catalogue-order-inventory).
+	// (ADR-0312).
 	//
 	// It is engine state rather than a sidecar record for one reason that decides
 	// it: an entitlement outlives the process instance that produced it, by years.
@@ -403,7 +403,7 @@ const (
 
 	// IntentEntitlementGranted and IntentEntitlementRevoked record that somebody
 	// started or stopped holding a catalogue item
-	// (ADR-draft-portal-catalogue-order-inventory).
+	// (ADR-0312).
 	//
 	// They are the inventory's only two events, and there is deliberately no third
 	// for editing one. An entitlement is observed or derived, never authored: the

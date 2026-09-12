@@ -13,7 +13,7 @@ import (
 
 // The portal offers its interface in the visitor's own language, and it may only
 // do that on one condition: every string it renders exists in every locale it
-// offers (ADR-draft-portal-language-follows-the-browser).
+// offers (ADR-0313).
 //
 // ADR-0267 refuses to consult the browser precisely because guessing can land
 // somebody on a half-translated screen. That is a statement about the state of a
@@ -294,7 +294,7 @@ func TestPortalNamesEveryStatusTheServerCanProduce(t *testing.T) {
 // identical and work for ninety days. Then retention deletes the order, the right
 // is still held, and the catalogue quietly stops marking it — the exact failure
 // the three-model split exists to prevent
-// (ADR-draft-portal-catalogue-order-inventory). So the source of the marking is
+// (ADR-0312). So the source of the marking is
 // the inventory route, and this says so in the one form that cannot be satisfied
 // by a comment: the fetch itself.
 func TestThePortalMarksWhatIsAlreadyHeldFromTheInventory(t *testing.T) {

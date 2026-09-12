@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// A theme belongs to a catalogue (ADR-draft-portal-theme-per-catalogue).
+// A theme belongs to a catalogue (ADR-0316).
 //
 // ADR-0113 stores one accent for the instance, on the grounds that a brand is an
 // organisation property rather than a personal preference. That reasoning

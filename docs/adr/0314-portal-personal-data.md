@@ -1,4 +1,4 @@
-# ADR-DRAFT: Personal data in the portal — a reference by default, a destroyable key for the rest
+# ADR-0314: Personal data in the portal — a reference by default, a destroyable key for the rest
 
 - **Status:** Accepted
 - **Implementation:** Not started
@@ -16,7 +16,7 @@
 
 The portal keeps its evidence forever. Who ordered what, who approved it, what was
 provisioned and when is the record an audit asks for years later, and
-[ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+[ADR-0312](0312-portal-catalogue-order-inventory.md)
 makes the inventory durable for exactly that reason.
 
 An order is also full of personal data. It names the person who ordered, the person it
@@ -211,7 +211,7 @@ portal process.
 
 ## Links
 
-- required by [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md) — the inventory stores a principal reference because of this record
+- required by [ADR-0312](0312-portal-catalogue-order-inventory.md) — the inventory stores a principal reference because of this record
 - answers risk R-06 in `docs/compliance/isds-konzept.md`, and amends its modelling recommendation into a rule
 - amends [ADR-0115](0115-history-retention-hard-delete.md) and [ADR-0144](0144-per-definition-history-ttl.md) — retention is no longer the only erasure mechanism
 - builds on [ADR-0069](0069-engine-internal-encrypted-secret-vault.md) and [ADR-0070](0070-vault-on-by-default-with-generated-key.md) — the vault wraps the data keys

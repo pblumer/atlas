@@ -3809,7 +3809,7 @@ func resolveAssignment(c *ProcessingContext, cp *compiler.CompiledProcess, scope
 }
 
 // raiseAssignmentIncident parks a user task whose assignment could not be
-// resolved (ADR-draft-user-task-assignment-expressions), with no job created: the
+// resolved (ADR-0318), with no job created: the
 // element stays Activated and visible, an operator fixes the data, and resolving
 // the incident re-runs the activation against the corrected variables. The job-less
 // incident is the same shape a failed timer schedule raises (ADR-0064).

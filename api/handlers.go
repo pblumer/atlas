@@ -4256,7 +4256,7 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 				// assignee because claim and unclaim rewrite it (ADR-0042), the
 				// candidate groups because a model may name them with an expression
 				// and what it evaluated to belongs to this instance
-				// (ADR-draft-user-task-assignment-expressions). The model's own value
+				// (ADR-0318). The model's own value
 				// is the fallback for a job written before the job carried them.
 				tr.Assignee = jv.Assignee
 				if tr.CandidateGroups = jv.CandidateGroups; tr.CandidateGroups == "" {

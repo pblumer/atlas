@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// A catalogue's brand mark (ADR-draft-portal-theme-per-catalogue).
+// A catalogue's brand mark (ADR-0316).
 //
 // The accent and the typeface are two short strings and ride along in the
 // catalogue record. A mark cannot: it is up to half a megabyte of opaque bytes,

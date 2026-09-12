@@ -12,7 +12,7 @@ import (
 // Reading the inventory.
 //
 // "What does this person hold today" is the question the whole third model exists
-// to answer (ADR-draft-portal-catalogue-order-inventory), and it is not the same
+// to answer (ADR-0312), and it is not the same
 // question as "what did they order". Orders end; rights do not, and the order
 // that granted one is eligible for retention deletion long before the right is.
 // So this reads the entitlement family and never the order store — an answer
@@ -22,7 +22,7 @@ import (
 //
 // It carries ids and moments and nothing about the person. Names, addresses and
 // departments resolve from the account when a screen is rendered
-// (ADR-draft-portal-personal-data); the inventory stores a principal reference,
+// (ADR-0314); the inventory stores a principal reference,
 // so there is nothing else here to return.
 type heldItem struct {
 	ItemID    string `json:"itemId"`

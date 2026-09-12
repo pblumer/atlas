@@ -1,4 +1,4 @@
-# ADR-DRAFT: Acting on a user task is an object question
+# ADR-0317: Acting on a user task is an object question
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -107,4 +107,4 @@ it, and an administrator reaches a task assigned to somebody else.
 
 - extends [ADR-0275](0275-instance-visibility.md) — the same axis, the write half
 - reuses [ADR-0042](0042-user-task-assignment-and-claim.md) — who holds a task
-- required by [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md) — an approval a customer can grant themselves is not an approval
+- required by [ADR-0312](0312-portal-catalogue-order-inventory.md) — an approval a customer can grant themselves is not an approval

@@ -259,7 +259,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 //
 // A line starts pending unless the recipient already holds the item and the item
 // says it may not be held twice, in which case it starts skipped — the basket's
-// second resolution (ADR-draft-portal-catalogue-order-inventory).
+// second resolution (ADR-0312).
 //
 // Skipped rather than dropped, on purpose. The request was made and the record
 // should say so: "you asked for this and already had it" is a different sentence

@@ -5,7 +5,7 @@ import "github.com/pblumer/atlas/model"
 // The inventory's two commands.
 //
 // An entitlement is observed or derived, never authored
-// (ADR-draft-portal-catalogue-order-inventory), so there are two of them and no
+// (ADR-0312), so there are two of them and no
 // third for editing one: a correction is a revocation and a grant, both of which
 // say when they happened. The day somebody can edit an entitlement directly is the
 // day the inventory stops being evidence and becomes an opinion.

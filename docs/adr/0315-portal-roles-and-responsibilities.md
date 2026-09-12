@@ -1,4 +1,4 @@
-# ADR-DRAFT: Who runs the portal — a role for the operation, a catalogue for the object
+# ADR-0315: Who runs the portal — a role for the operation, a catalogue for the object
 
 - **Status:** Accepted
 - **Implementation:** Not started
@@ -92,7 +92,7 @@ A `Catalog` carries the ADR-0071 shape — `ownerId`, `visibility`, `members` of
 Nothing new is invented; it is the same three fields on a different object.
 
 A `CatalogItem` is referenced by catalogues, not owned by them — it appears in several
-([ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)),
+([ADR-0312](0312-portal-catalogue-order-inventory.md)),
 so scope cannot be inherited from "the catalogue it is in". Two ways out were
 available: give every item its own member list, which is the per-artifact ACL ADR-0071
 deliberately refused because it becomes unmanageable; or give each item **one home
@@ -153,7 +153,7 @@ Aggregate figures for their products: counts, durations, abandonment and failure
 rates, plus failures with technical detail. Not individual orders.
 
 This costs less than it looks, because
-[ADR-draft-portal-personal-data](draft-portal-personal-data.md) keeps personal data out
+[ADR-0314](0314-portal-personal-data.md) keeps personal data out
 of orders entirely — an order names a principal id. The boundary is therefore about
 who may be *correlated with what they ordered*, which is the disclosure worth guarding,
 rather than about names in a payload.
@@ -184,7 +184,7 @@ be a condition nobody can see.
 The theme of a catalogue stays with `admin`, as the instance brand does today
 ([ADR-0113](0113-org-wide-ui-theme.md)); making it per-catalogue is a separate record.
 Self-registration is approved by a process, not by this role
-([ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+([ADR-0312](0312-portal-catalogue-order-inventory.md)
 places it), and which role that process assigns work to is that process's business.
 
 ### Consequences
@@ -227,6 +227,6 @@ places it), and which role that process assigns work to is that process's busine
 - extends [ADR-0071](0071-sharing-scopes.md) and [ADR-0180](0180-groups-as-members.md) — the catalogue carries the scope shape; groups may be members
 - follows [ADR-0278](0278-object-authorization.md) — the object check happens where the action does
 - deliberately does not grant [ADR-0199](0199-route-access-classes.md) public reach to any portal route
-- relies on [ADR-draft-portal-personal-data](draft-portal-personal-data.md) — orders hold ids, which is what makes an aggregate boundary meaningful
-- governs the catalogue defined in [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+- relies on [ADR-0314](0314-portal-personal-data.md) — orders hold ids, which is what makes an aggregate boundary meaningful
+- governs the catalogue defined in [ADR-0312](0312-portal-catalogue-order-inventory.md)
 - theme ownership stays with [ADR-0113](0113-org-wide-ui-theme.md) until a separate record moves it

@@ -14,7 +14,7 @@ import (
 // a family of its own rather than something derived from order history.
 //
 // So the purge must not reach it. This is the amendment to ADR-0115 and ADR-0144
-// that ADR-draft-portal-catalogue-order-inventory calls non-optional, made
+// that ADR-0312 calls non-optional, made
 // checkable: the day somebody adds an entitlement prefix to the purge's list, or
 // keys an entitlement by instance, this says so.
 func TestPurgingAnInstanceLeavesTheRightItGrantedStanding(t *testing.T) {

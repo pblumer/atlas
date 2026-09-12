@@ -10,7 +10,7 @@ import (
 
 // A user task's assignment may be an expression, and the value it evaluates to is
 // frozen into the job like the due date beside it
-// (ADR-draft-user-task-assignment-expressions).
+// (ADR-0318).
 //
 // Before this, an `assignee="=approvalRef"` was stored verbatim: the task was
 // assigned to the eight characters `=approvalRef` and no person held it. Three of

@@ -1,4 +1,4 @@
-// The approver's page (ADR-draft-portal-approval-page).
+// The approver's page (ADR-0311).
 //
 // An approval is a user task and the Console can work it. That is the wrong place
 // for most of the people who get one: the common approver is the line manager the

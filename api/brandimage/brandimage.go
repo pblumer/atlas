@@ -5,7 +5,7 @@
 // There is more than one mark in an installation. ADR-0148 gave the instance its
 // own — the operator's, shown on the sign-in screen and in the console. The
 // portal added a second kind: a catalogue's, shown to the customer group that
-// catalogue is for (ADR-draft-portal-theme-per-catalogue). They are stored in
+// catalogue is for (ADR-0316). They are stored in
 // different places and gated by different rules, and that is as it should be.
 //
 // What must not differ is the check. An uploaded image is attacker-influenced

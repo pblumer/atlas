@@ -424,7 +424,7 @@ type UserTaskDetail struct {
 	// AssigneeExpr and CandidateGroupsExpr are the other half: a FEEL expression
 	// the model wrote with a leading "=", evaluated when the task activates and
 	// frozen into the job-created event, exactly as the due date below is
-	// (ADR-draft-user-task-assignment-expressions). Nil when the model wrote a
+	// (ADR-0318). Nil when the model wrote a
 	// literal or nothing.
 	//
 	// The two are exclusive by construction — a value is one or the other — and a

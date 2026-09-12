@@ -1,4 +1,4 @@
-# ADR-DRAFT: A theme belongs to a catalogue, the sign-in screen belongs to the operator
+# ADR-0316: A theme belongs to a catalogue, the sign-in screen belongs to the operator
 
 - **Status:** Accepted
 - **Implementation:** Partial
@@ -146,7 +146,7 @@ same behaviour ADR-0113 already has when an admin changes the accent.
 ### Who maintains it
 
 `admin`, as the instance brand is maintained today. The product manager
-([ADR-draft-portal-roles-and-responsibilities](draft-portal-roles-and-responsibilities.md))
+([ADR-0315](0315-portal-roles-and-responsibilities.md))
 maintains the catalogue's contents, not its appearance.
 
 That is the smaller change deliberately: leaving the theme with `admin` means the logo
@@ -221,5 +221,5 @@ administration rather than alone.
 
 - extends [ADR-0113](0113-org-wide-ui-theme.md) — the brand is a catalogue property when a catalogue is known, an instance property otherwise
 - extends [ADR-0263](0263-form-runtime-brand-theming.md) — the derived `--accent-ink` is what makes ten accents safe
-- themes the catalogue defined in [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
-- maintenance stays with `admin` rather than the role in [ADR-draft-portal-roles-and-responsibilities](draft-portal-roles-and-responsibilities.md)
+- themes the catalogue defined in [ADR-0312](0312-portal-catalogue-order-inventory.md)
+- maintenance stays with `admin` rather than the role in [ADR-0315](0315-portal-roles-and-responsibilities.md)

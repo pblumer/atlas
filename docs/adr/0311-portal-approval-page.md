@@ -1,4 +1,4 @@
-# ADR-DRAFT: The approver decides on a page of their own, in the customer's colours
+# ADR-0311: The approver decides on a page of their own, in the customer's colours
 
 - **Status:** Accepted
 - **Implementation:** Partial
@@ -103,7 +103,7 @@ is modelled in the approval process. A page that also wrote it would be a second
 to one question, and the two would eventually disagree.
 
 That endpoint had to be closed first: before
-[ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md),
+[ADR-0317](0317-task-commands-are-an-object-question.md),
 any signed-in account could complete any open task, which for a portal customer meant
 approving their own order.
 
@@ -142,7 +142,7 @@ call in every system process against the route table, which is what should have 
 both.
 
 The third was an engine gap rather than a wiring mistake, and it is fixed in
-[ADR-draft-user-task-assignment-expressions](draft-user-task-assignment-expressions.md):
+[ADR-0318](0318-user-task-assignment-expressions.md):
 the three shipped models address their task with `assignee="=approvalRef"`, and Atlas
 interned the model's string verbatim, so the task was assigned to the literal
 `=approvalRef` and no person held it. A user task's assignment is now evaluated at
@@ -175,7 +175,7 @@ their list with a line saying so, because there is nothing else they can do abou
 **The recipient is a reference, not an address.** The model writes `to="=approvalRef"` —
 the person or group the *product* named — and the server resolves it in the account at
 send time, through `mail.Directory`. That is
-[ADR-draft-portal-personal-data](draft-portal-personal-data.md)'s rule applied to a
+[ADR-0314](0314-portal-personal-data.md)'s rule applied to a
 message instead of a screen: no mail address enters a process variable, an order or the
 event log. The residue is the resolved job and the SMTP conversation, which is the least
 any mail can be sent with.
@@ -194,12 +194,12 @@ printing a link nobody can follow.
 
 ## Links
 
-- needs [ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md) — an approval a customer can grant themselves is not an approval
-- brands from [ADR-draft-portal-theme-per-catalogue](draft-portal-theme-per-catalogue.md) — the same accent, typeface and mark, resolved from the order instead of the visitor
-- decides the orders of [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+- needs [ADR-0317](0317-task-commands-are-an-object-question.md) — an approval a customer can grant themselves is not an approval
+- brands from [ADR-0316](0316-portal-theme-per-catalogue.md) — the same accent, typeface and mark, resolved from the order instead of the visitor
+- decides the orders of [ADR-0312](0312-portal-catalogue-order-inventory.md)
 - keeps [ADR-0113](0113-org-wide-ui-theme.md) untouched — the Console stays the operator's
 - uses [ADR-0042](0042-user-task-assignment-and-claim.md) — who holds a task, and the four spellings the notification resolves
-- honours [ADR-draft-portal-personal-data](draft-portal-personal-data.md) — a recipient is a reference, resolved at send time
+- honours [ADR-0314](0314-portal-personal-data.md) — a recipient is a reference, resolved at send time
 - extends [ADR-0079](0079-outbound-mail-connector.md) — a mail recipient may be somebody this server knows rather than an address
 - needs [ADR-0200](0200-mcp-oauth-resource-server.md)'s configured origin — a link has to be one somebody else can follow
-- needs [ADR-draft-user-task-assignment-expressions](draft-user-task-assignment-expressions.md) — without it no shipped approval reaches an approver
+- needs [ADR-0318](0318-user-task-assignment-expressions.md) — without it no shipped approval reaches an approver

@@ -24,7 +24,7 @@ type inflightValue struct {
 	compensable   model.CompensableValue
 	operatorAct   model.OperatorActionValue
 	// entitlement rides only on the two inventory commands and the events they
-	// emit (ADR-draft-portal-catalogue-order-inventory). Like migration it never
+	// emit (ADR-0312). Like migration it never
 	// rides token movement, so it costs the hot path the field and nothing else.
 	entitlement model.EntitlementValue
 	// migration rides only on the operator-initiated migrate command and the event it

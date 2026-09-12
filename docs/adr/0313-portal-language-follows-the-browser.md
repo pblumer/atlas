@@ -1,4 +1,4 @@
-# ADR-DRAFT: The portal follows the browser's language; the console still does not
+# ADR-0313: The portal follows the browser's language; the console still does not
 
 - **Status:** Accepted
 - **Implementation:** Not started
@@ -88,7 +88,7 @@ fallback is a property of the surface, not of the mechanism.
 Interface text is checked by the test above, at build time. Catalogue content — product
 names, descriptions, variant labels — is checked when a catalogue release is published,
 which is where
-[ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+[ADR-0312](0312-portal-catalogue-order-inventory.md)
 already validates a release, and where a catalogue's own language list lives.
 
 One rule connects them, and it runs at publish time (I5,
@@ -151,5 +151,5 @@ anything, as it does today.
 ## Links
 
 - excepts [ADR-0267](0267-console-speaks-german-first.md) for the portal, on the condition its own reasoning names, and leaves the console unchanged
-- validated at publish time by the release in [ADR-draft-portal-catalogue-order-inventory](draft-portal-catalogue-order-inventory.md)
+- validated at publish time by the release in [ADR-0312](0312-portal-catalogue-order-inventory.md)
 - follows I5 as stated in [ADR-0008](0008-feel-expression-strategy.md) — the language check happens when a catalogue is published, not when one is browsed

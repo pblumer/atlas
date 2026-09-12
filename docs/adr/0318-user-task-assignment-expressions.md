@@ -1,4 +1,4 @@
-# ADR-DRAFT: A user task's assignment may be an expression
+# ADR-0318: A user task's assignment may be an expression
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -39,7 +39,7 @@ process compiles, and an assignee is just a string.
 - Whatever is decided has to survive replay. An assignment re-evaluated on recovery
   against variables that have since moved would hand the task to somebody else.
 - An assignment that cannot be resolved must not become *no* assignment. Under
-  [ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md)
+  [ADR-0317](0317-task-commands-are-an-object-question.md)
   a task the model addressed to nobody is open work anybody may complete — so a failed
   expression would silently turn one person's approval into everybody's.
 - Invariant I1: nothing new allocated on the hot path that is not needed.
@@ -144,5 +144,5 @@ task.
 
 - extends [ADR-0042](0042-user-task-assignment-and-claim.md) — the assignment it made literal
 - follows [ADR-0064](0064-timer-feel-failure-incidents.md) — a job-less incident parks the element and resolving it retries
-- required by [ADR-draft-portal-approval-page](draft-portal-approval-page.md) — an approval that reaches nobody has no approver to show a page to
-- guarded by [ADR-draft-task-commands-are-an-object-question](draft-task-commands-are-an-object-question.md) — which is why an unresolved assignment must not become no assignment
+- required by [ADR-0311](0311-portal-approval-page.md) — an approval that reaches nobody has no approver to show a page to
+- guarded by [ADR-0317](0317-task-commands-are-an-object-question.md) — which is why an unresolved assignment must not become no assignment

@@ -10,7 +10,7 @@ import (
 // The portal names people by principal id and by nothing else: a name, a mail
 // address, a department or a superior is resolved from the account when a screen
 // is rendered, and never copied into an order, an entitlement or a variable
-// (ADR-draft-portal-personal-data). An approval notification is that rule applied
+// (ADR-0314). An approval notification is that rule applied
 // to a message instead of a screen. The model writes `to="=approvalRef"` — the
 // person or group the *product* named — and the address is looked up here, in the
 // server, at the moment the mail is sent.

@@ -61,7 +61,7 @@ type Job struct {
 // It exists so a model can address somebody it only holds a *reference* to. The
 // portal names people by principal id and by nothing else, and resolves a name or
 // an address from the account at the moment a screen is rendered, never copying
-// one into an order or a variable (ADR-draft-portal-personal-data). A notification
+// one into an order or a variable (ADR-0314). A notification
 // is that rule applied to a message instead of a screen: the model writes
 // `to="=approvalRef"`, the address is looked up here, at send time, and it exists
 // nowhere else.

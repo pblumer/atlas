@@ -52,7 +52,7 @@ const (
 	cfElementTermination     columnFamily = 0x27 // elTerm:<procDefKey>:<piKey>:<elementId> → int64 count
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
-	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-draft-portal-catalogue-order-inventory)
+	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-0312)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

@@ -141,7 +141,7 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
-	// The portal catalogue (ADR-draft-portal-catalogue-order-inventory). Authoring
+	// The portal catalogue (ADR-0312). Authoring
 	// one is a plausible agent task — building a catalogue out of an ArchiMate
 	// model is close to what an agent is good at — and these will very likely
 	// become tools. They are not yet, for one reason: an MCP tool is a public

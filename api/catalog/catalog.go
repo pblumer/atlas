@@ -2,7 +2,7 @@
 // what may be ordered, how the parts of a product relate, and what a release
 // proves before anything can be ordered against it.
 //
-// It is the first of the three models in ADR-draft-portal-catalogue-order-inventory.
+// It is the first of the three models in ADR-0312.
 // Design-time state throughout — nothing here reaches the event log, the processor
 // or recovery, and none of the six engine invariants applies to it. What does apply
 // is I5: everything provable when a catalogue is published is proved there, so
@@ -48,7 +48,7 @@ type ApprovalKind string
 
 const (
 	// KindNone orders without approval. A catalogue always answers which of its
-	// items carry this, as a standing list — see ADR-draft-portal-roles-and-responsibilities.
+	// items carry this, as a standing list — see ADR-0315.
 	KindNone ApprovalKind = "none"
 	// KindFixed routes to one named principal.
 	KindFixed ApprovalKind = "fixed"

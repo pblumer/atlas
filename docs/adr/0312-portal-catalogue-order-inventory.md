@@ -1,4 +1,4 @@
-# ADR-DRAFT: Catalogue, order, inventory — three models, not one
+# ADR-0312: Catalogue, order, inventory — three models, not one
 
 - **Status:** Accepted
 - **Implementation:** Partial
@@ -468,7 +468,7 @@ the audience for, what each product is made of, and their own orders with a stat
 line. It computes an order's standing from its lines rather than reading a stored one,
 for the same reason the server derives it — the two cannot then disagree. The brand a
 visitor sees is their catalogue's, under its own record
-([ADR-draft-portal-theme-per-catalogue](draft-portal-theme-per-catalogue.md)).
+([ADR-0316](0316-portal-theme-per-catalogue.md)).
 
 `api/order` carries the order model, the propagation and the orchestrator's two
 questions:

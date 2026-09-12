@@ -1,7 +1,7 @@
 // Package order holds what was asked for: an order against one catalogue release,
 // its lines, and how a line's outcome reaches the lines that depend on it.
 //
-// It is the second of the three models in ADR-draft-portal-catalogue-order-inventory.
+// It is the second of the three models in ADR-0312.
 // An order names exactly one release and follows the schedule that release
 // precomputed; it never reconsults the catalogue, and a catalogue edited while an
 // approval is pending cannot change what was ordered.
@@ -198,7 +198,7 @@ type Line struct {
 	// the record can never say a line was given up on without saying by whom.
 	//
 	// AbandonedBy is a principal id. Never a name — see
-	// ADR-draft-portal-personal-data.
+	// ADR-0314.
 	AbandonedBy string `json:"abandonedBy,omitempty"`
 	AbandonedAt int64  `json:"abandonedAt,omitempty"`
 	// DecidedBy and DecidedAt record who decided this line's fate and when, and
@@ -336,7 +336,7 @@ type Order struct {
 	// what makes the order immune to catalogue edits while an approval is pending.
 	ReleaseID string `json:"releaseId"`
 	// Orderer and Recipient are principal ids. Never names, addresses or anything
-	// else about a person — see ADR-draft-portal-personal-data.
+	// else about a person — see ADR-0314.
 	Orderer   string `json:"orderer"`
 	Recipient string `json:"recipient"`
 	Lines     []Line `json:"lines"`

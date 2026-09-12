@@ -269,7 +269,7 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
 	// catalogs serves the self-service portal's product catalogues and the releases
-	// published from them (ADR-draft-portal-catalogue-order-inventory). Another
+	// published from them (ADR-0312). Another
 	// area service on the ADR-0147 shape: its own store, the run loop for every
 	// access, no engine state anywhere.
 	catalogs *catalog.Service

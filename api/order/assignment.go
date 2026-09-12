@@ -37,7 +37,7 @@ type Escalation struct {
 	// would address nobody.
 	//
 	// It is not a widening of what the portal holds about a person
-	// (ADR-draft-portal-personal-data): a username is a login identifier the
+	// (ADR-0314): a username is a login identifier the
 	// account already carries into every task's assignee field and into the event
 	// log with it. What stays out of here is what that record is about — names,
 	// mail addresses, departments — which are resolved from the account when

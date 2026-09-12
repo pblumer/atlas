@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// The approver's own surface (ADR-draft-portal-approval-page).
+// The approver's own surface (ADR-0311).
 //
 // An approval is a user task like any other, and the Console can work it. That is
 // the wrong place for most of the people who get one. The approver is a fixed
@@ -47,7 +47,7 @@ const approvalOrderVar = "orderId"
 type approvalResp struct {
 	Task taskResp `json:"task"`
 	// OrderID and ItemID name the line this approval decides; Recipient and Orderer
-	// are principal ids, never names — see ADR-draft-portal-personal-data.
+	// are principal ids, never names — see ADR-0314.
 	OrderID   string `json:"orderId"`
 	ItemID    string `json:"itemId"`
 	VariantID string `json:"variantId,omitempty"`

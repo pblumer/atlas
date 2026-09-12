@@ -790,7 +790,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Revoke a public start link", tag: "Forms", role: RoleModeler, resp: jsonBody("Revoked token", tObject())}},
 
 		// The self-service portal's catalogue
-		// (ADR-draft-portal-catalogue-order-inventory). Publishing is where the work
+		// (ADR-0312). Publishing is where the work
 		// happens: a release proves the graphs acyclic, resolves every process
 		// binding, checks the translations and the ranks, and computes the wave
 		// schedule an order follows — so ordering never interprets a graph, and a
@@ -855,7 +855,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
 			resp: jsonBody("What was imported, and what was skipped", tObject())}},
-		// The approver's page (ADR-draft-portal-approval-page). One call answers
+		// The approver's page (ADR-0311). One call answers
 		// everything it shows, because the chain behind an approval — task, order,
 		// release, catalogue — is one the approver may walk no step of themselves.
 		{"POST", "/api/v1/orders/{id}/cancel", s.handleCancelOrder, apiOp{
@@ -892,7 +892,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
-		// Portal orders (ADR-draft-portal-catalogue-order-inventory). An order names
+		// Portal orders (ADR-0312). An order names
 		// exactly one release and carries the schedule that release computed, so
 		// fulfilment reads one record and never recomputes a graph — and what was
 		// ordered cannot change because somebody edited a product while an approval

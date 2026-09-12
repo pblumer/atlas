@@ -142,7 +142,7 @@ type JobValue struct {
 	// the model when the task activates — the same way Assignee is. It lives on the
 	// job because a model may name its groups with an expression, and what that
 	// expression evaluated to is a fact about *this* instance rather than about the
-	// definition (ADR-draft-user-task-assignment-expressions). Append-compatible: a
+	// definition (ADR-0318). Append-compatible: a
 	// record written before it decodes to "", and a reader falls back to the model's
 	// own value for those.
 	CandidateGroups string

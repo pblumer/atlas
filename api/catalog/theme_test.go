@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// A theme belongs to a catalogue (ADR-draft-portal-theme-per-catalogue). Ten
+// A theme belongs to a catalogue (ADR-0316). Ten
 // catalogues for ten customer groups want ten faces, and ADR-0113's reasoning
 // survives that: the brand is an organisation property, and an instance serving
 // several customer groups has several.

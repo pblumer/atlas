@@ -8,7 +8,7 @@ import (
 // What somebody holds.
 //
 // The third of the portal's three models
-// (ADR-draft-portal-catalogue-order-inventory), and the one that outlives the
+// (ADR-0312), and the one that outlives the
 // other two. A catalogue entry says what may be ordered; an order line says what
 // was asked for, and its instance is eligible for retention deletion in ninety
 // days. An entitlement says what is *true now*, and stays true for years.
@@ -54,7 +54,7 @@ func (o EntitlementOrigin) String() string {
 type EntitlementValue struct {
 	// Principal is who holds it, as a principal id and nothing else. Never a name,
 	// an address or a department: those resolve from the account when a screen is
-	// rendered (ADR-draft-portal-personal-data), and an append-only log cannot
+	// rendered (ADR-0314), and an append-only log cannot
 	// forget what it was given in the clear.
 	Principal string
 	// ItemID is the catalogue item, as the release that granted it named it. A
