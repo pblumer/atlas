@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,7 +88,9 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/formgen"
+	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
@@ -265,6 +268,23 @@ type Server struct {
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
 	processDocs *processdoc.Service
+	// catalogs serves the self-service portal's product catalogues and the releases
+	// published from them (ADR-draft-portal-catalogue-order-inventory). Another
+	// area service on the ADR-0147 shape: its own store, the run loop for every
+	// access, no engine state anywhere.
+	catalogs *catalog.Service
+	// orders serves the portal's orders: what somebody asked for, against one
+	// frozen catalogue release.
+	orders *order.Service
+	// catalogStore and orderStore are the same two stores the services above hold,
+	// kept here for one reader that is neither of them: the approval page
+	// (approvals.go) joins a running task to the order it decides and the catalogue
+	// that order came from, and has to do it off the run loop, because it walks the
+	// open tasks (ADR-0239). Sidecar stores are written atomically and may be read
+	// directly for exactly that reason — it is the same access the order service is
+	// already built with (catalogStore.Release below).
+	catalogStore *catalog.Store
+	orderStore   *order.Store
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// formGen writes a form from a description and from the process it belongs to
@@ -1110,6 +1130,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	catalogStore, err := catalog.NewStore(filepath.Join(dataDir, "catalog"))
+	if err != nil {
+		return nil, err
+	}
+	orderStore, err := order.NewStore(filepath.Join(dataDir, "orders"))
+	if err != nil {
+		return nil, err
+	}
 	taskFolderStore, err := taskfolder.NewStore(filepath.Join(dataDir, "task-folders"))
 	if err != nil {
 		return nil, err
@@ -1330,6 +1358,67 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// The portal catalogue is another area service on the same shape: it takes the
+	// run loop, its store, and the server clock, and nothing else.
+	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() },
+		func(p *httpapi.Principal) bool { return p.HasRole(RoleAdmin) })
+	// Orders read releases straight from the catalogue store. The closure runs
+	// inside the order service's own run-loop closure, so it must not dispatch
+	// onto the loop again — Do is a rendezvous, and a nested one would deadlock.
+	// The wake is the fulfilment process's only prompt: a settled line publishes
+	// a message correlated on the order id, and the orchestrator parked on it asks
+	// what may start next. Publishing runs the processor, which is a visit to the
+	// loop of its own — so the order service calls this outside its own closure.
+	s.catalogStore, s.orderStore = catalogStore, orderStore
+	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
+		catalogStore.Release, s.catalogs.MayOrderFrom,
+		func(message, orderID string, vars map[string]string) error {
+			start := make([]model.VariableValue, 0, len(vars))
+			for name, value := range vars {
+				start = append(start, model.VariableValue{Name: name, Kind: model.VarString, Text: value})
+			}
+			// A map has no order and start variables are written in the order given,
+			// so sort: the same order must produce the same log, live and on replay.
+			sort.Slice(start, func(i, j int) bool { return start[i].Name < start[j].Name })
+			s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			return s.drive()
+		},
+		// The notification's link is built on the operator's configured origin and
+		// on nothing else. Deriving it from whichever host the orderer happened to
+		// reach would put an internal address in a mail to somebody who cannot
+		// resolve it.
+		func() string { return s.externalURL },
+		// The inventory. A right the portal granted is engine state, not order
+		// state, because it outlives the order: the instance that produced it is
+		// eligible for retention deletion long before the right ends, and a record
+		// that cannot be rebuilt after that is not a record. Origin is set here and
+		// not by the order service — an order can only ever produce an ordered
+		// right, and a package that cannot name another origin cannot mislabel one.
+		func(g order.Grant) error {
+			s.do(func() {
+				s.proc.GrantEntitlement(model.EntitlementValue{
+					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
+					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
+				})
+			})
+			return s.drive()
+		},
+		func(principal, itemID string) error {
+			s.do(func() { s.proc.RevokeEntitlement(principal, itemID) })
+			return s.drive()
+		},
+		// And what they already hold, for the basket's second resolution. Read off
+		// the loop: it is one person's inventory, but it is a scan (ADR-0239).
+		func(principal string) (map[string]bool, error) {
+			out := map[string]bool{}
+			err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+				return rv.EntitlementsOf(principal, func(v *model.EntitlementValue) error {
+					out[v.ItemID] = true
+					return nil
+				})
+			})
+			return out, err
+		})
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the
@@ -1425,6 +1514,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
+	s.catalogs.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless

@@ -2122,20 +2122,46 @@ func (b *Builder) AddWebScrapeConnectorTask(cfg WebScrapeConfig) int32 {
 
 // AddUserTask adds a user task that parks a token and creates a job for a human
 // to complete via the Tasks app (ADR-0028). assignee and candidateGroups are
-// optional (empty strings are stored as -1). Returns its element id.
-func (b *Builder) AddUserTask(name, assignee, candidateGroups, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
+// optional: an empty [Assignment] is stored as -1 and no expression. Returns its
+// element id.
+func (b *Builder) AddUserTask(name string, assignee, candidateGroups Assignment, formId string, priority int32, dueDateNanos int64, retries int32) int32 {
 	detail := int32(len(b.userTasks))
 	b.userTasks = append(b.userTasks, UserTaskDetail{
-		JobType:         b.intern(UserTaskJobType),
-		Name:            b.intern(name),
-		Assignee:        b.intern(assignee),
-		CandidateGroups: b.intern(candidateGroups),
-		FormId:          b.intern(formId),
-		Priority:        priority,
-		DueDateNanos:    dueDateNanos,
-		Retries:         retries,
+		JobType:             b.intern(UserTaskJobType),
+		Name:                b.intern(name),
+		Assignee:            b.intern(assignee.Literal),
+		CandidateGroups:     b.intern(candidateGroups.Literal),
+		AssigneeExpr:        assignee.Expr,
+		CandidateGroupsExpr: candidateGroups.Expr,
+		FormId:              b.intern(formId),
+		Priority:            priority,
+		DueDateNanos:        dueDateNanos,
+		Retries:             retries,
 	})
 	return b.addNode(TypeUserTask, detail)
+}
+
+// Assign reads one assignment attribute the way the model vocabulary means it: a
+// value beginning with "=" is a FEEL expression, anything else a literal name.
+// That is the same rule zeebe:input sources and a REST worker's fields already
+// follow, so a modeller writes one thing everywhere.
+//
+// what names the attribute for the error message; taskID names the task. An empty
+// value is an absent assignment, not an empty expression.
+func Assign(taskID, what, raw string) (Assignment, error) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "=") {
+		return Assignment{Literal: raw}, nil
+	}
+	text := strings.TrimSpace(trimmed[1:])
+	if text == "" {
+		return Assignment{}, fmt.Errorf("compiler: user task %q has an empty FEEL expression for %s", taskID, what)
+	}
+	e, err := expr.CompileAuto(text)
+	if err != nil {
+		return Assignment{}, fmt.Errorf("compiler: user task %q: %s: %w", taskID, what, err)
+	}
+	return Assignment{Expr: e}, nil
 }
 
 // AddBoundaryTimerEvent adds a timer boundary event attached to host, firing

@@ -14,7 +14,7 @@ func userTaskProcess(t testing.TB) (*compiler.CompiledProcess, int32) {
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "approval", 1)
 	start := b.AddStartEvent()
-	task := b.AddUserTask("Review order", "editor", "reviewers", "", 50, 0, 3)
+	task := b.AddUserTask("Review order", compiler.Assignment{Literal: "editor"}, compiler.Assignment{Literal: "reviewers"}, "", 50, 0, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, task)
 	b.Connect(task, end)
@@ -36,7 +36,7 @@ func TestUserTaskDueDate(t *testing.T) {
 	const dueNanos = int64(2*24*3600) * int64(1e9) // P2D
 	b := compiler.NewBuilder(defKey, "approval", 1)
 	start := b.AddStartEvent()
-	task := b.AddUserTask("Review order", "editor", "reviewers", "", 50, dueNanos, 3)
+	task := b.AddUserTask("Review order", compiler.Assignment{Literal: "editor"}, compiler.Assignment{Literal: "reviewers"}, "", 50, dueNanos, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, task)
 	b.Connect(task, end)

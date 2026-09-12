@@ -141,6 +141,55 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// The portal catalogue (ADR-draft-portal-catalogue-order-inventory). Authoring
+	// one is a plausible agent task — building a catalogue out of an ArchiMate
+	// model is close to what an agent is good at — and these will very likely
+	// become tools. They are not yet, for one reason: an MCP tool is a public
+	// contract, and this surface is half-built. There is no ordering side, no
+	// portal, and the shapes here are still moving with every slice. Exposing them
+	// now would pin a contract to a design that is still settling, which is the
+	// same argument the panorama entries below make.
+	"GET /api/v1/catalogs":                           "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs":                          "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalogs/{id}":                      "portal catalogue surface still being built; a tool is a public contract",
+	"PATCH /api/v1/catalogs/{id}":                    "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs/{id}/import":              "portal catalogue surface still being built; a tool is a public contract",
+	"PUT /api/v1/catalogs/{id}/theme":                "an instance's appearance is an operator's choice, not an agent's",
+	"POST /api/v1/instances":                         "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
+	"GET /api/v1/approvals/stalled":                  "an operations list still settling with the portal around it; a tool is a public contract",
+	"POST /api/v1/orders/{id}/cancel":                "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
+	"POST /api/v1/orders/{id}/lines/{item}/return":   "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
+	"POST /api/v1/orders/{id}/lines/{item}/escalate": "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
+	"POST /api/v1/orders/{id}/lines/{item}/reassign": "same: an intervention records the person who made it, and an agent is not one",
+	"GET /api/v1/approvals":                          "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
+	"GET /api/v1/approvals/{key}/logo":               "a brand mark is bytes for a browser; an agent has no use for the image",
+	"GET /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"PUT /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"DELETE /api/v1/catalogs/{id}/logo":              "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"POST /api/v1/catalogs/{id}/releases":            "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalogs/{id}/releases":             "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalog-products":                   "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalog-products":                  "portal catalogue surface still being built; a tool is a public contract",
+	// Ordering, for the same reason. An order is also somebody's own: the handler
+	// confines reads to the orders you placed or are the recipient of, and a tool
+	// acting as a server identity would have no such person to be.
+	"GET /api/v1/portal/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
+	// The inventory. Same shape as the catalogue above — it answers about the
+	// caller — with one more reason on top: a list of somebody's access is exactly
+	// the read that should need a person behind it, and an agent acting as a server
+	// identity is not one. The ?principal= form an administrator uses would hand
+	// every agent the whole estate's access map through one tool call.
+	"GET /api/v1/inventory":   "what one person holds; an agent has no inventory of its own, and the administrator's form of it reads somebody else's access",
+	"POST /api/v1/orders":     "portal ordering surface still being built; a tool is a public contract",
+	"GET /api/v1/orders":      "portal ordering surface still being built, and an order is read as the person who placed it",
+	"GET /api/v1/orders/{id}": "portal ordering surface still being built, and an order is read as the person who placed it",
+	// The orchestrator pair. These drive real provisioning, and an agent that
+	// could report a line as provisioned could make an order say something no
+	// target system ever did — the one place in this surface where a wrong call
+	// is not a wrong answer but a wrong record.
+	"GET /api/v1/orders/{id}/next":                   "orchestrator call; the ordering surface is still being built",
+	"POST /api/v1/orders/{id}/lines/{item}":          "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
+	"POST /api/v1/orders/{id}/lines/{item}/decision": "records somebody's refusal of a request; an agent must not be able to decide on a person's behalf, and the record is kept forever",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is

@@ -138,6 +138,14 @@ type JobValue struct {
 	// recomputed on replay (I6). Append-compatible: an old record decodes to 0, which
 	// reads correctly as "never leased".
 	LeaseEpoch uint64
+	// CandidateGroups is the resolved group assignment, comma-separated, seeded from
+	// the model when the task activates — the same way Assignee is. It lives on the
+	// job because a model may name its groups with an expression, and what that
+	// expression evaluated to is a fact about *this* instance rather than about the
+	// definition (ADR-draft-user-task-assignment-expressions). Append-compatible: a
+	// record written before it decodes to "", and a reader falls back to the model's
+	// own value for those.
+	CandidateGroups string
 }
 
 const jobSize = 8 + 8 + 4 + 4 + 8
@@ -153,7 +161,8 @@ func (v *JobValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.Assignee)
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.RetryDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.LeaseExpiresAt))
-	return binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
+	dst = binary.LittleEndian.AppendUint64(dst, v.LeaseEpoch)
+	return appendString(dst, v.CandidateGroups)
 }
 
 func (v *JobValue) decode(src []byte) error {
@@ -180,6 +189,13 @@ func (v *JobValue) decode(src []byte) error {
 	}
 	if len(rest) >= 24 {
 		v.LeaseEpoch = binary.LittleEndian.Uint64(rest[16:])
+	}
+	if len(rest) > 24 {
+		groups, _, err := readString(rest[24:])
+		if err != nil {
+			return err
+		}
+		v.CandidateGroups = groups
 	}
 	return nil
 }
@@ -1383,6 +1399,8 @@ func newValue(vt ValueType) Value {
 		return &ProcessMigrationValue{}
 	case VTVariableIndex:
 		return &VariableIndexValue{}
+	case VTEntitlement:
+		return &EntitlementValue{}
 	default:
 		return nil
 	}

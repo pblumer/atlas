@@ -1223,6 +1223,44 @@ func (q queries) Incidents(fn func(elementKey uint64, v *model.IncidentValue) er
 	})
 }
 
+// EntitlementsOf calls fn with everything one principal holds, in item order.
+//
+// Bounded by one person's inventory rather than by the population, which is what
+// makes it answerable at all — but it is still a scan, and every caller takes a
+// read view rather than the run loop for it (ADR-0239).
+func (q queries) EntitlementsOf(principal string, fn func(v *model.EntitlementValue) error) error {
+	return q.scanPrefix(entitlementPrefix(principal), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTEntitlement, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.EntitlementValue))
+	})
+}
+
+// Entitlement reads whether one principal holds one item. A point read, because
+// "do you already have this" is asked once per product on a catalogue page and a
+// scan per product would make the page cost the inventory.
+func (q queries) Entitlement(principal, itemID string) (*model.EntitlementValue, bool, error) {
+	raw, ok, err := getCopy(q.r, keyEntitlement(principal, itemID))
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	v, err := model.DecodeValue(model.VTEntitlement, raw)
+	if err != nil {
+		return nil, false, err
+	}
+	return v.(*model.EntitlementValue), true, nil
+}
+
+// EntitlementCount returns how many entitlements the inventory holds. It is the
+// measurement the record's open question asks for — whether a column family of
+// millions stays within a workable checkpoint — and the number an operator reads
+// before believing an answer about the estate.
+func (q queries) EntitlementCount() (int, error) {
+	return q.countPrefix([]byte{byte(cfEntitlement)})
+}
+
 // ActiveElementInstanceCount returns how many element instances are live.
 func (q queries) ActiveElementInstanceCount() (int, error) {
 	return q.countPrefix([]byte{byte(cfElementInstance)})

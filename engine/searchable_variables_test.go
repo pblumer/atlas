@@ -18,7 +18,7 @@ func searchableProcess(t testing.TB, names ...string) *compiler.CompiledProcess 
 	t.Helper()
 	b := compiler.NewBuilder(defKey, "identitaet", 1)
 	start := b.AddStartEvent()
-	task := b.AddUserTask("Review", "editor", "reviewers", "", 50, 0, 3)
+	task := b.AddUserTask("Review", compiler.Assignment{Literal: "editor"}, compiler.Assignment{Literal: "reviewers"}, "", 50, 0, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, task)
 	b.Connect(task, end)

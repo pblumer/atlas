@@ -180,6 +180,23 @@ func (t *Tx) PutJob(key uint64, v *model.JobValue) error {
 	return err
 }
 
+// --- Entitlement ---
+
+// PutEntitlement records that a principal holds an item. Writing one that is
+// already there replaces it, which is how a re-grant after a revocation reads: one
+// entitlement with a new start, not two overlapping ones.
+func (t *Tx) PutEntitlement(v *model.EntitlementValue) error {
+	return t.b.Set(keyEntitlement(v.Principal, v.ItemID), t.encodeValue(v), nil)
+}
+
+// DeleteEntitlement removes one. Deleting one that is absent is a harmless no-op:
+// a revocation of something nobody was recorded as holding is the state the caller
+// asked for, and refusing it would make a reconciliation that removes a privilege
+// twice into an error.
+func (t *Tx) DeleteEntitlement(principal, itemID string) error {
+	return t.b.Delete(keyEntitlement(principal, itemID), nil)
+}
+
 // --- Incident ---
 
 // PutIncident writes an incident, keyed by the element instance it is attached to.
@@ -462,6 +479,16 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 			return err
 		}
 	}
+	// What is deliberately not in that list: the entitlement family.
+	//
+	// It is not an oversight and it is not merely that the keys do not match. An
+	// entitlement is keyed by principal and item, and the instance that granted it
+	// is eligible for deletion here long before the right it produced ends — that
+	// difference in lifetime is the entire reason the inventory is its own family
+	// rather than something recoverable from the order. Purging an instance must
+	// therefore never reach it, which is an explicit amendment to ADR-0115 and
+	// ADR-0144 (see ADR-draft-portal-catalogue-order-inventory) and is held by a
+	// test rather than by this comment.
 	return nil
 }
 

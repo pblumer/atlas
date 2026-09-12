@@ -250,6 +250,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
 
+		{"POST", "/api/v1/instances", s.handleCreateInstanceByProcessID, apiOp{
+			summary: "Start the newest deployed version of a process by its BPMN process id — the way a model addresses another process, which knows an id and must not pin a version (a definition key pins one; use the route below for that)", tag: "Instances", role: RoleOperator,
+			req: jsonBody("Process id and initial variables", schemaObj(map[string]any{
+				"processId": tString(), "variables": tObject(),
+			}, "processId")),
+			resp: jsonBody("Created instance", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances", s.handleCreateInstance, apiOp{
 			summary: "Start a process instance", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
@@ -782,6 +788,149 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List public start links", tag: "Forms", role: RoleModeler, resp: jsonBody("Public links", tArray())}},
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
 			summary: "Revoke a public start link", tag: "Forms", role: RoleModeler, resp: jsonBody("Revoked token", tObject())}},
+
+		// The self-service portal's catalogue
+		// (ADR-draft-portal-catalogue-order-inventory). Publishing is where the work
+		// happens: a release proves the graphs acyclic, resolves every process
+		// binding, checks the translations and the ranks, and computes the wave
+		// schedule an order follows — so ordering never interprets a graph, and a
+		// modelling error surfaces for whoever published it rather than as an
+		// incident for whoever orders at 23:00. Reading a catalogue is open to any
+		// signed-in identity because a portal user browses one; changing it needs
+		// the role that maintains them.
+		{"GET", "/api/v1/catalogs", s.catalogs.HandleListCatalogs, apiOp{
+			summary: "Every product catalogue, lowest rank first", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Catalogues", tArray())}},
+		{"POST", "/api/v1/catalogs", s.catalogs.HandleCreateCatalog, apiOp{
+			summary: "Create a product catalogue", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue", schemaObj(map[string]any{
+				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
+				"items": tArray(), "groups": tArray(),
+			})),
+			resp: jsonBody("The created catalogue", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}", s.catalogs.HandleGetCatalog, apiOp{
+			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("The catalogue", tObject())}},
+		{"PATCH", "/api/v1/catalogs/{id}", s.catalogs.HandleUpdateCatalog, apiOp{
+			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue changes", schemaObj(map[string]any{
+				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
+				"items": tArray(), "groups": tArray(), "edges": tArray(),
+			})),
+			resp: jsonBody("The updated catalogue", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/releases", s.catalogs.HandlePublish, apiOp{
+			summary: "Publish a catalogue: validate it and freeze a release, or answer with every problem that stops it (422)", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The published release", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
+			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
+			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Products", tArray())}},
+		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule and the processes that provision and deprovision it", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Product", schemaObj(map[string]any{
+				"id": tString(), "homeCatalog": tString(), "state": tString(),
+				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
+				"approval": tObject(), "provisionProcess": tString(),
+				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
+			}, "id")),
+			resp: jsonBody("The saved product", tObject())}},
+
+		{"PUT", "/api/v1/catalogs/{id}/theme", s.catalogs.HandleSetTheme, apiOp{
+			summary: "Set or clear a catalogue's appearance: the source accent colour and one of the shipped typefaces. Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("Theme", schemaObj(map[string]any{
+				"accent": tString(), "typeface": tString(),
+			})),
+			resp: jsonBody("The updated catalogue", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleGetLogo, apiOp{
+			summary: "A catalogue's brand mark; 404 when it has none, and 404 too for a catalogue you may not read — unlike the instance logo this one is not public", tag: "Catalogue", role: roleAny,
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleSetLogo, apiOp{
+			summary: "Upload a catalogue's brand mark — raw PNG or SVG body, max 512 KiB. Administration, like the appearance it belongs to", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleDeleteLogo, apiOp{
+			summary: "Remove a catalogue's brand mark, so the portal falls back to the operator's", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+		{"POST", "/api/v1/catalogs/{id}/import", s.catalogs.HandleImport, apiOp{
+			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
+			resp: jsonBody("What was imported, and what was skipped", tObject())}},
+		// The approver's page (ADR-draft-portal-approval-page). One call answers
+		// everything it shows, because the chain behind an approval — task, order,
+		// release, catalogue — is one the approver may walk no step of themselves.
+		{"POST", "/api/v1/orders/{id}/cancel", s.handleCancelOrder, apiOp{
+			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
+			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
+			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
+			resp: jsonBody("The order, and the process now revoking the line", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
+			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{
+				"superior": tString(),
+			})),
+			resp: jsonBody("Where the approval sits now, and whether it can go further", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/reassign", s.handleReassignApproval, apiOp{
+			summary: "Give a stuck approval to somebody a person chose, recording who intervened. Refuses to give it to the caller themselves: the escalation path exists so a stalled approval reaches somebody who will act on it", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom to give it to", schemaObj(map[string]any{
+				"to": tString(),
+			}, "to")),
+			resp: jsonBody("Where the approval sits now", tObject())}},
+		{"GET", "/api/v1/approvals/stalled", s.handleStalledApprovals, apiOp{
+			summary: "Every approval that can escalate no further — the chain ran out or the directory looped. A stall records a fact, and this is where somebody who can act reads it; an approval nobody can escalate and nobody is looking at is how an order waits forever", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Stalled approvals", tArray())}},
+		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
+			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
+			resp: jsonBody("Approvals", tArray())}},
+		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
+			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"GET", "/api/v1/inventory", s.handleInventory, apiOp{
+			summary: "What you hold today: every entitlement recorded against you, newest first, with where the knowledge came from (ordered, adopted or legacy) and the order that granted it. An administrator may ask about somebody else with ?principal=. Read from the inventory and never from orders — an order is deleted by retention long before the access it granted ends", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("One principal's inventory", tObject())}},
+		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
+			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("Your catalogue", tObject())}},
+		// Portal orders (ADR-draft-portal-catalogue-order-inventory). An order names
+		// exactly one release and carries the schedule that release computed, so
+		// fulfilment reads one record and never recomputes a graph — and what was
+		// ordered cannot change because somebody edited a product while an approval
+		// was pending. Reading is confined to your own orders by the handler, not by
+		// the role: an order somebody else placed is not yours to see.
+		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
+			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
+			req: jsonBody("Order", schemaObj(map[string]any{
+				"releaseId": tString(), "items": tArray(), "recipient": tString(),
+			}, "releaseId", "items")),
+			resp: jsonBody("The placed order", tObject())}},
+		{"GET", "/api/v1/orders", s.orders.HandleList, apiOp{
+			summary: "Your own orders, newest first", tag: "Order", role: RoleUser,
+			resp: jsonBody("Orders", tArray())}},
+		{"GET", "/api/v1/orders/{id}", s.orders.HandleGet, apiOp{
+			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
+			resp: jsonBody("The order", tObject())}},
+
+		// The two calls an orchestrator makes to drive an order: what may start,
+		// and what came back. Operator work rather than the orderer's — nobody
+		// reports the result of their own provisioning, and an operator drives
+		// orders that are not theirs.
+		{"GET", "/api/v1/orders/{id}/next", s.orders.HandleNext, apiOp{
+			summary: "Which of an order's lines may be started now, each with the process that provisions it and the variant chosen: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Lines ready to start", tArray())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}", s.orders.HandleReport, apiOp{
+			summary: "Record one line's provisioning outcome (done, skipped, failed or running) and propagate what it stopped", tag: "Order", role: RoleOperator,
+			req: jsonBody("Outcome", schemaObj(map[string]any{
+				"status": tString(),
+			}, "status")),
+			resp: jsonBody("The updated order", tObject())}},
+
+		{"POST", "/api/v1/orders/{id}/lines/{item}/decision", s.orders.HandleDecide, apiOp{
+			summary: "Record that an approver refused a line, with who decided and why — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome", tag: "Order", role: RoleOperator,
+			req: jsonBody("Decision", schemaObj(map[string]any{
+				"by": tString(), "reason": tString(),
+			}, "by", "reason")),
+			resp: jsonBody("The updated order", tObject())}},
 
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an

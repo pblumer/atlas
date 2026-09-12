@@ -370,7 +370,15 @@ func registerScope(
 			}
 			dueDateNanos = nanos
 		}
-		reg.node(ut.Id, b.AddUserTask(ut.Name, ut.Assignment.Assignee, ut.Assignment.CandidateGroups, ut.Form.FormId, priority, dueDateNanos, retries))
+		assignee, err := Assign(ut.Id, "assignee", ut.Assignment.Assignee)
+		if err != nil {
+			return err
+		}
+		groups, err := Assign(ut.Id, "candidateGroups", ut.Assignment.CandidateGroups)
+		if err != nil {
+			return err
+		}
+		reg.node(ut.Id, b.AddUserTask(ut.Name, assignee, groups, ut.Form.FormId, priority, dueDateNanos, retries))
 	}
 	for _, ca := range c.CallActivities {
 		ce := ca.CalledElement

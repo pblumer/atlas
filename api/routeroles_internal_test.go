@@ -93,6 +93,16 @@ var wantAdminRoutes = []string{
 	// administrator — the login screen reads three before anyone is anybody — so it
 	// is the write that is listed here and the read that is not.
 	"PUT /api/v1/settings/theme",
+	// A catalogue's own appearance, which is the instance theme relocated rather
+	// than a second mechanism: an instance serving several customer groups has
+	// several brands, and it stays with the administrator for the same reason the
+	// instance one does (ADR-0113, decision 12).
+	"PUT /api/v1/catalogs/{id}/theme",
+	// And its brand mark, on the same gate and for one more reason: it is the only
+	// place in the catalogue where somebody hands the server bytes it will serve
+	// back to a browser.
+	"PUT /api/v1/catalogs/{id}/logo",
+	"DELETE /api/v1/catalogs/{id}/logo",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",

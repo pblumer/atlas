@@ -19,6 +19,18 @@ import (
 // Resolve needs: the compiled process, the task's detail, and the live scope.
 func resolveFixture(t *testing.T, cfg compiler.MailConfig, vars ...model.VariableValue) (*mail.Registry, mail.Job) {
 	t.Helper()
+	return resolveFixtureWith(t, nil, cfg, vars...)
+}
+
+// stubDirectory answers nothing, which is the case the shape test needs: a
+// directory that is present and resolves no reference.
+type stubDirectory struct{}
+
+func (stubDirectory) Recipients(string) ([]string, error) { return nil, nil }
+
+// resolveFixtureWith is resolveFixture with a directory injected.
+func resolveFixtureWith(t *testing.T, dir mail.Directory, cfg compiler.MailConfig, vars ...model.VariableValue) (*mail.Registry, mail.Job) {
+	t.Helper()
 	log, store := openStore(t)
 	cp, jobType := mailProcess(t, cfg)
 	reg := mail.NewRegistry()
@@ -29,7 +41,7 @@ func resolveFixture(t *testing.T, cfg compiler.MailConfig, vars ...model.Variabl
 	// Drive the process with a handler that resolves rather than sends, so the
 	// resolution runs against a real instance's variables and element instance.
 	driveResolving(t, cp, jobType, store, log, func(ei *model.ElementInstanceValue, elementInstanceKey, jobKey uint64, detail *compiler.ConnectorTaskDetail) {
-		resolved, resolveErr = mail.Resolve(store, cp, detail, ei, elementInstanceKey, jobKey)
+		resolved, resolveErr = mail.Resolve(store, cp, detail, ei, elementInstanceKey, jobKey, dir)
 		captured = true
 	}, vars...)
 	if !captured {
@@ -204,5 +216,35 @@ func driveResolving(t *testing.T, cp *compiler.CompiledProcess, jobType int32, s
 	p.CreateInstance(cp.Key, vars...)
 	if err := runner.Drive(); err != nil {
 		t.Fatalf("Drive: %v", err)
+	}
+}
+
+// TestNothingResolvedStaysNil is a shape, not a value.
+//
+// A leased job's payload is JSON, where a nil slice is `null` and an empty one is
+// `[]`. An unresolved recipient expression has to travel as the absence of a value
+// and not as a value that happens to be empty — the payload contract says so, and
+// the first cut of the directory lookup broke it by building its result with make.
+func TestNothingResolvedStaysNil(t *testing.T) {
+	// A directory is supplied, because the nil-directory path returns the caller's
+	// own slice and would pass whatever this did.
+	for _, tc := range []struct {
+		name string
+		to   compiler.RestExpr
+	}{
+		{"an expression over a variable that is not there", compiler.RestExpr{Expr: mustExpr(t, "fehlt")}},
+		{"nothing authored at all", compiler.RestExpr{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, j := resolveFixtureWith(t, stubDirectory{}, compiler.MailConfig{
+				Connector: "office365",
+				To:        tc.to,
+				Subject:   compiler.RestExpr{Literal: "Hi"},
+				Retries:   3,
+			})
+			if j.To != nil {
+				t.Fatalf("= %#v, want nil", j.To)
+			}
+		})
 	}
 }

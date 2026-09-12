@@ -23,6 +23,10 @@ type inflightValue struct {
 	variableAudit model.VariableAuditValue
 	compensable   model.CompensableValue
 	operatorAct   model.OperatorActionValue
+	// entitlement rides only on the two inventory commands and the events they
+	// emit (ADR-draft-portal-catalogue-order-inventory). Like migration it never
+	// rides token movement, so it costs the hot path the field and nothing else.
+	entitlement model.EntitlementValue
 	// migration rides only on the operator-initiated migrate command and the event it
 	// emits (ADR-0162). Its mapping is a slice, so — like the decision a job completion
 	// carries — it is a non-hot-path payload: no token movement ever populates it. It is
@@ -75,6 +79,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.migration
 	case model.VTVariableIndex:
 		return &v.variableIndex
+	case model.VTEntitlement:
+		return &v.entitlement
 	}
 	return nil
 }
@@ -159,6 +165,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTVariableIndex:
 		if v, ok := rec.Value.(*model.VariableIndexValue); ok {
 			iv.variableIndex = *v
+		}
+	case model.VTEntitlement:
+		if v, ok := rec.Value.(*model.EntitlementValue); ok {
+			iv.entitlement = *v
 		}
 	}
 	return iv

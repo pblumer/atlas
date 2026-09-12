@@ -28,7 +28,7 @@ type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 // (ADR-0079). Returning an error
 // leaves the job pending (retry, then an incident, ADR-0061); the runner completes it
 // only on success.
-func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handler {
+func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, dir Directory) job.Handler {
 	return func(j job.Job) error {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -48,7 +48,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Handle
 		// The same Resolve/Run pair a worker uses (ADR-0168). Running in the engine
 		// changes only *where* the registry comes from, never what a resolved mail
 		// task means — which is the point of routing both paths through one pair.
-		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key)
+		resolved, err := Resolve(store, cp, detail, ei, j.ElementInstanceKey, j.Key, dir)
 		if err != nil {
 			return err
 		}

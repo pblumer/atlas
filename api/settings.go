@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
+	"github.com/pblumer/atlas/api/brandimage"
 	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/httpapi"
 
@@ -112,42 +111,11 @@ func (s *Server) handleDeleteTheme(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// pngMagic is the 8-byte signature every PNG begins with. Validating the bytes
-// server-side (not just the client's Content-Type) means a mislabelled or corrupt
-// upload can never be persisted and served to every browser as the org logo.
-var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
-
-// normalizeLogoType canonicalises an upload's Content-Type to a bare, lowercase
-// media type, dropping any parameters (e.g. "image/svg+xml; charset=utf-8").
-func normalizeLogoType(h string) string {
-	if i := strings.IndexByte(h, ';'); i >= 0 {
-		h = h[:i]
-	}
-	return strings.ToLower(strings.TrimSpace(h))
-}
-
-// validLogo checks the uploaded bytes actually look like the declared image type:
-// the PNG magic for a raster mark, and well-formed UTF-8 containing an "<svg" root
-// for a vector one. It is a sanity gate, not a sanitiser — the served response's
-// CSP (handleGetLogo) is what neutralises a hostile SVG, so this only rejects
-// obvious non-images.
-func validLogo(contentType string, data []byte) bool {
-	switch contentType {
-	case "image/png":
-		return bytes.HasPrefix(data, pngMagic)
-	case "image/svg+xml":
-		return utf8.Valid(data) && bytes.Contains(bytes.ToLower(data), []byte("<svg"))
-	}
-	return false
-}
-
 // handleGetLogo serves the org-wide brand logo image, or 404 when none is set. It
 // is public (like the theme) so the login screen and every browser can show the
 // customer's mark before authenticating. A stored SVG is attacker-influenced
-// content, so the response is locked down: nosniff pins the declared type, and a
-// strict CSP with the sandbox directive neutralises any script the SVG carries even
-// if it is opened as a top-level document — the app itself only ever renders it via
-// <img>, where SVG script never runs anyway.
+// content, so the response is locked down by [brandimage.Serve] — the same
+// headers a catalogue's own mark travels under.
 func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 	var (
 		data []byte
@@ -164,12 +132,7 @@ func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no org logo set")
 		return
 	}
-	w.Header().Set("Content-Type", ct)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	brandimage.Serve(w, ct, data)
 }
 
 // handleSetLogo stores the org-wide brand logo. Admin-gated: it changes what every
@@ -177,8 +140,8 @@ func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 // the raw request body; its format comes from the Content-Type header and is
 // re-validated against the bytes before anything is persisted.
 func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
-	ct := normalizeLogoType(r.Header.Get("Content-Type"))
-	if _, ok := logoExtByType[ct]; !ok {
+	ct := brandimage.NormalizeType(r.Header.Get("Content-Type"))
+	if _, ok := brandimage.ExtByType[ct]; !ok {
 		httpapi.Error(w, http.StatusUnsupportedMediaType, "logo must be uploaded as image/png or image/svg+xml")
 		return
 	}
@@ -197,7 +160,7 @@ func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusRequestEntityTooLarge, "logo exceeds the 512 KiB limit")
 		return
 	}
-	if !validLogo(ct, data) {
+	if !brandimage.Valid(ct, data) {
 		httpapi.Error(w, http.StatusBadRequest, "body is not a valid "+ct+" image")
 		return
 	}

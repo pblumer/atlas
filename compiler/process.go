@@ -414,12 +414,26 @@ func (b DecisionBinding) String() string {
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
 // interned strings from the zeebe:assignmentDefinition extension (-1 if unset).
 type UserTaskDetail struct {
-	JobType         int32
-	Retries         int32
-	Name            int32 // interned element name (the task's human title) → index, -1 if unset
+	JobType int32
+	Retries int32
+	Name    int32 // interned element name (the task's human title) → index, -1 if unset
+	// Assignee and CandidateGroups are the literal halves of the assignment: the
+	// interned strings the model wrote, or -1 when it wrote an expression instead.
 	Assignee        int32
 	CandidateGroups int32
-	FormId          int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
+	// AssigneeExpr and CandidateGroupsExpr are the other half: a FEEL expression
+	// the model wrote with a leading "=", evaluated when the task activates and
+	// frozen into the job-created event, exactly as the due date below is
+	// (ADR-draft-user-task-assignment-expressions). Nil when the model wrote a
+	// literal or nothing.
+	//
+	// The two are exclusive by construction — a value is one or the other — and a
+	// reader must consult the expression first: the literal is -1 whenever an
+	// expression is present, so reading only the literal silently yields an
+	// unassigned task, which is what happened before this existed.
+	AssigneeExpr        *expr.Compiled
+	CandidateGroupsExpr *expr.Compiled
+	FormId              int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
 	// Priority is the task's static importance from zeebe:priorityDefinition
 	// (default 50, Camunda's convention); higher sorts first in the inbox.
 	Priority int32
@@ -961,6 +975,16 @@ type MockupTaskDetail struct {
 // I5, ADR-0008/0067). It backs the modeler's fx toggle: a model value with a
 // leading '=' is an expression, otherwise a literal.
 type RestExpr struct {
+	Literal string
+	Expr    *expr.Compiled
+}
+
+// Assignment is what a model wrote for a user task's assignee or its candidate
+// groups: a literal name, or a FEEL expression to evaluate when the task
+// activates. It is a type rather than two strings so the compiler cannot build a
+// user task while forgetting that one of them was an expression — which is
+// precisely the defect this shape was introduced to make impossible.
+type Assignment struct {
 	Literal string
 	Expr    *expr.Compiled
 }
