@@ -51,7 +51,7 @@ type persistedDeployment struct {
 	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
 	// BindingPolicy says how this deployment's latest-bound business rule tasks
 	// resolve their decision model
-	// (ADR-draft-durable-versioned-decision-deployments):
+	// (ADR-0319):
 	//
 	//   - bindingPinned ("pinned") — latest was resolved once, when this definition
 	//     was deployed, and DecisionBindings carries the answer. Nothing is decided

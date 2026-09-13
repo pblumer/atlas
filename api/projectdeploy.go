@@ -24,7 +24,7 @@ type projectDeployResp struct {
 	Definitions []deployedProcess `json:"definitions"`
 	// Decisions are the DMN models this publish deployed as runtime artifacts in
 	// their own right — durable, versioned, and evaluable without a process to carry
-	// them (ADR-draft-durable-versioned-decision-deployments). An application whose
+	// them (ADR-0319). An application whose
 	// only artifacts are decisions reports them here with an empty Definitions.
 	Decisions  []deployedDecisionResp `json:"decisions"`
 	References []dmnRefValidationResp `json:"references"`
@@ -49,7 +49,7 @@ type projectDeployResp struct {
 //
 // Decisions go first on purpose: a process published alongside a decision must pin
 // its latest-bound reference to that decision deployment rather than to the copy
-// bundled with itself (ADR-draft-durable-versioned-decision-deployments).
+// bundled with itself (ADR-0319).
 //
 // Honest limitation: the final BPMN deploy loop is not atomic against a mid-loop
 // persist failure (same as a multi-pool deploy). The decisions are inside that
@@ -238,7 +238,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		// Decisions before drafts, deliberately: a process published alongside a
 		// decision must pin its latest-bound reference to *that* decision deployment,
 		// not to the copy bundled with itself
-		// (ADR-draft-durable-versioned-decision-deployments).
+		// (ADR-0319).
 		var decErr error
 		if decisions, decErr = s.deployDecisions(decisionDeployments(models), id, principalID(r), deployedAt); decErr != nil {
 			persistErr = decErr
@@ -290,7 +290,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 // resolvedModel is one project DMN reference resolved for the bundle: its model
 // XML, the decision names it provides, and — for a reference that belongs to an
 // application being published — where it came from, which is what the decision
-// deployment records (ADR-draft-durable-versioned-decision-deployments). The
+// deployment records (ADR-0319). The
 // single-deploy path (dmnForDeployBody) fills only the first two: it bundles a
 // model with a process rather than deploying it as a decision.
 type resolvedModel struct {

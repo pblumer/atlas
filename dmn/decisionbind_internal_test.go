@@ -28,7 +28,7 @@ func bindProcess(t *testing.T, binding compiler.DecisionBinding) (*compiler.Comp
 }
 
 // TestDecisionModelKey is the whole of the runtime's version choice, which after
-// ADR-draft-durable-versioned-decision-deployments is meant to be no choice at
+// ADR-0319 is meant to be no choice at
 // all: a deployment-bound task reads its own snapshot, a pinned latest-bound task
 // reads the decision deployment its deploy resolved, and only a definition
 // deployed before pinning falls through to the ADR-0063 runtime lookup.

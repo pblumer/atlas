@@ -80,7 +80,7 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 	var scanErr error
 	s.do(func() {
 		// Decisions deployed in their own right
-		// (ADR-draft-durable-versioned-decision-deployments). These are listed whether
+		// (ADR-0319). These are listed whether
 		// or not any process calls them: an application may publish decisions and no
 		// BPMN at all, and a decision nobody has referenced yet is still something the
 		// engine is holding — a deployed process with no instances is listed for the

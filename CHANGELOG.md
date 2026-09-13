@@ -258,7 +258,7 @@ _Changed_ / _Removed_ for each version.
   An application release now names the decisions it shipped alongside its processes, and
   an application can be built from decisions with no BPMN in it at all — "Create new →
   Decision (DMN)" authors one in the embedded editor and files it under the application.
-  ([ADR-draft-durable-versioned-decision-deployments](docs/adr/draft-durable-versioned-decision-deployments.md),
+  ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
   [issue #915](https://github.com/pblumer/atlas/issues/915))
 
 - **A capability's service levels are measured, not only declared.** Every KPI and SLA

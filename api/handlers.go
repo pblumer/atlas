@@ -925,7 +925,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		}
 
 		// Resolve every latest-bound decision reference to an exact decision
-		// deployment, now, once (ADR-draft-durable-versioned-decision-deployments).
+		// deployment, now, once (ADR-0319).
 		// After this the definition names a concrete model and nothing about which
 		// version it runs is decided again — not on the worker, not on replay (I5/I6).
 		pins := s.pinDecisions(cp)

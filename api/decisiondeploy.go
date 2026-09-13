@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Decision deployments (ADR-draft-durable-versioned-decision-deployments).
+// Decision deployments (ADR-0319).
 //
 // A DMN model an application publishes becomes a runtime artifact of its own: a
 // durable, versioned record in the decisions store, compiled into the DMN registry
@@ -197,7 +197,7 @@ func decisionResponses(recs []persistedDecision) []deployedDecisionResp {
 
 // handleListDecisionDeployments lists the decisions deployed on this server as
 // runtime artifacts — one row per decision, newest deployment first, every version
-// present (ADR-draft-durable-versioned-decision-deployments). It is the decision
+// present (ADR-0319). It is the decision
 // counterpart of GET /api/v1/processes: what an operator can point a business rule
 // task at, and what a pinned reference resolved to.
 //

@@ -162,7 +162,7 @@ func JSONObject(m map[string]any) string {
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
 	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
 		// Which deployed model to evaluate was decided when the process was deployed
-		// (ADR-draft-durable-versioned-decision-deployments), so this picks it up
+		// (ADR-0319), so this picks it up
 		// rather than choosing. Both paths request the trace so the evaluation is
 		// retained with its explanation (ADR-0066).
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error) {
@@ -187,7 +187,7 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(
 //     two bindings follow different lineages.
 //   - `latest` binding on a definition deployed with pinning — the exact decision
 //     deployment its deploy resolved
-//     (ADR-draft-durable-versioned-decision-deployments). No version is selected
+//     (ADR-0319). No version is selected
 //     here, on replay, or anywhere else after the deploy (invariants I5/I6).
 //   - `latest` binding on a definition deployed before pinning existed — ok=false,
 //     so the caller keeps resolving the newest deployed model at activation, which

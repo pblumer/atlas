@@ -10,7 +10,7 @@
 //     thread-safe decisions held in a [Registry] (invariant I5: compile, don't
 //     interpret — no XML parsing or FEEL compilation at runtime), and which
 //     deployment's model a task evaluates is settled there too
-//     (ADR-draft-durable-versioned-decision-deployments), so the runtime and a
+//     (ADR-0319), so the runtime and a
 //     replay choose no version.
 //   - A business rule task creates a job carrying the reserved DMN job type. The
 //     processor never evaluates a decision itself, so it stays allocation-free
@@ -49,7 +49,7 @@ import (
 //     and registers them under the process-definition key (ADR-0014);
 //   - a **decision deployment** is a decision published in its own right, durable
 //     and versioned, under a key of its own
-//     (ADR-draft-durable-versioned-decision-deployments).
+//     (ADR-0319).
 //
 // A Registry is safe for concurrent evaluation once populated. Populate it (via
 // Deploy / DeployDecision) before the processes that use it start running.
@@ -94,7 +94,7 @@ func NewRegistry() *Registry {
 // It does *not* make this model the newest version of the decisions it provides:
 // that is [Registry.DeployDecision]'s job, and keeping the two apart is what stops
 // deploying a process from silently becoming "a new version of the decision"
-// (ADR-draft-durable-versioned-decision-deployments). The one index a bundled
+// (ADR-0319). The one index a bundled
 // model still moves is the legacy runtime-latest pointer the definitions deployed
 // before pinning read — see the Registry field comments.
 func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
@@ -155,7 +155,7 @@ func (r *Registry) register(defKey uint64, defs *tdmn.Definitions) {
 // DeployDecision compiles a DMN model published as a decision deployment — a
 // decision in its own right rather than a model bundled with some process — and
 // registers it under its own definition key
-// (ADR-draft-durable-versioned-decision-deployments). It additionally makes that
+// (ADR-0319). It additionally makes that
 // key the newest deployed version of every decision the model provides, which is
 // what a latest-bound business rule task is pinned against when its process is
 // deployed.

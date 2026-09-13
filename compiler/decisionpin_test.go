@@ -40,7 +40,7 @@ func buildPinProcess(t *testing.T) *compiler.CompiledProcess {
 // TestLatestBoundDecisions is what a deploy resolves: exactly the local,
 // latest-bound decisions. A deployment-bound task already names its model (this
 // process's own snapshot) and a central decision resolves through its worker, so
-// neither is pinned (ADR-draft-durable-versioned-decision-deployments).
+// neither is pinned (ADR-0319).
 func TestLatestBoundDecisions(t *testing.T) {
 	cp := buildPinProcess(t)
 	got := cp.LatestBoundDecisions()

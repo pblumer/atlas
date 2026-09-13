@@ -332,7 +332,7 @@ The control-flow basics most real models use.
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.
   **A decision is now a durable, versioned deployment artifact in its own right**
-  ([ADR-draft-durable-versioned-decision-deployments](docs/adr/draft-durable-versioned-decision-deployments.md)),
+  ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md)),
   which is what that binding now resolves against. Publishing an application
   deploys its DMN models as *decision deployments*: durable records in a
   `decisions/` sidecar store, keyed from the same definition key space process
@@ -1777,7 +1777,7 @@ is the engine an organisation would model such a workflow *in*.
   ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)), it embeds the
   standard `dmn-js` editor so a decision can be authored and versioned in place
   ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md),
-  [ADR-draft-durable-versioned-decision-deployments](docs/adr/draft-durable-versioned-decision-deployments.md)),
+  [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md)),
   and it offers a read-only decision-requirements-graph view and a decision picker
   that auto-reads inputs/outputs. What it does not do is reimplement DMN rendering
   or become a decision-management product beside the workflow engine: the editor is

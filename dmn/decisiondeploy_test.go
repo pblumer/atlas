@@ -9,7 +9,7 @@ import (
 )
 
 // TestDecisionDeploymentIsItsOwnLineage is the registry half of
-// ADR-draft-durable-versioned-decision-deployments: a decision deployed on its own
+// ADR-0319: a decision deployed on its own
 // (published from an application, with or without a process) is what
 // LatestDecisionKey answers with, and a model bundled with a *process* deployment
 // never moves that pointer. Before this the two were the same map, so deploying a

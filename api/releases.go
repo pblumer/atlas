@@ -100,7 +100,7 @@ func (s *Server) mintRelease(r *http.Request, out bundleOutcome, note string) (a
 		})
 	}
 	// The decisions this publish deployed, each naming the runtime artifact it
-	// produced (ADR-draft-durable-versioned-decision-deployments). They are recorded
+	// produced (ADR-0319). They are recorded
 	// exactly like processes, so a release says what it shipped whether the
 	// application holds BPMN, DMN, or only one of the two.
 	for _, d := range out.resp.Decisions {

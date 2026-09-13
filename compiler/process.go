@@ -1365,7 +1365,7 @@ type CompiledProcess struct {
 	// decisionPins is the exact decision deployment each latest-bound business rule
 	// task evaluates against, resolved once when this definition was deployed and
 	// restored from the deployment record on reload
-	// (ADR-draft-durable-versioned-decision-deployments). It is not compiled from
+	// (ADR-0319). It is not compiled from
 	// the model — the model says "latest", the deployment says which one that was —
 	// so it is written by PinDecisions after Build and before the definition is
 	// visible to the processor, the same post-compile discipline Version and
@@ -1998,7 +1998,7 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 // LatestBoundDecisions returns the DMN decision ids this process's *local,
 // latest-bound* business rule tasks reference, distinct and in node order — the
 // references a deployment has to resolve to an exact decision deployment
-// (ADR-draft-durable-versioned-decision-deployments).
+// (ADR-0319).
 //
 // It is deliberately narrower than [CompiledProcess.BusinessRuleDecisions]: a
 // deployment-bound task already names its model (the snapshot registered under
@@ -2026,7 +2026,7 @@ func (p *CompiledProcess) LatestBoundDecisions() []string {
 
 // PinDecisions records the decision deployment each latest-bound reference
 // resolved to, and marks this definition as one that resolved them at deploy time
-// (ADR-draft-durable-versioned-decision-deployments). An empty or nil map is a
+// (ADR-0319). An empty or nil map is a
 // meaningful call: it says "this definition was deployed under the pinning policy
 // and had nothing to pin".
 //

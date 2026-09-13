@@ -404,6 +404,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0316](0316-portal-theme-per-catalogue.md) | A theme belongs to a catalogue, the sign-in screen belongs to the operator | Accepted | Partial |
 | [0317](0317-task-commands-are-an-object-question.md) | Acting on a user task is an object question | Accepted | Landed |
 | [0318](0318-user-task-assignment-expressions.md) | A user task's assignment may be an expression | Accepted | Landed |
+| [0319](0319-durable-versioned-decision-deployments.md) | Durable, versioned decision deployments — and `latest` resolved when a process is deployed | Accepted | Landed |
 
 ## The two states of a record
 

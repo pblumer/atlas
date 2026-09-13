@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/wal"
 )
 
-// The acceptance suite for ADR-draft-durable-versioned-decision-deployments: a DMN
+// The acceptance suite for ADR-0319: a DMN
 // decision is a durable, versioned runtime artifact of its own, an application
 // made of nothing but decisions publishes, and a process's `latest` reference is
 // frozen when the process is deployed rather than chosen when a token arrives.

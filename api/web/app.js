@@ -3605,7 +3605,7 @@ function pickFile(accept) {
 // reference to it under the application. It is the decision counterpart of "BPMN
 // diagram" in the same menu — an application can now be built out of decisions
 // with no diagram in it at all, and publishing it deploys them as runtime
-// artifacts (ADR-draft-durable-versioned-decision-deployments).
+// artifacts (ADR-0319).
 //
 // The editor module is imported lazily, the same discipline editDmnRef uses, so
 // the Modeler home stays light. A cancelled or failed save resolves to null and

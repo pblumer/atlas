@@ -32,7 +32,7 @@ type applicationRelease struct {
 type releaseMember struct {
 	// Kind is "process" or "decision" ("form" as a later slice adds it). A decision
 	// member is a DMN decision deployed as a runtime artifact of its own
-	// (ADR-draft-durable-versioned-decision-deployments), which is what lets a
+	// (ADR-0319), which is what lets a
 	// release of an application with no BPMN in it still name what it shipped.
 	Kind string `json:"kind"`
 	// Ref is the logical identity within its kind: the processId of a process, the

@@ -306,7 +306,7 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 // the drafts may have moved on since. Members that are not processes are skipped —
 // forms and decisions do not travel yet, and silently sending nothing for them is
 // better than sending something the receiver cannot deploy. A release does now
-// record its decisions (ADR-draft-durable-versioned-decision-deployments), so what
+// record its decisions (ADR-0319), so what
 // is missing here is the transport for them, not the manifest: promoting a
 // decision-only application reaches the target with nothing to deploy, exactly as
 // it did before decisions were recorded at all.

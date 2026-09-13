@@ -1,4 +1,4 @@
-# ADR-DRAFT: Durable, versioned decision deployments — and `latest` resolved when a process is deployed
+# ADR-0319: Durable, versioned decision deployments — and `latest` resolved when a process is deployed
 
 - **Status:** Accepted
 - **Implementation:** Landed

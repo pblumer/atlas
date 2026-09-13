@@ -208,7 +208,7 @@ type Server struct {
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
 	// decisionDeploys is the durable sidecar for decision deployments — DMN models
 	// published as runtime artifacts in their own right
-	// (ADR-draft-durable-versioned-decision-deployments) — and decisionVersions the
+	// (ADR-0319) — and decisionVersions the
 	// per-decision-id version counter it rebuilds at startup, the decision
 	// counterpart of versions above.
 	decisionDeploys  *decisionStore
@@ -2413,7 +2413,7 @@ func (s *Server) drive() error {
 // registry and the processor directly here respects the single-writer invariant.
 //
 // Two stores feed it: process deployments and decision deployments
-// (ADR-draft-durable-versioned-decision-deployments). They share one key space and
+// (ADR-0319). They share one key space and
 // each lists in ascending key order, so merging them replays registration in the
 // order it happened live. That ordering is not cosmetic: a definition deployed
 // before deploy-time pinning still resolves latest binding against "the newest
@@ -2478,7 +2478,7 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 	}
 	cp.Version = rec.Version
 	// Restore the decision bindings this definition was deployed with
-	// (ADR-draft-durable-versioned-decision-deployments), before the processor sees
+	// (ADR-0319), before the processor sees
 	// it. A record with no policy marker predates deploy-time pinning, so it is
 	// deliberately left unpinned and keeps resolving latest at task activation.
 	if rec.BindingPolicy == bindingPinned {
@@ -2551,7 +2551,7 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 // restoreDecisionDeployment brings one decision deployment back: recompile its
 // persisted DMN source into the registry under the key it was deployed with, and
 // resume its per-decision version counters
-// (ADR-draft-durable-versioned-decision-deployments). Nothing compiled was ever
+// (ADR-0319). Nothing compiled was ever
 // persisted, so the registry is rebuilt from source here — off the processor, and
 // before the loop serves traffic.
 func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {

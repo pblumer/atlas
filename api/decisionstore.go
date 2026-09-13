@@ -10,7 +10,7 @@ import (
 
 // persistedDecision is a **decision deployment**: a DMN model published as a
 // runtime artifact in its own right, rather than as a model bundled with some
-// process's deployment (ADR-draft-durable-versioned-decision-deployments).
+// process's deployment (ADR-0319).
 //
 // It is the decision counterpart of [persistedDeployment] and follows the same
 // discipline (ADR-0019): the record holds the validated *source* plus the stable
