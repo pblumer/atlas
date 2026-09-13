@@ -1,9 +1,11 @@
 package api
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -69,19 +71,17 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 		served[r.method+" "+pathShape(r.pattern)] = true
 	}
 
-	entries, err := os.ReadDir(systemProcessesDir)
-	if err != nil {
-		t.Fatalf("read %s: %v", systemProcessesDir, err)
-	}
+	// Both trees, because the contract is the same one. A model under examples/ is
+	// not deployed on the way up, but it is installed by the handbook's own button
+	// into a reader's instance — a broken path there is found by somebody trying to
+	// learn from it, which is no better a place than an operator's upgrade.
 	calls := 0
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".bpmn") {
-			continue
-		}
-		raw, err := os.ReadFile(filepath.Join(systemProcessesDir, e.Name()))
+	for _, file := range modelFiles(t, systemProcessesDir, filepath.Join("..", "examples")) {
+		raw, err := os.ReadFile(file)
 		if err != nil {
-			t.Fatalf("read %s: %v", e.Name(), err)
+			t.Fatalf("read %s: %v", file, err)
 		}
+		name := filepath.Base(file)
 		for _, block := range restTask.FindAllString(string(raw), -1) {
 			m := methodHeader.FindStringSubmatch(block)
 			if m == nil {
@@ -104,7 +104,7 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 			if !served[m[1]+" "+shape] {
 				t.Errorf("%s calls %s %s, which this server does not serve.\n"+
 					"A path a model calls is a contract like any other; nothing else "+
-					"would report this until an instance ran.", e.Name(), m[1], shape)
+					"would report this until an instance ran.", name, m[1], shape)
 			}
 		}
 	}
@@ -112,7 +112,35 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 	// A rule that checks nothing reports the same "ok" as a rule everything
 	// satisfies. The portal's four models alone make more than this.
 	if calls < 5 {
-		t.Errorf("only %d REST calls found in the system processes; the scan or the "+
+		t.Errorf("only %d REST calls found in the models; the scan or the "+
 			"patterns above have gone stale, and a green result here would mean nothing", calls)
 	}
+}
+
+// modelFiles lists every .bpmn under the given roots, recursively, sorted so the
+// failures of a broken scan read the same way twice.
+func modelFiles(t *testing.T, roots ...string) []string {
+	t.Helper()
+	var out []string
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+				return err
+			case d.IsDir() || !strings.HasSuffix(path, ".bpmn"):
+				return nil
+			}
+			out = append(out, path)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", root, err)
+		}
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		t.Fatalf("no models found under %v; a walk that finds nothing passes every rule "+
+			"written against it", roots)
+	}
+	return out
 }

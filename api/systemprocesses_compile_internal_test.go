@@ -108,3 +108,31 @@ func TestEveryApprovalKindNamesADeployedProcess(t *testing.T) {
 		t.Errorf("an unapproved line routes to %q; it must go straight to provisioning", got)
 	}
 }
+
+// TestEveryExampleCompiles. The models under examples/ are not deployed on the way
+// up, which is why they were never compiled by a test — and is also why a broken one
+// stays broken: XML parses, the catalogue happily serves it, and the first person to
+// find out is a reader who pressed "install" to learn something.
+//
+// It compiles them with the compiler that would compile them at runtime, for the
+// reason the system-process test gives: an approximation of the compiler agrees with
+// it right up until it does not.
+func TestEveryExampleCompiles(t *testing.T) {
+	files := modelFiles(t, filepath.Join("..", "examples"))
+	for _, file := range files {
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			b, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("read: %v", err)
+			}
+			deployables, err := compiler.ParseAll(1000, 1, bytes.NewReader(b))
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			if len(deployables) == 0 {
+				t.Fatal("compiled to nothing: a file the handbook offers to install, and that " +
+					"would install nothing")
+			}
+		})
+	}
+}

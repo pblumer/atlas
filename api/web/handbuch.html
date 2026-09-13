@@ -4198,6 +4198,69 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-entra-verzeichnis-abgleich">
+        <h4><span class="rz-emoji" aria-hidden="true">🧭</span>
+          <span data-l="de">Verzeichnis-Abgleich: Konten aus Entra führen</span><span data-l="en">Directory sync: accounts kept from Entra</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-users</span><span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Trockenlauf</span><span class="tag" data-l="en">dry run</span>
+          <span class="tag">R/PT1H</span>
+          <span class="tag">examples/entra-verzeichnis-abgleich.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Wer im Verzeichnis steht, soll in Atlas ein Konto haben – und wer gegangen ist, keines
+              mehr. Bisher entstand ein Atlas-Konto erst bei der ersten Anmeldung, was am Tag der Inbetriebnahme einen
+              fast leeren Benutzerspeicher bedeutet. Dieser Prozess führt Konten und Gruppen stündlich aus
+              Entra nach, <b>ohne dass Entra Atlas erreichen muss</b>: Atlas fragt von sich aus, es gibt keinen
+              eingehenden Bereitstellungspunkt und keine Netzwerköffnung.</p>
+            <p data-l="de"><b>Der erste Lauf schreibt nichts.</b> Er zählt den ganzen Mandanten auf, entscheidet
+              alles und legt einen Bericht ab – Zahlen für das Erwartbare, ganze Zeilen für das
+              Bemerkenswerte: welche Konten zusammengeführt würden, wer deaktiviert würde, was sich nicht
+              auflösen liess. Erst wenn ein Mensch das gelesen hat, wird umgeschaltet.</p>
+            <p data-l="en">Whoever is in the directory should have an account in Atlas – and whoever has left
+              should not. Until now an Atlas account only came into being at somebody's first sign-in, which means an
+              almost empty user store on the day an installation goes live. This process keeps accounts and groups
+              from Entra hourly, <b>without Entra having to reach Atlas</b>: Atlas asks of its own accord, so there is
+              no inbound provisioning endpoint and no hole in the network.</p>
+            <p data-l="en"><b>The first run writes nothing.</b> It enumerates the whole tenant, decides everything and
+              leaves a report – numbers for the expected, whole lines for the notable: which accounts would be
+              merged, who would be disabled, what could not be resolved. Only once a person has read it does anybody
+              switch it on.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein Timer-Start mit <code>timeCycle R/PT1H</code> (ADR-0051) holt zuerst
+              <code>GET /api/v1/directory-sync</code> – beide Graph-Cursor und die Revision, gegen die gelesen
+              wird. Zwei <code>atlas:entraConnector</code>-Tasks lesen <code>delta-users</code> und
+              <code>delta-groups</code> ab diesen Cursorn, und <code>POST /api/v1/directory-sync</code> meldet beides
+              zurück. Der Schalter ist ein Feld der Meldung: <code>apply</code>, nicht <code>dryRun</code> –
+              ein fehlendes JSON-Feld ist der Nullwert, und der muss „nichts schreiben“ heißen.</p>
+            <p data-l="de">Drei Eigenschaften tragen das: <b>ein Codepfad</b> – der Trockenlauf entscheidet mit
+              demselben Code, nur der letzte Schritt fällt aus; <b>der Cursor bleibt stehen</b>, solange nichts
+              geschrieben wurde, sonst wären genau die angesehenen Änderungen verloren; und
+              <code>fromRevision</code> macht eine zweite Zustellung wirkungslos. Das Token trägt den Scope
+              <code>directory</code> und erreicht diese beiden Routen – deployen kann es nicht.</p>
+            <p data-l="en">A timer start with <code>timeCycle R/PT1H</code> (ADR-0051) first fetches
+              <code>GET /api/v1/directory-sync</code> – both Graph cursors and the revision the run reads
+              against. Two <code>atlas:entraConnector</code> tasks read <code>delta-users</code> and
+              <code>delta-groups</code> from those cursors, and <code>POST /api/v1/directory-sync</code> reports both
+              back. The switch is a field of the message: <code>apply</code>, not <code>dryRun</code> – an absent
+              JSON field is the zero value, and the zero value has to mean "write nothing".</p>
+            <p data-l="en">Three properties carry it: <b>one code path</b> – the dry run decides with the same
+              code and only the last step is skipped; <b>the cursor stays put</b> while nothing is written, or the
+              very changes just examined would be lost; and <code>fromRevision</code> makes a second delivery inert.
+              The token carries the <code>directory</code> scope and reaches those two routes – it cannot
+              deploy.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
       <div class="bsp" id="bsp-entra-onboarding-selfservice">
         <h4><span class="rz-emoji" aria-hidden="true">🙋</span>
           <span data-l="de">Onboarding-Self-Service mit Freigabe</span><span data-l="en">Onboarding self-service with an approval</span></h4>

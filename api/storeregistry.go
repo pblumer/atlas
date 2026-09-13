@@ -122,6 +122,7 @@ var persistentStores = []storeEntry{
 	// --- identity ----------------------------------------------------------
 	{name: "users", class: classIdentity, why: "accounts and their roles"},
 	{name: "groups", class: classIdentity, why: "group membership, which grants project access"},
+	{name: "directory-sync", class: classIdentity, onDemand: true, why: "where the Entra mirror resumes from; without it the next run enumerates the whole tenant again, which is expensive and safe"},
 
 	// --- credentials -------------------------------------------------------
 	{name: "api-tokens", class: classCredential, why: "machine access to the API"},

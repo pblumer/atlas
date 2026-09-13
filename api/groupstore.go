@@ -13,11 +13,37 @@ import (
 // engine invariants, and managing it is admin-gated. Members holds the ids of the
 // users in the group.
 type group struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Members   []string `json:"members"`
-	CreatedAt int64    `json:"createdAt"`
-	UpdatedAt int64    `json:"updatedAt"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
+
+	// Source and ExternalID say where the group came from. Empty Source is a group
+	// somebody made here; SourceEntra marks one mirrored out of a directory, and
+	// ExternalID is then that directory's group object id — lower-cased, for the
+	// reason User.DirectoryID is (ADR-draft-entra-directory-provisioning).
+	Source     string `json:"source,omitempty"`
+	ExternalID string `json:"externalId,omitempty"`
+
+	// ExternalMembers is the directory's own membership: the object ids the mirror
+	// last saw in this group, whether or not each of them resolves to an account
+	// here. Members is derived from it — the subset that resolves — and is recomputed
+	// on every synchronisation.
+	//
+	// Keeping the unresolved ids rather than discarding them is what makes the order
+	// of a run irrelevant. A person can appear in a group's membership before their
+	// own account has been read, and a change-tracking read never mentions that
+	// membership again; an id kept here simply resolves on a later run, with nothing
+	// to remember it by and no retry to schedule. It is also what makes a repeated
+	// delivery harmless: the field is a set the message replaces or amends, not a
+	// counter it advances.
+	//
+	// The consequence, stated because it is a real one: for a mirrored group the
+	// directory decides the membership, so a member added here by hand is removed
+	// again on the next run. The report says so, by name, every time it happens.
+	ExternalMembers []string `json:"externalMembers,omitempty"`
+
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // hasMember reports whether userID is in the group.

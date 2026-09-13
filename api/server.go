@@ -268,9 +268,12 @@ type Server struct {
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
-	apiTokens           *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
-	targets             *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions         map[string]int32  // applicationId → highest release version published (ADR-0128)
+	// directorySync holds one record: where the Entra mirror resumes from and how
+	// many runs have written (ADR-draft-entra-directory-provisioning).
+	directorySync *directorySyncStore
+	apiTokens     *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
+	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions   map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -1209,6 +1212,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	directorySync, err := newDirectorySyncStore(filepath.Join(dataDir, "directory-sync"))
+	if err != nil {
+		return nil, err
+	}
 	connectors, err := newConnectorStore(filepath.Join(dataDir, "connectors"))
 	if err != nil {
 		return nil, err
@@ -1327,6 +1334,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		groups:            groups,
+		directorySync:     directorySync,
 		sessions:          newSessionStore(defaultSessionTTL),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),

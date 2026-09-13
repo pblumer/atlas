@@ -135,6 +135,29 @@ type Limits struct {
 	// to make that safe would be smaller than Variable. That is a defect with its own
 	// fix, not a number to hide in.
 	Collection int64
+
+	// DirectorySync is one directory-synchronisation message: the accounts and
+	// groups a scheduled delta read of Entra reports back for this server to write
+	// (ADR-draft-entra-directory-provisioning). It is its own budget rather than
+	// Payload's because the two bound different risks — Payload bounds one answer a
+	// process received, this bounds the one message that may create accounts.
+	DirectorySync int64
+
+	// DirectoryObjects is how many directory objects (accounts plus groups) one such
+	// message may carry. It is the batch ceiling, and it is a count and not a size
+	// because what it protects is not memory: the decision and the writes happen in a
+	// single run-loop turn, so every object in a message is time the engine's single
+	// writer spends on this instead of on process execution. A message above the
+	// ceiling is refused whole rather than truncated — a short change set is a wrong
+	// answer that would then be recorded as complete by advancing the cursor.
+	DirectoryObjects int32
+
+	// DirectoryReport is how many individually named lines a synchronisation report
+	// may carry. The report exists to be read by a person before a first run is
+	// applied, and a report nobody finishes reading is one nobody reads: the counts
+	// are unbounded because they are numbers, and this bounds the lines. What does not
+	// fit is counted, never silently dropped.
+	DirectoryReport int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -160,6 +183,13 @@ func Default() Limits {
 		Iterations:   100_000,
 		Variable:     1 << 20,
 		Collection:   16 << 20,
+		// Eight megabytes is a full enumeration of a few tens of thousands of objects
+		// under a narrow $select; two thousand objects is the batch a run-loop turn can
+		// write without the engine noticeably stalling, and five hundred lines is more
+		// than anybody reads in one sitting.
+		DirectorySync:    8 << 20,
+		DirectoryObjects: 2_000,
+		DirectoryReport:  500,
 	}
 }
 

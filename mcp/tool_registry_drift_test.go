@@ -478,6 +478,16 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
 	"GET /api/v1/audit":                                 "global access-control history is an admin/UI concern",
 
+	// The directory mirror (ADR-draft-entra-directory-provisioning). Both routes are
+	// deliberately absent from the tool surface, and not merely unwritten: the pair
+	// exists so that one scheduled process, carrying one narrowly scoped credential,
+	// may create and disable accounts. Advertising it as a tool would put that reach
+	// behind whatever an assistant is asked to do next, which is the opposite of
+	// confining it — and the read half is no better, since it hands out the Graph
+	// cursor whose movement is how a run loses changes.
+	"GET /api/v1/directory-sync":  "account provisioning stays behind its own scoped credential, not an assistant's tool call",
+	"POST /api/v1/directory-sync": "account provisioning stays behind its own scoped credential, not an assistant's tool call",
+
 	// Workers + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each Worker Type: the Modeler's picker reads it to
 	// badge a kind it is about to author (ADR-0183).
