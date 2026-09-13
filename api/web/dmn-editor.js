@@ -10,11 +10,17 @@
 // artifact of that standing needs an address, a back button, and the same chrome as
 // its siblings. The chrome here is form-editor.js's, field for field.
 //
-// On save the model XML is stored through the DMN upload endpoint and a reference
-// is created (or overwritten in place when editing), so the business-rule-task
+// Save keeps a **draft** and nothing else: the model a reference resolves is
+// written only by "Save to model" (ADR-draft-decision-drafts). That is the BPMN
+// editor's grammar — its Save is a draft too — and it is what makes pressing Save
+// safe: a half-written decision can no longer refuse a colleague's publish of the
+// same application, or offer its half-named output to the next business rule task.
+//
+// Writing the model creates or updates the reference, so the business-rule-task
 // picker lists the decision and adopts its inputs and output — the ADR-0062 flow,
-// unchanged. Authoring the FEEL and the decision logic is still dmn-js's job;
-// Atlas only stores what it produces and evaluates it through temis.
+// unchanged, and still the step that completes the round trip from a task.
+// Authoring the FEEL and the decision logic is still dmn-js's job; Atlas only
+// stores what it produces and evaluates it through temis.
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -230,13 +236,16 @@ export function cleanup() {
 // mountDmnEditor renders the decision editor into root.
 //
 //   refId     — edit the decision this DMN reference points at; absent means a new one
+//   draftId   — open this decision draft: work that has never been written to the
+//               model, so it has no reference to be addressed by
+//               (ADR-draft-decision-drafts)
 //   projectId — the application a new decision is filed into
 //   forTask   — {processId, elementId} when the editor was reached by pressing
 //               "＋ New decision" on a business rule task. It decides where the back
-//               link goes and makes a successful save leave an adoption behind for
-//               that task (ADR-draft-the-decision-editor-is-a-page), so the round trip
-//               wires the task exactly as the overlay used to.
-export async function mountDmnEditor(root, { api, toast, refId, projectId, forTask }) {
+//               link goes and makes a successful model save leave an adoption behind
+//               for that task (ADR-draft-the-decision-editor-is-a-page), so the round
+//               trip wires the task exactly as the overlay used to.
+export async function mountDmnEditor(root, { api, toast, refId, draftId, projectId, forTask }) {
   cleanup();
   const gen = generation;
   // Claim the shared cleanup slot so navigating away tears this editor down (the
@@ -253,9 +262,12 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
         <a class="crumbs" id="dmn-back" href="#/modeler">&larr; Modeler</a>
         <div class="etabs" id="dmn-views"></div>
         <span class="chip" id="dmn-ref-chip" hidden></span>
+        <span class="chip draft-chip" id="dmn-draft-chip" hidden title="This decision has work that has not been written to the model yet — nothing else can see it">Draft</span>
         <div style="flex:1"></div>
         <span class="muted" id="dmn-status"></span>
-        <button class="btn" id="dmn-save" title="Save this decision">Save</button>
+        <button class="btn neutral" id="dmn-discard" hidden title="Throw away the draft and go back to the stored model">Discard draft</button>
+        <button class="btn neutral" id="dmn-save" title="Save this decision as a draft. Nothing that reads this decision changes until you save it to the model.">Save</button>
+        <button class="btn" id="dmn-save-model" title="Write this into the decision model every process and application resolves — this is what the next Publish ships.">Save to model</button>
       </div>
       <div class="editor-body dmn-body">
         <div class="dmn-canvas"></div>
@@ -263,7 +275,9 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
       </div>
       <div class="dmn-hint muted">Model the decision table. <b>Input Data</b> nodes become the
         decision's inputs and the output column becomes its result variable — both are adopted
-        into a business rule task that calls this decision.</div>
+        into a business rule task that calls this decision. <b>Save</b> keeps a draft only you
+        see; <b>Save to model</b> writes the decision every process resolves, and is what the
+        next Publish ships.</div>
     </div>`;
 
   const canvas = root.querySelector(".dmn-canvas");
@@ -271,14 +285,20 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
   const propsPanel = root.querySelector(".dmn-props");
   const statusEl = root.querySelector("#dmn-status");
   const chip = root.querySelector("#dmn-ref-chip");
+  const draftChip = root.querySelector("#dmn-draft-chip");
   const saveBtn = root.querySelector("#dmn-save");
+  const modelBtn = root.querySelector("#dmn-save-model");
+  const discardBtn = root.querySelector("#dmn-discard");
   const backEl = root.querySelector("#dmn-back");
 
   // ---- identity ------------------------------------------------------------
-  // What this session is editing: the reference record (once it exists) and the
-  // model handle behind it. A new decision has neither until its first save.
-  let ref = null;            // the dmnRef record, when editing an existing decision
-  let modelRef = "";         // the model handle the save overwrites in place
+  // What this session is editing, across the three layers a decision has
+  // (ADR-draft-decision-drafts): the draft it is keeping, the reference it is in the
+  // model under, and the model handle behind that. A brand-new decision has none of
+  // them until it is first saved.
+  let ref = null;            // the dmnRef record, when the decision is in the model
+  let modelRef = "";         // the model handle "Save to model" writes
+  let draft = null;          // the draft record this session writes, once it has one
   let project = projectId || "";
 
   if (refId) {
@@ -295,6 +315,29 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
     }
     modelRef = ref.modelRef;
     project = ref.projectId || project;
+  }
+
+  // A draft is keyed by the decision's reference id, so opening a decision that has
+  // unsaved work opens that work rather than the model it has not been written to.
+  // A draft addressed directly (#/modeler/dmn/d/…) is one for a decision that is not
+  // in the model at all, so it is the only place its content exists.
+  const wantDraft = draftId || (ref ? ref.id : "");
+  if (wantDraft) {
+    try {
+      const drafts = (await api("GET", "/api/v1/dmn-drafts")) || [];
+      if (gen !== generation) return;
+      draft = drafts.find((d) => d.id === wantDraft) || null;
+    } catch { /* no draft listing is the same as no draft: the model still opens */ }
+    if (draftId && !draft) {
+      root.innerHTML = `<div class="card empty"><h1>Decision draft not found</h1>` +
+        `<p class="muted">This decision draft no longer exists. It may have been written to the model, or discarded.</p>` +
+        `<p><a class="btn" href="#/modeler">Back to the Modeler</a></p></div>`;
+      return;
+    }
+    if (draft) {
+      modelRef = draft.modelRef || modelRef;
+      project = draft.projectId || project;
+    }
   }
 
   // Where back goes: to the diagram when this decision is being authored for one of
@@ -317,9 +360,12 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
   }
 
   const showHandle = () => {
-    if (!modelRef) { chip.hidden = true; return; }
-    chip.hidden = false;
-    chip.textContent = modelRef + ".dmn";
+    chip.hidden = !modelRef;
+    if (modelRef) chip.textContent = modelRef + ".dmn";
+    // The draft chip is the one thing on the bar that says "what you are looking at
+    // is not what anything else resolves yet".
+    draftChip.hidden = !draft;
+    discardBtn.hidden = !draft;
   };
   showHandle();
 
@@ -383,8 +429,15 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
     };
     modeler.on("views.changed", renderViews);
 
+    // What opens: the author's draft if there is one — it is the newer work and the
+    // only copy of it — else the stored model, else the seed for a decision that
+    // does not exist yet.
     let xml;
-    if (modelRef) {
+    if (draft) {
+      xml = await api("GET", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id) + "/xml");
+      if (gen !== generation) return;
+      if (typeof xml !== "string") throw new Error("could not load the draft XML");
+    } else if (modelRef) {
       xml = await api("GET", "/api/v1/dmn-models/" + encodeURIComponent(modelRef) + "/xml");
       if (gen !== generation) return;
       if (typeof xml !== "string") throw new Error("could not load the model XML");
@@ -395,8 +448,9 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
     if (gen !== generation) return;
     renderViews();
     patchCaretFields();
-    // An edit is no longer "unsaved" the moment it is typed the way a diagram is, so
-    // the status line starts empty and says something only after a save.
+    // The status line says what a *save* just did, so it starts empty and is cleared
+    // by anything else. That a draft is open is a standing fact rather than an event,
+    // so the chip in the bar says that instead.
     modeler.on("views.changed", () => { statusEl.textContent = ""; });
   } catch (e) {
     if (gen !== generation) return;
@@ -406,47 +460,154 @@ export async function mountDmnEditor(root, { api, toast, refId, projectId, forTa
     return;
   }
 
-  // ---- save ----------------------------------------------------------------
-  // Save stores the model and, for a decision that does not have one yet, creates the
-  // reference that files it under an application. It stays on the page and moves the
-  // URL onto the edit route, so a second Save updates this decision rather than
-  // creating a second one — the form editor's behaviour, for the same reason.
-  async function save() {
-    saveBtn.disabled = true;
-    statusEl.textContent = "Saving…";
+  // ---- saving --------------------------------------------------------------
+  // Two acts, two buttons (ADR-draft-decision-drafts). Save keeps a draft: the
+  // author's work, which nothing else resolves. Save to model writes the handle
+  // every reference, every picker and the next Publish resolve — and clears the
+  // draft, because a draft exists only while it differs from the model.
+
+  // currentXml is what dmn-js has now, plus the decision name read back out of it.
+  async function currentXml() {
+    const out = await modeler.saveXML({ format: true });
+    return { xml: out.xml, name: firstDecisionName(out.xml) || DEFAULT_DECISION_NAME };
+  }
+
+  // busy runs one save at a time and reports it on the status line, so a second
+  // click cannot race the first.
+  async function busy(label, fn) {
+    saveBtn.disabled = modelBtn.disabled = discardBtn.disabled = true;
+    statusEl.textContent = label;
     try {
-      const out = await modeler.saveXML({ format: true });
-      const savedXml = out.xml;
-      const name = firstDecisionName(savedXml) || DEFAULT_DECISION_NAME;
-      const q = modelRef
-        ? "?handle=" + encodeURIComponent(modelRef)
-        : "?name=" + encodeURIComponent(name);
-      const up = await api("POST", "/api/v1/dmn-models" + q, savedXml, true);
-      modelRef = up.modelRef;
-      if (!ref) {
-        ref = await api("POST", "/api/v1/dmnrefs", { name, modelRef, projectId: project || "" });
-        // The URL now addresses a stored decision, so the next save updates it and a
-        // reload comes back to what was just written.
-        history.replaceState(null, "", "#/modeler/dmn/e/" + encodeURIComponent(ref.id) + forSuffix);
-      } else if ((ref.name || "") !== name) {
-        // Editing keeps the handle, so only the display name can drift: an in-editor
-        // rename is mirrored onto the reference rather than leaving the Explorer
-        // showing a name the model no longer carries.
-        try {
-          await api("PATCH", "/api/v1/dmnrefs/" + encodeURIComponent(ref.id), { name });
-          ref.name = name;
-        } catch { /* the model is saved; a stale label is not worth failing the save */ }
-      }
-      showHandle();
-      stashAdoption(forTask, name, modelRef);
-      statusEl.textContent = "Saved";
-      toast && toast(`Decision “${name}” saved`, "ok");
-    } catch (e) {
-      statusEl.textContent = "";
-      toast && toast("Save failed: " + e.message, "err");
+      await fn();
     } finally {
-      saveBtn.disabled = false;
+      saveBtn.disabled = modelBtn.disabled = discardBtn.disabled = false;
     }
   }
-  saveBtn.addEventListener("click", save);
+
+  async function saveDraft() {
+    await busy("Saving…", async () => {
+      try {
+        const { xml, name } = await currentXml();
+        const saved = await api("POST", "/api/v1/dmn-drafts", {
+          id: draft ? draft.id : (ref ? ref.id : ""),
+          refId: ref ? ref.id : "",
+          modelRef,
+          projectId: project || "",
+          xml,
+        });
+        draft = saved;
+        showHandle();
+        // A draft on a decision that is not in the model is addressed by the draft;
+        // one on a decision that is keeps the decision's own address.
+        if (!ref) {
+          history.replaceState(null, "", "#/modeler/dmn/d/" + encodeURIComponent(saved.id) + forSuffix);
+        }
+        statusEl.textContent = forTask && forTask.elementId
+          ? "Draft saved — save to the model to wire the task"
+          : "Draft saved";
+        toast && toast(`Decision “${name}” saved as a draft`, "ok");
+      } catch (e) {
+        statusEl.textContent = "";
+        toast && toast("Save failed: " + e.message, "err");
+      }
+    });
+  }
+
+  // saveToModel writes the model and, for a decision that is not in it yet, creates
+  // the reference that files it under an application. It stays on the page and moves
+  // the URL onto the edit route, so the next save addresses this decision rather
+  // than making a second one — the form editor's behaviour, for the same reason.
+  async function saveToModel() {
+    await busy("Saving to the model…", async () => {
+      try {
+        const { xml, name } = await currentXml();
+        let up;
+        try {
+          up = await uploadModel(xml, name, false);
+        } catch (e) {
+          // ADR-0222: a handle another decision already holds is refused rather than
+          // forked into a second copy under a name nobody chose. Replacing it is the
+          // author's to decide, so it is asked here and sent as a deliberate act.
+          if (e.status !== 409) throw e;
+          if (!window.confirm(`${e.message}\n\nReplace that model with this decision?`)) {
+            statusEl.textContent = "";
+            return;
+          }
+          up = await uploadModel(xml, name, true);
+        }
+        modelRef = up.modelRef;
+        if (!ref) {
+          ref = await api("POST", "/api/v1/dmnrefs", { name, modelRef, projectId: project || "" });
+          history.replaceState(null, "", "#/modeler/dmn/e/" + encodeURIComponent(ref.id) + forSuffix);
+        } else if ((ref.name || "") !== name) {
+          // Editing keeps the handle, so only the display name can drift: an in-editor
+          // rename is mirrored onto the reference rather than leaving the Explorer
+          // showing a name the model no longer carries.
+          try {
+            await api("PATCH", "/api/v1/dmnrefs/" + encodeURIComponent(ref.id), { name });
+            ref.name = name;
+          } catch { /* the model is saved; a stale label is not worth failing the save */ }
+        }
+        await dropDraft();
+        showHandle();
+        stashAdoption(forTask, name, modelRef);
+        statusEl.textContent = "Saved to the model";
+        toast && toast(`Decision “${name}” saved to the model`, "ok");
+      } catch (e) {
+        statusEl.textContent = "";
+        toast && toast("Save failed: " + e.message, "err");
+      }
+    });
+  }
+
+  // uploadModel stores the XML under the decision's handle. ?handle= updates the
+  // model this session opened; otherwise ?from= makes the upload identity-aware, so
+  // a handle something else holds comes back 409 instead of silently becoming
+  // "eligibility-2" (ADR-0222).
+  function uploadModel(xml, name, overwrite) {
+    const q = modelRef
+      ? "?handle=" + encodeURIComponent(modelRef)
+      : "?name=" + encodeURIComponent(name) + "&from=" + (overwrite ? "&overwrite=true" : "");
+    return api("POST", "/api/v1/dmn-models" + q, xml, true);
+  }
+
+  // dropDraft clears the draft once its work is in the model. A failure here is not
+  // a failed save — the model has it — so it is reported on the status line rather
+  // than thrown: what is left behind is a stale draft saying "unsaved", which the
+  // author can discard.
+  async function dropDraft() {
+    if (!draft) return;
+    try {
+      await api("DELETE", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id));
+      draft = null;
+    } catch {
+      toast && toast("Saved to the model, but the draft could not be cleared — discard it when you can", "err");
+    }
+  }
+
+  async function discardDraft() {
+    if (!draft) return;
+    const gone = !modelRef
+      ? "This decision has never been saved to the model, so discarding the draft deletes it.\n\nContinue?"
+      : "Throw away this draft and go back to the model as it is stored?\n\nContinue?";
+    if (!window.confirm(gone)) return;
+    await busy("Discarding…", async () => {
+      try {
+        await api("DELETE", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id));
+        draft = null;
+        showHandle();
+        // Back to whatever the decision is without the draft: its model, or — for a
+        // decision that never reached one — the Modeler, since nothing is left.
+        location.hash = ref ? "#/modeler/dmn/e/" + encodeURIComponent(ref.id) + forSuffix
+          : (project ? "#/modeler/p/" + encodeURIComponent(project) : "#/modeler");
+      } catch (e) {
+        statusEl.textContent = "";
+        toast && toast("Could not discard the draft: " + e.message, "err");
+      }
+    });
+  }
+
+  saveBtn.addEventListener("click", saveDraft);
+  modelBtn.addEventListener("click", saveToModel);
+  discardBtn.addEventListener("click", discardDraft);
 }

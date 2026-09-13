@@ -337,9 +337,20 @@ The control-flow basics most real models use.
   stopped fitting when ADR-0319 made a decision a deployable, versioned artifact of
   its own. Authoring one *for* a business rule task now leaves the diagram (saving it
   as a draft first) and adopts what was authored on the way back, so the one-button
-  flow survives the move. Still to come: a draft state for a decision, Deploy from
-  inside the editor, XML export, documentation, auto-layout, a collaborative session,
-  and a panel that evaluates a decision against sample inputs.
+  flow survives the move.
+  **And a decision now has a draft**
+  ([ADR-draft-decision-drafts](docs/adr/draft-decision-drafts.md)): **Save** keeps work
+  in progress in a `dmn-drafts/` store of its own, and **Save to model** is what writes
+  the handle every reference, every picker and the next Publish resolve. A decision has
+  one layer more than a diagram — draft, model, deployment — and until now the editor
+  had no name for the first of them, so an unfinished decision could refuse a
+  colleague's publish of the same application. A publish ships the model, never the
+  draft; a decision that has only a draft is listed as such and says it will not travel.
+  Writing a model onto a handle another decision holds is refused and offered as a
+  deliberate replacement ([ADR-0222](docs/adr/0222-artifact-id-renames.md)) rather than
+  silently forking `eligibility-2`. Still to come: Deploy from inside the editor, XML
+  export, documentation, auto-layout, a collaborative session, and a panel that
+  evaluates a decision against sample inputs.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

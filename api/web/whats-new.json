@@ -217,6 +217,51 @@
       }
     },
     {
+      "id": "a-decision-has-a-draft-so-saving-it-is-no-longer-the-same-as",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Save a decision without publishing it to everyone",
+        "de": "Eine Entscheidung sichern, ohne sie allen zu geben"
+      },
+      "summary": {
+        "en": "Saving a decision used to write the model file itself — the one the business rule task picker reads, the one another application's decision may point at, and the one the next Publish ships. There was nowhere to leave an unfinished decision, and pressing Save had effects you could not see: a half-typed rule refused a colleague's Publish of that application, with a message about a decision they had never opened; a table whose output column was still called “result” handed “result” to the next task that used it; and saving a second decision called Eligibility quietly filed it as eligibility-2 and listed two rows with the same name. The editor now has the same pair of buttons as the diagram editor. Save keeps a draft — your work, which nothing else reads. Save to model writes the decision everything resolves, and is what the next Publish ships. An application shows a decision with unsaved work as Draft, and a decision that has never been saved to the model as its own row saying it will not be published. Saving to a name another decision already has is now a question, not a second copy.",
+        "de": "Eine Entscheidung zu speichern schrieb bisher direkt die Modelldatei — jene, aus der die Auswahl im Business-Rule-Task liest, auf die die Entscheidung einer anderen Anwendung zeigen kann, und die beim nächsten Publish ausgeliefert wird. Für eine unfertige Entscheidung gab es keinen Ort, und Speichern hatte Wirkungen, die man nicht sah: eine halb getippte Regel verweigerte einer Kollegin das Publish dieser Anwendung — mit einer Meldung über eine Entscheidung, die sie nie geöffnet hatte; eine Tabelle, deren Ausgabespalte noch «result» hiess, gab «result» an den nächsten Task weiter, der sie übernahm; und eine zweite Entscheidung namens Eligibility wurde stillschweigend als eligibility-2 abgelegt, mit zwei gleichnamigen Zeilen in der Liste. Der Editor hat jetzt dasselbe Knopfpaar wie der Diagramm-Editor. Speichern («Save») sichert einen Entwurf — Ihre Arbeit, die sonst niemand liest. «Save to model» schreibt die Entscheidung, die alles auflöst, und genau diese liefert das nächste Publish aus. Eine Anwendung zeigt eine Entscheidung mit ungesicherter Arbeit als «Draft», und eine Entscheidung, die nie ins Modell gespeichert wurde, als eigene Zeile mit dem Hinweis, dass sie nicht veröffentlicht wird. Auf einen Namen zu speichern, den eine andere Entscheidung bereits trägt, ist jetzt eine Rückfrage statt einer zweiten Kopie."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision, or create one from an application with Create new → Decision (DMN).",
+          "Model the table and press Save. The bar shows a dashed Draft chip: the work is stored, and nothing that reads decisions has changed.",
+          "Leave and come back. The decision opens on your draft, not on the model.",
+          "Press Save to model when it is ready. The draft marker disappears, the picker lists the decision, and the next Publish of the application ships it.",
+          "Discard draft throws the work away and goes back to the model as it is stored."
+        ],
+        "de": [
+          "Eine Entscheidung öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "Die Tabelle modellieren und Save drücken. In der Leiste erscheint der gestrichelte Chip «Draft»: Die Arbeit ist gesichert, und an dem, was Entscheidungen liest, hat sich nichts geändert.",
+          "Weggehen und zurückkommen. Die Entscheidung öffnet sich auf dem Entwurf, nicht auf dem Modell.",
+          "Wenn sie fertig ist, «Save to model» drücken. Die Entwurfsmarkierung verschwindet, die Auswahl im Business-Rule-Task führt die Entscheidung, und das nächste Publish der Anwendung liefert sie aus.",
+          "«Discard draft» verwirft die Arbeit und kehrt zum gespeicherten Modell zurück."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-decision-editor-is-a-page-of-the-modeler-not-a-window-ov",
       "version": "Unreleased",
       "date": null,
@@ -378,42 +423,6 @@
           "de": "Daten öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Link a diagram to the capability it draws",
-        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
-      },
-      "summary": {
-        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
-        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
-          "Open the Panorama model and select the Capability element that draws it.",
-          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
-          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
-        ],
-        "de": [
-          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
-          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
-          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
-          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
-        ]
       }
     }
   ]

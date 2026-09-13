@@ -1063,7 +1063,7 @@ function setChrome(appId, route) {
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
   const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/") ||
-    route.includes("/modeler/dmn/new") || route.includes("/modeler/dmn/e/");
+    route.includes("/modeler/dmn/new") || route.includes("/modeler/dmn/e/") || route.includes("/modeler/dmn/d/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -2726,18 +2726,22 @@ async function viewModelerHome() {
   const projRows = document.getElementById("proj-rows");
 
   const renderProjects = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { projRows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const all = [...drafts, ...refs, ...forms];
+    // A decision that exists only as a draft is still one of the application's
+    // artifacts, so it counts (ADR-draft-decision-drafts); a draft on a decision
+    // that is in the model is that decision, already counted as its reference.
+    const all = [...drafts, ...refs, ...forms, ...decDrafts.filter((d) => !d.refId)];
     const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
     const ungrouped = all.filter((a) => !a.projectId || !known.has(a.projectId));
 
@@ -2891,13 +2895,14 @@ async function viewProjectDetail(id) {
   const root = document.getElementById("pd");
 
   const render = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
 
@@ -2910,6 +2915,13 @@ async function viewProjectDetail(id) {
     setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
+    // A decision draft is work that has not been written to the model
+    // (ADR-draft-decision-drafts). One on a decision that is in the model is a
+    // marker on that decision's row; one on a decision that is not is a row of its
+    // own, because nothing else in this table represents it.
+    const ddl = decDrafts.filter(mine);
+    const draftFor = new Set(ddl.filter((d) => d.refId).map((d) => d.refId));
+    const looseDecDrafts = ddl.filter((d) => !d.refId);
 
     // Scope gating (ADR-0071). Ungrouped is the un-scoped personal/legacy bucket,
     // so it stays fully writable; a real project's actions follow the caller's
@@ -2957,10 +2969,29 @@ async function viewProjectDetail(id) {
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
       );
+      // A decision carrying a draft says so where the author looks for it, because
+      // what a publish would ship is the model, not that work.
+      const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">Draft</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
+        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A decision that has never been written to the model: its draft is the only
+    // copy, so it is listed, marked, and says plainly that a publish will not carry
+    // it (ADR-draft-decision-drafts).
+    const decDraftRow = (d) => {
+      const href = `#/modeler/dmn/d/${encodeURIComponent(d.id)}`;
+      const items = [{ label: "Open", icon: "→", href }];
+      if (canWrite) items.push(
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
+      );
+      return `<tr>
+        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href)}
+        <td class="muted">Decision</td>
+        <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
     const formRow = (f) => {
@@ -2977,7 +3008,8 @@ async function viewProjectDetail(id) {
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
-    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") + fl.map(formRow).join("");
+    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") +
+      looseDecDrafts.map(decDraftRow).join("") + fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
@@ -3061,6 +3093,7 @@ async function viewProjectDetail(id) {
         case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
+        case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
         case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
         case "moveref": moveDmnRef(b.dataset.key, b.dataset.pid, render); break;
@@ -4881,6 +4914,19 @@ async function deleteDmnRef(id, reload) {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
     toast("Deleted DMN reference", "ok");
   } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+  await reload();
+}
+
+// A decision that exists only as a draft has nothing behind it, so deleting the
+// draft is deleting the decision (ADR-draft-decision-drafts) — said plainly, because
+// the same word on a decision that *is* in the model means only "throw away the
+// unsaved work".
+async function deleteDecisionDraft(id, reload) {
+  if (!window.confirm("Delete this decision draft? It has never been saved to the model, so nothing else has a copy.")) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-drafts/${encodeURIComponent(id)}`);
+    toast("Deleted decision draft", "ok");
+  } catch (e) { toast("could not delete draft: " + e.message, "err"); }
   await reload();
 }
 
@@ -8593,14 +8639,16 @@ async function viewEditorDraft(id) {
 
 // viewDmnEditor mounts the decision editor
 // (ADR-draft-the-decision-editor-is-a-page). refId edits an existing decision;
-// without it a new one is authored, filed into projectId. forTask is the
-// {processId, elementId} of the business rule task the author pressed "＋ New
-// decision" on, which decides where back goes and whose task adopts what is saved.
-async function viewDmnEditor({ refId, projectId, forTask } = {}) {
+// without it a new one is authored, filed into projectId. draftId opens a decision
+// that exists only as a draft, which has no reference to be addressed by
+// (ADR-draft-decision-drafts). forTask is the {processId, elementId} of the business
+// rule task the author pressed "＋ New decision" on, which decides where back goes and
+// whose task adopts what is saved to the model.
+async function viewDmnEditor({ refId, draftId, projectId, forTask } = {}) {
   const gen = navGen;
   const mod = await import("./dmn-editor.js");
   if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
-  await mod.mountDmnEditor(view, { api, toast, refId, projectId, forTask });
+  await mod.mountDmnEditor(view, { api, toast, refId, draftId, projectId, forTask });
 }
 
 // generateFor, when given, is the {processId, elementId} the "Create a new form" link
@@ -9065,6 +9113,18 @@ async function route() {
         refId: decodeURIComponent(dedit[1]),
         forTask: dedit[3]
           ? { processId: decodeURIComponent(dedit[2]), elementId: decodeURIComponent(dedit[3]) }
+          : null,
+      });
+    }
+    // A decision draft has no reference to be addressed by, so it is addressed by
+    // itself (ADR-draft-decision-drafts). Before the viewer's catch-all, like its
+    // siblings.
+    const ddraft = path.match(/^#\/modeler\/dmn\/d\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (ddraft) {
+      return await viewDmnEditor({
+        draftId: decodeURIComponent(ddraft[1]),
+        forTask: ddraft[3]
+          ? { processId: decodeURIComponent(ddraft[2]), elementId: decodeURIComponent(ddraft[3]) }
           : null,
       });
     }

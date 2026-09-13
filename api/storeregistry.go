@@ -106,6 +106,7 @@ var persistentStores = []storeEntry{
 	{name: "releases", class: classDesignTime, why: "published application versions"},
 	{name: "dmnrefs", class: classDesignTime, why: "decision references"},
 	{name: "dmn-models", class: classDesignTime, onDemand: true, why: "decision models"},
+	{name: "dmn-drafts", class: classDesignTime, why: "decision work in progress in the Modeler, before it is written to the model every reference resolves"},
 	{name: "public-links", class: classDesignTime, why: "shared links to forms"},
 	{name: "connectors", class: classDesignTime, why: "worker definitions"},
 	{name: "catalog", class: classDesignTime, why: "the portal's catalogues, the products in them, and the releases orders are placed against"},
