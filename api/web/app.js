@@ -556,6 +556,15 @@ const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  // The service portal is a page of its own, not a view of this app, so its route
+  // is a path and not a hash. It is written for people who never open the modeler
+  // — ordering a laptop and seeing where the order stands — and it carries the
+  // brand of the catalogue the visitor belongs to rather than this console's.
+  //
+  // Without this line the page existed and nothing led to it: it was built, served
+  // and reachable only by somebody who already knew the URL. Held by
+  // TestTheServicePortalIsReachableFromTheMenu.
+  { id: "portal", name: "Portal", route: "/portal.html", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },

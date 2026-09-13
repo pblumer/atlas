@@ -312,3 +312,46 @@ func TestThePortalMarksWhatIsAlreadyHeldFromTheInventory(t *testing.T) {
 			"second licence looks like a mistake")
 	}
 }
+
+// A page nothing leads to is a page nobody uses.
+//
+// The portal was built, served under the embedded web root, and reachable only by
+// somebody who already knew to type its URL. Nothing broke, no test failed, and
+// the whole self-service surface was invisible to every person it was written for
+// — the same class of omission as a value type that never reaches the fold: silent,
+// and only found by looking.
+//
+// So the menu is checked rather than remembered. The entry's route is a *path* and
+// not a hash, because the portal is a page of its own and not a view of the console
+// app, and that distinction is what the second half of this test holds: a "#/portal"
+// would render a nav link that navigates the console to a route it does not have.
+func TestTheServicePortalIsReachableFromTheMenu(t *testing.T) {
+	src := readWeb(t, "app.js")
+
+	start := strings.Index(src, "const APPS = [")
+	if start < 0 {
+		t.Fatal("app.js has no APPS list; this test now checks nothing and says so instead")
+	}
+	end := strings.Index(src[start:], "\n];")
+	if end < 0 {
+		t.Fatal("the APPS list is not terminated as expected; the pattern has gone stale")
+	}
+	apps := src[start : start+end]
+
+	if !strings.Contains(apps, `route: "/portal.html"`) {
+		t.Error("no menu entry leads to the service portal. The page is served and " +
+			"works; without an entry it is reachable only by somebody who already " +
+			"knows the URL, which is every employee except the one who built it")
+	}
+	// Gated like the Tasks inbox: everybody signed in orders things, and a portal
+	// only modellers can see is a portal for nobody.
+	if !strings.Contains(apps, `{ id: "portal", name: "Portal", route: "/portal.html", on: true, role: "user" },`) {
+		t.Error("the portal entry is not in the expected shape; check its role gate — " +
+			"an ordinary employee must see it")
+	}
+	if strings.Contains(apps, `route: "#/portal`) {
+		t.Error("the portal entry uses a hash route. The portal is a separate page, " +
+			"not a view of this app: a hash would ask the console to route to " +
+			"something it does not have, and the visitor would land on a blank screen")
+	}
+}
