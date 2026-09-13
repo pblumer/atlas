@@ -3631,7 +3631,7 @@ function pickFile(accept) {
 //
 // It navigates rather than opening a window over this one: a decision is edited on a
 // page of its own, like a diagram and a form
-// (ADR-draft-the-decision-editor-is-a-page).
+// (ADR-0320).
 function createDecision(projectId) {
   location.hash = projectId
     ? "#/modeler/dmn/new/p/" + encodeURIComponent(projectId)
@@ -8574,7 +8574,7 @@ async function viewEditorDraft(id) {
   // A decision authored for one of this diagram's business rule tasks left what it
   // saved behind on the way out; the task adopts it as the editor mounts, which is
   // what keeps the ADR-0062 round trip working now that it is a navigation rather
-  // than a window (ADR-draft-the-decision-editor-is-a-page). One-shot: taking it
+  // than a window (ADR-0320). One-shot: taking it
   // clears it, so reopening the diagram later does not re-apply it.
   const { takeAdoption } = await import("./dmn-editor.js");
   const adopt = takeAdoption(id);
@@ -8592,7 +8592,7 @@ async function viewEditorDraft(id) {
 }
 
 // viewDmnEditor mounts the decision editor
-// (ADR-draft-the-decision-editor-is-a-page). refId edits an existing decision;
+// (ADR-0320). refId edits an existing decision;
 // without it a new one is authored, filed into projectId. forTask is the
 // {processId, elementId} of the business rule task the author pressed "＋ New
 // decision" on, which decides where back goes and whose task adopts what is saved.
@@ -9046,7 +9046,7 @@ async function route() {
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
     // The decision editor, before the viewer below: "new" and "e/…" would otherwise
     // be read as reference ids by its catch-all
-    // (ADR-draft-the-decision-editor-is-a-page). The /for/… tail is the shape
+    // (ADR-0320). The /for/… tail is the shape
     // ADR-0260 gave "Create a new form" pressed on a step — here it is "＋ New
     // decision" pressed on a business rule task, and it is what sends the author
     // back to that diagram.

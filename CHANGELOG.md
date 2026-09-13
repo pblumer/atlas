@@ -248,7 +248,7 @@ _Changed_ / _Removed_ for each version.
   by the task on the way back — decision id, input mappings and result variable filled
   in, exactly as before. A deployed definition opened read-only has no draft to return
   to, so it asks before leaving and the decision is picked afterwards.
-  ([ADR-draft-the-decision-editor-is-a-page](docs/adr/draft-the-decision-editor-is-a-page.md),
+  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md),
   [issue #919](https://github.com/pblumer/atlas/issues/919))
 
 - **A DMN decision is a durable, versioned deployment artifact, and a deployed process is

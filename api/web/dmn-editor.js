@@ -1,7 +1,7 @@
 // The decision editor. It mounts the vendored dmn-js modeler (bpmn.io — the same
 // family as the bpmn-js process modeler) as a **page of the Modeler**, so a
 // decision is authored, addressed and left the way a BPMN diagram and a form are
-// (ADR-draft-the-decision-editor-is-a-page).
+// (ADR-0320).
 //
 // It used to be a modal overlay. That fitted what a decision was under
 // ADR-0062 — a reference to a model file some process happened to use, stepped
@@ -234,7 +234,7 @@ export function cleanup() {
 //   forTask   — {processId, elementId} when the editor was reached by pressing
 //               "＋ New decision" on a business rule task. It decides where the back
 //               link goes and makes a successful save leave an adoption behind for
-//               that task (ADR-draft-the-decision-editor-is-a-page), so the round trip
+//               that task (ADR-0320), so the round trip
 //               wires the task exactly as the overlay used to.
 export async function mountDmnEditor(root, { api, toast, refId, projectId, forTask }) {
   cleanup();

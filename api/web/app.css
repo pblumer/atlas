@@ -2681,7 +2681,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 
-/* The decision editor (ADR-draft-the-decision-editor-is-a-page). It is a page like
+/* The decision editor (ADR-0320). It is a page like
    the BPMN and form editors, so its frame — .editor, .editor-bar, .etabs,
    .editor-body — is theirs; only the canvas, the properties column and the hint
    below them are its own. It was a full-screen modal over the current view until a

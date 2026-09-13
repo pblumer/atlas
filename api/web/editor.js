@@ -10,7 +10,7 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
-// The decision editor is a page of its own (ADR-draft-the-decision-editor-is-a-page),
+// The decision editor is a page of its own (ADR-0320),
 // so this module navigates to it rather than opening it. Nothing of dmn-js is loaded
 // here any more.
 import { tokenSimulationModule } from "./token-simulation.js";
@@ -227,7 +227,7 @@ let generation = 0;
 
 // leaveForDecision is this mount's "may we leave now" question, published for the
 // business-rule-task panel: authoring a decision is a navigation
-// (ADR-draft-the-decision-editor-is-a-page), and the panel is nowhere near the draft
+// (ADR-0320), and the panel is nowhere near the draft
 // machinery that has to run first. Replaced on every mount, so it always answers for
 // the diagram on screen.
 let leaveForDecision = async () => true;
@@ -7653,7 +7653,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
 
       // Author-a-decision. "＋ New decision" creates a decision and this task adopts
       // it; "Edit" opens the one already selected. Both leave this diagram for the
-      // decision editor's own page (ADR-draft-the-decision-editor-is-a-page) — it used
+      // decision editor's own page (ADR-0320) — it used
       // to be a window over this one, which is the thing that record ends.
       //
       // Adoption survives the trip: the decision editor stashes what it saved, app.js

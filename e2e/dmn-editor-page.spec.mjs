@@ -1,5 +1,5 @@
 // The decision editor is a page of the Modeler, not a window over one
-// (ADR-draft-the-decision-editor-is-a-page). These tests pin what that buys, because
+// (ADR-0320). These tests pin what that buys, because
 // none of it is visible to the Go suite: a decision has an address, the editor wears
 // the chrome its siblings wear, a save moves the URL onto the decision it just wrote,
 // and nothing anywhere mounts an overlay.

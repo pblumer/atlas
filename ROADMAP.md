@@ -329,7 +329,7 @@ The control-flow basics most real models use.
   reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
   authoring the FEEL/logic and model versioning still live in temis.
   **That editor is now a page rather than a window over one**
-  ([ADR-draft-the-decision-editor-is-a-page](docs/adr/draft-the-decision-editor-is-a-page.md)):
+  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md)):
   a decision is edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
   chrome the BPMN and form editors wear — breadcrumb, `.etabs` tab strip, Save — so it
   can be bookmarked, linked and reloaded, and the browser's back button means what it
