@@ -217,6 +217,49 @@
       }
     },
     {
+      "id": "a-data-object-s-state-is-on-the-diagram-and-says-whether-any",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A data object now shows the state it is in",
+        "de": "Ein Datenobjekt zeigt jetzt, in welchem Zustand es ist"
+      },
+      "summary": {
+        "en": "A data object on a diagram can carry a state — identitaet [ARCHIVIERT] — and the canvas never showed it, so a process that draws the same object six times drew six identical boxes and the one thing telling them apart sat in a side panel. The state is written under the object's name now, in the Modeler and in every runtime view. It also shows whether anything acts on it: a state an activity writes is set in full, a state that is only read is set back. Atlas drops the second one when the model is deployed, so it says what the step expects rather than something the engine does — and the difference is now visible instead of implied.",
+        "de": "Ein Datenobjekt im Diagramm kann einen Zustand tragen — identitaet [ARCHIVIERT] —, und die Zeichenfläche zeigte ihn nie. Ein Prozess, der dasselbe Objekt sechsmal zeichnet, zeigte sechs gleiche Kästen, und das Einzige, was sie unterscheidet, lag im Seitenpanel. Der Zustand steht jetzt unter dem Namen des Objekts, im Modeler und in jeder Laufzeitansicht. Er zeigt zugleich, ob überhaupt etwas nach ihm handelt: Ein Zustand, den eine Aktivität schreibt, steht in voller Schrift, ein nur gelesener zurückgenommen. Den zweiten verwirft Atlas beim Deployment — er beschreibt, was der Schritt erwartet, nicht was die Maschine tut, und dieser Unterschied ist nun sichtbar statt gemeint."
+      },
+      "link": {
+        "label": "ADR-0053",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and click a data object — the sheet of paper.",
+          "In the panel, set its Data state, for example ARCHIVIERT. It appears under the object's name on the canvas, in square brackets.",
+          "Draw an arrow from an activity to the object. The step now writes that state, and it is shown in full.",
+          "An arrow the other way only reads the object, and its state is set back — hover it to read why nothing acts on it."
+        ],
+        "de": [
+          "Im Modeler einen Prozess öffnen und ein Datenobjekt anklicken — das Blatt Papier.",
+          "Im Panel den Datenzustand setzen, zum Beispiel ARCHIVIERT. Er erscheint in eckigen Klammern unter dem Namen des Objekts.",
+          "Einen Pfeil von einer Aktivität zum Objekt ziehen: Der Schritt schreibt diesen Zustand nun, und er steht in voller Schrift.",
+          "Ein Pfeil in die andere Richtung liest das Objekt nur, sein Zustand steht zurückgenommen — der Mauszeiger darauf erklärt, warum nichts nach ihm handelt."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-decision-editor-is-a-page-of-the-modeler-not-a-window-ov",
       "version": "Unreleased",
       "date": null,
@@ -378,42 +421,6 @@
           "de": "Daten öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Link a diagram to the capability it draws",
-        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
-      },
-      "summary": {
-        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
-        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
-          "Open the Panorama model and select the Capability element that draws it.",
-          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
-          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
-        ],
-        "de": [
-          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
-          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
-          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
-          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
-        ]
       }
     }
   ]

@@ -224,6 +224,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A data object's state is on the diagram, and says whether anything acts on it.** A
+  `<dataObjectReference>` carries a data state — the `[ARCHIVIERT]` BPMN writes under
+  the box — and Atlas has read it end to end since ADR-0053: the compiler interns it, the
+  engine advances the object into it, and the Operations replay shows every transition.
+  The one place it was missing is the place a model is read. bpmn-js parses `<dataState>`
+  and draws nothing with it, and the properties panel has been able to *edit* the state
+  all along, so a diagram could carry a lifecycle no view showed. In the identity example
+  that meant six boxes reading `identitaet` and nine reading `services`, identical to the
+  eye, with the one thing that tells them apart held back in a side panel.
+
+  The state is now written under the object's name, in square brackets, on the Modeler
+  canvas and in all four read-only views. It rides under the *label* rather than the
+  symbol, so it stays with the name wherever an author drags it, and it follows the name
+  live as the state is typed, cleared or undone.
+
+  **It is drawn with its role, because the same string means two different things.** A
+  state on a box a write points at is the target state the compiler puts on the
+  `DataOutputAssociation`: the engine advances the object into it, the transition lands
+  in the log with its attribution, and `CheckDataFlow` matches it against the class's
+  lifecycle (ADR-0259). A state on a box that is only *read* is dropped — "its state
+  ignored on a read" — so it never reaches the compiled model, no engine acts on it, and
+  no check can reach it, not even the typo check that exists for exactly this mistake.
+  Drawing both the same way would have the diagram claim something the model does not do,
+  so the second is set back and its hover title says why. Same notation, same place, one
+  of them quieter — which is the honest rendering of what Atlas will actually do with it.
+
 - **The decision editor is a page of the Modeler, not a window over one.** A decision
   used to be edited in a modal overlay. That fitted what a decision was when the editor
   was built: a reference to a model file some process happened to use, stepped into from
