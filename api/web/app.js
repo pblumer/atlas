@@ -563,8 +563,19 @@ const APPS = [
   //
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
-  // TestTheServicePortalIsReachableFromTheMenu.
+  // TestBothPortalSurfacesAreReachableFromTheMenu.
   { id: "portal", name: "Portal", route: "/portal.html", on: true, role: "user" },
+  // The approver's half of the same surface, and a separate page for the same
+  // reason: it answers to a different person. Until now it was reached only
+  // through the link in its notification mail, so an approver who deleted the mail
+  // had no way back to a decision somebody is waiting on.
+  //
+  // Gated at "user" because there is no approver role to gate on: a product names
+  // a person, a group, or the orderer's superior, so anybody signed in may hold an
+  // approval tomorrow without holding one today. The entry is therefore shown to
+  // everybody and is empty for most, which is the honest cost of having no role to
+  // ask: a count on it would fix that, and nothing here keeps one yet.
+  { id: "approvals", name: "Approvals", route: "/genehmigung.html", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },

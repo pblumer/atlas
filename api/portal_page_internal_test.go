@@ -325,7 +325,7 @@ func TestThePortalMarksWhatIsAlreadyHeldFromTheInventory(t *testing.T) {
 // not a hash, because the portal is a page of its own and not a view of the console
 // app, and that distinction is what the second half of this test holds: a "#/portal"
 // would render a nav link that navigates the console to a route it does not have.
-func TestTheServicePortalIsReachableFromTheMenu(t *testing.T) {
+func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	src := readWeb(t, "app.js")
 
 	start := strings.Index(src, "const APPS = [")
@@ -353,5 +353,18 @@ func TestTheServicePortalIsReachableFromTheMenu(t *testing.T) {
 		t.Error("the portal entry uses a hash route. The portal is a separate page, " +
 			"not a view of this app: a hash would ask the console to route to " +
 			"something it does not have, and the visitor would land on a blank screen")
+	}
+
+	// The approver's half, which had the same gap for longer and worse: it was
+	// reached only through the link in its notification mail, so an approver who
+	// deleted the mail had no way back to a decision somebody was waiting on.
+	if !strings.Contains(apps, `route: "/genehmigung.html"`) {
+		t.Error("no menu entry leads to the approvals page. Its only other way in is " +
+			"the link in a notification mail, and a decision nobody can reach is an " +
+			"order that waits forever")
+	}
+	if strings.Contains(apps, `route: "#/genehmigung`) || strings.Contains(apps, `route: "#/approvals`) {
+		t.Error("the approvals entry uses a hash route; like the portal it is a page " +
+			"of its own and not a view of this app")
 	}
 }
