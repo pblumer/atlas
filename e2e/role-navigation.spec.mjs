@@ -31,7 +31,9 @@ test("a task worker is offered Tasks and the Console, not the Modeler", async ({
 
   // Panorama and Data are authoring workspaces, so they follow the Modeler's
   // product role rather than being offered to whoever can open a task.
-  await expect(drawer(page)).toHaveText(["Console", "Tasks"]);
+  // Portal and Approvals ride the same "user" gate as Tasks: everybody signed in
+  // orders things, and anybody may be named an approver tomorrow.
+  await expect(drawer(page)).toHaveText(["Console", "Tasks", "Portal", "Approvals"]);
   // And inside the Console, the administrator's screens are not offered either.
   const names = await topnav(page).allTextContents();
   expect(names).toContain("Dashboard");
@@ -43,14 +45,14 @@ test("a modeller who also operates is offered both", async ({ page }) => {
   stubAPI(page, { username: "mona", roles: ["modeler", "operator", "user"] });
   await boot(page);
 
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Operations", "Panorama", "Data"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Portal", "Approvals", "Operations", "Panorama", "Data"]);
 });
 
 test("an administrator is offered everything, Organization included", async ({ page }) => {
   stubAPI(page, { username: "root", roles: ["admin"] });
   await boot(page);
 
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Operations", "Panorama", "Data"]);
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Portal", "Approvals", "Operations", "Panorama", "Data"]);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 
@@ -60,7 +62,7 @@ test("with enforcement off there is nobody to have a role, so nothing is hidden"
     route.fulfill({ json: { authEnabled: false, user: null } }));
   await boot(page);
 
-  await expect(drawer(page)).toHaveCount(6);
+  await expect(drawer(page)).toHaveCount(8);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 
