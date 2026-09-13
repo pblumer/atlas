@@ -407,3 +407,38 @@ func sameJSON(a, b any) bool {
 	right, _ := json.Marshal(b)
 	return string(left) == string(right)
 }
+
+// TestAnAppliedRunThatChangesNothingStillMovesTheCursor. A quiet hour is the ordinary
+// case once a mirror is running, and it is the case that must not stall: a run that
+// refused to advance because nothing changed would re-read the same empty change set
+// forever, and a later real change would arrive against a cursor that had gone stale.
+func TestAnAppliedRunThatChangesNothingStillMovesTheCursor(t *testing.T) {
+	ts, dir := newAuthServer(t, "root", "correct horse battery")
+	c := newClient(t)
+	login(t, c, ts, "root", "correct horse battery")
+
+	if rep := postSync(t, c, ts, syncBody(t, true, 0, nil)); rep["applied"] != true {
+		t.Fatalf("the first run did not write: %+v", rep)
+	}
+	settled := identityFingerprint(t, dir)
+
+	// The same tenant again, pinned to the revision the first run produced: nothing has
+	// changed in the directory, so nothing should change here.
+	rep := postSync(t, c, ts, syncBody(t, true, 1, nil))
+	if rep["applied"] != true {
+		t.Fatalf("the second run was refused: %+v", rep)
+	}
+	counts, _ := rep["counts"].(map[string]any)
+	if counts["usersUnchanged"] != float64(2) || counts["groupsUnchanged"] != float64(1) {
+		t.Errorf("counts = %+v, want everything recognised as unchanged", counts)
+	}
+	if counts["usersUpdated"] != float64(0) || counts["groupsUpdated"] != float64(0) {
+		t.Errorf("counts = %+v, want no record rewritten", counts)
+	}
+	if identityFingerprint(t, dir) == settled {
+		t.Error("the state record was not written, so the cursor never advances on a quiet hour")
+	}
+	if end := syncState(t, c, ts); end["revision"] != float64(2) {
+		t.Errorf("revision = %v, want 2", end["revision"])
+	}
+}
