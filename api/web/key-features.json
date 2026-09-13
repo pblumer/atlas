@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "A capability's service levels are measured, not only declared.",
+  "reviewedThrough": "A DMN decision is a durable, versioned deployment artifact, and a deployed process is frozen to the version it was deployed against.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -116,8 +116,8 @@
         "de": "Entscheidungen als Tabellen"
       },
       "text": {
-        "en": "DMN business rule tasks with an embedded decision-table editor. Domain experts change the rules without redeploying the process, and every evaluation is recorded with inputs, outputs and the rule that hit.",
-        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Fachleute ändern die Regeln ohne Redeploy des Prozesses, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
+        "en": "DMN business rule tasks with an embedded decision-table editor. A decision is published as a versioned artifact of its own, a deployed process keeps evaluating the exact version it was deployed against, and every evaluation is recorded with inputs, outputs and the rule that hit.",
+        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Eine Entscheidung wird als eigenständig versioniertes Artefakt veröffentlicht, ein deployter Prozess wertet weiterhin genau die Version aus, gegen die er deployt wurde, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
       }
     },
     {

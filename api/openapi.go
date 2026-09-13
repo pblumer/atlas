@@ -312,6 +312,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
+		{"GET", "/api/v1/decision-deployments", s.handleListDecisionDeployments, apiOp{
+			summary: "List the DMN decisions deployed as runtime artifacts — one row per decision and version, with the application, model and checksum each came from; ?applicationId= narrows to one application and ?decisionId= to one decision's version history", tag: "Decisions", role: RoleOperator,
+			resp: jsonBody("Deployed decision definitions", tArray())}},
+		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
+			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: RoleOperator,
+			resp: xmlBody("DMN XML")}},
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Deployed decisions", tArray())}},

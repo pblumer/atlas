@@ -2959,6 +2959,7 @@ async function viewProjectDetail(id) {
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
+      { label: "Decision (DMN)", icon: "▦", act: "newdec" },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
       { sep: true },
@@ -3026,6 +3027,7 @@ async function viewProjectDetail(id) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
+        case "newdec": createDecision(ungrouped ? "" : id, render); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
@@ -3596,6 +3598,23 @@ function pickFile(accept) {
     document.body.appendChild(inp);
     inp.click();
   });
+}
+
+// createDecision authors a *new* decision in place: it opens the embedded dmn-js
+// editor (ADR-0062) on a seed model and, on save, stores the model and files a
+// reference to it under the application. It is the decision counterpart of "BPMN
+// diagram" in the same menu — an application can now be built out of decisions
+// with no diagram in it at all, and publishing it deploys them as runtime
+// artifacts (ADR-draft-durable-versioned-decision-deployments).
+//
+// The editor module is imported lazily, the same discipline editDmnRef uses, so
+// the Modeler home stays light. A cancelled or failed save resolves to null and
+// leaves the application untouched (the editor reports why itself).
+async function createDecision(projectId, reload) {
+  const { openDmnEditor } = await import("./dmn-editor.js");
+  const result = await openDmnEditor({ api, toast, projectId: projectId || "" });
+  if (!result) return;
+  await reload();
 }
 
 // createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is

@@ -93,10 +93,19 @@ func (s *Server) mintRelease(r *http.Request, out bundleOutcome, note string) (a
 	if err != nil {
 		return applicationRelease{}, err
 	}
-	members := make([]releaseMember, 0, len(out.resp.Definitions))
+	members := make([]releaseMember, 0, len(out.resp.Definitions)+len(out.resp.Decisions))
 	for _, d := range out.resp.Definitions {
 		members = append(members, releaseMember{
 			Kind: "process", Ref: d.ProcessID, ArtifactVer: d.Version, Key: d.Key,
+		})
+	}
+	// The decisions this publish deployed, each naming the runtime artifact it
+	// produced (ADR-draft-durable-versioned-decision-deployments). They are recorded
+	// exactly like processes, so a release says what it shipped whether the
+	// application holds BPMN, DMN, or only one of the two.
+	for _, d := range out.resp.Decisions {
+		members = append(members, releaseMember{
+			Kind: "decision", Ref: d.DecisionID, ArtifactVer: d.Version, Key: d.Key, Artifact: d.ResourceName,
 		})
 	}
 	rec := applicationRelease{

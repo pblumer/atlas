@@ -8,7 +8,10 @@
 //
 //   - A DMN model is compiled by temis once, at deploy time, into immutable
 //     thread-safe decisions held in a [Registry] (invariant I5: compile, don't
-//     interpret — no XML parsing or FEEL compilation at runtime).
+//     interpret — no XML parsing or FEEL compilation at runtime), and which
+//     deployment's model a task evaluates is settled there too
+//     (ADR-draft-durable-versioned-decision-deployments), so the runtime and a
+//     replay choose no version.
 //   - A business rule task creates a job carrying the reserved DMN job type. The
 //     processor never evaluates a decision itself, so it stays allocation-free
 //     (invariant I1) and free of the temis dependency.
@@ -17,10 +20,13 @@
 //     the token onward through the normal completion path. Evaluation is a
 //     post-durability side effect, exactly like any other worker (invariant I2).
 //
-// Because there is no process-variable subsystem yet (Milestone 1), a business
-// rule task feeds its decision a static input context recorded at deploy time
-// and its outputs are surfaced through a caller-supplied sink rather than written
-// back as variables. Wiring real input/output variable mappings is future work.
+// A business rule task's input context is the static inputs recorded at deploy
+// time overlaid with its io-mapping inputs, FEEL-evaluated over the instance's
+// variables off the hot path, and its result is written back into the process
+// variable the task names (ADR-0039). Each evaluation also rides back as a durable
+// record carrying its inputs, outputs and temis trace (ADR-0066); the
+// caller-supplied sink is an additional observation seam for tests and
+// diagnostics, not the path the result travels.
 package dmn
 
 import (
@@ -32,42 +38,65 @@ import (
 	tdmn "github.com/pblumer/temis/dmn"
 )
 
-// Registry holds the DMN models deployed alongside process definitions. It
-// compiles each model once with temis and keeps the immutable result, keyed by
-// the owning process-definition key, ready for cheap repeated evaluation.
+// Registry holds the DMN models Atlas has deployed. It compiles each model once
+// with temis and keeps the immutable result, keyed by the deployment it belongs
+// to, ready for cheap repeated evaluation.
 //
-// A Registry is safe for concurrent evaluation once populated. Populate it
-// (via Deploy) before the processes that use it start running.
+// Two kinds of deployment put a model here, and the key space is the same one
+// (the server's definition keys), so one map serves both:
+//
+//   - a **process deployment** bundles the models its business rule tasks need
+//     and registers them under the process-definition key (ADR-0014);
+//   - a **decision deployment** is a decision published in its own right, durable
+//     and versioned, under a key of its own
+//     (ADR-draft-durable-versioned-decision-deployments).
+//
+// A Registry is safe for concurrent evaluation once populated. Populate it (via
+// Deploy / DeployDecision) before the processes that use it start running.
 type Registry struct {
 	engine *tdmn.Engine
-	// definitions maps a process-definition key to the compiled DMN models bundled
-	// with it. A process may reference decisions from several models (its business
-	// rule tasks are not confined to one), so each key holds a list, appended to by
-	// Deploy and searched by decision id at evaluation time.
+	// definitions maps a deployment key to the compiled DMN models registered under
+	// it. A process may reference decisions from several models (its business rule
+	// tasks are not confined to one), so each key holds a list, appended to by Deploy
+	// and searched by decision id at evaluation time.
 	definitions map[uint64][]*tdmn.Definitions
-	// latest maps a decision id to the newest deployed model that provides it, for
-	// latest-bound business rule tasks (ADR-0063). Deploy overwrites it, so after
-	// replaying deployments oldest-first the pointer holds the last-deployed model.
+	// latest maps a decision id to the newest model registered that provides it, of
+	// either kind. It exists for one reason only: definitions deployed before
+	// deploy-time pinning still resolve latest binding at task activation
+	// (ADR-0063), and they must keep resolving it exactly as they did. Every
+	// register overwrites it, so replaying deployments oldest-first rebuilds it
+	// deterministically. New deployments never read it.
 	latest map[string]*tdmn.Definitions
+	// latestDecision maps a decision id to the newest *decision deployment* key
+	// providing it — the deploy-time selector a latest-bound business rule task is
+	// pinned against. Only registerDecision writes it, so bundling a model with a
+	// process can no longer make that process the newest version of a decision.
+	latestDecision map[string]uint64
 }
 
 // NewRegistry creates an empty registry over a fresh temis engine.
 func NewRegistry() *Registry {
 	return &Registry{
-		engine:      tdmn.New(),
-		definitions: map[uint64][]*tdmn.Definitions{},
-		latest:      map[string]*tdmn.Definitions{},
+		engine:         tdmn.New(),
+		definitions:    map[uint64][]*tdmn.Definitions{},
+		latest:         map[string]*tdmn.Definitions{},
+		latestDecision: map[string]uint64{},
 	}
 }
 
 // Deploy compiles a DMN model and registers it under the process-definition key of
 // the process whose business rule tasks reference it. A process may bundle several
 // models (its tasks can call decisions from different models), so Deploy appends —
-// call it once per bundled model. It also updates the latest-version pointer for
-// every decision the model provides (ADR-0063), so a latest-bound task resolves the
-// newest deployed version. Compilation happens here, at deploy time, never at
-// evaluation time (invariant I5). It returns an error if temis cannot parse or
+// call it once per bundled model. Compilation happens here, at deploy time, never
+// at evaluation time (invariant I5). It returns an error if temis cannot parse or
 // compile the model.
+//
+// It does *not* make this model the newest version of the decisions it provides:
+// that is [Registry.DeployDecision]'s job, and keeping the two apart is what stops
+// deploying a process from silently becoming "a new version of the decision"
+// (ADR-draft-durable-versioned-decision-deployments). The one index a bundled
+// model still moves is the legacy runtime-latest pointer the definitions deployed
+// before pinning read — see the Registry field comments.
 func (r *Registry) Deploy(defKey uint64, dmnXML []byte) error {
 	defs, diags, err := r.engine.Compile(context.Background(), dmnXML)
 	if err != nil {
@@ -112,14 +141,79 @@ func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
 	return formatDiagnostics(diags), nil
 }
 
-// register indexes a compiled model under the deployment key it was bundled with,
-// and as the latest provider of every decision it declares (ADR-0063). Shared by
-// Deploy and Reload so both index a model identically once it is accepted.
+// register indexes a compiled model under the deployment key it was registered
+// with, and as the newest model providing every decision it declares — the legacy
+// pointer only pre-pinning definitions read (ADR-0063). Shared by Deploy, Reload
+// and registerDecision so every accepted model is indexed identically.
 func (r *Registry) register(defKey uint64, defs *tdmn.Definitions) {
 	r.definitions[defKey] = append(r.definitions[defKey], defs)
 	for _, id := range defs.Index().Decisions {
 		r.latest[id] = defs
 	}
+}
+
+// DeployDecision compiles a DMN model published as a decision deployment — a
+// decision in its own right rather than a model bundled with some process — and
+// registers it under its own definition key
+// (ADR-draft-durable-versioned-decision-deployments). It additionally makes that
+// key the newest deployed version of every decision the model provides, which is
+// what a latest-bound business rule task is pinned against when its process is
+// deployed.
+//
+// Like Deploy it is the deploy-time gate: a model temis cannot compile, or whose
+// diagnostics carry errors, is refused and leaves nothing behind (invariant I5 —
+// compilation happens here, never at evaluation time).
+func (r *Registry) DeployDecision(key uint64, dmnXML []byte) error {
+	defs, diags, err := r.engine.Compile(context.Background(), dmnXML)
+	if err != nil {
+		return fmt.Errorf("dmn: compile decision %d: %w", key, err)
+	}
+	if diags.HasErrors() {
+		return fmt.Errorf("dmn: decision %d has errors: %v", key, diags)
+	}
+	r.registerDecision(key, defs)
+	return nil
+}
+
+// ReloadDecision is DeployDecision for a decision that is *already* deployed —
+// one coming back from its durable record at startup — and so it does not
+// re-apply the deploy-time gate, for the reason [Registry.Reload] gives
+// (ADR-0177): refusing it here undeploys nothing, it only keeps the server from
+// starting. The rendered error diagnostics are returned ("" when there are none)
+// for the caller to report.
+func (r *Registry) ReloadDecision(key uint64, dmnXML []byte) (string, error) {
+	defs, diags, err := r.engine.Compile(context.Background(), dmnXML)
+	if err != nil {
+		return "", fmt.Errorf("dmn: compile decision %d: %w", key, err)
+	}
+	r.registerDecision(key, defs)
+	if !diags.HasErrors() {
+		return "", nil
+	}
+	return formatDiagnostics(diags), nil
+}
+
+// registerDecision indexes a decision deployment: under its key like any other
+// model, and as the newest deployed version of every decision it declares. Shared
+// by DeployDecision and ReloadDecision so both index identically.
+func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions) {
+	r.register(key, defs)
+	for _, id := range defs.Index().Decisions {
+		r.latestDecision[id] = key
+	}
+}
+
+// LatestDecisionKey returns the key of the newest decision deployment providing
+// the decision id, and ok=false when the decision has never been deployed on its
+// own. It is the deploy-time selector behind latest binding: a process deployment
+// resolves each latest-bound reference through it once and stores the answer, so
+// nothing is re-decided at task activation or on replay (invariants I5/I6).
+//
+// It reads registry state, so it runs on the registry's owning goroutine — the
+// run loop — the same discipline as Deploy.
+func (r *Registry) LatestDecisionKey(decisionId string) (uint64, bool) {
+	key, ok := r.latestDecision[decisionId]
+	return key, ok
 }
 
 // modelProviding returns the model in the list that provides the decision id, or

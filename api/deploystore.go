@@ -49,12 +49,57 @@ type persistedDeployment struct {
 	// (deployment.diagram_updated) carries the rest.
 	DiagramUpdatedAt int64  `json:"diagramUpdatedAt,omitempty"`
 	DiagramUpdatedBy string `json:"diagramUpdatedBy,omitempty"`
+	// BindingPolicy says how this deployment's latest-bound business rule tasks
+	// resolve their decision model
+	// (ADR-draft-durable-versioned-decision-deployments):
+	//
+	//   - bindingPinned ("pinned") — latest was resolved once, when this definition
+	//     was deployed, and DecisionBindings carries the answer. Nothing is decided
+	//     at task activation or on replay.
+	//   - "" — the record was written before deploy-time pinning existed, so its
+	//     latest-bound tasks keep resolving the newest deployed model at activation
+	//     (ADR-0063), which is the behavior the definition has been running under.
+	//     Redeploying the process is what moves it to pinned.
+	//
+	// The empty value is the compatibility case, which is why there is no explicit
+	// "legacy" token to write: absence is what old records have.
+	BindingPolicy string `json:"bindingPolicy,omitempty"`
+	// DecisionBindings is each latest-bound decision reference and the decision
+	// deployment it resolved to. Empty on a pinned deployment with no latest-bound
+	// local business rule task, which is the common case — hence omitempty.
+	DecisionBindings []persistedDecisionBinding `json:"decisionBindings,omitempty"`
 	// Inactive marks a definition an operator has deactivated: it stays deployed but
 	// does not auto-start new instances from its timer/message/signal start events
 	// (ADR-0119). Absent (false) in every record written before this field existed, so
 	// deployments load active by default — the omitempty keeps the record unchanged for
 	// the common active case.
 	Inactive bool `json:"inactive,omitempty"`
+}
+
+// bindingPinned is the [persistedDeployment.BindingPolicy] value saying this
+// deployment resolved its latest-bound decision references at deploy time.
+const bindingPinned = "pinned"
+
+// persistedDecisionBinding is one resolved decision reference: the decision id a
+// latest-bound business rule task names, and the decision deployment whose model
+// it evaluates for as long as this definition exists.
+type persistedDecisionBinding struct {
+	DecisionID string `json:"decisionId"`
+	Key        uint64 `json:"key"`
+}
+
+// decisionPins turns the record's resolved bindings into the map a compiled
+// process is pinned with, or nil when the record carries none. It is only
+// meaningful for a record whose BindingPolicy is bindingPinned.
+func (d persistedDeployment) decisionPins() map[string]uint64 {
+	if len(d.DecisionBindings) == 0 {
+		return nil
+	}
+	out := make(map[string]uint64, len(d.DecisionBindings))
+	for _, b := range d.DecisionBindings {
+		out[b.DecisionID] = b.Key
+	}
+	return out
 }
 
 // dmnModels returns the deployment's DMN models as a list, transparently reading a

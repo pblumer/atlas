@@ -224,6 +224,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A DMN decision is a durable, versioned deployment artifact, and a deployed process is
+  frozen to the version it was deployed against.** A decision used to exist only as a
+  model bundled into some process's deployment. An application whose only artifact was
+  `eligibility.dmn` therefore published *successfully* and deployed nothing at all — the
+  bundle deploy iterated BPMN drafts and collected the models those drafts referenced, so
+  with no draft there was no loop iteration, no registry entry, and nothing on disk. After
+  a restart there was still nothing.
+
+  Publishing an application now deploys its DMN models as **decision deployments**:
+  durable records in a new `decisions/` store, keyed from the same definition key space
+  process definitions come from, versioned per decision id, and carrying the validated DMN
+  source plus its checksum. No compiled temis structure is persisted — the registry is
+  rebuilt by compiling the stored source again at startup, off the processor and before
+  the loop serves traffic. `GET /api/v1/decision-deployments` lists them and
+  `.../{key}/xml` serves the exact source a running process evaluates, which is not the
+  same thing as the model file behind a handle: that file is edited in place.
+
+  **`latest` binding is now resolved when the process is deployed, not when a token
+  arrives.** It was a lookup on the worker against a pointer every deploy overwrote, which
+  meant publishing a new decision silently changed the behaviour of processes already
+  running — and meant a version was being chosen outside the log, which a replay has no
+  way to reproduce. A deployment now resolves each `latest` reference once, to the newest
+  decision deployment providing it (or, when the decision was never published on its own,
+  to the model bundled with the process), and stores the answer in its record. The runtime
+  makes no version choice at all, and neither does recovery.
+
+  `deployment` binding is unchanged. **Deployments written before this keep their old
+  behaviour**: a record with no binding-policy marker still resolves `latest` at
+  activation, exactly as it was deployed to, and nothing on disk changes meaning under an
+  upgrade. Redeploying the process is what moves it to the pinned policy.
+
+  An application release now names the decisions it shipped alongside its processes, and
+  an application can be built from decisions with no BPMN in it at all — "Create new →
+  Decision (DMN)" authors one in the embedded editor and files it under the application.
+  ([ADR-draft-durable-versioned-decision-deployments](docs/adr/draft-durable-versioned-decision-deployments.md),
+  [issue #915](https://github.com/pblumer/atlas/issues/915))
+
 - **A capability's service levels are measured, not only declared.** Every KPI and SLA
   on a business capability was prose the API labelled as a declaration, because nothing
   computed one. `GET /api/v1/capabilities/{key}/measurement?windowDays=N` now returns,
