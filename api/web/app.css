@@ -2098,6 +2098,23 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   pointer-events: auto; cursor: default;
 }
 
+/* A data object's data state, written under its name (drawDataStateLabels). Set in the
+   type bpmn-js gives an external label — 11px Arial — so the two lines read as one
+   caption rather than as a label with an annotation stuck under it. The wrapper is a
+   zero-size pin at the anchor and blocks nothing, so clicks fall through to the box; the
+   text alone takes pointer events, for its hover title.
+   A state nothing writes is set back: it never reaches the compiled model, so the
+   diagram should not present it with the same weight as one the engine acts on. The
+   reduced weight is deliberately readable rather than faint — it is a difference in
+   role, not a disabled control. */
+.data-state-label { position: relative; width: 0; height: 0; pointer-events: none; }
+.data-state-label .ds-text {
+  position: absolute; left: 0; top: 0; transform: translateX(-50%);
+  white-space: nowrap; font: 11px/1.2 Arial, sans-serif; color: var(--text);
+  pointer-events: auto; cursor: default;
+}
+.data-state-label .ds-text.ds-unwritten { color: var(--muted); }
+
 /* ---------- Live collaboration sessions (ADR-0140) ---------- */
 /* A floating roster of co-editors, centered over the canvas, plus a lock badge on
    each element another participant is editing and a brief pulse on a remote edit. */
@@ -2687,7 +2704,7 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 
-/* The decision editor (ADR-draft-the-decision-editor-is-a-page). It is a page like
+/* The decision editor (ADR-0320). It is a page like
    the BPMN and form editors, so its frame — .editor, .editor-bar, .etabs,
    .editor-body — is theirs; only the canvas, the properties column and the hint
    below them are its own. It was a full-screen modal over the current view until a

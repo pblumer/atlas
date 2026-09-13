@@ -7,7 +7,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-the-decision-editor-is-a-page](draft-the-decision-editor-is-a-page.md)
+[ADR-0320](0320-the-decision-editor-is-a-page.md)
 moved the decision editor onto a routed page and listed four things the overlay
 had made invisible. Three of them it fixed. The third it named and left standing:
 
@@ -298,7 +298,7 @@ decision.
 
 ## Links
 
-- extends [ADR-draft-the-decision-editor-is-a-page](draft-the-decision-editor-is-a-page.md) — the fourth consequence it named and left open
+- extends [ADR-0320](0320-the-decision-editor-is-a-page.md) — the fourth consequence it named and left open
 - relates to [ADR-0021](0021-diagram-drafts.md) — the BPMN draft this one is modelled on
 - relates to [ADR-0014](0014-dmn-business-rule-tasks-via-temis.md) — the model handle that is the middle layer
 - relates to [ADR-0062](0062-embedded-dmn-editor.md) — the adoption flow a model save completes

@@ -1,5 +1,5 @@
 // The one flow that changed shape when the decision editor stopped being an overlay
-// (ADR-draft-the-decision-editor-is-a-page): authoring a decision from a business rule
+// (ADR-0320): authoring a decision from a business rule
 // task. It used to open a window over the diagram and resolve with what it saved; it
 // now leaves for a page and the diagram adopts what was authored on the way back.
 //

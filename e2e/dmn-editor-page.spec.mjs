@@ -1,10 +1,10 @@
 // The decision editor is a page of the Modeler, not a window over one
-// (ADR-draft-the-decision-editor-is-a-page), and its Save keeps a draft rather than
-// writing the model every reference resolves (ADR-draft-decision-drafts). These
-// tests pin what that buys, because none of it is visible to the Go suite: a decision
-// has an address, the editor wears the chrome its siblings wear, Save and Save to
-// model write different things, a model save moves the URL onto the decision it just
-// wrote, and nothing anywhere mounts an overlay.
+// (ADR-0320), and its Save keeps a draft rather than writing the model every
+// reference resolves (ADR-draft-decision-drafts). These tests pin what that buys,
+// because none of it is visible to the Go suite: a decision has an address, the editor
+// wears the chrome its siblings wear, Save and Save to model write different things, a
+// model save moves the URL onto the decision it just wrote, and nothing anywhere mounts
+// an overlay.
 //
 // The vendored dmn-js bundle is loaded for real (the static server serves ../api/web),
 // so what is asserted here is the editor that ships.

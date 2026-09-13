@@ -10,7 +10,7 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
-// The decision editor is a page of its own (ADR-draft-the-decision-editor-is-a-page),
+// The decision editor is a page of its own (ADR-0320),
 // so this module navigates to it rather than opening it. Nothing of dmn-js is loaded
 // here any more.
 import { tokenSimulationModule } from "./token-simulation.js";
@@ -227,7 +227,7 @@ let generation = 0;
 
 // leaveForDecision is this mount's "may we leave now" question, published for the
 // business-rule-task panel: authoring a decision is a navigation
-// (ADR-draft-the-decision-editor-is-a-page), and the panel is nowhere near the draft
+// (ADR-0320), and the panel is nowhere near the draft
 // machinery that has to run first. Replaced on every mount, so it always answers for
 // the diagram on screen.
 let leaveForDecision = async () => true;
@@ -818,6 +818,8 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   refreshBadges(); // reflect the initial tab for the diagram just imported
   const refreshPoolCaptions = makePoolProcessCaptions(modeler);
   refreshPoolCaptions(); // name the process each pool runs, on the diagram just imported
+  const refreshDataStates = makeDataStateLabels(modeler);
+  refreshDataStates(); // show each data object's [state] on the diagram just imported
   // The Playground is a mode rather than a level of detail: it takes over the bar
   // and a side panel, so the tab toggle switches it on instead of only re-rendering
   // the properties panel (ADR-0215).
@@ -1631,6 +1633,90 @@ function makePoolProcessCaptions(modeler) {
     ids = [];
   };
   const refresh = () => { clear(); ids = drawPoolProcessCaptions(modeler); };
+  modeler.on("element.changed", refresh);
+  modeler.on("elements.changed", refresh);
+  modeler.on("import.done", refresh);
+  return refresh;
+}
+
+// drawDataStateLabels writes each data object's data state under its name — the
+// `[ARCHIVIERT]` in square brackets BPMN puts below the box, and the one thing that
+// tells two boxes of the same object apart. A process that draws `identitaet` six times
+// draws six identical boxes without it, and the repetition reads as noise rather than
+// as a life. bpmn-js parses `<dataState>` into the business object and renders nothing
+// with it, so this label is ours to draw; the Properties panel has been able to *edit*
+// the state all along, which is how a diagram ends up carrying states nothing shows.
+//
+// The state is drawn with its **role**, not as one uniform caption, because the same
+// string means two different things depending on which way the association runs:
+//
+//   - A state on a box a write points at is the target state the compiler puts on the
+//     `DataOutputAssociation` (ADR-0058). The engine advances the object into it, the
+//     transition lands in the log, and `CheckDataFlow` matches it against the class's
+//     lifecycle (ADR-0259). It executes.
+//   - A state on a box that is only *read* is dropped — "its state ignored on a read"
+//     (`compiler/parse.go`). It never reaches the compiled model, so no engine acts on
+//     it and no check can reach it, not even the typo check. It documents a
+//     precondition and nothing more.
+//
+// Drawing both the same way would have the diagram claim something the model does not
+// do, so the second one is set back and its hover title says why. That is the whole
+// difference in treatment: same notation, same place, one of them quieter.
+//
+// The caption rides under the *label*, not under the symbol: a data object's name is an
+// external label the author can drag anywhere, and a state left behind at the symbol
+// would come adrift from the name it qualifies. A nameless reference has no label to
+// follow, so its state sits under the symbol instead.
+function drawDataStateLabels(modeler) {
+  const ids = [];
+  let overlays, registry;
+  try { overlays = modeler.get("overlays"); registry = modeler.get("elementRegistry"); }
+  catch { return ids; } // modeler torn down mid-flight
+  registry.forEach((el) => {
+    const bo = el.businessObject;
+    // The reference carries the state; its own label element carries the same business
+    // object, so the label is skipped or every state would be drawn twice.
+    if (!bo || bo.$type !== "bpmn:DataObjectReference" || el.type === "label") return;
+    const state = ((bo.dataState && bo.dataState.name) || "").trim();
+    if (!state) return;
+    // A write is an *incoming* data output association: the activity's output lands in
+    // this box, and this box's state is where it lands.
+    const written = (el.incoming || []).some(
+      (c) => ((c.businessObject || {}).$type || "") === "bpmn:DataOutputAssociation");
+    const title = written
+      ? `Data state: ${state} — a write here moves the object into it, and the deploy checks it against the class's lifecycle.`
+      : `Data state: ${state} — nothing writes it here. A state on a box that is only read is dropped when the model compiles, so it documents what this step expects; the engine never acts on it and no check reads it.`;
+    // Sit the caption directly under the name. The label's own bounds give both the
+    // baseline to clear and the centre to hang from; without a label there is only the
+    // symbol, and the caption goes under that.
+    const lbl = el.label;
+    const top = lbl ? (lbl.y + lbl.height) - el.y + 1 : (el.height || 0) + 5;
+    const left = lbl ? (lbl.x + lbl.width / 2) - el.x : (el.width || 0) / 2;
+    try {
+      ids.push(overlays.add(el.id, "atlas-data-state", {
+        position: { top, left },
+        html: `<div class="data-state-label"><span class="ds-text${written ? "" : " ds-unwritten"}" title="${esc(title)}">[${esc(state)}]</span></div>`,
+      }));
+    } catch { /* shape without graphics (e.g. mid-import) — skip */ }
+  });
+  return ids;
+}
+
+// makeDataStateLabels keeps the data-state captions in step with edits: the state typed
+// in the panel, an association drawn or deleted (which is what decides whether a state
+// executes), a label dragged elsewhere. Like the pool captions and unlike the
+// implementation badges these are not tab-gated — a data state is part of what the
+// model *says*, readable at any level of detail, not an implementation nicety. Returns
+// a refresh function; the initial call reflects the just-imported diagram.
+function makeDataStateLabels(modeler) {
+  let ids = []; // overlay ids currently on the canvas, so we remove only ours
+  const clear = () => {
+    let overlays;
+    try { overlays = modeler.get("overlays"); } catch { ids = []; return; }
+    for (const id of ids) { try { overlays.remove(id); } catch { /* gone */ } }
+    ids = [];
+  };
+  const refresh = () => { clear(); ids = drawDataStateLabels(modeler); };
   modeler.on("element.changed", refresh);
   modeler.on("elements.changed", refresh);
   modeler.on("import.done", refresh);
@@ -7653,7 +7739,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
 
       // Author-a-decision. "＋ New decision" creates a decision and this task adopts
       // it; "Edit" opens the one already selected. Both leave this diagram for the
-      // decision editor's own page (ADR-draft-the-decision-editor-is-a-page) — it used
+      // decision editor's own page (ADR-0320) — it used
       // to be a window over this one, which is the thing that record ends.
       //
       // Adoption survives the trip: the decision editor stashes what it saved, app.js
@@ -9468,6 +9554,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // show type icons at once, before the first poll lands
+  drawDataStateLabels(viewer); // [state] captions: model content, so every view shows them
   const countEl = root.querySelector("#inst-count");
   const tokenEl = root.querySelector("#token-count");
   const incidentPill = root.querySelector("#incident-pill");
@@ -10052,6 +10139,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (current !== viewer) return; // navigated away mid-flight
     overlays.clear();
     drawImplBadges(viewer); // type icons are static; overlays.clear() reaped them
+    drawDataStateLabels(viewer); // and so are the [state] captions the same clear() took
     for (const [id, marker] of marked) canvas.removeMarker(id, marker);
     marked = [];
     // The element the listing is filtered to is outlined on the diagram, so the chip
@@ -10704,6 +10792,7 @@ export async function mountCollaboration(root, { api, toast, key }) {
   const canvas = viewer.get("canvas");
   const registry = viewer.get("elementRegistry");
   drawImplBadges(viewer); // static type icons; this view never clears overlays
+  drawDataStateLabels(viewer); // [state] captions, static for the same reason
   // A pool's call activity drills in like everywhere else (ADR-0076). This view has no
   // single instance to mean — it replays the exchange between pools, not one caller —
   // so the "+" opens the called process's own live view.
@@ -11020,6 +11109,7 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
     const canvas = v.get("canvas");
     const registry = v.get("elementRegistry");
     try { drawImplBadges(v); } catch { /* best-effort type icons */ }
+    try { drawDataStateLabels(v); } catch { /* best-effort [state] captions */ }
 
     const frames = tl.frames || [];
     const steps = tl.steps || [];
@@ -11209,6 +11299,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const registry = viewer.get("elementRegistry");
   const overlays = viewer.get("overlays");
   drawImplBadges(viewer); // static type icons; only the count badges are re-drawn
+  drawDataStateLabels(viewer); // static [state] captions, drawn once with them
   const eventBus = viewer.get("eventBus");
   const layer = canvas.getLayer("atlas-replay", 900); // moving token dot rides above the diagram
   const dotLayer = canvas.getLayer("atlas-tokens", 899); // static per-frame token dots

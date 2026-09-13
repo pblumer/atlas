@@ -1,4 +1,4 @@
-# ADR-DRAFT: The decision editor is a page, not an overlay
+# ADR-0320: The decision editor is a page, not an overlay
 
 - **Status:** Accepted
 - **Implementation:** Landed
