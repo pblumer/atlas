@@ -30,10 +30,25 @@ type applicationRelease struct {
 
 // releaseMember is one artifact as it shipped in a release.
 type releaseMember struct {
-	Kind        string `json:"kind"` // "process" today; "decision"/"form" as later slices add them
-	Ref         string `json:"ref"`  // processId for a process
-	ArtifactVer int32  `json:"artifactVer"`
-	Key         uint64 `json:"key,omitempty"` // definition key for a process
+	// Kind is "process" or "decision" ("form" as a later slice adds it). A decision
+	// member is a DMN decision deployed as a runtime artifact of its own
+	// (ADR-draft-durable-versioned-decision-deployments), which is what lets a
+	// release of an application with no BPMN in it still name what it shipped.
+	Kind string `json:"kind"`
+	// Ref is the logical identity within its kind: the processId of a process, the
+	// decision id of a decision.
+	Ref string `json:"ref"`
+	// ArtifactVer is that identity's version — the ADR-0019 per-processId version,
+	// or the per-decision-id version.
+	ArtifactVer int32 `json:"artifactVer"`
+	// Key is the runtime definition key: the process definition, or the decision
+	// deployment. Two decisions from one model share a key and differ in Ref.
+	Key uint64 `json:"key,omitempty"`
+	// Artifact is the source artifact the runtime definition came from
+	// ("eligibility.dmn"), when there is a file-shaped name for it. Absent on the
+	// process members written before this field existed, and on any member with no
+	// such name — hence omitempty, which leaves every existing record byte-identical.
+	Artifact string `json:"artifact,omitempty"`
 }
 
 // releaseStore is a durable store for application releases, one JSON file per

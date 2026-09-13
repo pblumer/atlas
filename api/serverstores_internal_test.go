@@ -31,7 +31,7 @@ import (
 // order it opens them. A store added to New without a line here is not a failure this
 // test can see, which is the same gap that let two dozen of these go untested.
 var serverStoreDirs = []string{
-	"deployments", "jobtypes", "drafts", "playground-scenarios", "forms",
+	"deployments", "decisions", "jobtypes", "drafts", "playground-scenarios", "forms",
 	"public-links", "projects", "process-docs", "panorama-models",
 	"information-models", "releases", "grant-audit", "api-tokens", "deploy-tokens",
 	"oauth-clients", "oauth-grants", "targets", "dmnrefs", "users", "groups",

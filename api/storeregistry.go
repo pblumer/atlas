@@ -96,6 +96,7 @@ var persistentStores = []storeEntry{
 
 	// --- design time -------------------------------------------------------
 	{name: "deployments", class: classDesignTime, why: "the deployed process definitions"},
+	{name: "decisions", class: classDesignTime, why: "the deployed decision definitions, and the DMN source the registry is rebuilt from"},
 	{name: "drafts", class: classDesignTime, why: "work in progress in the Modeler"},
 	{name: "forms", class: classDesignTime, why: "task forms"},
 	{name: "projects", class: classDesignTime, why: "applications and their sharing scopes"},

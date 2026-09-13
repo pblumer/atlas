@@ -924,16 +924,24 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			name = deployables[i].ProcessName
 		}
 
+		// Resolve every latest-bound decision reference to an exact decision
+		// deployment, now, once (ADR-draft-durable-versioned-decision-deployments).
+		// After this the definition names a concrete model and nothing about which
+		// version it runs is decided again — not on the worker, not on replay (I5/I6).
+		pins := s.pinDecisions(cp)
+
 		if err := s.deploys.Save(persistedDeployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			ProjectID:  projectID,
-			DeployedBy: deployedBy,
-			XML:        string(body),
-			DMNXMLs:    dmnStrings,
+			Key:              key,
+			ProcessID:        pid,
+			Name:             name,
+			Version:          version,
+			DeployedAt:       deployedAt,
+			ProjectID:        projectID,
+			DeployedBy:       deployedBy,
+			XML:              string(body),
+			DMNXMLs:          dmnStrings,
+			BindingPolicy:    bindingPinned,
+			DecisionBindings: pins,
 		}); err != nil {
 			return deployed, nil, err
 		}

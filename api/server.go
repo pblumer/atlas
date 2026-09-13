@@ -206,6 +206,13 @@ type Server struct {
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	// decisionDeploys is the durable sidecar for decision deployments — DMN models
+	// published as runtime artifacts in their own right
+	// (ADR-draft-durable-versioned-decision-deployments) — and decisionVersions the
+	// per-decision-id version counter it rebuilds at startup, the decision
+	// counterpart of versions above.
+	decisionDeploys  *decisionStore
+	decisionVersions map[string]int32
 	// landscapes is what the Starmap last read this server's *structure* as
 	// (ADR-0211 §7). It holds no health and nobody's view of anything — see
 	// [meshFacts] — and it lives here, under the same single-owner discipline as the
@@ -1087,6 +1094,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	decisionDeploys, err := newDecisionStore(filepath.Join(dataDir, "decisions"))
+	if err != nil {
+		return nil, err
+	}
 	// The engine-wide job-type table. Every compiled process is resolved through it
 	// before it is deployed, so the job type a service task's job carries means the
 	// same thing across definitions (ADR-0007/0157).
@@ -1256,8 +1267,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		nextKey:     1,
 		versions:    map[string]int32{},
 		deploys:     ds,
-		jobTypes:    jobTypes,
-		workers:     newWorkerRegistry(nil),
+
+		// Its own group: gofmt aligns a literal's contiguous run, and folding these
+		// into the one above would rewrite every line of it for no change in meaning.
+		decisionDeploys:  decisionDeploys,
+		decisionVersions: map[string]int32{},
+		jobTypes:         jobTypes,
+		workers:          newWorkerRegistry(nil),
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -2395,101 +2411,174 @@ func (s *Server) drive() error {
 // restores diagrams, names, versions, and the ability to advance recovered
 // instances (ADR-0019). It runs before the loop serves traffic, so touching the
 // registry and the processor directly here respects the single-writer invariant.
+//
+// Two stores feed it: process deployments and decision deployments
+// (ADR-draft-durable-versioned-decision-deployments). They share one key space and
+// each lists in ascending key order, so merging them replays registration in the
+// order it happened live. That ordering is not cosmetic: a definition deployed
+// before deploy-time pinning still resolves latest binding against "the newest
+// model registered, of either kind", and rebuilding that pointer out of order
+// would silently hand it a different model than it had before the restart.
 func (s *Server) loadDeployments() error {
-	recs, err := s.deploys.LoadAll()
+	procs, err := s.deploys.LoadAll()
 	if err != nil {
 		return err
 	}
-	for _, rec := range recs {
-		// Recompile exactly the process this record represents (a collaboration's
-		// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
-		// without the deploy-time validation gate
-		// (ADR-0177). This definition passed the gate
-		// that existed when it was deployed and its instances have been running under
-		// it since; a rule added to the compiler afterwards is a reason to tell the
-		// operator, not to refuse to start. The model on disk did not change.
-		cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
-		if err != nil {
-			// A stored model that no longer compiles *at all* is still a hard,
-			// actionable error rather than a silently dropped definition (ADR-0019):
-			// there is no definition to bring back, so its instances could not advance
-			// either way. Name the record, since acting on it means editing that file.
-			return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+	decisions, err := s.decisionDeploys.LoadAll()
+	if err != nil {
+		return err
+	}
+	for i, j := 0, 0; i < len(procs) || j < len(decisions); {
+		if j == len(decisions) || (i < len(procs) && procs[i].Key < decisions[j].Key) {
+			if err := s.restoreDeployment(procs[i]); err != nil {
+				return err
+			}
+			i++
+			continue
 		}
-		if len(problems) > 0 {
-			// Not silent: the model is drifting from what the compiler now asks for,
-			// and the next deploy of it will be refused. Named per deployment so the
-			// operator can go straight to the model that needs fixing.
+		if err := s.restoreDecisionDeployment(decisions[j]); err != nil {
+			return err
+		}
+		j++
+	}
+	return nil
+}
+
+// restoreDeployment brings one process deployment back: recompile, re-resolve its
+// job types, re-register its bundled DMN models and its resolved decision
+// bindings, and put it in the in-memory registry. Split out of loadDeployments so
+// the two record kinds can be replayed in one merged key order.
+func (s *Server) restoreDeployment(rec persistedDeployment) error {
+	// Recompile exactly the process this record represents (a collaboration's
+	// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
+	// without the deploy-time validation gate
+	// (ADR-0177). This definition passed the gate
+	// that existed when it was deployed and its instances have been running under
+	// it since; a rule added to the compiler afterwards is a reason to tell the
+	// operator, not to refuse to start. The model on disk did not change.
+	cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
+	if err != nil {
+		// A stored model that no longer compiles *at all* is still a hard,
+		// actionable error rather than a silently dropped definition (ADR-0019):
+		// there is no definition to bring back, so its instances could not advance
+		// either way. Name the record, since acting on it means editing that file.
+		return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+	}
+	if len(problems) > 0 {
+		// Not silent: the model is drifting from what the compiler now asks for,
+		// and the next deploy of it will be refused. Named per deployment so the
+		// operator can go straight to the model that needs fixing.
+		logging.Warn(logging.DeploymentReloadedWithProblems,
+			"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+			slog.Uint64("deploymentKey", rec.Key),
+			slog.String("processId", rec.ProcessID),
+			slog.Int64("version", int64(rec.Version)),
+			slog.String("artifact", "bpmn"),
+			slog.String("problems", compiler.SummarizeProblems(problems)))
+	}
+	cp.Version = rec.Version
+	// Restore the decision bindings this definition was deployed with
+	// (ADR-draft-durable-versioned-decision-deployments), before the processor sees
+	// it. A record with no policy marker predates deploy-time pinning, so it is
+	// deliberately left unpinned and keeps resolving latest at task activation.
+	if rec.BindingPolicy == bindingPinned {
+		cp.PinDecisions(rec.decisionPins())
+	}
+	// Re-resolve the job types the same way the original deploy did. The registry
+	// is durable and never recycles an index, so this lands on exactly the indices
+	// the jobs already in state were written under (ADR-0007/0157).
+	if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+		return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
+	}
+	s.proc.Deploy(cp)
+	// Re-register the process's DMN models so its business rule tasks evaluate
+	// after a restart, exactly as they did when first deployed (ADR-0014). The
+	// models are snapshotted in the deployment record (a legacy record carries a
+	// single model), so no temis reference has to be re-resolved here.
+	for _, dmnXML := range rec.dmnModels() {
+		// The same split as the BPMN model above
+		// (ADR-0177), for the same reason: refusing a
+		// snapshotted DMN model here undeploys nothing, it only keeps the server from
+		// starting. A decision that stopped compiling since the deploy fails when it
+		// is evaluated — a job error on a worker, which the engine has an answer for
+		// — while every other decision in the model keeps answering.
+		dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
+		if err != nil {
+			return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
+		}
+		if dmnProblems != "" {
 			logging.Warn(logging.DeploymentReloadedWithProblems,
-				"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+				"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
 				slog.Uint64("deploymentKey", rec.Key),
 				slog.String("processId", rec.ProcessID),
 				slog.Int64("version", int64(rec.Version)),
-				slog.String("artifact", "bpmn"),
-				slog.String("problems", compiler.SummarizeProblems(problems)))
+				slog.String("artifact", "dmn"),
+				slog.String("problems", dmnProblems))
 		}
-		cp.Version = rec.Version
-		// Re-resolve the job types the same way the original deploy did. The registry
-		// is durable and never recycles an index, so this lands on exactly the indices
-		// the jobs already in state were written under (ADR-0007/0157).
-		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
-			return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
-		}
-		s.proc.Deploy(cp)
-		// Re-register the process's DMN models so its business rule tasks evaluate
-		// after a restart, exactly as they did when first deployed (ADR-0014). The
-		// models are snapshotted in the deployment record (a legacy record carries a
-		// single model), so no temis reference has to be re-resolved here.
-		for _, dmnXML := range rec.dmnModels() {
-			// The same split as the BPMN model above
-			// (ADR-0177), for the same reason: refusing a
-			// snapshotted DMN model here undeploys nothing, it only keeps the server from
-			// starting. A decision that stopped compiling since the deploy fails when it
-			// is evaluated — a job error on a worker, which the engine has an answer for
-			// — while every other decision in the model keeps answering.
-			dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
-			if err != nil {
-				return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
-			}
-			if dmnProblems != "" {
-				logging.Warn(logging.DeploymentReloadedWithProblems,
-					"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
-					slog.Uint64("deploymentKey", rec.Key),
-					slog.String("processId", rec.ProcessID),
-					slog.Int64("version", int64(rec.Version)),
-					slog.String("artifact", "dmn"),
-					slog.String("problems", dmnProblems))
-			}
-		}
-		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
-		// before timers tick, so a start timer restored from the log finds the definition
-		// inactive and skips instantiation. loadDeployments does not re-arm timers (they
-		// come back from the WAL), so this is the only place recovery re-applies the gate.
-		if rec.Inactive {
-			s.proc.SetProcessActive(rec.Key, false)
-		}
-		s.deployments[rec.Key] = &deployment{
-			Key:        rec.Key,
-			ProcessID:  rec.ProcessID,
-			Name:       rec.Name,
-			Version:    rec.Version,
-			DeployedAt: rec.DeployedAt,
-			ProjectID:  rec.ProjectID,
-			DeployedBy: rec.DeployedBy,
-			xml:        []byte(rec.XML),
-			cp:         cp,
-			inactive:   rec.Inactive,
+	}
+	// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
+	// before timers tick, so a start timer restored from the log finds the definition
+	// inactive and skips instantiation. loadDeployments does not re-arm timers (they
+	// come back from the WAL), so this is the only place recovery re-applies the gate.
+	if rec.Inactive {
+		s.proc.SetProcessActive(rec.Key, false)
+	}
+	s.deployments[rec.Key] = &deployment{
+		Key:        rec.Key,
+		ProcessID:  rec.ProcessID,
+		Name:       rec.Name,
+		Version:    rec.Version,
+		DeployedAt: rec.DeployedAt,
+		ProjectID:  rec.ProjectID,
+		DeployedBy: rec.DeployedBy,
+		xml:        []byte(rec.XML),
+		cp:         cp,
+		inactive:   rec.Inactive,
 
-			diagramUpdatedAt: rec.DiagramUpdatedAt,
-			diagramUpdatedBy: rec.DiagramUpdatedBy,
+		diagramUpdatedAt: rec.DiagramUpdatedAt,
+		diagramUpdatedBy: rec.DiagramUpdatedBy,
+	}
+	s.order = append(s.order, rec.Key)
+	if rec.Version > s.versions[rec.ProcessID] {
+		s.versions[rec.ProcessID] = rec.Version
+	}
+	if rec.Key >= s.nextKey {
+		s.nextKey = rec.Key + 1
+	}
+	return nil
+}
+
+// restoreDecisionDeployment brings one decision deployment back: recompile its
+// persisted DMN source into the registry under the key it was deployed with, and
+// resume its per-decision version counters
+// (ADR-draft-durable-versioned-decision-deployments). Nothing compiled was ever
+// persisted, so the registry is rebuilt from source here — off the processor, and
+// before the loop serves traffic.
+func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {
+	// The same ADR-0177 split the bundled models above get, for the same reason:
+	// refusing a decision that has stopped compiling cleanly undeploys nothing, it
+	// only keeps the server from starting. A decision whose logic no longer compiles
+	// fails when it is evaluated — a job error on a worker, which the engine has an
+	// answer for — while every other decision in the model keeps answering.
+	problems, err := s.dmnRegistry.ReloadDecision(rec.Key, []byte(rec.XML))
+	if err != nil {
+		return fmt.Errorf("api: reload decision deployment %d from %s: %w", rec.Key, s.decisionDeploys.fileFor(rec.Key), err)
+	}
+	if problems != "" {
+		logging.Warn(logging.DeploymentReloadedWithProblems,
+			"a deployed decision no longer compiles cleanly; it was restored and the decisions that still compile keep answering — fix the model and publish it again",
+			slog.Uint64("deploymentKey", rec.Key),
+			slog.String("modelRef", rec.ModelRef),
+			slog.String("artifact", "dmn"),
+			slog.String("problems", problems))
+	}
+	for _, d := range rec.Decisions {
+		if d.Version > s.decisionVersions[d.ID] {
+			s.decisionVersions[d.ID] = d.Version
 		}
-		s.order = append(s.order, rec.Key)
-		if rec.Version > s.versions[rec.ProcessID] {
-			s.versions[rec.ProcessID] = rec.Version
-		}
-		if rec.Key >= s.nextKey {
-			s.nextKey = rec.Key + 1
-		}
+	}
+	if rec.Key >= s.nextKey {
+		s.nextKey = rec.Key + 1
 	}
 	return nil
 }

@@ -1362,6 +1362,18 @@ type CompiledProcess struct {
 	documentation      int32               // interned <bpmn:documentation> of the process itself, -1 if none
 	lanes              []LaneDetail        // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string            // intern table (index → string), for debug/export
+	// decisionPins is the exact decision deployment each latest-bound business rule
+	// task evaluates against, resolved once when this definition was deployed and
+	// restored from the deployment record on reload
+	// (ADR-draft-durable-versioned-decision-deployments). It is not compiled from
+	// the model — the model says "latest", the deployment says which one that was —
+	// so it is written by PinDecisions after Build and before the definition is
+	// visible to the processor, the same post-compile discipline Version and
+	// ResolveJobTypes already use. decisionsPinned is the policy marker: false means
+	// this definition predates deploy-time pinning and still resolves latest at task
+	// activation (ADR-0063).
+	decisionPins    map[string]uint64
+	decisionsPinned bool
 }
 
 // Node returns the node with the given ElementId.
@@ -1981,6 +1993,69 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 		}
 	}
 	return out
+}
+
+// LatestBoundDecisions returns the DMN decision ids this process's *local,
+// latest-bound* business rule tasks reference, distinct and in node order — the
+// references a deployment has to resolve to an exact decision deployment
+// (ADR-draft-durable-versioned-decision-deployments).
+//
+// It is deliberately narrower than [CompiledProcess.BusinessRuleDecisions]: a
+// deployment-bound task already names its model (the snapshot registered under
+// this process's own key) and a central decision resolves through its worker
+// (ADR-0050), so neither has a version to pin.
+func (p *CompiledProcess) LatestBoundDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding != BindingLatest {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// PinDecisions records the decision deployment each latest-bound reference
+// resolved to, and marks this definition as one that resolved them at deploy time
+// (ADR-draft-durable-versioned-decision-deployments). An empty or nil map is a
+// meaningful call: it says "this definition was deployed under the pinning policy
+// and had nothing to pin".
+//
+// It mutates the compiled process, so it must be called on the deploying
+// goroutine before the definition is handed to the processor — the same window
+// Version and ResolveJobTypes are set in. After that the definition is read-only
+// and safe for concurrent evaluation.
+func (p *CompiledProcess) PinDecisions(pins map[string]uint64) {
+	p.decisionPins = pins
+	p.decisionsPinned = true
+}
+
+// DecisionsPinned reports whether this definition resolved its latest-bound
+// decision references at deploy time. False means it was deployed before that
+// existed, and its latest-bound tasks still resolve the newest deployed model at
+// task activation (ADR-0063) — the behavior it has been running under.
+func (p *CompiledProcess) DecisionsPinned() bool { return p.decisionsPinned }
+
+// PinnedDecisionKey returns the decision deployment a latest-bound task on this
+// decision id must evaluate against, and ok=false when there is none to use —
+// either because this definition was never pinned, or (defensively) because the
+// pin map does not carry that id. Both fall back to the runtime lookup rather
+// than to a key nobody chose.
+func (p *CompiledProcess) PinnedDecisionKey(decisionId string) (uint64, bool) {
+	if !p.decisionsPinned {
+		return 0, false
+	}
+	key, ok := p.decisionPins[decisionId]
+	return key, ok
 }
 
 // UserTask returns the user-task detail at the given table index.

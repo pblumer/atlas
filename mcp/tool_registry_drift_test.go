@@ -99,6 +99,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_terminate_instances":          "POST /api/v1/instances/terminate",
 	"atlas_instance_decisions":           "GET /api/v1/instances/{key}/decisions",
 	"atlas_deployed_decisions":           "GET /api/v1/decisions/deployed",
+	"atlas_decision_deployments":         "GET /api/v1/decision-deployments",
+	"atlas_deployed_decision_model":      "GET /api/v1/decision-deployments/{key}/xml",
 	"atlas_dmnref_graph":                 "GET /api/v1/dmnrefs/{id}/graph",
 	"atlas_get_decision_model":           "GET /api/v1/dmn-models/{ref}/xml",
 	"atlas_collaboration_runtime":        "GET /api/v1/collaborations/{key}/runtime",
