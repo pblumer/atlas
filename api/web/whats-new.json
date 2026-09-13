@@ -217,6 +217,49 @@
       }
     },
     {
+      "id": "the-decision-editor-is-a-page-of-the-modeler-not-a-window-ov",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Edit a decision on its own page, with an address you can share",
+        "de": "Eine Entscheidung auf einer eigenen Seite bearbeiten — mit einer Adresse zum Weitergeben"
+      },
+      "summary": {
+        "en": "Decisions opened in a window that sat over whatever you were looking at. That meant a decision had no link you could send anyone, the browser's back button closed the editor and threw the edit away, and there was no difference between saving your work and replacing the model every process reading it uses. A decision now opens like a diagram or a form: its own page, its own address, the same bar along the top, and the back button doing what it does everywhere else. Save keeps you where you are and points the address at the decision you just wrote, so saving again updates it instead of making a second one. Creating a decision from a business rule task is still one button — it now takes you to the editor and brings you back with the task filled in, and it saves your diagram as a draft on the way out so nothing is lost.",
+        "de": "Entscheidungen öffneten sich in einem Fenster über dem, was man gerade ansah. Das hiess: keine Adresse, die man jemandem schicken kann, der Zurück-Knopf des Browsers schloss den Editor und verwarf die Änderung, und zwischen «meine Arbeit sichern» und «das Modell ersetzen, mit dem jeder lesende Prozess arbeitet» gab es keinen Unterschied. Eine Entscheidung öffnet sich jetzt wie ein Diagramm oder ein Formular: eigene Seite, eigene Adresse, dieselbe Leiste oben, und der Zurück-Knopf tut, was er überall sonst tut. Speichern lässt Sie, wo Sie sind, und richtet die Adresse auf die eben geschriebene Entscheidung — erneutes Speichern aktualisiert sie also, statt eine zweite anzulegen. Eine Entscheidung aus einem Business-Rule-Task heraus anzulegen bleibt ein Knopfdruck: Der Weg führt jetzt in den Editor und zurück, mit ausgefülltem Task, und das Diagramm wird auf dem Weg hinaus als Entwurf gesichert, damit nichts verloren geht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "In an application, choose Create new → Decision (DMN). The editor opens on its own page; the address bar now names the decision.",
+          "Model the table and press Save. The address changes to the stored decision, so you can bookmark it or send the link.",
+          "Press back in the browser, or the link at the top left, to return to the application.",
+          "From a business rule task, ＋ New decision takes you to the same editor. Come back with the browser's back button and the task has the decision, its inputs and its result variable filled in."
+        ],
+        "de": [
+          "In einer Anwendung Create new → Decision (DMN) wählen. Der Editor öffnet sich als eigene Seite; die Adresszeile benennt jetzt die Entscheidung.",
+          "Die Tabelle modellieren und Save drücken. Die Adresse wechselt auf die gespeicherte Entscheidung — damit lässt sie sich als Lesezeichen ablegen oder als Link verschicken.",
+          "Mit dem Zurück-Knopf des Browsers oder dem Link oben links zurück zur Anwendung.",
+          "Aus einem Business-Rule-Task führt ＋ New decision in denselben Editor. Mit dem Zurück-Knopf zurück, und der Task trägt die Entscheidung, ihre Inputs und die Result-Variable bereits."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-dmn-decision-is-a-durable-versioned-deployment-artifact-an",
       "version": "Unreleased",
       "date": null,
@@ -372,27 +415,6 @@
           "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
         ]
       }
-    },
-    {
-      "id": "a-value-stream-is-an-element-you-can-draw",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Draw a value stream",
-        "de": "Einen Wertstrom zeichnen"
-      },
-      "summary": {
-        "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
-        "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
     }
   ]
 }

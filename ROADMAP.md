@@ -320,14 +320,26 @@ The control-flow basics most real models use.
   as the base. Wiring the clio/REST workers the same way, health probes, and
   external vendor workers remain ADR-0041 follow-ups.
   **A decision can now be authored in Atlas** ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md)):
-  the business rule task panel has "＋ Neue Decision" / "Bearbeiten" buttons that open
-  an embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
+  the business rule task panel has "＋ New decision" / "Edit" buttons that reach an
+  embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
   DRD + decision-table authoring surface. On save the model is stored (new reference,
   or overwritten in place when editing) and the decision's inputs and output are
   adopted into the task automatically through the existing picker path, so the
   empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
   reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
   authoring the FEEL/logic and model versioning still live in temis.
+  **That editor is now a page rather than a window over one**
+  ([ADR-draft-the-decision-editor-is-a-page](docs/adr/draft-the-decision-editor-is-a-page.md)):
+  a decision is edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
+  chrome the BPMN and form editors wear — breadcrumb, `.etabs` tab strip, Save — so it
+  can be bookmarked, linked and reloaded, and the browser's back button means what it
+  means everywhere else. The overlay fitted ADR-0062's picker-shaped entry point; it
+  stopped fitting when ADR-0319 made a decision a deployable, versioned artifact of
+  its own. Authoring one *for* a business rule task now leaves the diagram (saving it
+  as a draft first) and adopts what was authored on the way back, so the one-button
+  flow survives the move. Still to come: a draft state for a decision, Deploy from
+  inside the editor, XML export, documentation, auto-layout, a collaborative session,
+  and a panel that evaluates a decision against sample inputs.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

@@ -1062,7 +1062,8 @@ function setChrome(appId, route) {
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
-  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/") ||
+    route.includes("/modeler/dmn/new") || route.includes("/modeler/dmn/e/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -2950,7 +2951,7 @@ async function viewProjectDetail(id) {
       const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
       const items = [{ label: "View", icon: "▦", href }, { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } }];
       if (canWrite) items.unshift(
-        { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
+        { label: "Edit", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
       if (canWrite) items.push(
         ...moveItems(r.projectId, "moveref", r.id),
         { sep: true },
@@ -3050,14 +3051,14 @@ async function viewProjectDetail(id) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
-        case "newdec": createDecision(ungrouped ? "" : id, render); break;
+        case "newdec": createDecision(ungrouped ? "" : id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
         case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
         case "valproj": validateProject(id); break;
         case "valref": validateDmnRef(b.dataset.id); break;
-        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }, render); break;
+        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
@@ -3623,21 +3624,18 @@ function pickFile(accept) {
   });
 }
 
-// createDecision authors a *new* decision in place: it opens the embedded dmn-js
-// editor (ADR-0062) on a seed model and, on save, stores the model and files a
-// reference to it under the application. It is the decision counterpart of "BPMN
-// diagram" in the same menu — an application can now be built out of decisions
-// with no diagram in it at all, and publishing it deploys them as runtime
-// artifacts (ADR-0319).
+// createDecision opens the decision editor on a seed model, filing what it saves
+// under the application. It is the decision counterpart of "BPMN diagram" in the
+// same menu — an application can be built out of decisions with no diagram in it at
+// all, and publishing it deploys them as runtime artifacts (ADR-0319).
 //
-// The editor module is imported lazily, the same discipline editDmnRef uses, so
-// the Modeler home stays light. A cancelled or failed save resolves to null and
-// leaves the application untouched (the editor reports why itself).
-async function createDecision(projectId, reload) {
-  const { openDmnEditor } = await import("./dmn-editor.js");
-  const result = await openDmnEditor({ api, toast, projectId: projectId || "" });
-  if (!result) return;
-  await reload();
+// It navigates rather than opening a window over this one: a decision is edited on a
+// page of its own, like a diagram and a form
+// (ADR-draft-the-decision-editor-is-a-page).
+function createDecision(projectId) {
+  location.hash = projectId
+    ? "#/modeler/dmn/new/p/" + encodeURIComponent(projectId)
+    : "#/modeler/dmn/new";
 }
 
 // createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
@@ -4855,31 +4853,18 @@ function toggleSetSecret(row, name, workers, put, reload) {
   form.querySelector('[name="value"]').focus();
 }
 
-// editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,
-// on save, keeps the Project Explorer in sync. Editing overwrites the model in
-// place under the same handle, so the reference (and any business-rule-task
-// selection) stays valid; only the display name can drift, so a rename in the
-// editor is mirrored onto the reference here. The editor module is imported lazily
-// — same discipline as the BPMN editor — so the Modeler home stays light. When the
-// model can't be edited locally (a remote temis service, or a dangling handle) the
-// editor surfaces the failure itself and resolves to null, leaving the row as-is.
-async function editDmnRef(ref, reload) {
+// editDmnRef opens the decision editor on a reference's model. Editing overwrites
+// the model in place under the same handle, so the reference (and any
+// business-rule-task selection) stays valid; a rename in the editor is mirrored onto
+// the reference by the editor itself. A reference with no locally editable model (a
+// remote temis service, or a dangling handle) has nothing to open, and says so here
+// rather than navigating to an editor that would only report the same thing.
+function editDmnRef(ref) {
   if (!ref.modelRef) {
-    toast("Diese DMN-Referenz hat kein lokal editierbares Modell.", "err");
+    toast("This decision has no locally editable model.", "err");
     return;
   }
-  const { openDmnEditor } = await import("./dmn-editor.js");
-  const result = await openDmnEditor({ api, toast, projectId: ref.projectId || "", modelRef: ref.modelRef });
-  if (!result) return; // cancelled or failed (the editor already reported why)
-  // Editing keeps the handle; mirror a decision rename onto the reference so the
-  // Explorer label doesn't go stale.
-  const newName = (result.name || "").trim();
-  if (newName && newName !== ref.name) {
-    try {
-      await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(ref.id)}`, { name: newName });
-    } catch (e) { toast("Modell gespeichert, Umbenennen fehlgeschlagen: " + e.message, "err"); }
-  }
-  await reload();
+  location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
@@ -8586,6 +8571,13 @@ async function viewEditor(key, projectId) {
 async function viewEditorDraft(id) {
   const gen = navGen;
   const mod = await import("./editor.js");
+  // A decision authored for one of this diagram's business rule tasks left what it
+  // saved behind on the way out; the task adopts it as the editor mounts, which is
+  // what keeps the ADR-0062 round trip working now that it is a navigation rather
+  // than a window (ADR-draft-the-decision-editor-is-a-page). One-shot: taking it
+  // clears it, so reopening the diagram later does not re-apply it.
+  const { takeAdoption } = await import("./dmn-editor.js");
+  const adopt = takeAdoption(id);
   // An existing draft carries its own projectId; resolve it so the editor can
   // offer a "back to project" breadcrumb (the route alone doesn't name it).
   let projectId = "";
@@ -8596,7 +8588,19 @@ async function viewEditorDraft(id) {
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
   if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
-  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project, adopt });
+}
+
+// viewDmnEditor mounts the decision editor
+// (ADR-draft-the-decision-editor-is-a-page). refId edits an existing decision;
+// without it a new one is authored, filed into projectId. forTask is the
+// {processId, elementId} of the business rule task the author pressed "＋ New
+// decision" on, which decides where back goes and whose task adopts what is saved.
+async function viewDmnEditor({ refId, projectId, forTask } = {}) {
+  const gen = navGen;
+  const mod = await import("./dmn-editor.js");
+  if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
+  await mod.mountDmnEditor(view, { api, toast, refId, projectId, forTask });
 }
 
 // generateFor, when given, is the {processId, elementId} the "Create a new form" link
@@ -8630,7 +8634,7 @@ async function viewInstanceReplay(key) {
 // ---------- Router ----------
 // viewDmnViewer renders a referenced DMN model: its decision requirements graph
 // (decisions, input data, and the requirements between them) drawn read-only from
-// the graph the embedded engine exposes, with a Bearbeiten button that opens the
+// the graph the embedded engine exposes, with an Edit button that opens the
 // embedded dmn-js editor (ADR-0062) on the same model. The SVG itself is a
 // picture, not an edit surface — editing happens in the modeler overlay, and on
 // save the view re-renders from the updated model.
@@ -8640,7 +8644,7 @@ async function viewDmnViewer(refId) {
   let g, ref = null;
   try {
     // The graph carries no model handle, so the reference is fetched alongside it
-    // to know which model the Bearbeiten button should open.
+    // to know which model the Edit button should open.
     const [graph, refs] = await Promise.all([
       api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`),
       api("GET", "/api/v1/dmnrefs").catch(() => []),
@@ -8671,13 +8675,13 @@ async function viewDmnViewer(refId) {
     } catch { /* keep the generic "← Project" label, which still links correctly */ }
   };
   const editBtn = ref && ref.modelRef
-    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Bearbeiten</button>` : "";
-  // Re-render from the updated model once the editor closes on a save; also
-  // resolves the back link's project name.
+    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Edit</button>` : "";
+  // Edit navigates to the decision editor's own page; coming back re-renders this
+  // viewer from the stored model. Also resolves the back link's project name.
   const wireEdit = () => {
     const b = document.getElementById("dmn-edit");
-    if (b) b.addEventListener("click", async () => {
-      await editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name }, () => viewDmnViewer(refId));
+    if (b) b.addEventListener("click", () => {
+      editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name });
     });
     resolveBack();
   };
@@ -8695,7 +8699,7 @@ async function viewDmnViewer(refId) {
       <div class="row">${editBtn}</div>
     </div>
     <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
-    <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
+    <p class="muted" style="font-size:12px">This decision can be edited in Atlas (<b>Edit</b>) or used from a business rule task through the Modeler's decision picker.</p></div>`;
   wireEdit();
 }
 
@@ -9040,6 +9044,30 @@ async function route() {
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
+    // The decision editor, before the viewer below: "new" and "e/…" would otherwise
+    // be read as reference ids by its catch-all
+    // (ADR-draft-the-decision-editor-is-a-page). The /for/… tail is the shape
+    // ADR-0260 gave "Create a new form" pressed on a step — here it is "＋ New
+    // decision" pressed on a business rule task, and it is what sends the author
+    // back to that diagram.
+    const dnewdec = path.match(/^#\/modeler\/dmn\/new(?:\/p\/([^/]+))?(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dnewdec) {
+      return await viewDmnEditor({
+        projectId: dnewdec[1] ? decodeURIComponent(dnewdec[1]) : "",
+        forTask: dnewdec[3]
+          ? { processId: decodeURIComponent(dnewdec[2]), elementId: decodeURIComponent(dnewdec[3]) }
+          : null,
+      });
+    }
+    const dedit = path.match(/^#\/modeler\/dmn\/e\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dedit) {
+      return await viewDmnEditor({
+        refId: decodeURIComponent(dedit[1]),
+        forTask: dedit[3]
+          ? { processId: decodeURIComponent(dedit[2]), elementId: decodeURIComponent(dedit[3]) }
+          : null,
+      });
+    }
     const dv = path.match(/^#\/modeler\/dmn\/(.+)$/);
     if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);

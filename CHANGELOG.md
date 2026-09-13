@@ -224,6 +224,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The decision editor is a page of the Modeler, not a window over one.** A decision
+  used to be edited in a modal overlay. That fitted what a decision was when the editor
+  was built: a reference to a model file some process happened to use, stepped into from
+  the business-rule-task picker and stepped back out of. Since a decision became a
+  durable, versioned artifact published in its own right, an overlay costs four things a
+  page gives for nothing — a decision had no address to bookmark or send, the browser's
+  back button dismissed the editor and dropped the edit, saving was indistinguishable
+  from publishing the model every reference resolves to, and publishing was somewhere
+  else entirely.
+
+  A decision is now edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
+  chrome the BPMN and form editors wear: a breadcrumb back to the application by name,
+  the same tab strip (the DRG overview and each decision's own table), a model-handle
+  chip, a status line and **Save**. Save stays on the page and moves the URL onto the
+  decision it just wrote, so a second Save updates it rather than creating a second one.
+  The labels are English, like the rest of the Modeler — the overlay was German only,
+  and so was the starter model it seeded.
+
+  **Authoring a decision from a business rule task still takes one button.** It now
+  leaves the diagram instead of covering it: the diagram is saved as a draft first (the
+  rule the call-activity drill-down already used), and what the editor saved is adopted
+  by the task on the way back — decision id, input mappings and result variable filled
+  in, exactly as before. A deployed definition opened read-only has no draft to return
+  to, so it asks before leaving and the decision is picked afterwards.
+  ([ADR-draft-the-decision-editor-is-a-page](docs/adr/draft-the-decision-editor-is-a-page.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **A DMN decision is a durable, versioned deployment artifact, and a deployed process is
   frozen to the version it was deployed against.** A decision used to exist only as a
   model bundled into some process's deployment. An application whose only artifact was
