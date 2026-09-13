@@ -338,14 +338,14 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	}
 	apps := src[start : start+end]
 
-	if !strings.Contains(apps, `route: "/portal.html"`) {
+	if !strings.Contains(apps, `route: "portal.html"`) {
 		t.Error("no menu entry leads to the service portal. The page is served and " +
 			"works; without an entry it is reachable only by somebody who already " +
 			"knows the URL, which is every employee except the one who built it")
 	}
 	// Gated like the Tasks inbox: everybody signed in orders things, and a portal
 	// only modellers can see is a portal for nobody.
-	if !strings.Contains(apps, `{ id: "portal", name: "Portal", route: "/portal.html", on: true, role: "user" },`) {
+	if !strings.Contains(apps, `{ id: "portal", name: "Portal", route: "portal.html", on: true, role: "user" },`) {
 		t.Error("the portal entry is not in the expected shape; check its role gate — " +
 			"an ordinary employee must see it")
 	}
@@ -358,7 +358,7 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	// The approver's half, which had the same gap for longer and worse: it was
 	// reached only through the link in its notification mail, so an approver who
 	// deleted the mail had no way back to a decision somebody was waiting on.
-	if !strings.Contains(apps, `route: "/genehmigung.html"`) {
+	if !strings.Contains(apps, `route: "genehmigung.html"`) {
 		t.Error("no menu entry leads to the approvals page. Its only other way in is " +
 			"the link in a notification mail, and a decision nobody can reach is an " +
 			"order that waits forever")

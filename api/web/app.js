@@ -557,14 +557,17 @@ const APPS = [
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
   // The service portal is a page of its own, not a view of this app, so its route
-  // is a path and not a hash. It is written for people who never open the modeler
+  // is a path and not a hash — written without a leading slash, because a route in
+  // this table is what the handbook appends to the site root (href="/" + route),
+  // and "//portal.html" would be a protocol-relative URL to a host of that name.
+  // It is written for people who never open the modeler
   // — ordering a laptop and seeing where the order stands — and it carries the
   // brand of the catalogue the visitor belongs to rather than this console's.
   //
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Portal", route: "/portal.html", on: true, role: "user" },
+  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user" },
   // The approver's half of the same surface, and a separate page for the same
   // reason: it answers to a different person. Until now it was reached only
   // through the link in its notification mail, so an approver who deleted the mail
@@ -575,7 +578,7 @@ const APPS = [
   // approval tomorrow without holding one today. The entry is therefore shown to
   // everybody and is empty for most, which is the honest cost of having no role to
   // ask: a count on it would fix that, and nothing here keeps one yet.
-  { id: "approvals", name: "Approvals", route: "/genehmigung.html", on: true, role: "user" },
+  { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
