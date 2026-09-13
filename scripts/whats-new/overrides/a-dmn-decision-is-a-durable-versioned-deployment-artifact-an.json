@@ -1,0 +1,32 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "Publish a decision on its own, and keep the version a process was deployed with",
+    "de": "Eine Entscheidung eigenständig veröffentlichen — und die Version behalten, mit der ein Prozess bereitgestellt wurde"
+  },
+  "summary": {
+    "en": "A decision used to be something a process carried. An application containing only a decision table published without complaint and put nothing into the engine, and after a restart there was still nothing there. A decision is now published in its own right: it gets a version, it is stored with the model it was published from, and it comes back after a restart with no file to re-import. An application can be built from decisions alone — «Create new → Decision (DMN)» opens the decision editor and files the result under the application. The second change matters more, and it is a change of behaviour: a business rule task set to «latest» now settles which version it uses at the moment the process is deployed, and keeps it. Publishing a newer decision no longer moves processes that are already running — deploy the process again when you want it to follow. Processes deployed before this release keep the behaviour they were deployed with until you redeploy them.",
+    "de": "Eine Entscheidung war bisher etwas, das ein Prozess mit sich trug. Eine Anwendung, die nur eine Entscheidungstabelle enthielt, liess sich anstandslos veröffentlichen, brachte aber nichts in die Engine, und nach einem Neustart war weiterhin nichts da. Eine Entscheidung wird jetzt eigenständig veröffentlicht: Sie erhält eine Version, wird zusammen mit dem Modell gespeichert, aus dem sie veröffentlicht wurde, und ist nach einem Neustart wieder da, ohne dass eine Datei erneut eingelesen werden muss. Eine Anwendung kann allein aus Entscheidungen bestehen — «Create new → Decision (DMN)» öffnet den Entscheidungseditor und legt das Ergebnis unter der Anwendung ab. Die zweite Änderung wiegt schwerer, und sie ändert das Verhalten: Ein Business-Rule-Task mit Bindung «latest» legt jetzt im Moment der Bereitstellung fest, welche Version er verwendet, und behält sie. Das Veröffentlichen einer neueren Entscheidung verschiebt bereits laufende Prozesse nicht mehr — wer das will, stellt den Prozess erneut bereit. Prozesse, die vor dieser Version bereitgestellt wurden, behalten ihr bisheriges Verhalten, bis sie erneut bereitgestellt werden."
+  },
+  "tutorial": {
+    "en": [
+      "Open an application in the Modeler and choose Create new → Decision (DMN). Model the table and save; the decision is filed under the application, no BPMN diagram needed.",
+      "Press Publish. The release now lists the decision it deployed, with its version, beside any processes.",
+      "Deploy a process whose business rule task is bound «latest». It is now tied to exactly that version of the decision.",
+      "Edit the decision and publish again: a new version appears, and the process you already deployed keeps answering with the old one. Deploy the process again to move it forward."
+    ],
+    "de": [
+      "Eine Anwendung im Modeler öffnen und Create new → Decision (DMN) wählen. Die Tabelle modellieren und speichern; die Entscheidung wird unter der Anwendung abgelegt, ganz ohne BPMN-Diagramm.",
+      "Publish drücken. Die Freigabe führt die bereitgestellte Entscheidung samt Version nun neben allfälligen Prozessen auf.",
+      "Einen Prozess bereitstellen, dessen Business-Rule-Task auf «latest» gebunden ist. Er ist jetzt an genau diese Version der Entscheidung gebunden.",
+      "Die Entscheidung bearbeiten und erneut veröffentlichen: Es entsteht eine neue Version, und der bereits bereitgestellte Prozess antwortet weiterhin mit der alten. Für den Wechsel den Prozess erneut bereitstellen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}
