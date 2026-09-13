@@ -257,18 +257,19 @@ func (d *directoryDecider) resolveOne(oid string, ps *pendingGroup) {
 		}
 	}
 	ps.rec.Members = resolved
+	joined, left := membershipDelta(before, resolved)
 
 	switch {
 	case ps.isNew:
 		ps.rec.UpdatedAt = d.now
 		d.counts.GroupsCreated++
 		d.groupPlan = append(d.groupPlan, directoryGroupDecision{
-			Action: dirGroupCreate, ObjectID: oid, Record: ps.rec})
+			Action: dirGroupCreate, ObjectID: oid, Record: ps.rec, Joined: joined, Left: left})
 	case ps.cleared:
 		ps.rec.UpdatedAt = d.now
 		d.counts.GroupsCleared++
 		d.groupPlan = append(d.groupPlan, directoryGroupDecision{
-			Action: dirGroupClear, ObjectID: oid, Record: ps.rec})
+			Action: dirGroupClear, ObjectID: oid, Record: ps.rec, Joined: joined, Left: left})
 	case sameGroupRecord(ps.orig, ps.rec):
 		d.counts.GroupsUnchanged++
 		d.groupPlan = append(d.groupPlan, directoryGroupDecision{Action: dirGroupUnchanged, ObjectID: oid})
@@ -276,8 +277,28 @@ func (d *directoryDecider) resolveOne(oid string, ps *pendingGroup) {
 		ps.rec.UpdatedAt = d.now
 		d.counts.GroupsUpdated++
 		d.groupPlan = append(d.groupPlan, directoryGroupDecision{
-			Action: dirGroupUpdate, ObjectID: oid, Record: ps.rec})
+			Action: dirGroupUpdate, ObjectID: oid, Record: ps.rec, Joined: joined, Left: left})
 	}
+}
+
+// membershipDelta says who joined a group and who left it, in Atlas user ids.
+//
+// It exists because the group record is not where a running session reads its
+// memberships from: a session carries a snapshot (ADR-0185), and a group somebody has
+// just been removed from keeps granting whatever it grants until they sign in again.
+// So the change itself has to travel, not only the new state.
+func membershipDelta(before, after []string) (joined, left []string) {
+	for _, id := range after {
+		if !containsID(before, id) {
+			joined = append(joined, id)
+		}
+	}
+	for _, id := range before {
+		if !containsID(after, id) {
+			left = append(left, id)
+		}
+	}
+	return joined, left
 }
 
 // containsID reports whether a sorted-or-not slice holds an id.

@@ -240,6 +240,18 @@ reading like somebody left the mirror in reporting mode.
   cannot start an instance and cannot read the log. It is **not** made an
   administrator: `TestTokenRolesNeverIncludeAdmin` still holds, and the confinement is
   the allowlist.
+- **Disabling is not only a record.** A session that is already open is not re-checked
+  against the user store on every request, and an OAuth grant can stand for months
+  (ADR-0200), so writing `disabled: true` stops nothing by itself. A run that writes
+  therefore also ends the person's live sessions and revokes their standing grants —
+  what the administration API has always done — and pushes every mirrored group
+  membership it changed into the sessions that are already open (ADR-0185), because a
+  session carries the group ids it was opened with and nothing on the access path
+  re-reads the group store. Without that half, a mirror would be a *quieter* way to
+  disable somebody than the button that says so, and the gap would last until the
+  session expired. It runs after the run-loop turn and never inside it: revoking grants
+  dispatches onto the loop, which from inside a turn is a deadlock rather than a slow
+  path.
 - **Everything is audited**, including a run that wrote nothing: somebody read a whole
   tenant out of a directory, which is an event even when nothing changed here. Accounts
   are recorded under the existing `auth.user_created` / `auth.user_updated`, so an alert

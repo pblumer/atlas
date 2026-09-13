@@ -155,6 +155,15 @@ type directoryUserDecision struct {
 	Action   string `json:"action"`
 	ObjectID string `json:"objectId"`
 	Record   User   `json:"-"`
+
+	// Disabling marks a decision that turns an enabled account off, on whichever path
+	// reached that — a departure, a disabled flag, or a merge onto somebody who had
+	// already left. It is a field rather than a reading of Action because a merge that
+	// also disables is both, and because what depends on it is not cosmetic: a record
+	// written with Disabled set stops nothing on its own. The session that is already
+	// open and the OAuth grant that is already standing have to be taken away too, and
+	// that is the caller's work, after the write.
+	Disabling bool `json:"disabling,omitempty"`
 }
 
 // directoryGroupDecision is one group the plan would write, on the same terms.
@@ -162,6 +171,14 @@ type directoryGroupDecision struct {
 	Action   string `json:"action"`
 	ObjectID string `json:"objectId"`
 	Record   group  `json:"-"`
+
+	// Joined and Left are the membership change in Atlas user ids. They are carried
+	// because a group id lives in a live session's snapshot and nowhere else on the
+	// access path (ADR-0185): writing the group record alone leaves everybody who is
+	// signed in holding the grants of a group they have just left, until they next log
+	// in. The caller pushes these into the sessions after the write.
+	Joined []string `json:"joined,omitempty"`
+	Left   []string `json:"left,omitempty"`
 }
 
 // directoryCounts is the expected, in numbers.
@@ -404,7 +421,7 @@ func (d *directoryDecider) decideDeparture(mu directoryUser, oid string) error {
 	d.counts.UsersDisabled++
 	d.note(directoryNote{Kind: noteDisable, ObjectID: oid, Subject: rec.Username, UserID: rec.ID,
 		Detail: "the directory no longer holds this object" + removalReason(mu.Removed)})
-	d.commitUser(directoryUserDecision{Action: dirUserDisable, ObjectID: oid, Record: rec})
+	d.commitUser(directoryUserDecision{Action: dirUserDisable, ObjectID: oid, Record: rec, Disabling: true})
 	return nil
 }
 
@@ -439,7 +456,7 @@ func (d *directoryDecider) decideKnownUser(mu directoryUser, oid string, rec Use
 	} else {
 		d.counts.UsersUpdated++
 	}
-	d.commitUser(directoryUserDecision{Action: action, ObjectID: oid, Record: rec})
+	d.commitUser(directoryUserDecision{Action: action, ObjectID: oid, Record: rec, Disabling: disabling})
 	return nil
 }
 
@@ -461,8 +478,9 @@ func (d *directoryDecider) decideMerge(mu directoryUser, oid string, rec User) e
 	// account existing, and refusing it because the disable was refused would leave
 	// the duplicate this rule exists to avoid — with no later run to try again, since
 	// the object will not be reported a second time.
-	if mu.AccountEnabled != nil && !*mu.AccountEnabled && d.mayDisable(rec, oid) {
-		rec.Disabled = true
+	disabling := false
+	if mu.AccountEnabled != nil && !*mu.AccountEnabled && !rec.Disabled && d.mayDisable(rec, oid) {
+		rec.Disabled, disabling = true, true
 	}
 	rec.UpdatedAt = d.now
 	d.counts.UsersMerged++
@@ -474,7 +492,7 @@ func (d *directoryDecider) decideMerge(mu directoryUser, oid string, rec User) e
 			Detail: "the account this merge attaches to holds " + strings.Join(extra, ", ") +
 				"; the merge neither grants nor removes a role, so it keeps them"})
 	}
-	d.commitUser(directoryUserDecision{Action: dirUserMerge, ObjectID: oid, Record: rec})
+	d.commitUser(directoryUserDecision{Action: dirUserMerge, ObjectID: oid, Record: rec, Disabling: disabling})
 	return nil
 }
 

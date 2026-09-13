@@ -181,9 +181,49 @@ func (s *Server) handleDirectorySync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if applied {
+		s.enforceDirectoryPlan(plan)
+	}
 	rep := directoryReportOf(plan, msg, state, applied, s.budgets())
 	auditDirectorySync(r, rep, plan, applied)
 	httpapi.JSON(w, http.StatusOK, rep)
+}
+
+// enforceDirectoryPlan makes a written plan take effect on the people who are
+// already signed in.
+//
+// Writing the record is not the whole of disabling somebody, and this is the half
+// that is easy to forget because nothing fails without it. A session that is already
+// open is not re-checked against the user store on every request, and an OAuth grant
+// can stand for months (ADR-0200) — so an account the directory says has left would
+// keep working until its session expired. The administration API has always done both
+// (handlePatchUser); a mirror that only saved the record would be a quieter way to
+// disable somebody than the button that says so.
+//
+// Group membership is the same shape for the same reason: a session carries the group
+// ids it was opened with (ADR-0185), so a person removed from a
+// mirrored group keeps its grants until they next sign in unless the change is pushed
+// into the session that is already open.
+//
+// It runs after the run-loop turn, never inside it. Two of these calls take locks of
+// their own and revokeUserGrants dispatches onto the loop itself, which from inside a
+// turn is a deadlock rather than a slow path.
+func (s *Server) enforceDirectoryPlan(plan directoryPlan) {
+	for _, dec := range plan.Users {
+		if !dec.Disabling {
+			continue
+		}
+		s.sessions.destroyUser(dec.Record.ID)
+		s.revokeUserGrants(dec.Record.ID)
+	}
+	for _, dec := range plan.Groups {
+		for _, id := range dec.Joined {
+			s.sessions.setUserGroupMembership(id, dec.Record.ID, true)
+		}
+		for _, id := range dec.Left {
+			s.sessions.setUserGroupMembership(id, dec.Record.ID, false)
+		}
+	}
 }
 
 // directoryTooManyObjects is the refusal a batch above the budget gets, written out

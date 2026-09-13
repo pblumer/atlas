@@ -38,6 +38,12 @@ _Changed_ / _Removed_ for each version.
   resolved. The mode is a field of the message spelled `apply`, so an omission reports
   rather than provisions, and every report that wrote nothing says so and why.
 
+  Disabling somebody is not only a record: the run that writes it also ends their live
+  sessions, revokes their standing OAuth grants, and pushes every mirrored group
+  membership it changed into the sessions that are already open — a session carries the
+  group ids it was opened with, so without that half a mirror would be a quieter way to
+  disable somebody than the administration button that says so.
+
   An account mirrored onto one a federated login created keeps both identities: Entra's
   ID-token `sub` is pairwise per application and is therefore never the directory object
   id, so the object id lives in a new `directoryId` field and the pairwise subject stays

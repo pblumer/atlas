@@ -442,3 +442,105 @@ func TestAnAppliedRunThatChangesNothingStillMovesTheCursor(t *testing.T) {
 		t.Errorf("revision = %v, want 2", end["revision"])
 	}
 }
+
+// TestDisablingSomebodyEndsTheSessionTheyAreAlreadyIn — and a reporting run does not.
+//
+// Writing `disabled: true` into a record stops nothing by itself: a session that is
+// already open is not re-checked against the user store on every request. A mirror
+// that only saved the record would therefore be a quieter way to disable somebody than
+// the administration button that says so, and the gap would last until the session
+// expired — which for somebody who has left the organisation is exactly the window
+// that must not exist.
+func TestDisablingSomebodyEndsTheSessionTheyAreAlreadyIn(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "correct horse battery")
+	admin := newClient(t)
+	login(t, admin, ts, "root", "correct horse battery")
+
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/users",
+		`{"username":"ada","email":"ada@example.org","password":"a long enough secret"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create user: status=%d body=%s", code, body)
+	}
+
+	ada := newClient(t)
+	if code := login(t, ada, ts, "ada", "a long enough secret"); code != http.StatusOK {
+		t.Fatalf("ada could not sign in: %d", code)
+	}
+	signedIn := func() int {
+		code, _ := cReq(t, ada, ts, "GET", "/api/v1/auth/me", "")
+		return code
+	}
+	if signedIn() != http.StatusOK {
+		t.Fatal("ada's session was not live to begin with")
+	}
+
+	// Attach the directory object to her account, so the mirror knows who she is.
+	linked := `{"apply":true,"fromRevision":0,"users":[` +
+		`{"id":"oid-ada","userPrincipalName":"ada@example.org","mail":"ada@example.org","accountEnabled":true}]}`
+	if rep := postSync(t, admin, ts, linked); rep["applied"] != true {
+		t.Fatalf("the merge did not happen: %+v", rep)
+	}
+	if signedIn() != http.StatusOK {
+		t.Fatal("merging ended her session; a merge is not a departure")
+	}
+
+	// She leaves the directory — reported only. Nothing may happen yet.
+	gone := `"users":[{"id":"oid-ada","@removed":{"reason":"deleted"}}]`
+	postSync(t, admin, ts, `{"apply":false,"fromRevision":1,`+gone+`}`)
+	if signedIn() != http.StatusOK {
+		t.Fatal("a reporting run ended her session; it must decide everything and do nothing")
+	}
+
+	// And now for real.
+	rep := postSync(t, admin, ts, `{"apply":true,"fromRevision":1,`+gone+`}`)
+	if rep["applied"] != true {
+		t.Fatalf("the departure was not applied: %+v", rep)
+	}
+	if got := signedIn(); got != http.StatusUnauthorized {
+		t.Errorf("ada is still signed in (status %d) after the directory said she had left", got)
+	}
+}
+
+// TestLeavingAMirroredGroupTakesEffectWithoutSigningInAgain. A session carries the
+// group ids it was opened with and nothing on the access path re-reads the group
+// store, so a membership the mirror withdraws has to be pushed into the sessions that
+// are already open — or the person keeps whatever the group grants until they happen
+// to log in again.
+func TestLeavingAMirroredGroupTakesEffectWithoutSigningInAgain(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "correct horse battery")
+	admin := newClient(t)
+	login(t, admin, ts, "root", "correct horse battery")
+
+	joined := `{"apply":true,"fromRevision":0,` +
+		`"users":[{"id":"oid-ada","userPrincipalName":"ada@example.org","mail":"ada@example.org","accountEnabled":true}],` +
+		`"groups":[{"id":"oid-team","displayName":"Team","members@delta":[{"id":"oid-ada","@odata.type":"#microsoft.graph.user"}]}]}`
+	if rep := postSync(t, admin, ts, joined); rep["applied"] != true {
+		t.Fatalf("the first run did not write: %+v", rep)
+	}
+
+	left := `{"apply":true,"fromRevision":1,"groups":[{"id":"oid-team","displayName":"Team",` +
+		`"members@delta":[{"id":"oid-ada","@removed":{}}]}]}`
+	rep := postSync(t, admin, ts, left)
+	if rep["applied"] != true {
+		t.Fatalf("the removal was not applied: %+v", rep)
+	}
+
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/groups", "")
+	if code != http.StatusOK {
+		t.Fatalf("list groups: %d", code)
+	}
+	var groups []struct {
+		Name    string   `json:"name"`
+		Source  string   `json:"source"`
+		Members []string `json:"members"`
+	}
+	if err := json.Unmarshal(body, &groups); err != nil {
+		t.Fatalf("decode groups: %v (%s)", err, body)
+	}
+	if len(groups) != 1 || groups[0].Name != "Team" || groups[0].Source != "entra" {
+		t.Fatalf("groups = %+v, want the mirrored one, marked as mirrored", groups)
+	}
+	if len(groups[0].Members) != 0 {
+		t.Errorf("members = %v, want the withdrawal carried out", groups[0].Members)
+	}
+}
