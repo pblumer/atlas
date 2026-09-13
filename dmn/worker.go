@@ -161,19 +161,42 @@ func JSONObject(m map[string]any) string {
 // ([compiler.DMNJobTypeIndex]). sink, if non-nil, observes each result.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry, sink func(Result)) job.CompletingHandler {
 	return DecisionHandler(store, lookup, func(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail) (Evaluator, error) {
-		// The task's binding selects which deployed model version to evaluate
-		// (ADR-0063): deployment pins to this process's own snapshot; latest (the
-		// default) tracks the newest deployed version of the decision. Both request
-		// the trace so the evaluation is retained with its explanation (ADR-0066).
+		// Which deployed model to evaluate was decided when the process was deployed
+		// (ADR-0319), so this picks it up
+		// rather than choosing. Both paths request the trace so the evaluation is
+		// retained with its explanation (ADR-0066).
 		return func(ctx context.Context, decisionId string, inputs map[string]any) (Evaluation, error) {
-			if detail.Binding == compiler.BindingDeployment {
-				out, trace, err := reg.EvaluateTraced(ctx, cp.Key, decisionId, inputs)
+			if key, ok := decisionModelKey(cp, detail, decisionId); ok {
+				out, trace, err := reg.EvaluateTraced(ctx, key, decisionId, inputs)
 				return Evaluation{Outputs: out, Trace: trace}, err
 			}
 			out, trace, err := reg.EvaluateLatestTraced(ctx, decisionId, inputs)
 			return Evaluation{Outputs: out, Trace: trace}, err
 		}, nil
 	}, sink)
+}
+
+// decisionModelKey answers which deployment's model a business rule task must
+// evaluate against, and ok=false when that was never settled at deploy time and
+// the ADR-0063 runtime lookup is still the answer.
+//
+// The three cases, in order:
+//
+//   - `deployment` binding — the model snapshotted with this process, under this
+//     process's own key. Unchanged since ADR-0014, and unaffected by pinning: the
+//     two bindings follow different lineages.
+//   - `latest` binding on a definition deployed with pinning — the exact decision
+//     deployment its deploy resolved
+//     (ADR-0319). No version is selected
+//     here, on replay, or anywhere else after the deploy (invariants I5/I6).
+//   - `latest` binding on a definition deployed before pinning existed — ok=false,
+//     so the caller keeps resolving the newest deployed model at activation, which
+//     is the behavior that definition has been running under.
+func decisionModelKey(cp *compiler.CompiledProcess, detail *compiler.BusinessRuleTaskDetail, decisionId string) (uint64, bool) {
+	if detail.Binding == compiler.BindingDeployment {
+		return cp.Key, true
+	}
+	return cp.PinnedDecisionKey(decisionId)
 }
 
 // buildInputs assembles a decision's input context: the static constant inputs as

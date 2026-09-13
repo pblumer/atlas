@@ -4117,7 +4117,11 @@ test("a drafts fetch that fails puts the switch back", async ({ page }) => {
   await page.goto("/index.html#/panorama/starmap");
   await expect(page.locator(".mesh-canvas")).toBeVisible();
 
-  await page.locator("#mesh-drafts").check();
+  // click, not check: check() asserts the box stays checked after the click, and
+  // this test is about a view that deliberately puts it back. Whether the revert
+  // lands before or after Playwright verifies is a race, and the test failed on it
+  // about one run in five. The assertions below are the real ones either way.
+  await page.locator("#mesh-drafts").click();
   await expect(page.locator("#mesh-drafts")).not.toBeChecked();
   await expect(page.locator('[data-node-id="process:1"]')).toHaveCount(1);
 });

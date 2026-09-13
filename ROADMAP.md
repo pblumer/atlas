@@ -320,20 +320,48 @@ The control-flow basics most real models use.
   as the base. Wiring the clio/REST workers the same way, health probes, and
   external vendor workers remain ADR-0041 follow-ups.
   **A decision can now be authored in Atlas** ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md)):
-  the business rule task panel has "＋ Neue Decision" / "Bearbeiten" buttons that open
-  an embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
+  the business rule task panel has "＋ New decision" / "Edit" buttons that reach an
+  embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
   DRD + decision-table authoring surface. On save the model is stored (new reference,
   or overwritten in place when editing) and the decision's inputs and output are
   adopted into the task automatically through the existing picker path, so the
   empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
   reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
   authoring the FEEL/logic and model versioning still live in temis.
+  **That editor is now a page rather than a window over one**
+  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md)):
+  a decision is edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
+  chrome the BPMN and form editors wear — breadcrumb, `.etabs` tab strip, Save — so it
+  can be bookmarked, linked and reloaded, and the browser's back button means what it
+  means everywhere else. The overlay fitted ADR-0062's picker-shaped entry point; it
+  stopped fitting when ADR-0319 made a decision a deployable, versioned artifact of
+  its own. Authoring one *for* a business rule task now leaves the diagram (saving it
+  as a draft first) and adopts what was authored on the way back, so the one-button
+  flow survives the move. Still to come: a draft state for a decision, Deploy from
+  inside the editor, XML export, documentation, auto-layout, a collaborative session,
+  and a panel that evaluates a decision against sample inputs.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
-  (the default, Camunda-style) evaluates the newest deployed version of the
-  decision, `deployment` pins to the version snapshotted with the process — surfaced
-  as a "Binding" dropdown on the task. `versionTag` (pin to a numbered version) is
-  the next step, once models are stored with version history.
+  and `deployment` — surfaced as a "Binding" dropdown on the task.
+  **A decision is now a durable, versioned deployment artifact in its own right**
+  ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md)),
+  which is what that binding now resolves against. Publishing an application
+  deploys its DMN models as *decision deployments*: durable records in a
+  `decisions/` sidecar store, keyed from the same definition key space process
+  definitions come from, versioned per decision id, holding the validated DMN
+  source and its checksum — never a compiled temis structure, so the registry is
+  rebuilt by compiling the stored source again at startup. An application can
+  therefore consist of decisions with **no BPMN in it at all**, and it still
+  publishes something the engine runs and recovers. And `latest` is now resolved
+  **when the process is deployed**, not when a token reaches the task: a deployment
+  pins each reference to an exact decision deployment and stores it, so publishing a
+  newer decision no longer changes an already-deployed process, and neither the
+  runtime nor a replay chooses a version (I5/I6). `deployment` binding is unchanged,
+  and deployments written before this keep resolving `latest` at activation, exactly
+  as they were deployed to. Served over `GET /api/v1/decision-deployments` (+
+  `/{key}/xml` for the deployed source), reported in the application release
+  manifest beside its processes. `versionTag` (pin to a numbered version) is now
+  buildable on top of this and is the next step.
   **A decision is now debuggable end to end**
   ([ADR-0066](docs/adr/0066-decision-evaluation-records.md)): the DMN worker
   requests temis's rules-fired **trace** during its off-path evaluation and rides
@@ -1009,9 +1037,12 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   Modeler home lists each project's artifacts plus an **Ungrouped** bucket, moving
   one between projects from a per-row dropdown. Two artifact types so far:
   **BPMN drafts** (Phase 1) and **DMN references** — a DMN artifact is a *pointer*
-  to a temis-authored model (display name + temis handle), never DMN XML, so Atlas
-  organizes and deploys the decision without becoming a DMN editor, honoring the
-  "no DMN authoring surface" non-goal (Phase 2, ADR-0014). A DMN reference is
+  to a model (display name + model handle) rather than a copy of its XML, so the
+  model has one home and every reference to it sees the same edit (Phase 2). The
+  model behind a reference is authored either in temis or, since
+  [ADR-0062](docs/adr/0062-embedded-dmn-editor.md), in Atlas's own embedded dmn-js
+  editor; publishing the application deploys it as a durable, versioned decision
+  deployment (see Milestone 1). A DMN reference is
   **resolved and validated at deploy time**: a pluggable `dmn.Resolver` (default:
   a `<data-dir>/dmn-models/` folder of temis-exported models; a temis git/service
   source — `dmn.ServiceResolver`, an HTTP model source selected by
@@ -1030,8 +1061,8 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   API, no engine impact). The Modeler presents this as a **two-level view**: a
   clean project landscape (one row per project + an *Ungrouped* bucket) and a
   per-project detail page with a single unified artifact table, a **Create new ▾**
-  dropdown (BPMN diagram / DMN reference / Form, filing new artifacts into the
-  project), a filter, and per-row action menus. Next: further artifact types
+  dropdown (BPMN diagram / Decision (DMN) / uploaded DMN model / Form, filing new
+  artifacts into the project), a filter, and per-row action menus. Next: further artifact types
   (element templates, READMEs, nested folders), and — later — **importing or
   backing up a whole project from/to a git repository** (a natural fit for the
   same `Resolver`/sidecar seam that already externalizes DMN models).
@@ -1753,15 +1784,17 @@ is the engine an organisation would model such a workflow *in*.
   reimplement BPMN rendering or modeling from scratch.
 - A batteries-included application server beyond the single-binary server above —
   the engine core stays a library first, with the server embedding it.
-- A standalone DMN authoring/product surface. Atlas *executes* the DMN decisions
-  a model references, via business rule tasks that delegate to the embedded temis
-  engine ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)); it does
-  not ship a DMN **modeler/editor** or decision-management product of its own —
-  decisions are authored in temis. (Atlas does offer a **read-only** view of a
-  referenced model's decision requirements graph, and a decision picker that
-  auto-reads inputs/outputs, so an author can *use* a decision without leaving the
-  Modeler; that is a look-and-use surface, not an authoring one.) FEEL is also used
-  internally for expressions.
+- A standalone DMN **product**. Atlas executes the DMN decisions a model
+  references, via business rule tasks that delegate to the embedded temis engine
+  ([ADR-0014](docs/adr/0014-dmn-business-rule-tasks-via-temis.md)), it embeds the
+  standard `dmn-js` editor so a decision can be authored and versioned in place
+  ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md),
+  [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md)),
+  and it offers a read-only decision-requirements-graph view and a decision picker
+  that auto-reads inputs/outputs. What it does not do is reimplement DMN rendering
+  or become a decision-management product beside the workflow engine: the editor is
+  `dmn-js`, the engine is temis, and the FEEL and decision logic stay temis's job.
+  FEEL is also used internally for expressions.
 
 ## Guiding constraints
 

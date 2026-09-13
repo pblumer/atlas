@@ -96,6 +96,7 @@ var persistentStores = []storeEntry{
 
 	// --- design time -------------------------------------------------------
 	{name: "deployments", class: classDesignTime, why: "the deployed process definitions"},
+	{name: "decisions", class: classDesignTime, why: "the deployed decision definitions, and the DMN source the registry is rebuilt from"},
 	{name: "drafts", class: classDesignTime, why: "work in progress in the Modeler"},
 	{name: "forms", class: classDesignTime, why: "task forms"},
 	{name: "projects", class: classDesignTime, why: "applications and their sharing scopes"},
@@ -107,6 +108,8 @@ var persistentStores = []storeEntry{
 	{name: "dmn-models", class: classDesignTime, onDemand: true, why: "decision models"},
 	{name: "public-links", class: classDesignTime, why: "shared links to forms"},
 	{name: "connectors", class: classDesignTime, why: "worker definitions"},
+	{name: "catalog", class: classDesignTime, why: "the portal's catalogues, the products in them, and the releases orders are placed against"},
+	{name: "orders", class: classInstance, why: "what somebody asked for, and how far each line got"},
 	{name: "repository", class: classDesignTime, why: "the shared artifact repository"},
 	{name: "inbound-subscriptions", class: classDesignTime, why: "which worker receives which message"},
 	{name: "settings", class: classDesignTime, why: "installation settings, including the OIDC claim mapping"},

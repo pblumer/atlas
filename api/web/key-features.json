@@ -116,8 +116,8 @@
         "de": "Entscheidungen als Tabellen"
       },
       "text": {
-        "en": "DMN business rule tasks with an embedded decision-table editor. Domain experts change the rules without redeploying the process, and every evaluation is recorded with inputs, outputs and the rule that hit.",
-        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Fachleute ändern die Regeln ohne Redeploy des Prozesses, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
+        "en": "DMN business rule tasks with an embedded decision-table editor. A decision is published as a versioned artifact of its own, a deployed process keeps evaluating the exact version it was deployed against, and every evaluation is recorded with inputs, outputs and the rule that hit.",
+        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Eine Entscheidung wird als eigenständig versioniertes Artefakt veröffentlicht, ein deployter Prozess wertet weiterhin genau die Version aus, gegen die er deployt wurde, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
       }
     },
     {

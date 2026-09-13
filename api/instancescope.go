@@ -168,7 +168,13 @@ func (s *Server) taskFieldsFor(pr *httpapi.Principal, piKey uint64) (map[string]
 			return nil
 		}
 		detail := d.cp.UserTask(n.Detail)
-		if !s.holdsTask(pr, jv.Assignee, d.cp.Intern(detail.CandidateGroups)) {
+		// The job's resolved groups where it has them, the model's otherwise — the
+		// same fallback enrichTaskWith uses, and for the same reason.
+		groups := jv.CandidateGroups
+		if groups == "" {
+			groups = d.cp.Intern(detail.CandidateGroups)
+		}
+		if !s.holdsTask(pr, jv.Assignee, groups) {
 			return nil
 		}
 		formID := d.cp.Intern(detail.FormId)

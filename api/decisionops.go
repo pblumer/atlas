@@ -79,6 +79,21 @@ func (s *Server) handleDeployedDecisions(w http.ResponseWriter, _ *http.Request)
 
 	var scanErr error
 	s.do(func() {
+		// Decisions deployed in their own right
+		// (ADR-0319). These are listed whether
+		// or not any process calls them: an application may publish decisions and no
+		// BPMN at all, and a decision nobody has referenced yet is still something the
+		// engine is holding — a deployed process with no instances is listed for the
+		// same reason. A read failure here is not fatal to the view: the deployment
+		// sweep and the evaluation history below still answer, and this row set only
+		// widens what is shown.
+		if recs, err := s.decisionDeploys.LoadAll(); err == nil {
+			for _, rec := range recs {
+				for _, d := range rec.Decisions {
+					get(d.ID).local = true
+				}
+			}
+		}
 		// Deployed decisions: every local business rule decision across all deployed
 		// definitions. These are the decisions snapshotted into the DMN registry, so a
 		// decision that has never been evaluated still lists with its referencing

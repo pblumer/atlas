@@ -17,12 +17,17 @@ import (
 // validated as part of the same action. Deployed is false when the bundle was
 // refused (Reason says why) and nothing was registered.
 type projectDeployResp struct {
-	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
-	Deployed    bool                   `json:"deployed"`
-	Reason      string                 `json:"reason,omitempty"`
-	Definitions []deployedProcess      `json:"definitions"`
-	References  []dmnRefValidationResp `json:"references"`
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Deployed    bool              `json:"deployed"`
+	Reason      string            `json:"reason,omitempty"`
+	Definitions []deployedProcess `json:"definitions"`
+	// Decisions are the DMN models this publish deployed as runtime artifacts in
+	// their own right — durable, versioned, and evaluable without a process to carry
+	// them (ADR-0319). An application whose
+	// only artifacts are decisions reports them here with an empty Definitions.
+	Decisions  []deployedDecisionResp `json:"decisions"`
+	References []dmnRefValidationResp `json:"references"`
 	// Warnings are what a single-model deploy has reported since ADR-0158: things
 	// that registered fine but will not hold as written — a worker reference naming
 	// something not configured, a data object typed against a vocabulary that does
@@ -35,16 +40,22 @@ type projectDeployResp struct {
 }
 
 // handleDeployProject deploys a project as a bundle (ADR-0034): it first resolves
-// and validates every DMN reference (the deploy-time gate), then deploys every
-// BPMN draft as a runnable definition. It is "validate all, then deploy all" — a
-// draft that does not compile or a reference that does not validate refuses the
-// whole bundle before anything is registered, so a broken artifact never leaves a
+// and validates every DMN reference (the deploy-time gate), then deploys those
+// decisions as durable runtime artifacts, then deploys every BPMN draft as a
+// runnable definition. It is "validate all, then deploy all" — a draft that does
+// not compile or a reference that does not validate refuses the whole bundle
+// before anything is registered, so a broken artifact never leaves a
 // half-deployed project.
 //
-// Honest limitations: the DMN references are validated as part of the bundle but
-// not yet wired into the engine's runtime (the server does not execute DMN yet —
-// the ADR-0014 follow-up); and the final BPMN deploy loop is not atomic against a
-// mid-loop persist failure (same as a multi-pool deploy).
+// Decisions go first on purpose: a process published alongside a decision must pin
+// its latest-bound reference to that decision deployment rather than to the copy
+// bundled with itself (ADR-0319).
+//
+// Honest limitation: the final BPMN deploy loop is not atomic against a mid-loop
+// persist failure (same as a multi-pool deploy). The decisions are inside that
+// boundary rather than outside it — every decision record is written before any is
+// registered — so a failed publish leaves nothing evaluable that a restart would
+// not also produce.
 func (s *Server) handleDeployProject(w http.ResponseWriter, r *http.Request) {
 	out := s.deployApplicationBundle(r, r.PathValue("id"))
 	out.write(w)
@@ -150,7 +161,13 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			if err != nil {
 				return bundleOutcome{status: http.StatusInternalServerError, errMsg: "resolve dmn model: " + err.Error(), proj: proj}
 			}
-			models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
+			models = append(models, resolvedModel{
+				artifactID: rec.ID,
+				modelRef:   rec.ModelRef,
+				modelName:  res.ModelName,
+				decisions:  res.Decisions,
+				xml:        xml,
+			})
 		}
 		refReports = append(refReports, dmnRefValidationResp{
 			ID: rec.ID, Name: rec.Name, ModelRef: rec.ModelRef,
@@ -162,7 +179,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 			ID: proj.ID, Name: proj.Name, Deployed: false,
 			Reason:      fmt.Sprintf("%d DMN reference(s) unresolved or invalid", invalidRefs),
-			Definitions: []deployedProcess{}, References: refReports,
+			Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
 		}}
 	}
 
@@ -177,7 +194,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 				ID: proj.ID, Name: proj.Name, Deployed: false,
 				Reason:      fmt.Sprintf("draft %q does not compile: %s", d.ProcessID, err.Error()),
-				Definitions: []deployedProcess{}, References: refReports,
+				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
 			}}
 		}
 		needed := draftDecisions(deployables)
@@ -189,23 +206,25 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 				ID: proj.ID, Name: proj.Name, Deployed: false,
 				Reason:      fmt.Sprintf("draft %q references decision(s) %v not provided by any DMN reference in this project", d.ProcessID, needed),
-				Definitions: []deployedProcess{}, References: refReports,
+				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
 			}}
 		}
 		dmnForDraft[i] = xmls
 	}
 
-	// Phase 3 (on-loop): deploy each draft with its matched DMN model.
+	// Phase 3 (on-loop): deploy the application's decisions, then each draft with
+	// its matched DMN model.
 	var (
 		persistErr error
 		claimed    string
 		deployed   []deployedProcess
+		decisions  []persistedDecision
 		warnings   []string
 	)
 	s.do(func() {
 		// Every draft's claim first, then any deploy: a bundle is "validate all, then
 		// deploy all", and a claim refusal in the third draft must not leave the first
-		// two registered (ADR-0205).
+		// two registered (ADR-0205) — nor, now, its decisions deployed.
 		for _, d := range drafts {
 			var e error
 			if claimed, e = s.claimBlockingModel(r, []byte(d.XML)); e != nil {
@@ -216,6 +235,15 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			}
 		}
 		deployedAt := time.Now().Unix()
+		// Decisions before drafts, deliberately: a process published alongside a
+		// decision must pin its latest-bound reference to *that* decision deployment,
+		// not to the copy bundled with itself
+		// (ADR-0319).
+		var decErr error
+		if decisions, decErr = s.deployDecisions(decisionDeployments(models), id, principalID(r), deployedAt); decErr != nil {
+			persistErr = decErr
+			return
+		}
 		for i, d := range drafts {
 			dps, _, pErr := s.deployModel([]byte(d.XML), dmnForDraft[i], deployedAt, d.ProjectID, principalID(r))
 			if pErr != nil {
@@ -239,7 +267,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 			Reason: "a draft can be delivered the message name " + claimed +
 				", which an inbound worker you cannot reach publishes under. Rename the message, " +
 				"or ask whoever owns that worker to share it.",
-			Definitions: []deployedProcess{}, References: refReports,
+			Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
 		}}
 	}
 	if deployed == nil {
@@ -254,15 +282,46 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 	}
 	return bundleOutcome{status: http.StatusOK, deployed: true, proj: proj, resp: projectDeployResp{
 		ID: proj.ID, Name: proj.Name, Deployed: true,
-		Definitions: deployed, References: refReports, Warnings: dedupeWarnings(warnings),
+		Definitions: deployed, Decisions: decisionResponses(decisions),
+		References: refReports, Warnings: dedupeWarnings(warnings),
 	}}
 }
 
 // resolvedModel is one project DMN reference resolved for the bundle: its model
-// XML and the decision names it provides.
+// XML, the decision names it provides, and — for a reference that belongs to an
+// application being published — where it came from, which is what the decision
+// deployment records (ADR-0319). The
+// single-deploy path (dmnForDeployBody) fills only the first two: it bundles a
+// model with a process rather than deploying it as a decision.
 type resolvedModel struct {
-	decisions []string
-	xml       []byte
+	artifactID string
+	modelRef   string
+	modelName  string
+	decisions  []string
+	xml        []byte
+}
+
+// decisionDeployments turns the application's resolved DMN references into the
+// decision deployments to publish, one per distinct model. Two references to the
+// same handle are one model and get one deployment; a reference with no handle
+// (nothing to name a resource by) is skipped.
+func decisionDeployments(models []resolvedModel) []decisionDeployment {
+	var out []decisionDeployment
+	seen := map[string]bool{}
+	for _, m := range models {
+		if m.modelRef == "" || seen[m.modelRef] {
+			continue
+		}
+		seen[m.modelRef] = true
+		out = append(out, decisionDeployment{
+			artifactID: m.artifactID,
+			modelRef:   m.modelRef,
+			modelName:  m.modelName,
+			decisions:  m.decisions,
+			xml:        m.xml,
+		})
+	}
+	return out
 }
 
 // draftDecisions is the distinct set of DMN decision ids referenced by every

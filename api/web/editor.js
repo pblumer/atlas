@@ -10,7 +10,9 @@ import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { devLang } from "./dev-lang.js";
-import { openDmnEditor } from "./dmn-editor.js";
+// The decision editor is a page of its own (ADR-0320),
+// so this module navigates to it rather than opening it. Nothing of dmn-js is loaded
+// here any more.
 import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
 import { migrateInstanceFlow } from "./migrationdialog.js";
@@ -222,6 +224,17 @@ let collab; // active live collaboration session (ADR-0140), closed on remount
 // inside the current mount's #canvas and render another instance's data over it —
 // two overlaid diagrams, mismatched instance keys, a leaked poll timer.
 let generation = 0;
+
+// leaveForDecision is this mount's "may we leave now" question, published for the
+// business-rule-task panel: authoring a decision is a navigation
+// (ADR-0320), and the panel is nowhere near the draft
+// machinery that has to run first. Replaced on every mount, so it always answers for
+// the diagram on screen.
+let leaveForDecision = async () => true;
+// pendingAdopt is what a decision authored for one of this diagram's tasks left
+// behind. The panel consumes it the first time it renders that task and clears it, so
+// the decision is adopted exactly once — on the way back, not on every later open.
+let pendingAdopt = null;
 
 // docTitle refines the browser tab title with a loaded subject (a diagram or
 // process name), matching app.js's "<subject> · Atlas" scheme so open tabs are
@@ -632,7 +645,7 @@ function editorCrumbs(project, current) {
 // it as the one pressed most. Token simulation, Auto-layout, Export XML and Documentation
 // are in the menu, where a toggle reads as on by its check rather than by a pressed
 // button. Every control kept its id, so what each one does is still wired where it was.
-export async function mountEditor(root, { api, toast, key, draftId, projectId, project }) {
+export async function mountEditor(root, { api, toast, key, draftId, projectId, project, adopt }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -822,6 +835,29 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // leaves this diagram for the one it calls, so the drill-down owns the save that
   // has to happen first — hence the saveDraft it is handed (ADR-0076).
   wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft);
+  // "＋ New decision" on a business rule task is the same kind of door, and it is
+  // opened from the properties panel rather than from here — so this mount publishes
+  // the question the panel has to ask before it navigates, and the identity it must
+  // read the draft's id back off afterwards.
+  leaveForDecision = async () => (await makeKeepEdits(modeler, identity, saveDraft, "authoring a decision", true)())
+    ? { ok: true, processId: identity.draftId || "" }
+    : { ok: false, processId: "" };
+  pendingAdopt = adopt || null;
+  // Coming back from the decision editor, select the task the decision was authored
+  // for. Without this the adoption would sit waiting until the author happened to
+  // click that task again, and "press one button, model the decision, come back to a
+  // wired task" would be true only for somebody who knew to click.
+  if (pendingAdopt && pendingAdopt.elementId) {
+    try {
+      const el = modeler.get("elementRegistry").get(pendingAdopt.elementId);
+      if (el) {
+        modeler.get("selection").select(el);
+        try { modeler.get("canvas").scrollToElement(el); } catch { /* older bpmn-js */ }
+      } else {
+        pendingAdopt = null; // the task is gone; nothing to adopt into
+      }
+    } catch { pendingAdopt = null; }
+  }
   wireEditorVars(root, modeler, api);
   wireProblems(root, modeler, api, projectId);
   wireResizer(root, modeler);
@@ -6745,8 +6781,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           html += `<label class="field"><span>Decision</span>
               <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
-              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ Neue Decision</button>
-              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Bearbeiten</button>
+              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ New decision</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Edit</button>
             </div>
             <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
               <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
@@ -7701,11 +7737,16 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (d) applyPick(d);
       });
 
-      // Author-a-decision: the embedded dmn-js editor (ADR-0051). "＋ Neue Decision"
-      // creates a model + reference and adopts it; "Bearbeiten" opens the current
-      // decision's local model in place. After authoring, the catalog is re-fetched
-      // and the authored decision is adopted (id + inputs + result), so inputs and
-      // output flow in automatically — no separate upload step.
+      // Author-a-decision. "＋ New decision" creates a decision and this task adopts
+      // it; "Edit" opens the one already selected. Both leave this diagram for the
+      // decision editor's own page (ADR-0320) — it used
+      // to be a window over this one, which is the thing that record ends.
+      //
+      // Adoption survives the trip: the decision editor stashes what it saved, app.js
+      // hands it back when this diagram remounts, and the block below applies it. So
+      // the author still presses one button, models the decision, comes back, and
+      // finds the id, the input mappings and the result variable filled in — the
+      // ADR-0062 flow, over a navigation instead of a modal.
       const adoptAuthored = async (result) => {
         if (!result) return;
         const scope = projectId ? "?projectId=" + encodeURIComponent(projectId) : "";
@@ -7715,10 +7756,29 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           decisions.find((x) => x.modelRef === result.modelRef);
         if (d) applyPick(d); else show(element);
       };
+      // Coming back from the decision editor: adopt once, for the task it was
+      // authored for, then forget it.
+      if (pendingAdopt && pendingAdopt.elementId === element.id) {
+        const rec = pendingAdopt;
+        pendingAdopt = null;
+        adoptAuthored(rec);
+      }
+      // leaveForDecision saves this diagram (or asks) and reports the draft id the
+      // round trip has to come back to. Without one — a deployed definition opened
+      // read-only — the decision is still authored, just without a way home, so it is
+      // opened plainly and the author picks it afterwards.
+      const openDecisionPage = async (suffix) => {
+        const left = await leaveForDecision();
+        if (!left.ok) return;
+        const home = left.processId
+          ? "/for/" + encodeURIComponent(left.processId) + "/" + encodeURIComponent(element.id)
+          : "";
+        location.hash = "#/modeler/dmn/" + suffix + home;
+      };
       const fnew = body.querySelector("#f-dmn-new");
       if (fnew) {
-        fnew.addEventListener("click", async () => {
-          adoptAuthored(await openDmnEditor({ api, toast, projectId }));
+        fnew.addEventListener("click", () => {
+          openDecisionPage("new" + (projectId ? "/p/" + encodeURIComponent(projectId) : ""));
         });
       }
       const fedit = body.querySelector("#f-dmn-edit");
@@ -7726,10 +7786,19 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         fedit.addEventListener("click", async () => {
           const cur = (fpick._catalog || []).find((x) => x.id === (fdecision?.value || "").trim());
           if (!cur || !cur.modelRef) {
-            toast && toast("Diese Decision hat kein lokal editierbares Modell.", "err");
+            toast && toast("This decision has no locally editable model.", "err");
             return;
           }
-          adoptAuthored(await openDmnEditor({ api, toast, projectId, modelRef: cur.modelRef }));
+          // The panel knows the model handle; the editor's route addresses the
+          // reference that points at it, so resolve the one from the other.
+          let refs = [];
+          try { refs = (await api("GET", "/api/v1/dmnrefs")) || []; } catch { /* reported below */ }
+          const ref = refs.find((r) => r.modelRef === cur.modelRef);
+          if (!ref) {
+            toast && toast("This decision has no reference to open — add it to an application first.", "err");
+            return;
+          }
+          openDecisionPage("e/" + encodeURIComponent(ref.id));
         });
       }
     }
@@ -8575,6 +8644,27 @@ function wireDeployJSONEditors(container) {
   }
 }
 
+// makeKeepEdits builds the "may we leave this diagram now" question every action that
+// navigates away has to ask: true once this diagram's work is safe. A session that
+// addresses a draft saves it; one that does not has nowhere to put the edits without
+// inventing a draft, so it asks before discarding. `what` names the act in that
+// question, so the author reads what they are about to trade.
+//
+// saveNew widens the first case to a diagram that has never been saved at all, for an
+// action where minting a draft is plainly what the author wants — authoring a decision
+// for a task they have just drawn. It stays off for a deployed definition opened
+// read-only, where a save would fork a draft nobody asked for.
+function makeKeepEdits(modeler, identity, saveDraft, what, saveNew) {
+  return async () => {
+    let dirty = false;
+    try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
+    if (!dirty) return true;
+    if (identity.draftId != null) return await saveDraft(false);
+    if (saveNew && !identity.fromDeployment) return await saveDraft(false);
+    return window.confirm(`This diagram has unsaved changes, and ${what} discards them.\n\nContinue?`);
+  };
+}
+
 // deploymentKey is the definition this editor was opened on, or null for a draft
 // or a new diagram. Only the layout-save action needs it: it is the one thing here
 // that writes back to something already deployed.
@@ -9133,14 +9223,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
 // one that does not (a deployed definition opened read-only, or a diagram never saved)
 // has nowhere to put them without inventing a draft, so it asks before discarding.
 function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
-  // keepEdits answers "may we leave now": true once this diagram's work is safe.
-  const keepEdits = async () => {
-    let dirty = false;
-    try { dirty = modeler.get("commandStack").canUndo(); } catch { /* no stack, nothing to lose */ }
-    if (!dirty) return true;
-    if (identity.draftId != null) return await saveDraft(false);
-    return window.confirm("This diagram has unsaved changes, and opening the called process discards them.\n\nContinue?");
-  };
+  const keepEdits = makeKeepEdits(modeler, identity, saveDraft, "opening the called process");
 
   const openCallee = async (pid) => {
     pid = (pid || "").trim();

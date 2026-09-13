@@ -601,6 +601,55 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_decision_deployments",
+			Description: "List the DMN decisions deployed as durable runtime artifacts — one row per decision " +
+				"and version, with the application it was published from, the model and checksum behind it, and " +
+				"whether it is the current version. This is what a process's latest-bound business rule task is " +
+				"pinned to when the process is deployed, so a superseded version stays listed as long as a " +
+				"definition still evaluates it. Optionally narrowed to one application or to one decision's " +
+				"version history.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": stringProp("Only decisions published from this application (from atlas_list_applications)."),
+					"decisionId":    stringProp("Only this decision's versions, newest first."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				if v := optString(args, "applicationId"); v != "" {
+					q.Set("applicationId", v)
+				}
+				if v := optString(args, "decisionId"); v != "" {
+					q.Set("decisionId", v)
+				}
+				path := "/api/v1/decision-deployments"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_deployed_decision_model",
+			Description: "Get the DMN XML of one deployed decision by its deployment key (from " +
+				"atlas_decision_deployments) — the exact source the runtime was built from. Different from " +
+				"atlas_get_decision_model, which reads the design-time model file behind a handle: that file is " +
+				"edited in place, so only the deployment still knows what a running process evaluates.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"key": stringProp("The decision deployment key (from atlas_decision_deployments).")},
+				"required":   []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argString(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/decision-deployments/" + url.PathEscape(key) + "/xml"))
+			},
+		},
+		{
 			Name: "atlas_decision_evaluations",
 			Description: "List every retained evaluation of one DMN decision by its decision id — newest first, " +
 				"each with the instance that made it, the inputs, outputs, and trace. Drill into a decision across " +

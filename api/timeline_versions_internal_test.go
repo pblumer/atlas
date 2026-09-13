@@ -12,7 +12,7 @@ func twoNodeProcess(t *testing.T, ids ...string) *compiler.CompiledProcess {
 	t.Helper()
 	b := compiler.NewBuilder(1, "p", 1)
 	for _, id := range ids {
-		b.SetElementBpmnId(b.AddUserTask("", "", "", "", 0, 0, 1), id)
+		b.SetElementBpmnId(b.AddUserTask("", compiler.Assignment{Literal: ""}, compiler.Assignment{Literal: ""}, "", 0, 0, 1), id)
 	}
 	cp, err := b.Build()
 	if err != nil {
@@ -151,8 +151,8 @@ func TestVersionAtComparesElementsByIndexWithinAVersionAndByIdAcross(t *testing.
 	// Without BPMN ids there is nothing to compare across a boundary, and answering
 	// "equal" would collapse every element into one.
 	blank1, blank2 := compiler.NewBuilder(1, "p", 1), compiler.NewBuilder(2, "p", 2)
-	blank1.AddUserTask("", "", "", "", 0, 0, 1)
-	blank2.AddUserTask("", "", "", "", 0, 0, 1)
+	blank1.AddUserTask("", compiler.Assignment{Literal: ""}, compiler.Assignment{Literal: ""}, "", 0, 0, 1)
+	blank2.AddUserTask("", compiler.Assignment{Literal: ""}, compiler.Assignment{Literal: ""}, "", 0, 0, 1)
 	b1, err := blank1.Build()
 	if err != nil {
 		t.Fatalf("build: %v", err)

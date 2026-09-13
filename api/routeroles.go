@@ -47,7 +47,7 @@ const roleAny = "any"
 // routeRoles is every role a route may name. The inventory test holds the table
 // against it, so a typo ("moduler") is a failing build rather than an endpoint
 // nobody can reach.
-var routeRoles = []string{roleAny, RoleAdmin, RoleModeler, RoleOperator, RoleUser}
+var routeRoles = []string{roleAny, RoleAdmin, RoleModeler, RoleOperator, RoleUser, RoleProductManager}
 
 // grantableRoles is every role an account may be given. roleAny is deliberately
 // absent: it describes a route, not a person.
