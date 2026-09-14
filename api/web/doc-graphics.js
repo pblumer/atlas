@@ -6,7 +6,7 @@
 // turn the page for a wide one by the same rule. Keeping it here is what stops the
 // two document modules from importing each other in a circle now that the process
 // document also renders a decision's rule table
-// (ADR-draft-the-process-document-shows-the-decision-a-task-runs).
+// (ADR-0328).
 
 // svgToJpeg rasterizes the diagram bpmn-js drew. The SVG is drawn onto a canvas
 // at a fixed scale and encoded as JPEG, whose bytes the PDF embeds untranscoded.

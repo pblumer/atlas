@@ -2033,7 +2033,7 @@ func (p *CompiledProcess) LatestBoundDecisions() []string {
 // local tasks, and the deploy-time gate reads the two differently: a latest-bound
 // reference can be satisfied by a decision deployment already in the registry, and
 // a deployment-bound one cannot
-// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+// (ADR-0327).
 func (p *CompiledProcess) BundleBoundDecisions() []string {
 	var out []string
 	seen := map[string]bool{}

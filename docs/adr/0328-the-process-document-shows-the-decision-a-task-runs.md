@@ -1,4 +1,4 @@
-# ADR-DRAFT: The process document shows the decision a business rule task runs
+# ADR-0328: The process document shows the decision a business rule task runs
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -80,7 +80,7 @@ In this order, and the document says which one it used:
    (`GET /api/v1/decision-deployments/{key}/xml`), naming the version — which is
    the only source a decision deployed from the editor and never saved to the
    model has, and which
-   [ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task](draft-a-deployed-decision-satisfies-a-latest-bound-task.md)
+   [ADR-0327](0327-a-deployed-decision-satisfies-a-latest-bound-task.md)
    has just made an ordinary state for a `latest`-bound task rather than a trap;
 3. otherwise nothing: the section keeps its base layer and says the decision could
    not be resolved. A document that omits a table it could not read is honest; one

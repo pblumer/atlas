@@ -299,7 +299,7 @@ const BINDING_NOTE = {
 
 // resolveCalledDecisions fetches the rules behind every decision the diagram calls,
 // so the document can show them
-// (ADR-draft-the-process-document-shows-the-decision-a-task-runs). One request per
+// (ADR-0328). One request per
 // distinct decision id, in parallel, and a decision that cannot be resolved simply
 // has no entry — the section then documents the call without the table rather than
 // failing the export.
@@ -308,7 +308,7 @@ const BINDING_NOTE = {
 // is the authoring version under change control and the model a `deployment`-bound
 // task would bundle. A decision that exists only as a deployment (ADR-0322, made an
 // ordinary state for a latest-bound task by
-// ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task) is read from that
+// ADR-0327) is read from that
 // deployment's own source, and the document says so.
 export async function resolveCalledDecisions(collection, api) {
   const wanted = [];

@@ -143,7 +143,7 @@ const columnTitle = (c) => c.label || c.expression || "—";
 // renderDecisionBody draws one decision's content into a document: what it reads,
 // its rule table (or its literal expression), and what it writes. It is shared
 // with the *process* document, which shows the decision a business rule task runs
-// (ADR-draft-the-process-document-shows-the-decision-a-task-runs) — one renderer,
+// (ADR-0328) — one renderer,
 // so a rule table looks the same whichever document a reader is holding.
 //
 // It draws the body only. The heading, the id line and the prose above it belong

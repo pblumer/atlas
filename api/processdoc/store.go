@@ -39,7 +39,7 @@ type Code struct {
 
 // DecisionCall is how a business rule task calls its decision, snapshotted from
 // the diagram at publish time
-// (ADR-draft-the-process-document-shows-the-decision-a-task-runs). It is the one
+// (ADR-0328). It is the one
 // element type whose behaviour lives entirely outside the model, so the record
 // says which decision it runs and how it binds.
 //

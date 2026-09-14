@@ -297,7 +297,7 @@ test("a diagram with no process is refused rather than published empty", async (
 });
 
 // The decision behind a business rule task
-// (ADR-draft-the-process-document-shows-the-decision-a-task-runs). It is the one
+// (ADR-0328). It is the one
 // element whose behaviour lives entirely off the diagram, and until now the
 // document said nothing about it — while already setting a script task's source
 // and a flow's condition verbatim.

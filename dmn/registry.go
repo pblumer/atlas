@@ -219,7 +219,7 @@ func (r *Registry) LatestDecisionKey(decisionId string) (uint64, bool) {
 // LatestDecisionIDs returns the set of decision ids that have a decision
 // deployment — the ones a latest-bound reference resolves to something other than
 // the model bundled with its own process
-// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+// (ADR-0327).
 //
 // The deploy-time gate reads it to tell a business rule task that can evaluate
 // from one that cannot: a latest-bound reference in this set needs no model

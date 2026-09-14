@@ -52,7 +52,7 @@ type deployDecisionResp struct {
 // after its own decision id rather than a handle that does not exist. A
 // `latest`-bound business rule task may name it straight away — the deploy resolves
 // that reference to this record's key
-// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task). Only a
+// (ADR-0327). Only a
 // `deployment`-bound task cannot, because it evaluates the model bundled with its
 // own process, and the editor's toast says that much.
 func (s *Server) handleDeployDecision(w http.ResponseWriter, r *http.Request) {

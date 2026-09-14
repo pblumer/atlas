@@ -754,7 +754,7 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 		// The decisions already deployed in their own right: a latest-bound task
 		// naming one needs no model bundled with this process, because the deploy
 		// pins it to that deployment's key
-		// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task). Registry
+		// (ADR-0327). Registry
 		// state, so it is read on the loop beside the references.
 		deployedDecisionIDs map[string]bool
 	)

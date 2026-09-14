@@ -104,7 +104,7 @@ func TestDeployingOneDecisionMakesItRunnable(t *testing.T) {
 // deployed from the editor and never saved to the model is a real runtime
 // artifact, and a latest-bound business rule task may name it — the deploy
 // resolves that reference to this deployment's key, so no model needs bundling
-// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+// (ADR-0327).
 //
 // ADR-0322 recorded the opposite as an accepted trap. It was wrong: this is the
 // test that was written to pin it, turned round to pin what is true.
@@ -542,7 +542,7 @@ func TestTheRefusalNamesOnlyWhatCannotBeCovered(t *testing.T) {
 // document needs it — roles are flat, so a modeler is not an operator (ADR-0209).
 // It is now readable by any signed-in identity, like its BPMN counterpart
 // GET /api/v1/processes/{key}/xml, which carries strictly more
-// (ADR-draft-the-process-document-shows-the-decision-a-task-runs).
+// (ADR-0328).
 func TestAModelerCanReadADeployedDecisionsSource(t *testing.T) {
 	srv, _ := newValidateServer(t, WithAuth())
 	h := srv.Handler()

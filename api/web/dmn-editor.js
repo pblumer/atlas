@@ -813,7 +813,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         // `latest`-bound task may name this decision — the deploy resolves it to the
         // record just written. A `deployment`-bound one evaluates the model bundled
         // with its own process, and there is no model to bundle
-        // (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+        // (ADR-0327).
         if (!modelRef) {
           toast && toast("Deployed — but this decision is not in the model yet, so a business rule task bound to “deployment” cannot use it. Press “Save to model” to make it referenceable.", "warn");
         }

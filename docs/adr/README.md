@@ -412,6 +412,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0324](0324-decision-documentation.md) | A decision is published as its own document | Accepted | Landed |
 | [0325](0325-dmn-diagram-is-completed-on-read.md) | A DMN model's diagram is completed on read, and can be re-laid on request | Accepted | Landed |
 | [0326](0326-trying-a-decision-before-it-runs.md) | A decision can be tried against sample inputs before anything is deployed | Accepted | Landed |
+| [0327](0327-a-deployed-decision-satisfies-a-latest-bound-task.md) | A deployed decision satisfies a latest-bound business rule task | Accepted | Landed |
+| [0328](0328-the-process-document-shows-the-decision-a-task-runs.md) | The process document shows the decision a business rule task runs | Accepted | Landed |
 
 ## The two states of a record
 

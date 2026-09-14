@@ -289,7 +289,7 @@ func TestProcessDocStoreCodeRoundTrip(t *testing.T) {
 
 // TestProcessDocStoreDecisionCallRoundTrip proves a business rule task's call
 // survives the round trip: which decision it runs, how it binds, and what it feeds
-// in (ADR-draft-the-process-document-shows-the-decision-a-task-runs). It is the one
+// in (ADR-0328). It is the one
 // element whose behaviour lives entirely outside the BPMN, so a record that dropped
 // it would describe a step that says nothing about what it does.
 //

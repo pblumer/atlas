@@ -396,13 +396,13 @@ The control-flow basics most real models use.
   process whose business rule task named a decision that existed only as a
   deployment, telling the author to create what they had just deployed; it is now
   binding-aware
-  ([ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task](docs/adr/draft-a-deployed-decision-satisfies-a-latest-bound-task.md)),
+  ([ADR-0327](docs/adr/0327-a-deployed-decision-satisfies-a-latest-bound-task.md)),
   because a `latest`-bound task resolves to that deployment and never consults the
   bundle, while a `deployment`-bound one still needs it and now says so. And a
   process document names a business rule task without showing the decision behind
   it; it now carries the call the diagram holds and the decision's own rule table,
   drawn by the renderer the decision document already uses
-  ([ADR-draft-the-process-document-shows-the-decision-a-task-runs](docs/adr/draft-the-process-document-shows-the-decision-a-task-runs.md)).
+  ([ADR-0328](docs/adr/0328-the-process-document-shows-the-decision-a-task-runs.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

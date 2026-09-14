@@ -1,4 +1,4 @@
-# ADR-DRAFT: A deployed decision satisfies a latest-bound business rule task
+# ADR-0327: A deployed decision satisfies a latest-bound business rule task
 
 - **Status:** Accepted
 - **Implementation:** Landed

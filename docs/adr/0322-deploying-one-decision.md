@@ -117,7 +117,7 @@ diagram that has no draft — visible in Operations, absent from the Modeler's l
 which Atlas has always allowed.
 
 > **Later correction.** That paragraph was wrong on both halves, and
-> [ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task](draft-a-deployed-decision-satisfies-a-latest-bound-task.md)
+> [ADR-0327](0327-a-deployed-decision-satisfies-a-latest-bound-task.md)
 > replaces it: the picker already offered deployed decisions (ADR-0050), and a
 > `latest`-bound task never needed a model, because the deploy resolves it to the
 > decision deployment's own key. What remains true is narrower — a

@@ -101,7 +101,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		// The decisions the registry already has a deployment for. A latest-bound
 		// business rule task naming one needs no model bundled, because the deploy
 		// resolves it to that deployment's key
-		// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task). It is
+		// (ADR-0327). It is
 		// run-loop-owned state, so it is read here and handed to the off-loop match.
 		deployedDecisionIDs map[string]bool
 	)
@@ -350,7 +350,7 @@ func draftDecisions(deployables []compiler.Deployable) []string {
 // bundleBoundDecisions is the distinct set of decision ids referenced by every
 // process in one compiled draft through a *deployment*-bound business rule task —
 // the ones that need a model bundled with this deployment, whatever is deployed
-// elsewhere (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+// elsewhere (ADR-0327).
 func bundleBoundDecisions(deployables []compiler.Deployable) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -428,7 +428,7 @@ func coverModels(models []resolvedModel, needed []string) ([][]byte, bool) {
 // provides. The caller needs them to decide what to do: a latest-bound reference
 // that is already deployed needs no model at all, and one that is not has to be
 // named in the refusal
-// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+// (ADR-0327).
 //
 // Whatever *is* covered is still bundled, even when a deployment would also
 // satisfy it: pinDecisions prefers the deployment, so the bundled model is unused
@@ -464,7 +464,7 @@ func coverModelsReport(models []resolvedModel, needed []string) ([][]byte, []str
 
 // decisionCoverage decides whether a deploy may proceed when some referenced
 // decisions are in no stored model, and what to say when it may not
-// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+// (ADR-0327).
 //
 // The guard exists to stop a business rule task whose job can never evaluate. Two
 // of them cannot, and one can:
