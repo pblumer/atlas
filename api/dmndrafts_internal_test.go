@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// What a decision draft is for (ADR-draft-decision-drafts): a place to leave
+// What a decision draft is for (ADR-0321): a place to leave
 // unfinished decision work that nothing else resolves. Every test here is one of
 // the four failures the record names, held down.
 

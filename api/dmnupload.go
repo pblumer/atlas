@@ -30,7 +30,7 @@ import (
 // Writing a model is the act with an audience: a handle is what every reference,
 // every application's publish and the business-rule-task picker resolve. So the
 // decision editor's Save no longer comes here — it keeps a draft
-// (ADR-draft-decision-drafts) — and what does come here says so with ?from=, which
+// (ADR-0321) — and what does come here says so with ?from=, which
 // turns a taken handle into a named refusal instead of a silently suffixed second
 // copy (ADR-0222).
 func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {

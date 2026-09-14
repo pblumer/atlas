@@ -600,7 +600,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
 	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
 
-	// Decision drafts (ADR-draft-decision-drafts): the Modeler's holding place for a
+	// Decision drafts (ADR-0321): the Modeler's holding place for a
 	// decision an author has not finished. Its whole purpose is that nothing else
 	// resolves it — not the picker, not a publish — so a tool over it would let an
 	// agent write something no other tool can read. An agent that authors a decision

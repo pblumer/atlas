@@ -340,7 +340,7 @@ type Server struct {
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
-	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-draft-decision-drafts)
+	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-0321)
 	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)

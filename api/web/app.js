@@ -2739,7 +2739,7 @@ async function viewModelerHome() {
 
     const known = new Set(projects.map((p) => p.id));
     // A decision that exists only as a draft is still one of the application's
-    // artifacts, so it counts (ADR-draft-decision-drafts); a draft on a decision
+    // artifacts, so it counts (ADR-0321); a draft on a decision
     // that is in the model is that decision, already counted as its reference.
     const all = [...drafts, ...refs, ...forms, ...decDrafts.filter((d) => !d.refId)];
     const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
@@ -2916,7 +2916,7 @@ async function viewProjectDetail(id) {
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
     // A decision draft is work that has not been written to the model
-    // (ADR-draft-decision-drafts). One on a decision that is in the model is a
+    // (ADR-0321). One on a decision that is in the model is a
     // marker on that decision's row; one on a decision that is not is a row of its
     // own, because nothing else in this table represents it.
     const ddl = decDrafts.filter(mine);
@@ -2980,7 +2980,7 @@ async function viewProjectDetail(id) {
     };
     // A decision that has never been written to the model: its draft is the only
     // copy, so it is listed, marked, and says plainly that a publish will not carry
-    // it (ADR-draft-decision-drafts).
+    // it (ADR-0321).
     const decDraftRow = (d) => {
       const href = `#/modeler/dmn/d/${encodeURIComponent(d.id)}`;
       const items = [{ label: "Open", icon: "→", href }];
@@ -4918,7 +4918,7 @@ async function deleteDmnRef(id, reload) {
 }
 
 // A decision that exists only as a draft has nothing behind it, so deleting the
-// draft is deleting the decision (ADR-draft-decision-drafts) — said plainly, because
+// draft is deleting the decision (ADR-0321) — said plainly, because
 // the same word on a decision that *is* in the model means only "throw away the
 // unsaved work".
 async function deleteDecisionDraft(id, reload) {
@@ -8640,7 +8640,7 @@ async function viewEditorDraft(id) {
 // viewDmnEditor mounts the decision editor
 // (ADR-0320). refId edits an existing decision; without it a new one is authored,
 // filed into projectId. draftId opens a decision that exists only as a draft, which
-// has no reference to be addressed by (ADR-draft-decision-drafts). forTask is the
+// has no reference to be addressed by (ADR-0321). forTask is the
 // {processId, elementId} of the business rule task the author pressed "＋ New
 // decision" on, which decides where back goes and whose task adopts what is saved to
 // the model.
@@ -9117,7 +9117,7 @@ async function route() {
       });
     }
     // A decision draft has no reference to be addressed by, so it is addressed by
-    // itself (ADR-draft-decision-drafts). Before the viewer's catch-all, like its
+    // itself (ADR-0321). Before the viewer's catch-all, like its
     // siblings.
     const ddraft = path.match(/^#\/modeler\/dmn\/d\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
     if (ddraft) {

@@ -5,7 +5,7 @@ import (
 )
 
 // dmnDraft is decision work in progress: DMN XML kept without writing the model
-// every reference resolves to (ADR-draft-decision-drafts).
+// every reference resolves to (ADR-0321).
 //
 // A decision artifact has one layer more than a BPMN diagram. A diagram is a draft
 // until it is deployed; a decision is a draft, then a *model* under a handle that

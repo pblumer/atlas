@@ -1,6 +1,6 @@
 // The decision editor is a page of the Modeler, not a window over one
 // (ADR-0320), and its Save keeps a draft rather than writing the model every
-// reference resolves (ADR-draft-decision-drafts). These tests pin what that buys,
+// reference resolves (ADR-0321). These tests pin what that buys,
 // because none of it is visible to the Go suite: a decision has an address, the editor
 // wears the chrome its siblings wear, Save and Save to model write different things, a
 // model save moves the URL onto the decision it just wrote, and nothing anywhere mounts

@@ -11,7 +11,7 @@
 // its siblings. The chrome here is form-editor.js's, field for field.
 //
 // Save keeps a **draft** and nothing else: the model a reference resolves is
-// written only by "Save to model" (ADR-draft-decision-drafts). That is the BPMN
+// written only by "Save to model" (ADR-0321). That is the BPMN
 // editor's grammar — its Save is a draft too — and it is what makes pressing Save
 // safe: a half-written decision can no longer refuse a colleague's publish of the
 // same application, or offer its half-named output to the next business rule task.
@@ -238,7 +238,7 @@ export function cleanup() {
 //   refId     — edit the decision this DMN reference points at; absent means a new one
 //   draftId   — open this decision draft: work that has never been written to the
 //               model, so it has no reference to be addressed by
-//               (ADR-draft-decision-drafts)
+//               (ADR-0321)
 //   projectId — the application a new decision is filed into
 //   forTask   — {processId, elementId} when the editor was reached by pressing
 //               "＋ New decision" on a business rule task. It decides where the back
@@ -293,7 +293,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
 
   // ---- identity ------------------------------------------------------------
   // What this session is editing, across the three layers a decision has
-  // (ADR-draft-decision-drafts): the draft it is keeping, the reference it is in the
+  // (ADR-0321): the draft it is keeping, the reference it is in the
   // model under, and the model handle behind that. A brand-new decision has none of
   // them until it is first saved.
   let ref = null;            // the dmnRef record, when the decision is in the model
@@ -461,7 +461,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   }
 
   // ---- saving --------------------------------------------------------------
-  // Two acts, two buttons (ADR-draft-decision-drafts). Save keeps a draft: the
+  // Two acts, two buttons (ADR-0321). Save keeps a draft: the
   // author's work, which nothing else resolves. Save to model writes the handle
   // every reference, every picker and the next Publish resolve — and clears the
   // draft, because a draft exists only while it differs from the model.

@@ -403,7 +403,7 @@ textarea::placeholder {
 .chip.id-pending { border-style: dashed; border-color: var(--accent); }
 
 /* Decision work that has not been written to the model every reference resolves
-   (ADR-draft-decision-drafts). It marks the editor's bar and the Explorer row, and
+   (ADR-0321). It marks the editor's bar and the Explorer row, and
    it is a statement of fact rather than a warning — a draft is where an unfinished
    decision is meant to be — so it reads as an accent, not as an error. */
 .chip.draft-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
