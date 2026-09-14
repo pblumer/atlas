@@ -196,6 +196,10 @@ var catalogSources = []catalogSource{
 		ID: "entra-delta-sync", App: "Beispiel: Delta-Sync (Entra)",
 		Files: []string{"entra-delta-sync.bpmn"},
 	},
+	{
+		ID: "entra-verzeichnis-abgleich", App: "Beispiel: Verzeichnis-Abgleich (Entra)",
+		Files: []string{"entra-verzeichnis-abgleich.bpmn"},
+	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the

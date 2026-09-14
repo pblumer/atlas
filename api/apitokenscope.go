@@ -64,6 +64,19 @@ const (
 	// one to hand out (ADR-0198).
 	apiScopeMetrics = "metrics"
 
+	// apiScopeDirectory reaches the two directory-synchronisation routes and nothing
+	// else (ADR-draft-entra-directory-provisioning). It is the scope that carries the
+	// argument for scopes furthest: the credential behind it is held by a scheduled
+	// process that creates and disables accounts, so the question "what else could
+	// this do if it leaked" has to have a two-line answer — and it does. It cannot
+	// deploy, which is the property an operator asked for by name: a provisioning
+	// token is not also a deployment token.
+	//
+	// It does not, and must not, make the credential an administrator.
+	// TestTokenRolesNeverIncludeAdmin still holds: what a directory token carries is
+	// the ordinary machine role set, and what confines it is this list.
+	apiScopeDirectory = "directory"
+
 	// apiScopeStatus reaches this server's node descriptor and nothing else. It is
 	// what ADR-0189 §6 requires of remote correlation: another Atlas asking "who are
 	// you, and what can you be asked for" must not be handed a deploy credential to
@@ -108,6 +121,14 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeStatus: {
 		"GET /api/v1/node",
 	},
+	// Two patterns, and the pair is the whole of what a directory mirror does: ask
+	// where to resume, report what was read. Nothing else is added here without the
+	// decision record that argues for it — the value of this entry is that it is
+	// short enough to read in one glance and see the reach whole.
+	apiScopeDirectory: {
+		"GET /api/v1/directory-sync",
+		"POST /api/v1/directory-sync",
+	},
 	// The transport, both the exact path and everything under it, because that is
 	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET
 	// for the event stream, and confining a scope to one of them would break the
@@ -145,7 +166,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

@@ -1574,6 +1574,23 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/groups/{id}/members/{userId}", s.handleRemoveGroupMember, apiOp{
 			summary: "Remove a user from a group (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Updated group", tObject())}},
 
+		{"GET", "/api/v1/directory-sync", s.handleDirectorySyncState, apiOp{
+			summary: "Where the Entra mirror resumes from: the revision to pin a report to, the two Graph delta cursors, and whether this installation has ever applied a synchronisation. Refused outright when this server runs without authentication",
+			tag:     "Directory", role: RoleOperator,
+			resp: jsonBody("Sync state", schemaObj(map[string]any{
+				"revision": tInteger(), "usersDeltaLink": tString(), "groupsDeltaLink": tString(),
+				"everApplied": tBool(), "lastAppliedAt": tInteger(),
+			}))}},
+		{"POST", "/api/v1/directory-sync", s.handleDirectorySync, apiOp{
+			summary: "Report one Entra delta read — the changed accounts and groups plus the cursors they ended at — and receive what it decided. Writes nothing unless `apply` is true and `fromRevision` is still current, so an omitted field reports rather than provisions. Refused outright when this server runs without authentication",
+			tag:     "Directory", role: RoleOperator,
+			req: jsonBody("A change set, and whether it may be written", schemaObj(map[string]any{
+				"apply": tBool(), "fromRevision": tInteger(),
+				"users": tArray(), "usersDeltaLink": tString(),
+				"groups": tArray(), "groupsDeltaLink": tString(),
+			})),
+			resp: jsonBody("What the run decided, whether or not it wrote it", tObject())}},
+
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},
 	}

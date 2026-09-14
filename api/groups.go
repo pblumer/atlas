@@ -28,11 +28,16 @@ func newGroupID() (string, error) {
 // (normalized to a non-nil array), plus timestamps. A group carries no secret, so
 // this is the record itself with Members made JSON-stable.
 type groupView struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Members   []string `json:"members"`
-	CreatedAt int64    `json:"createdAt"`
-	UpdatedAt int64    `json:"updatedAt"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
+	// Source says where the group came from: absent for one made here, "entra" for
+	// one a directory synchronisation mirrors. It is on the view because the
+	// difference is one an administrator has to see before editing a membership the
+	// next run will overwrite (ADR-draft-entra-directory-provisioning).
+	Source    string `json:"source,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 func toGroupView(g group) groupView {
@@ -40,7 +45,7 @@ func toGroupView(g group) groupView {
 	if members == nil {
 		members = []string{}
 	}
-	return groupView{ID: g.ID, Name: g.Name, Members: members, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt}
+	return groupView{ID: g.ID, Name: g.Name, Members: members, Source: g.Source, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt}
 }
 
 // handleListGroups lists every group (admin-only). Oldest first.

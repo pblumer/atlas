@@ -131,6 +131,19 @@ var (
 	// after it: from the moment the mapping is on, whoever administers the provider's
 	// groups administers this instance's roles.
 	AuthOIDCMappingSet = newEvent("auth.oidc_mapping_set")
+	// The directory mirror (ADR-draft-entra-directory-provisioning). AuthDirectorySync
+	// is one line per run, written whether or not the run wrote anything: a report-only
+	// run still read a whole tenant out of a directory, which is an event even though
+	// nothing changed here. Its attributes are counts and the mode; the Graph cursor is
+	// deliberately absent, because a URL naming a tenant does not belong in a log that
+	// is shipped elsewhere. The accounts it creates and changes are recorded under the
+	// existing auth.user_created and auth.user_updated, so an alert written against
+	// those keeps working whoever made the change.
+	AuthDirectorySync = newEvent("auth.directory_sync")
+	// AuthDirectoryGroupSynced is one mirrored group written. It is its own name rather
+	// than a general group event, because it says exactly what it covers: nothing here
+	// claims to record the group edits an administrator makes by hand.
+	AuthDirectoryGroupSynced = newEvent("auth.directory_group_synced")
 	// AuthRolesUpgraded is said once, on the first start after roles per endpoint
 	// group shipped, naming how many accounts kept what they could already do. It is
 	// the line an operator needs to see: nothing is narrower than it was yesterday

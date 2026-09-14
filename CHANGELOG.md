@@ -12,6 +12,52 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run
+  writes nothing.** An account only ever came into being when somebody signed in through
+  OIDC, so a fresh installation starts with an almost empty user store — and the next
+  piece of work, taking an inventory of the rights that already exist, has to attribute
+  every right it finds to an account that is not there.
+
+  Atlas now reads the directory rather than waiting to be told about it. A scheduled
+  process (`examples/entra-verzeichnis-abgleich.bpmn`, timer start `R/PT1H`) runs the
+  Entra Worker's `delta-users` and `delta-groups` change-tracking queries and reports what
+  changed to `POST /api/v1/directory-sync`, which creates accounts, updates them, merges
+  the directory onto an account that already existed, and disables the people who have
+  left. `GET /api/v1/directory-sync` says where the next run resumes from. Nothing is
+  published outbound and there is no inbound provisioning endpoint: the decision record
+  carries the argument against SCIM, and against reading it as an oversight.
+
+  **The first run reports and writes nothing**, because an empty cursor enumerates the
+  whole tenant against an empty store and a defect there reaches everybody at once. It is
+  not a preview with an implementation of its own — the same code decides in both modes
+  and only the last step, the write, is skipped — the cursor does not move, so the run may
+  be repeated as often as somebody likes, and the report gives counts for the expected and
+  whole lines for the notable: merges, disables, refusals, memberships that cannot yet be
+  resolved. The mode is a field of the message spelled `apply`, so an omission reports
+  rather than provisions, and every report that wrote nothing says so and why.
+
+  Disabling somebody is not only a record: the run that writes it also ends their live
+  sessions, revokes their standing OAuth grants, and pushes every mirrored group
+  membership it changed into the sessions that are already open — a session carries the
+  group ids it was opened with, so without that half a mirror would be a quieter way to
+  disable somebody than the administration button that says so.
+
+  An account mirrored onto one a federated login created keeps both identities: Entra's
+  ID-token `sub` is pairwise per application and is therefore never the directory object
+  id, so the object id lives in a new `directoryId` field and the pairwise subject stays
+  where a sign-in looks for it. A created account holds `user` and nothing else, from a
+  literal that no input reaches; existing roles are never widened or narrowed; and the
+  last enabled administrator is never disabled. A mirrored group keeps the directory's own
+  member ids beside the translated ones, so a membership that arrives before its account
+  resolves on a later run instead of being lost. The credential the process carries is an
+  API token of the new `directory` scope, which reaches those two routes and nothing else
+  — it cannot deploy — and both routes refuse outright on a server running without
+  authentication. Three budgets bound the message, the batch and the report
+  (`ATLAS_LIMIT_DIRECTORY_SYNC`, `_DIRECTORY_OBJECTS`, `_DIRECTORY_REPORT`).
+  ([ADR-draft-entra-directory-provisioning](docs/adr/draft-entra-directory-provisioning.md))
+
 ### Fixed
 
 - **Deleting a DMN reference now says what it would break.** The confirm read "Delete
