@@ -9,7 +9,7 @@
 
 [ADR-0319](0319-durable-versioned-decision-deployments.md) made a decision a
 durable, versioned runtime artifact, and
-[ADR-draft-decision-drafts](draft-decision-drafts.md) gave it the two authoring
+[ADR-0321](0321-decision-drafts.md) gave it the two authoring
 rungs below that: a draft nobody else resolves, and the model everything resolves.
 
 The third rung has only one door. A decision reaches the runtime through the
@@ -82,7 +82,7 @@ publish would have had.
 
 The BPMN editor's Deploy does not write the draft, and this one does not write the
 model. The two verbs answer different questions, and collapsing them would undo
-what [ADR-draft-decision-drafts](draft-decision-drafts.md) has just separated:
+what [ADR-0321](0321-decision-drafts.md) has just separated:
 
 | | what it changes | who sees it |
 |---|---|---|
@@ -195,7 +195,7 @@ while it was the last verb on the bar.
 ## Links
 
 - extends [ADR-0319](0319-durable-versioned-decision-deployments.md) — the durable path this deploy goes through
-- extends [ADR-draft-decision-drafts](draft-decision-drafts.md) — the two rungs below this one
+- extends [ADR-0321](0321-decision-drafts.md) — the two rungs below this one
 - relates to [ADR-0320](0320-the-decision-editor-is-a-page.md) — the editor this button is on
 - relates to [ADR-0128](0128-process-applications.md) — the application Publish this is not
 - relates to [ADR-0002](0002-single-writer-partition-model.md) — the turn the write happens in

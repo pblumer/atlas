@@ -687,7 +687,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // deployDecision ships what is on screen, through the same durable path an
   // application publish uses: one record, written before anything is registered,
   // carrying its own XML. It deliberately does not write the model — that is
-  // "Save to model", and conflating the two is what ADR-draft-decision-drafts just
+  // "Save to model", and conflating the two is what ADR-0321 just
   // separated.
   async function deployDecision() {
     await busy("Deploying…", async () => {

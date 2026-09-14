@@ -156,7 +156,7 @@ test("a new decision opens at its own address, in the editor chrome its siblings
   // English, like the rest of the Modeler — and the BPMN editor's grammar: neutral
   // buttons for what you keep, one primary button for the act that leaves the
   // browser. Three verbs, because a decision has three layers
-  // (ADR-draft-decision-drafts, ADR-draft-deploying-one-decision).
+  // (ADR-0321, ADR-draft-deploying-one-decision).
   await expect(page.locator("#dmn-save")).toHaveText("Save");
   await expect(page.locator("#dmn-save-model")).toHaveText("Save to model");
   await expect(page.locator("#dmn-deploy")).toHaveText("Deploy");
