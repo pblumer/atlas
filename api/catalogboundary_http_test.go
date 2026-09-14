@@ -151,3 +151,116 @@ func TestWithoutTheRoleThereIsNoCatalogueMaintenanceAtAll(t *testing.T) {
 		t.Errorf("a plain user saved a product: %d, want 403", code)
 	}
 }
+
+// Sharing is the owner's, and an editor's write right does not carry it.
+//
+// This was open until it was looked for. An editor could rewrite the member list,
+// which makes the grant self-amplifying: whoever is given editor hands editor to
+// anybody, and the owner's choice of who maintains their catalogue stops being the
+// owner's. ADR-0071 says the owner "can read, write, share (edit membership)" and
+// the role beneath it is read/write — and projects already enforce exactly that
+// with checkProjectRole(..., ScopeRoleOwner). The catalogue was the one object that
+// did not.
+//
+// The refusal is loud rather than a silent drop: a maintainer told "saved" would
+// believe a grant exists that does not, which is worse than being refused.
+func TestSharingACatalogueIsTheOwnersAndNotAnEditors(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	anna := aProductManager(t, ts, admin, "anna")
+	bruno := aProductManager(t, ts, admin, "bruno")
+	carla := aProductManager(t, ts, admin, "carla")
+	brunoID := userID(t, ts, admin, "bruno")
+	carlaID := userID(t, ts, admin, "carla")
+
+	annas := ownCatalogue(t, ts, anna, "Anna")
+	member := func(id, role string) string {
+		return `{"ref":{"type":"user","id":"` + id + `"},"role":"` + role + `"}`
+	}
+
+	// The owner shares. That is hers.
+	if code, b := cReq(t, anna, ts, "PATCH", "/api/v1/catalogs/"+annas,
+		`{"members":[`+member(brunoID, "editor")+`]}`); code != http.StatusOK {
+		t.Fatalf("the owner could not share: %d (%s)", code, b)
+	}
+
+	// The editor may change the catalogue…
+	if code, b := cReq(t, bruno, ts, "PATCH", "/api/v1/catalogs/"+annas, `{"rank":42}`); code != http.StatusOK {
+		t.Fatalf("an editor could not change the catalogue: %d (%s)", code, b)
+	}
+	// …and may not change who else may.
+	code, body := cReq(t, bruno, ts, "PATCH", "/api/v1/catalogs/"+annas,
+		`{"members":[`+member(brunoID, "editor")+`,`+member(carlaID, "editor")+`]}`)
+	if code != http.StatusForbidden {
+		t.Errorf("an editor rewrote the member list: %d (%s)", code, body)
+	}
+
+	// The grant did not happen, which is the half a status code alone would not
+	// prove: carla was never chosen by the owner and cannot write.
+	if c, _ := cReq(t, carla, ts, "PATCH", "/api/v1/catalogs/"+annas, `{"rank":77}`); c == http.StatusOK {
+		t.Error("somebody the owner never chose can change the catalogue")
+	}
+
+	// An administrator still can, as everywhere.
+	if code, b := cReq(t, admin, ts, "PATCH", "/api/v1/catalogs/"+annas,
+		`{"members":[`+member(carlaID, "viewer")+`]}`); code != http.StatusOK {
+		t.Errorf("an administrator could not share: %d (%s)", code, b)
+	}
+}
+
+// With enforcement off there is nobody to be, not nobody who may.
+//
+// Atlas's default single-binary build runs without authentication, and the
+// catalogue read that as "no identity, therefore no rights": a catalogue could be
+// created — 201, with an id — and from the next request onward it answered 404 to
+// its own author. The screen for filling a catalogue was unusable on the default
+// configuration, and the failure looked like the catalogue had vanished rather
+// than like a refusal.
+//
+// Every other area of Atlas already reads enforcement-off as "everything is
+// permitted": Server.isAdmin and requireAdmin both return true, and the drawer's
+// mayUse offers every app. This holds the catalogue to the same rule.
+func TestWithAuthenticationOffACatalogueCanStillBeMaintained(t *testing.T) {
+	ts := newTestServer(t)
+
+	code, body := doReq(t, ts, "POST", "/api/v1/catalogs",
+		`{"rank":1,"languages":["de"],"texts":{"de":"Arbeitsplatz"}}`, "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create: %d (%s)", code, body)
+	}
+	var cat struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+
+	// The three the screen does next, each of which answered 404 before.
+	if c, b := doReq(t, ts, "GET", "/api/v1/catalogs/"+cat.ID, "", ""); c != http.StatusOK {
+		t.Errorf("read it back: %d (%s) — a catalogue that hides from its own author", c, b)
+	}
+	if c, b := doReq(t, ts, "PATCH", "/api/v1/catalogs/"+cat.ID, `{"rank":5}`, "application/json"); c != http.StatusOK {
+		t.Errorf("change it: %d (%s)", c, b)
+	}
+	if c, b := doReq(t, ts, "PATCH", "/api/v1/catalogs/"+cat.ID,
+		`{"members":[{"ref":{"type":"user","id":"usr_x"},"role":"editor"}]}`, "application/json"); c != http.StatusOK {
+		t.Errorf("share it: %d (%s)", c, b)
+	}
+	// And it is in the listing the screen opens with.
+	c, list := doReq(t, ts, "GET", "/api/v1/catalogs", "", "")
+	if c != http.StatusOK {
+		t.Fatalf("list: %d (%s)", c, list)
+	}
+	var seen []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(list, &seen); err != nil {
+		t.Fatalf("decode listing: %v (%s)", err, list)
+	}
+	if len(seen) != 1 || seen[0].ID != cat.ID {
+		t.Errorf("listing = %v, want the catalogue that was just created", seen)
+	}
+}
