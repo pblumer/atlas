@@ -408,6 +408,13 @@ textarea::placeholder {
    decision is meant to be — so it reads as an accent, not as an error. */
 .chip.draft-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
 
+/* The version a decision is deployed at, on the decision editor's bar
+   (ADR-draft-deploying-one-decision). It is the counterpart of the "Deployment
+   <key>" crumb a BPMN diagram opened from a deployment carries, and it states
+   something that is live in the engine — so it reads solid and settled, next to
+   the dashed draft chip which states the opposite. */
+.chip.deployed-chip { border-color: var(--ok); color: var(--ok); background: var(--ok-soft, transparent); }
+
 /* A searchable declaration the model cannot honour (ADR-0244). Red is certain — the
    deploy refuses a repeated name, and a structured value can never be indexed. Amber is
    a question: the diagram does not write that name, but something outside the model

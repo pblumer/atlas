@@ -348,9 +348,20 @@ The control-flow basics most real models use.
   draft; a decision that has only a draft is listed as such and says it will not travel.
   Writing a model onto a handle another decision holds is refused and offered as a
   deliberate replacement ([ADR-0222](docs/adr/0222-artifact-id-renames.md)) rather than
-  silently forking `eligibility-2`. Still to come: Deploy from inside the editor, XML
-  export, documentation, auto-layout, a collaborative session, and a panel that
-  evaluates a decision against sample inputs.
+  silently forking `eligibility-2`.
+  **The third verb landed too**
+  ([ADR-draft-deploying-one-decision](docs/adr/draft-deploying-one-decision.md)):
+  **Deploy** ships the decision on screen on its own, through
+  `POST /api/v1/decision-deployments` — the same `deployDecisions` an application
+  publish calls, so the record, the key, the per-decision version and the recovery
+  are identical, and the deployment takes the `latest` pointer a process deployed
+  afterwards binds to. Until then the only door to the engine was Publish on the
+  application, which ships everything it holds. The bar also carries the version and
+  key the decision is currently deployed under, as a diagram opened from a deployment
+  carries its key. A decision that is not in the model can be deployed — the record
+  carries its own source — and the editor says that no business rule task can name it
+  until it is. Still to come: XML export, documentation, auto-layout, a collaborative
+  session, and a panel that evaluates a decision against sample inputs.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

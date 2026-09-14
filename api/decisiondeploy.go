@@ -104,7 +104,7 @@ func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy 
 			ApplicationID: appID,
 			ArtifactID:    m.artifactID,
 			ModelRef:      m.modelRef,
-			ResourceName:  decisionResourceName(m.modelRef),
+			ResourceName:  decisionResourceName(m.modelRef, m.decisions),
 			ModelName:     m.modelName,
 			Decisions:     entries,
 			Checksum:      modelChecksum(m.xml),
@@ -129,9 +129,25 @@ func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy 
 
 // decisionResourceName is the file-shaped name a decision deployment carries into
 // a release manifest: the resolver handle with the extension an author would
-// recognize it by. Only ever called with a non-empty handle — decisionDeployments
-// drops a reference that has none, since there would be nothing to name.
-func decisionResourceName(modelRef string) string { return modelRef + ".dmn" }
+// recognize it by.
+//
+// A publish always has a handle — a reference without one is dropped before it gets
+// here, since there would be nothing to resolve. A decision deployed straight from
+// the editor may have none, because the record carries its own XML and therefore
+// needs no model behind it (ADR-draft-deploying-one-decision). Rather than claim a
+// model that does not exist, such a deployment names itself from its own first
+// decision id.
+func decisionResourceName(modelRef string, decisions []string) string {
+	if modelRef != "" {
+		return modelRef + ".dmn"
+	}
+	for _, id := range decisions {
+		if h := sanitizeHandle(id); h != "" {
+			return h + ".dmn"
+		}
+	}
+	return "decision.dmn"
+}
 
 // deployedDecisionResp is one deployed decision as the API reports it: the runtime
 // identity a business rule task binds to, and where it came from. One row per

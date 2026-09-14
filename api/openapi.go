@@ -312,8 +312,16 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
+		{"POST", "/api/v1/decision-deployments", s.handleDeployDecision, apiOp{
+			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-draft-deploying-one-decision). Body: the DMN XML. ?projectId= files it under an application, ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
+			req:  xmlBody("DMN XML"),
+			resp: jsonBody("The deployment key and the version each of its decisions is now at", tObject())}},
+		// roleAny, like GET /api/v1/processes, which it is the decision counterpart of
+		// and which exposes the same class of fact (a key, a version, when and by whom
+		// it was deployed). The decision editor reads it to show the version a decision
+		// is deployed at, and a modeler is not an operator (ADR-0209 roles are flat).
 		{"GET", "/api/v1/decision-deployments", s.handleListDecisionDeployments, apiOp{
-			summary: "List the DMN decisions deployed as runtime artifacts — one row per decision and version, with the application, model and checksum each came from; ?applicationId= narrows to one application and ?decisionId= to one decision's version history", tag: "Decisions", role: RoleOperator,
+			summary: "List the DMN decisions deployed as runtime artifacts — one row per decision and version, with the application, model and checksum each came from; ?applicationId= narrows to one application and ?decisionId= to one decision's version history", tag: "Decisions", role: roleAny,
 			resp: jsonBody("Deployed decision definitions", tArray())}},
 		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
 			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: RoleOperator,

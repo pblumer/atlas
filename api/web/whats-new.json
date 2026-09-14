@@ -217,6 +217,51 @@
       }
     },
     {
+      "id": "a-single-decision-can-be-deployed-from-its-editor-and-the-ed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Deploy one decision, without publishing everything around it",
+        "de": "Eine Entscheidung einzeln ausliefern, ohne alles andere mitzuliefern"
+      },
+      "summary": {
+        "en": "A decision reached the engine one way only: Publish on the application, which ships everything that application holds. To try out a decision you had just finished, you published other people's unfinished work with it, gave every other decision a new version, and created a release nobody had asked for. A single diagram has always had its own Deploy button; a single decision had none. The decision editor's bar now has Deploy beside Save and Save to model, and a chip saying which version of this decision is running and under which key — the answer to “is what I am looking at what the engine evaluates”, without leaving for Operations. Deploying takes exactly what is on screen and goes through the same path a Publish does, so the result is an ordinary deployed decision: keyed, versioned, and what the next process deployed binds to. The three buttons stay three different acts. Save keeps your draft, Save to model writes the decision everything resolves, Deploy changes what the engine runs. A decision that was never saved to the model can be deployed too — and the editor tells you that no business rule task can call it by name until you save it to the model.",
+        "de": "Eine Entscheidung erreichte die Engine bisher nur auf einem Weg: über Publish der Anwendung, und damit wurde alles ausgeliefert, was diese Anwendung enthält. Wer eine gerade fertiggestellte Entscheidung ausprobieren wollte, veröffentlichte die unfertige Arbeit anderer gleich mit, gab jeder weiteren Entscheidung eine neue Version und erzeugte ein Release, das niemand verlangt hatte. Ein einzelnes Diagramm hatte schon immer seinen eigenen Deploy-Knopf; eine einzelne Entscheidung hatte keinen. Die Leiste des Entscheidungseditors hat jetzt Deploy neben Save und «Save to model» — dazu einen Chip, der sagt, welche Version dieser Entscheidung läuft und unter welchem Schlüssel. Das ist die Antwort auf «Ist das, was ich sehe, auch das, was die Engine auswertet», ohne den Wechsel in den Betrieb. Deploy nimmt genau das, was auf dem Bildschirm steht, und geht denselben Weg wie ein Publish: Das Ergebnis ist eine gewöhnliche ausgelieferte Entscheidung — mit Schlüssel, mit Version, und genau daran bindet sich der nächste ausgelieferte Prozess. Die drei Knöpfe bleiben drei verschiedene Handlungen: Save sichert den Entwurf, «Save to model» schreibt die Entscheidung, die alles auflöst, Deploy ändert, was die Engine ausführt. Auch eine Entscheidung, die nie ins Modell gespeichert wurde, lässt sich ausliefern — der Editor weist dann darauf hin, dass kein Business-Rule-Task sie beim Namen nennen kann, solange sie nicht im Modell steht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+          "Model the table, then press Deploy. The bar shows the version and the key it is now deployed under.",
+          "Change a rule and press Deploy again. The version goes up and the key changes; processes deployed earlier keep the version they were pinned to.",
+          "Press Save to model when the decision should be resolvable by name — that is what the business rule task picker lists, and what the next Publish of the application ships.",
+          "The deployed decisions are listed under Operations → Decisions, with the application, the model and the checksum each came from."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "Die Tabelle modellieren und Deploy drücken. Die Leiste zeigt Version und Schlüssel, unter denen sie jetzt ausgeliefert ist.",
+          "Eine Regel ändern und erneut Deploy drücken. Die Version steigt, der Schlüssel ändert sich; früher ausgelieferte Prozesse behalten die Version, an die sie gebunden wurden.",
+          "«Save to model» drücken, sobald die Entscheidung über ihren Namen auflösbar sein soll — das ist es, was die Auswahl im Business-Rule-Task führt und was das nächste Publish der Anwendung ausliefert.",
+          "Die ausgelieferten Entscheidungen stehen unter Betrieb → Decisions, mit Anwendung, Modell und Prüfsumme, aus denen sie jeweils stammen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-decision-has-a-draft-so-saving-it-is-no-longer-the-same-as",
       "version": "Unreleased",
       "date": null,
@@ -388,42 +433,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-capability-s-service-levels-are-measured-not-only-declared",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Check a service level against what actually ran",
-        "de": "Ein Service Level gegen das prüfen, was tatsächlich lief"
-      },
-      "summary": {
-        "en": "A business capability could say what it has promised — decide within five days, verify within ten minutes — and nothing checked it. The promise sat in the record and the evidence sat in the engine, and no one page held both. Now you can ask for a capability's measurement over a window and get back, for each process that performs it, how often each ending occurred, how often work was cancelled, how long cases took, and what share of them met each promise. Two things are worth knowing before you read a number. The counts of endings and cancellations are running totals since the process was first deployed; only the timings are limited to the window you asked for, and the answer says so beside each figure. And a promise is only checked where somebody wrote its threshold as a number: «within five business days» stays as written, because Atlas will not decide what a business day means in your organisation. Add the number and the promise starts being measured.",
-        "de": "Eine Geschäftsfähigkeit konnte festhalten, was sie zugesagt hat — in fünf Tagen entscheiden, in zehn Minuten prüfen — und niemand glich das ab. Die Zusage stand im Datensatz, die Belege lagen in der Engine, und keine Ansicht hielt beides. Jetzt lässt sich die Messung einer Fähigkeit über einen Zeitraum abrufen: je ausführendem Prozess, wie oft welches Ende eintrat, wie oft Arbeit abgebrochen wurde, wie lange Fälle dauerten, und welcher Anteil davon jede Zusage eingehalten hat. Zwei Dinge sollte man wissen, bevor man eine Zahl liest. Die Zählungen von Enden und Abbrüchen sind laufende Summen seit der ersten Bereitstellung des Prozesses; nur die Zeiten beziehen sich auf den angefragten Zeitraum, und die Antwort sagt das bei jeder Zahl dazu. Und eine Zusage wird nur dort geprüft, wo jemand ihren Schwellwert als Zahl hinterlegt hat: «innert fünf Arbeitstagen» bleibt so stehen, weil Atlas nicht entscheidet, was ein Arbeitstag in Ihrer Organisation ist. Ergänzt man die Zahl, wird die Zusage gemessen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Architecture",
-        "API"
-      ],
-      "tutorial": {
-        "en": [
-          "Give an SLA on the capability a machine-readable threshold: add thresholdSeconds beside the wording it already carries.",
-          "Ask for the measurement: GET /api/v1/capabilities/{key}/measurement?windowDays=30. The window is required — a reading over all history is not offered, because it costs seconds once a process has run a hundred thousand cases.",
-          "Read countedBasis and walkedBasis in the answer before presenting anything: the counts are all-time, the timings are windowed.",
-          "Look at notMeasured to see which declared figures were left alone, and why."
-        ],
-        "de": [
-          "Einem SLA der Fähigkeit einen maschinenlesbaren Schwellwert geben: thresholdSeconds neben den bestehenden Wortlaut setzen.",
-          "Die Messung abrufen: GET /api/v1/capabilities/{key}/measurement?windowDays=30. Der Zeitraum ist Pflicht — eine Auswertung über die gesamte Historie wird nicht angeboten, weil sie Sekunden kostet, sobald ein Prozess hunderttausend Fälle hinter sich hat.",
-          "Vor jeder Darstellung countedBasis und walkedBasis lesen: Die Zählungen gelten seit Beginn, die Zeiten nur für den Zeitraum.",
-          "In notMeasured nachsehen, welche deklarierten Kennzahlen unberührt blieben und warum."
-        ]
       }
     }
   ]

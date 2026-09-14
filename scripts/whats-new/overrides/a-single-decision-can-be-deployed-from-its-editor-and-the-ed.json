@@ -1,0 +1,34 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "Deploy one decision, without publishing everything around it",
+    "de": "Eine Entscheidung einzeln ausliefern, ohne alles andere mitzuliefern"
+  },
+  "summary": {
+    "en": "A decision reached the engine one way only: Publish on the application, which ships everything that application holds. To try out a decision you had just finished, you published other people's unfinished work with it, gave every other decision a new version, and created a release nobody had asked for. A single diagram has always had its own Deploy button; a single decision had none. The decision editor's bar now has Deploy beside Save and Save to model, and a chip saying which version of this decision is running and under which key — the answer to “is what I am looking at what the engine evaluates”, without leaving for Operations. Deploying takes exactly what is on screen and goes through the same path a Publish does, so the result is an ordinary deployed decision: keyed, versioned, and what the next process deployed binds to. The three buttons stay three different acts. Save keeps your draft, Save to model writes the decision everything resolves, Deploy changes what the engine runs. A decision that was never saved to the model can be deployed too — and the editor tells you that no business rule task can call it by name until you save it to the model.",
+    "de": "Eine Entscheidung erreichte die Engine bisher nur auf einem Weg: über Publish der Anwendung, und damit wurde alles ausgeliefert, was diese Anwendung enthält. Wer eine gerade fertiggestellte Entscheidung ausprobieren wollte, veröffentlichte die unfertige Arbeit anderer gleich mit, gab jeder weiteren Entscheidung eine neue Version und erzeugte ein Release, das niemand verlangt hatte. Ein einzelnes Diagramm hatte schon immer seinen eigenen Deploy-Knopf; eine einzelne Entscheidung hatte keinen. Die Leiste des Entscheidungseditors hat jetzt Deploy neben Save und «Save to model» — dazu einen Chip, der sagt, welche Version dieser Entscheidung läuft und unter welchem Schlüssel. Das ist die Antwort auf «Ist das, was ich sehe, auch das, was die Engine auswertet», ohne den Wechsel in den Betrieb. Deploy nimmt genau das, was auf dem Bildschirm steht, und geht denselben Weg wie ein Publish: Das Ergebnis ist eine gewöhnliche ausgelieferte Entscheidung — mit Schlüssel, mit Version, und genau daran bindet sich der nächste ausgelieferte Prozess. Die drei Knöpfe bleiben drei verschiedene Handlungen: Save sichert den Entwurf, «Save to model» schreibt die Entscheidung, die alles auflöst, Deploy ändert, was die Engine ausführt. Auch eine Entscheidung, die nie ins Modell gespeichert wurde, lässt sich ausliefern — der Editor weist dann darauf hin, dass kein Business-Rule-Task sie beim Namen nennen kann, solange sie nicht im Modell steht."
+  },
+  "tutorial": {
+    "en": [
+      "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+      "Model the table, then press Deploy. The bar shows the version and the key it is now deployed under.",
+      "Change a rule and press Deploy again. The version goes up and the key changes; processes deployed earlier keep the version they were pinned to.",
+      "Press Save to model when the decision should be resolvable by name — that is what the business rule task picker lists, and what the next Publish of the application ships.",
+      "The deployed decisions are listed under Operations → Decisions, with the application, the model and the checksum each came from."
+    ],
+    "de": [
+      "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+      "Die Tabelle modellieren und Deploy drücken. Die Leiste zeigt Version und Schlüssel, unter denen sie jetzt ausgeliefert ist.",
+      "Eine Regel ändern und erneut Deploy drücken. Die Version steigt, der Schlüssel ändert sich; früher ausgelieferte Prozesse behalten die Version, an die sie gebunden wurden.",
+      "«Save to model» drücken, sobald die Entscheidung über ihren Namen auflösbar sein soll — das ist es, was die Auswahl im Business-Rule-Task führt und was das nächste Publish der Anwendung ausliefert.",
+      "Die ausgelieferten Entscheidungen stehen unter Betrieb → Decisions, mit Anwendung, Modell und Prüfsumme, aus denen sie jeweils stammen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

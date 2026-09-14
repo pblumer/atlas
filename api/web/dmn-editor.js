@@ -19,6 +19,15 @@
 // Writing the model creates or updates the reference, so the business-rule-task
 // picker lists the decision and adopts its inputs and output — the ADR-0062 flow,
 // unchanged, and still the step that completes the round trip from a task.
+//
+// Deploy is the third verb (ADR-draft-deploying-one-decision), and the only one
+// that reaches the engine: it ships what is on screen as a versioned decision
+// deployment, through the same durable path an application publish uses. The bar
+// therefore shows three buttons answering three different questions — what you are
+// keeping, what everything resolves, and what the runtime evaluates — and the chip
+// beside them says which version this decision is deployed at, as a BPMN diagram
+// opened from a deployment carries its key.
+//
 // Authoring the FEEL and the decision logic is still dmn-js's job; Atlas only
 // stores what it produces and evaluates it through temis.
 
@@ -160,6 +169,20 @@ function firstDecisionName(xml) {
   }
 }
 
+// firstDecisionId reads the decision *id* out of the DMN XML — the runtime
+// identity, which is what a business rule task binds to and what a deployment is
+// versioned by (ADR-0319). The name is what people read; the id is what the engine
+// keys on, and the two drift apart the moment somebody renames a decision.
+function firstDecisionId(xml) {
+  try {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    const dec = doc.querySelector("decision");
+    return (dec && dec.getAttribute("id")) || "";
+  } catch {
+    return "";
+  }
+}
+
 // viewLabel names a dmn-js view for the tab strip: the DRG overview, or a
 // decision's own table/expression editor.
 function viewLabel(v) {
@@ -263,11 +286,13 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         <div class="etabs" id="dmn-views"></div>
         <span class="chip" id="dmn-ref-chip" hidden></span>
         <span class="chip draft-chip" id="dmn-draft-chip" hidden title="This decision has work that has not been written to the model yet — nothing else can see it">Draft</span>
+        <span class="chip deployed-chip" id="dmn-deployed-chip" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="dmn-status"></span>
         <button class="btn neutral" id="dmn-discard" hidden title="Throw away the draft and go back to the stored model">Discard draft</button>
         <button class="btn neutral" id="dmn-save" title="Save this decision as a draft. Nothing that reads this decision changes until you save it to the model.">Save</button>
-        <button class="btn" id="dmn-save-model" title="Write this into the decision model every process and application resolves — this is what the next Publish ships.">Save to model</button>
+        <button class="btn neutral" id="dmn-save-model" title="Write this into the decision model every process and application resolves — this is what the next Publish ships.">Save to model</button>
+        <button class="btn" id="dmn-deploy" title="Deploy this decision on its own, as a versioned runtime artifact the engine can evaluate now. To ship a whole application, use Publish on the application.">Deploy</button>
       </div>
       <div class="editor-body dmn-body">
         <div class="dmn-canvas"></div>
@@ -277,7 +302,8 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         decision's inputs and the output column becomes its result variable — both are adopted
         into a business rule task that calls this decision. <b>Save</b> keeps a draft only you
         see; <b>Save to model</b> writes the decision every process resolves, and is what the
-        next Publish ships.</div>
+        next Publish ships; <b>Deploy</b> ships this decision to the engine on its own, as a new
+        version.</div>
     </div>`;
 
   const canvas = root.querySelector(".dmn-canvas");
@@ -286,8 +312,10 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const statusEl = root.querySelector("#dmn-status");
   const chip = root.querySelector("#dmn-ref-chip");
   const draftChip = root.querySelector("#dmn-draft-chip");
+  const deployedChip = root.querySelector("#dmn-deployed-chip");
   const saveBtn = root.querySelector("#dmn-save");
   const modelBtn = root.querySelector("#dmn-save-model");
+  const deployBtn = root.querySelector("#dmn-deploy");
   const discardBtn = root.querySelector("#dmn-discard");
   const backEl = root.querySelector("#dmn-back");
 
@@ -475,12 +503,12 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // busy runs one save at a time and reports it on the status line, so a second
   // click cannot race the first.
   async function busy(label, fn) {
-    saveBtn.disabled = modelBtn.disabled = discardBtn.disabled = true;
+    saveBtn.disabled = modelBtn.disabled = deployBtn.disabled = discardBtn.disabled = true;
     statusEl.textContent = label;
     try {
       await fn();
     } finally {
-      saveBtn.disabled = modelBtn.disabled = discardBtn.disabled = false;
+      saveBtn.disabled = modelBtn.disabled = deployBtn.disabled = discardBtn.disabled = false;
     }
   }
 
@@ -607,7 +635,98 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     });
   }
 
+  // ---- deploying -----------------------------------------------------------
+  // The third verb, and the only one that reaches the engine
+  // (ADR-draft-deploying-one-decision). Save changes the draft, Save to model
+  // changes what every reference resolves, Deploy changes what the runtime
+  // evaluates — and none of the three does another's job, which is why the bar
+  // shows all three.
+
+  // lastDeployedID is the decision id the chip was last resolved for, so switching
+  // views does not re-ask the server the same question.
+  let lastDeployedID = null;
+
+  // showDeployed puts the current deployment of this decision on the bar — the
+  // version and the key — the way a BPMN diagram opened from a deployment carries
+  // "Deployment <key>" in its crumbs. Nothing to show is the normal state of a
+  // decision that has never been deployed.
+  function showDeployed(id, row) {
+    if (!row) { deployedChip.hidden = true; deployedChip.textContent = ""; return; }
+    deployedChip.hidden = false;
+    deployedChip.textContent = `Deployed v${row.version} · key ${row.key}`;
+    deployedChip.title = `“${id}” is deployed as version ${row.version} under definition key ${row.key}`
+      + ` — what a process deployed from now on binds to. Deploying again makes a new version;`
+      + ` processes already deployed keep the version they were pinned to.`;
+  }
+
+  // refreshDeployed asks what the decision currently on screen is deployed at. It is
+  // keyed by the decision *id*, not by the reference or the handle, because that is
+  // what the runtime versions — renaming the decision genuinely changes which
+  // deployment the answer is about, and the chip follows it.
+  async function refreshDeployed(force) {
+    if (!modeler) return;
+    let id = "";
+    try {
+      const out = await modeler.saveXML({ format: false });
+      id = firstDecisionId(out.xml);
+    } catch { /* the chip is not worth failing anything for */ }
+    if (!force && id === lastDeployedID) return;
+    lastDeployedID = id;
+    if (!id) { showDeployed("", null); return; }
+    try {
+      const rows = (await api("GET", "/api/v1/decision-deployments?decisionId=" + encodeURIComponent(id))) || [];
+      if (gen !== generation || lastDeployedID !== id) return; // superseded while asking
+      showDeployed(id, rows.find((r) => r.current) || null);
+    } catch {
+      // A caller who may not read the deployment listing still gets the editor; the
+      // chip is the only thing that goes missing.
+      showDeployed(id, null);
+    }
+  }
+
+  // deployDecision ships what is on screen, through the same durable path an
+  // application publish uses: one record, written before anything is registered,
+  // carrying its own XML. It deliberately does not write the model — that is
+  // "Save to model", and conflating the two is what ADR-draft-decision-drafts just
+  // separated.
+  async function deployDecision() {
+    await busy("Deploying…", async () => {
+      try {
+        const { xml, name } = await currentXml();
+        const q = [];
+        if (project) q.push("projectId=" + encodeURIComponent(project));
+        if (ref) q.push("artifactId=" + encodeURIComponent(ref.id));
+        if (modelRef) q.push("modelRef=" + encodeURIComponent(modelRef));
+        const rep = await api("POST", "/api/v1/decision-deployments" + (q.length ? "?" + q.join("&") : ""), xml, true);
+        const rows = (rep && rep.decisions) || [];
+        // One model can provide several decisions, each versioned on its own. The one
+        // reported is the one being edited, not whichever sorted first.
+        const editedID = firstDecisionId(xml);
+        const primary = rows.find((r) => r.decisionId === editedID) || rows[0] || {};
+        await refreshDeployed(true);
+        statusEl.textContent = `Deployed v${primary.version} · key ${rep.key}`;
+        toast && toast(`Decision “${name}” deployed as version ${primary.version} (key ${rep.key})`, "ok");
+        // The trap this route accepts, said out loud where it happens: the record is
+        // real and evaluable, but what a business rule task may *name* is what a
+        // reference resolves, so a decision that is not in the model cannot be wired
+        // to one yet.
+        if (!modelRef) {
+          toast && toast("Deployed — but this decision is not in the model yet, so no business rule task can name it. Press “Save to model” to make it referenceable.", "warn");
+        }
+      } catch (e) {
+        statusEl.textContent = "";
+        toast && toast("Deploy failed: " + e.message, "err");
+      }
+    });
+  }
+
   saveBtn.addEventListener("click", saveDraft);
   modelBtn.addEventListener("click", saveToModel);
+  deployBtn.addEventListener("click", deployDecision);
   discardBtn.addEventListener("click", discardDraft);
+
+  // The bar says what this decision is deployed at from the moment it opens, and
+  // follows a decision renamed while it is open.
+  refreshDeployed(true);
+  modeler.on("views.changed", () => { refreshDeployed(false); });
 }

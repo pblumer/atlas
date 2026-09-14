@@ -224,6 +224,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A single decision can be deployed from its editor, and the editor says which version
+  is running.** A decision reached the engine through one door: the application's
+  **Publish**, which ships everything the application holds. An author who had just
+  finished a decision and wanted to see it evaluate had to publish other people's drafts
+  with it, give every other decision in the application a new version, and mint a release
+  nobody had asked for. A single diagram has had its own **Deploy** since the beginning;
+  a single decision had none.
+
+  The decision editor's bar now carries **Deploy** beside the two save verbs, and a chip
+  saying which version this decision is deployed at and under which key — the answer to
+  "is what I am looking at what is running", which until now meant leaving for
+  Operations. Deploy ships what is on screen through the very function an application
+  publish calls: one durable record, written before anything is registered, carrying its
+  own DMN source, versioned per decision id, and taking the `latest` pointer a process
+  deployed afterwards binds to. Nothing about the storage model or the binding rules
+  changes — this adds a caller to that path, not a variant of it.
+
+  The three verbs stay distinct, which is the point: **Save** keeps your draft,
+  **Save to model** writes what every reference resolves, **Deploy** changes what the
+  engine evaluates. A decision that has never been written to the model can still be
+  deployed — the record carries its own source — and the editor says plainly that no
+  business rule task can name it until it is in the model. `atlas_deploy_decision`
+  exposes the same act over MCP, and the deployed-decision listing is now readable by
+  any signed-in identity, as the deployed-process listing already was.
+  ([ADR-draft-deploying-one-decision](docs/adr/draft-deploying-one-decision.md),
+  [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **A decision has a draft, so saving it is no longer the same as writing the model
   everything resolves.** The decision editor's Save wrote `eligibility.dmn` itself — the
   model the business-rule-task picker resolves, the model another application's
