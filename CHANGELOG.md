@@ -14,6 +14,40 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Deleting a DMN reference now says what it would break.** The confirm read "Delete
+  this DMN reference? The temis model itself is not affected" — true, and not the
+  thing a reader needs. What a reference decides is not the file on disk; it is
+  whether anything can still be *deployed* against the decisions that model provides.
+  Delete the last one and a `deployment`-bound business rule task has no model to
+  bundle, so its process can never be deployed again — a refusal that arrives weeks
+  later, in a message that does not mention the deletion.
+
+  `GET /api/v1/dmnrefs/{id}/impact` answers it beforehand: the decisions this model
+  provides, which of them no other reference provides, and the deployed definitions
+  and drafts that could then not be deployed, each with its binding. It is the deploy
+  preflight's own condition read forwards, so the warning and the refusal cannot
+  drift apart. Running instances are never affected and the confirm says so. Nothing
+  is blocked — the reference stays the author's to delete — and an impact that cannot
+  be fetched falls back to the plain sentence. A draft in an application the caller
+  cannot see is counted, never named (ADR-0071).
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A DMN model whose last reference is deleted is no longer lost.** Every surface
+  that shows decisions reads DMN *references*: the catalog, the picker, the Modeler's
+  artifact list, a publish. The model file itself was reachable only by a handle you
+  had to already know, so deleting a reference took the model out of the product while
+  leaving it on disk — and the usual recovery, re-uploading it, files a second copy
+  under a suffixed handle.
+
+  `GET /api/v1/dmn-models` lists the store: one row per stored handle with what the
+  model declares, whether it compiles, and whether any reference points at it. The
+  Console shows the unreferenced ones under **Not assigned**, where artifacts
+  belonging to no application already live, with **Add reference** on each — which
+  re-uses the existing handle, so the model is recovered rather than copied. A model
+  that no longer compiles is listed too, because an author who has to fix it has to
+  find it first. The delete confirm now says where the file went instead of reassuring
+  that it is unaffected. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **A decision that is only deployed no longer blocks the deploy of a process that
   names it.** The deploy preflight demanded a stored DMN model behind a reference for
   every decision a business rule task called, and refused otherwise with "no DMN model

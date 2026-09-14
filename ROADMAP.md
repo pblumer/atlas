@@ -403,6 +403,16 @@ The control-flow basics most real models use.
   it; it now carries the call the diagram holds and the decision's own rule table,
   drawn by the renderer the decision document already uses
   ([ADR-0328](docs/adr/0328-the-process-document-shows-the-decision-a-task-runs.md)).
+  **And what deletion costs is now said out loud.** Deleting a DMN reference names
+  the deployed definitions and drafts that could then not be deployed — the deploy
+  preflight's own condition, read forwards
+  ([ADR-draft-deleting-a-dmn-reference-says-what-it-breaks](docs/adr/draft-deleting-a-dmn-reference-says-what-it-breaks.md));
+  a model nothing points at is listed under Not assigned instead of vanishing from
+  the product while staying on disk
+  ([ADR-draft-a-model-with-no-reference-stays-findable](docs/adr/draft-a-model-with-no-reference-stays-findable.md));
+  and the rule that a decision deployment may not be deleted while a definition is
+  pinned to it is written down before any route can break it
+  ([ADR-draft-a-decision-deployment-is-not-deletable](docs/adr/draft-a-decision-deployment-is-not-deletable.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

@@ -30,6 +30,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { refDeleteWarning } from "./dmnref-impact.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
@@ -2906,6 +2907,16 @@ async function viewProjectDetail(id) {
         api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    // A stored DMN model nothing points at belongs to no application, which is what
+    // this view is (ADR-draft-a-model-with-no-reference-stays-findable). It is only
+    // asked for here, and a failure costs the section rather than the page — a
+    // remote temis resolver has no folder to list and answers 409.
+    let orphanModels = [];
+    if (ungrouped) {
+      try {
+        orphanModels = ((await api("GET", "/api/v1/dmn-models")) || []).filter((m) => !m.referenced);
+      } catch { orphanModels = []; }
+    }
 
     const known = new Set(projects.map((p) => p.id));
     const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
@@ -2995,6 +3006,20 @@ async function viewProjectDetail(id) {
         <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
+    // A model in the store that no reference points at. Nothing else in this table
+    // represents it, and nothing anywhere else in the product does either — which is
+    // the whole reason it is drawn (ADR-draft-a-model-with-no-reference-stays-findable).
+    const orphanModelRow = (m) => {
+      const items = canWrite ? [{ label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } }] : [];
+      const what = m.valid
+        ? `${m.decisions.length} decision${m.decisions.length === 1 ? "" : "s"}: ${esc(m.decisions.join(", "))}`
+        : "does not compile";
+      return `<tr>
+        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">No reference</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        <td class="muted">Decision model</td>
+        <td class="muted" data-sort="0">—</td>
+        <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
+    };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
       const items = [{ label: "Open", icon: "→", href }];
@@ -3010,7 +3035,8 @@ async function viewProjectDetail(id) {
     };
 
     const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") +
-      looseDecDrafts.map(decDraftRow).join("") + fl.map(formRow).join("");
+      looseDecDrafts.map(decDraftRow).join("") + orphanModels.map(orphanModelRow).join("") +
+      fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
@@ -3094,6 +3120,7 @@ async function viewProjectDetail(id) {
         case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
+        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
         case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
         case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
@@ -4909,8 +4936,27 @@ async function moveDmnRef(id, projectId, reload) {
   await reload();
 }
 
+// referenceStoredModel puts a reference back on a model in the store that has none,
+// which is the recovery from having deleted the last one
+// (ADR-draft-a-model-with-no-reference-stays-findable). It re-uses the existing
+// handle rather than re-uploading, so the model is *recovered* rather than copied —
+// a re-upload would file a second model under a suffixed handle (ADR-0222).
+async function referenceStoredModel(handle, suggested, reload) {
+  const name = (window.prompt("Reference name (how it shows in Atlas)", suggested || handle) || "").trim();
+  if (!name) return;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
+    toast(`Added DMN reference "${name}"`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+  await reload();
+}
+
 async function deleteDmnRef(id, reload) {
-  if (!window.confirm("Delete this DMN reference? The temis model itself is not affected.")) return;
+  // The impact is a read and may fail; when it does the confirm falls back to the
+  // plain sentence rather than blocking a deletion the author is entitled to make.
+  let impact = null;
+  try { impact = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(id)}/impact`); } catch { impact = null; }
+  if (!window.confirm(refDeleteWarning(impact))) return;
   try {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
     toast("Deleted DMN reference", "ok");

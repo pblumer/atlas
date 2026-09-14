@@ -2,6 +2,92 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "deleting-a-dmn-reference-now-says-what-it-would-break",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Deleting a decision reference now tells you what it costs",
+        "de": "Das Löschen einer Entscheidungs-Referenz sagt jetzt, was es kostet"
+      },
+      "summary": {
+        "en": "The question before deleting a DMN reference was \"are you sure?\" with one reassuring sentence about the model file, which is not the thing at stake. What a reference decides is whether anything can still be deployed against the decisions in that model: a business rule task set to Deployment evaluates the copy shipped with its own process, and that copy comes from the reference. Delete the last one and that process can never be deployed again — a refusal that turns up weeks later, without a word about the deletion that caused it. The confirm now runs the same check the deploy runs and lists what it finds: which decisions lose their last model, and which deployed processes and drafts could then not be deployed, each with its binding. It also says what is not at risk, because that is the actual fear: running instances are untouched. Nothing is blocked — the reference stays yours to delete — and a draft in an application you cannot see is counted without being named.",
+        "de": "Vor dem Löschen einer DMN-Referenz stand «Sind Sie sicher?» mit einem beruhigenden Satz über die Modelldatei — also nicht über das, worum es geht. Eine Referenz entscheidet darüber, ob überhaupt noch etwas gegen die Entscheidungen dieses Modells ausgeliefert werden kann: Eine auf «Deployment» gesetzte Geschäftsregelaufgabe wertet die Kopie aus, die mit ihrem eigenen Prozess ausgeliefert wird, und diese Kopie stammt aus der Referenz. Löscht man die letzte, lässt sich dieser Prozess nie wieder ausliefern — eine Ablehnung, die Wochen später auftaucht, ohne ein Wort über die Löschung, die sie verursacht hat. Der Bestätigungsdialog führt jetzt dieselbe Prüfung durch wie das Ausliefern und listet auf, was er findet: welche Entscheidungen ihr letztes Modell verlieren und welche ausgelieferten Prozesse und Entwürfe danach nicht mehr ausgeliefert werden könnten, jeweils mit ihrer Bindung. Er sagt auch, was nicht gefährdet ist — denn das ist die eigentliche Sorge: Laufende Instanzen bleiben unberührt. Blockiert wird nichts; die Referenz bleibt Ihre Entscheidung. Ein Entwurf in einer Anwendung, die Sie nicht sehen können, wird gezählt, aber nicht benannt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open an application in the Modeler and find a DMN reference in its artifact list.",
+          "Choose ⋯ → Delete on it.",
+          "The confirm names the decisions that would lose their last model, and every deployed process or draft that could then not be deployed.",
+          "Cancel, and the reference stays. Nothing about the check changes anything."
+        ],
+        "de": [
+          "Eine Anwendung im Modeler öffnen und in ihrer Artefaktliste eine DMN-Referenz suchen.",
+          "Dort «⋯ → Delete» wählen.",
+          "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
+          "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-dmn-model-whose-last-reference-is-deleted-is-no-longer-los",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision model you removed the reference to can be found again",
+        "de": "Ein Entscheidungsmodell ohne Referenz ist wieder auffindbar"
+      },
+      "summary": {
+        "en": "Everything in Atlas that shows decisions — the picker, the catalogue, an application's artifact list, a publish — reads DMN references, not the model files themselves. So deleting a reference took the model out of the product while leaving it on disk: still there, reachable only by a handle you had to remember, and invisible everywhere. The usual recovery was to upload the file again, which filed a second copy under a slightly different name. Not assigned — the place artifacts that belong to no application already live — now also lists the stored models nothing points at, with what each one declares and an Add reference action that puts a reference back on the existing file rather than copying it. A model that no longer compiles is listed too, because somebody who has to fix it has to find it first. And the delete confirm now says where the file goes instead of assuring you it is unaffected.",
+        "de": "Alles, was in Atlas Entscheidungen anzeigt — die Auswahl, der Katalog, die Artefaktliste einer Anwendung, ein Publish — liest DMN-Referenzen, nicht die Modelldateien selbst. Das Löschen einer Referenz nahm das Modell also aus dem Produkt heraus und liess es auf der Platte zurück: weiterhin vorhanden, nur noch über einen Handle erreichbar, den man sich merken musste, und überall unsichtbar. Die übliche Rettung bestand darin, die Datei erneut hochzuladen — womit eine zweite Kopie unter leicht abweichendem Namen entstand. «Nicht zugeordnet» — der Ort, an dem Artefakte ohne Anwendung ohnehin schon liegen — führt nun auch die gespeicherten Modelle auf, auf die nichts zeigt, mit dem, was jedes davon deklariert, und einer Aktion «Add reference», die eine Referenz auf die bestehende Datei zurücksetzt, statt sie zu kopieren. Ein Modell, das nicht mehr kompiliert, wird ebenfalls aufgeführt, denn wer es reparieren soll, muss es zuerst finden. Und der Löschdialog sagt jetzt, wohin die Datei geht, statt zu versichern, sie sei nicht betroffen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Modeler, open Not assigned.",
+          "Stored decision models that no reference points at are listed there, marked No reference.",
+          "Choose ⋯ → Add reference on one to put it back in the catalogue under a name you pick.",
+          "It reappears in the business rule task's decision picker straight away."
+        ],
+        "de": [
+          "Im Modeler «Nicht zugeordnet» öffnen.",
+          "Gespeicherte Entscheidungsmodelle, auf die keine Referenz zeigt, sind dort aufgeführt und mit «No reference» gekennzeichnet.",
+          "Bei einem davon «⋯ → Add reference» wählen, um es unter einem selbst gewählten Namen zurück in den Katalog zu holen.",
+          "Es erscheint unmittelbar wieder in der Entscheidungsauswahl der Geschäftsregelaufgabe."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-decision-that-is-only-deployed-no-longer-blocks-the-deploy",
       "version": "Unreleased",
       "date": null,
@@ -312,96 +398,6 @@
           "«⋯ → Documentation» wählen und «Publish version» drücken.",
           "Das PDF öffnen: Der Abschnitt des Schritts nennt nun die Entscheidung, ihre Bindung und ihre Eingaben und setzt darunter die Regeltabelle.",
           "Die Zeile über der Tabelle sagt, woher die Regeln stammen — aus dem Modell hinter der Entscheidung oder aus der ausgelieferten Version, wenn es kein Modell gibt."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-is-published-as-its-own-document-and-two-people-c",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Hand a decision to someone, and work on one together",
-        "de": "Eine Entscheidung weitergeben – und gemeinsam daran arbeiten"
-      },
-      "summary": {
-        "en": "Two things a diagram could do and a decision could not. First: a decision table is the business rule — the thing a compliance officer signs off and an auditor asks about — and it could only be read inside Atlas. The editor's ⋯ menu now publishes it as a PDF: the requirements graph, then every decision with its description, the inputs it reads with their types, and its rule table set as a real table with the hit policy, one row per rule, and each rule's own note underneath. Versions are numbered, never change once published, and can be shared through a link you can revoke — the same way a process document works. It is deliberately separate from the deployed version: a rule is usually approved before it is switched on, which is exactly when there is no deployment to point at. Second: two people can now edit one decision at the same time and see each other — who is here, what they are looking at, and a lock so nobody's work is silently overwritten. The lock is the decision: in the requirements graph you claim a decision by selecting it, and opening a decision's table claims that decision. So two people can work on two decisions of the same model at once; two people cannot fill in one table together, and the editor tells you which it is rather than letting you find out afterwards.",
-        "de": "Zwei Dinge, die ein Diagramm konnte und eine Entscheidung nicht. Erstens: Eine Entscheidungstabelle ist die Geschäftsregel — das, was eine Compliance-Verantwortliche freigibt und wonach eine Revision fragt — und sie war nur innerhalb von Atlas lesbar. Über das Menü «⋯» im Editor lässt sie sich jetzt als PDF veröffentlichen: der Anforderungsgraph, dann jede Entscheidung mit ihrer Beschreibung, den gelesenen Eingaben samt Typen und ihrer Regeltabelle als echte Tabelle — mit Hit Policy, einer Zeile je Regel und der jeweiligen Anmerkung darunter. Versionen sind nummeriert, nach dem Veröffentlichen unveränderlich und über einen widerrufbaren Link teilbar — genau wie bei einer Prozessdokumentation. Sie ist bewusst getrennt von der ausgelieferten Version: Eine Regel wird üblicherweise freigegeben, bevor sie eingeschaltet wird — also genau dann, wenn es noch keine Auslieferung gibt, auf die man zeigen könnte. Zweitens: Zwei Personen können jetzt gleichzeitig an einer Entscheidung arbeiten und sehen einander — wer da ist, worauf jemand schaut, und eine Sperre, damit niemandes Arbeit stillschweigend überschrieben wird. Gesperrt wird die Entscheidung: Im Anforderungsgraphen beansprucht man sie durch Auswählen, und wer die Tabelle einer Entscheidung öffnet, beansprucht damit diese Entscheidung. Zwei Personen können also an zwei Entscheidungen desselben Modells gleichzeitig arbeiten; eine Tabelle gemeinsam ausfüllen können sie nicht — und der Editor sagt es, statt es einen hinterher merken zu lassen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler and choose ⋯ → Documentation.",
-          "Give the version a note — what changed, or what it was signed off for — and press Publish version.",
-          "The history lists every version with its PDF. Share… mints a link for a reader with no Atlas account; Revoke kills it.",
-          "For co-editing, open the same decision in two browsers. The avatars at the top of the canvas show who is here.",
-          "Open a decision's table in one of them: the other sees that decision locked, and can work on a different decision of the same model meanwhile."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen und «⋯ → Documentation» wählen.",
-          "Der Version eine Notiz geben — was sich geändert hat oder wofür sie freigegeben wurde — und «Publish version» drücken.",
-          "Die Historie führt jede Version mit ihrem PDF. «Share…» erzeugt einen Link für Lesende ohne Atlas-Konto, «Revoke» hebt ihn auf.",
-          "Für das gemeinsame Arbeiten dieselbe Entscheidung in zwei Browsern öffnen. Die Avatare oben auf der Fläche zeigen, wer da ist.",
-          "In einem davon die Tabelle einer Entscheidung öffnen: Die andere Seite sieht diese Entscheidung gesperrt und kann derweil an einer anderen Entscheidung desselben Modells arbeiten."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-can-be-tried-against-sample-inputs-and-a-dmn-mode",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Try a decision before anyone has to run it",
-        "de": "Eine Entscheidung ausprobieren, bevor sie jemand ausführen muss"
-      },
-      "summary": {
-        "en": "A decision table is a program, and the first thing you want to know is whether it does what you meant. Until now finding out meant saving the decision, deploying it, deploying a process with a business rule task that calls it, starting an instance, and reading the result off that instance — five steps, three of them about processes, to answer a question about one table. The decision editor now has Test: fill in the inputs, press Run, and see what came back along with the table showing which rule fired and which conditions held. A rule that never matches — a number compared against a string, a stray space — shows its condition in red. It is the same picture Operations shows for a decision a running process evaluated, so you learn to read it once. What is tested is the decision on screen: nothing is saved, nothing is deployed, and a decision you have not stored anywhere yet can be tried like any other. Separately, a DMN model that carries no diagram now gets one. Most models do not: a decision written by an agent or exported from another tool has the logic but no picture, and the editor could only draw a single box, silently leaving out the input data and the arrows — and saving from that state left the model rendering worse than you found it. Such a model now opens with its whole requirements graph drawn, and the new ⋯ menu offers Auto-layout to re-flow it, and Export XML to take the decision away as a file.",
-        "de": "Eine Entscheidungstabelle ist ein Programm, und das Erste, was man wissen will, ist, ob sie tut, was gemeint war. Das herauszufinden bedeutete bisher: die Entscheidung speichern, ausliefern, einen Prozess mit einem Business-Rule-Task ausliefern, der sie aufruft, eine Instanz starten und das Ergebnis dort ablesen — fünf Schritte, drei davon über Prozesse, für eine Frage zu einer einzigen Tabelle. Der Entscheidungseditor hat jetzt «Test»: Eingabewerte eintragen, «Run» drücken, und man sieht das Ergebnis zusammen mit der Tabelle, die zeigt, welche Regel gegriffen hat und welche Bedingungen erfüllt waren. Eine Regel, die nie zutrifft — eine Zahl gegen eine Zeichenkette verglichen, ein überzähliges Leerzeichen — zeigt ihre Bedingung in Rot. Es ist dasselbe Bild, das der Betrieb für eine Entscheidung zeigt, die ein laufender Prozess ausgewertet hat; man lernt es also nur einmal zu lesen. Geprüft wird die Entscheidung auf dem Bildschirm: Es wird nichts gespeichert, nichts ausgeliefert, und auch eine noch nirgends abgelegte Entscheidung lässt sich so ausprobieren. Unabhängig davon erhält ein DMN-Modell ohne Diagramm jetzt eines. Die meisten Modelle haben keines: Eine von einem Agenten geschriebene oder aus einem anderen Werkzeug exportierte Entscheidung hat die Logik, aber kein Bild — der Editor konnte dann nur einen einzelnen Kasten zeichnen, liess Eingabedaten und Pfeile stillschweigend weg, und ein Speichern aus diesem Zustand hinterliess das Modell schlechter dargestellt als zuvor. Ein solches Modell öffnet sich nun mit dem vollständigen Anforderungsgraphen, und das neue Menü «⋯» bietet «Auto-layout» zum Neuanordnen sowie «Export XML», um die Entscheidung als Datei mitzunehmen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
-          "Press Test. The panel lists the decisions the model provides and the inputs each one reads.",
-          "Type values and press Run. The result appears above the rule matrix, with the rule that fired highlighted.",
-          "Change a rule in the table and press Run again — nothing is saved or deployed in between, so you can iterate.",
-          "Use ⋯ → Auto-layout when a model's requirements graph needs re-arranging, and ⋯ → Export XML to download it."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
-          "«Test» drücken. Das Panel führt die Entscheidungen des Modells auf und die Eingaben, die jede davon liest.",
-          "Werte eintragen und «Run» drücken. Das Ergebnis erscheint über der Regelmatrix, die zutreffende Regel ist hervorgehoben.",
-          "Eine Regel in der Tabelle ändern und erneut «Run» drücken — dazwischen wird nichts gespeichert oder ausgeliefert.",
-          "«⋯ → Auto-layout» verwendet man, wenn der Anforderungsgraph neu angeordnet werden soll, «⋯ → Export XML» zum Herunterladen."
         ]
       },
       "try": {
