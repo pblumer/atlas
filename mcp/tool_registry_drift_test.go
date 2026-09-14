@@ -67,6 +67,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_save_draft":                   "POST /api/v1/drafts",
 	"atlas_save_form":                    "POST /api/v1/forms",
 	"atlas_upload_decision_model":        "POST /api/v1/dmn-models",
+	"atlas_deploy_decision":              "POST /api/v1/decision-deployments",
 	"atlas_register_decision":            "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":               "POST /api/v1/projects/{id}/deploy",
 	"atlas_deploy_application":           "POST /api/v1/applications/{id}/deploy",

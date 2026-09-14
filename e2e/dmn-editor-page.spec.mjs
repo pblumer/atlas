@@ -40,12 +40,14 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // `taken` makes the model upload answer 409 the way the server does when the handle
 // a decision would land on is already somebody else's (ADR-0222), unless the request
 // says the author chose to replace it.
-function installMock(page, { refs = [], drafts = [], taken = false } = {}) {
+function installMock(page, { refs = [], drafts = [], taken = false, deployed = [] } = {}) {
   const uploads = [];
   const created = [];
   const patched = [];
   const draftSaves = [];
   const draftDeletes = [];
+  const deploys = [];
+  let nextKey = 7;
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -84,6 +86,23 @@ function installMock(page, { refs = [], drafts = [], taken = false } = {}) {
       draftDeletes.push(path.split("/").pop());
       return route.fulfill({ status: 204, body: "" });
     }
+    if (path === "/api/v1/decision-deployments" && request.method() === "GET") {
+      const id = url.searchParams.get("decisionId");
+      return route.fulfill({ json: deployed.filter((d) => !id || d.decisionId === id) });
+    }
+    if (path === "/api/v1/decision-deployments" && request.method() === "POST") {
+      const body = request.postData() || "";
+      deploys.push({ query: url.search, body });
+      // The record is versioned by the decision id in the XML that was posted, the
+      // way the server versions it — so the chip the editor then reads back is about
+      // the decision the author actually deployed.
+      const decisionId = (body.match(/<decision\s+id="([^"]+)"/) || [])[1] || "Decision";
+      const version = deployed.filter((d) => d.decisionId === decisionId).length + 1;
+      for (const d of deployed) if (d.decisionId === decisionId) d.current = false;
+      const row = { key: nextKey++, decisionId, version, current: true };
+      deployed.push(row);
+      return route.fulfill({ json: { key: row.key, decisions: [row] } });
+    }
     if (path.endsWith("/xml") && path.startsWith("/api/v1/dmn-models/")) {
       return route.fulfill({ body: STORED_XML, contentType: "application/xml" });
     }
@@ -99,7 +118,7 @@ function installMock(page, { refs = [], drafts = [], taken = false } = {}) {
     }
     return route.fulfill({ json: [] });
   });
-  return { uploads, created, patched, draftSaves, draftDeletes };
+  return { uploads, created, patched, draftSaves, draftDeletes, deploys, deployed };
 }
 
 // A decision as it looks in a draft: the same shape as the stored model, with a
@@ -134,12 +153,19 @@ test("a new decision opens at its own address, in the editor chrome its siblings
   await expect(page.locator(".editor-bar .etabs#dmn-views button").first()).toHaveText("Overview (DRG)");
   await expect(page.locator(".editor-bar .etabs#dmn-views button")).toHaveCount(2);
 
-  // English, like the rest of the Modeler — and the BPMN editor's pairing: a neutral
-  // Save that keeps your work, a primary button that ships it.
+  // English, like the rest of the Modeler — and the BPMN editor's grammar: neutral
+  // buttons for what you keep, one primary button for the act that leaves the
+  // browser. Three verbs, because a decision has three layers
+  // (ADR-0321, ADR-draft-deploying-one-decision).
   await expect(page.locator("#dmn-save")).toHaveText("Save");
   await expect(page.locator("#dmn-save-model")).toHaveText("Save to model");
-  // Nothing is drafted yet, so neither the marker nor the way out of one is offered.
+  await expect(page.locator("#dmn-deploy")).toHaveText("Deploy");
+  await expect(page.locator("#dmn-save-model")).toHaveClass(/neutral/);
+  await expect(page.locator("#dmn-deploy")).not.toHaveClass(/neutral/);
+  // Nothing is drafted or deployed yet, so neither marker is offered, nor the way
+  // out of a draft.
   await expect(page.locator("#dmn-draft-chip")).toBeHidden();
+  await expect(page.locator("#dmn-deployed-chip")).toBeHidden();
   await expect(page.locator("#dmn-discard")).toBeHidden();
   expect(pageErrors).toEqual([]);
 });
@@ -319,4 +345,80 @@ test("the application's Create new menu navigates to the decision editor", async
 
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/dmn/new/p/app-1");
   await editorReady(page);
+});
+
+test("Deploy ships the decision to the engine, and says so on the bar", async ({ page }) => {
+  const state = installMock(page);
+  await page.goto("/index.html#/modeler/dmn/new/p/app-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-deploy").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Deployed v1 · key 7");
+
+  // What was sent: the decision on screen, filed under the application it was
+  // opened for. And nothing else was written — Deploy is not Save and not Save to
+  // model, which is the separation the three buttons exist for.
+  expect(state.deploys).toHaveLength(1);
+  expect(state.deploys[0].query).toBe("?projectId=app-1");
+  expect(state.deploys[0].body).toContain("<decision");
+  expect(state.uploads).toEqual([]);
+  expect(state.draftSaves).toEqual([]);
+  expect(state.created).toEqual([]);
+
+  // The version and the key are on the bar, the way a diagram opened from a
+  // deployment carries its key.
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployed v1 · key 7");
+
+  // The trap this buys is named where it happens: the decision runs, but nothing
+  // can call it by name until it is in the model.
+  await expect(page.locator("#toast")).toContainText("not in the model yet");
+
+  // Deploying again is a new version under a new key, and the bar follows.
+  await page.locator("#dmn-deploy").click();
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployed v2 · key 8");
+});
+
+test("a decision that is in the model deploys with its reference and handle, and is not warned about", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-deploy").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Deployed v1 · key 7");
+
+  // Provenance the record keeps: which application, which reference, which model
+  // handle this was authored as.
+  expect(state.deploys[0].query).toBe("?projectId=app-1&artifactId=ref-1&modelRef=eligibility");
+  // It is in the model, so there is nothing to warn about — the toast is the plain
+  // confirmation.
+  await expect(page.locator("#toast")).toContainText("deployed as version 1");
+  await expect(page.locator("#toast")).not.toContainText("not in the model yet");
+});
+
+test("the bar says which version a decision is deployed at the moment it opens", async ({ page }) => {
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    // Two versions of the same decision: only the current one is what a process
+    // deployed now would bind to, so only it belongs on the bar.
+    deployed: [
+      { key: 4, decisionId: "Decision_stored", version: 1, current: false },
+      { key: 9, decisionId: "Decision_stored", version: 2, current: true },
+    ],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployed v2 · key 9");
+  await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /version 2 under definition key 9/);
+});
+
+test("a decision nothing has deployed yet says nothing, rather than saying zero", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await expect(page.locator("#dmn-ref-chip")).toHaveText("eligibility.dmn");
+  await expect(page.locator("#dmn-deployed-chip")).toBeHidden();
 });
