@@ -392,6 +392,17 @@ The control-flow basics most real models use.
   no stable identity to lock. The session handlers now take a subject rather than
   assuming the BPMN draft store, so a third artifact with a draft is a binding rather
   than a copy. With that, #919's parity list is complete.
+  **Two things it surfaced were fixed with it.** The deploy preflight refused a
+  process whose business rule task named a decision that existed only as a
+  deployment, telling the author to create what they had just deployed; it is now
+  binding-aware
+  ([ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task](docs/adr/draft-a-deployed-decision-satisfies-a-latest-bound-task.md)),
+  because a `latest`-bound task resolves to that deployment and never consults the
+  bundle, while a `deployment`-bound one still needs it and now says so. And a
+  process document names a business rule task without showing the decision behind
+  it; it now carries the call the diagram holds and the decision's own rule table,
+  drawn by the renderer the decision document already uses
+  ([ADR-draft-the-process-document-shows-the-decision-a-task-runs](docs/adr/draft-the-process-document-shows-the-decision-a-task-runs.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

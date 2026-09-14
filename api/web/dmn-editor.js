@@ -809,12 +809,13 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         await refreshDeployed(true);
         statusEl.textContent = `Deployed v${primary.version} · key ${rep.key}`;
         toast && toast(`Decision “${name}” deployed as version ${primary.version} (key ${rep.key})`, "ok");
-        // The trap this route accepts, said out loud where it happens: the record is
-        // real and evaluable, but what a business rule task may *name* is what a
-        // reference resolves, so a decision that is not in the model cannot be wired
-        // to one yet.
+        // What this route still costs, said out loud where it happens. A
+        // `latest`-bound task may name this decision — the deploy resolves it to the
+        // record just written. A `deployment`-bound one evaluates the model bundled
+        // with its own process, and there is no model to bundle
+        // (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
         if (!modelRef) {
-          toast && toast("Deployed — but this decision is not in the model yet, so no business rule task can name it. Press “Save to model” to make it referenceable.", "warn");
+          toast && toast("Deployed — but this decision is not in the model yet, so a business rule task bound to “deployment” cannot use it. Press “Save to model” to make it referenceable.", "warn");
         }
       } catch (e) {
         statusEl.textContent = "";

@@ -2,6 +2,50 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-that-is-only-deployed-no-longer-blocks-the-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision you just deployed can now be used right away",
+        "de": "Eine soeben ausgelieferte Entscheidung ist jetzt sofort verwendbar"
+      },
+      "summary": {
+        "en": "Since a decision could be deployed on its own from its editor, there was a state the product invited you into and then refused: you deployed a decision, the business rule task's picker offered it, and deploying the process came back with \"no DMN model provides it — create the decision in Atlas, then deploy\". You had just created it. The check exists to stop a step whose evaluation can never happen, and for a task set to Latest that was simply not the case: deploying resolves it to the newest deployed version of that decision, and the copy bundled with the process is never consulted. The check now distinguishes the two bindings. A task set to Deployment still needs the decision as a model, because it evaluates the copy shipped with its own process — and its refusal now says that, rather than telling you to do something you have already done.",
+        "de": "Seit eine Entscheidung aus ihrem Editor heraus allein ausgeliefert werden kann, gab es einen Zustand, in den das Produkt einlud und den es anschliessend verweigerte: Man lieferte eine Entscheidung aus, die Auswahl der Geschäftsregelaufgabe bot sie an — und das Ausliefern des Prozesses endete mit «no DMN model provides it — create the decision in Atlas, then deploy». Erstellt hatte man sie gerade eben. Die Prüfung existiert, um einen Schritt zu verhindern, dessen Auswertung nie stattfinden kann; für eine auf «Latest» gesetzte Aufgabe traf das schlicht nicht zu: Das Ausliefern löst sie auf die neueste ausgelieferte Version dieser Entscheidung auf, die mit dem Prozess mitgelieferte Kopie wird gar nicht herangezogen. Die Prüfung unterscheidet nun die beiden Bindungen. Eine auf «Deployment» gesetzte Aufgabe braucht die Entscheidung weiterhin als Modell, weil sie die mit dem eigenen Prozess ausgelieferte Kopie auswertet — und ihre Ablehnung sagt das jetzt, statt zu etwas aufzufordern, das längst getan ist."
+      },
+      "link": {
+        "label": "ADR-0322",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0322-deploying-one-decision.md"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions",
+        "Deployment"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and press Deploy.",
+          "Open a diagram, add a business rule task and pick that decision; leave Binding on Latest.",
+          "Press Deploy on the diagram: it goes through, and the task evaluates the decision you deployed.",
+          "Switch Binding to Deployment and the deploy is refused again — that task needs the decision as a model, and the message says why."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und «Deploy» drücken.",
+          "Ein Diagramm öffnen, eine Geschäftsregelaufgabe hinzufügen und diese Entscheidung auswählen; «Binding» auf «Latest» belassen.",
+          "Beim Diagramm «Deploy» drücken: Es geht durch, und die Aufgabe wertet die ausgelieferte Entscheidung aus.",
+          "«Binding» auf «Deployment» umstellen: Das Ausliefern wird wieder abgelehnt — diese Aufgabe braucht die Entscheidung als Modell, und die Meldung sagt, warum."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-decision-whose-logic-is-a-literal-expression-no-longer-cov",
       "version": "Unreleased",
       "date": null,
@@ -235,6 +279,50 @@
       }
     },
     {
+      "id": "a-process-document-now-shows-the-decision-behind-each-busine",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The process document now contains the decision tables too",
+        "de": "Die Prozessdokumentation enthält jetzt auch die Entscheidungstabellen"
+      },
+      "summary": {
+        "en": "A process document already reproduced what each step runs — a script task's source, a branch's condition — verbatim, so a reader outside Atlas could check it rather than take it on trust. The one step it said nothing about was the business rule task, which is the one whose whole behaviour lives outside the diagram: the section named the step and stopped, and the rules that actually decide the outcome were somewhere else. Each such section now carries the call as the diagram holds it — which decision, how it binds and what that means, the result variable, and the values fed in — and, under it, the decision's rule table, set exactly as the decision's own document sets it. The rules are read from the model behind the decision where there is one and from the deployed version otherwise, and the document names which of the two it read. A step evaluated by an external temis worker says so and names the worker instead of pretending to hold rules it does not have.",
+        "de": "Eine Prozessdokumentation gab bisher schon wieder, was ein Schritt ausführt — den Quelltext eines Skript-Tasks, die Bedingung einer Verzweigung — und zwar wörtlich, damit Lesende ausserhalb von Atlas es prüfen können, statt es glauben zu müssen. Der einzige Schritt, zu dem sie nichts sagte, war die Geschäftsregelaufgabe — ausgerechnet jener, dessen Verhalten vollständig ausserhalb des Diagramms liegt: Der Abschnitt nannte den Schritt und hörte auf, die tatsächlich entscheidenden Regeln standen anderswo. Jeder solche Abschnitt führt nun den Aufruf so auf, wie das Diagramm ihn hält — welche Entscheidung, wie sie gebunden ist und was das bedeutet, die Ergebnisvariable und die übergebenen Werte — und darunter die Regeltabelle der Entscheidung, gesetzt genau wie in deren eigener Dokumentation. Die Regeln stammen aus dem Modell hinter der Entscheidung, sofern es eines gibt, sonst aus der ausgelieferten Version; die Dokumentation nennt, welche der beiden gelesen wurde. Ein Schritt, der über einen externen temis-Worker ausgewertet wird, sagt das und nennt den Worker, statt Regeln vorzugeben, die er nicht hält."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions",
+        "Documentation"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a diagram with a business rule task in the Modeler.",
+          "Choose ⋯ → Documentation and press Publish version.",
+          "Open the PDF: the task's section now names the decision, its binding and its inputs, and sets the rule table underneath.",
+          "The line above the table says where the rules came from — the model behind the decision, or the deployed version when there is no model."
+        ],
+        "de": [
+          "Ein Diagramm mit einer Geschäftsregelaufgabe im Modeler öffnen.",
+          "«⋯ → Documentation» wählen und «Publish version» drücken.",
+          "Das PDF öffnen: Der Abschnitt des Schritts nennt nun die Entscheidung, ihre Bindung und ihre Eingaben und setzt darunter die Regeltabelle.",
+          "Die Zeile über der Tabelle sagt, woher die Regeln stammen — aus dem Modell hinter der Entscheidung oder aus der ausgelieferten Version, wenn es kein Modell gibt."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-decision-is-published-as-its-own-document-and-two-people-c",
       "version": "Unreleased",
       "date": null,
@@ -314,96 +402,6 @@
           "Werte eintragen und «Run» drücken. Das Ergebnis erscheint über der Regelmatrix, die zutreffende Regel ist hervorgehoben.",
           "Eine Regel in der Tabelle ändern und erneut «Run» drücken — dazwischen wird nichts gespeichert oder ausgeliefert.",
           "«⋯ → Auto-layout» verwendet man, wenn der Anforderungsgraph neu angeordnet werden soll, «⋯ → Export XML» zum Herunterladen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-single-decision-can-be-deployed-from-its-editor-and-the-ed",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Deploy one decision, without publishing everything around it",
-        "de": "Eine Entscheidung einzeln ausliefern, ohne alles andere mitzuliefern"
-      },
-      "summary": {
-        "en": "A decision reached the engine one way only: Publish on the application, which ships everything that application holds. To try out a decision you had just finished, you published other people's unfinished work with it, gave every other decision a new version, and created a release nobody had asked for. A single diagram has always had its own Deploy button; a single decision had none. The decision editor's bar now has Deploy beside Save and Save to model, and a chip saying which version of this decision is running and under which key — the answer to “is what I am looking at what the engine evaluates”, without leaving for Operations. Deploying takes exactly what is on screen and goes through the same path a Publish does, so the result is an ordinary deployed decision: keyed, versioned, and what the next process deployed binds to. The three buttons stay three different acts. Save keeps your draft, Save to model writes the decision everything resolves, Deploy changes what the engine runs. A decision that was never saved to the model can be deployed too — and the editor tells you that no business rule task can call it by name until you save it to the model.",
-        "de": "Eine Entscheidung erreichte die Engine bisher nur auf einem Weg: über Publish der Anwendung, und damit wurde alles ausgeliefert, was diese Anwendung enthält. Wer eine gerade fertiggestellte Entscheidung ausprobieren wollte, veröffentlichte die unfertige Arbeit anderer gleich mit, gab jeder weiteren Entscheidung eine neue Version und erzeugte ein Release, das niemand verlangt hatte. Ein einzelnes Diagramm hatte schon immer seinen eigenen Deploy-Knopf; eine einzelne Entscheidung hatte keinen. Die Leiste des Entscheidungseditors hat jetzt Deploy neben Save und «Save to model» — dazu einen Chip, der sagt, welche Version dieser Entscheidung läuft und unter welchem Schlüssel. Das ist die Antwort auf «Ist das, was ich sehe, auch das, was die Engine auswertet», ohne den Wechsel in den Betrieb. Deploy nimmt genau das, was auf dem Bildschirm steht, und geht denselben Weg wie ein Publish: Das Ergebnis ist eine gewöhnliche ausgelieferte Entscheidung — mit Schlüssel, mit Version, und genau daran bindet sich der nächste ausgelieferte Prozess. Die drei Knöpfe bleiben drei verschiedene Handlungen: Save sichert den Entwurf, «Save to model» schreibt die Entscheidung, die alles auflöst, Deploy ändert, was die Engine ausführt. Auch eine Entscheidung, die nie ins Modell gespeichert wurde, lässt sich ausliefern — der Editor weist dann darauf hin, dass kein Business-Rule-Task sie beim Namen nennen kann, solange sie nicht im Modell steht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
-          "Model the table, then press Deploy. The bar shows the version and the key it is now deployed under.",
-          "Change a rule and press Deploy again. The version goes up and the key changes; processes deployed earlier keep the version they were pinned to.",
-          "Press Save to model when the decision should be resolvable by name — that is what the business rule task picker lists, and what the next Publish of the application ships.",
-          "The deployed decisions are listed under Operations → Decisions, with the application, the model and the checksum each came from."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
-          "Die Tabelle modellieren und Deploy drücken. Die Leiste zeigt Version und Schlüssel, unter denen sie jetzt ausgeliefert ist.",
-          "Eine Regel ändern und erneut Deploy drücken. Die Version steigt, der Schlüssel ändert sich; früher ausgelieferte Prozesse behalten die Version, an die sie gebunden wurden.",
-          "«Save to model» drücken, sobald die Entscheidung über ihren Namen auflösbar sein soll — das ist es, was die Auswahl im Business-Rule-Task führt und was das nächste Publish der Anwendung ausliefert.",
-          "Die ausgelieferten Entscheidungen stehen unter Betrieb → Decisions, mit Anwendung, Modell und Prüfsumme, aus denen sie jeweils stammen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-has-a-draft-so-saving-it-is-no-longer-the-same-as",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Save a decision without publishing it to everyone",
-        "de": "Eine Entscheidung sichern, ohne sie allen zu geben"
-      },
-      "summary": {
-        "en": "Saving a decision used to write the model file itself — the one the business rule task picker reads, the one another application's decision may point at, and the one the next Publish ships. There was nowhere to leave an unfinished decision, and pressing Save had effects you could not see: a half-typed rule refused a colleague's Publish of that application, with a message about a decision they had never opened; a table whose output column was still called “result” handed “result” to the next task that used it; and saving a second decision called Eligibility quietly filed it as eligibility-2 and listed two rows with the same name. The editor now has the same pair of buttons as the diagram editor. Save keeps a draft — your work, which nothing else reads. Save to model writes the decision everything resolves, and is what the next Publish ships. An application shows a decision with unsaved work as Draft, and a decision that has never been saved to the model as its own row saying it will not be published. Saving to a name another decision already has is now a question, not a second copy.",
-        "de": "Eine Entscheidung zu speichern schrieb bisher direkt die Modelldatei — jene, aus der die Auswahl im Business-Rule-Task liest, auf die die Entscheidung einer anderen Anwendung zeigen kann, und die beim nächsten Publish ausgeliefert wird. Für eine unfertige Entscheidung gab es keinen Ort, und Speichern hatte Wirkungen, die man nicht sah: eine halb getippte Regel verweigerte einer Kollegin das Publish dieser Anwendung — mit einer Meldung über eine Entscheidung, die sie nie geöffnet hatte; eine Tabelle, deren Ausgabespalte noch «result» hiess, gab «result» an den nächsten Task weiter, der sie übernahm; und eine zweite Entscheidung namens Eligibility wurde stillschweigend als eligibility-2 abgelegt, mit zwei gleichnamigen Zeilen in der Liste. Der Editor hat jetzt dasselbe Knopfpaar wie der Diagramm-Editor. Speichern («Save») sichert einen Entwurf — Ihre Arbeit, die sonst niemand liest. «Save to model» schreibt die Entscheidung, die alles auflöst, und genau diese liefert das nächste Publish aus. Eine Anwendung zeigt eine Entscheidung mit ungesicherter Arbeit als «Draft», und eine Entscheidung, die nie ins Modell gespeichert wurde, als eigene Zeile mit dem Hinweis, dass sie nicht veröffentlicht wird. Auf einen Namen zu speichern, den eine andere Entscheidung bereits trägt, ist jetzt eine Rückfrage statt einer zweiten Kopie."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision, or create one from an application with Create new → Decision (DMN).",
-          "Model the table and press Save. The bar shows a dashed Draft chip: the work is stored, and nothing that reads decisions has changed.",
-          "Leave and come back. The decision opens on your draft, not on the model.",
-          "Press Save to model when it is ready. The draft marker disappears, the picker lists the decision, and the next Publish of the application ships it.",
-          "Discard draft throws the work away and goes back to the model as it is stored."
-        ],
-        "de": [
-          "Eine Entscheidung öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
-          "Die Tabelle modellieren und Save drücken. In der Leiste erscheint der gestrichelte Chip «Draft»: Die Arbeit ist gesichert, und an dem, was Entscheidungen liest, hat sich nichts geändert.",
-          "Weggehen und zurückkommen. Die Entscheidung öffnet sich auf dem Entwurf, nicht auf dem Modell.",
-          "Wenn sie fertig ist, «Save to model» drücken. Die Entwurfsmarkierung verschwindet, die Auswahl im Business-Rule-Task führt die Entscheidung, und das nächste Publish der Anwendung liefert sie aus.",
-          "«Discard draft» verwirft die Arbeit und kehrt zum gespeicherten Modell zurück."
         ]
       },
       "try": {

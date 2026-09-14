@@ -100,13 +100,15 @@ func TestDeployingOneDecisionMakesItRunnable(t *testing.T) {
 	}
 }
 
-// TestADecisionDeployedWithoutAModelCannotBeNamedByATask pins the trade-off the
-// ADR accepts rather than hides. A decision deployed from the editor and never
-// saved to the model is a real runtime artifact — keyed, versioned, evaluable in
-// its own right — but a business rule task naming it is still refused at deploy
-// time, because what a task may name is what a reference resolves. The editor has
-// to say so; the server refuses the process, not the decision.
-func TestADecisionDeployedWithoutAModelCannotBeNamedByATask(t *testing.T) {
+// TestADecisionDeployedWithoutAModelIsUsableByALatestBoundTask: a decision
+// deployed from the editor and never saved to the model is a real runtime
+// artifact, and a latest-bound business rule task may name it — the deploy
+// resolves that reference to this deployment's key, so no model needs bundling
+// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+//
+// ADR-0322 recorded the opposite as an accepted trap. It was wrong: this is the
+// test that was written to pin it, turned round to pin what is true.
+func TestADecisionDeployedWithoutAModelIsUsableByALatestBoundTask(t *testing.T) {
 	srv, dir := newValidateServer(t)
 	x := deployTestHarness{t, srv.Handler()}
 
@@ -118,12 +120,34 @@ func TestADecisionDeployedWithoutAModelCannotBeNamedByATask(t *testing.T) {
 		t.Fatalf("model folder = %v, want the deploy to have added nothing", models)
 	}
 
-	code, b := x.do(http.MethodPost, "/api/v1/deployments", eligibilityProcess("orders", "latest"))
-	if code != http.StatusConflict {
-		t.Fatalf("deploy a process naming it = %d %s, want 409", code, b)
+	// The picker offers it (ADR-0050), and the deploy now agrees.
+	key := deployProcess(t, x, eligibilityProcess("orders", "latest"))
+	if got := runAndReadVerdict(t, x, key, "orders"); got != "approve" {
+		t.Fatalf("verdict = %q, want approve — the deployed decision is what it evaluates", got)
 	}
-	if !strings.Contains(string(b), "add its reference") {
-		t.Fatalf("refusal = %s, want it to name the missing reference", b)
+}
+
+// A deployment-bound task is the case the guard still has work to do on: it
+// evaluates the model bundled with its own process, so a decision deployed
+// elsewhere cannot satisfy it however current that decision is. The refusal says
+// that, rather than telling an author to deploy something they just deployed.
+func TestADeployedDecisionCannotSatisfyDeploymentBinding(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	deployOneDecision(t, x, "", eligibilityDMN("approve"))
+
+	code, b := x.do(http.MethodPost, "/api/v1/deployments", eligibilityProcess("pinned", "deployment"))
+	if code != http.StatusConflict {
+		t.Fatalf("deploy = %d %s, want 409: there is nothing bundled for it to evaluate", code, b)
+	}
+	for _, want := range []string{"`deployment`", "bind the task to `latest`"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("refusal = %s, want it to contain %q", b, want)
+		}
+	}
+	// And it must not repeat the old advice, which the author has already followed.
+	if strings.Contains(string(b), "create the decision (or add its reference) in Atlas") {
+		t.Errorf("refusal = %s, want it not to say 'create the decision' at somebody who just deployed one", b)
 	}
 }
 
@@ -381,5 +405,190 @@ func TestADeployedDecisionRecordsWhoDeployedItAndWhen(t *testing.T) {
 	got := rep.Decisions[0]
 	if got.DeployedBy != "usr_author" || got.DeployedAt < before {
 		t.Fatalf("decision = %+v, want it stamped with usr_author at or after %d", got, before)
+	}
+}
+
+// brTask is one business rule task in a multi-decision fixture: which decision it
+// calls and how it is bound.
+type brTask struct{ decisionID, binding string }
+
+// decisionsProcess is a process with one business rule task per call, in sequence,
+// parked at a user task afterwards. One diagram can mix bindings, or name
+// decisions with different coverage, and the preflight has to tell those apart
+// per task rather than per diagram — which is what needs a fixture with more than
+// the one task eligibilityProcess has.
+func decisionsProcess(processID string, calls ...brTask) string {
+	var b strings.Builder
+	b.WriteString(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="` + processID + `" isExecutable="true">
+    <startEvent id="s"/>
+    <userTask id="wait"/>
+    <endEvent id="e"/>
+`)
+	prev := "s"
+	for i, c := range calls {
+		id := fmt.Sprintf("decide%d", i)
+		b.WriteString(fmt.Sprintf(`    <businessRuleTask id="%s">
+      <extensionElements>
+        <calledDecision decisionId="%s" resultVariable="v%d" bindingType="%s"/>
+        <decisionInput name="amount" value="250"/>
+      </extensionElements>
+    </businessRuleTask>
+    <sequenceFlow id="in%d" sourceRef="%s" targetRef="%s"/>
+`, id, c.decisionID, i, c.binding, i, prev, id))
+		prev = id
+	}
+	b.WriteString(fmt.Sprintf(`    <sequenceFlow id="toWait" sourceRef="%s" targetRef="wait"/>
+    <sequenceFlow id="toEnd" sourceRef="wait" targetRef="e"/>
+  </process>
+</definitions>`, prev))
+	return b.String()
+}
+
+// TestPublishingAnApplicationAcceptsALatestBoundTaskOnADeployedDecision is the
+// same claim as TestADecisionDeployedWithoutAModelIsUsableByALatestBoundTask, on
+// the other preflight. A bundle deploy resolves its own references and matches
+// them itself, so the rule had to be taught to it separately; if the two ever
+// disagree, an author can deploy a diagram alone that their application refuses,
+// which is the inconsistency #919 started from.
+//
+// The application here holds no DMN reference at all: the only thing that makes
+// the draft deployable is the decision deployed from the editor beforehand.
+func TestPublishingAnApplicationAcceptsALatestBoundTaskOnADeployedDecision(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	deployOneDecision(t, x, "", eligibilityDMN("approve"))
+
+	appID := x.mkProject("orders app")
+	x.saveDraft(appID, eligibilityProcess("orders", "latest"))
+
+	code, b := x.do(http.MethodPost, "/api/v1/projects/"+appID+"/deploy", "")
+	if code != http.StatusOK {
+		t.Fatalf("publish = %d %s, want 200: the decision it needs is deployed", code, b)
+	}
+	var rep projectDeployResp
+	if err := json.Unmarshal(b, &rep); err != nil {
+		t.Fatalf("decode publish report: %v (%s)", err, b)
+	}
+	if !rep.Deployed || len(rep.Definitions) != 1 {
+		t.Fatalf("publish report = %+v, want the draft deployed", rep)
+	}
+	if got := runAndReadVerdict(t, x, rep.Definitions[0].Key, "orders"); got != "approve" {
+		t.Fatalf("verdict = %q, want approve — the bundle pinned the deployed decision", got)
+	}
+}
+
+// TestMixingBindingsOnOneDecisionStillNeedsTheBundle: coverage is a property of
+// the task, not of the decision id. A diagram that names "eligibility" twice —
+// once latest-bound, once deployment-bound — is refused even though the deployed
+// decision satisfies the first task, because the second evaluates the model
+// bundled with this process and there is none.
+func TestMixingBindingsOnOneDecisionStillNeedsTheBundle(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	deployOneDecision(t, x, "", eligibilityDMN("approve"))
+
+	code, b := x.do(http.MethodPost, "/api/v1/deployments", decisionsProcess("mixed",
+		brTask{"eligibility", "latest"}, brTask{"eligibility", "deployment"}))
+	if code != http.StatusConflict {
+		t.Fatalf("deploy = %d %s, want 409: the deployment-bound task has nothing to evaluate", code, b)
+	}
+	for _, want := range []string{"`deployment`", "eligibility"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("refusal = %s, want it to contain %q", b, want)
+		}
+	}
+}
+
+// TestTheRefusalNamesOnlyWhatCannotBeCovered: a diagram is refused for the
+// decisions that genuinely cannot run, and the ones a deployment already answers
+// are not listed. Naming them would send an author to create something they have
+// just deployed, which is how the superseded message read.
+//
+// The second half is the same diagram with the covered decision bound to
+// `deployment` instead: both halves of the refusal then apply at once, and each
+// names its own decision with its own remedy.
+func TestTheRefusalNamesOnlyWhatCannotBeCovered(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	deployOneDecision(t, x, "", eligibilityDMN("approve"))
+
+	code, b := x.do(http.MethodPost, "/api/v1/deployments", decisionsProcess("partly",
+		brTask{"eligibility", "latest"}, brTask{"discount", "latest"}))
+	if code != http.StatusConflict {
+		t.Fatalf("deploy = %d %s, want 409: discount is in no model and is not deployed", code, b)
+	}
+	if !strings.Contains(string(b), "discount") {
+		t.Errorf("refusal = %s, want it to name discount", b)
+	}
+	if strings.Contains(string(b), "eligibility") {
+		t.Errorf("refusal = %s, want it not to name eligibility, which is deployed", b)
+	}
+
+	code, b = x.do(http.MethodPost, "/api/v1/deployments", decisionsProcess("both",
+		brTask{"eligibility", "deployment"}, brTask{"discount", "latest"}))
+	if code != http.StatusConflict {
+		t.Fatalf("deploy = %d %s, want 409", code, b)
+	}
+	for _, want := range []string{"discount", "eligibility", "bound to `deployment`"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("refusal = %s, want it to contain %q", b, want)
+		}
+	}
+}
+
+// TestAModelerCanReadADeployedDecisionsSource: the deployed DMN source was
+// operator-only, which put it out of reach of exactly the people whose process
+// document needs it — roles are flat, so a modeler is not an operator (ADR-0209).
+// It is now readable by any signed-in identity, like its BPMN counterpart
+// GET /api/v1/processes/{key}/xml, which carries strictly more
+// (ADR-draft-the-process-document-shows-the-decision-a-task-runs).
+func TestAModelerCanReadADeployedDecisionsSource(t *testing.T) {
+	srv, _ := newValidateServer(t, WithAuth())
+	h := srv.Handler()
+	call := func(tok, path string) (int, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: tok})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	session := func(id string, roles ...string) string {
+		t.Helper()
+		tok, err := srv.sessions.create(User{ID: id, Username: id, Roles: roles}, nil)
+		if err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		return tok
+	}
+
+	modeler := session("usr_modeler", RoleModeler)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/decision-deployments", strings.NewReader(eligibilityDMN("approve")))
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: modeler})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deploy = %d %s", rec.Code, rec.Body)
+	}
+	var rep deployDecisionResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/decision-deployments/%d/xml", rep.Key)
+
+	if code, body := call(modeler, path); code != http.StatusOK || !strings.Contains(body, `"approve"`) {
+		t.Fatalf("modeler read = %d %s, want the deployed source", code, body)
+	}
+	// Widening must not have taken it away from the operator it used to belong to.
+	if code, _ := call(session("usr_ops", RoleOperator), path); code != http.StatusOK {
+		t.Errorf("operator read = %d, want 200: widening a role must not narrow it", code)
+	}
+	// "Any signed-in identity" means signed in: an anonymous caller still gets none.
+	anon := httptest.NewRequest(http.MethodGet, path, nil)
+	anonRec := httptest.NewRecorder()
+	h.ServeHTTP(anonRec, anon)
+	if anonRec.Code == http.StatusOK {
+		t.Errorf("anonymous read = 200, want a refusal")
 	}
 }

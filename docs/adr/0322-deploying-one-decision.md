@@ -116,6 +116,14 @@ says so on that deploy. It is the same shape as a BPMN definition deployed from 
 diagram that has no draft — visible in Operations, absent from the Modeler's list —
 which Atlas has always allowed.
 
+> **Later correction.** That paragraph was wrong on both halves, and
+> [ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task](draft-a-deployed-decision-satisfies-a-latest-bound-task.md)
+> replaces it: the picker already offered deployed decisions (ADR-0050), and a
+> `latest`-bound task never needed a model, because the deploy resolves it to the
+> decision deployment's own key. What remains true is narrower — a
+> **`deployment`**-bound task evaluates the model bundled with its own process, so
+> a deployed decision cannot satisfy it. Everything else in this record stands.
+
 ### The editor says what is deployed
 
 The bar carries a chip with the current deployed version of the decision being

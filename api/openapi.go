@@ -323,8 +323,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decision-deployments", s.handleListDecisionDeployments, apiOp{
 			summary: "List the DMN decisions deployed as runtime artifacts — one row per decision and version, with the application, model and checksum each came from; ?applicationId= narrows to one application and ?decisionId= to one decision's version history", tag: "Decisions", role: roleAny,
 			resp: jsonBody("Deployed decision definitions", tArray())}},
+		// roleAny, like GET /api/v1/processes/{key}/xml, which is its BPMN counterpart
+		// and exposes strictly more: a deployed process model carries its scripts, its
+		// FEEL conditions, its worker types and its connector configuration. A process
+		// document reads this to show the rules behind a business rule task whose
+		// decision has no model, and a modeler is not an operator (ADR-0209).
 		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
-			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: RoleOperator,
+			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: roleAny,
 			resp: xmlBody("DMN XML")}},
 		{"POST", "/api/v1/decisions/evaluate", s.handleTryDecision, apiOp{
 			summary: "Try a DMN model against sample inputs and get the temis trace back — what a decision returns and which rules fired, for the model in the request rather than anything deployed. Nothing is stored, keyed, or registered, and the DMN registry is untouched. With no decisionId it only describes what the model offers and its inputs. A model that does not compile comes back 200 with ok:false (ADR-0326)", tag: "Decisions", role: RoleModeler,

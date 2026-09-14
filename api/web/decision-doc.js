@@ -14,7 +14,7 @@
 // dependency on an editor's internals.
 
 import { PdfDocument, bytesToBase64 } from "./pdf.js";
-import { svgToJpeg, wantsLandscape } from "./process-doc.js";
+import { svgToJpeg, wantsLandscape } from "./doc-graphics.js";
 
 const GREY = [0.42, 0.42, 0.42];
 
@@ -140,6 +140,60 @@ const cellText = (t) => {
 // what an unlabelled column actually means.
 const columnTitle = (c) => c.label || c.expression || "—";
 
+// renderDecisionBody draws one decision's content into a document: what it reads,
+// its rule table (or its literal expression), and what it writes. It is shared
+// with the *process* document, which shows the decision a business rule task runs
+// (ADR-draft-the-process-document-shows-the-decision-a-task-runs) — one renderer,
+// so a rule table looks the same whichever document a reader is holding.
+//
+// It draws the body only. The heading, the id line and the prose above it belong
+// to the document doing the drawing, because the two frame a decision differently:
+// here it is the subject, there it is what a step calls.
+export function renderDecisionBody(doc, dec) {
+  if (dec.inputs && dec.inputs.length) {
+    doc.paragraph("Reads", { size: 9, bold: true, after: 2 });
+    doc.table(
+      [{ header: "Input", width: 2 }, { header: "Type", width: 1 }],
+      dec.inputs.map((i) => [i.expression, i.type || "—"]),
+    );
+  }
+
+  if (dec.rules.length || dec.inputColumns.length) {
+    // The rule table is the decision. It is set as a table rather than as
+    // preformatted text because a decision table read as text is a decision
+    // table nobody checks.
+    doc.paragraph("Rules  ·  hit policy " + dec.hitPolicy, { size: 9, color: GREY, after: 2 });
+    const columns = [{ header: "#", width: 0.4 }]
+      .concat(dec.inputColumns.map((c) => ({ header: columnTitle(c), width: 1.4 })))
+      .concat(dec.outputColumns.map((c) => ({ header: "→ " + columnTitle(c), width: 1.4 })));
+    const rows = dec.rules.map((rule, i) =>
+      [String(i + 1)]
+        .concat(dec.inputColumns.map((_, k) => cellText(rule.inputs[k])))
+        .concat(dec.outputColumns.map((_, k) => cellText(rule.outputs[k]))));
+    doc.table(columns, rows);
+    // A rule's own annotation says why it exists, which the grid has no room
+    // for; the ones that carry it follow the table.
+    const annotated = dec.rules
+      .map((rule, i) => ({ n: i + 1, text: rule.description }))
+      .filter((r) => r.text);
+    for (const r of annotated) {
+      doc.paragraph(`Rule ${r.n}: ${r.text}`, { size: 9, indent: 8, after: 3 });
+    }
+    if (dec.outputColumns.length) {
+      const outs = dec.outputColumns
+        .map((c) => c.expression + (c.type ? " (" + c.type + ")" : ""))
+        .filter(Boolean)
+        .join(", ");
+      if (outs) doc.paragraph("Writes: " + outs, { size: 9, color: GREY, after: 4 });
+    }
+  } else if (dec.literal) {
+    // A decision whose logic is a literal expression is shown as what it is.
+    doc.codeBlock(dec.literal, { label: "Literal expression", language: "feel" });
+  } else {
+    doc.paragraph("This decision declares no logic yet.", { size: 9.5, color: GREY, after: 6 });
+  }
+}
+
 // buildDecisionDocumentationPdf lays out the document. It is a pure function of
 // the collected content plus the rasterised graph, so a test can assert what a
 // document says without a browser canvas.
@@ -191,48 +245,7 @@ export function buildDecisionDocumentationPdf(spec) {
       doc.paragraph("No description.", { size: 9.5, color: GREY, after: 6 });
     }
 
-    if (dec.inputs.length) {
-      doc.paragraph("Reads", { size: 9, bold: true, after: 2 });
-      doc.table(
-        [{ header: "Input", width: 2 }, { header: "Type", width: 1 }],
-        dec.inputs.map((i) => [i.expression, i.type || "—"]),
-      );
-    }
-
-    if (dec.rules.length || dec.inputColumns.length) {
-      // The rule table is the decision. It is set as a table rather than as
-      // preformatted text because a decision table read as text is a decision
-      // table nobody checks.
-      doc.paragraph("Rules  ·  hit policy " + dec.hitPolicy, { size: 9, color: GREY, after: 2 });
-      const columns = [{ header: "#", width: 0.4 }]
-        .concat(dec.inputColumns.map((c) => ({ header: columnTitle(c), width: 1.4 })))
-        .concat(dec.outputColumns.map((c) => ({ header: "→ " + columnTitle(c), width: 1.4 })));
-      const rows = dec.rules.map((rule, i) =>
-        [String(i + 1)]
-          .concat(dec.inputColumns.map((_, k) => cellText(rule.inputs[k])))
-          .concat(dec.outputColumns.map((_, k) => cellText(rule.outputs[k]))));
-      doc.table(columns, rows);
-      // A rule's own annotation says why it exists, which the grid has no room
-      // for; the ones that carry it follow the table.
-      const annotated = dec.rules
-        .map((rule, i) => ({ n: i + 1, text: rule.description }))
-        .filter((r) => r.text);
-      for (const r of annotated) {
-        doc.paragraph(`Rule ${r.n}: ${r.text}`, { size: 9, indent: 8, after: 3 });
-      }
-      if (dec.outputColumns.length) {
-        const outs = dec.outputColumns
-          .map((c) => c.expression + (c.type ? " (" + c.type + ")" : ""))
-          .filter(Boolean)
-          .join(", ");
-        if (outs) doc.paragraph("Writes: " + outs, { size: 9, color: GREY, after: 4 });
-      }
-    } else if (dec.literal) {
-      // A decision whose logic is a literal expression is shown as what it is.
-      doc.codeBlock(dec.literal, { label: "Literal expression", language: "feel" });
-    } else {
-      doc.paragraph("This decision declares no logic yet.", { size: 9.5, color: GREY, after: 6 });
-    }
+    renderDecisionBody(doc, dec);
     doc.y += 4;
   }
 

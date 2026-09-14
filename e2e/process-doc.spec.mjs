@@ -295,3 +295,145 @@ test("a diagram with no process is refused rather than published empty", async (
   });
   expect(message).toContain("no process to document");
 });
+
+// The decision behind a business rule task
+// (ADR-draft-the-process-document-shows-the-decision-a-task-runs). It is the one
+// element whose behaviour lives entirely off the diagram, and until now the
+// document said nothing about it — while already setting a script task's source
+// and a flow's condition verbatim.
+
+test("a business rule task's call is read off the diagram, decision and binding and all", async ({ page }) => {
+  const c = await page.evaluate(() => window.__doc.collectDocumentation(window.__modeler));
+  const byId = Object.fromEntries(c.elements.map((e) => [e.id, e]));
+
+  expect(byId.Task_pruefung.decision).toEqual({
+    decisionId: "eligibility",
+    binding: "latest",
+    resultVariable: "verdict",
+    retries: "",
+    worker: "",
+    external: false,
+    inputs: [{ name: "amount", value: "= betrag" }],
+  });
+
+  // A task evaluated by a temis worker (ADR-0050) has no local decision: the rules
+  // live in that service, and the document must not imply it holds them.
+  expect(byId.Task_bonitaet.decision.external).toBe(true);
+  expect(byId.Task_bonitaet.decision.worker).toBe("risk-service");
+
+  // Everything else carries no call at all, so no section invents one.
+  expect(byId.Task_buchen.decision).toBeNull();
+  expect(byId.Gw_1.decision).toBeNull();
+});
+
+test("an omitted bindingType reads as latest, the rule the compiler applies", async ({ page }) => {
+  // ADR-0063: anything that is not "deployment" is latest. The scoring task's
+  // calledDecision declares no binding at all, which is the common case in a
+  // hand-authored model.
+  const binding = await page.evaluate(() => {
+    const bo = window.__modeler.get("elementRegistry").get("Task_bonitaet").businessObject;
+    return window.__doc.calledDecisionOf(bo).binding;
+  });
+  expect(binding).toBe("latest");
+});
+
+test("the rules are fetched from the model behind the decision's reference", async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const c = window.__doc.collectDocumentation(window.__modeler);
+    window.__apiCalls.length = 0;
+    const decisions = await window.__doc.resolveCalledDecisions(c, window.__api);
+    return { decisions, paths: window.__apiCalls.map((x) => x.path) };
+  });
+
+  // The catalog says eligibility resolves through the handle "anspruch", so the
+  // model file is what the document reads — the authoring version under change
+  // control, and the one a deployment-bound task would bundle.
+  expect(out.paths).toContain("/api/v1/decisions");
+  expect(out.paths).toContain("/api/v1/dmn-models/anspruch/xml");
+  expect(out.decisions.eligibility.source).toBe("Model anspruch.dmn");
+  expect(out.decisions.eligibility.collection.decisions[0].rules).toHaveLength(2);
+
+  // The worker-backed task is not looked up at all: there is nothing local to read.
+  expect(out.paths.join(" ")).not.toContain("scoring");
+  expect(out.decisions.scoring).toBeUndefined();
+});
+
+test("a decision with no reference is read from its deployment instead", async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const c = window.__doc.collectDocumentation(window.__modeler);
+    window.__decisionsCatalog = []; // nothing references it; only the deployment exists
+    window.__apiCalls.length = 0;
+    const decisions = await window.__doc.resolveCalledDecisions(c, window.__api);
+    window.__decisionsCatalog = [{ id: "eligibility", name: "Anspruch", model: "Anspruch", modelRef: "anspruch", inputs: [], output: {} }];
+    return { decisions, paths: window.__apiCalls.map((x) => x.path) };
+  });
+
+  // This is the state a decision deployed from its own editor is in (ADR-0322),
+  // which a latest-bound task may now name.
+  expect(out.paths).toContain("/api/v1/decision-deployments?decisionId=eligibility");
+  expect(out.paths).toContain("/api/v1/decision-deployments/7788/xml");
+  expect(out.decisions.eligibility.source).toBe("Deployed decision v3 (key 7788)");
+});
+
+test("a decision that cannot be read costs its table, not the document", async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const c = window.__doc.collectDocumentation(window.__modeler);
+    const failing = async () => { throw new Error("nope"); };
+    const decisions = await window.__doc.resolveCalledDecisions(c, failing);
+    const bytes = window.__doc.buildDocumentationPdf({
+      collection: c, diagram: null, title: "Reisebuchung", decisions,
+    });
+    return { keys: Object.keys(decisions), raw: window.__asLatin1(bytes) };
+  });
+
+  expect(out.keys).toEqual([]);
+  // The call is still documented — it comes off the diagram — and the missing
+  // table is admitted rather than passed over in silence.
+  expect(out.raw).toContain("eligibility");
+  expect(out.raw).toContain("could not be read");
+});
+
+test("the document sets the rule table behind the business rule task", async ({ page }) => {
+  const raw = await page.evaluate(async () => {
+    const collection = window.__doc.collectDocumentation(window.__modeler);
+    const decisions = await window.__doc.resolveCalledDecisions(collection, window.__api);
+    const bytes = window.__doc.buildDocumentationPdf({
+      collection, diagram: null, title: "Reisebuchung", version: 2, decisions,
+    });
+    return window.__asLatin1(bytes);
+  });
+
+  // How the task calls it, in words a reader who has not read ADR-0063 can use.
+  expect(raw).toContain("eligibility");
+  expect(raw).toContain("newest version deployed");
+  expect(raw).toContain("verdict");
+  expect(raw).toContain("= betrag");
+
+  // Where the rules came from, and then the rules themselves — the same table the
+  // decision's own document sets, drawn by the same renderer.
+  expect(raw).toContain("Rules read from: Model anspruch.dmn");
+  expect(raw).toContain("hit policy UNIQUE");
+  expect(raw).toContain("Betrag");
+  expect(raw).toContain("approve");
+  expect(raw).toContain("reject");
+  expect(raw).toContain("Rule 1: Ab 100 immer");
+  expect(raw).toContain("Writes: eligibility");
+
+  // The worker-backed task says where its rules live instead of pretending to none.
+  expect(raw).toContain("risk-service");
+});
+
+test("exporting carries each business rule task's call in the published record", async ({ page }) => {
+  const elements = await page.evaluate(async () => {
+    await window.__doc.exportDocumentation({ modeler: window.__modeler, api: window.__api, title: "Reisebuchung" });
+    return window.__apiCalls.at(-1).body.elements;
+  });
+  const byId = Object.fromEntries(elements.map((e) => [e.id, e]));
+
+  // The structured record says which decision the step runs and how it binds; the
+  // rules themselves stay in the decision's own document (ADR-0324) and in the PDF.
+  expect(byId.Task_pruefung.decision.decisionId).toBe("eligibility");
+  expect(byId.Task_pruefung.decision.binding).toBe("latest");
+  expect(byId.Task_pruefung.decision.inputs).toEqual([{ name: "amount", value: "= betrag" }]);
+  expect(byId.Task_bonitaet.decision.worker).toBe("risk-service");
+});

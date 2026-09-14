@@ -49,10 +49,12 @@ type deployDecisionResp struct {
 //
 // A decision that has never been written to the model can still be deployed: the
 // record carries its own XML, so it needs no model behind it. It is then named
-// after its own decision id rather than a handle that does not exist — and nothing
-// can *call* it until it is in the model, because a business rule task's picker
-// lists what references resolve. The editor says so; the server does not refuse
-// something coherent.
+// after its own decision id rather than a handle that does not exist. A
+// `latest`-bound business rule task may name it straight away — the deploy resolves
+// that reference to this record's key
+// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task). Only a
+// `deployment`-bound task cannot, because it evaluates the model bundled with its
+// own process, and the editor's toast says that much.
 func (s *Server) handleDeployDecision(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
