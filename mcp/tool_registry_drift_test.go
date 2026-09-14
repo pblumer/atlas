@@ -458,6 +458,21 @@ var mcpOmittedRoutes = map[string]string{
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
 	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
 
+	// Co-editing a decision (ADR-draft-co-editing-a-decision) is the same session
+	// over a decision draft. The browser surface is the point of that record; the
+	// agent surface is not duplicated for it, because an agent authoring a decision
+	// already has the turn-based path (atlas_upload_decision_model, and
+	// atlas_try_decision to check it) and six more tools would double the session
+	// surface for a case nobody has asked for. Widening the existing six to take a
+	// decision draft is the follow-up if somebody does.
+	"GET /api/v1/dmn-drafts/{id}/session":           "live SSE co-editing transport for browsers; the agent session surface is not duplicated per artifact kind",
+	"POST /api/v1/dmn-drafts/{id}/session/join":     "the agent session surface is not duplicated per artifact kind; an agent authors a decision turn-based",
+	"POST /api/v1/dmn-drafts/{id}/session/poll":     "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/leave":    "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/presence": "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/lock":     "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/change":   "same as join",
+
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
 	"GET /api/v1/public-links":            "human share links, not an agent action",

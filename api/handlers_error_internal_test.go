@@ -303,7 +303,7 @@ func TestDraftSessionRefusesUnflushableWriter(t *testing.T) {
 	sess := httptest.NewRequest(http.MethodGet, "/api/v1/drafts/wip/session", nil)
 	sess.SetPathValue("id", "wip")
 	w := &nonFlusher{h: http.Header{}}
-	srv.handleDraftSession(w, sess)
+	srv.handleDraftSession(srv.bpmnDraftSession())(w, sess)
 	if got := w.Header().Get("Content-Type"); strings.Contains(got, "event-stream") {
 		t.Errorf("Content-Type = %q, want the stream never to have been opened", got)
 	}

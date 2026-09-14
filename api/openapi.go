@@ -482,35 +482,73 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
-		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
+		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession(s.bpmnDraftSession()), apiOp{
 			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			resp: eventStreamBody("SSE stream of session frames")}},
-		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin(s.bpmnDraftSession()), apiOp{
 			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
 			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
-		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll(s.bpmnDraftSession()), apiOp{
 			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
-		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave(s.bpmnDraftSession()), apiOp{
 			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence(s.bpmnDraftSession()), apiOp{
 			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Presence update", schemaObj(map[string]any{
 				"participantId": tString(), "selection": tString(),
 			}, "participantId")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock(s.bpmnDraftSession()), apiOp{
 			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Lock action", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "action": tString(),
 			}, "participantId", "elementId", "action")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange(s.bpmnDraftSession()), apiOp{
 			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Element change", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "xml": tString(),
+			}, "participantId", "elementId")),
+			status: http.StatusNoContent}},
+
+		// Co-editing a decision (ADR-draft-co-editing-a-decision): ADR-0140's session,
+		// over a decision draft rather than a BPMN one. Same registry, same transport,
+		// same lock semantics — the handlers take the subject, so this is a second
+		// binding rather than a second implementation.
+		{"GET", "/api/v1/dmn-drafts/{id}/session", s.handleDraftSession(s.dmnDraftSession()), apiOp{
+			summary: "Join a decision draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			resp: eventStreamBody("SSE stream of session frames")}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/join", s.handleDraftSessionJoin(s.dmnDraftSession()), apiOp{
+			summary: "Join a decision draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
+			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/poll", s.handleDraftSessionPoll(s.dmnDraftSession()), apiOp{
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/leave", s.handleDraftSessionLeave(s.dmnDraftSession()), apiOp{
+			summary: "Leave a decision draft's live session, releasing the participant's locks — idempotent (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/presence", s.handleDraftSessionPresence(s.dmnDraftSession()), apiOp{
+			summary: "Update a participant's presence (selected element) in a decision draft's live session (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Presence update", schemaObj(map[string]any{
+				"participantId": tString(), "selection": tString(),
+			}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/lock", s.handleDraftSessionLock(s.dmnDraftSession()), apiOp{
+			summary: "Acquire or release a lock in a decision draft's live session. In the requirements graph an element is a decision or an input datum; opening a decision's table locks that decision, because a table row has no stable identity to lock. Acquiring what another participant holds is a 409 (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Lock action", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "action": tString(),
+			}, "participantId", "elementId", "action")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/change", s.handleDraftSessionChange(s.dmnDraftSession()), apiOp{
+			summary: "Broadcast an element change to a decision draft's live session participants — relayed live, not persisted (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Element change", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "xml": tString(),
 			}, "participantId", "elementId")),

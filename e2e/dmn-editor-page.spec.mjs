@@ -698,3 +698,34 @@ test("a published version can be shared, and deleting one is confirmed first", a
   await page.waitForTimeout(200);
   expect(state.docActions.filter((a) => (a.what || "").startsWith("DELETE"))).toEqual([]);
 });
+
+test("a decision whose logic is a literal expression does not cover the editor bar", async ({ page }) => {
+  // dmn-js uses `editor` as a state class inside its own components, and Atlas's
+  // `.editor` is the full-bleed page shell: without the reset in app.css the
+  // literal-expression view is pinned over the whole viewport, and the tabs, Save,
+  // Deploy and Test underneath it cannot be clicked. A fixed element is not
+  // clipped by the canvas, so nothing else stops it.
+  const LITERAL = STORED_XML.replace(
+    /<decisionTable[\s\S]*<\/decisionTable>/,
+    `<literalExpression id="le1"><text>0.1 * amount</text></literalExpression>`);
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: LITERAL, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  // Open the decision's own view, which is the literal expression editor.
+  await page.locator(".editor-bar .etabs#dmn-views button").nth(1).click();
+  await expect(page.locator(".dmn-canvas .cm-editor")).toBeVisible();
+
+  // The bar is still the thing at the bar's coordinates, and still usable.
+  const onTop = await page.evaluate(() => {
+    const tab = document.querySelector(".editor-bar .etabs#dmn-views button");
+    const r = tab.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return at ? at.tagName : "none";
+  });
+  expect(onTop).toBe("BUTTON");
+  await page.locator("#dmn-test").click();
+  await expect(page.locator("#dmn-test-panel")).toBeVisible();
+});

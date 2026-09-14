@@ -52,9 +52,35 @@ function isLockable(el) {
     el.type !== "bpmn:Process" && el.type !== "bpmn:Collaboration");
 }
 
+// bpmnSurface is the editor-shaped half of a session for a BPMN draft: where its
+// endpoints are, how to reach the diagram-js services of what is on screen, and
+// which elements are worth locking (ADR-draft-co-editing-a-decision).
+//
+// It is a parameter because a decision draft has a session too, over the same
+// registry and the same semantics, in an editor whose canvas is reached
+// differently — see dmn-collab.js. Everything below is written against this shape
+// rather than against bpmn-js, so the two editors share one client.
+export const bpmnSurface = {
+  base: (id) => `/api/v1/drafts/${encodeURIComponent(id)}/session`,
+  xml: (id) => `/api/v1/drafts/${encodeURIComponent(id)}/xml`,
+  // get reaches a diagram-js service on whatever is currently drawn.
+  get: (modeler, name) => modeler.get(name),
+  // bind subscribes the session's handlers and returns an unbind. A BPMN modeler
+  // has one canvas for its whole life, so this is the plain listener pair.
+  bind: (modeler, h) => {
+    modeler.on("selection.changed", h.onSelection);
+    modeler.on("element.changed", h.onChange);
+    return () => {
+      try { modeler.off("selection.changed", h.onSelection); } catch { /* torn down */ }
+      try { modeler.off("element.changed", h.onChange); } catch { /* torn down */ }
+    };
+  },
+  isLockable,
+};
+
 // attachCollab wires the modeler into the draft's live session and returns a
 // handle whose close() tears everything down (the editor's cleanup() calls it).
-export function attachCollab(modeler, api, draftId, toast) {
+export function attachCollab(modeler, api, draftId, toast, surface = bpmnSurface) {
   if (typeof EventSource === "undefined") return { close() {} };
 
   const state = {
@@ -73,7 +99,7 @@ export function attachCollab(modeler, api, draftId, toast) {
     warnedPending: false,  // deferral hint already shown for the current pending sync
   };
 
-  const base = `/api/v1/drafts/${encodeURIComponent(draftId)}/session`;
+  const base = surface.base(draftId);
 
   // Fire-and-forget POST of a session action; a 409 on a lock is expected (the
   // element is held by someone else) and surfaced as a hint rather than an error.
@@ -87,7 +113,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   };
 
   // --- Presence bar (a floating roster on the canvas) ---
-  const container = modeler.get("canvas").getContainer();
+  const container = surface.get(modeler, "canvas").getContainer();
   const bar = document.createElement("div");
   bar.className = "collab-presence";
   container.appendChild(bar);
@@ -120,7 +146,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   // --- Lock badges (a marker on each element another participant is editing) ---
   const renderLocks = () => {
     let overlays;
-    try { overlays = modeler.get("overlays"); } catch { return; }
+    try { overlays = surface.get(modeler, "overlays"); } catch { return; }
     for (const id of state.overlayIds) { try { overlays.remove(id); } catch { /* gone */ } }
     state.overlayIds = [];
     for (const l of state.locks) {
@@ -142,7 +168,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   // --- Remote change awareness: a brief pulse on the touched element ---
   const pulse = (elementId) => {
     let canvas;
-    try { canvas = modeler.get("canvas"); } catch { return; }
+    try { canvas = surface.get(modeler, "canvas"); } catch { return; }
     try {
       canvas.addMarker(elementId, "collab-touched");
       setTimeout(() => { try { canvas.removeMarker(elementId, "collab-touched"); } catch { /* gone */ } }, 1500);
@@ -172,24 +198,24 @@ export function attachCollab(modeler, api, draftId, toast) {
       return;
     }
     let xml;
-    try { xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`); }
+    try { xml = await api("GET", surface.xml(draftId)); }
     catch { return; } // transient fetch failure: the next change frame retries
     if (state.closed || state.dirty) return; // a local edit landed while we fetched
     let vb = null, sel = [];
     try {
-      vb = modeler.get("canvas").viewbox();
-      sel = modeler.get("selection").get().map((el) => el.id);
+      vb = surface.get(modeler, "canvas").viewbox();
+      sel = surface.get(modeler, "selection").get().map((el) => el.id);
     } catch { /* modeler torn down mid-flight */ }
     state.applyingRemote = true; // suppress our own change/selection broadcasts below
     try {
       await modeler.importXML(typeof xml === "string" ? xml : String(xml));
-      if (vb) { try { modeler.get("canvas").viewbox(vb); } catch { /* ignore */ } }
+      if (vb) { try { surface.get(modeler, "canvas").viewbox(vb); } catch { /* ignore */ } }
       // Re-select what we had so our locks and presence are re-announced for the
       // elements that survived the import (onSelection runs once we clear the flag).
       try {
-        const reg = modeler.get("elementRegistry");
+        const reg = surface.get(modeler, "elementRegistry");
         const still = sel.map((id) => reg.get(id)).filter(Boolean);
-        modeler.get("selection").select(still.length ? still : null);
+        surface.get(modeler, "selection").select(still.length ? still : null);
       } catch { /* ignore */ }
     } catch { /* malformed draft: leave the current canvas untouched */ }
     finally { state.applyingRemote = false; }
@@ -239,7 +265,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   // locks) as a backstop, while this live editor keeps its session by heartbeating.
   heartbeatTimer = setInterval(() => {
     let sel = [];
-    try { sel = modeler.get("selection").get() || []; } catch { /* torn down */ }
+    try { sel = surface.get(modeler, "selection").get() || []; } catch { /* torn down */ }
     send("/presence", { selection: sel.length ? sel[0].id : "" });
   }, 20000);
 
@@ -247,7 +273,7 @@ export function attachCollab(modeler, api, draftId, toast) {
   const onSelection = (ev) => {
     if (state.applyingRemote) return; // selection churn from our own re-import
     const sel = (ev && ev.newSelection) || [];
-    const wanted = new Set(sel.filter(isLockable).map((el) => el.id));
+    const wanted = new Set(sel.filter(surface.isLockable).map((el) => el.id));
 
     // Release locks we held but no longer have selected.
     for (const id of Array.from(state.myLocks)) {
@@ -266,7 +292,6 @@ export function attachCollab(modeler, api, draftId, toast) {
     // Announce where we are looking.
     send("/presence", { selection: sel.length ? sel[0].id : "" });
   };
-  modeler.on("selection.changed", onSelection);
 
   // --- Outgoing: relay this editor's edits and mark the canvas unsaved ---
   const onChange = (ev) => {
@@ -274,7 +299,7 @@ export function attachCollab(modeler, api, draftId, toast) {
     const el = ev && ev.element;
     if (el && el.id) { state.dirty = true; send("/change", { elementId: el.id }); }
   };
-  modeler.on("element.changed", onChange);
+  const unbind = surface.bind(modeler, { onSelection, onChange });
 
   return {
     // markSaved clears the unsaved-work guard after the editor persists the draft,
@@ -289,8 +314,7 @@ export function attachCollab(modeler, api, draftId, toast) {
       state.closed = true;
       if (reimportTimer) { clearTimeout(reimportTimer); reimportTimer = null; }
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-      try { modeler.off("selection.changed", onSelection); } catch { /* torn down */ }
-      try { modeler.off("element.changed", onChange); } catch { /* torn down */ }
+      try { unbind(); } catch { /* torn down */ }
       try { es.close(); } catch { /* already closed */ }
       // Best-effort release of our locks and departure; keepalive lets it finish
       // even as the page unloads.

@@ -33,6 +33,8 @@
 
 import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
+import { attachCollab } from "./collab.js";
+import { dmnSurface } from "./dmn-collab.js";
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -301,9 +303,13 @@ let generation = 0;
 // onDmnMenuDismiss removes the bar menu's document-level click listener; a remount
 // installs a new one, so the old must go with the editor it belonged to.
 let onDmnMenuDismiss;
+// collab is this editor's live session, when the decision has a draft to hold one
+// on (ADR-draft-co-editing-a-decision). Torn down with the editor.
+let collab;
 
 export function cleanup() {
   generation++;
+  if (collab) { try { collab.close(); } catch { /* ignore */ } collab = null; }
   if (onDmnMenuDismiss) { onDmnMenuDismiss(); onDmnMenuDismiss = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
@@ -614,8 +620,14 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
           projectId: project || "",
           xml,
         });
+        const first = !collab;
         draft = saved;
         showHandle();
+        // The session is keyed by the draft, so the first Save is what opens it;
+        // later saves tell the session this editor's work is safely stored, which
+        // is what lets a peer's deferred change sync in.
+        if (first) collab = attachCollab(modeler, api, saved.id, toast, dmnSurface);
+        else if (collab.markSaved) collab.markSaved();
         // A draft on a decision that is not in the model is addressed by the draft;
         // one on a decision that is keeps the decision's own address.
         if (!ref) {
@@ -1072,6 +1084,11 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       docPublish.disabled = false;
     }
   }
+
+  // Only a saved draft has a stable id to key a live session on, so a decision
+  // that has never been saved does not co-edit yet — the first Save opens the
+  // session (ADR-draft-co-editing-a-decision, ADR-0140).
+  if (draft) collab = attachCollab(modeler, api, draft.id, toast, dmnSurface);
 
   saveBtn.addEventListener("click", saveDraft);
   modelBtn.addEventListener("click", saveToModel);
