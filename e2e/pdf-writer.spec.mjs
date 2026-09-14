@@ -202,7 +202,7 @@ test("the finished document survives base64 encoding for upload", async ({ page 
 
 test("a table draws its header and every row, and repeats the header across a page break", async ({ page }) => {
   // The table primitive exists for a decision table
-  // (ADR-draft-decision-documentation): the column meanings are what make a rule
+  // (ADR-0324): the column meanings are what make a rule
   // readable, so losing them at a page break is the one way this can mislead.
   const { text, pages } = await page.evaluate(() => {
     const doc = new window.__pdf.PdfDocument({ title: "Rules" });

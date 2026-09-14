@@ -10,7 +10,7 @@ import (
 )
 
 // The diagram a DMN model is read with, and the one an author asks for
-// (ADR-draft-dmn-diagram-is-completed-on-read).
+// (ADR-0325).
 
 // diagramlessDMN is the shape almost every model arrives in: an agent, temis or a
 // hand writes the logic, and nothing writes the picture.

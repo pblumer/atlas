@@ -582,7 +582,7 @@ test("Export XML hands the decision over as a file", async ({ page }) => {
 });
 
 // The diagram Atlas generates for a model that has none must be one dmn-js draws
-// (ADR-draft-dmn-diagram-is-completed-on-read). This is the contract between the Go
+// (ADR-0325). This is the contract between the Go
 // generator's output and the vendored editor, so the fixture below is *verbatim*
 // what `dmn.EnsureDiagram` produces for a model with one input datum feeding one
 // decision — regenerate it if the generator's shape changes, which the Go tests in

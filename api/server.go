@@ -1387,7 +1387,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		token.New,
 	)
 	// Decision documentation is the same area service for a second artifact kind
-	// (ADR-draft-decision-documentation). It takes no deployment lookup: a decision
+	// (ADR-0324). It takes no deployment lookup: a decision
 	// document is a sign-off artifact and is usually published before the decision
 	// is deployed, so the field would be empty in the case it exists for.
 	s.decisionDocs = decisiondoc.New(
@@ -1740,7 +1740,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.processDocs.LoadVersions(); err != nil {
 		return nil, err
 	}
-	// And for the per-decision one (ADR-draft-decision-documentation).
+	// And for the per-decision one (ADR-0324).
 	if err := s.decisionDocs.LoadVersions(); err != nil {
 		return nil, err
 	}

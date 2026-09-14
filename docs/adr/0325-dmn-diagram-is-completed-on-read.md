@@ -1,4 +1,4 @@
-# ADR-DRAFT: A DMN model's diagram is completed on read, and can be re-laid on request
+# ADR-0325: A DMN model's diagram is completed on read, and can be re-laid on request
 
 - **Status:** Accepted
 - **Implementation:** Landed

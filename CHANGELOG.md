@@ -261,8 +261,8 @@ _Changed_ / _Removed_ for each version.
   model at once; two cannot fill in one table together, and the editor says which it is.
   The session handlers are now parameterised by subject rather than copied, so a third
   artifact with a draft costs a binding rather than an implementation.
-  ([ADR-draft-decision-documentation](docs/adr/draft-decision-documentation.md),
-  [ADR-draft-co-editing-a-decision](docs/adr/draft-co-editing-a-decision.md),
+  ([ADR-0324](docs/adr/0324-decision-documentation.md),
+  [ADR-0323](docs/adr/0323-co-editing-a-decision.md),
   [issue #919](https://github.com/pblumer/atlas/issues/919))
 
 - **A decision can be tried against sample inputs, and a DMN model with no diagram now
@@ -293,8 +293,8 @@ _Changed_ / _Removed_ for each version.
   requirements graph on request. One generator serves both the editor and the read-only
   DRG viewer, so the same model is drawn the same way in both. **Export XML** is in that
   menu too.
-  ([ADR-draft-trying-a-decision-before-it-runs](docs/adr/draft-trying-a-decision-before-it-runs.md),
-  [ADR-draft-dmn-diagram-is-completed-on-read](docs/adr/draft-dmn-diagram-is-completed-on-read.md),
+  ([ADR-0326](docs/adr/0326-trying-a-decision-before-it-runs.md),
+  [ADR-0325](docs/adr/0325-dmn-diagram-is-completed-on-read.md),
   [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md),
   [issue #919](https://github.com/pblumer/atlas/issues/919))
 

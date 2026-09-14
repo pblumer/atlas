@@ -10,7 +10,7 @@ import (
 )
 
 // Trying a decision before anything is deployed
-// (ADR-draft-trying-a-decision-before-it-runs). The claim under test is that the
+// (ADR-0326). The claim under test is that the
 // answer comes from the bytes in the request and from nothing else: no key, no
 // record, no registry, nothing left behind.
 

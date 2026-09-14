@@ -54,7 +54,7 @@ function isLockable(el) {
 
 // bpmnSurface is the editor-shaped half of a session for a BPMN draft: where its
 // endpoints are, how to reach the diagram-js services of what is on screen, and
-// which elements are worth locking (ADR-draft-co-editing-a-decision).
+// which elements are worth locking (ADR-0323).
 //
 // It is a parameter because a decision draft has a session too, over the same
 // registry and the same semantics, in an editor whose canvas is reached

@@ -416,7 +416,7 @@ textarea::placeholder {
 .chip.deployed-chip { border-color: var(--ok); color: var(--ok); background: var(--ok-soft, transparent); }
 
 /* Trying a decision against sample inputs, in the decision editor
-   (ADR-draft-trying-a-decision-before-it-runs). It is the .start-panel strip the
+   (ADR-0326). It is the .start-panel strip the
    BPMN editor opens for a deploy, plus room for the answer: a row of typed inputs,
    then the outputs and the rule matrix below them. The matrix can be wider than the
    window on a table with many inputs, so the panel scrolls rather than the page. */

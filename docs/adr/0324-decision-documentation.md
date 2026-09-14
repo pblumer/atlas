@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision is published as its own document
+# ADR-0324: A decision is published as its own document
 
 - **Status:** Accepted
 - **Implementation:** Landed

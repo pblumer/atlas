@@ -1,4 +1,4 @@
-// e2e for co-editing a decision (ADR-draft-co-editing-a-decision).
+// e2e for co-editing a decision (ADR-0323).
 //
 // The claim is that ADR-0140's session runs over a decision draft with the same
 // semantics, in an editor whose canvas is reached differently — and that the lock

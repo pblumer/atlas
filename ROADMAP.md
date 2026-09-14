@@ -362,14 +362,14 @@ The control-flow basics most real models use.
   carries its own source — and the editor says that no business rule task can name it
   until it is.
   **And the decision can now be tried before anything runs it**
-  ([ADR-draft-trying-a-decision-before-it-runs](docs/adr/draft-trying-a-decision-before-it-runs.md)):
+  ([ADR-0326](docs/adr/0326-trying-a-decision-before-it-runs.md)):
   **Test** posts the model on screen to `POST /api/v1/decisions/evaluate`, which compiles
   it for that one call and throws it away — no key, no record, no registry entry — and
   answers with the outputs and the temis trace (ADR-0066). The rule matrix is the one
   Operations draws, extracted so both read from the same renderer. A decision stored
   nowhere yet can be tried like any other, and `atlas_try_decision` exposes the same act
   over MCP. **A DMN model with no diagram also renders now**
-  ([ADR-draft-dmn-diagram-is-completed-on-read](docs/adr/draft-dmn-diagram-is-completed-on-read.md)):
+  ([ADR-0325](docs/adr/0325-dmn-diagram-is-completed-on-read.md)):
   almost every model reaching Atlas carries no `DMNDI`, and dmn-js drew a single box and
   silently dropped the input data and the arrows — then a save wrote back a diagram
   covering only what had been drawn, leaving the model worse than it was found. Atlas
@@ -378,14 +378,14 @@ The control-flow basics most real models use.
   DRG viewer reads the same generated bounds, so both surfaces draw one picture.
   **Export XML** joins them in the bar's `⋯` menu.
   **The last two arrived with them.** A decision is published as its own document
-  ([ADR-draft-decision-documentation](docs/adr/draft-decision-documentation.md)):
+  ([ADR-0324](docs/adr/0324-decision-documentation.md)):
   ADR-0143's design for a second artifact kind — the requirements graph, then every
   decision's prose, inputs and rule table set as a real table — as an immutable
   numbered version with a revocable public link, in a `decision-docs/` store that is a
   deliberate sibling of `process-docs/`. Its version line is about sign-off rather than
   about what is running, which is why it exists alongside ADR-0319's and not instead of
   it. And a decision draft holds a live session
-  ([ADR-draft-co-editing-a-decision](docs/adr/draft-co-editing-a-decision.md)):
+  ([ADR-0323](docs/adr/0323-co-editing-a-decision.md)):
   ADR-0140's registry, transport and semantics over a decision, with the lock scoped to
   the **decision** — in the requirements graph that is ADR-0140's per-element rule
   exactly, and opening a decision's table claims that decision, because a table row has

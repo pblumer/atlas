@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision can be tried against sample inputs before anything is deployed
+# ADR-0326: A decision can be tried against sample inputs before anything is deployed
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -1,4 +1,4 @@
-// Decision documentation export (ADR-draft-decision-documentation): turn the
+// Decision documentation export (ADR-0324): turn the
 // decision the Modeler is holding into a structured PDF — the requirements graph,
 // then every decision with its prose, the input data it reads, and its rule table.
 //

@@ -52,7 +52,7 @@ type ModelGraph struct {
 //
 // Every node comes back with bounds: a model whose diagram does not cover it is
 // completed on the way through, so the viewer never has to invent a layout of its
-// own (ADR-draft-dmn-diagram-is-completed-on-read).
+// own (ADR-0325).
 func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, error) {
 	empty := ModelGraph{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
 	xml, err := v.resolver.Resolve(ctx, modelRef)
@@ -65,7 +65,7 @@ func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, err
 	}
 	// The viewer draws from the bounds this graph carries, so the model is completed
 	// first and temis then reports the generated diagram as any other
-	// (ADR-draft-dmn-diagram-is-completed-on-read). One generator, so the viewer and
+	// (ADR-0325). One generator, so the viewer and
 	// the editor place the same model in the same picture.
 	xml = EnsureDiagram(xml)
 	defs, diags, err := v.engine.Compile(ctx, xml)

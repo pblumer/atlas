@@ -297,7 +297,7 @@ export class PdfDocument {
   }
 
   // table renders a grid — a decision table's rules, say
-  // (ADR-draft-decision-documentation). It is the one shape the process document
+  // (ADR-0324). It is the one shape the process document
   // never needed: prose wraps, a rule does not, and a decision table read as
   // preformatted text is a decision table nobody checks.
   //

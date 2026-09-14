@@ -6,7 +6,7 @@ import (
 )
 
 // Trying a decision before anything is deployed
-// (ADR-draft-trying-a-decision-before-it-runs).
+// (ADR-0326).
 //
 // A decision table is a program, and the first question its author asks is whether
 // it does what they meant. Answering that used to mean saving the model, deploying

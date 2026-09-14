@@ -304,7 +304,7 @@ let generation = 0;
 // installs a new one, so the old must go with the editor it belonged to.
 let onDmnMenuDismiss;
 // collab is this editor's live session, when the decision has a draft to hold one
-// on (ADR-draft-co-editing-a-decision). Torn down with the editor.
+// on (ADR-0323). Torn down with the editor.
 let collab;
 
 export function cleanup() {
@@ -825,7 +825,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
 
   // ---- trying it ----------------------------------------------------------
   // A decision table is a program, and the question its author asks first is
-  // whether it does what they meant (ADR-draft-trying-a-decision-before-it-runs).
+  // whether it does what they meant (ADR-0326).
   // The panel asks the server that about the model on screen: nothing is saved,
   // nothing is deployed, and the answer is the temis trace saying which rules fired.
 
@@ -976,7 +976,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   // ---- documentation ------------------------------------------------------
   // A decision table is the business rule, and the people who sign it off are the
   // ones least likely to have a Modeler open. Publishing it is ADR-0143's act for
-  // a second artifact kind (ADR-draft-decision-documentation): the browser renders
+  // a second artifact kind (ADR-0324): the browser renders
   // the picture it is already drawing, the server numbers and stores it, and a
   // revocable link puts one version in front of a reader with no account.
 
@@ -1087,7 +1087,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
 
   // Only a saved draft has a stable id to key a live session on, so a decision
   // that has never been saved does not co-edit yet — the first Save opens the
-  // session (ADR-draft-co-editing-a-decision, ADR-0140).
+  // session (ADR-0323, ADR-0140).
   if (draft) collab = attachCollab(modeler, api, draft.id, toast, dmnSurface);
 
   saveBtn.addEventListener("click", saveDraft);

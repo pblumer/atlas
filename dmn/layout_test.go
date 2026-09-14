@@ -7,7 +7,7 @@ import (
 )
 
 // What a DMN model's diagram is for, and what happens when it is missing or half
-// there (ADR-draft-dmn-diagram-is-completed-on-read). Every test here drives the
+// there (ADR-0325). Every test here drives the
 // exported entry points over real DMN XML — the bytes a model actually arrives as.
 
 // drgXML is one input datum feeding one decision, with no diagram at all: the

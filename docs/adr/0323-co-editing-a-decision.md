@@ -1,4 +1,4 @@
-# ADR-DRAFT: Two people can edit one decision together, and the lock is the decision
+# ADR-0323: Two people can edit one decision together, and the lock is the decision
 
 - **Status:** Accepted
 - **Implementation:** Landed

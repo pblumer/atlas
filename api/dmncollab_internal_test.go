@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Co-editing a decision (ADR-draft-co-editing-a-decision): ADR-0140's session
+// Co-editing a decision (ADR-0323): ADR-0140's session
 // over a decision draft. What these hold down is that it is the *same* session —
 // same registry, same semantics, same scope rule — and that the two namespaces
 // cannot be crossed.

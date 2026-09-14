@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Trying a decision from the editor (ADR-draft-trying-a-decision-before-it-runs).
+// Trying a decision from the editor (ADR-0326).
 //
 // POST /api/v1/decisions/evaluate takes the DMN on screen and answers what it does
 // with the given inputs. The model is compiled for this one call and discarded: no

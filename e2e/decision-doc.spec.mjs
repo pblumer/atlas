@@ -1,5 +1,5 @@
 // e2e for the decision documentation collector and layout
-// (api/web/decision-doc.js, ADR-draft-decision-documentation).
+// (api/web/decision-doc.js, ADR-0324).
 //
 // The point of the feature is that the business rule itself — the table, its hit
 // policy, what each rule matches and returns, and the prose written about it —

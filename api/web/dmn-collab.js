@@ -1,5 +1,5 @@
 // dmn-collab.js — the collaboration surface for a decision draft
-// (ADR-draft-co-editing-a-decision).
+// (ADR-0323).
 //
 // ADR-0140's session, its registry, its transport and its lock semantics are
 // reused unchanged; collab.js holds all of that. What differs is the editor, and

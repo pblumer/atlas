@@ -10,7 +10,7 @@ import (
 
 // handleDmnLayout re-flows a DMN model's decision requirements graph, discarding
 // whatever diagram it carries and laying the whole graph out afresh
-// (ADR-draft-dmn-diagram-is-completed-on-read). It backs the decision editor's
+// (ADR-0325). It backs the decision editor's
 // Auto-layout action — the counterpart of POST /api/v1/layout for a diagram — and
 // it is the one thing that moves a diagram somebody placed, because it is the
 // author asking for exactly that.

@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api/token"
 )
 
-// Decision documentation (ADR-draft-decision-documentation): a DMN decision
+// Decision documentation (ADR-0324): a DMN decision
 // published as one structured PDF — the decision requirements graph plus every
 // decision's prose, inputs and rule table — so a reader outside Atlas can be
 // handed the business rule itself.

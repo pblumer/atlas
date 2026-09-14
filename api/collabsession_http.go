@@ -27,7 +27,7 @@ func sseFrame(w io.Writer, event string, seq uint64, data []byte) {
 }
 
 // sessionSubject is what a live session is about: the artifact its participants
-// are gathered around (ADR-draft-co-editing-a-decision).
+// are gathered around (ADR-0323).
 //
 // The handlers below were written against *the* draft store, and there are now
 // two kinds of draft that want a session — a BPMN diagram (ADR-0140) and a
@@ -112,7 +112,7 @@ func (s *Server) draftSessionAccess(r *http.Request, draftID string) (canEdit bo
 }
 
 // dmnDraftSessionAccess is draftSessionAccess for a decision draft
-// (ADR-draft-co-editing-a-decision). A decision draft is filed into an
+// (ADR-0323). A decision draft is filed into an
 // application exactly as a BPMN draft is (ADR-0321), so the rule is the same one:
 // at least viewer on that application to watch, editor to co-edit; a draft with
 // no application stays open, as its content handlers already are; and a principal

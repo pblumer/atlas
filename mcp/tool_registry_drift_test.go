@@ -458,7 +458,7 @@ var mcpOmittedRoutes = map[string]string{
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
 	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
 
-	// Co-editing a decision (ADR-draft-co-editing-a-decision) is the same session
+	// Co-editing a decision (ADR-0323) is the same session
 	// over a decision draft. The browser surface is the point of that record; the
 	// agent surface is not duplicated for it, because an agent authoring a decision
 	// already has the turn-based path (atlas_upload_decision_model, and
@@ -611,7 +611,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
 
 	// Decision documentation is the same design for a second artifact kind
-	// (ADR-draft-decision-documentation), and omitted for the same reasons: the
+	// (ADR-0324), and omitted for the same reasons: the
 	// document is rendered in the browser from dmn-js's own picture, and publishing
 	// or revoking one is a human decision. An agent reads the decision itself with
 	// atlas_get_decision_model and can check it with atlas_try_decision.

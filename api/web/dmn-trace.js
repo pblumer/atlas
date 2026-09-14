@@ -3,7 +3,7 @@
 // A trace says which decision tables ran, which rules matched, and why. Two places
 // ask that question: **Operations → Decisions**, about an evaluation a running
 // process made, and the decision editor's **Test** panel, about the model on screen
-// (ADR-draft-trying-a-decision-before-it-runs). They draw one picture, from here,
+// (ADR-0326). They draw one picture, from here,
 // so an author who learns to read a trace in the Modeler can read the same trace in
 // Operations.
 //

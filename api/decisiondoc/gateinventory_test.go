@@ -14,7 +14,7 @@ import (
 // Every authenticated route here is reachable by anybody the role boundary let
 // through, and the one route that is reachable without a login at all is gated by
 // an opaque share token that is the whole authorization
-// (ADR-0029's mechanism, ADR-draft-decision-documentation).
+// (ADR-0029's mechanism, ADR-0324).
 //
 // That is the same posture api/processdoc has, and the reason it carries a
 // sentence in areasWithoutAGateInventory instead of a table. A table is better

@@ -1,5 +1,5 @@
 // Package decisiondoc serves decision documentation
-// (ADR-draft-decision-documentation): a published DMN decision as a stored PDF
+// (ADR-0324): a published DMN decision as a stored PDF
 // plus the prose and rule tables it describes, its version history, and the
 // revocable public link a reader without an account follows.
 //
@@ -60,7 +60,7 @@ type Service struct {
 //
 // Unlike its process sibling it takes no deployment lookup. A decision document is
 // a sign-off artifact and is usually published *before* the decision is deployed,
-// so the field would be empty in the common case; ADR-draft-decision-documentation
+// so the field would be empty in the common case; ADR-0324
 // leaves it out until somebody asks for it.
 func New(loop *runloop.Loop, store *Store, allow func(clientIP string) bool,
 	newToken func() (string, error)) *Service {

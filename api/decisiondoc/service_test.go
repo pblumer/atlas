@@ -17,7 +17,7 @@ import (
 )
 
 // What publishing a decision as a document buys
-// (ADR-draft-decision-documentation), driven against the service directly — no
+// (ADR-0324), driven against the service directly — no
 // server needed, which is the property ADR-0147's per-area shape is for.
 
 // samplePDF is the smallest byte string the upload guard accepts as a document.

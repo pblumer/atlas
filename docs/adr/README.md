@@ -408,6 +408,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0320](0320-the-decision-editor-is-a-page.md) | The decision editor is a page, not an overlay | Accepted | Landed |
 | [0321](0321-decision-drafts.md) | A decision has a draft, and Save stops writing the model | Accepted | Landed |
 | [0322](0322-deploying-one-decision.md) | One decision can be deployed on its own, from the editor | Accepted | Landed |
+| [0323](0323-co-editing-a-decision.md) | Two people can edit one decision together, and the lock is the decision | Accepted | Landed |
+| [0324](0324-decision-documentation.md) | A decision is published as its own document | Accepted | Landed |
+| [0325](0325-dmn-diagram-is-completed-on-read.md) | A DMN model's diagram is completed on read, and can be re-laid on request | Accepted | Landed |
+| [0326](0326-trying-a-decision-before-it-runs.md) | A decision can be tried against sample inputs before anything is deployed | Accepted | Landed |
 
 ## The two states of a record
 

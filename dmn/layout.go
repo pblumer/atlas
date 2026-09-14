@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// DMN diagram interchange, generated (ADR-draft-dmn-diagram-is-completed-on-read).
+// DMN diagram interchange, generated (ADR-0325).
 //
 // A DMN model has a semantic half — decisions, input data, requirements, decision
 // tables — and a diagram half, the <dmndi:DMNDI> block saying where each element is
