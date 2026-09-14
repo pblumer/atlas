@@ -34,7 +34,7 @@ type groupView struct {
 	// Source says where the group came from: absent for one made here, "entra" for
 	// one a directory synchronisation mirrors. It is on the view because the
 	// difference is one an administrator has to see before editing a membership the
-	// next run will overwrite (ADR-draft-entra-directory-provisioning).
+	// next run will overwrite (ADR-0332).
 	Source    string `json:"source,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`

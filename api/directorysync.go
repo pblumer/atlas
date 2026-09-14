@@ -7,7 +7,7 @@ import (
 )
 
 // Mirroring a Microsoft Entra tenant's accounts and groups into this server
-// (ADR-draft-entra-directory-provisioning).
+// (ADR-0332).
 //
 // Atlas pulls: a scheduled process reads /users/delta and /groups/delta through the
 // Entra Worker and reports what changed here. Nothing is published outbound, no

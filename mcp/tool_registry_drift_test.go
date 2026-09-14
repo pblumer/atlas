@@ -498,7 +498,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
 	"GET /api/v1/audit":                                 "global access-control history is an admin/UI concern",
 
-	// The directory mirror (ADR-draft-entra-directory-provisioning). Both routes are
+	// The directory mirror (ADR-0332). Both routes are
 	// deliberately absent from the tool surface, and not merely unwritten: the pair
 	// exists so that one scheduled process, carrying one narrowly scoped credential,
 	// may create and disable accounts. Advertising it as a tool would put that reach

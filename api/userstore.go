@@ -22,7 +22,7 @@ const (
 
 	// SourceEntra marks an account this server mirrored out of a Microsoft Entra
 	// tenant, by reading /users/delta rather than by anybody signing in
-	// (ADR-draft-entra-directory-provisioning). Its ExternalID is the directory
+	// (ADR-0332). Its ExternalID is the directory
 	// object id, and so is its DirectoryID — which is the field the mirror actually
 	// resolves by, because an account mirrored onto an identity that already existed
 	// keeps the Source and ExternalID it had. Like an OIDC account it carries no
@@ -117,7 +117,7 @@ type User struct {
 
 	// DirectoryID is the object id of the directory entry this account mirrors —
 	// Entra's `id` from /users/delta, which is the same value /users and an ID
-	// token's `oid` claim carry (ADR-draft-entra-directory-provisioning).
+	// token's `oid` claim carry (ADR-0332).
 	//
 	// It is a second field rather than a reuse of ExternalID, and the reason is a
 	// property of Entra rather than a preference. An ID token's `sub` is *pairwise*:

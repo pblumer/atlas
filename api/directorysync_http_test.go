@@ -19,7 +19,7 @@ import (
 )
 
 // The directory-synchronisation routes, over HTTP
-// (ADR-draft-entra-directory-provisioning).
+// (ADR-0332).
 //
 // Three of these are the reason the slice was cut this way: a first run must write
 // nothing, it must leave the cursor exactly where it was, and what it reports must be

@@ -56,7 +56,7 @@ _Changed_ / _Removed_ for each version.
   — it cannot deploy — and both routes refuse outright on a server running without
   authentication. Three budgets bound the message, the batch and the report
   (`ATLAS_LIMIT_DIRECTORY_SYNC`, `_DIRECTORY_OBJECTS`, `_DIRECTORY_REPORT`).
-  ([ADR-draft-entra-directory-provisioning](docs/adr/draft-entra-directory-provisioning.md))
+  ([ADR-0332](docs/adr/0332-entra-directory-provisioning.md))
 
 ### Fixed
 

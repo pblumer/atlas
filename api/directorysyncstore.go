@@ -5,7 +5,7 @@ import (
 )
 
 // Where a directory synchronisation resumes from, and how far it has got
-// (ADR-draft-entra-directory-provisioning).
+// (ADR-0332).
 //
 // This is the whole of the mirror's own state. Everything else it decides is
 // derived from the accounts and groups it wrote — which is deliberate: a mirror

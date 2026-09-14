@@ -20,7 +20,7 @@ type group struct {
 	// Source and ExternalID say where the group came from. Empty Source is a group
 	// somebody made here; SourceEntra marks one mirrored out of a directory, and
 	// ExternalID is then that directory's group object id — lower-cased, for the
-	// reason User.DirectoryID is (ADR-draft-entra-directory-provisioning).
+	// reason User.DirectoryID is (ADR-0332).
 	Source     string `json:"source,omitempty"`
 	ExternalID string `json:"externalId,omitempty"`
 

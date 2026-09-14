@@ -65,7 +65,7 @@ const (
 	apiScopeMetrics = "metrics"
 
 	// apiScopeDirectory reaches the two directory-synchronisation routes and nothing
-	// else (ADR-draft-entra-directory-provisioning). It is the scope that carries the
+	// else (ADR-0332). It is the scope that carries the
 	// argument for scopes furthest: the credential behind it is held by a scheduled
 	// process that creates and disables accounts, so the question "what else could
 	// this do if it leaked" has to have a two-line answer — and it does. It cannot

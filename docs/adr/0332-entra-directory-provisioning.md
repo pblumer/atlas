@@ -1,4 +1,4 @@
-# ADR-DRAFT: Accounts and groups are pulled from Entra by delta query, and the first run writes nothing
+# ADR-0332: Accounts and groups are pulled from Entra by delta query, and the first run writes nothing
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -7,7 +7,7 @@ import (
 )
 
 // The group half of a directory synchronisation
-// (ADR-draft-entra-directory-provisioning).
+// (ADR-0332).
 //
 // A group is harder than an account for one reason: Atlas groups hold *Atlas* user
 // ids, because that is what a scope grant resolves against (ADR-0180), while the

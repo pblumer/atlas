@@ -7,7 +7,7 @@ import (
 )
 
 // Writing a decided plan, and turning it into something a person reads
-// (ADR-draft-entra-directory-provisioning).
+// (ADR-0332).
 
 // applyDirectoryPlan writes a plan and does nothing else.
 //

@@ -270,7 +270,7 @@ type Server struct {
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
 	// directorySync holds one record: where the Entra mirror resumes from and how
-	// many runs have written (ADR-draft-entra-directory-provisioning).
+	// many runs have written (ADR-0332).
 	directorySync *directorySyncStore
 	apiTokens     *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
 	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
