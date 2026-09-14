@@ -339,7 +339,7 @@ The control-flow basics most real models use.
   as a draft first) and adopts what was authored on the way back, so the one-button
   flow survives the move.
   **And a decision now has a draft**
-  ([ADR-draft-decision-drafts](docs/adr/draft-decision-drafts.md)): **Save** keeps work
+  ([ADR-0321](docs/adr/0321-decision-drafts.md)): **Save** keeps work
   in progress in a `dmn-drafts/` store of its own, and **Save to model** is what writes
   the handle every reference, every picker and the next Publish resolve. A decision has
   one layer more than a diagram — draft, model, deployment — and until now the editor

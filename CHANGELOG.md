@@ -277,7 +277,7 @@ _Changed_ / _Removed_ for each version.
   and forms have had since ids became identity. An import, a source-tree apply and the
   MCP authoring tools are untouched — they never claimed to be editing one decision, and
   keep the plain upsert.
-  ([ADR-draft-decision-drafts](docs/adr/draft-decision-drafts.md),
+  ([ADR-0321](docs/adr/0321-decision-drafts.md),
   [ADR-0222](docs/adr/0222-artifact-id-renames.md),
   [issue #919](https://github.com/pblumer/atlas/issues/919))
 

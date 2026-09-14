@@ -1239,7 +1239,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Upload a DMN model file into the local model store and return its reference handle. ?handle= overwrites that model in place. Otherwise the handle is derived from ?name=: with ?from= present (the model handle this editing session opened, empty for a decision that has none) the derived handle must be free, or the upload is refused with 409 rather than silently forking a second copy (ADR-0222); without ?from= a taken handle is suffixed, which is the upsert an import or an agent wants", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 
 		{"POST", "/api/v1/dmn-drafts", s.handleSaveDmnDraft, apiOp{
-			summary: "Save decision work in progress, without writing the model every reference resolves. Keyed by the decision's reference id, or by a minted id for a decision that is not in the model yet (ADR-draft-decision-drafts)", tag: "Decision drafts", role: RoleModeler, req: jsonBody("Decision draft", tObject()), resp: jsonBody("Saved decision draft", tObject())}},
+			summary: "Save decision work in progress, without writing the model every reference resolves. Keyed by the decision's reference id, or by a minted id for a decision that is not in the model yet (ADR-0321)", tag: "Decision drafts", role: RoleModeler, req: jsonBody("Decision draft", tObject()), resp: jsonBody("Saved decision draft", tObject())}},
 		{"GET", "/api/v1/dmn-drafts", s.handleListDmnDrafts, apiOp{
 			summary: "List decision drafts", tag: "Decision drafts", role: RoleModeler, resp: jsonBody("Decision drafts", tArray())}},
 		{"GET", "/api/v1/dmn-drafts/{id}/xml", s.handleDmnDraftXML, apiOp{

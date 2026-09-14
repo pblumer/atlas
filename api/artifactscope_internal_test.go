@@ -139,7 +139,7 @@ func TestArtifactScopeStoreErrors(t *testing.T) {
 		{"create dmnref (authorizeTargetProject)", "POST", "/api/v1/dmnrefs", `{"name":"N","modelRef":"m","projectId":"pdir"}`},
 		{"create draft (authorizeTargetProject)", "POST", "/api/v1/drafts?projectId=pdir", scopeBPMN("newp")},
 		// A decision draft is a design-time artifact like the rest, so every door into
-		// it inherits its application's scope (ADR-draft-decision-drafts, ADR-0071).
+		// it inherits its application's scope (ADR-0321, ADR-0071).
 		{"decision draft xml (authorizeArtifact)", "GET", "/api/v1/dmn-drafts/dd1/xml", ""},
 		{"delete decision draft (authorizeArtifact)", "DELETE", "/api/v1/dmn-drafts/dd1", ""},
 		{"overwrite decision draft (authorizeArtifact source)", "POST", "/api/v1/dmn-drafts",

@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// The HTTP surface of the decision draft (ADR-draft-decision-drafts): save, list,
+// The HTTP surface of the decision draft (ADR-0321): save, list,
 // read back, discard. It is the decision editor's Save, and nothing else reads it —
 // in particular the application publish does not, because a publish ships the model
 // a reference resolves, never a draft somebody happens to have open.
