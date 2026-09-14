@@ -368,3 +368,58 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 			"of its own and not a view of this app")
 	}
 }
+
+// A page of its own needs a way out of its own.
+//
+// Both portal surfaces are reached from the shell's menu and from a link in a
+// notification mail, and neither is a view of the shell — so the browser's back
+// button is the only exit, and somebody who arrived by following a link has no back
+// to press. The header carries a way back on each.
+//
+// The link is checked in both pages because they were written separately and the
+// second inherited the first's shape: a fix applied to one and forgotten on the
+// other is exactly how the approvals page came to have no menu entry for months.
+func TestBothPortalSurfacesLeadBackToAtlas(t *testing.T) {
+	for _, page := range []struct{ src, key string }{
+		{"portal.js", "portal.back"},
+		{"genehmigung.js", "appr.back"},
+	} {
+		src := readWeb(t, page.src)
+		if !strings.Contains(src, `href: '/index.html'`) {
+			t.Errorf("%s renders no way back to Atlas; a page of its own with no exit "+
+				"strands whoever followed a link into it", page.src)
+		}
+		// The label travels through the message catalogue like every other word on
+		// these pages, so a locale that offers the page offers the way out too.
+		if !strings.Contains(src, `t('`+page.key+`')`) {
+			t.Errorf("%s hard-codes the back link's label instead of reading %q from the "+
+				"catalogue", page.src, page.key)
+		}
+	}
+}
+
+// TestTheCatalogueCanBeFilledFromTheMenu: the authoring surface exists and is
+// reachable.
+//
+// The portal's API landed with no screen at all — catalogues, products, edges and
+// releases were reachable only by hand-written JSON. That is a working API and an
+// unusable product, and the gap was invisible because every test passed.
+func TestTheCatalogueCanBeFilledFromTheMenu(t *testing.T) {
+	src := readWeb(t, "app.js")
+	start := strings.Index(src, "const APPS = [")
+	if start < 0 {
+		t.Fatal("app.js has no APPS list; this test now checks nothing and says so instead")
+	}
+	apps := src[start : start+strings.Index(src[start:], "\n];")]
+	if !strings.Contains(apps, `{ id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },`) {
+		t.Error("no menu entry leads to the catalogue authoring screen, or its gate moved. " +
+			"It is a hash route because it *is* a view of this app, unlike the two portal " +
+			"pages, and it is gated at productmanager because ADR-0315 exists so that " +
+			"filling a catalogue does not need instance administration")
+	}
+	// The screen is worth nothing if the role it is gated at cannot be handed out.
+	if !strings.Contains(src, `{ id: "productmanager", name: "Product manager",`) {
+		t.Error("the account dialog cannot grant productmanager, so the catalogue screen " +
+			"is reachable by administrators alone — which is the arrangement ADR-0315 refused")
+	}
+}
