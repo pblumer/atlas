@@ -326,6 +326,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
 			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: RoleOperator,
 			resp: xmlBody("DMN XML")}},
+		{"POST", "/api/v1/decisions/evaluate", s.handleTryDecision, apiOp{
+			summary: "Try a DMN model against sample inputs and get the temis trace back — what a decision returns and which rules fired, for the model in the request rather than anything deployed. Nothing is stored, keyed, or registered, and the DMN registry is untouched. With no decisionId it only describes what the model offers and its inputs. A model that does not compile comes back 200 with ok:false (ADR-draft-trying-a-decision-before-it-runs)", tag: "Decisions", role: RoleModeler,
+			req: jsonBody("The model to try, the decision to run, and its inputs", schemaObj(map[string]any{
+				"xml": tString(), "decisionId": tString(), "inputs": tObject(),
+			}, "xml")),
+			resp: jsonBody("What the model offers and, when a decision was named, what it produced", tObject())}},
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Deployed decisions", tArray())}},
@@ -1233,6 +1239,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", role: RoleModeler, resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
 			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model graph", tObject())}},
+		{"POST", "/api/v1/dmn-layout", s.handleDmnLayout, apiOp{
+			summary: "Regenerate a DMN model's decision requirements diagram — discards any existing DMNDI and returns the model with a freshly laid-out graph, backing the decision editor's Auto-layout action. A pure transform: nothing is compiled, stored, or deployed (ADR-draft-dmn-diagram-is-completed-on-read)", tag: "Decisions", role: RoleModeler,
+			req:  xmlBody("DMN XML"),
+			resp: xmlBody("DMN XML with a regenerated decision requirements diagram")}},
 		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
 			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", role: RoleModeler, resp: jsonBody("DMN XML", tObject())}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{

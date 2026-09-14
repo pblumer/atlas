@@ -68,6 +68,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_save_form":                    "POST /api/v1/forms",
 	"atlas_upload_decision_model":        "POST /api/v1/dmn-models",
 	"atlas_deploy_decision":              "POST /api/v1/decision-deployments",
+	"atlas_try_decision":                 "POST /api/v1/decisions/evaluate",
 	"atlas_register_decision":            "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":               "POST /api/v1/projects/{id}/deploy",
 	"atlas_deploy_application":           "POST /api/v1/applications/{id}/deploy",
@@ -411,7 +412,8 @@ var mcpOmittedRoutes = map[string]string{
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
 	// directly (or relies on server-side ensureDiagramLayout on read), so it does
 	// not drive a scenario through this.
-	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+	"POST /api/v1/layout":     "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+	"POST /api/v1/dmn-layout": "the same for a decision requirements graph, and needed even less by an agent: a model an agent uploads is completed on read anyway",
 
 	// MIM/FIM XOML import (#471): a human file-upload in the Modeler that converts a
 	// Microsoft Identity Manager workflow into a BPMN draft. An MCP agent authors BPMN

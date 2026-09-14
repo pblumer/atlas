@@ -31,6 +31,8 @@
 // Authoring the FEEL and the decision logic is still dmn-js's job; Atlas only
 // stores what it produces and evaluates it through temis.
 
+import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
+
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
 const DMN_CSS = [
@@ -70,6 +72,51 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const rid = () => Math.random().toString(36).slice(2, 10);
+
+// sanitizeFileName turns a decision's name into something a file system will take,
+// for the Export XML download. It is a download's label, not an identity: the model
+// handle is preferred when there is one, and this is the fallback for a decision
+// that has never been saved to one.
+const sanitizeFileName = (s) =>
+  String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+// wireDmnBarMenu opens and closes the bar's overflow menu, and returns a teardown
+// for the document listener it installs. It is editor.js's wireBarMenu, for the
+// same reason: the Console's delegated handler lives in app.js, and this editor is
+// mounted without app.js by the e2e harnesses, so a bar depending on that handler
+// would be a bar those harnesses cannot open. Stopping propagation on the trigger
+// keeps app.js's document handler — which closes every open menu on any click it
+// sees — from closing this one the moment it opens.
+function wireDmnBarMenu(root) {
+  const toggle = root.querySelector("#dmn-more");
+  const menu = root.querySelector("#dmn-menu");
+  if (!toggle || !menu) return () => {};
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.hidden) {
+      for (const other of document.querySelectorAll(".dropdown-menu:not([hidden])")) {
+        if (other !== menu) other.hidden = true;
+      }
+    }
+    setOpen(menu.hidden);
+  });
+  // Anything else — a menu item, the canvas, another part of the page — dismisses it:
+  // picking an item is an action, and the menu has no business outliving it.
+  const dismiss = () => {
+    if (!menu.hidden || toggle.getAttribute("aria-expanded") === "true") setOpen(false);
+  };
+  document.addEventListener("click", dismiss);
+  toggle.parentElement.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || menu.hidden) return;
+    setOpen(false);
+    toggle.focus();
+  });
+  return () => document.removeEventListener("click", dismiss);
+}
 
 // DEFAULT_DECISION_NAME names a decision whose own name could not be read back out
 // of the saved XML — a model with no <decision> yet, which dmn-js allows while the
@@ -250,9 +297,13 @@ let current; // active session handle, torn down on remount/leave
 // into a detached container and leaks them — the guard editor.js and form-editor.js
 // both use.
 let generation = 0;
+// onDmnMenuDismiss removes the bar menu's document-level click listener; a remount
+// installs a new one, so the old must go with the editor it belonged to.
+let onDmnMenuDismiss;
 
 export function cleanup() {
   generation++;
+  if (onDmnMenuDismiss) { onDmnMenuDismiss(); onDmnMenuDismiss = null; }
   if (current) { try { current.destroy(); } catch { /* ignore */ } current = null; }
 }
 
@@ -291,8 +342,27 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         <span class="muted" id="dmn-status"></span>
         <button class="btn neutral" id="dmn-discard" hidden title="Throw away the draft and go back to the stored model">Discard draft</button>
         <button class="btn neutral" id="dmn-save" title="Save this decision as a draft. Nothing that reads this decision changes until you save it to the model.">Save</button>
+        <button class="btn neutral toggle" id="dmn-test" type="button" aria-pressed="false" title="Run this decision against sample inputs and see which rules fired — nothing is saved or deployed">Test</button>
+        <span class="bar-div" aria-hidden="true"></span>
         <button class="btn neutral" id="dmn-save-model" title="Write this into the decision model every process and application resolves — this is what the next Publish ships.">Save to model</button>
         <button class="btn" id="dmn-deploy" title="Deploy this decision on its own, as a versioned runtime artifact the engine can evaluate now. To ship a whole application, use Publish on the application.">Deploy</button>
+        <div class="dropdown">
+          <button class="icon-btn bar-more" id="dmn-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this decision can do">&#8943;</button>
+          <div class="dropdown-menu" id="dmn-menu" hidden>
+            <button id="dmn-autolayout" type="button" title="Re-flow the decision requirements graph into a clean layout"><span class="mi-icon">&#8649;</span>Auto-layout</button>
+            <button id="dmn-export" type="button" title="Download this decision as DMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+          </div>
+        </div>
+      </div>
+      <div class="start-panel dmn-test-panel" id="dmn-test-panel" hidden>
+        <div class="row">
+          <label class="field"><span>Decision</span><select id="dmn-test-decision"></select></label>
+          <button class="btn" id="dmn-test-run" title="Evaluate this decision with the values below">Run</button>
+          <button class="btn neutral" id="dmn-test-close" title="Close the test panel">Close</button>
+          <span class="err" id="dmn-test-err"></span>
+        </div>
+        <div class="dmn-test-inputs" id="dmn-test-inputs"></div>
+        <div class="dmn-test-result" id="dmn-test-result"></div>
       </div>
       <div class="editor-body dmn-body">
         <div class="dmn-canvas"></div>
@@ -303,7 +373,8 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         into a business rule task that calls this decision. <b>Save</b> keeps a draft only you
         see; <b>Save to model</b> writes the decision every process resolves, and is what the
         next Publish ships; <b>Deploy</b> ships this decision to the engine on its own, as a new
-        version.</div>
+        version. <b>Test</b> runs it against sample inputs and shows which rules fired — nothing is
+        saved or deployed by asking.</div>
     </div>`;
 
   const canvas = root.querySelector(".dmn-canvas");
@@ -317,6 +388,12 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const modelBtn = root.querySelector("#dmn-save-model");
   const deployBtn = root.querySelector("#dmn-deploy");
   const discardBtn = root.querySelector("#dmn-discard");
+  const testBtn = root.querySelector("#dmn-test");
+  const testPanel = root.querySelector("#dmn-test-panel");
+  const testDecision = root.querySelector("#dmn-test-decision");
+  const testInputs = root.querySelector("#dmn-test-inputs");
+  const testResult = root.querySelector("#dmn-test-result");
+  const testErr = root.querySelector("#dmn-test-err");
   const backEl = root.querySelector("#dmn-back");
 
   // ---- identity ------------------------------------------------------------
@@ -720,10 +797,167 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     });
   }
 
+  // ---- trying it ----------------------------------------------------------
+  // A decision table is a program, and the question its author asks first is
+  // whether it does what they meant (ADR-draft-trying-a-decision-before-it-runs).
+  // The panel asks the server that about the model on screen: nothing is saved,
+  // nothing is deployed, and the answer is the temis trace saying which rules fired.
+
+  // described is the model as the server last read it: which decisions it provides
+  // and what each of them wants. The form is built from that rather than from
+  // anything the browser re-derives out of the XML.
+  let described = [];
+
+  // testValue turns what somebody typed into the value the decision will see. The
+  // declared type decides: a number field sends a number, a boolean sends true or
+  // false, and anything else is sent as JSON when it parses (so a list or a record
+  // can be typed) and as plain text when it does not — which is what a string is.
+  function testValue(raw, type) {
+    const text = String(raw ?? "").trim();
+    if (text === "") return null;
+    if (type === "number") { const n = Number(text); return Number.isNaN(n) ? text : n; }
+    if (type === "boolean") return text === "true";
+    if (type === "string") return text;
+    try { return JSON.parse(text); } catch { return text; }
+  }
+
+  // renderTestForm draws one field per input the chosen decision consumes, keeping
+  // whatever was already typed into a field of the same name — retyping the amount
+  // on every edit of the table is exactly the friction this panel exists to remove.
+  function renderTestForm() {
+    const chosen = described.find((d) => d.id === testDecision.value) || described[0];
+    const kept = {};
+    testInputs.querySelectorAll("input[data-in]").forEach((el) => { kept[el.dataset.in] = el.value; });
+    const fields = (chosen && chosen.inputs) || [];
+    testInputs.innerHTML = fields.length
+      ? fields.map((f) => `<label class="field"><span>${esc(f.name)}${f.type ? ` <span class="muted">${esc(f.type)}</span>` : ""}</span>` +
+          `<input type="text" data-in="${esc(f.name)}" value="${esc(kept[f.name] || "")}" placeholder="${esc(f.type === "number" ? "250" : f.type === "boolean" ? "true" : "")}"/></label>`).join("")
+      : `<p class="muted">This decision reads no input data, so there is nothing to fill in.</p>`;
+  }
+
+  // describeModel asks the server what the model on screen offers. It runs when the
+  // panel opens, so a decision renamed or an input added since last time is picked up.
+  async function describeModel() {
+    const { xml } = await currentXml();
+    const res = await api("POST", "/api/v1/decisions/evaluate", { xml });
+    if (!res.ok) throw new Error(res.message || "this model does not compile yet");
+    described = res.decisions || [];
+    if (!described.length) throw new Error("this model declares no decision to run");
+    const previous = testDecision.value;
+    testDecision.innerHTML = described.map((d) =>
+      `<option value="${esc(d.id)}">${esc(d.name || d.id)}</option>`).join("");
+    // Prefer the decision that was being tested, else the one being edited, else the
+    // first — so reopening the panel lands where it was left.
+    const edited = firstDecisionId(xml);
+    testDecision.value = described.some((d) => d.id === previous) ? previous
+      : described.some((d) => d.id === edited) ? edited : described[0].id;
+    renderTestForm();
+  }
+
+  // runTest evaluates the decision with what is in the form and renders the answer:
+  // the outputs, and the rule matrix that says which rules fired and why — the same
+  // matrix Operations draws for a decision a running process evaluated.
+  async function runTest() {
+    const inputs = {};
+    const chosen = described.find((d) => d.id === testDecision.value);
+    const types = {};
+    for (const f of (chosen && chosen.inputs) || []) types[f.name] = f.type;
+    testInputs.querySelectorAll("input[data-in]").forEach((el) => {
+      const v = testValue(el.value, types[el.dataset.in]);
+      if (v !== null) inputs[el.dataset.in] = v;
+    });
+    testErr.textContent = "";
+    testResult.innerHTML = `<p class="muted">Running…</p>`;
+    try {
+      const { xml } = await currentXml();
+      const res = await api("POST", "/api/v1/decisions/evaluate", { xml, decisionId: testDecision.value, inputs });
+      if (!res.ok) {
+        testResult.innerHTML = "";
+        testErr.textContent = res.message || "this decision did not run";
+        return;
+      }
+      const outs = Object.entries(res.outputs || {});
+      const result = outs.length
+        ? `<div class="res">${outs.map(([k, v]) =>
+            `<div class="res-row"><span class="res-key">${esc(k)}</span><span class="res-val">${esc(traceValue(v))}</span></div>`).join("")}</div>`
+        : `<p class="muted">This decision returned nothing for those inputs — no rule matched.</p>`;
+      testResult.innerHTML = result + renderTrace(res.trace);
+    } catch (e) {
+      testResult.innerHTML = "";
+      testErr.textContent = e.message;
+    }
+  }
+
+  // openTest describes the model and shows the panel; a model that does not compile
+  // says so where the author is looking rather than opening an empty form.
+  async function setTestOpen(open) {
+    testBtn.setAttribute("aria-pressed", open ? "true" : "false");
+    if (!open) { testPanel.hidden = true; return; }
+    testErr.textContent = "";
+    testResult.innerHTML = "";
+    testPanel.hidden = false;
+    try {
+      await describeModel();
+    } catch (e) {
+      testInputs.innerHTML = "";
+      testErr.textContent = e.message;
+    }
+  }
+
+  // ---- the overflow menu ---------------------------------------------------
+  // Export takes the decision away as the DMN file it is, and Auto-layout re-flows
+  // the requirements graph — the counterparts of the BPMN editor's own two, in the
+  // same place on the bar.
+
+  async function exportXml() {
+    try {
+      const { xml, name } = await currentXml();
+      const blob = new Blob([xml], { type: "application/xml" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (modelRef || sanitizeFileName(name) || "decision") + ".dmn";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      toast && toast("Export failed: " + e.message, "err");
+    }
+  }
+
+  // The result is reported by toast rather than on the status line, as the BPMN
+  // editor's Auto-layout reports it: the import re-opens the views, and the
+  // views.changed handler clears the status line by design, so a message left there
+  // would be racing the thing that just put it there.
+  async function autoLayout() {
+    await busy("Laying out…", async () => {
+      try {
+        const { xml } = await currentXml();
+        const relaid = await api("POST", "/api/v1/dmn-layout", xml, true);
+        if (typeof relaid !== "string" || !relaid) throw new Error("the model came back empty");
+        await modeler.importXML(relaid);
+        const view = modeler.getActiveView();
+        if (view && view.type === "drd") {
+          try { modeler.getActiveViewer().get("canvas").zoom("fit-viewport"); } catch { /* nothing to fit */ }
+        }
+        lastDeployedID = null; // the import replaced the canvas; re-read the chip's subject
+        await refreshDeployed(true);
+        toast && toast("Decision requirements graph laid out", "ok");
+      } catch (e) {
+        toast && toast("Auto-layout failed: " + e.message, "err");
+      }
+    });
+  }
+
   saveBtn.addEventListener("click", saveDraft);
   modelBtn.addEventListener("click", saveToModel);
   deployBtn.addEventListener("click", deployDecision);
   discardBtn.addEventListener("click", discardDraft);
+  testBtn.addEventListener("click", () => { setTestOpen(testPanel.hidden); });
+  root.querySelector("#dmn-test-close").addEventListener("click", () => setTestOpen(false));
+  root.querySelector("#dmn-test-run").addEventListener("click", runTest);
+  testDecision.addEventListener("change", renderTestForm);
+  root.querySelector("#dmn-export").addEventListener("click", exportXml);
+  root.querySelector("#dmn-autolayout").addEventListener("click", autoLayout);
+  onDmnMenuDismiss = wireDmnBarMenu(root);
 
   // The bar says what this decision is deployed at from the moment it opens, and
   // follows a decision renamed while it is open.

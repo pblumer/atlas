@@ -415,6 +415,18 @@ textarea::placeholder {
    the dashed draft chip which states the opposite. */
 .chip.deployed-chip { border-color: var(--ok); color: var(--ok); background: var(--ok-soft, transparent); }
 
+/* Trying a decision against sample inputs, in the decision editor
+   (ADR-draft-trying-a-decision-before-it-runs). It is the .start-panel strip the
+   BPMN editor opens for a deploy, plus room for the answer: a row of typed inputs,
+   then the outputs and the rule matrix below them. The matrix can be wider than the
+   window on a table with many inputs, so the panel scrolls rather than the page. */
+.dmn-test-panel { max-height: 46vh; overflow: auto; }
+.dmn-test-inputs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.dmn-test-inputs .field { margin: 0; min-width: 160px; }
+.dmn-test-inputs .field span .muted { font-weight: normal; }
+.dmn-test-result { margin-top: 10px; }
+.dmn-test-result .res { margin-bottom: 10px; }
+
 /* A searchable declaration the model cannot honour (ADR-0244). Red is certain — the
    deploy refuses a repeated name, and a structured value can never be indexed. Amber is
    a question: the diagram does not write that name, but something outside the model

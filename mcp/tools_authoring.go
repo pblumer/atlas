@@ -560,6 +560,38 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_try_decision",
+			Description: "Try a DMN model against sample inputs without deploying anything: returns what the " +
+				"decision produced and the temis trace saying which rules fired and why. The model is the one " +
+				"in the request, so this works on a decision that is stored nowhere yet — use it to check a " +
+				"decision table you just wrote before atlas_upload_decision_model or atlas_deploy_decision. " +
+				"Omit decisionId to be told what the model offers and which inputs each decision wants.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"xml":        stringProp("The full DMN XML document to try."),
+					"decisionId": stringProp("Which decision in the model to run. Omitted, the model is only described."),
+					"inputs":     map[string]any{"type": "object", "description": "The decision's input values, by input data name."},
+				},
+				"required": []any{"xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"xml": xml}
+				if id, _ := args["decisionId"].(string); id != "" {
+					payload["decisionId"] = id
+				}
+				if in, ok := args["inputs"].(map[string]any); ok {
+					payload["inputs"] = in
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/decisions/evaluate", "application/json", body))
+			},
+		},
+		{
 			Name: "atlas_deploy_decision",
 			Description: "Deploy one DMN model as a decision deployment: durable, versioned, and " +
 				"evaluable on its own, without publishing the whole application around it. The " +

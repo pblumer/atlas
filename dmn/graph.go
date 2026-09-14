@@ -49,6 +49,10 @@ type ModelGraph struct {
 // an infrastructure failure; an unresolved handle or an invalid model is a normal
 // result carrying a Message (and no nodes), so the viewer can explain the state
 // instead of erroring.
+//
+// Every node comes back with bounds: a model whose diagram does not cover it is
+// completed on the way through, so the viewer never has to invent a layout of its
+// own (ADR-draft-dmn-diagram-is-completed-on-read).
 func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, error) {
 	empty := ModelGraph{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
 	xml, err := v.resolver.Resolve(ctx, modelRef)
@@ -59,6 +63,11 @@ func (v *Validator) Graph(ctx context.Context, modelRef string) (ModelGraph, err
 	if err != nil {
 		return ModelGraph{}, err
 	}
+	// The viewer draws from the bounds this graph carries, so the model is completed
+	// first and temis then reports the generated diagram as any other
+	// (ADR-draft-dmn-diagram-is-completed-on-read). One generator, so the viewer and
+	// the editor place the same model in the same picture.
+	xml = EnsureDiagram(xml)
 	defs, diags, err := v.engine.Compile(ctx, xml)
 	if err != nil {
 		empty.Resolved, empty.Message = true, err.Error()
