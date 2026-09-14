@@ -581,6 +581,10 @@ const APPS = [
   // everybody and is empty for most, which is the honest cost of having no role to
   // ask: a count on it would fix that, and nothing here keeps one yet.
   { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user" },
+  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
+  // catalogue means choosing from processes already deployed, never deploying one,
+  // so it is deliberately not the modeller's role — deploy is code execution.
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -1633,6 +1637,7 @@ const GRANTABLE_ROLES = [
   { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
+  { id: "productmanager", name: "Product manager", what: "maintain the portal's catalogues and products, and publish releases" },
 ];
 
 function userForm(u) {
@@ -9059,6 +9064,7 @@ async function route() {
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/panorama")) appId = "panorama";
   else if (path.startsWith("#/data")) appId = "data";
+  else if (path.startsWith("#/catalog")) appId = "catalog";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
@@ -9091,6 +9097,22 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/catalog") {
+      const gen = navGen;
+      const { viewCatalogs } = await import("./catalog-admin.js");
+      return await viewCatalogs({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    const cd = path.match(/^#\/catalog\/c\/(.+)$/);
+    if (cd) {
+      const gen = navGen;
+      const { viewCatalogDetail } = await import("./catalog-admin.js");
+      // me travels with the context because one card on that page is the owner's
+      // alone (ADR-0071): an editor may change the catalogue and not who else can.
+      return await viewCatalogDetail({
+        api, toast, view, isSuperseded: () => superseded(gen),
+        me: AUTH.user, enforced: AUTH.enabled,
+      }, decodeURIComponent(cd[1]));
+    }
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);

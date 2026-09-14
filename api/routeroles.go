@@ -51,7 +51,15 @@ var routeRoles = []string{roleAny, RoleAdmin, RoleModeler, RoleOperator, RoleUse
 
 // grantableRoles is every role an account may be given. roleAny is deliberately
 // absent: it describes a route, not a person.
-var grantableRoles = []string{RoleAdmin, RoleModeler, RoleOperator, RoleUser}
+//
+// RoleProductManager is here because ADR-0315's whole point is that catalogue
+// administration must not need instance administration — "nobody administering a
+// catalogue should need instance administration". A role that gates routes and
+// cannot be granted leaves exactly one kind of account able to fill a catalogue:
+// an administrator, which is the option that record refused. It is granted
+// deliberately, never by the legacy upgrade: legacyRoles() does not carry it, and
+// a test holds that.
+var grantableRoles = []string{RoleAdmin, RoleModeler, RoleOperator, RoleUser, RoleProductManager}
 
 // isRouteRole reports whether a string is one of the roles a route may name.
 func isRouteRole(role string) bool {

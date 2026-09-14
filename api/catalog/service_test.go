@@ -31,7 +31,7 @@ func newService(t *testing.T) *Service {
 
 	n := int64(0)
 	return New(loop, store, func() int64 { n++; return 1700 + n },
-		func(p *httpapi.Principal) bool { return p.HasRole("admin") })
+		func(p *httpapi.Principal) bool { return p != nil && p.HasRole("admin") })
 }
 
 func do(t *testing.T, h http.HandlerFunc, method, target, body string, vals ...string) *httptest.ResponseRecorder {
@@ -295,7 +295,7 @@ func brokenService(t *testing.T) *Service {
 	go loop.Run()
 	t.Cleanup(func() { close(quit) })
 	return New(loop, store, func() int64 { return 1700 },
-		func(p *httpapi.Principal) bool { return p.HasRole("admin") })
+		func(p *httpapi.Principal) bool { return p != nil && p.HasRole("admin") })
 }
 
 func TestAnUnreadableStoreIsAnError(t *testing.T) {

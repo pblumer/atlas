@@ -368,3 +368,94 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 			"of its own and not a view of this app")
 	}
 }
+
+// A page of its own needs a way out of its own.
+//
+// Both portal surfaces are reached from the shell's menu and from a link in a
+// notification mail, and neither is a view of the shell — so the browser's back
+// button is the only exit, and somebody who arrived by following a link has no back
+// to press. The header carries a way back on each.
+//
+// The link is checked in both pages because they were written separately and the
+// second inherited the first's shape: a fix applied to one and forgotten on the
+// other is exactly how the approvals page came to have no menu entry for months.
+func TestBothPortalSurfacesLeadBackToAtlas(t *testing.T) {
+	for _, page := range []struct{ src, key string }{
+		{"portal.js", "portal.back"},
+		{"genehmigung.js", "appr.back"},
+	} {
+		src := readWeb(t, page.src)
+		if !strings.Contains(src, `href: '/index.html'`) {
+			t.Errorf("%s renders no way back to Atlas; a page of its own with no exit "+
+				"strands whoever followed a link into it", page.src)
+		}
+		// The label travels through the message catalogue like every other word on
+		// these pages, so a locale that offers the page offers the way out too.
+		if !strings.Contains(src, `t('`+page.key+`')`) {
+			t.Errorf("%s hard-codes the back link's label instead of reading %q from the "+
+				"catalogue", page.src, page.key)
+		}
+	}
+}
+
+// TestTheCatalogueCanBeFilledFromTheMenu: the authoring surface exists and is
+// reachable.
+//
+// The portal's API landed with no screen at all — catalogues, products, edges and
+// releases were reachable only by hand-written JSON. That is a working API and an
+// unusable product, and the gap was invisible because every test passed.
+func TestTheCatalogueCanBeFilledFromTheMenu(t *testing.T) {
+	src := readWeb(t, "app.js")
+	start := strings.Index(src, "const APPS = [")
+	if start < 0 {
+		t.Fatal("app.js has no APPS list; this test now checks nothing and says so instead")
+	}
+	apps := src[start : start+strings.Index(src[start:], "\n];")]
+	if !strings.Contains(apps, `{ id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },`) {
+		t.Error("no menu entry leads to the catalogue authoring screen, or its gate moved. " +
+			"It is a hash route because it *is* a view of this app, unlike the two portal " +
+			"pages, and it is gated at productmanager because ADR-0315 exists so that " +
+			"filling a catalogue does not need instance administration")
+	}
+	// The screen is worth nothing if the role it is gated at cannot be handed out.
+	if !strings.Contains(src, `{ id: "productmanager", name: "Product manager",`) {
+		t.Error("the account dialog cannot grant productmanager, so the catalogue screen " +
+			"is reachable by administrators alone — which is the arrangement ADR-0315 refused")
+	}
+}
+
+// The catalogue screen offers sharing to the owner and to nobody else.
+//
+// The server refuses either way (mayShare), so this is about what the screen
+// *offers*: a form that always ends in 403 is its own kind of lie, and a page that
+// hid the rule would leave an editor wondering why their grant never took.
+//
+// It is checked against the source rather than rendered, because the rule is the
+// thing worth pinning: enforcement off means everybody, admin passes, the owner
+// passes, and an editor does not.
+func TestTheCatalogueScreenOffersSharingOnlyToTheOwner(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+
+	if !strings.Contains(src, "function mayShare(cat, me, enforced)") {
+		t.Fatal("catalog-admin.js has no mayShare; this test now checks nothing and says so instead")
+	}
+	start := strings.Index(src, "function mayShare(cat, me, enforced)")
+	body := src[start : start+strings.Index(src[start:], "\n}")]
+
+	for _, want := range []struct{ frag, why string }{
+		{"if (!enforced) return true;", "with authentication off there is nobody to be, so everybody may"},
+		{`(me.roles || []).includes("admin")`, "an administrator passes, as everywhere"},
+		{"cat.ownerId === me.id", "the owner is who may share"},
+	} {
+		if !strings.Contains(body, want.frag) {
+			t.Errorf("mayShare does not say %q — %s", want.frag, want.why)
+		}
+	}
+	// The absence that matters: an editor must not be offered the form. If this
+	// ever starts consulting the member list, the screen has stopped mirroring the
+	// server and started inventing a rule.
+	if strings.Contains(body, "members") {
+		t.Error("mayShare reads the member list, so it offers sharing to editors too — " +
+			"which is the grant-amplification the server refuses")
+	}
+}

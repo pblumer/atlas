@@ -52,7 +52,9 @@ test("an administrator is offered everything, Organization included", async ({ p
   stubAPI(page, { username: "root", roles: ["admin"] });
   await boot(page);
 
-  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Portal", "Approvals", "Operations", "Panorama", "Data"]);
+  // Catalogue rides productmanager, which mona above does not hold — admin does,
+  // because admin is the one superset.
+  await expect(drawer(page)).toHaveText(["Console", "Modeler", "Tasks", "Portal", "Approvals", "Catalogue", "Operations", "Panorama", "Data"]);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 
@@ -62,7 +64,7 @@ test("with enforcement off there is nobody to have a role, so nothing is hidden"
     route.fulfill({ json: { authEnabled: false, user: null } }));
   await boot(page);
 
-  await expect(drawer(page)).toHaveCount(8);
+  await expect(drawer(page)).toHaveCount(9);
   expect(await topnav(page).allTextContents()).toContain("Organization");
 });
 

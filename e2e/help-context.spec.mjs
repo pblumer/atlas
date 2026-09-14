@@ -39,7 +39,7 @@ test("the apps the shell offers are the apps the handbook teaches", () => {
   const app = read("../api/web/app.js");
   const table = app.slice(app.indexOf("const APPS = ["), app.indexOf("];", app.indexOf("const APPS = [")));
   const routes = [...table.matchAll(/route: "([^"]+)"/g)].map((m) => m[1]);
-  expect(routes.length).toBe(8);
+  expect(routes.length).toBe(9);
 
   // The welcome chapter's card grid is where a reader learns an app exists at all,
   // and it linked to four of six for as long as Panorama and Data went untaught.

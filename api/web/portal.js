@@ -32,6 +32,7 @@ const STRINGS = {
     'portal.noOrders': 'Sie haben noch nichts bestellt.',
     'portal.placed': 'Bestellt am',
     'portal.approval': 'Genehmigung nötig',
+    'portal.back': 'Zurück zu Atlas',
     'portal.held': 'Haben Sie bereits',
     'portal.held.since': 'seit',
     'portal.blockedBy': 'Wartet auf',
@@ -75,6 +76,7 @@ const STRINGS = {
     'portal.noOrders': 'You have not ordered anything yet.',
     'portal.placed': 'Ordered on',
     'portal.approval': 'Needs approval',
+    'portal.back': 'Back to Atlas',
     'portal.held': 'You already have this',
     'portal.held.since': 'since',
     'portal.blockedBy': 'Waiting for',
@@ -540,10 +542,16 @@ function render() {
       el('div', { class: 'brand' },
         renderMark(),
         el('h1', {}, state.catalog ? textOf(state.catalog.texts, t('portal.title')) : t('portal.title'))),
-      el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
-        class: l === locale ? 'lang on' : 'lang',
-        onclick: () => setLocale(l),
-      }, l.toUpperCase())))),
+      el('div', { class: 'headright' },
+        // The way back. This page is reached from Atlas' own menu and from a link in
+        // a mail, and it is a page of its own rather than a view of the shell — so
+        // without this the only way out is the browser's back button, and a visitor
+        // who arrived by link has no back to press.
+        el('a', { class: 'backlink', href: '/index.html' }, '\u2190 ', t('portal.back')),
+        el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
+          class: l === locale ? 'lang on' : 'lang',
+          onclick: () => setLocale(l),
+        }, l.toUpperCase()))))),
     state.error ? el('p', { class: 'error' }, state.error,
       ' ', el('button', { onclick: load }, t('portal.retry'))) : null,
     el('section', {}, el('h2', {}, t('portal.catalog')), renderCatalogue()),

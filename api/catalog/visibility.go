@@ -69,6 +69,11 @@ func Resolve(catalogs []Catalog, groups []string) (Catalog, bool) {
 // bindings, so at ten of them named after customers the listing alone tells one
 // customer who the others are.
 func (s *Service) mayRead(c Catalog, p *httpapi.Principal) bool {
+	// Same order and the same reason as mayEdit: enforcement off means there is
+	// nobody to be, not nobody who may.
+	if s.admin(p) {
+		return true
+	}
 	if p == nil {
 		return false
 	}

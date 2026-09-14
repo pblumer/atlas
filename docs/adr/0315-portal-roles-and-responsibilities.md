@@ -1,7 +1,7 @@
 # ADR-0315: Who runs the portal — a role for the operation, a catalogue for the object
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether aggregate figures are enough for a product manager to
@@ -220,6 +220,54 @@ places it), and which role that process assigns work to is that process's busine
 - Good: creation is answerable, per-catalogue responsibility is answerable, and both use
   shapes already in the tree.
 - Bad: the most moving parts. Two axes to hold in mind when reviewing any portal handler.
+
+## Implementation
+
+The role and the object axis were both in the server before anything could reach
+them, and the gap between "enforced" and "usable" turned out to hold three defects.
+
+**`productmanager` gated routes and could not be granted.** `routeRoles` carried it
+and `grantableRoles` did not, so the only account that could maintain a catalogue
+was an administrator — precisely the arrangement this record refused ("nobody
+administering a catalogue should need instance administration"). It is grantable
+now, from the account dialog like the other four, and `legacyRoles()` still does not
+carry it: granting stays a deliberate act, as decision *The role* requires.
+
+**Sharing was an editor's and is the owner's.** `HandleUpdateCatalog` let anyone
+who passed `mayEdit` replace `Members`, which makes a grant self-amplifying —
+whoever is given editor hands editor to anybody, and the owner's choice of who
+maintains their catalogue stops being the owner's. That contradicts
+[ADR-0071](0071-sharing-scopes.md), where the
+owner "can read, write, share (edit membership)" and the role beneath is read/write,
+and it diverged from how projects already enforce it (`checkProjectRole(…,
+ScopeRoleOwner)`). `mayShare` closes it, and the refusal is explicit rather than a
+silent drop: a maintainer told "saved" would believe a grant exists that does not.
+
+**With enforcement off, a catalogue could be created and never changed.** The
+default single-binary build runs without authentication, and the catalogue read "no
+identity" as "no rights": create answered 201 with an id, and every request after it
+answered 404 to the catalogue's own author. Every other area reads enforcement-off as
+"everything is permitted" — `Server.isAdmin`, `requireAdmin`, the drawer's `mayUse` —
+so the catalogue now asks its admin predicate before the nil guard rather than after.
+That changes a contract: the predicate is called with a nil principal, which is
+written on the field and honoured by every implementation.
+
+**The screen.** `api/web/catalog-admin.js` is the authoring surface this record
+implied and nobody had built: catalogues, products, the two edge graphs, the member
+list, and publishing — which renders every problem the 422 carries, because the
+refusal list *is* the work. Processes are bound from what is deployed, never from
+free text, which is the least-authority reading of decision *A product manager is not
+a modeller*: choosing among deployed processes, never deploying one. Members are
+added by id, because a product manager holds no user listing and borrowing the task
+folders' value lists would couple two unrelated areas to spare one paste.
+
+The boundary is proven over real HTTP as well as in the package: one product manager
+sees only their own catalogues in the listing, gets 404 rather than 403 on another's
+id, and cannot patch, publish, read releases of, or home a product in it.
+
+**Not built here:** the aggregate figures decision *What a product manager may see*
+describes, the integration-manager relation, and the catalogue theme, which stays
+with `admin` as decision 12 says.
 
 ## Links
 

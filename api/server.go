@@ -1399,7 +1399,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The portal catalogue is another area service on the same shape: it takes the
 	// run loop, its store, and the server clock, and nothing else.
 	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() },
-		func(p *httpapi.Principal) bool { return p.HasRole(RoleAdmin) })
+		// "Passes as an administrator here" — which with enforcement off is everybody,
+		// exactly as Server.isAdmin answers it for every other area. Written with the
+		// nil check because a request carries no principal when nobody is signed in.
+		func(p *httpapi.Principal) bool { return !s.authEnabled || (p != nil && p.HasRole(RoleAdmin)) })
 	// Orders read releases straight from the catalogue store. The closure runs
 	// inside the order service's own run-loop closure, so it must not dispatch
 	// onto the loop again — Do is a rendezvous, and a nested one would deadlock.
