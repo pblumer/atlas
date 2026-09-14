@@ -595,6 +595,20 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
 	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
 
+	// Decision documentation is the same design for a second artifact kind
+	// (ADR-draft-decision-documentation), and omitted for the same reasons: the
+	// document is rendered in the browser from dmn-js's own picture, and publishing
+	// or revoking one is a human decision. An agent reads the decision itself with
+	// atlas_get_decision_model and can check it with atlas_try_decision.
+	"POST /api/v1/decisions/{decisionId}/documentation":       "the document is rendered in the browser; an agent has no requirements-graph raster to publish",
+	"GET /api/v1/decisions/{decisionId}/documentation":        "history of a published artifact; an agent reads the model itself via atlas_get_decision_model",
+	"POST /api/v1/decisions/{decisionId}/documentation/prune": "retention over published history is a human decision, not an agent action",
+	"GET /api/v1/decision-docs/{id}":                          "a published artifact's record; an agent reads the model itself via atlas_get_decision_model",
+	"GET /api/v1/decision-docs/{id}/pdf":                      "binary document download is not an agent capability",
+	"POST /api/v1/decision-docs/{id}/share":                   "publishing a decision to an audience outside Atlas is a human decision, not an agent action",
+	"DELETE /api/v1/decision-docs/{id}/share":                 "revoking a publication is a human decision, not an agent action",
+	"DELETE /api/v1/decision-docs/{id}":                       "pruning published history is a human decision, not an agent action",
+
 	// Artifact id availability (ADR-0222): a keystroke-level
 	// probe that colours the Modeler's ID field while it is being typed. An agent
 	// does not type; it saves, and the save itself is the authority — it refuses a

@@ -115,6 +115,7 @@ var persistentStores = []storeEntry{
 	{name: "inbound-subscriptions", class: classDesignTime, why: "which worker receives which message"},
 	{name: "settings", class: classDesignTime, why: "installation settings, including the OIDC claim mapping"},
 	{name: "process-docs", class: classInstance, why: "process documentation"},
+	{name: "decision-docs", class: classInstance, why: "decision documentation — the sign-off artifact for a business rule, with its own version line"},
 	{name: "information-models", class: classInstance, why: "the vocabulary data objects are typed against"},
 	{name: "playground-scenarios", class: classInstance, why: "saved playground scenarios"},
 	{name: "call-overrides", class: classInstance, why: "which process a call activity resolves to on this server"},

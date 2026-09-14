@@ -990,6 +990,45 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a documentation version, taking its public link with it (ADR-0143)", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
+		// Decision documentation (ADR-draft-decision-documentation): the same design
+		// for a second artifact kind. A DMN decision published as one structured PDF
+		// — the requirements graph plus every decision's prose, inputs and rule table
+		// — as an immutable, per-decision numbered version, optionally shared through
+		// a revocable public link. The version line is about sign-off, not about what
+		// is running: the decision deployment record (ADR-0319) answers that, and a
+		// document is routinely published from a draft before anything is deployed.
+		{"POST", "/api/v1/decisions/{decisionId}/documentation", s.decisionDocs.HandleCreate, apiOp{
+			summary: "Publish the next documentation version of a decision: the produced PDF plus the decision prose and rule tables it describes", tag: "Documentation", role: RoleModeler,
+			req: jsonBody("Documentation upload", schemaObj(map[string]any{
+				"title": tString(), "note": tString(), "modelName": tString(), "modelRef": tString(),
+				"xml": tString(), "decisions": tArray(), "pdfBase64": tString(),
+			}, "pdfBase64")),
+			resp: jsonBody("The minted documentation version", tObject())}},
+		{"GET", "/api/v1/decisions/{decisionId}/documentation", s.decisionDocs.HandleList, apiOp{
+			summary: "A decision's documentation history, newest version first", tag: "Documentation", role: roleAny,
+			resp: jsonBody("Documentation versions", tArray())}},
+		{"POST", "/api/v1/decisions/{decisionId}/documentation/prune", s.decisionDocs.HandlePrune, apiOp{
+			summary: "Prune a decision's documentation history to the newest `keep` versions, deleting older ones and their PDFs", tag: "Documentation", role: RoleModeler,
+			req: jsonBody("Retention limit", schemaObj(map[string]any{
+				"keep": tInteger(),
+			}, "keep")),
+			resp: jsonBody("The versions that were pruned", tObject())}},
+		{"GET", "/api/v1/decision-docs/{id}", s.decisionDocs.HandleGet, apiOp{
+			summary: "Fetch one decision documentation version in full: metadata, the documented decisions and rule tables, and the DMN source it was produced from", tag: "Documentation", role: roleAny,
+			resp: jsonBody("Documentation version", tObject())}},
+		{"GET", "/api/v1/decision-docs/{id}/pdf", s.decisionDocs.HandleGetPDF, apiOp{
+			summary: "Download a decision documentation version's PDF", tag: "Documentation", role: roleAny,
+			resp: &bodySpec{mediaType: "application/pdf", schema: tString(), desc: "The published PDF document"}}},
+		{"POST", "/api/v1/decision-docs/{id}/share", s.decisionDocs.HandleShare, apiOp{
+			summary: "Share one decision documentation version: mint (or return) its revocable public link. Idempotent — a URL readers already hold never rotates", tag: "Documentation", role: RoleModeler,
+			resp: jsonBody("The version with its share link", tObject())}},
+		{"DELETE", "/api/v1/decision-docs/{id}/share", s.decisionDocs.HandleUnshare, apiOp{
+			summary: "Revoke a decision documentation version's public link", tag: "Documentation", role: RoleModeler,
+			resp: jsonBody("The version, now private", tObject())}},
+		{"DELETE", "/api/v1/decision-docs/{id}", s.decisionDocs.HandleDelete, apiOp{
+			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
+			status: http.StatusNoContent}},
+
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
 		// surface is /api/v1/applications; each route binds to the same handler as

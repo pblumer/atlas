@@ -40,7 +40,7 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // `taken` makes the model upload answer 409 the way the server does when the handle
 // a decision would land on is already somebody else's (ADR-0222), unless the request
 // says the author chose to replace it.
-function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null } = {}) {
+function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [] } = {}) {
   const uploads = [];
   const created = [];
   const patched = [];
@@ -49,6 +49,8 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
   const deploys = [];
   const tries = [];
   const layouts = [];
+  const docPublishes = [];
+  const docActions = [];
   let nextKey = 7;
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -120,6 +122,26 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
         },
       });
     }
+    if (/^\/api\/v1\/decisions\/[^/]+\/documentation$/.test(path)) {
+      if (request.method() === "GET") return route.fulfill({ json: docs });
+      const payload = request.postDataJSON();
+      docPublishes.push({ path, body: payload });
+      const version = docs.length + 1;
+      docs.unshift({
+        id: "doc-" + version, decisionId: path.split("/")[4], version,
+        title: payload.title, note: payload.note, createdAt: 1789000000, createdBy: "pat",
+        pdfUrl: "/api/v1/decision-docs/doc-" + version + "/pdf",
+      });
+      return route.fulfill({ json: docs[0] });
+    }
+    if (/^\/api\/v1\/decisions\/[^/]+\/documentation\/prune$/.test(path)) {
+      docActions.push({ what: "prune", body: request.postDataJSON() });
+      return route.fulfill({ json: { deleted: [], kept: 1 } });
+    }
+    if (path.startsWith("/api/v1/decision-docs/")) {
+      docActions.push({ what: request.method() + " " + path });
+      return route.fulfill({ json: {} });
+    }
     if (path === "/api/v1/dmn-layout" && request.method() === "POST") {
       layouts.push(request.postData());
       return route.fulfill({ body: RELAID_XML, contentType: "application/xml" });
@@ -156,7 +178,7 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
     }
     return route.fulfill({ json: [] });
   });
-  return { uploads, created, patched, draftSaves, draftDeletes, deploys, deployed, tries, layouts };
+  return { uploads, created, patched, draftSaves, draftDeletes, deploys, deployed, tries, layouts, docPublishes, docActions, docs };
 }
 
 // A decision as it looks in a draft: the same shape as the stored model, with a
@@ -615,4 +637,64 @@ test("a model the server completed draws its whole requirements graph", async ({
   for (const id of ["id_amount", "eligibility", "ir1"]) {
     await expect(page.locator(`.dmn-canvas [data-element-id="${id}"]`)).toBeVisible();
   }
+});
+
+test("Documentation publishes a version of the decision and lists its history", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-more").click();
+  await page.locator("#dmn-docexport").click();
+  await expect(page.locator("#dmn-doc-panel")).toBeVisible();
+  await expect(page.locator("#dmn-doc-history")).toContainText("No version published yet");
+
+  await page.locator("#dmn-doc-note").fill("Signed off in March");
+  await page.locator("#dmn-doc-publish").click();
+
+  // Filed under the decision the model declares, with the rules and the document.
+  await expect.poll(() => state.docPublishes.length).toBe(1);
+  const sent = state.docPublishes[0];
+  expect(sent.path).toBe("/api/v1/decisions/Decision_stored/documentation");
+  expect(sent.body.note).toBe("Signed off in March");
+  expect(sent.body.modelRef).toBe("eligibility");
+  expect(sent.body.decisions[0].id).toBe("Decision_stored");
+  expect(sent.body.pdfBase64.length).toBeGreaterThan(100);
+
+  // And the history now shows it, with its download and a way to share it.
+  await expect(page.locator("#dmn-doc-history")).toContainText("v1");
+  await expect(page.locator("#dmn-doc-history")).toContainText("Signed off in March");
+  await expect(page.locator('#dmn-doc-history [data-share]')).toBeVisible();
+
+  // Nothing else was written by documenting: a document describes the decision,
+  // it does not change it.
+  expect(state.uploads).toEqual([]);
+  expect(state.deploys).toEqual([]);
+  expect(state.draftSaves).toEqual([]);
+});
+
+test("a published version can be shared, and deleting one is confirmed first", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    docs: [{ id: "doc-1", decisionId: "Decision_stored", version: 1, createdAt: 1789000000, pdfUrl: "/api/v1/decision-docs/doc-1/pdf" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-more").click();
+  await page.locator("#dmn-docexport").click();
+  await expect(page.locator("#dmn-doc-history")).toContainText("v1");
+
+  await page.locator('#dmn-doc-history [data-share]').click();
+  await expect.poll(() => state.docActions.map((a) => a.what))
+    .toContain("POST /api/v1/decision-docs/doc-1/share");
+
+  // Deleting a published version destroys an artifact somebody handed out, so it
+  // asks first — and a declined confirmation deletes nothing.
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator('#dmn-doc-history [data-delete]').click();
+  await page.waitForTimeout(200);
+  expect(state.docActions.filter((a) => (a.what || "").startsWith("DELETE"))).toEqual([]);
 });

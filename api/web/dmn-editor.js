@@ -32,6 +32,7 @@
 // stores what it produces and evaluates it through temis.
 
 import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
+import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -351,6 +352,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
           <div class="dropdown-menu" id="dmn-menu" hidden>
             <button id="dmn-autolayout" type="button" title="Re-flow the decision requirements graph into a clean layout"><span class="mi-icon">&#8649;</span>Auto-layout</button>
             <button id="dmn-export" type="button" title="Download this decision as DMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
+            <button id="dmn-docexport" type="button" title="Publish this decision as a structured PDF — the requirements graph plus every decision's prose and rule table — as a numbered version you can share"><span class="mi-icon">&#128196;</span>Documentation</button>
           </div>
         </div>
       </div>
@@ -363,6 +365,18 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         </div>
         <div class="dmn-test-inputs" id="dmn-test-inputs"></div>
         <div class="dmn-test-result" id="dmn-test-result"></div>
+      </div>
+      <div class="start-panel" id="dmn-doc-panel" hidden>
+        <label class="field"><span>Title</span>
+          <input id="dmn-doc-title" placeholder="Leave empty to use the model name"/></label>
+        <label class="field"><span>Note for this version</span>
+          <input id="dmn-doc-note" placeholder="What changed, or what this version was signed off for"/></label>
+        <div class="row">
+          <button class="btn" id="dmn-doc-publish" title="Publish a new documentation version as a PDF">Publish version</button>
+          <button class="btn neutral" id="dmn-doc-cancel" title="Close the documentation panel">Close</button>
+          <span class="err" id="dmn-doc-err"></span>
+        </div>
+        <div class="doc-history" id="dmn-doc-history"></div>
       </div>
       <div class="editor-body dmn-body">
         <div class="dmn-canvas"></div>
@@ -947,9 +961,162 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     });
   }
 
+  // ---- documentation ------------------------------------------------------
+  // A decision table is the business rule, and the people who sign it off are the
+  // ones least likely to have a Modeler open. Publishing it is ADR-0143's act for
+  // a second artifact kind (ADR-draft-decision-documentation): the browser renders
+  // the picture it is already drawing, the server numbers and stores it, and a
+  // revocable link puts one version in front of a reader with no account.
+
+  const docPanel = root.querySelector("#dmn-doc-panel");
+  const docErr = root.querySelector("#dmn-doc-err");
+  const docHistory = root.querySelector("#dmn-doc-history");
+  const docPublish = root.querySelector("#dmn-doc-publish");
+  const closeDoc = () => { docPanel.hidden = true; docErr.textContent = ""; };
+
+  // renderDocHistory draws this decision's published versions, newest first, each
+  // with its download and its sharing state. Sharing is per version, so every row
+  // carries its own control.
+  const renderDocHistory = (versions) => {
+    if (!versions.length) {
+      docHistory.innerHTML = `<p class="muted doc-empty">No version published yet.</p>`;
+      return;
+    }
+    docHistory.innerHTML = versions.map((v) => {
+      const when = v.createdAt ? new Date(v.createdAt * 1000).toLocaleString() : "";
+      const by = v.createdBy ? " · " + esc(v.createdBy) : "";
+      const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
+      const share = v.shareUrl
+        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">Public link</a>
+           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="Revoke the shared link for this version">Revoke</button>`
+        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="Share a link to this documentation version">Share…</button>`;
+      return `<div class="doc-version">
+        <div class="doc-version-head">
+          <b>v${v.version}</b>
+          <span class="muted">${esc(when)}${by}</span>
+        </div>
+        ${note}
+        <div class="row">
+          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>
+          ${share}
+          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="Delete this version and its PDF">Delete</button>
+        </div>
+      </div>`;
+    }).join("");
+    // Every version keeps a PDF, so an old archive grows without bound. Offer a
+    // one-click prune when there is enough history to be worth trimming.
+    if (versions.length > 1) {
+      docHistory.innerHTML += `<div class="doc-prune row">
+        <span class="muted">Keep newest</span>
+        <input id="dmn-doc-keep" type="number" min="1" value="5" style="width:4em"/>
+        <button class="btn neutral small" id="dmn-doc-prune" title="Delete older documentation versions">Prune older versions</button>
+      </div>`;
+    }
+  };
+
+  // documentedDecisionId is the decision the history is filed under: the first the
+  // model declares, which is what the export files it under too.
+  async function documentedDecisionId() {
+    const { xml } = await currentXml();
+    return collectDecisionDocumentation(xml).decisionId;
+  }
+
+  const loadDocHistory = async () => {
+    const id = await documentedDecisionId();
+    if (!id) { docHistory.innerHTML = ""; return; }
+    try {
+      const versions = await api("GET", `/api/v1/decisions/${encodeURIComponent(id)}/documentation`);
+      renderDocHistory(versions || []);
+    } catch (e) {
+      docHistory.innerHTML = `<p class="err">${esc(e.message)}</p>`;
+    }
+  };
+
+  const openDoc = async () => {
+    docPanel.hidden = false;
+    docErr.textContent = "";
+    const titleField = root.querySelector("#dmn-doc-title");
+    if (!titleField.value) {
+      try {
+        const { name } = await currentXml();
+        titleField.value = name === DEFAULT_DECISION_NAME ? "" : name;
+      } catch { /* the field simply stays empty */ }
+    }
+    docHistory.innerHTML = `<p class="muted doc-empty">Loading…</p>`;
+    await loadDocHistory();
+  };
+
+  // publishDoc renders the document from the DRG view, because that is the view
+  // that draws the requirements graph: a model open on a decision table has no
+  // graph to save. The author is put back on the view they were reading.
+  async function publishDoc() {
+    docPublish.disabled = true;
+    docErr.textContent = "";
+    const wasOn = modeler.getActiveView();
+    try {
+      const drd = (modeler.getViews() || []).find((v) => v.type === "drd");
+      if (drd && (!wasOn || wasOn.id !== drd.id)) await modeler.open(drd);
+      const { xml } = await currentXml();
+      await exportDecisionDocumentation({
+        modeler, api, xml, modelRef,
+        title: root.querySelector("#dmn-doc-title").value.trim(),
+        note: root.querySelector("#dmn-doc-note").value.trim(),
+      });
+      root.querySelector("#dmn-doc-note").value = "";
+      toast && toast("Documentation version published", "ok");
+      await loadDocHistory();
+    } catch (e) {
+      docErr.textContent = e.message;
+    } finally {
+      if (wasOn) { try { await modeler.open(wasOn); } catch { /* the view went away */ } }
+      docPublish.disabled = false;
+    }
+  }
+
   saveBtn.addEventListener("click", saveDraft);
   modelBtn.addEventListener("click", saveToModel);
   deployBtn.addEventListener("click", deployDecision);
+  root.querySelector("#dmn-docexport").addEventListener("click", () => {
+    docPanel.hidden ? openDoc() : closeDoc();
+  });
+  root.querySelector("#dmn-doc-cancel").addEventListener("click", closeDoc);
+  docPublish.addEventListener("click", publishDoc);
+  // Sharing, revoking, deleting a version and pruning are delegated: the history
+  // is re-rendered on every change, so binding per row would leak listeners.
+  docHistory.addEventListener("click", async (e) => {
+    const attr = (name) => e.target.getAttribute && e.target.getAttribute(name);
+    const shareId = attr("data-share");
+    const unshareId = attr("data-unshare");
+    const deleteId = attr("data-delete");
+    const prune = e.target.id === "dmn-doc-prune";
+    if (!shareId && !unshareId && !deleteId && !prune) return;
+
+    // Deleting a version and pruning both destroy a published artifact and its
+    // PDF, so both confirm first — this is not a click to make lightly.
+    if (deleteId && !window.confirm(`Delete documentation v${attr("data-version")}? This removes the version and its PDF for good.`)) return;
+    let keep = 0;
+    let decisionId = "";
+    if (prune) {
+      const keepField = docHistory.querySelector("#dmn-doc-keep");
+      keep = Math.max(1, parseInt(keepField && keepField.value, 10) || 1);
+      decisionId = await documentedDecisionId();
+      if (!decisionId) return;
+      if (!window.confirm(`Keep the newest ${keep} version${keep === 1 ? "" : "s"} and delete the rest? The deleted versions and their PDFs are gone for good.`)) return;
+    }
+
+    e.target.disabled = true;
+    try {
+      if (shareId) await api("POST", `/api/v1/decision-docs/${encodeURIComponent(shareId)}/share`);
+      else if (unshareId) await api("DELETE", `/api/v1/decision-docs/${encodeURIComponent(unshareId)}/share`);
+      else if (deleteId) await api("DELETE", `/api/v1/decision-docs/${encodeURIComponent(deleteId)}`);
+      else if (prune) await api("POST", `/api/v1/decisions/${encodeURIComponent(decisionId)}/documentation/prune`, { keep });
+      await loadDocHistory();
+    } catch (err) {
+      docErr.textContent = err.message;
+    } finally {
+      e.target.disabled = false;
+    }
+  });
   discardBtn.addEventListener("click", discardDraft);
   testBtn.addEventListener("click", () => { setTestOpen(testPanel.hidden); });
   root.querySelector("#dmn-test-close").addEventListener("click", () => setTestOpen(false));

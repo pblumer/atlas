@@ -89,6 +89,7 @@ import (
 	"github.com/pblumer/atlas/tracing"
 
 	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
@@ -274,7 +275,8 @@ type Server struct {
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
-	processDocs *processdoc.Service
+	processDocs  *processdoc.Service
+	decisionDocs *decisiondoc.Service
 	// catalogs serves the self-service portal's product catalogues and the releases
 	// published from them (ADR-0312). Another
 	// area service on the ADR-0147 shape: its own store, the run loop for every
@@ -1142,6 +1144,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	decisionDocStore, err := decisiondoc.NewStore(filepath.Join(dataDir, "decision-docs"))
+	if err != nil {
+		return nil, err
+	}
 	catalogStore, err := catalog.NewStore(filepath.Join(dataDir, "catalog"))
 	if err != nil {
 		return nil, err
@@ -1380,6 +1386,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// Decision documentation is the same area service for a second artifact kind
+	// (ADR-draft-decision-documentation). It takes no deployment lookup: a decision
+	// document is a sign-off artifact and is usually published before the decision
+	// is deployed, so the field would be empty in the case it exists for.
+	s.decisionDocs = decisiondoc.New(
+		s.runLoop,
+		decisionDocStore,
+		func(clientIP string) bool { return s.publicRate.allow(clientIP) },
+		token.New,
+	)
 	// The portal catalogue is another area service on the same shape: it takes the
 	// run loop, its store, and the server clock, and nothing else.
 	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() },
@@ -1533,6 +1549,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// in the limits package is what notices.
 	s.formGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
+	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
@@ -1721,6 +1738,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Same discipline for the per-process documentation counter, so an export after
 	// a restart continues the sequence instead of minting a second v1 (ADR-0143).
 	if err := s.processDocs.LoadVersions(); err != nil {
+		return nil, err
+	}
+	// And for the per-decision one (ADR-draft-decision-documentation).
+	if err := s.decisionDocs.LoadVersions(); err != nil {
 		return nil, err
 	}
 	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
@@ -2900,6 +2921,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// names. The token in the URL is the whole authorization, and the handlers rate
 	// limit them.
 	mountFunc(accessPublic, roleAny, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
+	mountFunc(accessPublic, roleAny, "GET "+decisiondoc.PublicPath+"{token}", s.decisionDocs.HandlePublic)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}", s.handlePublicFormPage)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/start", s.handlePublicFormStart)
