@@ -9033,8 +9033,12 @@ async function route() {
     if (cd) {
       const gen = navGen;
       const { viewCatalogDetail } = await import("./catalog-admin.js");
-      return await viewCatalogDetail({ api, toast, view, isSuperseded: () => superseded(gen) },
-        decodeURIComponent(cd[1]));
+      // me travels with the context because one card on that page is the owner's
+      // alone (ADR-0071): an editor may change the catalogue and not who else can.
+      return await viewCatalogDetail({
+        api, toast, view, isSuperseded: () => superseded(gen),
+        me: AUTH.user, enforced: AUTH.enabled,
+      }, decodeURIComponent(cd[1]));
     }
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();

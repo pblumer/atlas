@@ -423,3 +423,39 @@ func TestTheCatalogueCanBeFilledFromTheMenu(t *testing.T) {
 			"is reachable by administrators alone — which is the arrangement ADR-0315 refused")
 	}
 }
+
+// The catalogue screen offers sharing to the owner and to nobody else.
+//
+// The server refuses either way (mayShare), so this is about what the screen
+// *offers*: a form that always ends in 403 is its own kind of lie, and a page that
+// hid the rule would leave an editor wondering why their grant never took.
+//
+// It is checked against the source rather than rendered, because the rule is the
+// thing worth pinning: enforcement off means everybody, admin passes, the owner
+// passes, and an editor does not.
+func TestTheCatalogueScreenOffersSharingOnlyToTheOwner(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+
+	if !strings.Contains(src, "function mayShare(cat, me, enforced)") {
+		t.Fatal("catalog-admin.js has no mayShare; this test now checks nothing and says so instead")
+	}
+	start := strings.Index(src, "function mayShare(cat, me, enforced)")
+	body := src[start : start+strings.Index(src[start:], "\n}")]
+
+	for _, want := range []struct{ frag, why string }{
+		{"if (!enforced) return true;", "with authentication off there is nobody to be, so everybody may"},
+		{`(me.roles || []).includes("admin")`, "an administrator passes, as everywhere"},
+		{"cat.ownerId === me.id", "the owner is who may share"},
+	} {
+		if !strings.Contains(body, want.frag) {
+			t.Errorf("mayShare does not say %q — %s", want.frag, want.why)
+		}
+	}
+	// The absence that matters: an editor must not be offered the form. If this
+	// ever starts consulting the member list, the screen has stopped mirroring the
+	// server and started inventing a rule.
+	if strings.Contains(body, "members") {
+		t.Error("mayShare reads the member list, so it offers sharing to editors too — " +
+			"which is the grant-amplification the server refuses")
+	}
+}

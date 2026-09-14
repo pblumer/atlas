@@ -134,7 +134,7 @@ const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boole
 
 // ---------- One catalogue ----------
 
-export async function viewCatalogDetail({ api, toast, view, isSuperseded }, id) {
+export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
   let cat, items, releases, processes;
   try {
     [cat, items, releases, processes] = await Promise.all([
@@ -204,6 +204,8 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded }, id) 
     ${edgeTable(cat.edges || [], byID, langs)}
     ${offered.length > 1 ? edgeForm(offered, byID, langs) : `<p class="muted">Two products are needed before one can relate to another.</p>`}
 
+    ${sharingCard(cat, me, enforced)}
+
     <h3 style="margin-top:26px">Releases</h3>
     <p class="muted" style="max-width:62ch">Publishing freezes everything above into a release.
       An order names one release and is immune to every edit made afterwards, which is why a
@@ -216,7 +218,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded }, id) 
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
-  wire({ api, toast, view }, cat, items, byID, langs, procIDs);
+  wire({ api, toast, view }, cat, items, byID, langs, procIDs, mayShare(cat, me, enforced));
 }
 
 function productRow(it, iid, langs) {
@@ -270,6 +272,66 @@ function edgeForm(offered, byID, langs) {
   </form>`;
 }
 
+// mayShare mirrors the server's rule rather than guessing at it: sharing is the
+// owner's, an editor may change the catalogue and not who else can (ADR-0071).
+// With enforcement off there is nobody to be, so everybody is.
+//
+// It decides what to *offer*, never what is allowed — the server refuses either
+// way. Showing a form that always ends in 403 is its own kind of lie.
+function mayShare(cat, me, enforced) {
+  if (!enforced) return true;
+  if (!me) return false;
+  if ((me.roles || []).includes("admin")) return true;
+  return !!cat.ownerId && cat.ownerId === me.id;
+}
+
+const MEMBER_ROLES = [
+  { id: "viewer", name: "Viewer", what: "may read it, and may include its products in another catalogue" },
+  { id: "editor", name: "Editor", what: "may change it and publish it — but not change this list" },
+];
+
+function sharingCard(cat, me, enforced) {
+  const can = mayShare(cat, me, enforced);
+  const members = cat.members || [];
+  const rows = members.map((m) => {
+    const r = MEMBER_ROLES.find((x) => x.id === m.role);
+    const ref = m.ref || {};
+    return `<tr><td>${esc(ref.type === "group" ? "Group" : "User")}</td>
+      <td><code>${esc(ref.id || "")}</code></td>
+      <td>${esc(r ? r.name : m.role)}</td>
+      <td>${can ? `<button class="linkish" data-act="unshare"
+        data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
+  }).join("");
+
+  return `<h3 style="margin-top:26px">Who maintains this catalogue</h3>
+    <p class="muted" style="max-width:62ch">The role says somebody may maintain catalogues at
+      all; this says which ones. Sharing is the owner's: an editor may change this catalogue
+      and publish it, and may not change this list.</p>
+    <p class="muted">Owner: <code>${esc(cat.ownerId || "—")}</code>${
+      cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>
+    ${members.length ? `<table class="table">
+      <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>`
+    : `<p class="muted">Nobody else. Only the owner and administrators maintain it.</p>`}
+    ${can ? `<form class="share-new card" style="margin-top:12px; max-width:640px">
+      <h4 style="margin:0 0 10px">Let somebody else maintain it</h4>
+      <label class="field">Kind<select name="type">
+        <option value="user">One account</option>
+        <option value="group">A group — everybody in it</option>
+      </select></label>
+      <label class="field">Id
+        <input name="id" required autocomplete="off" placeholder="usr_… or the group id">
+        <span class="muted">The account or group id, not the name. An administrator reads it
+          from Console → Organization.</span></label>
+      <label class="field">May<select name="role">
+        ${MEMBER_ROLES.map((r) => `<option value="${r.id}">${esc(r.name)} — ${esc(r.what)}</option>`).join("")}
+      </select></label>
+      <button class="primary" type="submit">Add</button>
+    </form>`
+    : `<p class="muted">You maintain this catalogue but do not own it, so who else may is
+      the owner's to change.</p>`}`;
+}
+
 // productForm renders the editor for one product, or for a new one.
 function productForm(it, cat, langs, procIDs) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
@@ -310,7 +372,7 @@ function productForm(it, cat, langs, procIDs) {
   </div>`;
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs) {
+function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   const patch = async (body) => {
@@ -383,6 +445,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs) {
       return;
     }
 
+    if (act === "unshare") {
+      if (!canShare) return;
+      const [type, refID] = b.dataset.ref.split("|");
+      const members = (cat.members || []).filter(
+        (m) => !((m.ref || {}).type === type && (m.ref || {}).id === refID));
+      try { await patch({ members }); reload(); }
+      catch (err) { toast(err.message, "err"); }
+      return;
+    }
+
     if (act === "publish") {
       const report = view.querySelector(".publish-report");
       report.innerHTML = "";
@@ -401,6 +473,20 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs) {
       } finally { b.disabled = false; }
     }
   });
+
+  const shareNew = view.querySelector(".share-new");
+  if (shareNew) {
+    shareNew.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const refID = String(f.get("id") || "").trim();
+      if (!refID) { toast("An id is needed", "err"); return; }
+      const members = [...(cat.members || []),
+        { ref: { type: f.get("type"), id: refID }, role: f.get("role") }];
+      try { await patch({ members }); reload(); }
+      catch (err) { toast(err.message, "err"); }
+    });
+  }
 
   const edgeNew = view.querySelector(".edge-new");
   if (edgeNew) {
