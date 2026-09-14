@@ -313,7 +313,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
 		{"POST", "/api/v1/decision-deployments", s.handleDeployDecision, apiOp{
-			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-draft-deploying-one-decision). Body: the DMN XML. ?projectId= files it under an application, ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
+			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application, ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
 			req:  xmlBody("DMN XML"),
 			resp: jsonBody("The deployment key and the version each of its decisions is now at", tObject())}},
 		// roleAny, like GET /api/v1/processes, which it is the decision counterpart of

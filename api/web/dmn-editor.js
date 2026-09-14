@@ -20,7 +20,7 @@
 // picker lists the decision and adopts its inputs and output — the ADR-0062 flow,
 // unchanged, and still the step that completes the round trip from a task.
 //
-// Deploy is the third verb (ADR-draft-deploying-one-decision), and the only one
+// Deploy is the third verb (ADR-0322), and the only one
 // that reaches the engine: it ships what is on screen as a versioned decision
 // deployment, through the same durable path an application publish uses. The bar
 // therefore shows three buttons answering three different questions — what you are
@@ -637,7 +637,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
 
   // ---- deploying -----------------------------------------------------------
   // The third verb, and the only one that reaches the engine
-  // (ADR-draft-deploying-one-decision). Save changes the draft, Save to model
+  // (ADR-0322). Save changes the draft, Save to model
   // changes what every reference resolves, Deploy changes what the runtime
   // evaluates — and none of the three does another's job, which is why the bar
   // shows all three.

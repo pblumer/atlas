@@ -1,4 +1,4 @@
-# ADR-DRAFT: One decision can be deployed on its own, from the editor
+# ADR-0322: One decision can be deployed on its own, from the editor
 
 - **Status:** Accepted
 - **Implementation:** Landed

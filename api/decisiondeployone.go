@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Deploying one decision (ADR-draft-deploying-one-decision).
+// Deploying one decision (ADR-0322).
 //
 // The counterpart of POST /api/v1/deployments, which deploys a single BPMN
 // diagram. Until now a decision reached the runtime only through the application's

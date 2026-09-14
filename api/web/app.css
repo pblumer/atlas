@@ -409,7 +409,7 @@ textarea::placeholder {
 .chip.draft-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
 
 /* The version a decision is deployed at, on the decision editor's bar
-   (ADR-draft-deploying-one-decision). It is the counterpart of the "Deployment
+   (ADR-0322). It is the counterpart of the "Deployment
    <key>" crumb a BPMN diagram opened from a deployment carries, and it states
    something that is live in the engine — so it reads solid and settled, next to
    the dashed draft chip which states the opposite. */

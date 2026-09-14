@@ -407,6 +407,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0319](0319-durable-versioned-decision-deployments.md) | Durable, versioned decision deployments — and `latest` resolved when a process is deployed | Accepted | Landed |
 | [0320](0320-the-decision-editor-is-a-page.md) | The decision editor is a page, not an overlay | Accepted | Landed |
 | [0321](0321-decision-drafts.md) | A decision has a draft, and Save stops writing the model | Accepted | Landed |
+| [0322](0322-deploying-one-decision.md) | One decision can be deployed on its own, from the editor | Accepted | Landed |
 
 ## The two states of a record
 

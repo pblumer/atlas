@@ -134,7 +134,7 @@ func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy 
 // A publish always has a handle — a reference without one is dropped before it gets
 // here, since there would be nothing to resolve. A decision deployed straight from
 // the editor may have none, because the record carries its own XML and therefore
-// needs no model behind it (ADR-draft-deploying-one-decision). Rather than claim a
+// needs no model behind it (ADR-0322). Rather than claim a
 // model that does not exist, such a deployment names itself from its own first
 // decision id.
 func decisionResourceName(modelRef string, decisions []string) string {

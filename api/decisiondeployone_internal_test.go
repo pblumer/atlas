@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// The acceptance suite for ADR-draft-deploying-one-decision: an author can deploy
+// The acceptance suite for ADR-0322: an author can deploy
 // the decision in front of them, alone, and what arrives at the runtime is
 // indistinguishable from a decision an application publish deployed.
 //

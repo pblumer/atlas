@@ -350,7 +350,7 @@ The control-flow basics most real models use.
   deliberate replacement ([ADR-0222](docs/adr/0222-artifact-id-renames.md)) rather than
   silently forking `eligibility-2`.
   **The third verb landed too**
-  ([ADR-draft-deploying-one-decision](docs/adr/draft-deploying-one-decision.md)):
+  ([ADR-0322](docs/adr/0322-deploying-one-decision.md)):
   **Deploy** ships the decision on screen on its own, through
   `POST /api/v1/decision-deployments` — the same `deployDecisions` an application
   publish calls, so the record, the key, the per-decision version and the recovery

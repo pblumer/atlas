@@ -248,7 +248,7 @@ _Changed_ / _Removed_ for each version.
   business rule task can name it until it is in the model. `atlas_deploy_decision`
   exposes the same act over MCP, and the deployed-decision listing is now readable by
   any signed-in identity, as the deployed-process listing already was.
-  ([ADR-draft-deploying-one-decision](docs/adr/draft-deploying-one-decision.md),
+  ([ADR-0322](docs/adr/0322-deploying-one-decision.md),
   [ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md),
   [issue #919](https://github.com/pblumer/atlas/issues/919))
 
