@@ -751,13 +751,22 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	var (
 		refs    []dmnRef
 		loadErr error
+		// The decisions already deployed in their own right: a latest-bound task
+		// naming one needs no model bundled with this process, because the deploy
+		// pins it to that deployment's key
+		// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task). Registry
+		// state, so it is read on the loop beside the references.
+		deployedDecisionIDs map[string]bool
 	)
-	s.do(func() { refs, loadErr = s.dmnrefs.LoadAll() })
+	s.do(func() {
+		refs, loadErr = s.dmnrefs.LoadAll()
+		deployedDecisionIDs = s.dmnRegistry.LatestDecisionIDs()
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
-	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs, deployedDecisionIDs)
 	if dmnErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 		return

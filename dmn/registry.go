@@ -216,6 +216,24 @@ func (r *Registry) LatestDecisionKey(decisionId string) (uint64, bool) {
 	return key, ok
 }
 
+// LatestDecisionIDs returns the set of decision ids that have a decision
+// deployment — the ones a latest-bound reference resolves to something other than
+// the model bundled with its own process
+// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+//
+// The deploy-time gate reads it to tell a business rule task that can evaluate
+// from one that cannot: a latest-bound reference in this set needs no model
+// bundled, because pinDecisions will resolve it to that deployment's key. It
+// reads registry state, so it runs on the registry's owning goroutine — the run
+// loop — and the caller hands the answer to the off-loop preflight.
+func (r *Registry) LatestDecisionIDs() map[string]bool {
+	out := make(map[string]bool, len(r.latestDecision))
+	for id := range r.latestDecision {
+		out[id] = true
+	}
+	return out
+}
+
 // modelProviding returns the model in the list that provides the decision id, or
 // nil if none does — how a deployment-bound evaluation finds the bundled model that
 // declares its decision when a process bundles several.

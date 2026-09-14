@@ -98,8 +98,15 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		getErr, loadErr error
 		drafts          []draft
 		refs            []dmnRef
+		// The decisions the registry already has a deployment for. A latest-bound
+		// business rule task naming one needs no model bundled, because the deploy
+		// resolves it to that deployment's key
+		// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task). It is
+		// run-loop-owned state, so it is read here and handed to the off-loop match.
+		deployedDecisionIDs map[string]bool
 	)
 	s.do(func() {
+		deployedDecisionIDs = s.dmnRegistry.LatestDecisionIDs()
 		if proj, ok, getErr = s.projects.Get(id); getErr != nil || !ok {
 			return
 		}
@@ -201,11 +208,11 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 		if len(needed) == 0 {
 			continue
 		}
-		xmls, ok := coverModels(models, needed)
-		if !ok {
+		xmls, missing := coverModelsReport(models, needed)
+		if refuse := decisionCoverage(missing, bundleBoundDecisions(deployables), deployedDecisionIDs); refuse != "" {
 			return bundleOutcome{status: http.StatusConflict, proj: proj, resp: projectDeployResp{
 				ID: proj.ID, Name: proj.Name, Deployed: false,
-				Reason:      fmt.Sprintf("draft %q references decision(s) %v not provided by any DMN reference in this project", d.ProcessID, needed),
+				Reason:      fmt.Sprintf("draft %q: %s", d.ProcessID, refuse),
 				Definitions: []deployedProcess{}, Decisions: []deployedDecisionResp{}, References: refReports,
 			}}
 		}
@@ -340,6 +347,24 @@ func draftDecisions(deployables []compiler.Deployable) []string {
 	return out
 }
 
+// bundleBoundDecisions is the distinct set of decision ids referenced by every
+// process in one compiled draft through a *deployment*-bound business rule task —
+// the ones that need a model bundled with this deployment, whatever is deployed
+// elsewhere (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+func bundleBoundDecisions(deployables []compiler.Deployable) []string {
+	seen := map[string]bool{}
+	var out []string
+	for i := range deployables {
+		for _, id := range deployables[i].Process.BundleBoundDecisions() {
+			if !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+	}
+	return out
+}
+
 // dmnForDeployBody resolves the DMN model a single (non-project) deploy's business
 // rule tasks need, so a local decision is bundled with the process instead of
 // deployed model-less. A model-less business-rule deploy is the trap that started
@@ -355,7 +380,7 @@ func draftDecisions(deployables []compiler.Deployable) []string {
 // process that can never run; or (nil, "", err) on an infrastructure failure. It
 // resolves and compiles models (I/O + CPU), so it runs OFF the run loop; the
 // reference records are read on the loop and passed in.
-func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRef) ([][]byte, string, error) {
+func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRef, deployed map[string]bool) ([][]byte, string, error) {
 	deployables, err := compiler.ParseAll(1, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, "", nil // a compile error is surfaced (as a 400) by the deploy itself
@@ -379,10 +404,11 @@ func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRe
 		}
 		models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
 	}
-	if xmls, ok := coverModels(models, needed); ok {
-		return xmls, "", nil
+	xmls, missing := coverModelsReport(models, needed)
+	if refuse := decisionCoverage(missing, bundleBoundDecisions(deployables), deployed); refuse != "" {
+		return nil, refuse, nil
 	}
-	return nil, fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides — create the decision (or add its reference) in Atlas, then deploy", needed), nil
+	return xmls, "", nil
 }
 
 // coverModels returns the XML of the models that together provide every needed
@@ -394,6 +420,21 @@ func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRe
 // decision is in no model at all, in which case the deploy is refused rather than
 // registering a business rule task that can never evaluate.
 func coverModels(models []resolvedModel, needed []string) ([][]byte, bool) {
+	xmls, missing := coverModelsReport(models, needed)
+	return xmls, len(missing) == 0
+}
+
+// coverModelsReport is coverModels, additionally naming the decisions no model
+// provides. The caller needs them to decide what to do: a latest-bound reference
+// that is already deployed needs no model at all, and one that is not has to be
+// named in the refusal
+// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+//
+// Whatever *is* covered is still bundled, even when a deployment would also
+// satisfy it: pinDecisions prefers the deployment, so the bundled model is unused
+// — but it is the fallback the record has always carried, and dropping it would
+// change what a deployment holds for no gain.
+func coverModelsReport(models []resolvedModel, needed []string) ([][]byte, []string) {
 	provider := map[string]int{} // decision id → index of the model that provides it
 	for i, m := range models {
 		for _, d := range m.decisions {
@@ -403,10 +444,12 @@ func coverModels(models []resolvedModel, needed []string) ([][]byte, bool) {
 		}
 	}
 	used := map[int]bool{}
+	var missing []string
 	for _, n := range needed {
 		i, ok := provider[n]
 		if !ok {
-			return nil, false
+			missing = append(missing, n)
+			continue
 		}
 		used[i] = true
 	}
@@ -416,5 +459,56 @@ func coverModels(models []resolvedModel, needed []string) ([][]byte, bool) {
 			out = append(out, models[i].xml)
 		}
 	}
-	return out, true
+	return out, missing
+}
+
+// decisionCoverage decides whether a deploy may proceed when some referenced
+// decisions are in no stored model, and what to say when it may not
+// (ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task).
+//
+// The guard exists to stop a business rule task whose job can never evaluate. Two
+// of them cannot, and one can:
+//
+//   - a **deployment**-bound task evaluates the model bundled with this process's
+//     own deployment. With nothing bundled there is nothing to evaluate, whatever
+//     is deployed elsewhere — so it stays refused, and the message says why rather
+//     than repeating "no DMN model provides it" at somebody who has just deployed
+//     one.
+//   - a **latest**-bound task is resolved at deploy time to the newest decision
+//     deployment providing its id (ADR-0319). When one exists the task evaluates
+//     that, and the bundle is never consulted — so a missing model is not a
+//     problem to refuse.
+//   - a latest-bound task with no decision deployment either falls back to this
+//     process's own key, which is the bundle it does not have. Refused, as before.
+//
+// missing are the decisions no stored model provides, bundleBound those referenced
+// by at least one deployment-bound task, and deployed the ids the registry already
+// has a decision deployment for. It returns "" when the deploy may proceed.
+func decisionCoverage(missing, bundleBound []string, deployed map[string]bool) string {
+	bundle := make(map[string]bool, len(bundleBound))
+	for _, id := range bundleBound {
+		bundle[id] = true
+	}
+	var needModel, needBundle []string
+	for _, id := range missing {
+		switch {
+		case bundle[id]:
+			// Referenced by a deployment-bound task: only a bundled model will do.
+			needBundle = append(needBundle, id)
+		case !deployed[id]:
+			needModel = append(needModel, id)
+		}
+	}
+	switch {
+	case len(needModel) > 0 && len(needBundle) > 0:
+		return fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides, and %v that are bound to `deployment` and so need the model bundled with this process — create the decision (or add its reference) in Atlas, then deploy",
+			needModel, needBundle)
+	case len(needModel) > 0:
+		return fmt.Sprintf("this diagram's business rule task(s) reference decision(s) %v that no DMN model provides — create the decision (or add its reference) in Atlas, then deploy", needModel)
+	case len(needBundle) > 0:
+		return fmt.Sprintf("this diagram's business rule task(s) bound to `deployment` reference decision(s) %v that no DMN model provides. A deployed decision cannot satisfy `deployment` binding, which evaluates the model bundled with this process — add the decision's reference, or bind the task to `latest`",
+			needBundle)
+	default:
+		return ""
+	}
 }
