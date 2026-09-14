@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision that is only deployed no longer blocks the deploy of a process that
+  names it.** The deploy preflight demanded a stored DMN model behind a reference for
+  every decision a business rule task called, and refused otherwise with "no DMN model
+  provides it — create the decision (or add its reference) in Atlas". Since a decision
+  became deployable on its own ([ADR-0322](docs/adr/0322-deploying-one-decision.md)) an
+  author could deploy exactly such a decision, see it offered by the task's picker, and
+  then be told to create the thing they had just deployed.
+
+  The guard exists to stop a business rule task whose job can never evaluate, and for a
+  `latest`-bound task that premise was false: the deploy resolves that reference to the
+  newest decision deployment and only falls back to the bundled model when there is
+  none, so a covered task never consults the bundle. The preflight is now binding-aware
+  on both paths that run it — the single-diagram deploy and the application publish. A
+  `deployment`-bound task still needs a model, because it evaluates the one bundled
+  under its own key, and its refusal now says that instead of repeating advice the
+  author has already followed. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **A decision whose logic is a literal expression no longer covers the editor's own
   bar.** dmn-js uses `editor` as a state class inside its own components — its literal
   expression view is `<div class="literal-expression textarea editor">` — and Atlas's
@@ -234,6 +251,25 @@ _Changed_ / _Removed_ for each version.
   the paragraph underneath (ADR-0230).
 
 ### Added
+
+- **A process document now shows the decision behind each business rule task.** The
+  document already set a script task's source and a sequence flow's FEEL condition
+  verbatim, under the rule that the prose says what a step is for and the code says
+  what it runs. A business rule task is the one element whose behaviour lives entirely
+  outside the diagram, and it was the one the document said least about.
+
+  Each such section now carries what the diagram holds — the decision id, the binding
+  and what it means, the result variable, and the inputs the task feeds in — and, below
+  it, the decision's own rule table, drawn by the same renderer the decision document
+  uses. The rules are read from the model behind the decision's reference where there
+  is one, and otherwise from its deployment, with the document naming which. A task
+  evaluated by a temis Worker says so and names the worker rather than implying it
+  holds the rules; a decision that cannot be read costs its table, not the export.
+
+  `GET /api/v1/decision-deployments/{key}/xml` is widened from `operator` to any
+  signed-in identity for this, matching `GET /api/v1/processes/{key}/xml`, which is
+  already open to any identity and carries strictly more.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
 
 - **A decision is published as its own document, and two people can edit one together.**
   The last two things a diagram had and a decision did not.

@@ -536,3 +536,59 @@ func TestTheRefusalNamesOnlyWhatCannotBeCovered(t *testing.T) {
 		}
 	}
 }
+
+// TestAModelerCanReadADeployedDecisionsSource: the deployed DMN source was
+// operator-only, which put it out of reach of exactly the people whose process
+// document needs it — roles are flat, so a modeler is not an operator (ADR-0209).
+// It is now readable by any signed-in identity, like its BPMN counterpart
+// GET /api/v1/processes/{key}/xml, which carries strictly more
+// (ADR-draft-the-process-document-shows-the-decision-a-task-runs).
+func TestAModelerCanReadADeployedDecisionsSource(t *testing.T) {
+	srv, _ := newValidateServer(t, WithAuth())
+	h := srv.Handler()
+	call := func(tok, path string) (int, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: tok})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	session := func(id string, roles ...string) string {
+		t.Helper()
+		tok, err := srv.sessions.create(User{ID: id, Username: id, Roles: roles}, nil)
+		if err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		return tok
+	}
+
+	modeler := session("usr_modeler", RoleModeler)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/decision-deployments", strings.NewReader(eligibilityDMN("approve")))
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: modeler})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("deploy = %d %s", rec.Code, rec.Body)
+	}
+	var rep deployDecisionResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	path := fmt.Sprintf("/api/v1/decision-deployments/%d/xml", rep.Key)
+
+	if code, body := call(modeler, path); code != http.StatusOK || !strings.Contains(body, `"approve"`) {
+		t.Fatalf("modeler read = %d %s, want the deployed source", code, body)
+	}
+	// Widening must not have taken it away from the operator it used to belong to.
+	if code, _ := call(session("usr_ops", RoleOperator), path); code != http.StatusOK {
+		t.Errorf("operator read = %d, want 200: widening a role must not narrow it", code)
+	}
+	// "Any signed-in identity" means signed in: an anonymous caller still gets none.
+	anon := httptest.NewRequest(http.MethodGet, path, nil)
+	anonRec := httptest.NewRecorder()
+	h.ServeHTTP(anonRec, anon)
+	if anonRec.Code == http.StatusOK {
+		t.Errorf("anonymous read = 200, want a refusal")
+	}
+}

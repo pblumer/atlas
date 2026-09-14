@@ -8,6 +8,13 @@
 // only wires a button to them.
 
 import { PdfDocument, bytesToBase64 } from "./pdf.js";
+import { collectDecisionDocumentation, renderDecisionBody } from "./decision-doc.js";
+import { svgToJpeg, wantsLandscape } from "./doc-graphics.js";
+
+// Re-exported because they were this module's own until the decision document
+// started sharing them, and every caller — the editor, the harness — already names
+// them here. The definitions moved; the door did not.
+export { svgToJpeg, sizeOfSvg, trimToContent, wantsLandscape } from "./doc-graphics.js";
 
 // A readable label for each BPMN type. The raw `bpmn:ExclusiveGateway` is
 // meaningless to the audience this document is written for.
@@ -96,6 +103,63 @@ export function codeFieldsOf(bo) {
   return out;
 }
 
+// extOf finds an extension element by the local name of its type, case-insensitively
+// and whatever prefix a file declares. The moddle resolves a registered extension
+// to "zeebe:CalledDecision"; a model authored by hand or by another tool may carry
+// the same element spelled differently, and the document should still read it.
+function extOf(bo, localName) {
+  const values = (bo && bo.extensionElements && bo.extensionElements.values) || [];
+  const want = String(localName).toLowerCase();
+  return values.find((v) => String(v.$type || "").split(":").pop().toLowerCase() === want) || null;
+}
+
+// attrOf reads a moddle property whether the descriptor declared it (a plain
+// property) or not (parked in $attrs).
+function attrOf(el, name) {
+  if (!el) return "";
+  const direct = el[name];
+  if (direct !== undefined && direct !== null && direct !== "") return String(direct);
+  const raw = el.$attrs && el.$attrs[name];
+  return raw === undefined || raw === null ? "" : String(raw);
+}
+
+// calledDecisionOf describes how a business rule task calls its decision — the
+// part that is in the diagram and therefore never missing: which decision, how it
+// binds (ADR-0063), what it writes, and the inputs it feeds in. A task backed by a
+// temis Worker (ADR-0050) carries no local decision at all; it reports the worker
+// instead, because the rules then live in that service and the document must not
+// imply otherwise.
+//
+// Returns null for anything that is not a business rule task.
+export function calledDecisionOf(bo) {
+  if (!bo || bo.$type !== "bpmn:BusinessRuleTask") return null;
+  const worker = extOf(bo, "temisConnector");
+  const cd = extOf(bo, "calledDecision");
+  const io = extOf(bo, "ioMapping");
+  const inputs = ((io && io.inputParameters) || [])
+    .map((p) => ({ name: String(p.target || ""), value: String(p.source || "") }))
+    .filter((p) => p.name || p.value);
+  // A hand-authored model may feed the decision through <decisionInput name= value=>
+  // instead, which the compiler also accepts.
+  for (const v of (bo.extensionElements && bo.extensionElements.values) || []) {
+    if (String(v.$type || "").split(":").pop().toLowerCase() !== "decisioninput") continue;
+    const name = attrOf(v, "name");
+    const value = attrOf(v, "value");
+    if (name || value) inputs.push({ name, value });
+  }
+  return {
+    decisionId: attrOf(cd, "decisionId"),
+    // ADR-0063: anything that is not "deployment" is latest, including an omitted
+    // attribute — the same rule decisionBinding applies in the compiler.
+    binding: attrOf(cd, "bindingType") === "deployment" ? "deployment" : "latest",
+    resultVariable: attrOf(cd, "resultVariable"),
+    retries: attrOf(cd, "retries"),
+    worker: attrOf(worker, "connector"),
+    external: !!worker,
+    inputs,
+  };
+}
+
 // Containers and decorations, which never earn a section of their own. Pools and
 // lanes are structure rather than steps, and each element already reports the
 // lane it sits in; annotations are the *source* of prose, not subjects of it.
@@ -176,6 +240,9 @@ export function collectDocumentation(modeler) {
       annotations: annotationsFor.get(bo.id) || [],
       lane: laneOf.get(bo.id) || "",
       code: codeFieldsOf(bo),
+      // Null for everything but a business rule task, which is the one element
+      // whose behaviour lives entirely off the diagram.
+      decision: calledDecisionOf(bo),
     });
   }
 
@@ -219,125 +286,125 @@ function processBusinessObject(modeler, businessObjects) {
   return root;
 }
 
-// svgToJpeg rasterizes the diagram bpmn-js drew. The SVG is drawn onto a canvas
-// at a fixed scale and encoded as JPEG, whose bytes the PDF embeds untranscoded.
-// A white backdrop is painted first: a BPMN diagram has a transparent background,
-// and JPEG has no alpha, so without it the diagram would come out on black.
-export async function svgToJpeg(svg, { scale = 2, quality = 0.92, maxPixels = 4000 } = {}) {
-  const sized = sizeOfSvg(svg);
-  let width = Math.max(1, Math.round(sized.width * scale));
-  let height = Math.max(1, Math.round(sized.height * scale));
-  const cap = Math.max(width, height);
-  if (cap > maxPixels) {
-    const shrink = maxPixels / cap;
-    width = Math.max(1, Math.round(width * shrink));
-    height = Math.max(1, Math.round(height * shrink));
-  }
-
-  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const img = await loadImage(url);
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(img, 0, 0, width, height);
-
-    const trimmed = trimToContent(canvas);
-    const out = await new Promise((resolve) => trimmed.toBlob(resolve, "image/jpeg", quality));
-    return { bytes: new Uint8Array(await out.arrayBuffer()), width: trimmed.width, height: trimmed.height };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-// trimToContent crops the blank margin off a rasterized diagram. The SVG bpmn-js
-// exports is boxed generously — its viewBox can start well above the topmost
-// shape — and a document whose centrepiece floats in a band of white looks like
-// a mistake. Returns the original canvas when there is nothing to trim.
-export function trimToContent(canvas, { padding = 12 } = {}) {
-  const ctx = canvas.getContext("2d");
-  const { width, height } = canvas;
-  let pixels;
-  try {
-    pixels = ctx.getImageData(0, 0, width, height).data;
-  } catch {
-    return canvas; // a tainted canvas cannot be read; ship it untrimmed
-  }
-  let top = height, left = width, right = -1, bottom = -1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      // Near-white is background. The tolerance keeps JPEG-ish noise and
-      // antialiased edges from counting as content.
-      if (pixels[i] > 247 && pixels[i + 1] > 247 && pixels[i + 2] > 247) continue;
-      if (y < top) top = y;
-      if (y > bottom) bottom = y;
-      if (x < left) left = x;
-      if (x > right) right = x;
-    }
-  }
-  if (right < 0) return canvas; // nothing but background — leave it alone
-
-  const x0 = Math.max(0, left - padding);
-  const y0 = Math.max(0, top - padding);
-  const w = Math.min(width, right + padding + 1) - x0;
-  const h = Math.min(height, bottom + padding + 1) - y0;
-  if (w >= width && h >= height) return canvas;
-
-  const out = document.createElement("canvas");
-  out.width = w;
-  out.height = h;
-  const octx = out.getContext("2d");
-  octx.fillStyle = "#ffffff";
-  octx.fillRect(0, 0, w, h);
-  octx.drawImage(canvas, x0, y0, w, h, 0, 0, w, h);
-  return out;
-}
-
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("the diagram image could not be rendered"));
-    img.src = url;
-  });
-}
-
-// sizeOfSvg reads the drawing's dimensions from the SVG bpmn-js produced,
-// preferring the viewBox (which is always present and in diagram units) over the
-// width/height attributes, which may carry percentages.
-export function sizeOfSvg(svg) {
-  const viewBox = /viewBox="([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)"/.exec(svg);
-  if (viewBox) {
-    const w = parseFloat(viewBox[3]);
-    const h = parseFloat(viewBox[4]);
-    if (w > 0 && h > 0) return { width: w, height: h };
-  }
-  const w = parseFloat((/\swidth="([\d.]+)/.exec(svg) || [])[1]);
-  const h = parseFloat((/\sheight="([\d.]+)/.exec(svg) || [])[1]);
-  if (w > 0 && h > 0) return { width: w, height: h };
-  return { width: 800, height: 600 };
-}
 
 const GREY = [0.42, 0.42, 0.42];
 
-// wantsLandscape decides whether the diagram earns its own landscape page. A wide,
-// busy diagram fitted to a portrait page's narrow content width shrinks into a
-// thin, unreadable strip — turning the page to A4 landscape gives it the width it
-// needs. The trigger is deliberately narrow so a small diagram, which reads fine
-// in portrait, is left in the flow of the document: the diagram must be clearly
-// wider than tall *and* the process busy enough that the shrink would cost
-// legibility — or so extreme in aspect that portrait cannot serve it at any size.
-export function wantsLandscape(diagram, elementCount = 0, { minAspect = 1.3, minElements = 10, extremeAspect = 2.5 } = {}) {
-  if (!diagram || !diagram.width || !diagram.height) return false;
-  const aspect = diagram.width / diagram.height;
-  if (aspect >= extremeAspect) return true;
-  return aspect >= minAspect && elementCount >= minElements;
+// BINDING_NOTE says what a binding means, once, where the reader meets it. "latest"
+// and "deployment" are precise to somebody who has read ADR-0063 and opaque to
+// everybody else, and this document is written for everybody else.
+const BINDING_NOTE = {
+  latest: "latest — the newest version deployed at the time this process is deployed",
+  deployment: "deployment — pinned to the model deployed together with this process",
+};
+
+// resolveCalledDecisions fetches the rules behind every decision the diagram calls,
+// so the document can show them
+// (ADR-draft-the-process-document-shows-the-decision-a-task-runs). One request per
+// distinct decision id, in parallel, and a decision that cannot be resolved simply
+// has no entry — the section then documents the call without the table rather than
+// failing the export.
+//
+// The source is the model behind a DMN reference where there is one, because that
+// is the authoring version under change control and the model a `deployment`-bound
+// task would bundle. A decision that exists only as a deployment (ADR-0322, made an
+// ordinary state for a latest-bound task by
+// ADR-draft-a-deployed-decision-satisfies-a-latest-bound-task) is read from that
+// deployment's own source, and the document says so.
+export async function resolveCalledDecisions(collection, api) {
+  const wanted = [];
+  for (const el of collection.elements || []) {
+    const d = el.decision;
+    if (!d || d.external || !d.decisionId) continue;
+    if (!wanted.includes(d.decisionId)) wanted.push(d.decisionId);
+  }
+  const out = {};
+  if (!wanted.length || typeof api !== "function") return out;
+
+  let catalog = [];
+  try { catalog = await api("GET", "/api/v1/decisions"); } catch { catalog = []; }
+  if (!Array.isArray(catalog)) catalog = [];
+  const refOf = new Map();
+  for (const item of catalog) {
+    if (item && item.id && item.modelRef && !refOf.has(item.id)) refOf.set(item.id, item.modelRef);
+  }
+
+  await Promise.all(wanted.map(async (id) => {
+    const modelRef = refOf.get(id) || "";
+    try {
+      if (modelRef) {
+        const xml = await api("GET", `/api/v1/dmn-models/${encodeURIComponent(modelRef)}/xml`);
+        out[id] = { source: `Model ${modelRef}.dmn`, collection: collectDecisionDocumentation(String(xml)) };
+        return;
+      }
+      // No reference resolves it, so the only rules that exist are the ones a
+      // deployment carries. The newest is the one a latest-bound task would reach.
+      const rows = await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`);
+      if (!Array.isArray(rows)) return;
+      const current = rows.find((r) => r && r.current) || rows[0];
+      if (!current || !current.key) return;
+      const xml = await api("GET", `/api/v1/decision-deployments/${current.key}/xml`);
+      out[id] = {
+        source: `Deployed decision v${current.version} (key ${current.key})`,
+        collection: collectDecisionDocumentation(String(xml)),
+      };
+    } catch {
+      // One decision that cannot be read costs its table, not the document.
+    }
+  }));
+  return out;
 }
+
+// renderCalledDecision draws a business rule task's decision into its section: how
+// the diagram calls it, then the rules behind it. The first half is unconditional
+// — it comes off the diagram — and the second appears when `decisions` resolved
+// that id.
+function renderCalledDecision(doc, call, decisions) {
+  if (!call) return;
+  if (call.external) {
+    doc.paragraph(
+      "Evaluated by the temis worker " + (call.worker || "(unnamed)") +
+      ". The rules live in that service and are not part of this model.",
+      { size: 9.5, color: GREY, after: 6 },
+    );
+    return;
+  }
+  if (!call.decisionId) {
+    doc.paragraph("This business rule task names no decision yet.", { size: 9.5, color: GREY, after: 6 });
+    return;
+  }
+
+  doc.keyValue("Decision", call.decisionId);
+  doc.keyValue("Binding", BINDING_NOTE[call.binding] || call.binding);
+  if (call.resultVariable) doc.keyValue("Result variable", call.resultVariable);
+  if (call.inputs.length) {
+    doc.paragraph("Inputs", { size: 9, bold: true, after: 2 });
+    doc.table(
+      [{ header: "Decision input", width: 1 }, { header: "Fed from", width: 1.6 }],
+      call.inputs.map((i) => [i.name || "—", i.value || "—"]),
+    );
+  }
+
+  const resolved = decisions && decisions[call.decisionId];
+  if (!resolved) {
+    doc.paragraph(
+      "The rules behind this decision could not be read, so they are not reproduced here.",
+      { size: 9.5, color: GREY, after: 6 },
+    );
+    return;
+  }
+  const dec = (resolved.collection.decisions || []).find((d) => d.id === call.decisionId);
+  if (!dec) {
+    doc.paragraph(
+      `${resolved.source} does not declare ${call.decisionId}.`,
+      { size: 9.5, color: GREY, after: 6 },
+    );
+    return;
+  }
+  doc.paragraph("Rules read from: " + resolved.source, { size: 8.5, color: GREY, after: 3 });
+  if (dec.description) doc.paragraph(dec.description, { size: 9.5, after: 4 });
+  renderDecisionBody(doc, dec);
+}
+
 
 // buildDocumentationPdf lays out the document: a cover naming the process and the
 // version, the diagram, then one section per element carrying its prose. Returns
@@ -345,6 +412,10 @@ export function wantsLandscape(diagram, elementCount = 0, { minAspect = 1.3, min
 export function buildDocumentationPdf(spec) {
   const {
     collection, diagram, title, note, version, createdAt, createdBy, deploymentVersion,
+    // The decisions behind this process's business rule tasks, keyed by decision id
+    // (resolveCalledDecisions). Absent is a legitimate state — the collector's
+    // output alone still documents every call — so nothing here requires it.
+    decisions,
   } = spec;
   const doc = new PdfDocument({
     title: title || collection.processName || collection.processId,
@@ -404,6 +475,9 @@ export function buildDocumentationPdf(spec) {
     for (const code of el.code || []) {
       doc.codeBlock(code.source, { label: code.label, language: code.language });
     }
+    // A business rule task's code is its decision, which lives outside the diagram
+    // — the one element the rule above could not reach until now.
+    renderCalledDecision(doc, el.decision, decisions);
     doc.y += 4;
   }
 
@@ -429,9 +503,10 @@ export async function exportDocumentation({ modeler, api, title, note, createdBy
   const { svg } = await modeler.saveSVG();
   const diagram = await svgToJpeg(svg);
   const { xml } = await modeler.saveXML({ format: true });
+  const decisions = await resolveCalledDecisions(collection, api);
 
   const bytes = buildDocumentationPdf({
-    collection, diagram, title, note, createdBy,
+    collection, diagram, title, note, createdBy, decisions,
     createdAt: new Date().toLocaleString(),
   });
 
