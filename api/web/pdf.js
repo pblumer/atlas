@@ -296,6 +296,80 @@ export class PdfDocument {
     this.y += 5;
   }
 
+  // table renders a grid — a decision table's rules, say
+  // (ADR-draft-decision-documentation). It is the one shape the process document
+  // never needed: prose wraps, a rule does not, and a decision table read as
+  // preformatted text is a decision table nobody checks.
+  //
+  // `columns` is [{header, width}] where width is a share of the content width
+  // (they are normalised, so [2,1,1] means half, a quarter, a quarter). `rows` is
+  // an array of string arrays. Cells wrap, a row is as tall as its tallest cell,
+  // and a row that does not fit starts a fresh page with the header repeated —
+  // otherwise a table split across a page break loses the column meanings exactly
+  // where a reader needs them most.
+  table(columns, rows, { size = 8.5, headerSize = 8.5, pad = 4 } = {}) {
+    const total = columns.reduce((n, c) => n + (c.width || 1), 0) || 1;
+    const widths = columns.map((c) => ((c.width || 1) / total) * this.contentWidth);
+    const lineHeight = size * 1.3;
+
+    // cellLines wraps one cell to its column, never returning nothing, so an empty
+    // cell still contributes a row of height.
+    const cellLines = (text, w, bold) => {
+      const lines = wrapText(String(text ?? ""), size, Math.max(12, w - 2 * pad), bold);
+      return lines.length ? lines : [""];
+    };
+    const rowHeight = (cells, bold) =>
+      Math.max(...cells.map((c, i) => cellLines(c, widths[i], bold).length)) * lineHeight + 2 * pad;
+
+    const drawRow = (cells, { bold = false, fill = null } = {}) => {
+      const h = rowHeight(cells, bold);
+      const top = this.space(h);
+      const y = this.height - top - h;
+      if (fill) {
+        this.current.ops.push(`${num(fill[0])} ${num(fill[1])} ${num(fill[2])} rg ` +
+          `${num(this.margin)} ${num(y)} ${num(this.contentWidth)} ${num(h)} re f`);
+      }
+      // A hairline under every row, and one down each column boundary, so the grid
+      // reads as a grid rather than as columns of text that happen to line up.
+      this.current.ops.push(`0.8 0.8 0.8 RG 0.5 w ${num(this.margin)} ${num(y)} m ` +
+        `${num(this.margin + this.contentWidth)} ${num(y)} l S`);
+      let x = this.margin;
+      for (let i = 0; i < widths.length; i++) {
+        if (i > 0) {
+          this.current.ops.push(`0.88 0.88 0.88 RG 0.5 w ${num(x)} ${num(y)} m ${num(x)} ${num(y + h)} l S`);
+        }
+        let baseline = this.height - top - pad - size;
+        for (const line of cellLines(cells[i], widths[i], bold)) {
+          this.current.ops.push(
+            `BT 0.1 0.1 0.1 rg /${bold ? "F2" : "F1"} ${num(bold ? headerSize : size)} Tf ` +
+            `1 0 0 1 ${num(x + pad)} ${num(baseline)} Tm (${escapePdfString(toWinAnsi(line))}) Tj ET`,
+          );
+          baseline -= lineHeight;
+        }
+        x += widths[i];
+      }
+    };
+
+    const header = columns.map((c) => c.header || "");
+    drawRow(header, { bold: true, fill: [0.94, 0.94, 0.94] });
+    for (const row of rows) {
+      // Repeat the header when a row lands on a new page: the column meanings are
+      // what make a rule readable, and losing them at a page break is the one way
+      // this table can mislead.
+      const h = rowHeight(row, false);
+      if (this.y + h > this.bottom) {
+        this.newPage({ width: this.width, height: this.height });
+        drawRow(header, { bold: true, fill: [0.94, 0.94, 0.94] });
+      }
+      drawRow(row);
+    }
+    // Close the grid with a line under the last row.
+    const top = this.space(0);
+    this.current.ops.push(`0.8 0.8 0.8 RG 0.5 w ${num(this.margin)} ${num(this.height - top)} m ` +
+      `${num(this.margin + this.contentWidth)} ${num(this.height - top)} l S`);
+    this.y += 8;
+  }
+
   // image places a JPEG, scaled to fit the content width and the space left on
   // the page while keeping its aspect ratio. jpeg is a Uint8Array of the encoded
   // bytes; they are embedded untranscoded (DCTDecode).

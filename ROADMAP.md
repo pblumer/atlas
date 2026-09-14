@@ -360,8 +360,38 @@ The control-flow basics most real models use.
   key the decision is currently deployed under, as a diagram opened from a deployment
   carries its key. A decision that is not in the model can be deployed — the record
   carries its own source — and the editor says that no business rule task can name it
-  until it is. Still to come: XML export, documentation, auto-layout, a collaborative
-  session, and a panel that evaluates a decision against sample inputs.
+  until it is.
+  **And the decision can now be tried before anything runs it**
+  ([ADR-draft-trying-a-decision-before-it-runs](docs/adr/draft-trying-a-decision-before-it-runs.md)):
+  **Test** posts the model on screen to `POST /api/v1/decisions/evaluate`, which compiles
+  it for that one call and throws it away — no key, no record, no registry entry — and
+  answers with the outputs and the temis trace (ADR-0066). The rule matrix is the one
+  Operations draws, extracted so both read from the same renderer. A decision stored
+  nowhere yet can be tried like any other, and `atlas_try_decision` exposes the same act
+  over MCP. **A DMN model with no diagram also renders now**
+  ([ADR-draft-dmn-diagram-is-completed-on-read](docs/adr/draft-dmn-diagram-is-completed-on-read.md)):
+  almost every model reaching Atlas carries no `DMNDI`, and dmn-js drew a single box and
+  silently dropped the input data and the arrows — then a save wrote back a diagram
+  covering only what had been drawn, leaving the model worse than it was found. Atlas
+  completes the diagram on the way to the editor, as [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md)
+  has always done for BPMN, and **Auto-layout** re-flows the whole graph on request; the
+  DRG viewer reads the same generated bounds, so both surfaces draw one picture.
+  **Export XML** joins them in the bar's `⋯` menu.
+  **The last two arrived with them.** A decision is published as its own document
+  ([ADR-draft-decision-documentation](docs/adr/draft-decision-documentation.md)):
+  ADR-0143's design for a second artifact kind — the requirements graph, then every
+  decision's prose, inputs and rule table set as a real table — as an immutable
+  numbered version with a revocable public link, in a `decision-docs/` store that is a
+  deliberate sibling of `process-docs/`. Its version line is about sign-off rather than
+  about what is running, which is why it exists alongside ADR-0319's and not instead of
+  it. And a decision draft holds a live session
+  ([ADR-draft-co-editing-a-decision](docs/adr/draft-co-editing-a-decision.md)):
+  ADR-0140's registry, transport and semantics over a decision, with the lock scoped to
+  the **decision** — in the requirements graph that is ADR-0140's per-element rule
+  exactly, and opening a decision's table claims that decision, because a table row has
+  no stable identity to lock. The session handlers now take a subject rather than
+  assuming the BPMN draft store, so a third artifact with a draft is a binding rather
+  than a copy. With that, #919's parity list is complete.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

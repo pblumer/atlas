@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision whose logic is a literal expression no longer covers the editor's own
+  bar.** dmn-js uses `editor` as a state class inside its own components — its literal
+  expression view is `<div class="literal-expression textarea editor">` — and Atlas's
+  `.editor` is the full-bleed page shell, pinned to the viewport. Since the decision
+  editor became a page ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md)) that
+  collision drew the expression editor across the whole window, so the view tabs, Save,
+  Save to model and Deploy underneath it could not be clicked; a fixed element is not
+  clipped by the canvas, so nothing else stopped it. The four properties that rule sets
+  are now undone inside the dmn-js subtree, leaving dmn-js's own styling for the class
+  alone. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything
@@ -223,6 +234,69 @@ _Changed_ / _Removed_ for each version.
   the paragraph underneath (ADR-0230).
 
 ### Added
+
+- **A decision is published as its own document, and two people can edit one together.**
+  The last two things a diagram had and a decision did not.
+
+  **Documentation.** A decision table is the business rule — the thing a compliance
+  officer signs off and an auditor asks about — and it was readable only inside Atlas.
+  The editor's `⋯` menu now publishes it as a structured PDF: the requirements graph,
+  then every decision with its prose, the input data it reads with declared types, and
+  its rule table set as a real table (hit policy, columns, one row per rule, each rule's
+  own annotation below it). A decision whose logic is a literal expression shows the
+  expression. Versions are numbered per decision, immutable, and shareable through a
+  revocable public link — [ADR-0143](docs/adr/0143-process-documentation-export.md)'s
+  design for a second artifact kind. The version line is about sign-off rather than
+  about what is running: a business rule is usually approved *before* it is deployed,
+  which is when the deployment record ([ADR-0319](docs/adr/0319-durable-versioned-decision-deployments.md))
+  does not exist yet.
+
+  **Co-editing.** A decision draft now holds a live session
+  ([ADR-0140](docs/adr/0140-live-collaborative-modeling-sessions.md)): who else is here,
+  what they are looking at, and a lock so two people cannot overwrite each other. The
+  rule needed an answer dmn-js forced: a decision-table view is a grid, and a rule, a
+  cell or a column has no id a session could name. **So the lock is the decision** — in
+  the requirements graph that is literally ADR-0140's per-element rule, and opening a
+  decision's table claims that decision. Two people can work on two decisions of one
+  model at once; two cannot fill in one table together, and the editor says which it is.
+  The session handlers are now parameterised by subject rather than copied, so a third
+  artifact with a draft costs a binding rather than an implementation.
+  ([ADR-draft-decision-documentation](docs/adr/draft-decision-documentation.md),
+  [ADR-draft-co-editing-a-decision](docs/adr/draft-co-editing-a-decision.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **A decision can be tried against sample inputs, and a DMN model with no diagram now
+  renders.** Two gaps closed in the decision editor, both of which made it a worse place
+  to work than the diagram editor beside it.
+
+  **Test.** A decision table is a program, and the first question its author asks is
+  whether it does what they meant. Answering it meant saving the decision, deploying it,
+  deploying a process with a business rule task that calls it, starting an instance and
+  reading the result off it — five steps, three of them about processes, to answer a
+  question about one table. The bar now carries **Test**: fill in the inputs, press Run,
+  and see what came back together with the rule matrix saying which rules fired and why —
+  the same matrix Operations draws for a decision a running process evaluated, because it
+  is now literally the same renderer. The model tried is the one on screen, compiled for
+  that one call and thrown away: no key, no record, no registry entry, nothing to clean
+  up, and a decision that is stored nowhere yet can be tried like any other.
+  `atlas_try_decision` exposes the same act over MCP.
+
+  **A diagram for models that have none.** Almost every DMN model that reaches Atlas
+  carries no `DMNDI` — an agent writing a decision table over MCP writes logic, not a
+  picture, and so does temis, and so does a hand. dmn-js needs one to draw anything, so
+  such a model opened in the editor showed a single box: the input data and the arrows
+  between were silently absent, and the graph could not be seen or rewired. Worse, saving
+  from that state wrote back a diagram covering only what had been drawn, so one visit
+  to the editor left the model rendering worse than it was found. Atlas now completes a
+  DMN model's diagram on the way to the editor, the way it has always done for a
+  layout-less BPMN model, and **Auto-layout** in the new `⋯` menu re-flows the whole
+  requirements graph on request. One generator serves both the editor and the read-only
+  DRG viewer, so the same model is drawn the same way in both. **Export XML** is in that
+  menu too.
+  ([ADR-draft-trying-a-decision-before-it-runs](docs/adr/draft-trying-a-decision-before-it-runs.md),
+  [ADR-draft-dmn-diagram-is-completed-on-read](docs/adr/draft-dmn-diagram-is-completed-on-read.md),
+  [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
 
 - **A single decision can be deployed from its editor, and the editor says which version
   is running.** A decision reached the engine through one door: the application's

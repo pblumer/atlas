@@ -326,6 +326,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
 			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: RoleOperator,
 			resp: xmlBody("DMN XML")}},
+		{"POST", "/api/v1/decisions/evaluate", s.handleTryDecision, apiOp{
+			summary: "Try a DMN model against sample inputs and get the temis trace back — what a decision returns and which rules fired, for the model in the request rather than anything deployed. Nothing is stored, keyed, or registered, and the DMN registry is untouched. With no decisionId it only describes what the model offers and its inputs. A model that does not compile comes back 200 with ok:false (ADR-draft-trying-a-decision-before-it-runs)", tag: "Decisions", role: RoleModeler,
+			req: jsonBody("The model to try, the decision to run, and its inputs", schemaObj(map[string]any{
+				"xml": tString(), "decisionId": tString(), "inputs": tObject(),
+			}, "xml")),
+			resp: jsonBody("What the model offers and, when a decision was named, what it produced", tObject())}},
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Deployed decisions", tArray())}},
@@ -476,35 +482,73 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
-		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
+		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession(s.bpmnDraftSession()), apiOp{
 			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			resp: eventStreamBody("SSE stream of session frames")}},
-		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin(s.bpmnDraftSession()), apiOp{
 			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
 			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
-		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll(s.bpmnDraftSession()), apiOp{
 			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
-		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave(s.bpmnDraftSession()), apiOp{
 			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence(s.bpmnDraftSession()), apiOp{
 			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Presence update", schemaObj(map[string]any{
 				"participantId": tString(), "selection": tString(),
 			}, "participantId")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock(s.bpmnDraftSession()), apiOp{
 			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Lock action", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "action": tString(),
 			}, "participantId", "elementId", "action")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange(s.bpmnDraftSession()), apiOp{
 			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Element change", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "xml": tString(),
+			}, "participantId", "elementId")),
+			status: http.StatusNoContent}},
+
+		// Co-editing a decision (ADR-draft-co-editing-a-decision): ADR-0140's session,
+		// over a decision draft rather than a BPMN one. Same registry, same transport,
+		// same lock semantics — the handlers take the subject, so this is a second
+		// binding rather than a second implementation.
+		{"GET", "/api/v1/dmn-drafts/{id}/session", s.handleDraftSession(s.dmnDraftSession()), apiOp{
+			summary: "Join a decision draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			resp: eventStreamBody("SSE stream of session frames")}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/join", s.handleDraftSessionJoin(s.dmnDraftSession()), apiOp{
+			summary: "Join a decision draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
+			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/poll", s.handleDraftSessionPoll(s.dmnDraftSession()), apiOp{
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/leave", s.handleDraftSessionLeave(s.dmnDraftSession()), apiOp{
+			summary: "Leave a decision draft's live session, releasing the participant's locks — idempotent (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/presence", s.handleDraftSessionPresence(s.dmnDraftSession()), apiOp{
+			summary: "Update a participant's presence (selected element) in a decision draft's live session (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Presence update", schemaObj(map[string]any{
+				"participantId": tString(), "selection": tString(),
+			}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/lock", s.handleDraftSessionLock(s.dmnDraftSession()), apiOp{
+			summary: "Acquire or release a lock in a decision draft's live session. In the requirements graph an element is a decision or an input datum; opening a decision's table locks that decision, because a table row has no stable identity to lock. Acquiring what another participant holds is a 409 (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Lock action", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "action": tString(),
+			}, "participantId", "elementId", "action")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/change", s.handleDraftSessionChange(s.dmnDraftSession()), apiOp{
+			summary: "Broadcast an element change to a decision draft's live session participants — relayed live, not persisted (ADR-draft-co-editing-a-decision)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Element change", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "xml": tString(),
 			}, "participantId", "elementId")),
@@ -984,6 +1028,45 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a documentation version, taking its public link with it (ADR-0143)", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
+		// Decision documentation (ADR-draft-decision-documentation): the same design
+		// for a second artifact kind. A DMN decision published as one structured PDF
+		// — the requirements graph plus every decision's prose, inputs and rule table
+		// — as an immutable, per-decision numbered version, optionally shared through
+		// a revocable public link. The version line is about sign-off, not about what
+		// is running: the decision deployment record (ADR-0319) answers that, and a
+		// document is routinely published from a draft before anything is deployed.
+		{"POST", "/api/v1/decisions/{decisionId}/documentation", s.decisionDocs.HandleCreate, apiOp{
+			summary: "Publish the next documentation version of a decision: the produced PDF plus the decision prose and rule tables it describes", tag: "Documentation", role: RoleModeler,
+			req: jsonBody("Documentation upload", schemaObj(map[string]any{
+				"title": tString(), "note": tString(), "modelName": tString(), "modelRef": tString(),
+				"xml": tString(), "decisions": tArray(), "pdfBase64": tString(),
+			}, "pdfBase64")),
+			resp: jsonBody("The minted documentation version", tObject())}},
+		{"GET", "/api/v1/decisions/{decisionId}/documentation", s.decisionDocs.HandleList, apiOp{
+			summary: "A decision's documentation history, newest version first", tag: "Documentation", role: roleAny,
+			resp: jsonBody("Documentation versions", tArray())}},
+		{"POST", "/api/v1/decisions/{decisionId}/documentation/prune", s.decisionDocs.HandlePrune, apiOp{
+			summary: "Prune a decision's documentation history to the newest `keep` versions, deleting older ones and their PDFs", tag: "Documentation", role: RoleModeler,
+			req: jsonBody("Retention limit", schemaObj(map[string]any{
+				"keep": tInteger(),
+			}, "keep")),
+			resp: jsonBody("The versions that were pruned", tObject())}},
+		{"GET", "/api/v1/decision-docs/{id}", s.decisionDocs.HandleGet, apiOp{
+			summary: "Fetch one decision documentation version in full: metadata, the documented decisions and rule tables, and the DMN source it was produced from", tag: "Documentation", role: roleAny,
+			resp: jsonBody("Documentation version", tObject())}},
+		{"GET", "/api/v1/decision-docs/{id}/pdf", s.decisionDocs.HandleGetPDF, apiOp{
+			summary: "Download a decision documentation version's PDF", tag: "Documentation", role: roleAny,
+			resp: &bodySpec{mediaType: "application/pdf", schema: tString(), desc: "The published PDF document"}}},
+		{"POST", "/api/v1/decision-docs/{id}/share", s.decisionDocs.HandleShare, apiOp{
+			summary: "Share one decision documentation version: mint (or return) its revocable public link. Idempotent — a URL readers already hold never rotates", tag: "Documentation", role: RoleModeler,
+			resp: jsonBody("The version with its share link", tObject())}},
+		{"DELETE", "/api/v1/decision-docs/{id}/share", s.decisionDocs.HandleUnshare, apiOp{
+			summary: "Revoke a decision documentation version's public link", tag: "Documentation", role: RoleModeler,
+			resp: jsonBody("The version, now private", tObject())}},
+		{"DELETE", "/api/v1/decision-docs/{id}", s.decisionDocs.HandleDelete, apiOp{
+			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
+			status: http.StatusNoContent}},
+
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
 		// surface is /api/v1/applications; each route binds to the same handler as
@@ -1233,6 +1316,10 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", role: RoleModeler, resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
 			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model graph", tObject())}},
+		{"POST", "/api/v1/dmn-layout", s.handleDmnLayout, apiOp{
+			summary: "Regenerate a DMN model's decision requirements diagram — discards any existing DMNDI and returns the model with a freshly laid-out graph, backing the decision editor's Auto-layout action. A pure transform: nothing is compiled, stored, or deployed (ADR-draft-dmn-diagram-is-completed-on-read)", tag: "Decisions", role: RoleModeler,
+			req:  xmlBody("DMN XML"),
+			resp: xmlBody("DMN XML with a regenerated decision requirements diagram")}},
 		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
 			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", role: RoleModeler, resp: jsonBody("DMN XML", tObject())}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{

@@ -40,13 +40,17 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // `taken` makes the model upload answer 409 the way the server does when the handle
 // a decision would land on is already somebody else's (ADR-0222), unless the request
 // says the author chose to replace it.
-function installMock(page, { refs = [], drafts = [], taken = false, deployed = [] } = {}) {
+function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [] } = {}) {
   const uploads = [];
   const created = [];
   const patched = [];
   const draftSaves = [];
   const draftDeletes = [];
   const deploys = [];
+  const tries = [];
+  const layouts = [];
+  const docPublishes = [];
+  const docActions = [];
   let nextKey = 7;
   page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -86,6 +90,62 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
       draftDeletes.push(path.split("/").pop());
       return route.fulfill({ status: 204, body: "" });
     }
+    if (path === "/api/v1/decisions/evaluate" && request.method() === "POST") {
+      const payload = request.postDataJSON();
+      tries.push(payload);
+      // The server describes the model out of the same compile that runs it, so the
+      // mock answers both halves the same way: decisions always, outputs only when a
+      // decision was named.
+      const described = {
+        ok: true,
+        modelName: "Eligibility",
+        decisions: [{ id: "Decision_stored", name: "eligibility", inputs: [{ name: "amount", type: "number" }], output: { name: "result", type: "string" } }],
+      };
+      if (!payload.decisionId) return route.fulfill({ json: described });
+      if (trial) return route.fulfill({ json: { ...described, ...trial } });
+      const approved = Number(payload.inputs && payload.inputs.amount) >= 100;
+      return route.fulfill({
+        json: {
+          ...described,
+          decisionId: payload.decisionId,
+          outputs: { eligibility: approved ? "approve" : "reject" },
+          trace: {
+            tables: [{
+              hitPolicy: "U",
+              inputs: [{ expression: "amount", value: payload.inputs && payload.inputs.amount }],
+              rules: [
+                { index: 0, matched: approved, conditions: [{ entry: ">= 100", matched: approved }], outputs: ["approve"] },
+                { index: 1, matched: !approved, conditions: [{ entry: "< 100", matched: !approved }], outputs: ["reject"] },
+              ],
+            }],
+          },
+        },
+      });
+    }
+    if (/^\/api\/v1\/decisions\/[^/]+\/documentation$/.test(path)) {
+      if (request.method() === "GET") return route.fulfill({ json: docs });
+      const payload = request.postDataJSON();
+      docPublishes.push({ path, body: payload });
+      const version = docs.length + 1;
+      docs.unshift({
+        id: "doc-" + version, decisionId: path.split("/")[4], version,
+        title: payload.title, note: payload.note, createdAt: 1789000000, createdBy: "pat",
+        pdfUrl: "/api/v1/decision-docs/doc-" + version + "/pdf",
+      });
+      return route.fulfill({ json: docs[0] });
+    }
+    if (/^\/api\/v1\/decisions\/[^/]+\/documentation\/prune$/.test(path)) {
+      docActions.push({ what: "prune", body: request.postDataJSON() });
+      return route.fulfill({ json: { deleted: [], kept: 1 } });
+    }
+    if (path.startsWith("/api/v1/decision-docs/")) {
+      docActions.push({ what: request.method() + " " + path });
+      return route.fulfill({ json: {} });
+    }
+    if (path === "/api/v1/dmn-layout" && request.method() === "POST") {
+      layouts.push(request.postData());
+      return route.fulfill({ body: RELAID_XML, contentType: "application/xml" });
+    }
     if (path === "/api/v1/decision-deployments" && request.method() === "GET") {
       const id = url.searchParams.get("decisionId");
       return route.fulfill({ json: deployed.filter((d) => !id || d.decisionId === id) });
@@ -118,12 +178,17 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
     }
     return route.fulfill({ json: [] });
   });
-  return { uploads, created, patched, draftSaves, draftDeletes, deploys, deployed };
+  return { uploads, created, patched, draftSaves, draftDeletes, deploys, deployed, tries, layouts, docPublishes, docActions, docs };
 }
 
 // A decision as it looks in a draft: the same shape as the stored model, with a
 // decision named differently so a test can tell which of the two was opened.
 const DRAFT_XML = STORED_XML.replace('name="eligibility"', 'name="eligibility-wip"');
+
+// What the auto-layout route hands back: the same model with the decision moved, so
+// a test can tell that the editor imported the server's answer rather than keeping
+// what it had.
+const RELAID_XML = STORED_XML.replace('x="160" y="100"', 'x="60" y="60"');
 
 // The editor is slow to first paint only because of the vendored bundle; everything
 // asserted after it is instant.
@@ -421,4 +486,246 @@ test("a decision nothing has deployed yet says nothing, rather than saying zero"
 
   await expect(page.locator("#dmn-ref-chip")).toHaveText("eligibility.dmn");
   await expect(page.locator("#dmn-deployed-chip")).toBeHidden();
+});
+
+test("Test runs the decision on screen and shows which rule fired", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-test").click();
+  await expect(page.locator("#dmn-test-panel")).toBeVisible();
+
+  // The form is built from what the server said the model wants, not from anything
+  // the browser re-derived out of the XML.
+  const amount = page.locator('#dmn-test-inputs input[data-in="amount"]');
+  await expect(amount).toBeVisible();
+  expect(state.tries[0].decisionId).toBeUndefined();
+  expect(state.tries[0].xml).toContain("<decision");
+
+  await amount.fill("250");
+  await page.locator("#dmn-test-run").click();
+
+  // The answer, and the rule matrix that says why — the same matrix Operations draws.
+  await expect(page.locator("#dmn-test-result .res-val")).toHaveText("approve");
+  await expect(page.locator("#dmn-test-result .mtable-head")).toContainText("Rule 1 fired");
+  await expect(page.locator("#dmn-test-result .mrule.is-hit")).toHaveCount(1);
+
+  // What was sent: the model on screen, the decision named, and the value typed —
+  // coerced to a number, because that is what the decision declares.
+  const run = state.tries[state.tries.length - 1];
+  expect(run.decisionId).toBe("Decision_stored");
+  expect(run.inputs).toEqual({ amount: 250 });
+
+  // And nothing was saved or deployed by asking.
+  expect(state.uploads).toEqual([]);
+  expect(state.draftSaves).toEqual([]);
+  expect(state.deploys).toEqual([]);
+
+  // A different value takes a different rule, which is the whole point.
+  await amount.fill("12");
+  await page.locator("#dmn-test-run").click();
+  await expect(page.locator("#dmn-test-result .res-val")).toHaveText("reject");
+  await expect(page.locator("#dmn-test-result .mtable-head")).toContainText("Rule 2 fired");
+});
+
+test("a decision that does not run says so in the panel, not as a broken page", async ({ page }) => {
+  installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    trial: { ok: false, message: "eligibility: cannot compare number to string" },
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-test").click();
+  await page.locator("#dmn-test-run").click();
+
+  await expect(page.locator("#dmn-test-err")).toContainText("cannot compare number to string");
+  await expect(page.locator("#dmn-test-panel")).toBeVisible();
+  // The editor is untouched: a table that does not work yet is the normal state of
+  // one being written.
+  await expect(page.locator(".dmn-editor .dmn-canvas .dmn-js-parent")).toBeVisible();
+});
+
+test("Auto-layout re-flows the requirements graph through the server", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-more").click();
+  await expect(page.locator("#dmn-menu")).toBeVisible();
+  await page.locator("#dmn-autolayout").click();
+
+  await expect(page.locator("#toast")).toContainText("laid out");
+  expect(state.layouts).toHaveLength(1);
+  expect(state.layouts[0]).toContain("<decision");
+  // The model came back through the editor, not around it: nothing was stored.
+  expect(state.uploads).toEqual([]);
+});
+
+test("Export XML hands the decision over as a file", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-more").click();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#dmn-export").click(),
+  ]);
+  // Named after the model handle, so the file lands as the decision people know.
+  expect(download.suggestedFilename()).toBe("eligibility.dmn");
+});
+
+// The diagram Atlas generates for a model that has none must be one dmn-js draws
+// (ADR-draft-dmn-diagram-is-completed-on-read). This is the contract between the Go
+// generator's output and the vendored editor, so the fixture below is *verbatim*
+// what `dmn.EnsureDiagram` produces for a model with one input datum feeding one
+// decision — regenerate it if the generator's shape changes, which the Go tests in
+// dmn/layout_test.go will tell you about first.
+const COMPLETED_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Definitions_nodi" name="Eligibility" namespace="http://atlas/dmn">
+  <inputData id="id_amount" name="amount"/>
+  <decision id="eligibility" name="eligibility">
+    <informationRequirement id="ir1"><requiredInput href="#id_amount"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in1" label="amount"><inputExpression id="ie1" typeRef="number"><text>amount</text></inputExpression></input>
+      <output id="out1" label="eligibility" name="eligibility" typeRef="string"/>
+      <rule id="r1"><inputEntry id="e1"><text>&gt;= 100</text></inputEntry><outputEntry id="o1"><text>"approve"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/">
+    <dmndi:DMNDiagram id="DMNDiagram_atlas">
+      <dmndi:DMNShape id="DMNShape_id_amount" dmnElementRef="id_amount">
+        <dc:Bounds x="60" y="220" width="125" height="45"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNShape id="DMNShape_eligibility" dmnElementRef="eligibility">
+        <dc:Bounds x="60" y="60" width="180" height="80"/>
+      </dmndi:DMNShape>
+      <dmndi:DMNEdge id="DMNEdge_ir1" dmnElementRef="ir1">
+        <di:waypoint x="122.5" y="220"/>
+        <di:waypoint x="150" y="140"/>
+      </dmndi:DMNEdge>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`;
+
+test("a model the server completed draws its whole requirements graph", async ({ page }) => {
+  page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path === "/api/v1/dmnrefs" && request.method() === "GET") {
+      return route.fulfill({ json: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "" }] });
+    }
+    if (path.startsWith("/api/v1/dmn-models/") && path.endsWith("/xml")) {
+      return route.fulfill({ body: COMPLETED_XML, contentType: "application/xml" });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+  await page.locator("#dmn-views button", { hasText: "Overview (DRG)" }).click();
+
+  // All three, and the arrow between them. Without the generated diagram dmn-js
+  // draws the decision alone and silently drops the input data and the requirement,
+  // so the graph the model describes cannot be seen or rewired.
+  for (const id of ["id_amount", "eligibility", "ir1"]) {
+    await expect(page.locator(`.dmn-canvas [data-element-id="${id}"]`)).toBeVisible();
+  }
+});
+
+test("Documentation publishes a version of the decision and lists its history", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-more").click();
+  await page.locator("#dmn-docexport").click();
+  await expect(page.locator("#dmn-doc-panel")).toBeVisible();
+  await expect(page.locator("#dmn-doc-history")).toContainText("No version published yet");
+
+  await page.locator("#dmn-doc-note").fill("Signed off in March");
+  await page.locator("#dmn-doc-publish").click();
+
+  // Filed under the decision the model declares, with the rules and the document.
+  await expect.poll(() => state.docPublishes.length).toBe(1);
+  const sent = state.docPublishes[0];
+  expect(sent.path).toBe("/api/v1/decisions/Decision_stored/documentation");
+  expect(sent.body.note).toBe("Signed off in March");
+  expect(sent.body.modelRef).toBe("eligibility");
+  expect(sent.body.decisions[0].id).toBe("Decision_stored");
+  expect(sent.body.pdfBase64.length).toBeGreaterThan(100);
+
+  // And the history now shows it, with its download and a way to share it.
+  await expect(page.locator("#dmn-doc-history")).toContainText("v1");
+  await expect(page.locator("#dmn-doc-history")).toContainText("Signed off in March");
+  await expect(page.locator('#dmn-doc-history [data-share]')).toBeVisible();
+
+  // Nothing else was written by documenting: a document describes the decision,
+  // it does not change it.
+  expect(state.uploads).toEqual([]);
+  expect(state.deploys).toEqual([]);
+  expect(state.draftSaves).toEqual([]);
+});
+
+test("a published version can be shared, and deleting one is confirmed first", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }],
+    docs: [{ id: "doc-1", decisionId: "Decision_stored", version: 1, createdAt: 1789000000, pdfUrl: "/api/v1/decision-docs/doc-1/pdf" }],
+  });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  await page.locator("#dmn-more").click();
+  await page.locator("#dmn-docexport").click();
+  await expect(page.locator("#dmn-doc-history")).toContainText("v1");
+
+  await page.locator('#dmn-doc-history [data-share]').click();
+  await expect.poll(() => state.docActions.map((a) => a.what))
+    .toContain("POST /api/v1/decision-docs/doc-1/share");
+
+  // Deleting a published version destroys an artifact somebody handed out, so it
+  // asks first — and a declined confirmation deletes nothing.
+  page.once("dialog", (d) => d.dismiss());
+  await page.locator('#dmn-doc-history [data-delete]').click();
+  await page.waitForTimeout(200);
+  expect(state.docActions.filter((a) => (a.what || "").startsWith("DELETE"))).toEqual([]);
+});
+
+test("a decision whose logic is a literal expression does not cover the editor bar", async ({ page }) => {
+  // dmn-js uses `editor` as a state class inside its own components, and Atlas's
+  // `.editor` is the full-bleed page shell: without the reset in app.css the
+  // literal-expression view is pinned over the whole viewport, and the tabs, Save,
+  // Deploy and Test underneath it cannot be clicked. A fixed element is not
+  // clipped by the canvas, so nothing else stops it.
+  const LITERAL = STORED_XML.replace(
+    /<decisionTable[\s\S]*<\/decisionTable>/,
+    `<literalExpression id="le1"><text>0.1 * amount</text></literalExpression>`);
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: LITERAL, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  // Open the decision's own view, which is the literal expression editor.
+  await page.locator(".editor-bar .etabs#dmn-views button").nth(1).click();
+  await expect(page.locator(".dmn-canvas .cm-editor")).toBeVisible();
+
+  // The bar is still the thing at the bar's coordinates, and still usable.
+  const onTop = await page.evaluate(() => {
+    const tab = document.querySelector(".editor-bar .etabs#dmn-views button");
+    const r = tab.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return at ? at.tagName : "none";
+  });
+  expect(onTop).toBe("BUTTON");
+  await page.locator("#dmn-test").click();
+  await expect(page.locator("#dmn-test-panel")).toBeVisible();
 });

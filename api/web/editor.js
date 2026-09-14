@@ -22,6 +22,7 @@ import { migrateInstanceFlow } from "./migrationdialog.js";
 import { formFieldKeys, formFieldTypes, loadFormViewer, withLoadDeadline } from "./formviewer.js";
 import { attachCollab } from "./collab.js";
 import { collectDocumentation, exportDocumentation } from "./process-doc.js";
+import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 // Documentation prose is Markdown (ADR-0250). The replay
 // renders it with the same module the Tasks app uses, so the same text cannot mean two
 // things depending on which surface a reader is standing in front of.
@@ -451,37 +452,14 @@ function decVal(x, fallback) {
   return x;
 }
 
-// Decision-trace presentation, shared with the Operations decision-detail page
-// (temis Operate style): values compact, and a decision table rendered as a matrix
-// with the matched rule highlighted and each cell tinted by whether its condition
-// held. decTablesOf/decMatchedNums read an evaluation's (already-parsed) trace.
-const decFmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
-const decCellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
-const decTablesOf = (d) => { const t = decVal(d.trace, null); return (t && Array.isArray(t.tables)) ? t.tables : []; };
-const decMatchedNums = (d) => {
-  const nums = [];
-  for (const t of decTablesOf(d)) for (const r of (t.rules || [])) if (r.matched) nums.push(r.index + 1);
-  return [...new Set(nums)];
-};
-function decMiniTable(tt, n) {
-  const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
-  const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
-  const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
-  const ins = tt.inputs || [];
-  const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
-    `<th>${esc(i.expression)} <code>= ${esc(decFmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
-  const body = (tt.rules || []).map((r) => {
-    const cells = ins.map((_, k) => {
-      const c = r.conditions && r.conditions[k];
-      const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
-      return `<td class="${cls}">${c ? esc(decCellText(c.entry)) : ""}</td>`;
-    }).join("");
-    const out = r.matched && r.outputs ? esc(r.outputs.map(decFmtVal).join(", ")) : "";
-    return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
-  }).join("");
-  return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
-    `<table class="mgrid">${hr}${body}</table></div>`;
-}
+// Decision-trace presentation. The matrix comes from dmn-trace.js — one renderer, shared with
+// Operations → Decisions and the decision editor's Test panel, so a trace looks the
+// same wherever it is read. Only the unwrapping differs here: a replay's evaluation
+// carries its trace as a value that may still need decoding.
+const decFmtVal = traceValue;
+const decTablesOf = (d) => traceTablesOf(decVal(d.trace, null));
+const decMatchedNums = (d) => matchedRuleNumbers(decVal(d.trace, null));
+const decMiniTable = (tt, n) => renderTraceTable(tt, n);
 
 // decCard renders one decision evaluation: a header, its input pills, and its result
 // rows. Each result carries a "Rule N" badge; a row backed by a decision table is

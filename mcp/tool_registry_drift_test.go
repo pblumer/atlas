@@ -68,6 +68,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_save_form":                    "POST /api/v1/forms",
 	"atlas_upload_decision_model":        "POST /api/v1/dmn-models",
 	"atlas_deploy_decision":              "POST /api/v1/decision-deployments",
+	"atlas_try_decision":                 "POST /api/v1/decisions/evaluate",
 	"atlas_register_decision":            "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":               "POST /api/v1/projects/{id}/deploy",
 	"atlas_deploy_application":           "POST /api/v1/applications/{id}/deploy",
@@ -411,7 +412,8 @@ var mcpOmittedRoutes = map[string]string{
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
 	// directly (or relies on server-side ensureDiagramLayout on read), so it does
 	// not drive a scenario through this.
-	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+	"POST /api/v1/layout":     "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+	"POST /api/v1/dmn-layout": "the same for a decision requirements graph, and needed even less by an agent: a model an agent uploads is completed on read anyway",
 
 	// MIM/FIM XOML import (#471): a human file-upload in the Modeler that converts a
 	// Microsoft Identity Manager workflow into a BPMN draft. An MCP agent authors BPMN
@@ -455,6 +457,21 @@ var mcpOmittedRoutes = map[string]string{
 	// event stream, so it joins via the non-streaming atlas_join_session and reads
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
 	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
+
+	// Co-editing a decision (ADR-draft-co-editing-a-decision) is the same session
+	// over a decision draft. The browser surface is the point of that record; the
+	// agent surface is not duplicated for it, because an agent authoring a decision
+	// already has the turn-based path (atlas_upload_decision_model, and
+	// atlas_try_decision to check it) and six more tools would double the session
+	// surface for a case nobody has asked for. Widening the existing six to take a
+	// decision draft is the follow-up if somebody does.
+	"GET /api/v1/dmn-drafts/{id}/session":           "live SSE co-editing transport for browsers; the agent session surface is not duplicated per artifact kind",
+	"POST /api/v1/dmn-drafts/{id}/session/join":     "the agent session surface is not duplicated per artifact kind; an agent authors a decision turn-based",
+	"POST /api/v1/dmn-drafts/{id}/session/poll":     "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/leave":    "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/presence": "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/lock":     "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/change":   "same as join",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
@@ -592,6 +609,20 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/documentation/{id}/share":                "revoking a publication is a human decision, not an agent action",
 	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
 	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
+
+	// Decision documentation is the same design for a second artifact kind
+	// (ADR-draft-decision-documentation), and omitted for the same reasons: the
+	// document is rendered in the browser from dmn-js's own picture, and publishing
+	// or revoking one is a human decision. An agent reads the decision itself with
+	// atlas_get_decision_model and can check it with atlas_try_decision.
+	"POST /api/v1/decisions/{decisionId}/documentation":       "the document is rendered in the browser; an agent has no requirements-graph raster to publish",
+	"GET /api/v1/decisions/{decisionId}/documentation":        "history of a published artifact; an agent reads the model itself via atlas_get_decision_model",
+	"POST /api/v1/decisions/{decisionId}/documentation/prune": "retention over published history is a human decision, not an agent action",
+	"GET /api/v1/decision-docs/{id}":                          "a published artifact's record; an agent reads the model itself via atlas_get_decision_model",
+	"GET /api/v1/decision-docs/{id}/pdf":                      "binary document download is not an agent capability",
+	"POST /api/v1/decision-docs/{id}/share":                   "publishing a decision to an audience outside Atlas is a human decision, not an agent action",
+	"DELETE /api/v1/decision-docs/{id}/share":                 "revoking a publication is a human decision, not an agent action",
+	"DELETE /api/v1/decision-docs/{id}":                       "pruning published history is a human decision, not an agent action",
 
 	// Artifact id availability (ADR-0222): a keystroke-level
 	// probe that colours the Modeler's ID field while it is being typed. An agent

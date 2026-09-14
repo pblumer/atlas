@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-decision-whose-logic-is-a-literal-expression-no-longer-cov",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision whose logic is a literal expression no longer covers the editor's own bar.",
+        "de": "A decision whose logic is a literal expression no longer covers the editor's own bar."
+      },
+      "summary": {
+        "en": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport.",
+        "de": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport."
+      },
+      "link": {
+        "label": "ADR-0320",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0320-the-decision-editor-is-a-page.md"
+      }
+    },
+    {
       "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
       "version": "Unreleased",
       "date": null,
@@ -217,6 +235,96 @@
       }
     },
     {
+      "id": "a-decision-is-published-as-its-own-document-and-two-people-c",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Hand a decision to someone, and work on one together",
+        "de": "Eine Entscheidung weitergeben – und gemeinsam daran arbeiten"
+      },
+      "summary": {
+        "en": "Two things a diagram could do and a decision could not. First: a decision table is the business rule — the thing a compliance officer signs off and an auditor asks about — and it could only be read inside Atlas. The editor's ⋯ menu now publishes it as a PDF: the requirements graph, then every decision with its description, the inputs it reads with their types, and its rule table set as a real table with the hit policy, one row per rule, and each rule's own note underneath. Versions are numbered, never change once published, and can be shared through a link you can revoke — the same way a process document works. It is deliberately separate from the deployed version: a rule is usually approved before it is switched on, which is exactly when there is no deployment to point at. Second: two people can now edit one decision at the same time and see each other — who is here, what they are looking at, and a lock so nobody's work is silently overwritten. The lock is the decision: in the requirements graph you claim a decision by selecting it, and opening a decision's table claims that decision. So two people can work on two decisions of the same model at once; two people cannot fill in one table together, and the editor tells you which it is rather than letting you find out afterwards.",
+        "de": "Zwei Dinge, die ein Diagramm konnte und eine Entscheidung nicht. Erstens: Eine Entscheidungstabelle ist die Geschäftsregel — das, was eine Compliance-Verantwortliche freigibt und wonach eine Revision fragt — und sie war nur innerhalb von Atlas lesbar. Über das Menü «⋯» im Editor lässt sie sich jetzt als PDF veröffentlichen: der Anforderungsgraph, dann jede Entscheidung mit ihrer Beschreibung, den gelesenen Eingaben samt Typen und ihrer Regeltabelle als echte Tabelle — mit Hit Policy, einer Zeile je Regel und der jeweiligen Anmerkung darunter. Versionen sind nummeriert, nach dem Veröffentlichen unveränderlich und über einen widerrufbaren Link teilbar — genau wie bei einer Prozessdokumentation. Sie ist bewusst getrennt von der ausgelieferten Version: Eine Regel wird üblicherweise freigegeben, bevor sie eingeschaltet wird — also genau dann, wenn es noch keine Auslieferung gibt, auf die man zeigen könnte. Zweitens: Zwei Personen können jetzt gleichzeitig an einer Entscheidung arbeiten und sehen einander — wer da ist, worauf jemand schaut, und eine Sperre, damit niemandes Arbeit stillschweigend überschrieben wird. Gesperrt wird die Entscheidung: Im Anforderungsgraphen beansprucht man sie durch Auswählen, und wer die Tabelle einer Entscheidung öffnet, beansprucht damit diese Entscheidung. Zwei Personen können also an zwei Entscheidungen desselben Modells gleichzeitig arbeiten; eine Tabelle gemeinsam ausfüllen können sie nicht — und der Editor sagt es, statt es einen hinterher merken zu lassen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and choose ⋯ → Documentation.",
+          "Give the version a note — what changed, or what it was signed off for — and press Publish version.",
+          "The history lists every version with its PDF. Share… mints a link for a reader with no Atlas account; Revoke kills it.",
+          "For co-editing, open the same decision in two browsers. The avatars at the top of the canvas show who is here.",
+          "Open a decision's table in one of them: the other sees that decision locked, and can work on a different decision of the same model meanwhile."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und «⋯ → Documentation» wählen.",
+          "Der Version eine Notiz geben — was sich geändert hat oder wofür sie freigegeben wurde — und «Publish version» drücken.",
+          "Die Historie führt jede Version mit ihrem PDF. «Share…» erzeugt einen Link für Lesende ohne Atlas-Konto, «Revoke» hebt ihn auf.",
+          "Für das gemeinsame Arbeiten dieselbe Entscheidung in zwei Browsern öffnen. Die Avatare oben auf der Fläche zeigen, wer da ist.",
+          "In einem davon die Tabelle einer Entscheidung öffnen: Die andere Seite sieht diese Entscheidung gesperrt und kann derweil an einer anderen Entscheidung desselben Modells arbeiten."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-can-be-tried-against-sample-inputs-and-a-dmn-mode",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Try a decision before anyone has to run it",
+        "de": "Eine Entscheidung ausprobieren, bevor sie jemand ausführen muss"
+      },
+      "summary": {
+        "en": "A decision table is a program, and the first thing you want to know is whether it does what you meant. Until now finding out meant saving the decision, deploying it, deploying a process with a business rule task that calls it, starting an instance, and reading the result off that instance — five steps, three of them about processes, to answer a question about one table. The decision editor now has Test: fill in the inputs, press Run, and see what came back along with the table showing which rule fired and which conditions held. A rule that never matches — a number compared against a string, a stray space — shows its condition in red. It is the same picture Operations shows for a decision a running process evaluated, so you learn to read it once. What is tested is the decision on screen: nothing is saved, nothing is deployed, and a decision you have not stored anywhere yet can be tried like any other. Separately, a DMN model that carries no diagram now gets one. Most models do not: a decision written by an agent or exported from another tool has the logic but no picture, and the editor could only draw a single box, silently leaving out the input data and the arrows — and saving from that state left the model rendering worse than you found it. Such a model now opens with its whole requirements graph drawn, and the new ⋯ menu offers Auto-layout to re-flow it, and Export XML to take the decision away as a file.",
+        "de": "Eine Entscheidungstabelle ist ein Programm, und das Erste, was man wissen will, ist, ob sie tut, was gemeint war. Das herauszufinden bedeutete bisher: die Entscheidung speichern, ausliefern, einen Prozess mit einem Business-Rule-Task ausliefern, der sie aufruft, eine Instanz starten und das Ergebnis dort ablesen — fünf Schritte, drei davon über Prozesse, für eine Frage zu einer einzigen Tabelle. Der Entscheidungseditor hat jetzt «Test»: Eingabewerte eintragen, «Run» drücken, und man sieht das Ergebnis zusammen mit der Tabelle, die zeigt, welche Regel gegriffen hat und welche Bedingungen erfüllt waren. Eine Regel, die nie zutrifft — eine Zahl gegen eine Zeichenkette verglichen, ein überzähliges Leerzeichen — zeigt ihre Bedingung in Rot. Es ist dasselbe Bild, das der Betrieb für eine Entscheidung zeigt, die ein laufender Prozess ausgewertet hat; man lernt es also nur einmal zu lesen. Geprüft wird die Entscheidung auf dem Bildschirm: Es wird nichts gespeichert, nichts ausgeliefert, und auch eine noch nirgends abgelegte Entscheidung lässt sich so ausprobieren. Unabhängig davon erhält ein DMN-Modell ohne Diagramm jetzt eines. Die meisten Modelle haben keines: Eine von einem Agenten geschriebene oder aus einem anderen Werkzeug exportierte Entscheidung hat die Logik, aber kein Bild — der Editor konnte dann nur einen einzelnen Kasten zeichnen, liess Eingabedaten und Pfeile stillschweigend weg, und ein Speichern aus diesem Zustand hinterliess das Modell schlechter dargestellt als zuvor. Ein solches Modell öffnet sich nun mit dem vollständigen Anforderungsgraphen, und das neue Menü «⋯» bietet «Auto-layout» zum Neuanordnen sowie «Export XML», um die Entscheidung als Datei mitzunehmen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+          "Press Test. The panel lists the decisions the model provides and the inputs each one reads.",
+          "Type values and press Run. The result appears above the rule matrix, with the rule that fired highlighted.",
+          "Change a rule in the table and press Run again — nothing is saved or deployed in between, so you can iterate.",
+          "Use ⋯ → Auto-layout when a model's requirements graph needs re-arranging, and ⋯ → Export XML to download it."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "«Test» drücken. Das Panel führt die Entscheidungen des Modells auf und die Eingaben, die jede davon liest.",
+          "Werte eintragen und «Run» drücken. Das Ergebnis erscheint über der Regelmatrix, die zutreffende Regel ist hervorgehoben.",
+          "Eine Regel in der Tabelle ändern und erneut «Run» drücken — dazwischen wird nichts gespeichert oder ausgeliefert.",
+          "«⋯ → Auto-layout» verwendet man, wenn der Anforderungsgraph neu angeordnet werden soll, «⋯ → Export XML» zum Herunterladen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "a-single-decision-can-be-deployed-from-its-editor-and-the-ed",
       "version": "Unreleased",
       "date": null,
@@ -296,135 +404,6 @@
           "Weggehen und zurückkommen. Die Entscheidung öffnet sich auf dem Entwurf, nicht auf dem Modell.",
           "Wenn sie fertig ist, «Save to model» drücken. Die Entwurfsmarkierung verschwindet, die Auswahl im Business-Rule-Task führt die Entscheidung, und das nächste Publish der Anwendung liefert sie aus.",
           "«Discard draft» verwirft die Arbeit und kehrt zum gespeicherten Modell zurück."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-data-object-s-state-is-on-the-diagram-and-says-whether-any",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A data object now shows the state it is in",
-        "de": "Ein Datenobjekt zeigt jetzt, in welchem Zustand es ist"
-      },
-      "summary": {
-        "en": "A data object on a diagram can carry a state — identitaet [ARCHIVIERT] — and the canvas never showed it, so a process that draws the same object six times drew six identical boxes and the one thing telling them apart sat in a side panel. The state is written under the object's name now, in the Modeler and in every runtime view. It also shows whether anything acts on it: a state an activity writes is set in full, a state that is only read is set back. Atlas drops the second one when the model is deployed, so it says what the step expects rather than something the engine does — and the difference is now visible instead of implied.",
-        "de": "Ein Datenobjekt im Diagramm kann einen Zustand tragen — identitaet [ARCHIVIERT] —, und die Zeichenfläche zeigte ihn nie. Ein Prozess, der dasselbe Objekt sechsmal zeichnet, zeigte sechs gleiche Kästen, und das Einzige, was sie unterscheidet, lag im Seitenpanel. Der Zustand steht jetzt unter dem Namen des Objekts, im Modeler und in jeder Laufzeitansicht. Er zeigt zugleich, ob überhaupt etwas nach ihm handelt: Ein Zustand, den eine Aktivität schreibt, steht in voller Schrift, ein nur gelesener zurückgenommen. Den zweiten verwirft Atlas beim Deployment — er beschreibt, was der Schritt erwartet, nicht was die Maschine tut, und dieser Unterschied ist nun sichtbar statt gemeint."
-      },
-      "link": {
-        "label": "ADR-0053",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0053-first-class-data-objects.md"
-      },
-      "tags": [
-        "Modeler",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and click a data object — the sheet of paper.",
-          "In the panel, set its Data state, for example ARCHIVIERT. It appears under the object's name on the canvas, in square brackets.",
-          "Draw an arrow from an activity to the object. The step now writes that state, and it is shown in full.",
-          "An arrow the other way only reads the object, and its state is set back — hover it to read why nothing acts on it."
-        ],
-        "de": [
-          "Im Modeler einen Prozess öffnen und ein Datenobjekt anklicken — das Blatt Papier.",
-          "Im Panel den Datenzustand setzen, zum Beispiel ARCHIVIERT. Er erscheint in eckigen Klammern unter dem Namen des Objekts.",
-          "Einen Pfeil von einer Aktivität zum Objekt ziehen: Der Schritt schreibt diesen Zustand nun, und er steht in voller Schrift.",
-          "Ein Pfeil in die andere Richtung liest das Objekt nur, sein Zustand steht zurückgenommen — der Mauszeiger darauf erklärt, warum nichts nach ihm handelt."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-decision-editor-is-a-page-of-the-modeler-not-a-window-ov",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Edit a decision on its own page, with an address you can share",
-        "de": "Eine Entscheidung auf einer eigenen Seite bearbeiten — mit einer Adresse zum Weitergeben"
-      },
-      "summary": {
-        "en": "Decisions opened in a window that sat over whatever you were looking at. That meant a decision had no link you could send anyone, the browser's back button closed the editor and threw the edit away, and there was no difference between saving your work and replacing the model every process reading it uses. A decision now opens like a diagram or a form: its own page, its own address, the same bar along the top, and the back button doing what it does everywhere else. Save keeps you where you are and points the address at the decision you just wrote, so saving again updates it instead of making a second one. Creating a decision from a business rule task is still one button — it now takes you to the editor and brings you back with the task filled in, and it saves your diagram as a draft on the way out so nothing is lost.",
-        "de": "Entscheidungen öffneten sich in einem Fenster über dem, was man gerade ansah. Das hiess: keine Adresse, die man jemandem schicken kann, der Zurück-Knopf des Browsers schloss den Editor und verwarf die Änderung, und zwischen «meine Arbeit sichern» und «das Modell ersetzen, mit dem jeder lesende Prozess arbeitet» gab es keinen Unterschied. Eine Entscheidung öffnet sich jetzt wie ein Diagramm oder ein Formular: eigene Seite, eigene Adresse, dieselbe Leiste oben, und der Zurück-Knopf tut, was er überall sonst tut. Speichern lässt Sie, wo Sie sind, und richtet die Adresse auf die eben geschriebene Entscheidung — erneutes Speichern aktualisiert sie also, statt eine zweite anzulegen. Eine Entscheidung aus einem Business-Rule-Task heraus anzulegen bleibt ein Knopfdruck: Der Weg führt jetzt in den Editor und zurück, mit ausgefülltem Task, und das Diagramm wird auf dem Weg hinaus als Entwurf gesichert, damit nichts verloren geht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "In an application, choose Create new → Decision (DMN). The editor opens on its own page; the address bar now names the decision.",
-          "Model the table and press Save. The address changes to the stored decision, so you can bookmark it or send the link.",
-          "Press back in the browser, or the link at the top left, to return to the application.",
-          "From a business rule task, ＋ New decision takes you to the same editor. Come back with the browser's back button and the task has the decision, its inputs and its result variable filled in."
-        ],
-        "de": [
-          "In einer Anwendung Create new → Decision (DMN) wählen. Der Editor öffnet sich als eigene Seite; die Adresszeile benennt jetzt die Entscheidung.",
-          "Die Tabelle modellieren und Save drücken. Die Adresse wechselt auf die gespeicherte Entscheidung — damit lässt sie sich als Lesezeichen ablegen oder als Link verschicken.",
-          "Mit dem Zurück-Knopf des Browsers oder dem Link oben links zurück zur Anwendung.",
-          "Aus einem Business-Rule-Task führt ＋ New decision in denselben Editor. Mit dem Zurück-Knopf zurück, und der Task trägt die Entscheidung, ihre Inputs und die Result-Variable bereits."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-dmn-decision-is-a-durable-versioned-deployment-artifact-an",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Publish a decision on its own, and keep the version a process was deployed with",
-        "de": "Eine Entscheidung eigenständig veröffentlichen — und die Version behalten, mit der ein Prozess bereitgestellt wurde"
-      },
-      "summary": {
-        "en": "A decision used to be something a process carried. An application containing only a decision table published without complaint and put nothing into the engine, and after a restart there was still nothing there. A decision is now published in its own right: it gets a version, it is stored with the model it was published from, and it comes back after a restart with no file to re-import. An application can be built from decisions alone — «Create new → Decision (DMN)» opens the decision editor and files the result under the application. The second change matters more, and it is a change of behaviour: a business rule task set to «latest» now settles which version it uses at the moment the process is deployed, and keeps it. Publishing a newer decision no longer moves processes that are already running — deploy the process again when you want it to follow. Processes deployed before this release keep the behaviour they were deployed with until you redeploy them.",
-        "de": "Eine Entscheidung war bisher etwas, das ein Prozess mit sich trug. Eine Anwendung, die nur eine Entscheidungstabelle enthielt, liess sich anstandslos veröffentlichen, brachte aber nichts in die Engine, und nach einem Neustart war weiterhin nichts da. Eine Entscheidung wird jetzt eigenständig veröffentlicht: Sie erhält eine Version, wird zusammen mit dem Modell gespeichert, aus dem sie veröffentlicht wurde, und ist nach einem Neustart wieder da, ohne dass eine Datei erneut eingelesen werden muss. Eine Anwendung kann allein aus Entscheidungen bestehen — «Create new → Decision (DMN)» öffnet den Entscheidungseditor und legt das Ergebnis unter der Anwendung ab. Die zweite Änderung wiegt schwerer, und sie ändert das Verhalten: Ein Business-Rule-Task mit Bindung «latest» legt jetzt im Moment der Bereitstellung fest, welche Version er verwendet, und behält sie. Das Veröffentlichen einer neueren Entscheidung verschiebt bereits laufende Prozesse nicht mehr — wer das will, stellt den Prozess erneut bereit. Prozesse, die vor dieser Version bereitgestellt wurden, behalten ihr bisheriges Verhalten, bis sie erneut bereitgestellt werden."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open an application in the Modeler and choose Create new → Decision (DMN). Model the table and save; the decision is filed under the application, no BPMN diagram needed.",
-          "Press Publish. The release now lists the decision it deployed, with its version, beside any processes.",
-          "Deploy a process whose business rule task is bound «latest». It is now tied to exactly that version of the decision.",
-          "Edit the decision and publish again: a new version appears, and the process you already deployed keeps answering with the old one. Deploy the process again to move it forward."
-        ],
-        "de": [
-          "Eine Anwendung im Modeler öffnen und Create new → Decision (DMN) wählen. Die Tabelle modellieren und speichern; die Entscheidung wird unter der Anwendung abgelegt, ganz ohne BPMN-Diagramm.",
-          "Publish drücken. Die Freigabe führt die bereitgestellte Entscheidung samt Version nun neben allfälligen Prozessen auf.",
-          "Einen Prozess bereitstellen, dessen Business-Rule-Task auf «latest» gebunden ist. Er ist jetzt an genau diese Version der Entscheidung gebunden.",
-          "Die Entscheidung bearbeiten und erneut veröffentlichen: Es entsteht eine neue Version, und der bereits bereitgestellte Prozess antwortet weiterhin mit der alten. Für den Wechsel den Prozess erneut bereitstellen."
         ]
       },
       "try": {
