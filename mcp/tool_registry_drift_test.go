@@ -451,7 +451,9 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
+	"GET /api/v1/dmnrefs/{id}/impact":    "it exists to fill that deletion's confirm dialog, and the deletion is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
+	"GET /api/v1/dmn-models":             "reading the model folder as a folder is housekeeping for the Modeler; an agent resolves a decision through the catalog, not the store",
 
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads

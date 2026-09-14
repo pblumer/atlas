@@ -1313,6 +1313,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN reference artifacts", tag: "DMN References", role: RoleModeler, resp: jsonBody("References", tArray())}},
 		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleUpdateDmnRef, apiOp{
 			summary: "Update a DMN reference: move it to a project and/or rename it", tag: "DMN References", role: RoleModeler, req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
+		{"GET", "/api/v1/dmnrefs/{id}/impact", s.handleDmnRefImpact, apiOp{
+			summary: "What deleting this DMN reference would break: the decisions its model provides, which of them no other reference provides, and the deployed definitions and drafts that could then not be deployed, each with its binding. A read that refuses nothing — the Console renders it in the delete confirm (ADR-draft-deleting-a-dmn-reference-says-what-it-breaks)",
+			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Deletion impact", tObject())}},
 		{"DELETE", "/api/v1/dmnrefs/{id}", s.handleDeleteDmnRef, apiOp{
 			summary: "Delete a DMN reference", tag: "DMN References", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
@@ -1327,6 +1330,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: xmlBody("DMN XML with a regenerated decision requirements diagram")}},
 		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
 			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", role: RoleModeler, resp: jsonBody("DMN XML", tObject())}},
+		{"GET", "/api/v1/dmn-models", s.handleListDmnModels, apiOp{
+			summary: "List the local DMN model store — one row per stored handle with what the model declares and whether any DMN reference points at it. A model nothing points at is reachable nowhere else, which is what this exists for (ADR-draft-a-model-with-no-reference-stays-findable)",
+			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Stored DMN models", tArray())}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
 			summary: "Upload a DMN model file into the local model store and return its reference handle. ?handle= overwrites that model in place. Otherwise the handle is derived from ?name=: with ?from= present (the model handle this editing session opened, empty for a decision that has none) the derived handle must be free, or the upload is refused with 409 rather than silently forking a second copy (ADR-0222); without ?from= a taken handle is suffixed, which is the upsert an import or an agent wants", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 
