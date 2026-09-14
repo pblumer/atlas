@@ -11,7 +11,7 @@ import (
 )
 
 // What deleting a DMN reference would break
-// (ADR-draft-deleting-a-dmn-reference-says-what-it-breaks).
+// (ADR-0331).
 //
 // A reference is what supplies the *model* a business rule task's decision is
 // bundled from. Deleting the last one providing a decision breaks no running

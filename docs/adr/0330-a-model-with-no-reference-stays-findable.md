@@ -1,4 +1,4 @@
-# ADR-DRAFT: A model with no reference stays findable
+# ADR-0330: A model with no reference stays findable
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -111,7 +111,7 @@ This record deliberately adds no way to delete a stored model. The store now has
 list, which is what an author needs to recover one; whether Atlas should also be
 able to remove one — and what would have to be true first, given that a decision
 deployment's provenance points at a handle — is the same question
-[ADR-draft-a-decision-deployment-is-not-deletable](draft-a-decision-deployment-is-not-deletable.md)
+[ADR-0329](0329-a-decision-deployment-is-not-deletable.md)
 asks one rung above, and it deserves its own answer rather than a checkbox here.
 
 ### Consequences
@@ -162,4 +162,4 @@ asks one rung above, and it deserves its own answer rather than a checkbox here.
 - relates to [ADR-0222](0222-artifact-id-renames.md) — the suffixed duplicate a lost model produces
 - relates to [ADR-0071](0071-sharing-scopes.md) — why "referenced" is a fact and the references are a view
 - relates to [ADR-0319](0319-durable-versioned-decision-deployments.md) — the deployment that keeps running without the file
-- relates to [ADR-draft-a-decision-deployment-is-not-deletable](draft-a-decision-deployment-is-not-deletable.md) — where deleting content is decided
+- relates to [ADR-0329](0329-a-decision-deployment-is-not-deletable.md) — where deleting content is decided

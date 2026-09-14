@@ -1,5 +1,5 @@
 // The confirm text for deleting a DMN reference
-// (ADR-draft-deleting-a-dmn-reference-says-what-it-breaks).
+// (ADR-0331).
 //
 // It lives apart from app.js because it is a pure function of what the server
 // reports, so it can be driven and asserted in a browser test without standing up

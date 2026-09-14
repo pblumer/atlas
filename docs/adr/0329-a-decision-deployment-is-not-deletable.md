@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision deployment is not deletable, and what has to be true before it is
+# ADR-0329: A decision deployment is not deletable, and what has to be true before it is
 
 - **Status:** Accepted
 - **Implementation:** Landed

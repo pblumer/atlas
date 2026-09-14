@@ -2908,7 +2908,7 @@ async function viewProjectDetail(id) {
       ]);
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
     // A stored DMN model nothing points at belongs to no application, which is what
-    // this view is (ADR-draft-a-model-with-no-reference-stays-findable). It is only
+    // this view is (ADR-0330). It is only
     // asked for here, and a failure costs the section rather than the page — a
     // remote temis resolver has no folder to list and answers 409.
     let orphanModels = [];
@@ -3008,7 +3008,7 @@ async function viewProjectDetail(id) {
     };
     // A model in the store that no reference points at. Nothing else in this table
     // represents it, and nothing anywhere else in the product does either — which is
-    // the whole reason it is drawn (ADR-draft-a-model-with-no-reference-stays-findable).
+    // the whole reason it is drawn (ADR-0330).
     const orphanModelRow = (m) => {
       const items = canWrite ? [{ label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } }] : [];
       const what = m.valid
@@ -4938,7 +4938,7 @@ async function moveDmnRef(id, projectId, reload) {
 
 // referenceStoredModel puts a reference back on a model in the store that has none,
 // which is the recovery from having deleted the last one
-// (ADR-draft-a-model-with-no-reference-stays-findable). It re-uses the existing
+// (ADR-0330). It re-uses the existing
 // handle rather than re-uploading, so the model is *recovered* rather than copied —
 // a re-upload would file a second model under a suffixed handle (ADR-0222).
 async function referenceStoredModel(handle, suggested, reload) {

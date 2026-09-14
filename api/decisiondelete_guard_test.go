@@ -6,7 +6,7 @@ import (
 )
 
 // TestNoRouteDeletesADecisionDeployment is the guard for
-// ADR-draft-a-decision-deployment-is-not-deletable.
+// ADR-0329.
 //
 // A deployed process pins its latest-bound decision references to a decision
 // deployment's key at deploy time (ADR-0327), stores that key in its own record,
@@ -37,7 +37,7 @@ deployed definition is pinned to the key: PinnedDecisionKey(decisionId) returns 
 or the persisted record's decisionBindings names it. Superseded versions count as
 much as current ones, and a definition with no running instances is still pinned.
 
-Read docs/adr/draft-a-decision-deployment-is-not-deletable.md, implement the
+Read docs/adr/0329-a-decision-deployment-is-not-deletable.md, implement the
 refusal with its own tests, then replace this test with them.`, r.method, r.pattern)
 	}
 }

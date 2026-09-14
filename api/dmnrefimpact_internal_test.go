@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// The acceptance suite for ADR-draft-deleting-a-dmn-reference-says-what-it-breaks:
+// The acceptance suite for ADR-0331:
 // before a DMN reference is deleted, the server can say exactly what would stop
 // deploying afterwards — and, just as importantly, say nothing when nothing would.
 //

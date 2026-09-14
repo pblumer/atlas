@@ -11,7 +11,7 @@ import (
 )
 
 // The acceptance suite for
-// ADR-draft-a-model-with-no-reference-stays-findable: a model whose last reference
+// ADR-0330: a model whose last reference
 // is deleted is still in the store, and now still in the product.
 //
 // The defect it closes is not a crash, it is a disappearance, so what these assert

@@ -406,13 +406,13 @@ The control-flow basics most real models use.
   **And what deletion costs is now said out loud.** Deleting a DMN reference names
   the deployed definitions and drafts that could then not be deployed — the deploy
   preflight's own condition, read forwards
-  ([ADR-draft-deleting-a-dmn-reference-says-what-it-breaks](docs/adr/draft-deleting-a-dmn-reference-says-what-it-breaks.md));
+  ([ADR-0331](docs/adr/0331-deleting-a-dmn-reference-says-what-it-breaks.md));
   a model nothing points at is listed under Not assigned instead of vanishing from
   the product while staying on disk
-  ([ADR-draft-a-model-with-no-reference-stays-findable](docs/adr/draft-a-model-with-no-reference-stays-findable.md));
+  ([ADR-0330](docs/adr/0330-a-model-with-no-reference-stays-findable.md));
   and the rule that a decision deployment may not be deleted while a definition is
   pinned to it is written down before any route can break it
-  ([ADR-draft-a-decision-deployment-is-not-deletable](docs/adr/draft-a-decision-deployment-is-not-deletable.md)).
+  ([ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

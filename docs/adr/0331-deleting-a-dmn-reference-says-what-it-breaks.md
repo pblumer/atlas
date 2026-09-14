@@ -1,4 +1,4 @@
-# ADR-DRAFT: Deleting a DMN reference says what it would break
+# ADR-0331: Deleting a DMN reference says what it would break
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -10,7 +10,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// The model store, listed (ADR-draft-a-model-with-no-reference-stays-findable).
+// The model store, listed (ADR-0330).
 //
 // A DMN reference (ADR-0034) is what puts a stored model in front of an author:
 // the decision catalog reads references, the picker reads the catalog, the Modeler

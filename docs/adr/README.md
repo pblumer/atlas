@@ -414,6 +414,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0326](0326-trying-a-decision-before-it-runs.md) | A decision can be tried against sample inputs before anything is deployed | Accepted | Landed |
 | [0327](0327-a-deployed-decision-satisfies-a-latest-bound-task.md) | A deployed decision satisfies a latest-bound business rule task | Accepted | Landed |
 | [0328](0328-the-process-document-shows-the-decision-a-task-runs.md) | The process document shows the decision a business rule task runs | Accepted | Landed |
+| [0329](0329-a-decision-deployment-is-not-deletable.md) | A decision deployment is not deletable, and what has to be true before it is | Accepted | Landed |
+| [0330](0330-a-model-with-no-reference-stays-findable.md) | A model with no reference stays findable | Accepted | Landed |
+| [0331](0331-deleting-a-dmn-reference-says-what-it-breaks.md) | Deleting a DMN reference says what it would break | Accepted | Landed |
 
 ## The two states of a record
 

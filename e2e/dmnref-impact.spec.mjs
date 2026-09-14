@@ -1,5 +1,5 @@
 // The confirm for deleting a DMN reference (api/web/dmnref-impact.js,
-// ADR-draft-deleting-a-dmn-reference-says-what-it-breaks).
+// ADR-0331).
 //
 // The point of the feature is a sentence somebody reads instead of clicks
 // through, so the sentence is what these assert — not that a function returned
