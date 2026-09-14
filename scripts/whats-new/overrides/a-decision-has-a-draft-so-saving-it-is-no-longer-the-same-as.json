@@ -1,0 +1,34 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "Save a decision without publishing it to everyone",
+    "de": "Eine Entscheidung sichern, ohne sie allen zu geben"
+  },
+  "summary": {
+    "en": "Saving a decision used to write the model file itself — the one the business rule task picker reads, the one another application's decision may point at, and the one the next Publish ships. There was nowhere to leave an unfinished decision, and pressing Save had effects you could not see: a half-typed rule refused a colleague's Publish of that application, with a message about a decision they had never opened; a table whose output column was still called “result” handed “result” to the next task that used it; and saving a second decision called Eligibility quietly filed it as eligibility-2 and listed two rows with the same name. The editor now has the same pair of buttons as the diagram editor. Save keeps a draft — your work, which nothing else reads. Save to model writes the decision everything resolves, and is what the next Publish ships. An application shows a decision with unsaved work as Draft, and a decision that has never been saved to the model as its own row saying it will not be published. Saving to a name another decision already has is now a question, not a second copy.",
+    "de": "Eine Entscheidung zu speichern schrieb bisher direkt die Modelldatei — jene, aus der die Auswahl im Business-Rule-Task liest, auf die die Entscheidung einer anderen Anwendung zeigen kann, und die beim nächsten Publish ausgeliefert wird. Für eine unfertige Entscheidung gab es keinen Ort, und Speichern hatte Wirkungen, die man nicht sah: eine halb getippte Regel verweigerte einer Kollegin das Publish dieser Anwendung — mit einer Meldung über eine Entscheidung, die sie nie geöffnet hatte; eine Tabelle, deren Ausgabespalte noch «result» hiess, gab «result» an den nächsten Task weiter, der sie übernahm; und eine zweite Entscheidung namens Eligibility wurde stillschweigend als eligibility-2 abgelegt, mit zwei gleichnamigen Zeilen in der Liste. Der Editor hat jetzt dasselbe Knopfpaar wie der Diagramm-Editor. Speichern («Save») sichert einen Entwurf — Ihre Arbeit, die sonst niemand liest. «Save to model» schreibt die Entscheidung, die alles auflöst, und genau diese liefert das nächste Publish aus. Eine Anwendung zeigt eine Entscheidung mit ungesicherter Arbeit als «Draft», und eine Entscheidung, die nie ins Modell gespeichert wurde, als eigene Zeile mit dem Hinweis, dass sie nicht veröffentlicht wird. Auf einen Namen zu speichern, den eine andere Entscheidung bereits trägt, ist jetzt eine Rückfrage statt einer zweiten Kopie."
+  },
+  "tutorial": {
+    "en": [
+      "Open a decision, or create one from an application with Create new → Decision (DMN).",
+      "Model the table and press Save. The bar shows a dashed Draft chip: the work is stored, and nothing that reads decisions has changed.",
+      "Leave and come back. The decision opens on your draft, not on the model.",
+      "Press Save to model when it is ready. The draft marker disappears, the picker lists the decision, and the next Publish of the application ships it.",
+      "Discard draft throws the work away and goes back to the model as it is stored."
+    ],
+    "de": [
+      "Eine Entscheidung öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+      "Die Tabelle modellieren und Save drücken. In der Leiste erscheint der gestrichelte Chip «Draft»: Die Arbeit ist gesichert, und an dem, was Entscheidungen liest, hat sich nichts geändert.",
+      "Weggehen und zurückkommen. Die Entscheidung öffnet sich auf dem Entwurf, nicht auf dem Modell.",
+      "Wenn sie fertig ist, «Save to model» drücken. Die Entwurfsmarkierung verschwindet, die Auswahl im Business-Rule-Task führt die Entscheidung, und das nächste Publish der Anwendung liefert sie aus.",
+      "«Discard draft» verwirft die Arbeit und kehrt zum gespeicherten Modell zurück."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

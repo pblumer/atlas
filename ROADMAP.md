@@ -320,14 +320,99 @@ The control-flow basics most real models use.
   as the base. Wiring the clio/REST workers the same way, health probes, and
   external vendor workers remain ADR-0041 follow-ups.
   **A decision can now be authored in Atlas** ([ADR-0062](docs/adr/0062-embedded-dmn-editor.md)):
-  the business rule task panel has "＋ Neue Decision" / "Bearbeiten" buttons that open
-  an embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
+  the business rule task panel has "＋ New decision" / "Edit" buttons that reach an
+  embedded **dmn-js** editor (vendored, same family as the bpmn-js modeler) — a
   DRD + decision-table authoring surface. On save the model is stored (new reference,
   or overwritten in place when editing) and the decision's inputs and output are
   adopted into the task automatically through the existing picker path, so the
   empty-dropdown round trip (author elsewhere → export → upload → pick) is gone. This
   reverses ADR-0014's "no DMN authoring" non-goal for the decision-table case;
   authoring the FEEL/logic and model versioning still live in temis.
+  **That editor is now a page rather than a window over one**
+  ([ADR-0320](docs/adr/0320-the-decision-editor-is-a-page.md)):
+  a decision is edited at `#/modeler/dmn/new` or `#/modeler/dmn/e/{ref}`, in the
+  chrome the BPMN and form editors wear — breadcrumb, `.etabs` tab strip, Save — so it
+  can be bookmarked, linked and reloaded, and the browser's back button means what it
+  means everywhere else. The overlay fitted ADR-0062's picker-shaped entry point; it
+  stopped fitting when ADR-0319 made a decision a deployable, versioned artifact of
+  its own. Authoring one *for* a business rule task now leaves the diagram (saving it
+  as a draft first) and adopts what was authored on the way back, so the one-button
+  flow survives the move.
+  **And a decision now has a draft**
+  ([ADR-0321](docs/adr/0321-decision-drafts.md)): **Save** keeps work
+  in progress in a `dmn-drafts/` store of its own, and **Save to model** is what writes
+  the handle every reference, every picker and the next Publish resolve. A decision has
+  one layer more than a diagram — draft, model, deployment — and until now the editor
+  had no name for the first of them, so an unfinished decision could refuse a
+  colleague's publish of the same application. A publish ships the model, never the
+  draft; a decision that has only a draft is listed as such and says it will not travel.
+  Writing a model onto a handle another decision holds is refused and offered as a
+  deliberate replacement ([ADR-0222](docs/adr/0222-artifact-id-renames.md)) rather than
+  silently forking `eligibility-2`.
+  **The third verb landed too**
+  ([ADR-0322](docs/adr/0322-deploying-one-decision.md)):
+  **Deploy** ships the decision on screen on its own, through
+  `POST /api/v1/decision-deployments` — the same `deployDecisions` an application
+  publish calls, so the record, the key, the per-decision version and the recovery
+  are identical, and the deployment takes the `latest` pointer a process deployed
+  afterwards binds to. Until then the only door to the engine was Publish on the
+  application, which ships everything it holds. The bar also carries the version and
+  key the decision is currently deployed under, as a diagram opened from a deployment
+  carries its key. A decision that is not in the model can be deployed — the record
+  carries its own source — and the editor says that no business rule task can name it
+  until it is.
+  **And the decision can now be tried before anything runs it**
+  ([ADR-0326](docs/adr/0326-trying-a-decision-before-it-runs.md)):
+  **Test** posts the model on screen to `POST /api/v1/decisions/evaluate`, which compiles
+  it for that one call and throws it away — no key, no record, no registry entry — and
+  answers with the outputs and the temis trace (ADR-0066). The rule matrix is the one
+  Operations draws, extracted so both read from the same renderer. A decision stored
+  nowhere yet can be tried like any other, and `atlas_try_decision` exposes the same act
+  over MCP. **A DMN model with no diagram also renders now**
+  ([ADR-0325](docs/adr/0325-dmn-diagram-is-completed-on-read.md)):
+  almost every model reaching Atlas carries no `DMNDI`, and dmn-js drew a single box and
+  silently dropped the input data and the arrows — then a save wrote back a diagram
+  covering only what had been drawn, leaving the model worse than it was found. Atlas
+  completes the diagram on the way to the editor, as [ADR-0124](docs/adr/0124-server-side-diagram-auto-layout.md)
+  has always done for BPMN, and **Auto-layout** re-flows the whole graph on request; the
+  DRG viewer reads the same generated bounds, so both surfaces draw one picture.
+  **Export XML** joins them in the bar's `⋯` menu.
+  **The last two arrived with them.** A decision is published as its own document
+  ([ADR-0324](docs/adr/0324-decision-documentation.md)):
+  ADR-0143's design for a second artifact kind — the requirements graph, then every
+  decision's prose, inputs and rule table set as a real table — as an immutable
+  numbered version with a revocable public link, in a `decision-docs/` store that is a
+  deliberate sibling of `process-docs/`. Its version line is about sign-off rather than
+  about what is running, which is why it exists alongside ADR-0319's and not instead of
+  it. And a decision draft holds a live session
+  ([ADR-0323](docs/adr/0323-co-editing-a-decision.md)):
+  ADR-0140's registry, transport and semantics over a decision, with the lock scoped to
+  the **decision** — in the requirements graph that is ADR-0140's per-element rule
+  exactly, and opening a decision's table claims that decision, because a table row has
+  no stable identity to lock. The session handlers now take a subject rather than
+  assuming the BPMN draft store, so a third artifact with a draft is a binding rather
+  than a copy. With that, #919's parity list is complete.
+  **Two things it surfaced were fixed with it.** The deploy preflight refused a
+  process whose business rule task named a decision that existed only as a
+  deployment, telling the author to create what they had just deployed; it is now
+  binding-aware
+  ([ADR-0327](docs/adr/0327-a-deployed-decision-satisfies-a-latest-bound-task.md)),
+  because a `latest`-bound task resolves to that deployment and never consults the
+  bundle, while a `deployment`-bound one still needs it and now says so. And a
+  process document names a business rule task without showing the decision behind
+  it; it now carries the call the diagram holds and the decision's own rule table,
+  drawn by the renderer the decision document already uses
+  ([ADR-0328](docs/adr/0328-the-process-document-shows-the-decision-a-task-runs.md)).
+  **And what deletion costs is now said out loud.** Deleting a DMN reference names
+  the deployed definitions and drafts that could then not be deployed — the deploy
+  preflight's own condition, read forwards
+  ([ADR-0331](docs/adr/0331-deleting-a-dmn-reference-says-what-it-breaks.md));
+  a model nothing points at is listed under Not assigned instead of vanishing from
+  the product while staying on disk
+  ([ADR-0330](docs/adr/0330-a-model-with-no-reference-stays-findable.md));
+  and the rule that a decision deployment may not be deleted while a definition is
+  pinned to it is written down before any route can break it
+  ([ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

@@ -405,6 +405,18 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0317](0317-task-commands-are-an-object-question.md) | Acting on a user task is an object question | Accepted | Landed |
 | [0318](0318-user-task-assignment-expressions.md) | A user task's assignment may be an expression | Accepted | Landed |
 | [0319](0319-durable-versioned-decision-deployments.md) | Durable, versioned decision deployments — and `latest` resolved when a process is deployed | Accepted | Landed |
+| [0320](0320-the-decision-editor-is-a-page.md) | The decision editor is a page, not an overlay | Accepted | Landed |
+| [0321](0321-decision-drafts.md) | A decision has a draft, and Save stops writing the model | Accepted | Landed |
+| [0322](0322-deploying-one-decision.md) | One decision can be deployed on its own, from the editor | Accepted | Landed |
+| [0323](0323-co-editing-a-decision.md) | Two people can edit one decision together, and the lock is the decision | Accepted | Landed |
+| [0324](0324-decision-documentation.md) | A decision is published as its own document | Accepted | Landed |
+| [0325](0325-dmn-diagram-is-completed-on-read.md) | A DMN model's diagram is completed on read, and can be re-laid on request | Accepted | Landed |
+| [0326](0326-trying-a-decision-before-it-runs.md) | A decision can be tried against sample inputs before anything is deployed | Accepted | Landed |
+| [0327](0327-a-deployed-decision-satisfies-a-latest-bound-task.md) | A deployed decision satisfies a latest-bound business rule task | Accepted | Landed |
+| [0328](0328-the-process-document-shows-the-decision-a-task-runs.md) | The process document shows the decision a business rule task runs | Accepted | Landed |
+| [0329](0329-a-decision-deployment-is-not-deletable.md) | A decision deployment is not deletable, and what has to be true before it is | Accepted | Landed |
+| [0330](0330-a-model-with-no-reference-stays-findable.md) | A model with no reference stays findable | Accepted | Landed |
+| [0331](0331-deleting-a-dmn-reference-says-what-it-breaks.md) | Deleting a DMN reference says what it would break | Accepted | Landed |
 
 ## The two states of a record
 

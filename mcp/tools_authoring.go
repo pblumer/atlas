@@ -560,6 +560,74 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_try_decision",
+			Description: "Try a DMN model against sample inputs without deploying anything: returns what the " +
+				"decision produced and the temis trace saying which rules fired and why. The model is the one " +
+				"in the request, so this works on a decision that is stored nowhere yet — use it to check a " +
+				"decision table you just wrote before atlas_upload_decision_model or atlas_deploy_decision. " +
+				"Omit decisionId to be told what the model offers and which inputs each decision wants.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"xml":        stringProp("The full DMN XML document to try."),
+					"decisionId": stringProp("Which decision in the model to run. Omitted, the model is only described."),
+					"inputs":     map[string]any{"type": "object", "description": "The decision's input values, by input data name."},
+				},
+				"required": []any{"xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"xml": xml}
+				if id, _ := args["decisionId"].(string); id != "" {
+					payload["decisionId"] = id
+				}
+				if in, ok := args["inputs"].(map[string]any); ok {
+					payload["inputs"] = in
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/decisions/evaluate", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_deploy_decision",
+			Description: "Deploy one DMN model as a decision deployment: durable, versioned, and " +
+				"evaluable on its own, without publishing the whole application around it. The " +
+				"counterpart of atlas_deploy for a single diagram. Use it to try a decision on the " +
+				"engine; use atlas_upload_decision_model plus atlas_register_decision first when a " +
+				"business rule task must also be able to name it, since the picker resolves " +
+				"references, not deployments.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"xml":       stringProp("The full DMN XML document to deploy."),
+					"projectId": stringProp("Optional application id to file the deployment under."),
+					"modelRef":  stringProp("Optional model handle this was authored as, recorded as the deployment's provenance."),
+				},
+				"required": []any{"xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{}
+				if pid, _ := args["projectId"].(string); pid != "" {
+					q.Set("projectId", pid)
+				}
+				if ref, _ := args["modelRef"].(string); ref != "" {
+					q.Set("modelRef", ref)
+				}
+				path := "/api/v1/decision-deployments"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.post(path, "application/xml", []byte(xml)))
+			},
+		},
+		{
 			Name: "atlas_register_decision",
 			Description: "Register a decision reference (name + modelRef) so a business rule task's " +
 				"calledDecision resolves to an uploaded model at deploy time, optionally under a project. " +

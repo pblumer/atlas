@@ -2024,6 +2024,36 @@ func (p *CompiledProcess) LatestBoundDecisions() []string {
 	return out
 }
 
+// BundleBoundDecisions returns the DMN decision ids this process's *local,
+// deployment-bound* business rule tasks reference, distinct and in node order —
+// the references that need a model bundled with this deployment, because that is
+// literally what they evaluate (ADR-0063).
+//
+// It is the complement of [CompiledProcess.LatestBoundDecisions] over the same
+// local tasks, and the deploy-time gate reads the two differently: a latest-bound
+// reference can be satisfied by a decision deployment already in the registry, and
+// a deployment-bound one cannot
+// (ADR-0327).
+func (p *CompiledProcess) BundleBoundDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding == BindingLatest {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // PinDecisions records the decision deployment each latest-bound reference
 // resolved to, and marks this definition as one that resolved them at deploy time
 // (ADR-0319). An empty or nil map is a
