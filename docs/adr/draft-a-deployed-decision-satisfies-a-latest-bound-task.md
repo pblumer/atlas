@@ -130,15 +130,27 @@ is not offered inside a project's own scope.
   cross-application case ADR-0319's registry was built for and the preflight was
   silently blocking.
 - **Negative / trade-offs accepted:** A latest-bound task can now deploy with
-  nothing bundled for it. If every deployment providing that decision were later
-  deleted, the pinned key would dangle — the same exposure ADR-0319 already carries
-  for a pinned reference, and not a new one.
+  nothing bundled for it, so the decision deployment it pins has to outlive the
+  process. It does: **nothing deletes a decision deployment.** There is no route in
+  the HTTP surface, none in the MCP adapter, no control in the Console, and
+  deleting the application explicitly leaves deployed definitions alone. What this
+  record changes is that the store being append-only stops being merely convenient
+  and becomes load-bearing.
 - **Negative:** The preflight now reads run-loop-owned registry state, so the set
   of deployed decision ids is read on the loop and passed in, next to the reference
   records. One more parameter on a function that already takes one.
-- **Follow-ups / risks to watch:** Nothing stops a decision deployment being
-  deleted while a definition is pinned to it. That is ADR-0319's question, not this
-  one's, and it is worth answering separately.
+- **Follow-ups / risks to watch:** The day a decision deployment becomes
+  deletable, a definition pinned to it has to be a reason to refuse — the way a
+  running instance already refuses `DELETE /api/v1/processes/{key}`. It is worth
+  writing that rule down *before* the delete route exists rather than after,
+  because a deployed process carries no fallback for a latest-bound task that
+  resolved away from its own bundle. Deleting the **reference**, which is
+  reachable and confirmed with a generic prompt, moves the other way: a
+  latest-bound task no longer needed it before this deploy and does not need it
+  after, so the reference is less load-bearing than it was, not more. It still
+  decides whether a `deployment`-bound task can be re-deployed, and the prompt
+  does not say so — a warning that named the affected deployed processes would be
+  an improvement, and belongs to whoever owns that dialog.
 
 ## Pros and cons of the options
 
