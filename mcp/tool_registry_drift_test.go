@@ -600,6 +600,16 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
 	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
 
+	// Decision drafts (ADR-draft-decision-drafts): the Modeler's holding place for a
+	// decision an author has not finished. Its whole purpose is that nothing else
+	// resolves it — not the picker, not a publish — so a tool over it would let an
+	// agent write something no other tool can read. An agent that authors a decision
+	// writes the model, which is what atlas_upload_decision_model already does.
+	"POST /api/v1/dmn-drafts":         "a Modeler holding place nothing resolves; an agent writes the model with atlas_upload_decision_model",
+	"GET /api/v1/dmn-drafts":          "a Modeler holding place nothing resolves; an agent reads decisions with atlas_list_decision_refs",
+	"GET /api/v1/dmn-drafts/{id}/xml": "a Modeler holding place nothing resolves; an agent reads the model with atlas_get_decision_model",
+	"DELETE /api/v1/dmn-drafts/{id}":  "discards Modeler work in progress an agent never wrote",
+
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
 	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",

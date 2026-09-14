@@ -34,7 +34,7 @@ var serverStoreDirs = []string{
 	"deployments", "decisions", "jobtypes", "drafts", "playground-scenarios", "forms",
 	"public-links", "projects", "process-docs", "panorama-models",
 	"information-models", "releases", "grant-audit", "api-tokens", "deploy-tokens",
-	"oauth-clients", "oauth-grants", "targets", "dmnrefs", "users", "groups",
+	"oauth-clients", "oauth-grants", "targets", "dmnrefs", "dmn-drafts", "users", "groups",
 	"connectors", "call-overrides", "repository", "inbound-subscriptions", "settings",
 }
 

@@ -1228,7 +1228,16 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
 			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", role: RoleModeler, resp: jsonBody("DMN XML", tObject())}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
-			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
+			summary: "Upload a DMN model file into the local model store and return its reference handle. ?handle= overwrites that model in place. Otherwise the handle is derived from ?name=: with ?from= present (the model handle this editing session opened, empty for a decision that has none) the derived handle must be free, or the upload is refused with 409 rather than silently forking a second copy (ADR-0222); without ?from= a taken handle is suffixed, which is the upsert an import or an agent wants", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
+
+		{"POST", "/api/v1/dmn-drafts", s.handleSaveDmnDraft, apiOp{
+			summary: "Save decision work in progress, without writing the model every reference resolves. Keyed by the decision's reference id, or by a minted id for a decision that is not in the model yet (ADR-draft-decision-drafts)", tag: "Decision drafts", role: RoleModeler, req: jsonBody("Decision draft", tObject()), resp: jsonBody("Saved decision draft", tObject())}},
+		{"GET", "/api/v1/dmn-drafts", s.handleListDmnDrafts, apiOp{
+			summary: "List decision drafts", tag: "Decision drafts", role: RoleModeler, resp: jsonBody("Decision drafts", tArray())}},
+		{"GET", "/api/v1/dmn-drafts/{id}/xml", s.handleDmnDraftXML, apiOp{
+			summary: "Fetch a decision draft's DMN XML", tag: "Decision drafts", role: RoleModeler, resp: xmlBody("DMN XML")}},
+		{"DELETE", "/api/v1/dmn-drafts/{id}", s.handleDeleteDmnDraft, apiOp{
+			summary: "Discard a decision draft — what the editor does once the work has been written to the model, and what \"Discard draft\" does", tag: "Decision drafts", role: RoleModeler, status: http.StatusNoContent}},
 
 		// ADR-0203: configured Workers are the design-time configuration resource;
 		// /api/v1/workers remains the existing runtime/Operations view above.

@@ -224,6 +224,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A decision has a draft, so saving it is no longer the same as writing the model
+  everything resolves.** The decision editor's Save wrote `eligibility.dmn` itself — the
+  model the business-rule-task picker resolves, the model another application's
+  reference may point at, and the model the next Publish ships. There was nowhere to put
+  an unfinished decision, and pressing Save had consequences an author could not see:
+  one half-typed FEEL expression refused a *colleague's* publish of that application,
+  with a message about a decision they had never touched; a table whose output column was
+  still called `result` offered `result` to the next business rule task that adopted it;
+  and the first save of a second decision named *Eligibility* quietly became
+  `eligibility-2.dmn` with its own reference, leaving two rows with the same name.
+
+  The editor now carries the BPMN editor's pairing: **Save** keeps a draft — your work,
+  which nothing else resolves — and **Save to model** writes the handle every reference,
+  every picker and the next Publish resolve. A draft lives in a store of its own, filed
+  into its application, and exists only while it differs from the model: writing the
+  model clears it. A decision that has one is marked **Draft** in the application's
+  artifact list, and a decision that has *only* a draft is listed as its own row saying
+  it is not in the model yet, because a publish ships the model and does not carry it.
+  **Discard draft** goes back to the stored model.
+
+  Writing the model no longer forks a copy either: a handle another decision already
+  holds is refused, named, and offered as a deliberate replacement, the same rule drafts
+  and forms have had since ids became identity. An import, a source-tree apply and the
+  MCP authoring tools are untouched — they never claimed to be editing one decision, and
+  keep the plain upsert.
+  ([ADR-draft-decision-drafts](docs/adr/draft-decision-drafts.md),
+  [ADR-0222](docs/adr/0222-artifact-id-renames.md),
+  [issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **A data object's state is on the diagram, and says whether anything acts on it.** A
   `<dataObjectReference>` carries a data state — the `[ARCHIVIERT]` BPMN writes under
   the box — and Atlas has read it end to end since ADR-0053: the compiler interns it, the
