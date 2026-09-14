@@ -29,7 +29,7 @@ func serviceWithAdmin(t *testing.T) *Service {
 	go loop.Run()
 	t.Cleanup(func() { close(quit) })
 	return New(loop, store, func() int64 { return 1700 },
-		func(p *httpapi.Principal) bool { return p.HasRole("admin") })
+		func(p *httpapi.Principal) bool { return p != nil && p.HasRole("admin") })
 }
 
 // as runs a handler as a given principal.
@@ -375,7 +375,7 @@ func TestProductListingReportsAnUnreadableCatalogueStore(t *testing.T) {
 	go loop.Run()
 	t.Cleanup(func() { close(quit) })
 	s := New(loop, store, func() int64 { return 1700 },
-		func(pr *httpapi.Principal) bool { return pr.HasRole("admin") })
+		func(pr *httpapi.Principal) bool { return pr != nil && pr.HasRole("admin") })
 
 	if rec := as(t, s.HandleListItems, user("usr_a"), "GET", ""); rec.Code != http.StatusInternalServerError {
 		t.Fatalf("code = %d (%s), want 500", rec.Code, rec.Body)

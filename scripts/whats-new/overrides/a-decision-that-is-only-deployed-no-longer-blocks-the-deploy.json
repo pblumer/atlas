@@ -1,0 +1,32 @@
+{
+  "tags": ["Modeler", "Decisions", "Deployment"],
+  "title": {
+    "en": "A decision you just deployed can now be used right away",
+    "de": "Eine soeben ausgelieferte Entscheidung ist jetzt sofort verwendbar"
+  },
+  "summary": {
+    "en": "Since a decision could be deployed on its own from its editor, there was a state the product invited you into and then refused: you deployed a decision, the business rule task's picker offered it, and deploying the process came back with \"no DMN model provides it — create the decision in Atlas, then deploy\". You had just created it. The check exists to stop a step whose evaluation can never happen, and for a task set to Latest that was simply not the case: deploying resolves it to the newest deployed version of that decision, and the copy bundled with the process is never consulted. The check now distinguishes the two bindings. A task set to Deployment still needs the decision as a model, because it evaluates the copy shipped with its own process — and its refusal now says that, rather than telling you to do something you have already done.",
+    "de": "Seit eine Entscheidung aus ihrem Editor heraus allein ausgeliefert werden kann, gab es einen Zustand, in den das Produkt einlud und den es anschliessend verweigerte: Man lieferte eine Entscheidung aus, die Auswahl der Geschäftsregelaufgabe bot sie an — und das Ausliefern des Prozesses endete mit «no DMN model provides it — create the decision in Atlas, then deploy». Erstellt hatte man sie gerade eben. Die Prüfung existiert, um einen Schritt zu verhindern, dessen Auswertung nie stattfinden kann; für eine auf «Latest» gesetzte Aufgabe traf das schlicht nicht zu: Das Ausliefern löst sie auf die neueste ausgelieferte Version dieser Entscheidung auf, die mit dem Prozess mitgelieferte Kopie wird gar nicht herangezogen. Die Prüfung unterscheidet nun die beiden Bindungen. Eine auf «Deployment» gesetzte Aufgabe braucht die Entscheidung weiterhin als Modell, weil sie die mit dem eigenen Prozess ausgelieferte Kopie auswertet — und ihre Ablehnung sagt das jetzt, statt zu etwas aufzufordern, das längst getan ist."
+  },
+  "tutorial": {
+    "en": [
+      "Open a decision in the Modeler and press Deploy.",
+      "Open a diagram, add a business rule task and pick that decision; leave Binding on Latest.",
+      "Press Deploy on the diagram: it goes through, and the task evaluates the decision you deployed.",
+      "Switch Binding to Deployment and the deploy is refused again — that task needs the decision as a model, and the message says why."
+    ],
+    "de": [
+      "Eine Entscheidung im Modeler öffnen und «Deploy» drücken.",
+      "Ein Diagramm öffnen, eine Geschäftsregelaufgabe hinzufügen und diese Entscheidung auswählen; «Binding» auf «Latest» belassen.",
+      "Beim Diagramm «Deploy» drücken: Es geht durch, und die Aufgabe wertet die ausgelieferte Entscheidung aus.",
+      "«Binding» auf «Deployment» umstellen: Das Ausliefern wird wieder abgelehnt — diese Aufgabe braucht die Entscheidung als Modell, und die Meldung sagt, warum."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

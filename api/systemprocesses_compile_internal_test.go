@@ -118,7 +118,7 @@ func TestEveryApprovalKindNamesADeployedProcess(t *testing.T) {
 // reason the system-process test gives: an approximation of the compiler agrees with
 // it right up until it does not.
 func TestEveryExampleCompiles(t *testing.T) {
-	files := modelFiles(t, filepath.Join("..", "examples"))
+	files := bpmnFilesUnder(t, filepath.Join("..", "examples"))
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			b, err := os.ReadFile(file)

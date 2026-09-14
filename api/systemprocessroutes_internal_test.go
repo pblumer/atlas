@@ -76,7 +76,7 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 	// into a reader's instance — a broken path there is found by somebody trying to
 	// learn from it, which is no better a place than an operator's upgrade.
 	calls := 0
-	for _, file := range modelFiles(t, systemProcessesDir, filepath.Join("..", "examples")) {
+	for _, file := range bpmnFilesUnder(t, systemProcessesDir, filepath.Join("..", "examples")) {
 		raw, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatalf("read %s: %v", file, err)
@@ -117,9 +117,14 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 	}
 }
 
-// modelFiles lists every .bpmn under the given roots, recursively, sorted so the
-// failures of a broken scan read the same way twice.
-func modelFiles(t *testing.T, roots ...string) []string {
+// bpmnFilesUnder lists every .bpmn under the given roots, recursively, sorted so
+// the failures of a broken scan read the same way twice.
+//
+// Named for what it walks rather than "modelFiles": the DMN draft tests already
+// hold that name for the handles in the model folder, and two helpers called the
+// same thing in one package is a merge that compiles in each branch and in
+// neither together.
+func bpmnFilesUnder(t *testing.T, roots ...string) []string {
 	t.Helper()
 	var out []string
 	for _, root := range roots {

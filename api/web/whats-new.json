@@ -2,6 +2,154 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "deleting-a-dmn-reference-now-says-what-it-would-break",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Deleting a decision reference now tells you what it costs",
+        "de": "Das Löschen einer Entscheidungs-Referenz sagt jetzt, was es kostet"
+      },
+      "summary": {
+        "en": "The question before deleting a DMN reference was \"are you sure?\" with one reassuring sentence about the model file, which is not the thing at stake. What a reference decides is whether anything can still be deployed against the decisions in that model: a business rule task set to Deployment evaluates the copy shipped with its own process, and that copy comes from the reference. Delete the last one and that process can never be deployed again — a refusal that turns up weeks later, without a word about the deletion that caused it. The confirm now runs the same check the deploy runs and lists what it finds: which decisions lose their last model, and which deployed processes and drafts could then not be deployed, each with its binding. It also says what is not at risk, because that is the actual fear: running instances are untouched. Nothing is blocked — the reference stays yours to delete — and a draft in an application you cannot see is counted without being named.",
+        "de": "Vor dem Löschen einer DMN-Referenz stand «Sind Sie sicher?» mit einem beruhigenden Satz über die Modelldatei — also nicht über das, worum es geht. Eine Referenz entscheidet darüber, ob überhaupt noch etwas gegen die Entscheidungen dieses Modells ausgeliefert werden kann: Eine auf «Deployment» gesetzte Geschäftsregelaufgabe wertet die Kopie aus, die mit ihrem eigenen Prozess ausgeliefert wird, und diese Kopie stammt aus der Referenz. Löscht man die letzte, lässt sich dieser Prozess nie wieder ausliefern — eine Ablehnung, die Wochen später auftaucht, ohne ein Wort über die Löschung, die sie verursacht hat. Der Bestätigungsdialog führt jetzt dieselbe Prüfung durch wie das Ausliefern und listet auf, was er findet: welche Entscheidungen ihr letztes Modell verlieren und welche ausgelieferten Prozesse und Entwürfe danach nicht mehr ausgeliefert werden könnten, jeweils mit ihrer Bindung. Er sagt auch, was nicht gefährdet ist — denn das ist die eigentliche Sorge: Laufende Instanzen bleiben unberührt. Blockiert wird nichts; die Referenz bleibt Ihre Entscheidung. Ein Entwurf in einer Anwendung, die Sie nicht sehen können, wird gezählt, aber nicht benannt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open an application in the Modeler and find a DMN reference in its artifact list.",
+          "Choose ⋯ → Delete on it.",
+          "The confirm names the decisions that would lose their last model, and every deployed process or draft that could then not be deployed.",
+          "Cancel, and the reference stays. Nothing about the check changes anything."
+        ],
+        "de": [
+          "Eine Anwendung im Modeler öffnen und in ihrer Artefaktliste eine DMN-Referenz suchen.",
+          "Dort «⋯ → Delete» wählen.",
+          "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
+          "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-dmn-model-whose-last-reference-is-deleted-is-no-longer-los",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision model you removed the reference to can be found again",
+        "de": "Ein Entscheidungsmodell ohne Referenz ist wieder auffindbar"
+      },
+      "summary": {
+        "en": "Everything in Atlas that shows decisions — the picker, the catalogue, an application's artifact list, a publish — reads DMN references, not the model files themselves. So deleting a reference took the model out of the product while leaving it on disk: still there, reachable only by a handle you had to remember, and invisible everywhere. The usual recovery was to upload the file again, which filed a second copy under a slightly different name. Not assigned — the place artifacts that belong to no application already live — now also lists the stored models nothing points at, with what each one declares and an Add reference action that puts a reference back on the existing file rather than copying it. A model that no longer compiles is listed too, because somebody who has to fix it has to find it first. And the delete confirm now says where the file goes instead of assuring you it is unaffected.",
+        "de": "Alles, was in Atlas Entscheidungen anzeigt — die Auswahl, der Katalog, die Artefaktliste einer Anwendung, ein Publish — liest DMN-Referenzen, nicht die Modelldateien selbst. Das Löschen einer Referenz nahm das Modell also aus dem Produkt heraus und liess es auf der Platte zurück: weiterhin vorhanden, nur noch über einen Handle erreichbar, den man sich merken musste, und überall unsichtbar. Die übliche Rettung bestand darin, die Datei erneut hochzuladen — womit eine zweite Kopie unter leicht abweichendem Namen entstand. «Nicht zugeordnet» — der Ort, an dem Artefakte ohne Anwendung ohnehin schon liegen — führt nun auch die gespeicherten Modelle auf, auf die nichts zeigt, mit dem, was jedes davon deklariert, und einer Aktion «Add reference», die eine Referenz auf die bestehende Datei zurücksetzt, statt sie zu kopieren. Ein Modell, das nicht mehr kompiliert, wird ebenfalls aufgeführt, denn wer es reparieren soll, muss es zuerst finden. Und der Löschdialog sagt jetzt, wohin die Datei geht, statt zu versichern, sie sei nicht betroffen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Modeler, open Not assigned.",
+          "Stored decision models that no reference points at are listed there, marked No reference.",
+          "Choose ⋯ → Add reference on one to put it back in the catalogue under a name you pick.",
+          "It reappears in the business rule task's decision picker straight away."
+        ],
+        "de": [
+          "Im Modeler «Nicht zugeordnet» öffnen.",
+          "Gespeicherte Entscheidungsmodelle, auf die keine Referenz zeigt, sind dort aufgeführt und mit «No reference» gekennzeichnet.",
+          "Bei einem davon «⋯ → Add reference» wählen, um es unter einem selbst gewählten Namen zurück in den Katalog zu holen.",
+          "Es erscheint unmittelbar wieder in der Entscheidungsauswahl der Geschäftsregelaufgabe."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-that-is-only-deployed-no-longer-blocks-the-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision you just deployed can now be used right away",
+        "de": "Eine soeben ausgelieferte Entscheidung ist jetzt sofort verwendbar"
+      },
+      "summary": {
+        "en": "Since a decision could be deployed on its own from its editor, there was a state the product invited you into and then refused: you deployed a decision, the business rule task's picker offered it, and deploying the process came back with \"no DMN model provides it — create the decision in Atlas, then deploy\". You had just created it. The check exists to stop a step whose evaluation can never happen, and for a task set to Latest that was simply not the case: deploying resolves it to the newest deployed version of that decision, and the copy bundled with the process is never consulted. The check now distinguishes the two bindings. A task set to Deployment still needs the decision as a model, because it evaluates the copy shipped with its own process — and its refusal now says that, rather than telling you to do something you have already done.",
+        "de": "Seit eine Entscheidung aus ihrem Editor heraus allein ausgeliefert werden kann, gab es einen Zustand, in den das Produkt einlud und den es anschliessend verweigerte: Man lieferte eine Entscheidung aus, die Auswahl der Geschäftsregelaufgabe bot sie an — und das Ausliefern des Prozesses endete mit «no DMN model provides it — create the decision in Atlas, then deploy». Erstellt hatte man sie gerade eben. Die Prüfung existiert, um einen Schritt zu verhindern, dessen Auswertung nie stattfinden kann; für eine auf «Latest» gesetzte Aufgabe traf das schlicht nicht zu: Das Ausliefern löst sie auf die neueste ausgelieferte Version dieser Entscheidung auf, die mit dem Prozess mitgelieferte Kopie wird gar nicht herangezogen. Die Prüfung unterscheidet nun die beiden Bindungen. Eine auf «Deployment» gesetzte Aufgabe braucht die Entscheidung weiterhin als Modell, weil sie die mit dem eigenen Prozess ausgelieferte Kopie auswertet — und ihre Ablehnung sagt das jetzt, statt zu etwas aufzufordern, das längst getan ist."
+      },
+      "link": {
+        "label": "ADR-0322",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0322-deploying-one-decision.md"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions",
+        "Deployment"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and press Deploy.",
+          "Open a diagram, add a business rule task and pick that decision; leave Binding on Latest.",
+          "Press Deploy on the diagram: it goes through, and the task evaluates the decision you deployed.",
+          "Switch Binding to Deployment and the deploy is refused again — that task needs the decision as a model, and the message says why."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und «Deploy» drücken.",
+          "Ein Diagramm öffnen, eine Geschäftsregelaufgabe hinzufügen und diese Entscheidung auswählen; «Binding» auf «Latest» belassen.",
+          "Beim Diagramm «Deploy» drücken: Es geht durch, und die Aufgabe wertet die ausgelieferte Entscheidung aus.",
+          "«Binding» auf «Deployment» umstellen: Das Ausliefern wird wieder abgelehnt — diese Aufgabe braucht die Entscheidung als Modell, und die Meldung sagt, warum."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-whose-logic-is-a-literal-expression-no-longer-cov",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision whose logic is a literal expression no longer covers the editor's own bar.",
+        "de": "A decision whose logic is a literal expression no longer covers the editor's own bar."
+      },
+      "summary": {
+        "en": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport.",
+        "de": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport."
+      },
+      "link": {
+        "label": "ADR-0320",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0320-the-decision-editor-is-a-page.md"
+      }
+    },
+    {
       "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
       "version": "Unreleased",
       "date": null,
@@ -217,17 +365,17 @@
       }
     },
     {
-      "id": "a-dmn-decision-is-a-durable-versioned-deployment-artifact-an",
+      "id": "a-process-document-now-shows-the-decision-behind-each-busine",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "Publish a decision on its own, and keep the version a process was deployed with",
-        "de": "Eine Entscheidung eigenständig veröffentlichen — und die Version behalten, mit der ein Prozess bereitgestellt wurde"
+        "en": "The process document now contains the decision tables too",
+        "de": "Die Prozessdokumentation enthält jetzt auch die Entscheidungstabellen"
       },
       "summary": {
-        "en": "A decision used to be something a process carried. An application containing only a decision table published without complaint and put nothing into the engine, and after a restart there was still nothing there. A decision is now published in its own right: it gets a version, it is stored with the model it was published from, and it comes back after a restart with no file to re-import. An application can be built from decisions alone — «Create new → Decision (DMN)» opens the decision editor and files the result under the application. The second change matters more, and it is a change of behaviour: a business rule task set to «latest» now settles which version it uses at the moment the process is deployed, and keeps it. Publishing a newer decision no longer moves processes that are already running — deploy the process again when you want it to follow. Processes deployed before this release keep the behaviour they were deployed with until you redeploy them.",
-        "de": "Eine Entscheidung war bisher etwas, das ein Prozess mit sich trug. Eine Anwendung, die nur eine Entscheidungstabelle enthielt, liess sich anstandslos veröffentlichen, brachte aber nichts in die Engine, und nach einem Neustart war weiterhin nichts da. Eine Entscheidung wird jetzt eigenständig veröffentlicht: Sie erhält eine Version, wird zusammen mit dem Modell gespeichert, aus dem sie veröffentlicht wurde, und ist nach einem Neustart wieder da, ohne dass eine Datei erneut eingelesen werden muss. Eine Anwendung kann allein aus Entscheidungen bestehen — «Create new → Decision (DMN)» öffnet den Entscheidungseditor und legt das Ergebnis unter der Anwendung ab. Die zweite Änderung wiegt schwerer, und sie ändert das Verhalten: Ein Business-Rule-Task mit Bindung «latest» legt jetzt im Moment der Bereitstellung fest, welche Version er verwendet, und behält sie. Das Veröffentlichen einer neueren Entscheidung verschiebt bereits laufende Prozesse nicht mehr — wer das will, stellt den Prozess erneut bereit. Prozesse, die vor dieser Version bereitgestellt wurden, behalten ihr bisheriges Verhalten, bis sie erneut bereitgestellt werden."
+        "en": "A process document already reproduced what each step runs — a script task's source, a branch's condition — verbatim, so a reader outside Atlas could check it rather than take it on trust. The one step it said nothing about was the business rule task, which is the one whose whole behaviour lives outside the diagram: the section named the step and stopped, and the rules that actually decide the outcome were somewhere else. Each such section now carries the call as the diagram holds it — which decision, how it binds and what that means, the result variable, and the values fed in — and, under it, the decision's rule table, set exactly as the decision's own document sets it. The rules are read from the model behind the decision where there is one and from the deployed version otherwise, and the document names which of the two it read. A step evaluated by an external temis worker says so and names the worker instead of pretending to hold rules it does not have.",
+        "de": "Eine Prozessdokumentation gab bisher schon wieder, was ein Schritt ausführt — den Quelltext eines Skript-Tasks, die Bedingung einer Verzweigung — und zwar wörtlich, damit Lesende ausserhalb von Atlas es prüfen können, statt es glauben zu müssen. Der einzige Schritt, zu dem sie nichts sagte, war die Geschäftsregelaufgabe — ausgerechnet jener, dessen Verhalten vollständig ausserhalb des Diagramms liegt: Der Abschnitt nannte den Schritt und hörte auf, die tatsächlich entscheidenden Regeln standen anderswo. Jeder solche Abschnitt führt nun den Aufruf so auf, wie das Diagramm ihn hält — welche Entscheidung, wie sie gebunden ist und was das bedeutet, die Ergebnisvariable und die übergebenen Werte — und darunter die Regeltabelle der Entscheidung, gesetzt genau wie in deren eigener Dokumentation. Die Regeln stammen aus dem Modell hinter der Entscheidung, sofern es eines gibt, sonst aus der ausgelieferten Version; die Dokumentation nennt, welche der beiden gelesen wurde. Ein Schritt, der über einen externen temis-Worker ausgewertet wird, sagt das und nennt den Worker, statt Regeln vorzugeben, die er nicht hält."
       },
       "link": {
         "label": "Changelog",
@@ -235,20 +383,21 @@
       },
       "tags": [
         "Modeler",
-        "Decisions"
+        "Decisions",
+        "Documentation"
       ],
       "tutorial": {
         "en": [
-          "Open an application in the Modeler and choose Create new → Decision (DMN). Model the table and save; the decision is filed under the application, no BPMN diagram needed.",
-          "Press Publish. The release now lists the decision it deployed, with its version, beside any processes.",
-          "Deploy a process whose business rule task is bound «latest». It is now tied to exactly that version of the decision.",
-          "Edit the decision and publish again: a new version appears, and the process you already deployed keeps answering with the old one. Deploy the process again to move it forward."
+          "Open a diagram with a business rule task in the Modeler.",
+          "Choose ⋯ → Documentation and press Publish version.",
+          "Open the PDF: the task's section now names the decision, its binding and its inputs, and sets the rule table underneath.",
+          "The line above the table says where the rules came from — the model behind the decision, or the deployed version when there is no model."
         ],
         "de": [
-          "Eine Anwendung im Modeler öffnen und Create new → Decision (DMN) wählen. Die Tabelle modellieren und speichern; die Entscheidung wird unter der Anwendung abgelegt, ganz ohne BPMN-Diagramm.",
-          "Publish drücken. Die Freigabe führt die bereitgestellte Entscheidung samt Version nun neben allfälligen Prozessen auf.",
-          "Einen Prozess bereitstellen, dessen Business-Rule-Task auf «latest» gebunden ist. Er ist jetzt an genau diese Version der Entscheidung gebunden.",
-          "Die Entscheidung bearbeiten und erneut veröffentlichen: Es entsteht eine neue Version, und der bereits bereitgestellte Prozess antwortet weiterhin mit der alten. Für den Wechsel den Prozess erneut bereitstellen."
+          "Ein Diagramm mit einer Geschäftsregelaufgabe im Modeler öffnen.",
+          "«⋯ → Documentation» wählen und «Publish version» drücken.",
+          "Das PDF öffnen: Der Abschnitt des Schritts nennt nun die Entscheidung, ihre Bindung und ihre Eingaben und setzt darunter die Regeltabelle.",
+          "Die Zeile über der Tabelle sagt, woher die Regeln stammen — aus dem Modell hinter der Entscheidung oder aus der ausgelieferten Version, wenn es kein Modell gibt."
         ]
       },
       "try": {
@@ -258,141 +407,6 @@
         },
         "route": "#/modeler"
       }
-    },
-    {
-      "id": "a-capability-s-service-levels-are-measured-not-only-declared",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Check a service level against what actually ran",
-        "de": "Ein Service Level gegen das prüfen, was tatsächlich lief"
-      },
-      "summary": {
-        "en": "A business capability could say what it has promised — decide within five days, verify within ten minutes — and nothing checked it. The promise sat in the record and the evidence sat in the engine, and no one page held both. Now you can ask for a capability's measurement over a window and get back, for each process that performs it, how often each ending occurred, how often work was cancelled, how long cases took, and what share of them met each promise. Two things are worth knowing before you read a number. The counts of endings and cancellations are running totals since the process was first deployed; only the timings are limited to the window you asked for, and the answer says so beside each figure. And a promise is only checked where somebody wrote its threshold as a number: «within five business days» stays as written, because Atlas will not decide what a business day means in your organisation. Add the number and the promise starts being measured.",
-        "de": "Eine Geschäftsfähigkeit konnte festhalten, was sie zugesagt hat — in fünf Tagen entscheiden, in zehn Minuten prüfen — und niemand glich das ab. Die Zusage stand im Datensatz, die Belege lagen in der Engine, und keine Ansicht hielt beides. Jetzt lässt sich die Messung einer Fähigkeit über einen Zeitraum abrufen: je ausführendem Prozess, wie oft welches Ende eintrat, wie oft Arbeit abgebrochen wurde, wie lange Fälle dauerten, und welcher Anteil davon jede Zusage eingehalten hat. Zwei Dinge sollte man wissen, bevor man eine Zahl liest. Die Zählungen von Enden und Abbrüchen sind laufende Summen seit der ersten Bereitstellung des Prozesses; nur die Zeiten beziehen sich auf den angefragten Zeitraum, und die Antwort sagt das bei jeder Zahl dazu. Und eine Zusage wird nur dort geprüft, wo jemand ihren Schwellwert als Zahl hinterlegt hat: «innert fünf Arbeitstagen» bleibt so stehen, weil Atlas nicht entscheidet, was ein Arbeitstag in Ihrer Organisation ist. Ergänzt man die Zahl, wird die Zusage gemessen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Architecture",
-        "API"
-      ],
-      "tutorial": {
-        "en": [
-          "Give an SLA on the capability a machine-readable threshold: add thresholdSeconds beside the wording it already carries.",
-          "Ask for the measurement: GET /api/v1/capabilities/{key}/measurement?windowDays=30. The window is required — a reading over all history is not offered, because it costs seconds once a process has run a hundred thousand cases.",
-          "Read countedBasis and walkedBasis in the answer before presenting anything: the counts are all-time, the timings are windowed.",
-          "Look at notMeasured to see which declared figures were left alone, and why."
-        ],
-        "de": [
-          "Einem SLA der Fähigkeit einen maschinenlesbaren Schwellwert geben: thresholdSeconds neben den bestehenden Wortlaut setzen.",
-          "Die Messung abrufen: GET /api/v1/capabilities/{key}/measurement?windowDays=30. Der Zeitraum ist Pflicht — eine Auswertung über die gesamte Historie wird nicht angeboten, weil sie Sekunden kostet, sobald ein Prozess hunderttausend Fälle hinter sich hat.",
-          "Vor jeder Darstellung countedBasis und walkedBasis lesen: Die Zählungen gelten seit Beginn, die Zeiten nur für den Zeitraum.",
-          "In notMeasured nachsehen, welche deklarierten Kennzahlen unberührt blieben und warum."
-        ]
-      }
-    },
-    {
-      "id": "atlas-now-reads-the-difference-between-what-your-processes-b",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See what you have planned but not built yet",
-        "de": "Sehen, was geplant, aber noch nicht gebaut ist"
-      },
-      "summary": {
-        "en": "Your processes say what your data actually is; your information model says what you want it to be. Atlas now shows the difference, in two lists that are never mixed: what is planned and not built — your backlog, and explicitly not a defect — and what is built and not described, which usually means write it down. It also tells you plainly what it never compared, because derivation cannot see a business key or an attribute's type, so a short list is not a clean bill. Nothing is changed in either document.",
-        "de": "Ihre Prozesse sagen, was Ihre Daten tatsächlich sind; Ihr Informationsmodell sagt, was sie sein sollen. Atlas zeigt jetzt die Differenz, in zwei Listen, die nie vermischt werden: was geplant und nicht gebaut ist — Ihr Backlog, und ausdrücklich kein Fehler — und was gebaut und nicht beschrieben ist, was meist heisst: aufschreiben. Es sagt auch offen, was es nie verglichen hat, denn ein Geschäftsschlüssel oder ein Attributtyp lässt sich aus Prozessen nicht ablesen; eine kurze Liste ist also kein Freispruch. An beiden Dokumenten wird nichts geändert."
-      },
-      "link": {
-        "label": "ADR-0301",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and press As built…, then pick your application.",
-          "Follow Planned against built in the header — or go straight there from the model list.",
-          "Left is your backlog: states, members and classes the model declares that no process builds yet.",
-          "Read the box at the bottom before concluding anything: it names what the comparison never looked at."
-        ],
-        "de": [
-          "Unter Daten auf As built… klicken und die Anwendung wählen.",
-          "Oben Planned against built folgen — oder direkt aus der Modellliste dorthin gehen.",
-          "Links steht Ihr Backlog: Zustände, Attribute und Klassen, die das Modell deklariert und noch kein Prozess baut.",
-          "Den Kasten unten lesen, bevor Sie etwas schliessen: er nennt, was der Vergleich nie angesehen hat."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Link a diagram to the capability it draws",
-        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
-      },
-      "summary": {
-        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
-        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
-          "Open the Panorama model and select the Capability element that draws it.",
-          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
-          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
-        ],
-        "de": [
-          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
-          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
-          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
-          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
-        ]
-      }
-    },
-    {
-      "id": "a-value-stream-is-an-element-you-can-draw",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Draw a value stream",
-        "de": "Einen Wertstrom zeichnen"
-      },
-      "summary": {
-        "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
-        "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
     }
   ]
 }

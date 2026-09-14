@@ -32,6 +32,10 @@ type Service struct {
 	// rather than a role name so this package never carries a second copy of the
 	// role vocabulary — a list kept in two places is a list that eventually
 	// disagrees with itself.
+	// admin answers "does this caller pass as an administrator here". It is called
+	// with a **nil principal** when nobody is signed in, so every implementation
+	// must be nil-safe — and the server's says yes in that case, because with
+	// enforcement off there is nobody to be rather than nobody who may.
 	admin func(*httpapi.Principal) bool
 
 	// Limits are the installation's resource budgets. New sets them to
@@ -65,18 +69,45 @@ func (s *Service) budgets() limits.Limits {
 // same run-loop closure as the write it guards, rather than needing a second
 // rendezvous the loop cannot give it.
 func (s *Service) mayEdit(c Catalog, p *httpapi.Principal) bool {
+	// Asked first, and deliberately before the nil guard below: with enforcement
+	// off there is no identity to carry, and every other area of Atlas reads that
+	// as "everything is permitted" (Server.isAdmin, requireAdmin, the drawer's
+	// mayUse). The catalogue read it as "nobody may do anything", so on a default
+	// single-binary install a catalogue could be created and then never changed —
+	// it answered 404 to its own author from the next request onward.
+	if s.admin(p) {
+		return true
+	}
 	// Fail closed: a request that arrived without an identity is not the owner of
 	// a catalogue that happens to have none.
 	if p == nil {
 		return false
 	}
-	if s.admin(p) {
-		return true
-	}
 	if c.OwnerID != "" && c.OwnerID == p.UserID {
 		return true
 	}
 	return grantedRole(c, p) == RoleEditor
+}
+
+// mayShare reports whether p may change who else may maintain this catalogue.
+//
+// Narrower than mayEdit on purpose, and the distinction is ADR-0071's: an editor
+// may read and write, the *owner* may read, write and share. Letting an editor
+// rewrite the member list makes the grant self-amplifying — whoever is given
+// editor can hand editor to anybody, and the owner's choice of who maintains their
+// catalogue stops being the owner's. It is the same rule projects enforce with
+// checkProjectRole(..., ScopeRoleOwner), and the catalogue was the one object that
+// did not.
+//
+// Admin passes, as it passes everywhere.
+func (s *Service) mayShare(c Catalog, p *httpapi.Principal) bool {
+	if s.admin(p) {
+		return true
+	}
+	if p == nil {
+		return false
+	}
+	return c.OwnerID != "" && c.OwnerID == p.UserID
 }
 
 // grantedRole returns the strongest member role this principal holds on the
@@ -236,10 +267,11 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 
 	p := httpapi.PrincipalFrom(r.Context())
 	var (
-		got     Catalog
-		found   bool
-		allowed bool
-		loadErr error
+		got         Catalog
+		found       bool
+		allowed     bool
+		mayNotShare bool
+		loadErr     error
 	)
 	s.loop.Do(func() {
 		got, found, loadErr = s.store.Catalog(id)
@@ -271,6 +303,13 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 			got.Groups = in.Groups
 		}
 		if in.Members != nil {
+			// Sharing is the owner's, not an editor's (mayShare). Refused rather
+			// than silently dropped: a maintainer who rewrote the list and was told
+			// "saved" would believe a grant exists that does not.
+			if !s.mayShare(got, p) {
+				mayNotShare = true
+				return
+			}
 			got.Members = in.Members
 		}
 		if in.Edges != nil {
@@ -286,6 +325,11 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+id)
+	case mayNotShare:
+		// Said plainly, because the difference is the point: this caller may change
+		// the catalogue and may not change who else can.
+		httpapi.Error(w, http.StatusForbidden,
+			"changing who maintains catalogue "+id+" is the owner's; an editor may change the catalogue but not its member list")
 	default:
 		httpapi.JSON(w, http.StatusOK, got)
 	}

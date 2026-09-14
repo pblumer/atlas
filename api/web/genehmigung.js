@@ -24,6 +24,7 @@ import { applyAccent } from './theme.js';
 const STRINGS = {
   de: {
     'appr.title': 'Genehmigungen',
+    'appr.back': 'Zurück zu Atlas',
     'appr.none': 'Sie haben nichts zu genehmigen.',
     'appr.none.hint': 'Offene Anträge erscheinen hier, sobald Sie zuständig sind.',
     'appr.for': 'Bestellt für',
@@ -45,6 +46,7 @@ const STRINGS = {
   },
   en: {
     'appr.title': 'Approvals',
+    'appr.back': 'Back to Atlas',
     'appr.none': 'You have nothing to approve.',
     'appr.none.hint': 'Open requests appear here once they are yours to decide.',
     'appr.for': 'Ordered for',
@@ -313,10 +315,15 @@ function render() {
       el('div', { class: 'brand' },
         renderMark(a),
         el('h1', {}, a ? textOf(a.catalogTexts, t('appr.title')) : t('appr.title'))),
-      el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
-        class: l === locale ? 'lang on' : 'lang',
-        onclick: () => setLocale(l),
-      }, l.toUpperCase())))),
+      el('div', { class: 'headright' },
+        // Same reason as the portal's: an approver arrives here from a mail link or
+        // from the menu, and a page of its own with no way back strands whoever
+        // followed it.
+        el('a', { class: 'backlink', href: '/index.html' }, '\u2190 ', t('appr.back')),
+        el('div', { class: 'langs' }, Object.keys(STRINGS).map((l) => el('button', {
+          class: l === locale ? 'lang on' : 'lang',
+          onclick: () => setLocale(l),
+        }, l.toUpperCase()))))),
     state.error ? el('p', { class: 'error' }, state.error) : null,
     state.stale ? el('p', { class: 'muted' }, t('appr.stale')) : null,
     state.truncated ? el('p', { class: 'muted' }, t('appr.more')) : null,

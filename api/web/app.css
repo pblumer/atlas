@@ -402,6 +402,31 @@ textarea::placeholder {
 .field input[type="text"].id-taken:focus { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.18); }
 .chip.id-pending { border-style: dashed; border-color: var(--accent); }
 
+/* Decision work that has not been written to the model every reference resolves
+   (ADR-0321). It marks the editor's bar and the Explorer row, and
+   it is a statement of fact rather than a warning — a draft is where an unfinished
+   decision is meant to be — so it reads as an accent, not as an error. */
+.chip.draft-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+
+/* The version a decision is deployed at, on the decision editor's bar
+   (ADR-0322). It is the counterpart of the "Deployment
+   <key>" crumb a BPMN diagram opened from a deployment carries, and it states
+   something that is live in the engine — so it reads solid and settled, next to
+   the dashed draft chip which states the opposite. */
+.chip.deployed-chip { border-color: var(--ok); color: var(--ok); background: var(--ok-soft, transparent); }
+
+/* Trying a decision against sample inputs, in the decision editor
+   (ADR-0326). It is the .start-panel strip the
+   BPMN editor opens for a deploy, plus room for the answer: a row of typed inputs,
+   then the outputs and the rule matrix below them. The matrix can be wider than the
+   window on a table with many inputs, so the panel scrolls rather than the page. */
+.dmn-test-panel { max-height: 46vh; overflow: auto; }
+.dmn-test-inputs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.dmn-test-inputs .field { margin: 0; min-width: 160px; }
+.dmn-test-inputs .field span .muted { font-weight: normal; }
+.dmn-test-result { margin-top: 10px; }
+.dmn-test-result .res { margin-bottom: 10px; }
+
 /* A searchable declaration the model cannot honour (ADR-0244). Red is certain — the
    deploy refuses a repeated name, and a structured value can never be indexed. Amber is
    a question: the diagram does not write that name, but something outside the model
@@ -2092,6 +2117,23 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   pointer-events: auto; cursor: default;
 }
 
+/* A data object's data state, written under its name (drawDataStateLabels). Set in the
+   type bpmn-js gives an external label — 11px Arial — so the two lines read as one
+   caption rather than as a label with an annotation stuck under it. The wrapper is a
+   zero-size pin at the anchor and blocks nothing, so clicks fall through to the box; the
+   text alone takes pointer events, for its hover title.
+   A state nothing writes is set back: it never reaches the compiled model, so the
+   diagram should not present it with the same weight as one the engine acts on. The
+   reduced weight is deliberately readable rather than faint — it is a difference in
+   role, not a disabled control. */
+.data-state-label { position: relative; width: 0; height: 0; pointer-events: none; }
+.data-state-label .ds-text {
+  position: absolute; left: 0; top: 0; transform: translateX(-50%);
+  white-space: nowrap; font: 11px/1.2 Arial, sans-serif; color: var(--text);
+  pointer-events: auto; cursor: default;
+}
+.data-state-label .ds-text.ds-unwritten { color: var(--muted); }
+
 /* ---------- Live collaboration sessions (ADR-0140) ---------- */
 /* A floating roster of co-editors, centered over the canvas, plus a lock badge on
    each element another participant is editing and a brief pulse on a remote edit. */
@@ -2681,33 +2723,30 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 
-/* Embedded DMN editor overlay (ADR-0062) — a full-screen modal hosting the
-   vendored dmn-js modeler over the current view (e.g. the BPMN editor). */
-.dmn-overlay {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(20, 22, 26, 0.45);
-  display: flex; padding: 24px;
-}
-.dmn-modal {
-  margin: auto; width: 100%; max-width: 1200px; height: 100%;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-}
-.dmn-modal-head {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; border-bottom: 1px solid var(--border);
-}
-.dmn-views { display: flex; gap: 4px; flex-wrap: wrap; }
-.dmn-view-tab {
-  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
-  padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;
-}
-.dmn-view-tab:hover { color: var(--text); }
-.dmn-view-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+/* The decision editor (ADR-0320). It is a page like
+   the BPMN and form editors, so its frame — .editor, .editor-bar, .etabs,
+   .editor-body — is theirs; only the canvas, the properties column and the hint
+   below them are its own. It was a full-screen modal over the current view until a
+   decision became a deployable artifact in its own right (ADR-0319). */
 .dmn-body { flex: 1; min-height: 0; display: flex; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
+/* dmn-js uses `editor` as a state class inside its own components — the literal
+   expression view is `<div class="literal-expression textarea editor">`, and the
+   DRD's decision-name field carries it too. Atlas's `.editor` is the full-bleed
+   page shell (`position: fixed; inset: var(--topbar-h) 0 0 0`), so those elements
+   were being pinned over the whole viewport: opening a decision whose logic is a
+   literal expression drew its CodeMirror across the bar, and the view tabs, Save,
+   Deploy and Test underneath it could not be clicked. A fixed element is not
+   clipped by the canvas's `overflow: hidden`, so nothing else stopped it.
+   Undoing the four properties that rule sets, inside the dmn-js subtree only,
+   leaves dmn-js's own styling for the class untouched. */
+.dmn-js-parent .editor {
+  position: static;
+  inset: auto;
+  display: block;
+  background: none;
+}
 /* The Camunda-style properties panel column (DRG view). dmn-js-properties-panel
    ships its own internal styling; we only size the column and separate it. */
 .dmn-props { width: 320px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--bg); }
