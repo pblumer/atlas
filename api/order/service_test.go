@@ -931,8 +931,8 @@ func TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence(t *testing.T) {
 // turn "nobody wired the inventory" into a right that is silently never
 // recorded, which is the one failure an access record must not have. These say
 // out loud that a given test does not look at that.
-func ignoreGrant(Grant) error           { return nil }
-func ignoreRevoke(string, string) error { return nil }
+func ignoreGrant(Grant) error                          { return nil }
+func ignoreRevoke(string, string, int64, string) error { return nil }
 
 // holdsNothing is the inventory of somebody with no rights yet, which is what
 // every test that is not about the basket's second resolution assumes.

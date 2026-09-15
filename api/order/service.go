@@ -76,7 +76,7 @@ type Service struct {
 	// service's loop closure — writing an engine fact runs the processor, which
 	// is a visit to the loop of its own, and a nested Do would deadlock.
 	grant  func(Grant) error
-	revoke func(principal, itemID string) error
+	revoke func(principal, itemID string, at int64, by string) error
 	// held answers what one principal already holds, as a set of item ids. It is
 	// what makes the basket's second resolution possible — an item the recipient
 	// already has and may not have twice is ordered as skipped rather than
@@ -107,7 +107,7 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 	wake func(message, orderID string, vars map[string]string) error,
 	portalBase func() string,
 	grant func(Grant) error,
-	revoke func(principal, itemID string) error,
+	revoke func(principal, itemID string, at int64, by string) error,
 	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
 		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase,
@@ -552,7 +552,20 @@ func (s *Service) recordInventory(o Order, itemID string, status LineStatus) err
 			OrderID: o.ID, At: o.UpdatedAt, Until: until,
 		})
 	case StatusReturned:
-		return s.revoke(o.Recipient, itemID)
+		// The moment is the order's, not a fresh clock reading: it is the same
+		// frozen, command-time value the grant above uses, so the pair of history
+		// timestamps comes from one source. The actor is whoever asked for the
+		// return, carried on the line since then — what completed it is a
+		// deprovisioning process, and naming that as the decider would attribute a
+		// decision to a robot.
+		var by string
+		for _, l := range o.Lines {
+			if l.ItemID == itemID {
+				by = l.ReturnedBy
+				break
+			}
+		}
+		return s.revoke(o.Recipient, itemID, o.UpdatedAt, by)
 	}
 	return nil
 }

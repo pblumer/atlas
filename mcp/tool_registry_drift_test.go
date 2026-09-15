@@ -559,6 +559,19 @@ var mcpOmittedRoutes = map[string]string{
 	// to a person. One route, two modes, and a tool cannot expose only the safe one.
 	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
 
+	// Access history (ADR-draft-entitlement-history). Omitted, and the reason is
+	// not the inventory's.
+	//
+	// The inventory routes are withheld because they are other people's access.
+	// This one is withheld because of what it is *for*: it is the record an access
+	// review reads, and the one structure in the portal built to outlive every
+	// retention rule around it. A tool that could read it lets an assistant
+	// assemble a person's whole access biography — every right, every period, every
+	// decider — in one call, which is a dossier rather than an answer. The `?at=`
+	// mode is sharper still: it reconstructs a past day, which is precisely the
+	// evidence somebody would want before disputing it.
+	"GET /api/v1/entitlements/history": "a person's access history is a biography, and the route reconstructs past days on request",
+
 	// Expiry (ADR-draft-time-bounded-entitlements). Omitted for the reason GET
 	// /api/v1/inventory is: it is a list of other people's access, with the dates
 	// their access ends attached. That it happens to be read-only does not make it

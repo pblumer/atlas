@@ -140,6 +140,18 @@ const (
 	// clear. Appended last so every prior value type keeps its numeric value on the
 	// log.
 	VTEntitlement
+
+	// VTEntitlementHistory is a hold that has ended: the inventory row as it stood,
+	// plus when and why it stopped being recorded
+	// (ADR-draft-entitlement-history).
+	//
+	// A separate type rather than a flag on VTEntitlement, because the two answer
+	// different questions and a value that means one thing on one event and another
+	// on another is one nobody can read. It is also the only value type in the
+	// portal that is written and never updated: a hold ends once.
+	//
+	// Appended last so every prior value type keeps its numeric value on the log.
+	VTEntitlementHistory
 )
 
 func (t ValueType) String() string {
@@ -162,6 +174,8 @@ func (t ValueType) String() string {
 		return "Incident"
 	case VTEntitlement:
 		return "Entitlement"
+	case VTEntitlementHistory:
+		return "EntitlementHistory"
 	case VTSignal:
 		return "Signal"
 	case VTError:

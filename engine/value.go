@@ -27,6 +27,10 @@ type inflightValue struct {
 	// emit (ADR-0312). Like migration it never
 	// rides token movement, so it costs the hot path the field and nothing else.
 	entitlement model.EntitlementValue
+	// entitlementEnd rides only on the revocation command and the event it emits
+	// (ADR-draft-entitlement-history). Like entitlement it never rides token
+	// movement, so it costs the hot path the field and nothing else.
+	entitlementEnd model.EntitlementHistoryValue
 	// migration rides only on the operator-initiated migrate command and the event it
 	// emits (ADR-0162). Its mapping is a slice, so — like the decision a job completion
 	// carries — it is a non-hot-path payload: no token movement ever populates it. It is
@@ -81,6 +85,8 @@ func (v *inflightValue) asValue(vt model.ValueType) model.Value {
 		return &v.variableIndex
 	case model.VTEntitlement:
 		return &v.entitlement
+	case model.VTEntitlementHistory:
+		return &v.entitlementEnd
 	}
 	return nil
 }
@@ -169,6 +175,10 @@ func inflightFromRecord(rec model.Record) inflightValue {
 	case model.VTEntitlement:
 		if v, ok := rec.Value.(*model.EntitlementValue); ok {
 			iv.entitlement = *v
+		}
+	case model.VTEntitlementHistory:
+		if v, ok := rec.Value.(*model.EntitlementHistoryValue); ok {
+			iv.entitlementEnd = *v
 		}
 	}
 	return iv

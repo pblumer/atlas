@@ -14,7 +14,7 @@ import (
 // what was revoked, and an error it can be told to answer with.
 type recordedInventory struct {
 	granted []Grant
-	revoked [][2]string
+	revoked []revocation
 	err     error
 }
 
@@ -26,11 +26,22 @@ func (i *recordedInventory) grant(g Grant) error {
 	return nil
 }
 
-func (i *recordedInventory) revoke(principal, itemID string) error {
+// revocation is what the inventory was told to close: who held what, when it
+// ended, and who asked. The last two are recorded rather than dropped so a test
+// can hold the service to them — they are what the history row is built from
+// (ADR-draft-entitlement-history), and a fixture that discarded them could not
+// tell a correct attribution from a missing one.
+type revocation struct {
+	principal, itemID string
+	at                int64
+	by                string
+}
+
+func (i *recordedInventory) revoke(principal, itemID string, at int64, by string) error {
 	if i.err != nil {
 		return i.err
 	}
-	i.revoked = append(i.revoked, [2]string{principal, itemID})
+	i.revoked = append(i.revoked, revocation{principal, itemID, at, by})
 	return nil
 }
 
@@ -128,7 +139,7 @@ func TestAReturnedLineStopsBeingHeld(t *testing.T) {
 		t.Fatalf("Get: %v", err)
 	}
 	// A return is reported only by the revocation that was asked for, so ask.
-	if got, err = Returning(got, "laptop", 1650); err != nil {
+	if got, err = Returning(got, "laptop", 1650, "usr_ada"); err != nil {
 		t.Fatalf("Returning: %v", err)
 	}
 	if err := store.Save(got); err != nil {
@@ -139,7 +150,8 @@ func TestAReturnedLineStopsBeingHeld(t *testing.T) {
 		"id", "ord_1", "item", "laptop"); rec.Code != http.StatusOK {
 		t.Fatalf("report = %d: %s", rec.Code, rec.Body)
 	}
-	if len(inv.revoked) != 1 || inv.revoked[0] != [2]string{"usr_ada", "laptop"} {
+	if len(inv.revoked) != 1 || inv.revoked[0].principal != "usr_ada" ||
+		inv.revoked[0].itemID != "laptop" {
 		t.Fatalf("revoked = %v, want the recipient's laptop", inv.revoked)
 	}
 	if len(inv.granted) != 0 {

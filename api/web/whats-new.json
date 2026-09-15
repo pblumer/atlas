@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-hold-that-ends-now-leaves-a-record-that-it-existed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A hold that ends now leaves a record that it existed.",
+        "de": "A hold that ends now leaves a record that it existed."
+      },
+      "summary": {
+        "en": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all.",
+        "de": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
       "version": "Unreleased",
       "date": null,
@@ -270,49 +288,6 @@
           "de": "Processes öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "deleting-a-dmn-reference-now-says-what-it-would-break",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Deleting a decision reference now tells you what it costs",
-        "de": "Das Löschen einer Entscheidungs-Referenz sagt jetzt, was es kostet"
-      },
-      "summary": {
-        "en": "The question before deleting a DMN reference was \"are you sure?\" with one reassuring sentence about the model file, which is not the thing at stake. What a reference decides is whether anything can still be deployed against the decisions in that model: a business rule task set to Deployment evaluates the copy shipped with its own process, and that copy comes from the reference. Delete the last one and that process can never be deployed again — a refusal that turns up weeks later, without a word about the deletion that caused it. The confirm now runs the same check the deploy runs and lists what it finds: which decisions lose their last model, and which deployed processes and drafts could then not be deployed, each with its binding. It also says what is not at risk, because that is the actual fear: running instances are untouched. Nothing is blocked — the reference stays yours to delete — and a draft in an application you cannot see is counted without being named.",
-        "de": "Vor dem Löschen einer DMN-Referenz stand «Sind Sie sicher?» mit einem beruhigenden Satz über die Modelldatei — also nicht über das, worum es geht. Eine Referenz entscheidet darüber, ob überhaupt noch etwas gegen die Entscheidungen dieses Modells ausgeliefert werden kann: Eine auf «Deployment» gesetzte Geschäftsregelaufgabe wertet die Kopie aus, die mit ihrem eigenen Prozess ausgeliefert wird, und diese Kopie stammt aus der Referenz. Löscht man die letzte, lässt sich dieser Prozess nie wieder ausliefern — eine Ablehnung, die Wochen später auftaucht, ohne ein Wort über die Löschung, die sie verursacht hat. Der Bestätigungsdialog führt jetzt dieselbe Prüfung durch wie das Ausliefern und listet auf, was er findet: welche Entscheidungen ihr letztes Modell verlieren und welche ausgelieferten Prozesse und Entwürfe danach nicht mehr ausgeliefert werden könnten, jeweils mit ihrer Bindung. Er sagt auch, was nicht gefährdet ist — denn das ist die eigentliche Sorge: Laufende Instanzen bleiben unberührt. Blockiert wird nichts; die Referenz bleibt Ihre Entscheidung. Ein Entwurf in einer Anwendung, die Sie nicht sehen können, wird gezählt, aber nicht benannt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open an application in the Modeler and find a DMN reference in its artifact list.",
-          "Choose ⋯ → Delete on it.",
-          "The confirm names the decisions that would lose their last model, and every deployed process or draft that could then not be deployed.",
-          "Cancel, and the reference stays. Nothing about the check changes anything."
-        ],
-        "de": [
-          "Eine Anwendung im Modeler öffnen und in ihrer Artefaktliste eine DMN-Referenz suchen.",
-          "Dort «⋯ → Delete» wählen.",
-          "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
-          "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

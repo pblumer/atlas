@@ -14,6 +14,43 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A hold that ends now leaves a record that it existed.** The inventory is present tense by
+  construction — a grant writes a row, a revocation deletes it — and the order behind a right
+  is deleted by retention long before the right ends, which is why the inventory is engine
+  state at all. Put those two facts together and a third follows that nothing had a place for:
+  when a right ends, *everything* about it goes, and the estate can no longer say whether the
+  person ever held the thing, under whose approval, or for how long.
+
+  It got worse as detection got better. Every finding the last three slices added is about a
+  **held** right, and every remedy ends the hold — so "this person held `create-supplier` and
+  `approve-payment` together for six months" is a finding that ceases to exist the moment
+  anybody acts on it. **The remedy destroyed the evidence of the problem**, and an estate that
+  remembers only the mistakes nobody fixed has the record backwards.
+
+  Closing a hold now writes a row into a new engine-state column family, in the same
+  transaction that deletes the live entitlement. It **copies** the hold rather than referring
+  to it, because there is nothing left to refer to.
+
+  **The reason it ended changes what the row means.** A `returned` hold is evidence the person
+  *had* the access; a `corrected` one — reconciliation found the target system did not have it
+  — is evidence only that Atlas *claimed* they did, which is all `handleRevokeDiscrepancy`
+  ever decided. Writing the second as the first would assert, in a record kept for years, that
+  somebody had access nobody can show they had. Every row carries the word and the flag.
+
+  `GET /api/v1/entitlements/history` lists what has ended, and `?at=` answers the question an
+  access review actually asks — what the record said on a given day, drawn from the ended holds
+  *and* from what is still held. It is not an MCP tool: an assistant that could read it would
+  assemble a person's whole access biography in one call, and `?at=` reconstructs a past day.
+
+  The fold reads the hold through its own transaction rather than taking a frozen copy, which
+  stays inside I4/I6 — those require determinism, not the absence of reads — and is what makes
+  a double revocation write one row instead of two. `Line.ReturnedBy` joins `DecidedBy` and
+  `AbandonedBy`, recorded when a return is *asked for*: what completes one is a deprovisioning
+  process, and naming that as the decider would attribute a decision to a robot.
+
+  This is the first slice in this line of work that needs **no modelled process at all** — the
+  record accrues as a consequence of what the portal already does.
+
 - **The catalogue can now say what must never be held together.** Everything the portal had
   learned about access was **detective or temporal**: the commissioning load records what was
   there, reconciliation checks whether the record is true, recertification asks whether it is

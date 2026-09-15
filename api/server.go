@@ -1503,8 +1503,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			})
 			return s.drive()
 		},
-		func(principal, itemID string) error {
-			s.do(func() { s.proc.RevokeEntitlement(principal, itemID) })
+		// And the closing of a hold. The reason is Returned and never anything
+		// else: this callback is reached only from a line that reached Returned,
+		// which is a right that was given back. The correction path — a right
+		// reconciliation found the target system does not have — goes through
+		// handleRevokeDiscrepancy and says so there, because the two rows assert
+		// different things (ADR-draft-entitlement-history).
+		func(principal, itemID string, at int64, by string) error {
+			s.do(func() {
+				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
+			})
 			return s.drive()
 		},
 		// And what they already hold, for the basket's second resolution. Read off
