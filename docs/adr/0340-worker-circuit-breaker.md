@@ -1,4 +1,4 @@
-# ADR-DRAFT: An outage stops at the worker, not at every token
+# ADR-0340: An outage stops at the worker, not at every token
 
 - **Status:** Proposed
 - **Implementation:** Not started
