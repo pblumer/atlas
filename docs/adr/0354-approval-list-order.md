@@ -1,4 +1,4 @@
-# ADR-DRAFT: An approval list is a work list, so it starts where nobody has looked
+# ADR-0354: An approval list is a work list, so it starts where nobody has looked
 
 - **Status:** Accepted
 - **Implementation:** Landed

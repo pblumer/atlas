@@ -185,7 +185,7 @@ function renderMark(approval) {
 const state = {
   approvals: [],
   // query and sort are how an approver finds one decision among forty
-  // (ADR-draft-approval-list-order). They live here and not in the URL: this page
+  // (ADR-0354). They live here and not in the URL: this page
   // is reached from a mail link that already carries ?order=, and a second set of
   // parameters on the same link would be two ways to say where somebody is.
   query: '',
