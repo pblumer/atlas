@@ -104,6 +104,12 @@ const STRINGS = {
     'info.yes': 'ja',
     'info.no': 'nein',
     'services.none': 'Sie beziehen zurzeit keine Leistungen.',
+    'fav.mark': 'Als Favorit merken',
+    'fav.clear': 'Favorit entfernen',
+    'fav.only': 'Nur Favoriten',
+    'fav.none': 'Sie haben nichts als Favorit gemerkt.',
+    'fav.unresolved': 'Favoriten, die dieser Katalog nicht führt',
+    'fav.full': 'Mehr Favoriten als ein Konto führen darf. Entfernen Sie einen, bevor Sie einen weiteren merken.',
   },
   en: {
     'portal.title': 'Service portal',
@@ -191,6 +197,12 @@ const STRINGS = {
     'info.yes': 'yes',
     'info.no': 'no',
     'services.none': 'You currently hold no services.',
+    'fav.mark': 'Mark as favourite',
+    'fav.clear': 'Remove favourite',
+    'fav.only': 'Favourites only',
+    'fav.none': 'You have marked nothing as a favourite.',
+    'fav.unresolved': 'Favourites this catalogue does not carry',
+    'fav.full': 'That is more favourites than one account may keep. Remove one before marking another.',
   },
 };
 
@@ -330,6 +342,15 @@ const state = {
   filters: { company: '', person: '', date: '', order: '', status: '' },
   // info is the service whose details are open, empty for none.
   info: '',
+  // favourites is what this person marked, as ids — a bookmark and never an
+  // entitlement (ADR-draft-favourites). Held as a Set because every row asks
+  // "is this one of mine" while the cascade renders.
+  favourites: new Set(),
+  // favouritesOnly narrows the cascade to marked products, which is what a
+  // shortcut list is for. It is a filter over the columns rather than a fourth
+  // destination in the nav: a favourite is still a product in the catalogue, and
+  // pulling it onto its own screen would hide what it is part of.
+  favouritesOnly: false,
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -415,6 +436,8 @@ async function load() {
   state.orders = await api('/api/v1/orders');
   const inv = await api('/api/v1/inventory');
   state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
+  const favs = await api('/api/v1/portal/favourites');
+  state.favourites = new Set((favs && favs.itemIds) || []);
   render();
 }
 
@@ -580,6 +603,53 @@ function infoPanel(item) {
     heldPill(item));
 }
 
+// star marks or unmarks one product.
+//
+// It writes through to the server and takes the answer as the new truth rather
+// than toggling locally and hoping: a favourites list is the one thing on this
+// page a second tab can be changing at the same time, and the route answers with
+// the whole list precisely so this does not have to guess.
+async function star(id) {
+  const marked = state.favourites.has(id);
+  // Painted before the request, so a star responds to the press. The answer
+  // replaces it either way, so a failure corrects it rather than leaving a lie.
+  if (marked) state.favourites.delete(id); else state.favourites.add(id);
+  render();
+  try {
+    const out = await api(`/api/v1/portal/favourites/${encodeURIComponent(id)}`,
+      { method: marked ? 'DELETE' : 'PUT' });
+    state.favourites = new Set((out && out.itemIds) || []);
+  } catch (e) {
+    // Put it back and say what happened. A star that silently returned to where
+    // it was is the kind of small wrongness somebody stops trusting the page over.
+    if (marked) state.favourites.add(id); else state.favourites.delete(id);
+    state.error = `${t('portal.failed')} ${e.message}`;
+  }
+  render();
+}
+
+// starButton is the affordance the row carries.
+function starButton(id) {
+  const on = state.favourites.has(id);
+  return el('button', {
+    class: 'sq',
+    'aria-pressed': on ? 'true' : 'false',
+    'aria-label': t(on ? 'fav.clear' : 'fav.mark'),
+    title: t(on ? 'fav.clear' : 'fav.mark'),
+    onclick: () => star(id),
+  }, on ? '\u2605' : '\u2606');
+}
+
+// keepFavourites narrows a column when the favourites filter is on.
+//
+// A whole is kept when it is marked *or* when something under it is: hiding a
+// bundle whose service somebody starred would hide the way to reach the star.
+function keepFavourites(rel, entries) {
+  if (!state.favouritesOnly) return entries;
+  return entries.filter((e) => state.favourites.has(e.id)
+    || [...state.favourites].some((f) => carriedBy(rel, e.id, f)));
+}
+
 function renderCatalogue() {
   if (!state.catalog) {
     return el('div', { class: 'empty' },
@@ -605,7 +675,7 @@ function renderCatalogue() {
 
   const bundleCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.bundle')),
-    bundles.map((b) => cell({
+    keepFavourites(rel, bundles).map((b) => cell({
       text: name(b.id),
       open: state.bundle === b.id,
       onOpen: () => {
@@ -613,30 +683,47 @@ function renderCatalogue() {
         state.offering = '';
         render();
       },
-      trail: toggle(rel, b.id, false),
+      trail: el('span', {}, starButton(b.id), ' ', toggle(rel, b.id, false)),
     })));
 
   const offeringCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.offering')),
-    offerings.map((o) => cell({
+    keepFavourites(rel, offerings).map((o) => cell({
       text: name(o.id),
       open: state.offering === o.id,
       onOpen: () => {
         state.offering = state.offering === o.id ? '' : o.id;
         render();
       },
-      trail: toggle(rel, o.id, o.integral),
+      trail: el('span', {}, starButton(o.id), ' ', toggle(rel, o.id, o.integral)),
     })));
 
   const serviceCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.service')),
-    services.map((sv) => cell({
+    keepFavourites(rel, services).map((sv) => cell({
       text: name(sv.id),
       lead: toggle(rel, sv.id, sv.integral),
-      trail: infoButton(sv.id),
+      trail: el('span', {}, starButton(sv.id), ' ', infoButton(sv.id)),
     })));
 
+  // Favourites this catalogue does not carry. Counted rather than hidden in
+  // silence: a mark that stopped appearing with no word looks like the page lost
+  // it, and the person cannot tell that from a catalogue that moved under them.
+  const unresolved = [...state.favourites].filter((id) => !by[id]).length;
+
   return el('div', {},
+    el('div', { class: 'favbar' },
+      el('label', {},
+        el('input', {
+          type: 'checkbox', id: 'fav-only',
+          ...(state.favouritesOnly ? { checked: 'checked' } : {}),
+          onchange: (e) => { state.favouritesOnly = e.target.checked; render(); },
+        }),
+        ' ', t('fav.only')),
+      state.favouritesOnly && !state.favourites.size
+        ? el('span', { class: 'muted' }, t('fav.none')) : null,
+      unresolved
+        ? el('span', { class: 'muted' }, `${t('fav.unresolved')}: ${unresolved}`) : null),
     el('div', { class: 'cascade' }, category, bundleCol, offeringCol, serviceCol),
     state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(by[state.info])) : null);
 }

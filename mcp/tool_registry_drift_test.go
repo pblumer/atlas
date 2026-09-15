@@ -559,6 +559,20 @@ var mcpOmittedRoutes = map[string]string{
 	// to a person. One route, two modes, and a tool cannot expose only the safe one.
 	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
 
+	// Favourites (ADR-draft-favourites). Omitted, and not for a disclosure reason:
+	// the routes only ever touch the caller's own list, so there is nothing here to
+	// read about anybody else.
+	//
+	// A favourite is a **navigation aid for a person in front of a screen**. It
+	// exists so somebody can find a product again among hundreds. An assistant does
+	// not navigate a screen — it can list the catalogue and name a product directly
+	// — so a tool here would buy nothing on the read side, and on the write side it
+	// would let a robot set a preference into somebody's portal that they did not
+	// choose and have no obvious way to attribute.
+	"GET /api/v1/portal/favourites":             "a bookmark list is a navigation aid for a person at a screen, which an assistant does not need",
+	"PUT /api/v1/portal/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
+	"DELETE /api/v1/portal/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
+
 	// Access history (ADR-draft-entitlement-history). Omitted, and the reason is
 	// not the inventory's.
 	//

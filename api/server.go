@@ -367,6 +367,7 @@ type Server struct {
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
+	favourites       *favouriteStore     // one list of marked products per account (ADR-draft-favourites)
 	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-0321)
 	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
@@ -1239,6 +1240,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	favourites, err := newFavouriteStore(filepath.Join(dataDir, "favourites"))
+	if err != nil {
+		return nil, err
+	}
 	dmnDrafts, err := newDmnDraftStore(filepath.Join(dataDir, "dmn-drafts"))
 	if err != nil {
 		return nil, err
@@ -1371,6 +1376,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
+		favourites:        favourites,
 		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
