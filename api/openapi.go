@@ -728,6 +728,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/derived", s.handleDerivedModel, apiOp{
 			summary: "Derive an application's information model from the processes that use it — the classes their data objects carry, the members their writes target, and the states and transitions they actually reach, with what could not be read (a business key above all) stated beside it. A reading of what is built, never written into an authored model (?applicationId= required)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Derived information model", tObject())}},
+		{"GET", "/api/v1/infomodel/classes", s.handleInfomodelCatalog, apiOp{
+			summary: "The class catalogue: every business object, value type and enumeration across the information models you may view, with how many processes use each, which members and states they touch, and how many places the vocabulary itself uses it. One list across applications, because a vocabulary maintained per application is still one vocabulary; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Every modelled class, with where each is used", tArray())}},
 		{"POST", "/api/v1/infomodel/models", s.infomodel.HandleCreate, apiOp{
 			summary: "Start an empty information model for a process application", tag: "Information model", role: RoleModeler,
 			req: jsonBody("New information model", schemaObj(map[string]any{
@@ -757,6 +760,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/models/{id}/schema", s.infomodel.HandleSchema, apiOp{
 			summary: "Project one class (?class=Order) to a JSON Schema — the derived, read-only contract a value of that class is checked against, together with what the projection could not carry", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("JSON Schema projection", tObject())}},
+		{"GET", "/api/v1/infomodel/models/{id}/usage", s.handleInfomodelUsage, apiOp{
+			summary: "Where one class (?class=Order) is used and how: every deployed process that declares, reads, writes or stores it — with the element, the member a write targets and the state it moves the object into — plus every place the vocabulary itself uses it (an attribute typed with it, an association, a lifecycle taking its states from it, a store holding it). Computed on every call and stored nowhere", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Where one class is used, and how", tObject())}},
 
 		// The business architecture (ADR-0305):
 		// what the organisation must be able to do, above the processes that do it.

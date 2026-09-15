@@ -14,6 +14,40 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A business object says where it is used.** The information model gave a data object's
+  `itemSubjectRef` a type to resolve against, and every reading built on it since has run
+  from the process outwards. The vocabulary itself had none: somebody about to rename
+  `Order.total`, retire an enumeration literal or drop a state could see what an Order *is*
+  and nothing whatever about what the change would break.
+
+  **Data › Business objects** is the vocabulary read as a vocabulary — every class of every
+  information model you can see, business objects, value types and enumerations together, in
+  the console's shared sort-and-filter table. One list across applications, because two
+  applications each modelling an `Order` is the failure the information model exists to
+  prevent, one level up, and a per-model view cannot show it. Each row carries what the class
+  holds — its members, its business key, its states — and how much of the estate depends on
+  it.
+
+  Opening one answers the question a change actually asks. Every deployed process that
+  declares a data object of that class, and **every element that reads it, writes it, writes
+  one member of it, moves it into a state, or names the store it is kept in** — with the
+  element, the member and the state named, so the answer is precise enough to act on. Beside
+  it, the model's own uses: an attribute typed with it, an association, a lifecycle taking its
+  states from it, a store holding it. Those are listed apart rather than added in, because an
+  «enumeration» is normally declared by no data object at all — a reading that counted only
+  processes would report the vocabulary's most shared elements as dead, and somebody would
+  eventually act on that.
+
+  Two things it deliberately does not do. It does not guess: a data object with no declared
+  type is not read as a use of the class its name resembles, because an inference in a list
+  somebody is about to act on is worse than a gap. And it reads only what this installation
+  runs — the deployed, active, latest version of each process — so a Modeler draft is not in
+  it, which the page says where it makes the claim rather than leaving it to be assumed.
+  `GET /api/v1/infomodel/classes` and `GET /api/v1/infomodel/models/{id}/usage?class=Order`
+  serve both readings; both are computed on every call and stored nowhere. Both are MCP tools
+  too — `atlas_class_catalog` and `atlas_class_usage` — because an agent proposing a rename is
+  exactly the caller that cannot otherwise see what it would break.
+
 - **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
   the portal's three models were decided and has had no writer, which meant the inventory
   could only ever contain what Atlas itself had granted. On the day an installation goes
