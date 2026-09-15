@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// Closing a hold, at the layer that does it (ADR-draft-entitlement-history).
+// Closing a hold, at the layer that does it (ADR-0346).
 //
 // The engine has its own tests for the fold, but coverage is measured per
 // package: a function in this package that only another package's tests reach

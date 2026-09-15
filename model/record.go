@@ -143,7 +143,7 @@ const (
 
 	// VTEntitlementHistory is a hold that has ended: the inventory row as it stood,
 	// plus when and why it stopped being recorded
-	// (ADR-draft-entitlement-history).
+	// (ADR-0346).
 	//
 	// A separate type rather than a flag on VTEntitlement, because the two answer
 	// different questions and a value that means one thing on one event and another

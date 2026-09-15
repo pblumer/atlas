@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product may narrow its catalogue's audience, because a person only ever sees one catalogue
+# ADR-0347: A product may narrow its catalogue's audience, because a person only ever sees one catalogue
 
 - **Status:** Accepted
 - **Implementation:** Landed

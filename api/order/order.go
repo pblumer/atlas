@@ -230,7 +230,7 @@ type Line struct {
 	// attributing the decision to it would name a robot where a decision was made.
 	//
 	// It is what the history row carries into the years after this order is deleted
-	// (ADR-draft-entitlement-history): without it the record can say a right ended
+	// (ADR-0346): without it the record can say a right ended
 	// and not who ended it, which is half of what an access review asks.
 	ReturnedBy string `json:"returnedBy,omitempty"`
 	DecidedAt  int64  `json:"decidedAt,omitempty"`

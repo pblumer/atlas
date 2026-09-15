@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// What a hold leaves behind, end to end (ADR-draft-entitlement-history).
+// What a hold leaves behind, end to end (ADR-0346).
 //
 // The claim: the remedy must not destroy the evidence of the problem. Everything
 // the portal learned to detect is about a *held* right, and every remedy ends the

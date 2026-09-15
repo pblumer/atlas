@@ -573,7 +573,7 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/portal/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
 	"DELETE /api/v1/portal/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
 
-	// Access history (ADR-draft-entitlement-history). Omitted, and the reason is
+	// Access history (ADR-0346). Omitted, and the reason is
 	// not the inventory's.
 	//
 	// The inventory routes are withheld because they are other people's access.

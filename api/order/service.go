@@ -49,7 +49,7 @@ type Service struct {
 	// deadlock.
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error)
 	// groupsOf answers which groups somebody belongs to, for the eligibility check
-	// (ADR-draft-product-eligibility). It asks about the **recipient**, who is not
+	// (ADR-0347). It asks about the **recipient**, who is not
 	// the caller and therefore has no principal in the request — a manager ordering
 	// for a new hire is the ordinary case, and checking the caller's groups would
 	// refuse exactly that.
@@ -244,7 +244,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// And who may receive it at all. Beside the conflict check rather than
 		// before the catalogue gate, because it is the same kind of rule read at the
 		// same moment: what the release says about this basket
-		// (ADR-draft-product-eligibility). The catalogue's audience has already
+		// (ADR-0347). The catalogue's audience has already
 		// decided whether this shop is theirs; this decides whether this shelf is.
 		if barred = ineligibleIn(rel, ordered, recipientGroups); barred != nil {
 			return

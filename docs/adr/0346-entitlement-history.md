@@ -1,4 +1,4 @@
-# ADR-DRAFT: The remedy must not destroy the evidence, so a hold that ends leaves a row
+# ADR-0346: The remedy must not destroy the evidence, so a hold that ends leaves a row
 
 - **Status:** Accepted
 - **Implementation:** Landed

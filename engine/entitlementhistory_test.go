@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// What a hold leaves behind (ADR-draft-entitlement-history).
+// What a hold leaves behind (ADR-0346).
 //
 // The claim under this whole family is that the remedy must not destroy the
 // evidence of the problem. These hold the fold to it at the level where it is

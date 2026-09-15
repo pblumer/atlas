@@ -953,5 +953,5 @@ func holdsNothing(string) (map[string]bool, error) { return nil, nil }
 // group at all. It is the right default because it is the one that proves the
 // rule is *narrowing* — an item naming no eligible group must still be orderable
 // by somebody in no groups, or every catalogue in existence would stop working
-// the day this landed (ADR-draft-product-eligibility).
+// the day this landed (ADR-0347).
 func inAnyGroup(string) ([]string, error) { return nil, nil }

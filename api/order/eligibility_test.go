@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// Who may receive what (ADR-draft-product-eligibility).
+// Who may receive what (ADR-0347).
 
 func aReleaseWith(items ...catalog.Item) catalog.Release {
 	return catalog.Release{ID: "rel_1", Items: items}
