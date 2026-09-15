@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **"Who is this?" failing for two different reasons was answered as though it were
+  one.** Resolving a person fails because the name is nobody's — the caller's input is
+  wrong — or because the user store could not be read, which is the server's fault. Both
+  came back the same way, and in both directions: an order for a misspelled recipient
+  answered **500**, and the approval inbox turned an unreadable user store into a **404**
+  saying the person does not exist. An operator was told their colleague has no account
+  when what happened is that Atlas could not look.
+
+  `httpapi.ErrNoSuchPrincipal` now says which. An order for a name nobody holds is
+  **400**, with the sentence naming the four spellings that resolve; an unreadable store
+  stays **500**; the approval inbox keeps its **404** for a name nobody holds and stops
+  giving it for a store it could not read. A sentinel and not a match on the error text,
+  because a status code decided by string comparison changes the day somebody improves a
+  message.
+
 - **An order could be placed in anybody's name.** `HandlePlace` took the recipient straight
   out of the request body and asked nothing about it, so any account that could reach a
   catalogue could put an order — and an approval in that person's manager's inbox, a line in
@@ -40,6 +55,41 @@ _Changed_ / _Removed_ for each version.
   is the name on the order, not the product.
 
 ### Added
+
+- **The recipient of an order is picked, not typed — and the field is only shown to
+  accounts that may use it.** Ordering in somebody else's name became a first-class
+  screen gated on the operator role, and the field it goes through took a free string
+  and offered no help finding one. The comment above it said a picker would mean
+  shipping an organisation chart.
+
+  **That was wrong, and it is worth saying so rather than quietly changing it.** Atlas
+  already serves exactly this list, to any authenticated caller, at
+  `GET /api/v1/principals` — the directory every member and assignee picker in the
+  product reads. It carries a type, an opaque id and a display name, and deliberately
+  nothing else: no address, no roles, no reporting line. There is no hierarchy in it to
+  disclose, and a hierarchy is what an organisation chart is.
+
+  The field now suggests from that list as somebody types, shows the person's name, and
+  sends the id — a display name is not something the server can resolve, and an id is
+  not something a person can check. Typing over a picked name un-picks it, or the order
+  would be placed for whoever was chosen before under a name no longer on screen. Free
+  text still resolves, by principal id, username, directory id or mail address.
+
+  Groups are in that directory and are not offered here: an entitlement is held by a
+  person, so a group would be a recipient the server refuses after the basket is
+  already full.
+
+  **The scope is the role and not an "area of responsibility"**, and that is settled
+  rather than left open: an area of responsibility means a reporting line, and Atlas
+  has no reporting line. The `superior` approval kind has the caller name the superior
+  precisely because a directory lookup belongs to a modelled process and not to the
+  engine. Scoping a person search to a hierarchy would mean inventing the hierarchy
+  first, and an invented hierarchy decides who may act in whose name.
+
+  **The page also learns who is reading it.** It fetched a catalogue, a release, orders,
+  the inventory and favourites and never asked what the account may do, so the recipient
+  field was drawn for every visitor and answered 403 for almost all of them — which
+  reads as a permission that failed rather than one they never had.
 
 - **A catalogue can be searched, and by words it does not display.** The portal browsed
   and did not find. Four columns cascade from the catalogue to the individual service,

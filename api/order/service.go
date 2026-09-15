@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -53,6 +54,11 @@ type Service struct {
 	// the caller and therefore has no principal in the request — a manager ordering
 	// for a new hire is the ordinary case, and checking the caller's groups would
 	// refuse exactly that.
+	//
+	// It answers [httpapi.ErrNoSuchPrincipal] for a name nobody holds, which is a
+	// different failure from a store it could not read: the first refuses the
+	// order as bad input, the second as a server fault, and telling them apart is
+	// what stops a misspelled recipient reading as an outage.
 	groupsOf func(string) ([]string, error)
 	// mayOrderForOthers answers whether this caller may place an order naming
 	// somebody else as the recipient (ADR-0349).
@@ -236,7 +242,17 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	// unreadable answer refuses the order rather than placing one — a restriction
 	// that fails open is not a restriction.
 	recipientGroups, groupErr := s.groupsOf(recipient)
-	if groupErr != nil {
+	switch {
+	case errors.Is(groupErr, httpapi.ErrNoSuchPrincipal):
+		// A recipient nobody holds is the caller's mistake, and it was being answered
+		// as the server's. That matters beyond the status code: an order naming a
+		// person who does not exist puts an approval in nobody's inbox, provisions
+		// against nothing, and leaves a right attached to a string — so the refusal
+		// has to be readable by whoever typed the name, not by whoever reads the
+		// server log.
+		httpapi.Error(w, http.StatusBadRequest, groupErr.Error())
+		return
+	case groupErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError,
 			"check who the recipient is: "+groupErr.Error())
 		return

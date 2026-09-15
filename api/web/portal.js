@@ -82,6 +82,9 @@ const STRINGS = {
     'for.approve': 'Genehmigen für:',
     'for.search': 'Person suchen',
     'for.self': 'mich selbst',
+    'for.hits': 'Personen',
+    'for.none': 'Niemand mit diesem Namen. Kennung, Benutzername oder Mailadresse geht auch.',
+    'for.clear': 'Wieder für mich selbst bestellen',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
     'tbl.placed': 'bestellt',
@@ -181,6 +184,9 @@ const STRINGS = {
     'for.approve': 'Approve for:',
     'for.search': 'Find a person',
     'for.self': 'myself',
+    'for.hits': 'people',
+    'for.none': 'Nobody by that name. An id, username or mail address works too.',
+    'for.clear': 'Order for myself again',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
     'tbl.placed': 'ordered',
@@ -346,9 +352,10 @@ const state = {
   // a fourth nav entry: the mockups make it the next step of the same screen,
   // reached and left by the action row.
   inBasket: false,
-  // forWhom is the recipient an order is placed for, empty for oneself. A
-  // principal id or username — the server resolves it, and this page deliberately
-  // does not try to, because it has no directory of its own to search.
+  // forWhom is the recipient an order is placed for, empty for oneself. What is
+  // sent: a principal id picked from the directory, or whatever was typed — the
+  // server resolves a principal id, a username, a directory id or a mail address
+  // (ADR-draft-person-picker).
   forWhom: '',
   // filters is the orders table's per-column search, keyed by column.
   filters: { company: '', person: '', date: '', order: '', status: '' },
@@ -367,6 +374,22 @@ const state = {
   // it is set the cascade is replaced by a flat list of matches, each showing the
   // path it sits on (ADR-0355).
   query: '',
+  // forWhomLabel is what the field shows while forWhom holds what is sent. The
+  // two differ after somebody picks from the directory: the field reads "Ada
+  // Lovelace" and the order carries the principal id, because a display name is
+  // not something the server can resolve and an id is not something a person can
+  // read (ADR-draft-person-picker).
+  forWhomLabel: '',
+  // people is the principals directory, users only, loaded once and only for a
+  // caller who may order in somebody else's name. It is the list every member and
+  // assignee picker in Atlas already reads (ADR-0073).
+  people: [],
+  // mayOrderForOthers mirrors the gate the server enforces
+  // (ADR-0349). The page asks so it can leave the field
+  // out, rather than offering something that answers 403 — a field somebody may
+  // not use is worse than no field, because it looks like a permission that
+  // failed rather than one they never had.
+  mayOrderForOthers: false,
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -454,7 +477,44 @@ async function load() {
   state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
   const favs = await api('/api/v1/portal/favourites');
   state.favourites = new Set((favs && favs.itemIds) || []);
+  await loadWhoIAm();
   render();
+}
+
+// loadWhoIAm asks what this account may do, and nothing else.
+//
+// The page had no idea who was reading it. That was fine while every screen was
+// the same for everybody, and stopped being fine the moment ordering in somebody
+// else's name became a role: the field was drawn for every visitor and answered
+// 403 for almost all of them. Roles come from the same record the session
+// snapshots them from, so what the page hides and what the server refuses cannot
+// drift apart.
+async function loadWhoIAm() {
+  state.mayOrderForOthers = false;
+  state.people = [];
+  let me;
+  try {
+    me = await api('/api/v1/auth/me');
+  } catch {
+    // Unreadable is not the same as forbidden, and the honest response to not
+    // knowing is to offer less rather than to guess more: the ordinary portal
+    // still works, ordering for somebody else simply is not offered.
+    return;
+  }
+  const roles = (me && me.user && me.user.roles) || [];
+  // With enforcement off there is nobody to be, exactly as the server has it.
+  state.mayOrderForOthers = !me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin');
+  if (!state.mayOrderForOthers) return;
+  try {
+    const all = await api('/api/v1/principals');
+    // Users only. A group cannot receive an order: an entitlement is held by a
+    // person, and offering a team would produce a recipient the server refuses.
+    state.people = (all || []).filter((e) => e.type === 'user');
+  } catch {
+    // The field still takes a typed id. A picker that could not load is a
+    // convenience missing, not a screen broken.
+    state.people = [];
+  }
 }
 
 // products returns what a person picks from: the items nothing else includes.
@@ -1280,24 +1340,100 @@ function renderNav() {
     link('services', 'nav.services'),
     el('span', { class: 'spacer' }),
     el('span', { class: 'who' },
-      el('span', {}, state.forWhom.trim() || t('for.self')),
+      el('span', {}, state.forWhomLabel.trim() || t('for.self')),
       el('span', { class: 'avatar', 'aria-hidden': 'true' }, '\u25cb')));
 }
 
-// renderForWhom is the mockups' "Bestellen für: [Person suchen]".
+// --- Ordering in somebody else's name ---------------------------------------
 //
-// A plain field and not a picker, because this page has no directory to search:
-// the server resolves a principal id, a username, a directory id or a mail
-// address, and offering a dropdown would mean shipping a person search that
-// answers for everybody in the estate — which is an organisation chart, and the
-// reason the reminder route keeps that answer to operators.
+// The mockups' "Bestellen für: [Person suchen]". It was a plain field, on the
+// reasoning that a person search would answer for everybody in the estate and so
+// amount to shipping an organisation chart.
+//
+// That reasoning was wrong, and it is worth saying why rather than quietly
+// changing it: Atlas already serves exactly this list, to any authenticated
+// caller, at GET /api/v1/principals — the directory every member and assignee
+// picker reads (ADR-0073). It carries a type, an opaque id
+// and a display name, and deliberately nothing else: no address, no roles, no
+// reporting line. There is no hierarchy in it to disclose, which is what an
+// organisation chart *is*. Refusing to use it here did not withhold anything; it
+// only made this one field harder to use than every other picker in the product.
+//
+// What the field is still gated on is the role, because that is a different
+// question — not who may be *seen*, but whose name an order may carry
+// (ADR-0349).
+
+// peopleMatching is the suggestion list for what has been typed so far.
+//
+// Over the display name and the id: somebody who knows the id types it, and
+// somebody who does not types a name. Capped, because a list longer than a screen
+// is not read, and because a query matching four hundred people is a query that
+// has not narrowed anything yet.
+function peopleMatching(q) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return [];
+  const hits = state.people.filter((e) => e.name.toLowerCase().includes(needle)
+    || e.id.toLowerCase().includes(needle));
+  // Once the field holds exactly one person's name there is nothing left to
+  // choose, and a list of one under the cursor is noise.
+  if (hits.length === 1 && hits[0].name.toLowerCase() === needle) return [];
+  return hits.slice(0, 20);
+}
+
+// What a keystroke in the recipient field redraws. Same reason as the catalogue
+// search: a full render would replace the field being typed into and send the
+// caret to the end of the name after every character.
+let peopleNode = null;
+
+function repaintPeople() {
+  if (!peopleNode || !peopleNode.isConnected) return;
+  paint(peopleNode, peopleBodies());
+}
+
+function peopleBodies() {
+  if (!state.forWhomLabel.trim()) return [];
+  const hits = peopleMatching(state.forWhomLabel);
+  if (!hits.length) {
+    // Not an error. A typed id, username or mail address resolves on the server
+    // and will never appear in this list, so the message says what else works
+    // rather than implying the name is wrong.
+    return [el('p', { class: 'note' }, t('for.none'))];
+  }
+  return [el('div', { class: 'people' }, hits.map((e) => el('button', {
+    class: 'person',
+    // The field shows the name and the order carries the id. A display name is
+    // not something the server can resolve, and an id is not something a person
+    // can check — so each side gets the form it can use.
+    onclick: () => { state.forWhom = e.id; state.forWhomLabel = e.name; render(); },
+  }, e.name)))];
+}
+
 function renderForWhom() {
+  // Not drawn at all for an account that may not use it. A field that answers 403
+  // reads as a permission that failed rather than one somebody never had.
+  if (!state.mayOrderForOthers) return null;
+  peopleNode = el('div', {}, peopleBodies());
   return el('div', { class: 'forwhom' },
     el('label', { class: 'muted', for: 'forwhom' }, t('for.order')),
-    el('input', {
-      id: 'forwhom', type: 'search', value: state.forWhom, placeholder: t('for.search'),
-      oninput: (e) => { state.forWhom = e.target.value; },
-    }));
+    el('div', { class: 'forwhomfield' },
+      el('input', {
+        id: 'forwhom', type: 'search', value: state.forWhomLabel,
+        placeholder: t('for.search'), 'aria-label': t('for.order'),
+        oninput: (e) => {
+          // Both, because typing over a picked name un-picks it: what is sent must
+          // never keep pointing at somebody whose name is no longer in the field.
+          state.forWhomLabel = e.target.value;
+          state.forWhom = e.target.value;
+          repaintPeople();
+        },
+      }),
+      peopleNode),
+    state.forWhom.trim()
+      ? el('button', {
+        class: 'sq', title: t('for.clear'), 'aria-label': t('for.clear'),
+        onclick: () => { state.forWhom = ''; state.forWhomLabel = ''; render(); },
+      }, '\u2715')
+      : null);
 }
 
 // renderActions is the row along the bottom. Which buttons it carries is the
