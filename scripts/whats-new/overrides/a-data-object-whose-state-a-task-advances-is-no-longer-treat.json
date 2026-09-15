@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Data"
+  ],
+  "title": {
+    "en": "A state change is not a rewrite of the object",
+    "de": "Ein Zustandswechsel ist keine Neufassung des Objekts"
+  },
+  "summary": {
+    "en": "An arrow that only advances a data object's state leaves its value untouched. Atlas read it as a write that replaces the whole object, and then withheld the field comparison from that class — which would have quietly emptied the difference reading for almost every class, because almost every lifecycle is driven by exactly these arrows. Fixed before it reached a release.",
+    "de": "Ein Pfeil, der nur den Zustand eines Datenobjekts weiterschaltet, lässt dessen Wert unangetastet. Atlas las ihn als Schreibvorgang, der das ganze Objekt ersetzt, und nahm die Klasse daraufhin vom Feldvergleich aus. Das hätte den Abgleich für fast jede Klasse still geleert, denn fast jeder Lebenszyklus wird von genau solchen Pfeilen bewegt. Behoben, bevor es in ein Release kam."
+  }
+}

@@ -86,6 +86,7 @@
               { name: "total", type: "number", multiplicity: "0..1" },
               { name: "customer", type: "Customer", multiplicity: "1" },
               { name: "tags", type: "", multiplicity: "0..*" },
+              { name: "priority", type: "Priority", multiplicity: "1" },
             ],
             lifecycle: {
               states: [
@@ -100,6 +101,10 @@
             } },
           { id: "c2", name: "Customer", stereotype: "businessObject", identity: [],
             attributes: [{ name: "name", type: "string", multiplicity: "1" }] },
+          // An «enumeration» that types an attribute: the closed set a write into
+          // `priority` may hold (ADR-0351).
+          { id: "c3", name: "Priority", stereotype: "enumeration", attributes: [],
+            literals: ["low", "normal", "urgent"] },
         ],
       };
 

@@ -151,6 +151,18 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const canvas = new uml.ClassCanvas(canvasEl, {
     subset,
     paletteEntries,
+    contextPadEntries,
+    // A drag out of the pad reports where it landed; nothing is created on the canvas.
+    // The document is the host's, and reconcile rebuilds every line from it — a
+    // connection diagram-js added to its own model would live until the next sync.
+    onConnect: (kind, from, to) => { if (!drawRelationship(kind, from.id, to.id)) render(); },
+    // Dropped where the subset refuses. The drag already refused it, so nothing is
+    // created — this only says why, in the server's own words.
+    onConnectRefused: (kind, from, to) => {
+      const a = classById(from.id);
+      const b = classById(to.id);
+      if (a && b) toast(refusalFor(kind, a, b), "err");
+    },
     onSelection: (bo, all) => onCanvasSelection(bo, all),
     onChange: () => { absorbMoves(); syncHistoryButtons(); },
     onTool: (tool) => showMarquee(tool === "marquee"),
@@ -1283,12 +1295,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const act = btn.dataset.act;
     if (act === "close-schema") { state.schemaFor = ""; renderSide(); return; }
 
-    const store = selectedStore();
-    if (store && act === "del-store") {
-      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
-      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
-      selectOne(null);
-      markDirty(); render();
+    if (act === "del-store" || act === "del-class" || act === "del-assoc") {
+      deleteSelected();
       return;
     }
 
@@ -1315,22 +1323,6 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         // an arrow to a state that is not there is what the validator refuses.
         resyncClassesSourcedFrom(c.name);
         markDirty(); render();
-      } else if (act === "del-class") {
-        // A delete says what it would break before it is confirmed (ADR-0331). A store
-        // keeps naming its class by name, and nothing can follow that for a class that
-        // is going away — so the cost is stated here rather than met as a refusal on
-        // the next save.
-        const held = (state.model.stores || []).filter((st) => st.class === c.name).map((st) => st.name);
-        const alsoKept = held.length
-          ? ` ${held.length === 1 ? "The store" : "The stores"} ${held.map((n) => `"${n}"`).join(", ")} ` +
-            `${held.length === 1 ? "holds" : "hold"} it, and the model will not save until that is settled.`
-          : "";
-        if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.${alsoKept}`)) return;
-        state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
-        state.model.associations = state.model.associations.filter(
-          (x) => x.from.classId !== c.id && x.to.classId !== c.id);
-        selectOne(null);
-        markDirty(); render();
       } else if (act === "schema") {
         state.schemaFor = c.name;
         renderSide();
@@ -1340,11 +1332,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
     const a = selectedAssoc();
     if (!a) return;
-    if (act === "del-assoc") {
-      state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
-      selectOne(null);
-      markDirty(); render();
-    } else if (act === "flip") {
+    if (act === "flip") {
       const tmp = a.from; a.from = a.to; a.to = tmp;
       markDirty(); render();
     }
@@ -1734,6 +1722,45 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     markDirty(); render();
   }
 
+  // deleteSelected removes whatever is selected, and is the only place that answers
+  // "delete what?". The panel's ✕ and the context pad's bin both come here, so the two
+  // cannot drift into meaning different things — and a class still takes its
+  // relationships with it however it was deleted.
+  function deleteSelected() {
+    const store = selectedStore();
+    if (store) {
+      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
+      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
+      selectOne(null);
+      markDirty(); render();
+      return;
+    }
+    const c = selectedClass();
+    if (c) {
+      // A delete says what it would break before it is confirmed (ADR-0331). A store
+      // keeps naming its class by name, and nothing can follow that for a class that
+      // is going away — so the cost is stated here rather than met as a refusal on
+      // the next save.
+      const held = (state.model.stores || []).filter((st) => st.class === c.name).map((st) => st.name);
+      const alsoKept = held.length
+        ? ` ${held.length === 1 ? "The store" : "The stores"} ${held.map((n) => `"${n}"`).join(", ")} ` +
+          `${held.length === 1 ? "holds" : "hold"} it, and the model will not save until that is settled.`
+        : "";
+      if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.${alsoKept}`)) return;
+      state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
+      state.model.associations = state.model.associations.filter(
+        (x) => x.from.classId !== c.id && x.to.classId !== c.id);
+      selectOne(null);
+      markDirty(); render();
+      return;
+    }
+    const a = selectedAssoc();
+    if (!a) return;
+    state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
+    selectOne(null);
+    markDirty(); render();
+  }
+
   // Arming a relationship is a mode: the next two classes clicked become its ends.
   // Pressing the armed one again puts it away, which is the only way out that does
   // not require drawing something first.
@@ -1778,6 +1805,36 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return out;
   }
 
+  // What the context pad offers beside the selected element. It is the palette's
+  // relations group, moved to where the thing it acts on is: a relationship is drawn by
+  // dragging out of the class it starts at, the way a sequence flow is drawn in the BPMN
+  // modeler, instead of arming a kind and then remembering which class to click first.
+  //
+  // Only the kinds this class could actually reach something with. Offering a
+  // generalization on an enumeration would be a button whose only possible outcome is
+  // the refusal toast — the matrix is served, so the pad can ask it rather than offer
+  // and apologise.
+  function contextPadEntries(bo) {
+    if (!bo || !bo.element) return [];
+    const bin = {
+      id: "trash", group: "edit", title: "Delete", onClick: () => deleteSelected(),
+    };
+    // A store's line to its class, and a class's lines to an enumeration, exist because
+    // something names something. There is nothing to do to one, so the pad stays shut.
+    if (bo.element !== "class") return bo.element === "store" || bo.element === "association" ? [bin] : [];
+    const out = [];
+    for (const k of subset.associationKinds) {
+      const reaches = subset.stereotypes.some((st) => allowed(bo.stereotype, st.stereotype).includes(k.kind));
+      if (!reaches) continue;
+      out.push({
+        id: k.kind, group: "connect", connect: k.kind,
+        title: `${k.label} — ${k.rule} Drag onto the class at the other end.`,
+      });
+    }
+    out.push(bin);
+    return out;
+  }
+
   // Selecting on the canvas and selecting in the panel are the same selection, so
   // the round trip is guarded: telling the panel what the canvas selected must not
   // tell the canvas back and start again.
@@ -1816,17 +1873,29 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       render();
       return;
     }
-    const from = classById(state.connecting.fromId);
-    const to = classById(bo.id);
-    const kind = state.connecting.kind;
-    if (!from || !to || from.id === to.id) { state.connecting = null; render(); return; }
+    const { kind, fromId } = state.connecting;
+    state.connecting = null;
+    // Read before the mode is cleared, and re-rendered when nothing was drawn: a
+    // refusal still has to take the armed entry's light off the palette.
+    if (!drawRelationship(kind, fromId, bo.id)) render();
+  }
+
+  // drawRelationship is the one place a relationship comes into being — the armed
+  // two-click draw and a drag out of the context pad both end here, so the matrix that
+  // refuses, the sentence it refuses with and the shape of what is created cannot
+  // differ between the two ways of drawing the same line.
+  //
+  // It answers whether it drew, because the two callers differ in one thing only: a
+  // refusal has to re-render either way, and only one of them has a mode to clear.
+  function drawRelationship(kind, fromId, toId) {
+    const from = classById(fromId);
+    const to = classById(toId);
+    if (!from || !to || from.id === to.id) return false;
     if (!allowed(from.stereotype, to.stereotype).includes(kind)) {
       // The matrix the server enforces is the matrix that refuses here, and it
       // refuses in the server's own words.
       toast(refusalFor(kind, from, to), "err");
-      state.connecting = null;
-      render();
-      return;
+      return false;
     }
     const a = {
       id: `new-${Math.random().toString(36).slice(2, 10)}`, kind, name: "",
@@ -1835,8 +1904,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     };
     state.model.associations.push(a);
     selectOne({ kind: "association", id: a.id });
-    state.connecting = null;
     markDirty(); render();
+    return true;
   }
 
   // refusalFor turns a matrix miss into the sentence the server would have sent. It

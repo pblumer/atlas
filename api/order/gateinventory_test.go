@@ -106,7 +106,7 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 			insider := New(loop, store, func() int64 { return 1700 },
 				func(string) (catalog.Release, bool, error) { return rel, true, nil },
 				func(*httpapi.Principal, string) (bool, error) { return true, nil },
-				inAnyGroup,
+				inAnyGroup, mayOrderForAnyone,
 				func(message, orderID string, vars map[string]string) error { return nil },
 				func() string { return "https://atlas.example.ch" },
 				ignoreGrant, ignoreRevoke, holdsNothing)
@@ -117,7 +117,7 @@ func TestEveryGatedOrderHandlerRefusesAnOutsider(t *testing.T) {
 			s := New(loop, store, func() int64 { return 1700 },
 				func(string) (catalog.Release, bool, error) { return rel, true, nil },
 				func(*httpapi.Principal, string) (bool, error) { return false, nil },
-				inAnyGroup,
+				inAnyGroup, mayOrderForAnyone,
 				func(message, orderID string, vars map[string]string) error { return nil },
 				func() string { return "https://atlas.example.ch" },
 				ignoreGrant, ignoreRevoke, holdsNothing)

@@ -12,7 +12,67 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An order could be placed in anybody's name.** `HandlePlace` took the recipient straight
+  out of the request body and asked nothing about it, so any account that could reach a
+  catalogue could put an order — and an approval in that person's manager's inbox, a line in
+  their record, and eventually a provisioning run — in a colleague's name.
+
+  It stayed harmless only because nothing exercised it: the portal never sent a recipient, and
+  no shipped model places an order at all — every `recipient` in a BPMN file *reads* the one
+  the order already carries and passes it down. The mockups end that, by making ordering for
+  somebody else a first-class screen. A latent hole with no caller becomes an open path with a
+  button.
+
+  Naming somebody else as recipient now needs the **operator** role. Naming yourself is
+  unchanged, so a self-service portal stays self-service.
+
+  **A role and not a manager relationship, because Atlas cannot evaluate one** — and that is
+  settled rather than open: the escalation path has the *caller* name the superior precisely
+  because a directory lookup belongs to a modelled process and not to the engine. An engine
+  that gated on a hierarchy it had to invent would decide who may act in whose name from a
+  guess.
+
+  The product-eligibility check beside it does not cover this and was never going to: it asks
+  whether *this person* may have *this product*, and would wave through an order placed in a
+  colleague's name for something the colleague is perfectly entitled to. What is wrong there
+  is the name on the order, not the product.
+
 ### Added
+
+- **The catalogue can now be read backwards.** Every question it answered ran forwards: a
+  product names what it contains, what it needs, what it excludes. That is the question an
+  *order* asks, and the portal, the basket and the fulfilment schedule are all built on it.
+
+  The person who **maintains** a service asks the opposite, and could not ask it at all. Where
+  is this used, and integrally or optionally? **What needs it** — nobody reading the VPN's own
+  page learns that the laptop cannot be provisioned without it. What may it never be held
+  with? How many people have it, and did this portal grant them or merely find them? A product
+  manager about to retire a service, rebind its provisioning or move it between catalogues had
+  no way to find out what they were about to break.
+
+  `GET /api/v1/catalog-products/{id}/usage` answers all of it out of the edges every release
+  already froze. **No new data, no migration**: the answer has been in the store since the
+  first release was published, with nothing to ask it.
+
+  Merged across catalogues, because a service does not belong to one — the same product
+  carried by two of them is one thing somebody is about to change, and a per-catalogue answer
+  would let them fix one estate and break another. Composition and aggregation stay apart,
+  because retiring an integral part changes what the whole *is* and retiring an optional one
+  does not.
+
+  **Holders are counted and never named.** A list of the people holding one service is the
+  inventory filtered to the interesting part. The count is broken down by origin, because that
+  decides what can be done: an ordered right can be returned through its order, an adopted or
+  legacy one cannot.
+
+  It is an **MCP tool** (`atlas_product_usage`), unlike every other read this line of work
+  added — those were withheld because they are other people's access, and this one names no
+  person at all.
+
+  An unknown product answers 404 rather than an empty report: "nothing uses this" and "this
+  does not exist" are different answers, and an empty one reads as *safe to retire*.
 
 - **Products can be marked as favourites.** The smallest measure in the plan, and the one
   whose two decisions are the kind that get made by accident.
@@ -431,6 +491,77 @@ _Changed_ / _Removed_ for each version.
   (`ATLAS_LIMIT_DIRECTORY_SYNC`, `_DIRECTORY_OBJECTS`, `_DIRECTORY_REPORT`).
   ([ADR-0332](docs/adr/0332-entra-directory-provisioning.md))
 
+- **A relationship is drawn from the class it starts at, the way a sequence flow is.**
+  Selecting a class on the information model's canvas now opens the little menu beside
+  it that the BPMN modeler has had all along: the relationship kinds that class could
+  actually reach something with, and a bin. Drag one onto the class at the other end and
+  the line is drawn.
+
+  Drawing used to be a mode. The kind was armed in the palette, and the next two classes
+  clicked became its ends — which had to be entered before the classes were looked at,
+  remembered between the two clicks, and aimed from a convention nothing on screen
+  stated. Which end a composition's diamond goes on is the question the notation turns
+  on, and it was answered by the order somebody happened to click.
+
+  The subset now answers under the pointer rather than after the drop: a target that
+  cannot take this kind of relationship never lights, and the question asked is the
+  narrow one — not whether two classes may relate, but whether they may relate *like
+  this*. A drop on a refused target still says why, in the same words the deploy would
+  use. The BPMN modeler drops such a gesture in silence; this canvas has explained the
+  notation at that exact moment since the palette did the drawing.
+
+  The armed palette mode still works. It is the only way to draw a relationship without
+  a pointer that can drag, and removing it is a separate decision.
+  ([ADR-0352](docs/adr/0352-draw-a-relationship-from-the-class-it-starts-at.md),
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
+- **An «enumeration» now says which values a member may take, and is drawn as part of the
+  class diagram.** Four questions an author answers while drawing a write arrow have the
+  same shape, and only three of them were asked that way: which class is this data
+  object, which state does the write move it into, which member does it target — and
+  then, in free text, what goes in. Where the member's type is an «enumeration», the
+  model has already written down the complete list of values it may hold. The write row
+  offers them, and a value that is computed still takes any FEEL expression, because a
+  picker that cannot be left would be lying about what the field is.
+
+  At deploy, a value that is **constant** is checked against the literals, and one that
+  is none of them is a warning worded like the unknown-state warning, for the same
+  reason: a model that is merely behind its process is not broken. Constant means an
+  expression that reads no variable — the inputs decide, not what an evaluation happens
+  to return, because `=if x then "approved" else "approvd"` with `x` unbound hands back a
+  perfectly concrete else branch that the process may never write.
+
+  On the class diagram, an «enumeration» that types an attribute is joined to the class
+  that uses it, derived and never authored, the way a data store's line and the
+  `«lifecycle»` line already are. Until now it was the one box that floated: the
+  compartment said `status : Lebenszustand` and nothing held the two together. One line
+  per pair, labelled with the attributes that justify it, and none where the `«lifecycle»`
+  line already joins them — a derived line is routed straight, so a second would be drawn
+  on the first. A straight line's label also moved to its midpoint, where it was landing
+  on the target box.
+  ([ADR-0351](docs/adr/0351-an-enumeration-says-which-values-a-member-may-take.md),
+  [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
+- **A write arrow can set several members of a data object at once.** A step that
+  captures a form's worth of fields writes them from one arrow with a row per field,
+  rather than one arrow per field. BPMN always allowed this — a data association carries
+  `assignment [0..*]` — and Atlas read one and silently dropped the rest, so a model
+  another tool wrote deployed and quietly did something other than what it said.
+
+  The writes are applied in the order they are listed and recorded as **one** change to
+  the object, not one per field: an activity that fills in a record did one thing, and a
+  timeline showing four half-built identities would be an artefact of how the write was
+  compiled rather than something that happened. Order is load-bearing and falls out of
+  that: two writes to the same member mean the later one, and a member write after a
+  whole-object write on the same arrow lands on the new value.
+
+  This is also the way out of the trade-off the previous release left standing. Writing
+  the whole object from one FEEL expression drew well and told the model nothing — the
+  members inside an expression cannot be read at deploy time, so the write went
+  unchecked and the class derived as having none. Named on their own rows, every member
+  is a static fact again: checked against the class, listed in the derived model, and
+  compared rather than excluded by the difference reading.
+  ([ADR-0350](docs/adr/0350-a-write-arrow-may-set-several-members.md),
+  [ADR-0060](docs/adr/0060-field-level-data-object-writes.md))
+
 ### Fixed
 
 - **Restoring a backup from another installation no longer attaches this one's history
@@ -816,6 +947,30 @@ _Changed_ / _Removed_ for each version.
   The field is also called **Class** now rather than *Type*: what it holds is the class
   from the information model, and calling it by that name is a shorter explanation than
   the paragraph underneath (ADR-0230).
+
+- **A data object whose state a task advances is no longer treated as one the task
+  writes whole.** An association with no assignment moves the object's data state and
+  leaves its value alone, so it replaces nothing and hides nothing. The derivation read
+  it as a whole-object write anyway, which withheld the member comparison from every
+  class whose lifecycle is driven by state-only transitions — most of them. Shipped in
+  the same release as the exclusion it defeated, and never released.
+  ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md))
+- **A class a process writes whole no longer fills the difference reading with work that
+  is already done.** A write with no target path replaces a data object's entire value
+  with whatever a FEEL expression evaluates to at run time, so none of the fields it sets
+  can be read from the model. Derivation produced an empty member list for such a class,
+  and the difference between built and planned read that silence as an answer: every
+  member the model declared came back as *planned, not built*. On a real model one such
+  write invented five of them — exactly the kind of false backlog item that costs the
+  list its credibility.
+
+  Derivation now records the fact it could not see inside, as a gap stated on that class,
+  and the difference honours it: the member comparison is withheld and the exclusion says
+  so by name, in the same place it lists. The *states* of such a class are still compared,
+  because a data state is written on the object rather than inside its value, so a
+  whole-object write hides none of them.
+  ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md),
+  [ADR-0310](docs/adr/0310-read-the-difference-between-what-is-built-and-what-is-planned.md))
 
 ### Added
 

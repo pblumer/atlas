@@ -926,6 +926,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
 			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Products", tArray())}},
+		{"GET", "/api/v1/catalog-products/{id}/usage", s.handleProductUsage, apiOp{
+			summary: "Where one product is used, read backwards out of the same edges the release froze: which catalogues offer it, which wholes carry it and whether integrally or optionally, what it needs, **what needs it**, what it may never be held with, and how many people hold it by origin. The reverse question is the one a maintainer cannot ask anywhere else — a product manager about to retire a service, rebind its provisioning or move it between catalogues has no other way to find out what they are about to break. Merged across catalogues, because a service does not belong to one: the same product carried by two catalogues is one thing somebody is about to change. Holders are counted and never listed — a list of the people holding one service is the inventory filtered to the interesting part",
+			tag:     "Catalogue", role: RoleProductManager,
+			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
+
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
 			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule and the processes that provision and deprovision it", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{

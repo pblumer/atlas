@@ -132,6 +132,13 @@ class rather than as a footnote:
   graph only shows what no process happens to do next.
 - **Associations** other than the containment a nested write path implies.
 - **Documentation**, which is the whole reason a person writes a model at all.
+- **What is inside a whole-object write.** A write with no target path replaces the
+  object's entire value with whatever a FEEL expression evaluates to at run time, so
+  none of the members it sets can be read. This one is stated per class, because the
+  damage is specific: the class's member list is then a *silence*, not an answer, and
+  a reader who takes it for the members concludes that fields the process demonstrably
+  writes are missing. Found on a real model, where a single such write would have made
+  five written fields look unbuilt.
 
 A derived picture that is mistaken for a complete one is worse than no picture. The
 view names its own gaps in the same place it draws.

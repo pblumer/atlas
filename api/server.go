@@ -1484,6 +1484,20 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			}
 			return p.GroupIDs, nil
 		},
+		// Whose name an order may carry (ADR-0349).
+		//
+		// The operator role, and not a manager relationship, because Atlas cannot
+		// answer what a manager relationship *is*: the escalation path has the
+		// caller name a superior precisely because a directory lookup belongs to a
+		// modelled process and not to the engine. Gating on something this server
+		// cannot evaluate would mean inventing a hierarchy, and an invented
+		// hierarchy decides who may act in whose name.
+		//
+		// With enforcement off there is nobody to be, exactly as everywhere else.
+		func(p *httpapi.Principal) bool {
+			return !s.authEnabled ||
+				(p != nil && (p.HasRole(RoleOperator) || p.HasRole(RoleAdmin)))
+		},
 		func(message, orderID string, vars map[string]string) error {
 			start := make([]model.VariableValue, 0, len(vars))
 			for name, value := range vars {
