@@ -271,7 +271,7 @@ type Limits struct {
 	HistoryReport int32
 
 	// Favourites is how many products one account may mark
-	// (ADR-draft-favourites). The smallest ceiling in this file, and the one whose
+	// (ADR-0348). The smallest ceiling in this file, and the one whose
 	// number is a *product* judgement as much as a budget: a shortcut list nobody
 	// can scan has stopped being a shortcut. It is a budget nonetheless, because
 	// without it one account can grow a stored file without bound by pressing a

@@ -112,7 +112,7 @@ var persistentStores = []storeEntry{
 	{name: "connectors", class: classDesignTime, why: "worker definitions"},
 	{name: "catalog", class: classDesignTime, why: "the portal's catalogues, the products in them, and the releases orders are placed against"},
 	{name: "orders", class: classInstance, why: "what somebody asked for, and how far each line got"},
-	{name: "favourites", class: classInstance, why: "the products each account marked to find again (ADR-draft-favourites). A convenience and not a right — nothing here decides what anybody may order — but it is one person's own arrangement of a catalogue they use, and restoring an estate without it hands everybody back a portal they have to set up again"},
+	{name: "favourites", class: classInstance, why: "the products each account marked to find again (ADR-0348). A convenience and not a right — nothing here decides what anybody may order — but it is one person's own arrangement of a catalogue they use, and restoring an estate without it hands everybody back a portal they have to set up again"},
 	{name: "repository", class: classDesignTime, why: "the shared artifact repository"},
 	{name: "inbound-subscriptions", class: classDesignTime, why: "which worker receives which message"},
 	{name: "settings", class: classDesignTime, why: "installation settings, including the OIDC claim mapping"},

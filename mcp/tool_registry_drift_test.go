@@ -559,7 +559,7 @@ var mcpOmittedRoutes = map[string]string{
 	// to a person. One route, two modes, and a tool cannot expose only the safe one.
 	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
 
-	// Favourites (ADR-draft-favourites). Omitted, and not for a disclosure reason:
+	// Favourites (ADR-0348). Omitted, and not for a disclosure reason:
 	// the routes only ever touch the caller's own list, so there is nothing here to
 	// read about anybody else.
 	//

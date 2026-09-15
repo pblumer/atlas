@@ -343,7 +343,7 @@ const state = {
   // info is the service whose details are open, empty for none.
   info: '',
   // favourites is what this person marked, as ids — a bookmark and never an
-  // entitlement (ADR-draft-favourites). Held as a Set because every row asks
+  // entitlement (ADR-0348). Held as a Set because every row asks
   // "is this one of mine" while the cascade renders.
   favourites: new Set(),
   // favouritesOnly narrows the cascade to marked products, which is what a

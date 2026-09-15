@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Marking a product, end to end (ADR-draft-favourites).
+// Marking a product, end to end (ADR-0348).
 
 type favsResp struct {
 	Principal string   `json:"principal"`

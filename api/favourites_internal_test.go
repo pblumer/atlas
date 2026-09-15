@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Marking a product (ADR-draft-favourites).
+// Marking a product (ADR-0348).
 
 // TestAStarPressedTwiceChangesNothingTheSecondTime.
 //

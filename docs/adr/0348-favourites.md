@@ -1,4 +1,4 @@
-# ADR-DRAFT: A favourite is a bookmark, so it stores an id and resolves nothing
+# ADR-0348: A favourite is a bookmark, so it stores an id and resolves nothing
 
 - **Status:** Accepted
 - **Implementation:** Landed

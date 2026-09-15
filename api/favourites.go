@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// What somebody marked to find again (ADR-draft-favourites).
+// What somebody marked to find again (ADR-0348).
 //
 // The smallest thing in the portal and the one with the least to argue about,
 // which is exactly why the two decisions it does carry are worth writing down.
