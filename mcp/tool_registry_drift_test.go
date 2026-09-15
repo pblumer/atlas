@@ -26,15 +26,16 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":                 "GET /api/v1/info",
-	"atlas_stats":                "GET /api/v1/stats",
-	"atlas_deploy":               "POST /api/v1/deployments",
-	"atlas_list_processes":       "GET /api/v1/processes",
-	"atlas_get_process_xml":      "GET /api/v1/processes/{key}/xml",
-	"atlas_save_process_diagram": "PUT /api/v1/processes/{key}/diagram",
-	"atlas_delete_process":       "DELETE /api/v1/processes/{key}",
-	"atlas_process_runtime":      "GET /api/v1/processes/{key}/runtime",
-	"atlas_call_activities":      "GET /api/v1/call-activities",
+	"atlas_info":                       "GET /api/v1/info",
+	"atlas_stats":                      "GET /api/v1/stats",
+	"atlas_deploy":                     "POST /api/v1/deployments",
+	"atlas_list_processes":             "GET /api/v1/processes",
+	"atlas_get_process_xml":            "GET /api/v1/processes/{key}/xml",
+	"atlas_save_process_diagram":       "PUT /api/v1/processes/{key}/diagram",
+	"atlas_delete_process":             "DELETE /api/v1/processes/{key}",
+	"atlas_delete_decision_deployment": "DELETE /api/v1/decision-deployments/{key}",
+	"atlas_process_runtime":            "GET /api/v1/processes/{key}/runtime",
+	"atlas_call_activities":            "GET /api/v1/call-activities",
 
 	// The business architecture (ADR-0305):
 	// the map an agent needs in order to say what a process it deploys is *for*.
@@ -456,6 +457,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/dmnrefs/{id}/impact":    "it exists to fill that deletion's confirm dialog, and the deletion is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
 	"GET /api/v1/dmn-models":             "reading the model folder as a folder is housekeeping for the Modeler; an agent resolves a decision through the catalog, not the store",
+	"DELETE /api/v1/dmn-models/{ref}":    "removing a file from that folder is the same housekeeping, and deleting an author's model is not an agent action",
 
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads

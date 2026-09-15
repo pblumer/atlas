@@ -71,11 +71,25 @@ type reconcileMessage struct {
 	// documentation rather than leaving it to be assumed.
 	Refs []string `json:"refs"`
 
+	// Subjects is the other axis of the same promise: the subjects whose holdings
+	// in this system this run read **completely**. It answers a question `Refs`
+	// structurally cannot — *is this person out of everything?* — and that is the
+	// question an offboarding asks.
+	//
+	// A group listing cannot answer it. To learn that a leaver holds nothing you
+	// would have to reconcile every group in the system and notice their absence
+	// from all of them, which is a whole-system run wearing a disguise. Reading one
+	// person's memberships is a different call to the target system and a different
+	// promise, so it is a different field.
+	//
+	// Named in the target system's vocabulary, exactly as an observation's subject
+	// is — a directory object id or a mail address, never an Atlas principal id.
+	Subjects []string `json:"subjects"`
+
 	// Observations are who was found holding what, within that scope. An
-	// observation naming a reference outside Refs is reported and otherwise
-	// ignored: it is a fact the run did not promise to have read whole, and
-	// counting it as unmanaged would be acting on exactly the half-read the scope
-	// exists to prevent.
+	// observation outside both promises is reported and otherwise ignored: it is a
+	// fact the run did not claim to have read whole, and counting it as unmanaged
+	// would be acting on exactly the half-read the scope exists to prevent.
 	Observations []rightObservation `json:"observations"`
 }
 
@@ -151,10 +165,27 @@ type reconcilePlan struct {
 	// Notes are the observations that could not be compared at all.
 	Notes  []discrepancy
 	Counts reconcileCounts
-	// InScopeItems are the items the scope resolved to. The journal needs them:
-	// closing a discrepancy nobody saw this time is only sound for the items this
-	// run actually examined.
-	InScopeItems map[string]bool
+	// The scope, as the two promises resolved to. The journal needs all three:
+	// closing a disagreement nobody saw this time is only sound for the pairs this
+	// run actually examined, and "examined" is now a question about a pair rather
+	// than about an item.
+	//
+	// InScopeItems are the items the references resolved to. InScopeSubjects are the
+	// principals the subjects resolved to. SystemItems is every item this system's
+	// references can be attributed to — without it a subject-scoped run would report
+	// somebody's Jira rights as missing from Active Directory, which is true of
+	// nothing.
+	InScopeItems    map[string]bool
+	InScopeSubjects map[string]bool
+	SystemItems     map[string]bool
+}
+
+// examined reports whether this run was entitled to conclude anything about one
+// (principal, item) pair. Either promise covers it, and they compose: a run may
+// say "these two groups whole, and everything Ada has".
+func (p reconcilePlan) examined(principal, itemID string) bool {
+	return p.InScopeItems[itemID] ||
+		(p.InScopeSubjects[principal] && p.SystemItems[itemID])
 }
 
 // reconcileCounts is the run by conclusion.
@@ -204,7 +235,20 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 
 	itemByRef, ambiguous := indexTargets(in.Items, system)
 
-	plan := reconcilePlan{InScopeItems: map[string]bool{}}
+	plan := reconcilePlan{
+		InScopeItems:    map[string]bool{},
+		InScopeSubjects: map[string]bool{},
+		SystemItems:     map[string]bool{},
+	}
+	// SystemItems is built from the same index the comparison uses, and not from the
+	// catalogue directly. That is the whole point of taking it from here: a draft
+	// product is not indexed, and neither is the loser of a reference two products
+	// claim — so neither can enter a subject scope. Reading the catalogue again
+	// would put both back, and a recorded right on either would then be reported
+	// missing by a leaver run for no better reason than that nothing observed it.
+	for _, it := range itemByRef {
+		plan.SystemItems[it.ID] = true
+	}
 	add := func(d discrepancy) { plan.Found = append(plan.Found, d) }
 	note := func(d discrepancy) { plan.Notes = append(plan.Notes, d) }
 
@@ -239,6 +283,28 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 		}
 	}
 
+	// The other axis. A subject that resolves to no account is reported rather than
+	// dropped: a run that promised to have read everything a leaver holds, and named
+	// somebody Atlas has never heard of, has verified nothing about them — and that
+	// is precisely the case an offboarding must not read as "clean".
+	for _, raw := range msg.Subjects {
+		subject := strings.TrimSpace(raw)
+		if subject == "" {
+			continue
+		}
+		u, found := resolve(subject)
+		if !found {
+			plan.Counts.NoSubject++
+			note(discrepancy{Kind: recNoSubject, System: system, Principal: subject,
+				Why: "this run claimed to have read everything this subject holds, and no account " +
+					"matches them by directory id or mail. Nothing was verified about them — an " +
+					"offboarding reading this as a clean result would be reading the absence of " +
+					"an account as the absence of access"})
+			continue
+		}
+		plan.InScopeSubjects[u.ID] = true
+	}
+
 	// What the target system says, as (principal, item) pairs.
 	observed := map[string]bool{}
 	refOf := map[string]string{}
@@ -247,18 +313,35 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 		if subject == "" || ref == "" {
 			continue
 		}
-		if !scopeRefs[ref] {
+		// The subject is resolved before the scope is decided, because one of the two
+		// promises is about the subject. A reference nobody named is still in scope
+		// when the person holding it is: a run that read everything Ada has read this
+		// too, whichever group it came from.
+		u, found := resolve(subject)
+		inSubjectScope := found && plan.InScopeSubjects[u.ID]
+		if !scopeRefs[ref] && !inSubjectScope {
 			plan.Counts.OutOfScope++
 			note(discrepancy{Kind: recOutOfScope, System: system, Ref: ref, Principal: subject,
-				Why: "this run did not claim to have read " + ref + " completely, so what it " +
-					"carries about it says nothing either way. Name it in refs to compare it"})
+				Why: "this run did not claim to have read " + ref + " completely, nor everything " +
+					"this subject holds, so what it carries about the pair says nothing either " +
+					"way. Name the reference in refs, or the subject in subjects"})
 			continue
 		}
 		it, known := itemByRef[ref]
 		if !known {
-			continue // already reported once, against the reference rather than per holder
+			if inSubjectScope {
+				// Reported per holder here rather than per reference: in ref scope the
+				// fact is about the catalogue, but a run that read one person's whole
+				// estate has found something *they* hold that nothing models, and the
+				// person is the subject of the answer.
+				plan.Counts.NoItem++
+				note(discrepancy{Kind: recNoItem, System: system, Ref: ref, Principal: subject,
+					Why: "no product claims this reference in system " + system + ". This subject " +
+						"holds something the catalogue does not model, so there is no inventory " +
+						"side to compare it against"})
+			}
+			continue // in ref scope it is already reported once, against the reference
 		}
-		u, found := resolve(subject)
 		if !found {
 			plan.Counts.NoSubject++
 			note(discrepancy{Kind: recNoSubject, System: system, Ref: ref, Principal: subject,
@@ -272,10 +355,10 @@ func decideReconcile(msg reconcileMessage, in reconcileInput) reconcilePlan {
 		refOf[key] = ref
 	}
 
-	// What Atlas says, for the items in scope only.
+	// What Atlas says, for the pairs in scope only — by either promise.
 	recorded := map[string]model.EntitlementValue{}
 	for _, v := range in.Held {
-		if plan.InScopeItems[v.ItemID] {
+		if plan.examined(v.Principal, v.ItemID) {
 			recorded[v.Principal+"\x00"+v.ItemID] = v
 		}
 	}

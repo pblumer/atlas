@@ -305,3 +305,121 @@ func findingOfKind(t *testing.T, open []map[string]any, kind string) string {
 	t.Fatalf("no open finding of kind %q among %+v", kind, open)
 	return ""
 }
+
+// TestALeaverIsVerifiedByNamingThemRatherThanEveryGroup.
+//
+// The question an offboarding asks is "is this person out of everything", and a
+// reference scope structurally cannot answer it: absence from a group nobody named
+// says nothing. Naming the person is a different promise, and it makes the same
+// silence a finding.
+func TestALeaverIsVerifiedByNamingThemRatherThanEveryGroup(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "correct horse battery")
+	c := newClient(t)
+	if code := login(t, c, ts, "root", "correct horse battery"); code != http.StatusOK {
+		t.Fatalf("login: %d", code)
+	}
+	ada, _ := aReconcilableEstate(t, c, ts)
+
+	// A run that names no reference and no subject is refused, and says both ways out.
+	code, body := cReq(t, c, ts, "POST", "/api/v1/reconciliation", `{"system":"ad"}`)
+	if code != http.StatusBadRequest {
+		t.Fatalf("a run promising nothing was accepted: %d %s", code, body)
+	}
+	for _, want := range []string{"refs", "subjects"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("the refusal does not offer %q as a way to declare a scope: %s", want, body)
+		}
+	}
+
+	// Ada's VPN right is recorded. Nobody names CN=VPN-Users, so a reference run
+	// concludes nothing about her.
+	byRef := postReconcile(t, c, ts, `{"system":"ad","refs":["CN=Nothing"],"observations":[]}`)
+	counts, _ := byRef["counts"].(map[string]any)
+	if counts["missing"] != float64(0) {
+		t.Errorf("a run that named another reference concluded %v missing about Ada",
+			counts["missing"])
+	}
+
+	// Naming her verifies her: she holds nothing in AD and Atlas says she holds VPN.
+	bySubject := postReconcile(t, c, ts,
+		`{"system":"ad","subjects":["ada@example.org"],"observations":[]}`)
+	counts, _ = bySubject["counts"].(map[string]any)
+	if counts["missing"] != float64(1) {
+		t.Fatalf("the leaver run found %v missing, want the right Atlas records and the "+
+			"system does not have: %+v", counts["missing"], bySubject)
+	}
+	if bySubject["subjects"] == nil {
+		t.Error("the report does not echo the subjects it was entitled to conclude about; a " +
+			"finding without its scope beside it is one nobody can weigh")
+	}
+
+	// And the finding is actionable: it is a missing one, so it takes a revoke.
+	id := findingOfKind(t, openFindings(t, c, ts), "missing")
+	if code, body := cReq(t, c, ts, "POST", "/api/v1/reconciliation/"+id+"/revoke", ""); code != http.StatusOK {
+		t.Fatalf("revoking the leaver's stale record: %d %s", code, body)
+	}
+	if held := heldBy(t, c, ts, ada); len(held) != 0 {
+		t.Errorf("Atlas still records a right for a leaver who holds nothing: %+v", held)
+	}
+}
+
+// TestACleanLeaverSaysSoRatherThanReportingNothing.
+//
+// The answer an offboarding wants is an empty one, and an empty answer that reads
+// like "nothing happened" wastes the one run that actually confirmed something.
+func TestACleanLeaverSaysSoRatherThanReportingNothing(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "correct horse battery")
+	c := newClient(t)
+	login(t, c, ts, "root", "correct horse battery")
+	aCatalogueWithAVPNProduct(t, c, ts, `[{"system":"ad","ref":"CN=VPN-Users"}]`)
+	anAccountWithMail(t, c, ts, "bo", "bo@example.org")
+
+	rep := postReconcile(t, c, ts,
+		`{"system":"ad","subjects":["bo@example.org"],"observations":[]}`)
+
+	if rep["nothingFound"] != true {
+		t.Fatalf("a leaver holding nothing produced findings: %+v", rep)
+	}
+	reason, _ := rep["reason"].(string)
+	if !strings.Contains(reason, "out of it") {
+		t.Errorf("the reason reads %q; the run that confirms a leaver is clean should say so "+
+			"rather than report an absence of news", reason)
+	}
+}
+
+// TestASubjectScopedRunClosesOnlyWhatItPromisedToRead.
+//
+// Closing is the half that is expensive to get wrong, and the subject axis makes it
+// sharper: a run that read everything Ada holds has said nothing whatever about Bo,
+// and a journal that took the silence for repair would report an estate as fixed
+// because somebody verified one leaver.
+func TestASubjectScopedRunClosesOnlyWhatItPromisedToRead(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "correct horse battery")
+	c := newClient(t)
+	login(t, c, ts, "root", "correct horse battery")
+	_, bo := aReconcilableEstate(t, c, ts)
+
+	// A reference run over the group finds both directions: Ada's record is
+	// unsubstantiated, Bo holds something nobody granted.
+	postReconcile(t, c, ts, `{"system":"ad","refs":["CN=VPN-Users"],"observations":[
+		{"subject":"bo@example.org","ref":"CN=VPN-Users"}]}`)
+	if open := openFindings(t, c, ts); len(open) != 2 {
+		t.Fatalf("%d finding(s) open before the leaver run, want 2", len(open))
+	}
+
+	// Now one subject is read whole, and reality has repaired her half of it.
+	rep := postReconcile(t, c, ts, `{"system":"ad","subjects":["ada@example.org"],"observations":[
+		{"subject":"ada@example.org","ref":"CN=VPN-Users"}]}`)
+	if rep["closed"] != float64(1) {
+		t.Errorf("closed = %v, want only Ada's finding closed", rep["closed"])
+	}
+
+	open := openFindings(t, c, ts)
+	if len(open) != 1 {
+		t.Fatalf("%d finding(s) open after the leaver run, want Bo's alone: %+v", len(open), open)
+	}
+	if got := fmt.Sprint(open[0]["principal"]); got != bo {
+		t.Errorf("the finding left standing is %q; a run about Ada must leave Bo's untouched, "+
+			"because it promised nothing about him", got)
+	}
+}

@@ -64,7 +64,7 @@ func (s *Server) applyReconcilePlan(plan reconcilePlan, system string, now int64
 
 	for _, r := range journal {
 		switch {
-		case !r.Open(), found[r.ID], r.System != system, !plan.InScopeItems[r.ItemID]:
+		case !r.Open(), found[r.ID], r.System != system, !plan.examined(r.Principal, r.ItemID):
 			continue
 		}
 		if err := s.discrepancies.Save(closeDiscrepancy(r, closedGone, "", now)); err != nil {
@@ -78,10 +78,11 @@ func (s *Server) applyReconcilePlan(plan reconcilePlan, system string, now int64
 // reconcileReport is what one run tells a person.
 type reconcileReport struct {
 	System string `json:"system"`
-	// Scope is what the run claimed to have read completely, echoed so a report
-	// read later says what it was entitled to conclude. A finding without its
-	// scope beside it is a finding nobody can weigh.
-	Scope []string `json:"scope"`
+	// Scope and Subjects are what the run claimed to have read completely, echoed
+	// so a report read later says what it was entitled to conclude. A finding
+	// without its scope beside it is a finding nobody can weigh.
+	Scope    []string `json:"scope"`
+	Subjects []string `json:"subjects"`
 
 	Counts reconcileCounts `json:"counts"`
 
@@ -118,13 +119,16 @@ func reconcileReportOf(plan reconcilePlan, msg reconcileMessage, opened, closed,
 	budgets limits.Limits) reconcileReport {
 
 	rep := reconcileReport{
-		System: msg.System, Scope: msg.Refs, Counts: plan.Counts,
+		System: msg.System, Scope: msg.Refs, Subjects: msg.Subjects, Counts: plan.Counts,
 		Opened: opened, Closed: closed, NotRecorded: refused,
 		Findings: []discrepancy{}, Notes: []discrepancy{},
 		InventoryOf: examined,
 	}
 	if rep.Scope == nil {
 		rep.Scope = []string{}
+	}
+	if rep.Subjects == nil {
+		rep.Subjects = []string{}
 	}
 
 	limit := int(budgets.ReconcileReport)
@@ -169,12 +173,20 @@ func reconcileReason(plan reconcilePlan, msg reconcileMessage) string {
 		return ""
 	}
 	switch {
-	case len(plan.InScopeItems) == 0:
-		return fmt.Sprintf("nothing was compared: none of the %d reference(s) in scope resolved "+
-			"to a product in system %q. Either no product declares them as target references, or "+
-			"the system name does not match the one the catalogue uses — check a product's target "+
-			"references before reading this as agreement",
-			len(msg.Refs), msg.System)
+	case len(plan.InScopeItems) == 0 && len(plan.InScopeSubjects) == 0:
+		return fmt.Sprintf("nothing was compared: none of the %d reference(s) and %d subject(s) "+
+			"in scope resolved to anything in system %q. Either no product declares those "+
+			"references as targets, the system name does not match the one the catalogue uses, "+
+			"or the subjects have no accounts here — check before reading this as agreement",
+			len(msg.Refs), len(msg.Subjects), msg.System)
+	case len(msg.Observations) == 0 && len(plan.InScopeSubjects) > 0:
+		// The leaver's clean result, and it deserves its own sentence: this is the
+		// answer an offboarding is looking for, and reading it as "nothing happened"
+		// would waste the one run that actually confirmed something.
+		return fmt.Sprintf("nothing held and nothing recorded: %d subject(s) in scope hold "+
+			"nothing in %q, and the inventory records nothing for them there either. That is "+
+			"the answer an offboarding verification wants — they are out of it",
+			len(plan.InScopeSubjects), msg.System)
 	case len(msg.Observations) == 0:
 		return fmt.Sprintf("no disagreement, and nothing to disagree about: the scope named %d "+
 			"reference(s), the reading carried no observations, and the inventory records nobody "+

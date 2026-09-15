@@ -72,6 +72,11 @@ type Registry struct {
 	// pinned against. Only registerDecision writes it, so bundling a model with a
 	// process can no longer make that process the newest version of a decision.
 	latestDecision map[string]uint64
+	// decisionKeys is the set of keys registered as *decision* deployments rather
+	// than as models bundled with a process. Only UndeployDecision reads it, and it
+	// reads it for one reason: after removing a key, latestDecision has to be
+	// rebuilt from what is left, and only these keys may write it.
+	decisionKeys map[uint64]bool
 }
 
 // NewRegistry creates an empty registry over a fresh temis engine.
@@ -81,6 +86,7 @@ func NewRegistry() *Registry {
 		definitions:    map[uint64][]*tdmn.Definitions{},
 		latest:         map[string]*tdmn.Definitions{},
 		latestDecision: map[string]uint64{},
+		decisionKeys:   map[uint64]bool{},
 	}
 }
 
@@ -198,8 +204,58 @@ func (r *Registry) ReloadDecision(key uint64, dmnXML []byte) (string, error) {
 // by DeployDecision and ReloadDecision so both index identically.
 func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions) {
 	r.register(key, defs)
+	r.decisionKeys[key] = true
 	for _, id := range defs.Index().Decisions {
 		r.latestDecision[id] = key
+	}
+}
+
+// UndeployDecision removes a decision deployment from the registry and leaves the
+// two "newest model providing this decision" pointers exactly as a restart would
+// build them — which is the only definition of correct available here
+// (ADR-0336).
+//
+// Removing the key is the easy half. The hard half is that both pointers are
+// last-write-wins: each holds *the newest* provider and keeps no history, so a
+// pointer aimed at the removed key cannot simply be cleared — it has to fall back
+// to the next-newest, and nothing here remembers which that was.
+//
+// It is rebuilt rather than remembered. Keys come from one monotonic counter, so
+// ascending key order *is* registration order, live and on recovery alike; walking
+// the survivors in that order reproduces exactly the state the same records would
+// produce after a restart. That is what makes a delete survivable: what the server
+// answers now and what it answers after rebooting cannot diverge.
+//
+// Removing a key that is not a decision deployment — a process's bundled model, or
+// nothing at all — is a no-op, so an unknown key is not an error here.
+func (r *Registry) UndeployDecision(key uint64) {
+	if !r.decisionKeys[key] {
+		return
+	}
+	delete(r.decisionKeys, key)
+	delete(r.definitions, key)
+
+	keys := make([]uint64, 0, len(r.definitions))
+	for k := range r.definitions {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	r.latest = make(map[string]*tdmn.Definitions, len(r.latest))
+	r.latestDecision = make(map[string]uint64, len(r.latestDecision))
+	for _, k := range keys {
+		for _, defs := range r.definitions[k] {
+			for _, id := range defs.Index().Decisions {
+				// register's rule: every accepted model, of either kind, moves the legacy
+				// pointer.
+				r.latest[id] = defs
+				// registerDecision's rule: only a decision deployment moves the pinning
+				// selector.
+				if r.decisionKeys[k] {
+					r.latestDecision[id] = k
+				}
+			}
+		}
 	}
 }
 

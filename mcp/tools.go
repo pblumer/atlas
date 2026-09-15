@@ -468,6 +468,32 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_delete_decision_deployment",
+			Description: "Delete a deployed DMN decision by its deployment key, removing it from the " +
+				"engine and from disk. Refused with a conflict error while a deployed process is " +
+				"pinned to it — pins outlive the instances that used them, so having no running " +
+				"instances is not enough — and while it is the current version of a decision that " +
+				"has older versions still deployed, which means removing a version history oldest " +
+				"first. The refusal says which of the two it is. Returns a confirmation.",
+			InputSchema: keyArg("The decision deployment key (from atlas_decision_deployments) to delete."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				body, err := c.del("/api/v1/decision-deployments/" + strconv.FormatUint(key, 10))
+				if err != nil {
+					return "", err
+				}
+				// 204 No Content on success, like the process delete above: give the model
+				// an explicit confirmation rather than an empty string.
+				if len(body) == 0 {
+					return `{"deleted":true,"key":` + strconv.FormatUint(key, 10) + `}`, nil
+				}
+				return string(body), nil
+			},
+		},
+		{
 			Name: "atlas_mail_outbox",
 			Description: "List what a mail worker on the \"preview\" provider delivered in-server instead of " +
 				"sending (ADR-0150) — how a scenario checks what a mail task actually produced, with no mail " +

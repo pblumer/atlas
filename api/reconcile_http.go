@@ -43,17 +43,18 @@ func (s *Server) handleReconcile(w http.ResponseWriter, r *http.Request) {
 				"target references are matched against")
 		return
 	}
-	if len(msg.Refs) == 0 {
+	if len(msg.Refs) == 0 && len(msg.Subjects) == 0 {
 		// The refusal that keeps the endpoint honest. Absence is a finding here, so
 		// a run has to say what it read whole — and no default can supply that,
 		// because the only candidates are "nothing" (useless) and "everything"
 		// (a guess that turns a truncated read into a report that the estate has
 		// lost its access).
 		httpapi.Error(w, http.StatusBadRequest,
-			"name the references this run read completely (\"refs\"). This endpoint reads absence "+
-				"as a finding: a right recorded here and not seen in the reading is reported as "+
-				"missing. That is only sound within a scope the caller promises is complete, so "+
-				"there is no default — a run that read three groups names those three")
+			"name what this run read completely: the references (\"refs\"), the subjects "+
+				"(\"subjects\"), or both. This endpoint reads absence as a finding — a right "+
+				"recorded here and not seen inside the scope is reported as missing — and that is "+
+				"only sound within a scope the caller promises is complete. A run that read three "+
+				"groups names those three; one verifying a leaver names that person")
 		return
 	}
 	if n := len(msg.Observations); n > int(s.budgets().ReconcileObservations) {

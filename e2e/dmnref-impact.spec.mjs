@@ -92,3 +92,54 @@ test("the count covers what is named and what is only counted", async ({ page })
   expect(text).toContain("2 artefacts could then not be deployed:");
   expect(text).toContain("1 more in an application you cannot see");
 });
+
+// Which deployed version of a decision the Console offers to remove
+// (api/web/decision-cleanup.js, ADR-0336). The
+// server decides; this is the affordance that keeps a reader from clicking into a
+// refusal, and it mirrors the server's two guards rather than approximating them.
+
+const state = (page, row, rows) => page.evaluate(([r, all]) => window.__versionState(r, all), [row, rows]);
+
+test("a version nothing holds may go", async ({ page }) => {
+  const rows = [{ key: 1, version: 1, current: true }];
+  expect(await state(page, rows[0], rows)).toEqual({ deletable: true, why: "" });
+});
+
+test("a pinned version says which process is holding it", async ({ page }) => {
+  const rows = [
+    { key: 1, version: 1, current: false, pinnedBy: [{ key: 9, processId: "orders", version: 2, decisionId: "eligibility" }] },
+    { key: 2, version: 2, current: true },
+  ];
+  const got = await state(page, rows[0], rows);
+  expect(got.deletable).toBe(false);
+  // Named, because the reader's next move is to go and look at that process.
+  expect(got.why).toContain("orders");
+  expect(got.why).toContain("pinned this version when deployed");
+});
+
+test("the current version is held while older ones remain, and free once they are gone", async ({ page }) => {
+  const two = [{ key: 1, version: 1 }, { key: 2, version: 2, current: true }];
+  const held = await state(page, two[1], two);
+  expect(held.deletable).toBe(false);
+  expect(held.why).toContain("remove those first");
+
+  // The last version of a decision may go: nothing survives to disagree about what
+  // the next deploy's version number means.
+  const one = [{ key: 2, version: 2, current: true }];
+  expect(await state(page, one[0], one)).toEqual({ deletable: true, why: "" });
+});
+
+test("a superseded version with nothing pinned to it may go, which is the ordinary cleanup", async ({ page }) => {
+  const rows = [{ key: 1, version: 1 }, { key: 2, version: 2 }, { key: 3, version: 3, current: true }];
+  expect((await state(page, rows[0], rows)).deletable).toBe(true);
+  expect((await state(page, rows[1], rows)).deletable).toBe(true);
+  expect((await state(page, rows[2], rows)).deletable).toBe(false);
+});
+
+test("a pin outranks everything, including on the last version", async ({ page }) => {
+  const rows = [{ key: 1, version: 1, current: true, pinnedBy: [{ key: 9, processId: "orders" }, { key: 10, processId: "billing" }] }];
+  const got = await state(page, rows[0], rows);
+  expect(got.deletable).toBe(false);
+  expect(got.why).toContain("orders, billing");
+  expect(got.why).toContain("those processes");
+});
