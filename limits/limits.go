@@ -207,6 +207,35 @@ type Limits struct {
 	// findings mean the scope or the catalogue is wrong, and filling a disk with
 	// them helps nobody read the first ten.
 	ReconcileJournal int32
+
+	// Recertify is one message opening a recertification campaign: its name, its
+	// scope, and the map of who reviews whom (ADR-0341).
+	// The reviewer map is what makes it large — one entry per person in scope — and
+	// it is external input like any other.
+	Recertify int64
+
+	// RecertifyRows is how many questions one campaign may ask.
+	//
+	// A ceiling on what a *read of Atlas's own inventory* produced, which is unusual
+	// and deliberate. The number that matters is not a message size, it is how many
+	// judgements one campaign asks of people: a campaign of twenty thousand rows is
+	// not answered, it is signed, and this is the one place where making that
+	// impossible is cheaper than detecting it afterwards. A campaign above it is
+	// refused whole rather than shortened, because a campaign missing its tail looks
+	// exactly like a complete one to whoever closes it.
+	RecertifyRows int32
+
+	// RecertifyReport is how many rows one answer renders. Unlike RecertifyRows this
+	// is only about reading: the campaign keeps every row and every one is decidable
+	// through its own route, so a view that stops at five hundred costs nothing but
+	// a second request.
+	RecertifyReport int32
+
+	// RecertifyNote is one decision's free text. Small on purpose — it is a
+	// sentence explaining a judgement, not an attachment, and a justification field
+	// that invites an essay gets an essay from the first reviewer and "ok" from
+	// every one after.
+	RecertifyNote int64
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -257,6 +286,10 @@ func Default() Limits {
 		ReconcileObservations: 2_000,
 		ReconcileReport:       500,
 		ReconcileJournal:      10_000,
+		Recertify:             8 << 20,
+		RecertifyRows:         5_000,
+		RecertifyReport:       500,
+		RecertifyNote:         4 << 10,
 	}
 }
 

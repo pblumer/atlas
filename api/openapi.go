@@ -1654,6 +1654,37 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 
+		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
+			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("What to certify and who answers for it", schemaObj(map[string]any{
+				"name": tString(), "items": tArray(), "principals": tArray(),
+				"reviewers": tObject(), "dueAt": tInteger(),
+			}, "name")),
+			resp: jsonBody("The campaign and the questions it asks", tObject())}},
+		{"GET", "/api/v1/recertification", s.handleListRecertifications, apiOp{
+			summary: "Every campaign, newest first, headers only",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Campaigns", tArray())}},
+		{"GET", "/api/v1/recertification/{id}", s.handleReadRecertification, apiOp{
+			summary: "One campaign with its rows and its counts. `?mine=true` narrows it to the rows the caller may answer, which is what a reviewer wants: a manager opening a five-thousand-row campaign to find their four is being asked to work for the software. `undecided` is a first-class count and never a subtraction — a row nobody answered is not certified",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The campaign, its rows and its counts", tObject())}},
+		{"POST", "/api/v1/recertification/{id}/close", s.handleCloseRecertification, apiOp{
+			summary: "Declare a campaign over. It changes no row: a campaign closes with undecided rows still in it, and that number is the finding. Closing that certified the remainder would manufacture a signature nobody gave; closing that revoked it would take access away because somebody was on holiday",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The campaign, now closed", tObject())}},
+		{"POST", "/api/v1/recertification/{id}/rows/{row}/keep", s.handleKeepRecertifyRow, apiOp{
+			summary: "Attest that this right is still needed. Writes no entitlement — nothing changed, the judgement is what is new. One row per call: there is deliberately no way to answer several at once, because a campaign answered in bulk is a signature without a reading behind it. Authorised by the row rather than by the role: the reviewer it names may answer it, as may an operator or an administrator",
+			tag:     "Catalogue", role: RoleUser,
+			req:  jsonBody("An optional note", schemaObj(map[string]any{"note": tString()})),
+			resp: jsonBody("The row, now decided", tObject())}},
+		{"POST", "/api/v1/recertification/{id}/rows/{row}/revoke", s.handleRevokeRecertifyRow, apiOp{
+			summary: "Attest that this right is no longer needed, and run the product's deprovisioning process — never a direct worker call. A right already gone by the time the decision arrives is recorded and starts nothing: a campaign is a snapshot and the estate moves under it. A decided row cannot be decided again, because an attestation says what somebody judged at one moment",
+			tag:     "Catalogue", role: RoleUser,
+			req:  jsonBody("An optional note", schemaObj(map[string]any{"note": tString()})),
+			resp: jsonBody("The row, now decided", tObject())}},
+
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},
 	}

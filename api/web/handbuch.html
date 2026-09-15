@@ -4440,6 +4440,66 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-rezertifizierung">
+        <h4><span class="rz-emoji" aria-hidden="true">🖊️</span>
+          <span data-l="de">Rezertifizierung: braucht das noch jemand?</span><span data-l="en">Recertification: does anybody still need this?</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-users</span>
+          <span class="tag" data-l="de">je Zeile ein Mensch</span><span class="tag" data-l="en">one row, one person</span>
+          <span class="tag" data-l="de">Schweigen zählt nicht</span><span class="tag" data-l="en">silence is not an answer</span>
+          <span class="tag">R/P91D</span>
+          <span class="tag">examples/rezertifizierung.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Über den Zugriff eines Menschen lassen sich drei Fragen stellen. Die Bestellung
+              beantwortet <i>darf er das haben</i>, der Abgleich <i>hat er es wirklich</i> – und diese
+              hier <b>braucht er es noch</b>. Die dritte stellte bisher niemand, und sie ist nicht die
+              kleine Schwester der anderen beiden: ein korrekt genehmigtes, korrekt eingerichtetes und
+              korrekt geführtes Recht kann trotzdem falsch sein.</p>
+            <p data-l="de"><b>So entsteht falscher Zugriff in den meisten Betrieben:</b> Leute wechseln
+              die Rolle und behalten, was die alte brauchte. Niemand hat etwas unrechtmässig vergeben,
+              und niemand hat etwas entzogen – denn Entziehen ist jemandes Aufgabe und damit niemandes.</p>
+            <p data-l="en">Three questions can be asked about somebody's access. Ordering answers <i>may
+              they have it</i>, reconciliation <i>do they actually have it</i> – and this one <b>do they
+              still need it</b>. Nothing asked the third until now, and it is not the smaller sibling of
+              the other two: a properly approved, properly provisioned and correctly recorded right can
+              still be wrong.</p>
+            <p data-l="en"><b>This is how wrong access accumulates in most estates:</b> people change
+              roles and keep what the old one needed. Nobody granted anything improperly, and nobody
+              removed anything either, because removing is somebody's job and therefore nobody's.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Der ganze Entwurf ist die Weigerung, eine Unterschrift billig zu machen. Es
+              gibt <b>keinen Weg, mehrere Zeilen auf einmal zu beantworten</b> – weder im Bildschirm noch
+              in der Schnittstelle. Eine im Block beantwortete Kampagne ist eine Unterschrift ohne
+              Prüfung, und die ist schlimmer als keine, weil eine prüfende Stelle sie glaubt.</p>
+            <p data-l="de"><b>Schweigen ist nie eine Entscheidung.</b> Eine Kampagne schliesst mit
+              unbeantworteten Zeilen, und die bleiben unbeantwortet: „Schweigen heisst behalten“ erfindet
+              eine Bestätigung, die niemand gegeben hat, „Schweigen heisst entziehen“ sperrt Leute aus,
+              weil jemand in den Ferien war. <code>undecided</code> ist deshalb eine eigene Zahl und kein
+              Rest. Wer prüft, bestimmt das Modell und nicht Atlas – eine Vorgesetztensuche ist eine
+              Verzeichnisfrage, genau wie bei der Genehmigungsregel <code>superior</code>.</p>
+            <p data-l="en">The whole design is a refusal to make a signature cheap. There is <b>no way to
+              answer several rows at once</b> – not in the screen and not in the API. A campaign answered
+              in bulk is a signature with no reading behind it, and that is worse than none, because an
+              auditor believes it.</p>
+            <p data-l="en"><b>Silence is never a decision.</b> A campaign closes with unanswered rows in
+              it and they stay unanswered: "silence means keep" invents an attestation nobody gave,
+              "silence means revoke" locks people out because somebody was on holiday. So
+              <code>undecided</code> is a first-class count rather than a remainder. Who reviews is the
+              model's to decide, not Atlas's – a line-manager lookup is a directory question, exactly as
+              it is for the <code>superior</code> approval rule.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
       <div class="bsp" id="bsp-entra-onboarding-selfservice">
         <h4><span class="rz-emoji" aria-hidden="true">🙋</span>
           <span data-l="de">Onboarding-Self-Service mit Freigabe</span><span data-l="en">Onboarding self-service with an approval</span></h4>

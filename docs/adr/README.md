@@ -425,6 +425,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 | [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
 | [0339](0339-the-definition-key-space-never-goes-backwards.md) | The definition key space never goes backwards | Accepted | Landed |
+| [0340](0340-worker-circuit-breaker.md) | An outage stops at the worker, not at every token | Accepted | Not started |
+| [0341](0341-access-recertification.md) | Recertification asks whether a right is still justified, and refuses to let silence answer | Accepted | Landed |
 
 ## The two states of a record
 

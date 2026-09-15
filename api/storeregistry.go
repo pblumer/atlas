@@ -128,6 +128,8 @@ var persistentStores = []storeEntry{
 	{name: "directory-sync", class: classIdentity, onDemand: true, why: "where the Entra mirror resumes from; without it the next run enumerates the whole tenant again, which is expensive and safe"},
 	{name: "inventory-loads", class: classIdentity, onDemand: true, why: "whether a commissioning load has ever been applied per target system; without it a restored installation cannot tell a system it loaded and found empty from one it never loaded, and those call for opposite actions"},
 	{name: "discrepancies", class: classIdentity, onDemand: true, why: "the journal of what Atlas and the target systems disagreed about, and who decided what about it; it is evidence and it is not in the event log, so nothing else can rebuild it"},
+	{name: "recertification-campaigns", class: classIdentity, onDemand: true, why: "what was asked of whom, when, and by whose authority; an attestation with no campaign around it says nothing about what else was in front of the reviewer"},
+	{name: "recertification-rows", class: classIdentity, onDemand: true, why: "the attestations themselves — who judged which right still needed, and when. Separate from the campaigns because there are thousands per campaign and each is written once; losing them loses the evidence and nothing can reconstruct a judgement"},
 
 	// --- credentials -------------------------------------------------------
 	{name: "api-tokens", class: classCredential, why: "machine access to the API"},

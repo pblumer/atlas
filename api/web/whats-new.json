@@ -62,6 +62,24 @@
       }
     },
     {
+      "id": "the-third-question-about-somebody-s-access-can-now-be-asked",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The third question about somebody's access can now be asked.",
+        "de": "The third question about somebody's access can now be asked."
+      },
+      "summary": {
+        "en": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it.",
+        "de": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
       "version": "Unreleased",
       "date": null,
@@ -369,24 +387,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-whose-logic-is-a-literal-expression-no-longer-cov",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision whose logic is a literal expression no longer covers the editor's own bar.",
-        "de": "A decision whose logic is a literal expression no longer covers the editor's own bar."
-      },
-      "summary": {
-        "en": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport.",
-        "de": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport."
-      },
-      "link": {
-        "label": "ADR-0320",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0320-the-decision-editor-is-a-page.md"
       }
     }
   ]

@@ -543,6 +543,28 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
 	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
 
+	// Recertification (ADR-0341). Omitted whole, and this
+	// one is the sharpest case in the table rather than another instance of it.
+	//
+	// The record's entire design is the refusal of a signature nobody read behind.
+	// There is no bulk decision, the interface asks one row at a time, and an
+	// undecided row is never a keep — all of it to make an attestation cost the
+	// reading it claims. A tool call is precisely the bulk decision wearing another
+	// name: an assistant asked to "finish the access review" would answer four
+	// hundred rows in a second, and every one of them would carry a person's id.
+	// That is not a worse version of the feature, it is the failure the feature
+	// exists to prevent, executed perfectly.
+	//
+	// The reads go for the reason GET /api/v1/inventory does — they are other
+	// people's access — and closing goes because what it publishes is how many
+	// questions went unanswered, which is a statement about people's diligence.
+	"POST /api/v1/recertification":                        "a campaign asks people questions, and an agent opening one decides who is asked and about what",
+	"GET /api/v1/recertification":                         "campaigns are other people's access under review, read the same way the inventory is",
+	"GET /api/v1/recertification/{id}":                    "a campaign's rows are other people's access, each with the reviewer's name against it",
+	"POST /api/v1/recertification/{id}/close":             "closing publishes how many questions nobody answered; it is a statement about people and belongs to one",
+	"POST /api/v1/recertification/{id}/rows/{row}/keep":   "an attestation is a person saying a right is still needed; an agent saying it is the rubber stamp the whole record refuses",
+	"POST /api/v1/recertification/{id}/rows/{row}/revoke": "taking somebody's access away is a person's act, and here it also records a judgement they must have made",
+
 	// Workers + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each Worker Type: the Modeler's picker reads it to
 	// badge a kind it is about to author (ADR-0183).

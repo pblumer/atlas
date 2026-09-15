@@ -79,6 +79,37 @@ _Changed_ / _Removed_ for each version.
   column from the summary — the same column, from a couple of hundred bytes instead of
   megabytes.
 
+- **The third question about somebody's access can now be asked.** Ordering answers *may they
+  have it*; reconciliation answers *do they actually have it*; nothing asked *do they still
+  need it*. That third one is not the smaller sibling of the other two — a right that was
+  properly approved, properly provisioned and is correctly recorded can still be wrong, and
+  in most estates it is the dominant way wrong access accumulates. People change roles and
+  keep what the old one needed. Nobody granted anything improperly; nobody removed anything
+  either, because removing is somebody's job and therefore nobody's.
+
+  `POST /api/v1/recertification` turns what the inventory records into questions, each
+  addressed to the person who can judge it. **Who reviews is named by the caller**, because
+  Atlas does not resolve line managers — a directory lookup belongs to a modelled process,
+  exactly as it does for the `superior` approval rule. A holder nobody names gives an
+  *unassigned* row, which lands with the campaign's owner rather than stopping the campaign.
+
+  The whole design is a refusal to make a signature cheap. **There is no way to answer more
+  than one row** — not in the screen and not in the API — because a campaign answered in bulk
+  is an attestation with no reading behind it, which is worse than none: an auditor believes
+  it. **Silence is never a decision**: a campaign closes with unanswered rows in it and they
+  stay unanswered, so `undecided` is a first-class count rather than a remainder. There is no
+  auto-revoke at the deadline, and no re-grant — granting is ordering, and ordering carries
+  the approval rule.
+
+  Each row carries what the reviewer was shown, frozen: origin, order, how long it has been
+  held, and whether an open reconciliation finding disputes it. Certifying a disputed right
+  is signing a statement about something two systems currently disagree about, so it is
+  marked — and marked rather than refused, because one finding must not block a campaign over
+  an estate. Withdrawing a right runs the product's own deprovisioning process, never a
+  direct worker call. `examples/rezertifizierung.bpmn` is the modelled process, and **Tasks →
+  Access review** is where somebody answers — Tasks rather than Operations, because the
+  reviewer is a line manager who has never opened Operations.
+
 - **A deployed decision version can now be removed, and so can a model file nothing
   points at.** Both stores only ever grew: every Deploy in the decision editor minted a
   version carrying the full DMN source, and every upload left a file behind.
