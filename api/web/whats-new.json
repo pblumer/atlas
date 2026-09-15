@@ -2,347 +2,269 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
-      "id": "a-relationship-is-drawn-from-the-class-it-starts-at-the-way-",
+      "id": "products-can-be-marked-as-favourites",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "Drag a relationship out of the class it starts at",
-        "de": "Beziehungen aus der Klasse ziehen, bei der sie beginnen"
+        "en": "Products can be marked as favourites.",
+        "de": "Products can be marked as favourites."
       },
       "summary": {
-        "en": "Select a class on the information model's canvas and the small menu you know from the BPMN modeler opens beside it, offering the relationship kinds that class can actually reach something with. Drag one onto the class at the other end and the line is drawn. Until now this was a mode: arm a kind in the toolbox, then click two classes and hope you clicked them in the right order — which is what decided where a composition's diamond went. A target that cannot take this kind of relationship no longer lights up, so the answer arrives while you are still deciding rather than afterwards, and dropping on one anyway still tells you why. The toolbox still works the old way if you prefer it.",
-        "de": "Wählen Sie im Informationsmodell eine Klasse aus, öffnet sich daneben das kleine Menü, das Sie aus dem BPMN-Modeler kennen — mit den Beziehungsarten, mit denen diese Klasse überhaupt etwas erreichen kann. Ziehen Sie eine davon auf die Klasse am anderen Ende, und die Linie ist gezeichnet. Bisher war das ein Modus: Art in der Werkzeugleiste scharfschalten, dann zwei Klassen anklicken und hoffen, dass die Reihenfolge stimmte — sie entschied, an welchem Ende die Raute einer Komposition landet. Ein Ziel, das diese Art von Beziehung nicht annehmen kann, leuchtet nicht mehr auf: Die Antwort kommt, während Sie noch entscheiden, statt danach. Wer trotzdem darauf loslässt, erfährt weiterhin den Grund. Die Werkzeugleiste funktioniert unverändert, wenn Sie den alten Weg bevorzugen."
+        "en": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident.",
+        "de": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     },
     {
-      "id": "an-enumeration-now-says-which-values-a-member-may-take-and-i",
+      "id": "a-product-can-now-say-who-may-receive-it",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "A status you pick instead of spell",
-        "de": "Einen Status auswählen statt schreiben"
+        "en": "A product can now say who may receive it.",
+        "de": "A product can now say who may receive it."
       },
       "summary": {
-        "en": "When a write targets a field whose type is an «enumeration», the value is now chosen from the values that enumeration declares, rather than typed. A computed value is still possible and is one item down the same list. When you deploy, a fixed value that is none of the declared ones is reported: the string is what matching is done by, and nothing else, so a status spelled slightly wrong runs for months and matches nothing. Only fixed values are judged, never one your process works out while it runs. The class diagram also joins the two boxes now: an enumeration that types an attribute used to sit unconnected beside the class that used it, with only the class body naming it.",
-        "de": "Zielt ein Schreibvorgang auf ein Feld, dessen Typ eine «enumeration» ist, wird der Wert jetzt aus den Werten ausgewählt, die diese Enumeration deklariert, statt getippt. Ein berechneter Wert bleibt möglich und steht einen Eintrag weiter unten in derselben Liste. Beim Deployen wird ein fester Wert gemeldet, der keiner der deklarierten ist: Verglichen wird über die Zeichenkette und über nichts sonst, ein leicht falsch geschriebener Status läuft also monatelang und trifft nie. Beurteilt werden nur feste Werte, nie einer, den Ihr Prozess zur Laufzeit ermittelt. Auch im Klassendiagramm sind die beiden Kästen jetzt verbunden: Eine Enumeration, die ein Attribut typisiert, stand bisher unverbunden neben der Klasse, die sie nutzt, und nur der Klassenrumpf nannte sie."
+        "en": "A catalogue carries an audience and that gate is fail-closed — but it was the only gate: whoever was in a catalogue's audience could order anything in it, and the sole thing between a person and domain administration was an approval rule, which says who decides rather than who may ask.",
+        "de": "A catalogue carries an audience and that gate is fail-closed — but it was the only gate: whoever was in a catalogue's audience could order anything in it, and the sole thing between a person and domain administration was an approval rule, which says who decides rather than who may ask."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Data"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     },
     {
-      "id": "a-write-arrow-can-set-several-members-of-a-data-object-at-on",
+      "id": "a-hold-that-ends-now-leaves-a-record-that-it-existed",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "One arrow, as many fields as the step fills in",
-        "de": "Ein Pfeil, so viele Felder wie der Schritt ausfüllt"
+        "en": "A hold that ends now leaves a record that it existed.",
+        "de": "A hold that ends now leaves a record that it existed."
       },
       "summary": {
-        "en": "A task that captures a name, a first name, a unit and a start date used to need four arrows to the same data object, one per field, and a diagram of them reads as a cable harness. The arrow now carries a list: add a row per field, pick the member, give it a value. They are applied in the order you list them and recorded as one change to the object, because the step did one thing. The alternative was to write the whole object from a single expression, which drew well and told Atlas nothing — what is inside an expression cannot be read before the process runs, so nothing checked those fields against the class and the class looked like it had none. Named on their own rows they count again: checked when you deploy, listed in the derived model, and compared against what you planned.",
-        "de": "Eine Aufgabe, die Name, Vorname, Organisationseinheit und Eintritt erfasst, brauchte bisher vier Pfeile auf dasselbe Datenobjekt, einen je Feld — ein Diagramm davon sieht aus wie ein Kabelbaum. Der Pfeil führt jetzt eine Liste: eine Zeile je Feld, Attribut auswählen, Wert angeben. Sie werden in der angegebenen Reihenfolge angewandt und als eine Änderung am Objekt festgehalten, denn der Schritt hat eine Sache getan. Die Alternative war, das ganze Objekt aus einem einzigen Ausdruck zu schreiben. Das zeichnet sich gut und sagt Atlas nichts: Was in einem Ausdruck steht, ist vor dem Lauf nicht lesbar, also prüfte niemand diese Felder gegen die Klasse, und die Klasse sah aus, als hätte sie keine. In eigenen Zeilen benannt zählen sie wieder — geprüft beim Deployen, im abgeleiteten Modell aufgeführt und gegen das Geplante verglichen."
+        "en": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all.",
+        "de": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Data"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     },
     {
-      "id": "a-data-object-whose-state-a-task-advances-is-no-longer-treat",
+      "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "A state change is not a rewrite of the object",
-        "de": "Ein Zustandswechsel ist keine Neufassung des Objekts"
+        "en": "The catalogue can now say what must never be held together.",
+        "de": "The catalogue can now say what must never be held together."
       },
       "summary": {
-        "en": "An arrow that only advances a data object's state leaves its value untouched. Atlas read it as a write that replaces the whole object, and then withheld the field comparison from that class — which would have quietly emptied the difference reading for almost every class, because almost every lifecycle is driven by exactly these arrows. Fixed before it reached a release.",
-        "de": "Ein Pfeil, der nur den Zustand eines Datenobjekts weiterschaltet, lässt dessen Wert unangetastet. Atlas las ihn als Schreibvorgang, der das ganze Objekt ersetzt, und nahm die Klasse daraufhin vom Feldvergleich aus. Das hätte den Abgleich für fast jede Klasse still geleert, denn fast jeder Lebenszyklus wird von genau solchen Pfeilen bewegt. Behoben, bevor es in ein Release kam."
-      },
-      "link": {
-        "label": "ADR-0301",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data"
-      ]
-    },
-    {
-      "id": "a-class-a-process-writes-whole-no-longer-fills-the-differenc",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The difference reading no longer asks for work a process already does",
-        "de": "Der Abgleich verlangt keine Arbeit mehr, die längst erledigt ist"
-      },
-      "summary": {
-        "en": "A task can write a whole data object at once instead of naming a field — the value is an expression, and what it puts inside is decided while the process runs. Nothing in the model says what that is, so Atlas could see no fields at all for such an object. The difference between what is built and what is planned took that silence for an answer and listed every field the class declares as still to do. On a real model that was five fields a task was already writing. Now Atlas says plainly that it cannot see inside, leaves the fields of that class out of the comparison, and names the class among the things it did not compare. The states such an object moves through are still compared, because those are written on the object itself.",
-        "de": "Eine Aufgabe kann ein Datenobjekt als Ganzes schreiben, statt ein einzelnes Feld zu benennen — der Wert ist ein Ausdruck, und was darin steht, entscheidet sich erst zur Laufzeit. Im Modell steht davon nichts, also sah Atlas für ein solches Objekt überhaupt keine Felder. Der Abgleich zwischen Gebautem und Geplantem hielt dieses Schweigen für eine Antwort und führte jedes Feld der Klasse als offen. An einem echten Modell waren das fünf Felder, die eine Aufgabe längst schreibt. Jetzt sagt Atlas ausdrücklich, dass es nicht hineinsehen kann, lässt die Felder dieser Klasse aus dem Vergleich heraus und nennt die Klasse bei dem, was es nicht verglichen hat. Die Zustände, die ein solches Objekt durchläuft, werden weiterhin verglichen — die stehen am Objekt selbst."
+        "en": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself.",
+        "de": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ]
-    },
-    {
-      "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "PowerShell works in the strict script sandbox",
-        "de": "PowerShell funktioniert in der strikten Skript-Sandbox"
-      },
-      "summary": {
-        "en": "The strict profile denied PowerShell the process and account files its runtime reads before starting, so every PowerShell script task failed while Python and JavaScript worked. It now allows exactly those, and only this process's own entry. Starting with --script-sandbox=strict also launches each enabled interpreter once to prove it runs, so a broken profile is refused at startup instead of one failed job at a time.",
-        "de": "Das strikte Profil verwehrte PowerShell die Prozess- und Kontodateien, die seine Laufzeit vor dem Start liest; deshalb scheiterte jede PowerShell-Skriptaufgabe, während Python und JavaScript liefen. Genau diese sind nun erlaubt, und nur der eigene Prozesseintrag. Beim Start mit --script-sandbox=strict wird zudem jeder aktivierte Interpreter einmal ausgeführt: Ein nicht lauffähiges Profil wird beim Start abgewiesen statt Auftrag für Auftrag."
-      },
-      "link": {
-        "label": "ADR",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0303-script-sandbox-isolation.md"
-      },
-      "tags": [
-        "Security",
-        "Scripts"
-      ]
-    },
-    {
-      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-relations",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Starmap's ArchiMate view now draws the relationships too",
-        "de": "Die ArchiMate-Ansicht der Starmap zeichnet jetzt auch die Beziehungen"
-      },
-      "summary": {
-        "en": "The nodes were already drawn in ArchiMate's own symbols; the lines between them were still Atlas's — one solid, one dashed, one dotted. For a reader who works in the notation that is half the alphabet, because ArchiMate tells Assignment, Triggering and Serving apart by what sits at the ends of an otherwise identical solid line. Each is now drawn that way: a ball at the source and a filled arrowhead at the target for Assignment, a filled arrowhead for Triggering, an open one for Serving. The lines are solid, and that is not a detail — in ArchiMate a dashed line with an open arrowhead is a Flow and a dotted one a Realization, so keeping Atlas's own dash would not have been a missing statement but a wrong one. A Serving relationship points the other way from the fact it comes from: ArchiMate runs Serving from the provider to the consumer, so the arrowhead sits on the process rather than on the worker it names — the same reversal the exported document has always made. The key says that in words as well, for the reader who does not know the notation by sight, and the marks travel into an exported file where there is no key to hover over. Three relationships is all there can be: Atlas knows that an application holds a process, that a process calls another, and that a process uses a worker or a decision. Nothing here is a Flow or a Realization, and an absent relationship type means Atlas cannot see one, never that there is none. Atlas's own picture is unchanged — the dash is a free channel there, because the vocabulary has no opinion about it.",
-        "de": "Die Knoten wurden bereits in den Symbolen von ArchiMate gezeichnet, die Linien dazwischen jedoch weiterhin in der Darstellung von Atlas: eine durchgezogen, eine gestrichelt, eine gepunktet. Für Lesende, die in dieser Notation arbeiten, fehlt damit das halbe Alphabet, denn ArchiMate unterscheidet Assignment, Triggering und Serving allein danach, was an den Enden einer ansonsten identischen durchgezogenen Linie steht. Genau so wird jetzt gezeichnet: eine Kugel am Ausgangspunkt und eine gefüllte Pfeilspitze am Ziel für Assignment, eine gefüllte Pfeilspitze für Triggering, eine offene für Serving. Die Linien sind durchgezogen, und das ist kein Detail — in ArchiMate ist eine gestrichelte Linie mit offener Pfeilspitze ein Flow und eine gepunktete eine Realization. Die Strichelung von Atlas beizubehalten wäre also keine fehlende, sondern eine falsche Aussage gewesen. Eine Serving-Beziehung zeigt in die Gegenrichtung der Tatsache, aus der sie stammt: ArchiMate führt Serving vom Anbieter zum Nutzer, die Pfeilspitze sitzt daher am Prozess und nicht am Worker, den er benennt — dieselbe Umkehrung, die das exportierte Dokument seit jeher vornimmt. Die Legende sagt das zusätzlich in Worten, für Lesende, welche die Notation nicht auf den ersten Blick kennen, und die Marken wandern in eine exportierte Datei, in der es keine Legende zum Nachschlagen gibt. Mehr als drei Beziehungen kann es nicht geben: Atlas weiss, dass eine Anwendung einen Prozess hält, dass ein Prozess einen anderen aufruft und dass ein Prozess einen Worker oder eine Entscheidung nutzt. Nichts hier ist ein Flow oder eine Realization, und ein fehlender Beziehungstyp bedeutet, dass Atlas keinen erkennen kann — nie, dass es keinen gibt. Die eigene Darstellung von Atlas bleibt unverändert: Dort ist die Strichelung ein freier Kanal, weil das Vokabular dazu keine Aussage trifft."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Panorama; the Starmap is its landing view.",
-          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
-          "Look at the ends of the lines: a ball and a filled arrowhead is an Assignment, a filled arrowhead alone is a Triggering, an open one is a Serving.",
-          "Follow a Serving line: the arrowhead is on the process, not on the worker. The key row says \"drawn from the provider\" for exactly that reason.",
-          "Export the picture as SVG or PNG — the marks and the key travel with the file."
-        ],
-        "de": [
-          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
-          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
-          "Auf die Linienenden achten: Kugel und gefüllte Pfeilspitze bedeuten Assignment, eine gefüllte Pfeilspitze allein Triggering, eine offene Serving.",
-          "Einer Serving-Linie folgen: Die Pfeilspitze sitzt am Prozess, nicht am Worker. Die Legende vermerkt dazu „drawn from the provider“.",
-          "Das Bild als SVG oder PNG exportieren — Marken und Legende wandern mit der Datei."
-        ]
       }
     },
     {
-      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-own-symbo",
+      "id": "a-reminder-can-now-ask-what-is-waiting-for-somebody-else",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "The Starmap's ArchiMate view is drawn in ArchiMate's own symbols",
-        "de": "Die ArchiMate-Ansicht der Starmap wird in ArchiMate-Symbolen gezeichnet"
+        "en": "A reminder can now ask what is waiting for somebody else.",
+        "de": "A reminder can now ask what is waiting for somebody else."
       },
       "summary": {
-        "en": "Picking ArchiMate 3.2 under Notation already mapped every node to an ArchiMate element type and wrote that type under its name — and then drew Atlas's own circles and squares. For the one reader that view exists for, that was the vocabulary without the script. The five mapped kinds are now drawn as the elements themselves: an Application Component with its two lugs, an Application Process as an arrow, an Application Service as a rounded lozenge, an Application Function as a chevron, and a deployment target as a Node's three-dimensional box. The standard allows either a box with a small type icon in the corner or the icon at full size; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node, and the written type stays beside it for readers who do not know the notation by sight. The fills are the layer colours everyone recognises — Application #B5FFFF, Technology #C9E7B7 — and the key says plainly what they are: ArchiMate 3.2 defines no colours at all, and these are the convention its own figures and the Archi tool use. They are pale by design, so a red or amber finding still reads above them. A draft, a restricted placeholder and an unresolved dependency keep Atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would claim something the notation does not.",
-        "de": "Die Auswahl von ArchiMate 3.2 unter „Notation“ ordnete bisher jedem Knoten einen ArchiMate-Elementtyp zu und schrieb diesen Typ unter den Namen — gezeichnet wurden dann aber weiterhin die Kreise und Quadrate von Atlas. Für die Leserschaft, für die diese Ansicht existiert, war das die Sprache ohne die Schrift. Die fünf zugeordneten Arten werden jetzt als die Elemente selbst gezeichnet: eine Application Component mit ihren zwei Laschen, ein Application Process als Pfeil, ein Application Service als abgerundete Raute, eine Application Function als Winkel und ein Deployment-Ziel als dreidimensionaler Kasten eines Node. Der Standard erlaubt beide Formen — einen Kasten mit kleinem Typsymbol in der Ecke oder das Symbol in voller Grösse; in der Grösse, in der ein Knoten hier gezeichnet wird, wären es ein bis zwei Pixel, also ist das Symbol der Knoten. Der geschriebene Typ bleibt daneben stehen, für Lesende, die die Notation nicht auf den ersten Blick erkennen. Die Füllungen sind die bekannten Ebenenfarben — Application #B5FFFF, Technology #C9E7B7 — und die Legende sagt ausdrücklich, was sie sind: ArchiMate 3.2 definiert überhaupt keine Farben; diese sind die Konvention der Abbildungen des Standards und des Werkzeugs Archi. Sie sind bewusst blass gehalten, damit ein roter oder gelber Befund weiterhin darüber lesbar bleibt. Ein Entwurf, ein eingeschränkter Platzhalter und eine nicht aufgelöste Abhängigkeit behalten Form und Farbe von Atlas, denn ArchiMate hat für sie kein Element, und sie als eines zu zeichnen wäre eine Aussage, die die Notation nicht macht."
+        "en": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks.",
+        "de": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Panorama; the Starmap is its landing view.",
-          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
-          "The picture is redrawn in ArchiMate's symbols, in the Application and Technology layer fills.",
-          "Read the loss list under the picture: it names what the projection cannot say, including that the colours are convention rather than standard and that drafts, restricted placeholders and unresolved dependencies keep Atlas's own shape."
-        ],
-        "de": [
-          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
-          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
-          "Das Bild wird in den Symbolen von ArchiMate gezeichnet, in den Füllfarben der Ebenen Application und Technology.",
-          "Die Verlustliste unter dem Bild lesen: Sie nennt, was die Projektion nicht ausdrücken kann — unter anderem, dass die Farben Konvention und nicht Standard sind und dass Entwürfe, eingeschränkte Platzhalter und nicht aufgelöste Abhängigkeiten die Form von Atlas behalten."
-        ]
       }
     },
     {
-      "id": "the-starmap-opens-using-the-whole-window-whatever-the-size-o",
+      "id": "a-right-can-now-end-by-itself",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "The Starmap opens using the whole window",
-        "de": "Die Starmap nutzt beim Öffnen das ganze Fenster"
+        "en": "A right can now end by itself.",
+        "de": "A right can now end by itself."
       },
       "summary": {
-        "en": "A small landscape used to open as a few small circles adrift in an empty canvas, and a process attached to nothing — or a handful that call each other and nothing else, like a test flow — could sit at the far edge holding two thirds of the window open behind it. The picture is now drawn at the same density whatever the size of the estate (five nodes fill as much of the window as a hundred and twenty-five do), and nothing is left far enough from the rest of the picture to decide how small everything else is drawn. It applies to every notation, including the Instances and Incidents heatmaps.",
-        "de": "Eine kleine Landschaft wurde bisher als ein paar kleine Kreise auf einer weitgehend leeren Fläche geöffnet, und ein Prozess ohne Verbindung — oder eine Handvoll, die nur sich gegenseitig aufrufen, etwa ein Testablauf — konnte am äusseren Rand sitzen und zwei Drittel des Fensters leer halten. Das Bild wird jetzt unabhängig von der Grösse der Landschaft in derselben Dichte gezeichnet (fünf Knoten füllen so viel Fenster wie hundertfünfundzwanzig), und nichts liegt mehr so weit vom Rest entfernt, dass es bestimmt, wie klein alles andere gezeichnet wird. Das gilt für jede Notation, auch für die Heatmaps Instances und Incidents."
+        "en": "Everything the portal grants, it granted forever — which nobody notices on the day it is built, and which is why the commissioning load, reconciliation and recertification all exist: three controls that find access which should not be there, after it is there.",
+        "de": "Everything the portal grants, it granted forever — which nobody notices on the day it is built, and which is why the commissioning load, reconciliation and recertification all exist: three controls that find access which should not be there, after it is there."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
-    },
-    {
-      "id": "removing-someone-from-an-application-now-takes-their-starmap",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Removing someone from an application takes effect on the Starmap at once",
-        "de": "Wer aus einer Applikation entfernt wird, verliert die Starmap sofort"
-      },
-      "summary": {
-        "en": "The Starmap holds a short reading of what this server is, so that twenty people with the view open cost the engine one reading rather than twenty. It decided who may see what on every request — but from that held reading, and the reading included the application records themselves. An application's members are written on the application, so re-deciding against a record half a minute old gave the answer from half a minute ago. Somebody you removed from an application, an application you sealed to private, an ownership transfer, an application you deleted: in each case the person who had just lost access kept receiving that application's processes for the rest of the window — process names and ids, what calls what, running and finished instance counts, incident counts and ages, and the incident details with their raw error text from workers. That is the material the Starmap otherwise replaces with an anonymous placeholder, and the view's own automatic refresh reached the window without anybody doing anything, because an open tab re-reads on its own. The two stores a sharing scope lives in — applications and workers — are now read on every request, exactly as every other list on this server reads them, so a change of access takes effect on the next request as it does everywhere else. Only structure that carries no sharing scope is still held briefly, so the reason for holding it is intact. Two things get better with it: an application or a worker you create or delete now appears on the Starmap at once instead of within half a minute, and a task pointing at a worker you have just deleted stops pointing at it.",
-        "de": "Die Starmap hält kurz fest, was dieser Server ist, damit zwanzig geöffnete Ansichten die Engine einmal statt zwanzigmal kosten. Wer was sehen darf, wurde bei jeder Anfrage neu entschieden — aber anhand dieses festgehaltenen Standes, und der enthielt die Applikations-Datensätze selbst. Die Mitglieder einer Applikation stehen an der Applikation; eine Entscheidung gegen einen eine halbe Minute alten Datensatz liefert also die Antwort von vor einer halben Minute. Wen Sie aus einer Applikation entfernt, welche Applikation Sie auf privat gestellt, übertragen oder gelöscht haben: Die betroffene Person erhielt die Prozesse dieser Applikation für den Rest des Fensters weiter — Prozessnamen und -IDs, wer wen aufruft, laufende und abgeschlossene Instanzzahlen, Incident-Zahlen und -Alter sowie die Incident-Details mit den unveränderten Fehlermeldungen aus Workern. Genau dieses Material ersetzt die Starmap sonst durch einen anonymen Platzhalter, und die automatische Aktualisierung der Ansicht erreichte das Fenster von selbst, weil ein offener Tab eigenständig nachliest. Die beiden Ablagen, in denen eine Freigabe lebt — Applikationen und Worker —, werden jetzt bei jeder Anfrage gelesen, genau wie jede andere Liste dieses Servers es tut; eine Zugriffsänderung wirkt damit ab der nächsten Anfrage, wie überall sonst. Festgehalten wird nur noch Struktur ohne Freigabe, der Grund für das Festhalten bleibt also bestehen. Zwei Dinge werden dabei besser: Eine Applikation oder ein Worker, die Sie anlegen oder löschen, erscheinen auf der Starmap jetzt sofort statt innerhalb einer halben Minute, und ein Task, der auf einen soeben gelöschten Worker zeigte, zeigt nicht mehr darauf."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Security"
-      ],
-      "tutorial": {
-        "en": [
-          "Nothing to configure — the change is in how the Starmap answers.",
-          "If you have removed anyone from an application recently and want to be sure: open the application under Applications, check its members, and the Starmap will match on its next read.",
-          "If you administer this server, note that a person's session and role are unaffected — only their view of applications and workers changes, and only in the direction of less."
-        ],
-        "de": [
-          "Nichts einzurichten — die Änderung betrifft, wie die Starmap antwortet.",
-          "Falls Sie kürzlich jemanden aus einer Applikation entfernt haben und sichergehen wollen: Applikation unter Applications öffnen, Mitglieder prüfen — die Starmap stimmt ab dem nächsten Lesen damit überein.",
-          "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
-        ]
       }
     },
     {
-      "id": "switching-drafts-on-the-starmap-while-it-happens-to-be-refre",
+      "id": "a-business-object-says-where-it-is-used",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "The Drafts switch on the Starmap stays where you put it",
-        "de": "Der Drafts-Schalter der Starmap bleibt, wo Sie ihn hinstellen"
+        "en": "Every business object now says where it is used",
+        "de": "Jedes Business Object zeigt jetzt, wo es verwendet wird"
       },
       "summary": {
-        "en": "The Starmap re-reads the landscape on its own while you have it open. That read and the one the Drafts switch makes could be in flight at the same time, and if the automatic one happened to land second it overwrote the picture and put the switch back — the drafts appeared and then vanished again under the hand that had just asked for them, with nothing said about why. Your answer wins now: an automatic read that arrives after you have asked for a different landscape is dropped rather than applied, and the timer does not start one while the switch's own request is still running.",
-        "de": "Die Starmap liest die Landschaft von selbst nach, solange sie offen ist. Dieses Lesen und das des Drafts-Schalters konnten gleichzeitig unterwegs sein, und traf das automatische zufällig als Zweites ein, überschrieb es das Bild und stellte den Schalter zurück — die Drafts erschienen und verschwanden wieder unter der Hand, die sie gerade angefordert hatte, ohne jeden Hinweis. Jetzt gewinnt Ihre Antwort: Ein automatisches Lesen, das eintrifft, nachdem Sie eine andere Landschaft angefordert haben, wird verworfen statt angewendet, und der Zeitgeber startet keines, solange die Anfrage des Schalters noch läuft."
+        "en": "You could always see what an Order is. What you could not see was what depends on it — so renaming a member, retiring an enumeration literal or dropping a state meant guessing. Data now has a Business objects list: every class of every information model you can see, in one sortable, filterable table across all applications. Open one and it says where it is used and how — every deployed process that declares it, and every element that reads it, writes one member of it, moves it into a state or names the store it is kept in, plus everything in the model itself that refers to it.",
+        "de": "Was ein Auftrag ist, war immer sichtbar. Was von ihm abhängt, nicht — ein Attribut umbenennen, ein Literal streichen oder einen Zustand entfernen hiess raten. Data hat jetzt die Liste Business objects: jede Klasse jedes Informationsmodells, das Sie sehen dürfen, in einer sortier- und filterbaren Tabelle über alle Applikationen hinweg. Ein Klick darauf zeigt, wo und wie sie verwendet wird — jeder deployte Prozess, der sie deklariert, und jedes Element, das sie liest, ein Attribut davon schreibt, sie in einen Zustand überführt oder den Speicher nennt, in dem sie liegt, dazu alles im Modell selbst, was auf sie verweist."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Panorama"
-      ]
-    },
-    {
-      "id": "a-diagram-filed-under-no-application-no-longer-answers-with-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Modeler now says when it cannot check your data",
-        "de": "Der Modeler sagt jetzt, wenn er Ihre Daten nicht prüfen kann"
-      },
-      "summary": {
-        "en": "If a diagram is not filed under an application there is no information model behind it, so nothing about its data objects can be resolved or checked. That used to look like everything being fine: the class field was a plain text box and the Problems panel said \"No problems\". Now the panel names the reason and what to do about it, and an unchecked diagram says \"No problems found — data not checked\" instead of claiming a clean bill it never earned.",
-        "de": "Liegt ein Diagramm unter keiner Anwendung, steht kein Informationsmodell dahinter — nichts an seinen Datenobjekten lässt sich auflösen oder prüfen. Bisher sah das aus, als wäre alles in Ordnung: Das Klassenfeld war ein einfaches Textfeld, und die Problemliste meldete „No problems\". Jetzt nennt das Panel den Grund und den Weg heraus, und ein ungeprüftes Diagramm sagt „No problems found — data not checked\", statt eine Unbedenklichkeit zu behaupten, die es nie erworben hat."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
         "Data"
       ],
       "tutorial": {
         "en": [
-          "Open a process in the Modeler and select a data object.",
-          "If the Class field is a plain text box, read the note under it: either the diagram is filed under no application, or the application models nothing yet — two different remedies.",
-          "For the first: open the process's draft from its application, or deploy it from there.",
-          "The Problems bar tells you the same thing from the other side — it now distinguishes \"nothing wrong\" from \"nothing looked\"."
+          "Open Data and switch to the Business objects tab.",
+          "Filter the list by name, kind or application — the Used by column says how many processes depend on each class.",
+          "Click a name to open it: its members and lifecycle first, then every process use with the element, the member and the state named.",
+          "An enumeration used by no process is not unused — its uses are listed under \"Used in the model\"."
         ],
         "de": [
-          "Einen Prozess im Modeler öffnen und ein Datenobjekt auswählen.",
-          "Ist das Feld Class ein einfaches Textfeld, sagt der Hinweis darunter warum: entweder liegt das Diagramm unter keiner Anwendung, oder die Anwendung modelliert noch nichts — zwei verschiedene Wege heraus.",
-          "Für den ersten Fall: den Draft des Prozesses aus seiner Anwendung heraus öffnen oder von dort deployen.",
-          "Die Problemleiste sagt dasselbe von der anderen Seite — sie unterscheidet jetzt „nichts gefunden\" von „nichts geprüft\"."
+          "Data öffnen und auf den Reiter Business objects wechseln.",
+          "Die Liste nach Name, Art oder Applikation filtern — die Spalte Used by sagt, wie viele Prozesse von einer Klasse abhängen.",
+          "Auf einen Namen klicken: zuerst Attribute und Lebenszyklus, dann jede Verwendung im Prozess mit Element, Attribut und Zustand.",
+          "Eine Enumeration ohne Prozessverwendung ist nicht ungenutzt — ihre Verwendungen stehen unter «Used in the model»."
         ]
       },
       "try": {
         "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
+          "en": "Open Business objects",
+          "de": "Business objects öffnen"
         },
-        "route": "#/modeler"
+        "route": "#/data/objects"
+      }
+    },
+    {
+      "id": "an-incident-flood-is-read-by-cause-and-cleared-in-one-action",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An incident flood is read by cause, and cleared in one action.",
+        "de": "An incident flood is read by cause, and cleared in one action."
+      },
+      "summary": {
+        "en": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems.",
+        "de": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-third-question-about-somebody-s-access-can-now-be-asked",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The third question about somebody's access can now be asked.",
+        "de": "The third question about somebody's access can now be asked."
+      },
+      "summary": {
+        "en": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it.",
+        "de": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old decision versions can finally be cleared away",
+        "de": "Alte Entscheidungsversionen lassen sich endlich aufräumen"
+      },
+      "summary": {
+        "en": "Every press of Deploy in the decision editor minted a version and kept the whole model with it, and every uploaded model file stayed where it was put. Nothing could take either back, so iterating on a decision — which is what that button is for — cost permanent disk. Both can now be removed, under a rule that protects what is actually running. A deployed version is refused while a deployed process is pinned to it: that process resolved its decision to exactly that version when it was deployed and keeps no copy of it, and the pin outlives the instances that used it — so having nothing running is not enough. It is also refused while it is the newest version of a decision that still has older ones behind it, because removing it would send the next deployment quietly back a version. Clearing a history therefore works oldest first, and the refusal says which of the two reasons applies. Operations' page for a decision now lists every deployed version with the processes holding each one — the first place in Atlas that answers what is using this version — and offers Delete where nothing does. A model file that no reference points at can be deleted from Not assigned; decisions already deployed from it keep running, because they carry their own copy.",
+        "de": "Jeder Druck auf «Deploy» im Entscheidungseditor erzeugte eine Version und behielt das ganze Modell dazu, und jede hochgeladene Modelldatei blieb liegen. Zurücknehmen liess sich beides nicht — das Iterieren an einer Entscheidung, wofür diese Schaltfläche da ist, kostete also dauerhaft Speicher. Beides lässt sich nun entfernen, nach einer Regel, die schützt, was tatsächlich läuft. Eine ausgelieferte Version wird abgelehnt, solange ein ausgelieferter Prozess darauf festgelegt ist: Dieser Prozess hat seine Entscheidung beim Ausliefern auf genau diese Version aufgelöst und hält keine eigene Kopie davon, und die Festlegung überdauert die Instanzen, die sie genutzt haben — dass nichts mehr läuft, genügt also nicht. Abgelehnt wird auch die neueste Version einer Entscheidung, hinter der noch ältere stehen, denn ihr Entfernen würde die nächste Auslieferung stillschweigend eine Version zurückwerfen. Eine Historie räumt man daher von der ältesten Version her ab, und die Ablehnung sagt, welcher der beiden Gründe greift. Die Entscheidungsseite in Operations führt jetzt jede ausgelieferte Version mit den Prozessen auf, die sie halten — die erste Stelle in Atlas, die beantwortet, was eine Version verwendet — und bietet «Delete» dort an, wo nichts sie hält. Eine Modelldatei, auf die keine Referenz zeigt, lässt sich unter «Nicht zugeordnet» löschen; bereits daraus ausgelieferte Entscheidungen laufen weiter, weil sie ihre eigene Kopie tragen."
+      },
+      "link": {
+        "label": "ADR-0329",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0329-a-decision-deployment-is-not-deletable.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations → Decisions and choose a decision.",
+          "Deployed versions lists every version with its key, when it was deployed, and what is holding it.",
+          "A version nothing holds carries a Delete button; one that is held says held, and the tooltip says why.",
+          "For model files, open the Modeler's Not assigned and use ⋯ → Delete model on a row marked No reference."
+        ],
+        "de": [
+          "«Operations → Decisions» öffnen und eine Entscheidung auswählen.",
+          "«Deployed versions» führt jede Version auf, mit Schlüssel, Auslieferungszeitpunkt und dem, was sie hält.",
+          "Eine Version, die nichts hält, trägt eine Schaltfläche «Delete»; eine gehaltene zeigt «held», und der Tooltip nennt den Grund.",
+          "Für Modelldateien im Modeler «Nicht zugeordnet» öffnen und bei einer mit «No reference» markierten Zeile «⋯ → Delete model» wählen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Decisions",
+          "de": "Decisions öffnen"
+        },
+        "route": "#/operations/decisions"
+      }
+    },
+    {
+      "id": "the-inventory-can-now-be-checked-rather-than-trusted",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The inventory can now be checked rather than trusted.",
+        "de": "The inventory can now be checked rather than trusted."
+      },
+      "summary": {
+        "en": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it.",
+        "de": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-inventory-is-taken-before-it-is-enforced",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The inventory is taken before it is enforced.",
+        "de": "The inventory is taken before it is enforced."
+      },
+      "summary": {
+        "en": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted.",
+        "de": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]

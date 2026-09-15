@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Entra ID Verzeichnis-Abgleich (ADR-0332)
+  — stündlich lesen, was sich geändert hat, und Atlas-Konten daraus führen.
+
+  Das Gegenstück zu entra-delta-sync.bpmn: dort endet der Prozess mit dem Cursor in
+  der Hand, hier meldet er das Gelesene an Atlas selbst, und Atlas legt Konten und
+  Gruppen an, ändert sie und deaktiviert sie.
+
+  Gezogen statt geschoben: Atlas läuft intern, fragt Graph von sich aus ab und
+  veröffentlicht nichts nach aussen. Es gibt keinen eingehenden Bereitstellungspfad
+  und keine Netzwerköffnung — der Mandanten-Zugang liegt weiterhin ausschliesslich
+  im Entra-Worker (ADR-0172).
+
+    Timer-Start "stündlich"      timeCycle R/PT1H (ADR-0051)
+     -> [REST GET  /api/v1/directory-sync]  `stand` = { revision, usersDeltaLink,
+                                            groupsDeltaLink, everApplied }
+     -> [entra delta-users]      ab stand.usersDeltaLink  -> `konten`
+     -> [entra delta-groups]     ab stand.groupsDeltaLink -> `gruppen`
+     -> [REST POST /api/v1/directory-sync]  meldet beide Änderungsmengen und beide
+                                            Cursor -> `bericht`
+     -> Ende
+
+  ────────────────────────────────────────────────────────────────────────────────
+  DER ERSTE LAUF SCHREIBT NICHTS. Der Meldetask trägt `apply: false`.
+
+  Ein leerer Cursor löst beim ersten Mal eine vollständige Aufzählung des ganzen
+  Mandanten aus, gegen einen fast leeren Benutzerspeicher. Das ist der Lauf, bei dem
+  ein Fehler nicht einen Menschen trifft, sondern alle. Er entscheidet daher alles
+  und schreibt nichts, bis ein Mensch `bericht` gelesen hat.
+
+  Umschalten heisst: in der eigenen Kopie dieses Modells `apply: false` auf
+  `apply: true` setzen und neu deployen. Bis dahin sagt jeder Bericht in
+  `bericht.reason` ausdrücklich, dass nichts geschrieben wurde und warum, und
+  `bericht.everApplied` bleibt false — damit ein Monat im Trockenlauf nicht aussieht
+  wie ein Abgleich ohne Änderungen.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  Voraussetzungen beim Betreiber:
+    * Ein Entra-Worker (hier "contoso") mit den Graph-Berechtigungen User.Read.All
+      und Group.Read.All — lesend genügt, dieser Prozess schreibt nichts nach Entra.
+    * Ein REST-Worker namens "atlas", der auf diese Atlas-Instanz zeigt und ein
+      API-Token mit dem Scope "directory" trägt. Dieser Scope erreicht genau die
+      beiden Routen unten und sonst nichts; insbesondere kann er nicht deployen.
+    * Authentisierung eingeschaltet. Beide Routen weisen einen Server ohne
+      Authentisierung ausdrücklich ab — es gibt keinen unauthentisierten Weg in die
+      Kontenbereitstellung.
+
+  Das Intervall steht als timeCycle im Modell und nicht als Konstante im Quelltext:
+  eine Installation mit anderem Bedarf ändert ihre Kopie. Eine Stunde ist die
+  Verzögerung, mit der ein ausgeschiedener Mensch Konto und Rechte behält — Entras
+  eigener Bereitstellungszyklus liegt bei rund 40 Minuten und ist nicht einstellbar,
+  der Abstand zum geschobenen Verfahren ist also klein.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_entra_verzeichnis_abgleich"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_entra_verzeichnis_abgleich" name="Entra ID: Verzeichnis-Abgleich" isExecutable="true">
+    <bpmn:documentation>Führt die Atlas-Konten und -Gruppen stündlich aus einem Entra-Mandanten nach: liest über Graph-Delta-Abfragen nur, was sich seit dem letzten Lauf geändert hat, und meldet es an diese Atlas-Instanz.
+
+Der Prozess startet ohne Variablen — der Timer erzeugt die Instanz, und alles, was der Lauf braucht, holt der erste Task von Atlas selbst. Insbesondere die beiden Cursor: sie leben im Server und nicht im Modell, weil sie Neustarts überleben müssen und weil nur der Server weiss, ob der letzte Lauf tatsächlich geschrieben hat.
+
+Der erste Lauf meldet mit apply=false und schreibt daher nichts; er entscheidet aber vollständig, und `bericht` sagt, was ein Lauf mit apply=true getan hätte. Erst wenn dieser Bericht gelesen ist, wird in der eigenen Kopie des Modells apply auf true gesetzt und neu deployt.
+
+Ein wiederholt zugestellter Lauf ist harmlos: die Meldung trägt mit fromRevision die Revision, gegen die sie gelesen wurde, und Atlas schreibt nur, solange diese noch aktuell ist. Eine zweite Zustellung meldet „bereits verarbeitet" und bewegt den Cursor nicht.
+
+Worker-only (ADR-0172): der Mandanten-Zugang liegt nie in der Engine.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_stuendlich" name="stündlich">
+      <bpmn:documentation>Wiederholungszyklus R/PT1H: der Timer erzeugt jede Stunde eine Instanz (ADR-0051). Das Intervall ist die Verzögerung, mit der ein ausgeschiedener Mensch sein Atlas-Konto behält — wer sie anders braucht, ändert sie hier und nicht im Quelltext.</bpmn:documentation>
+      <bpmn:outgoing>f_start_stand</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_stuendlich">
+        <bpmn:timeCycle>R/PT1H</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="stand_lesen" name="Stand holen">
+      <bpmn:documentation>GET /api/v1/directory-sync. Antwortet mit den beiden Graph-Cursorn, der Revision, gegen die dieser Lauf gelesen wird, und damit, ob diese Installation überhaupt je etwas geschrieben hat.
+
+Warum der Cursor nicht im Modell steht: er muss Neustarts überleben, und ein Prozess, der ihn als Startvariable hereinreicht, verliert ihn beim ersten Deployment. Der Server hält ihn und gibt ihn genau hier heraus.
+
+Schreibt: stand.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+          <zeebe:header key="path" value="/api/v1/directory-sync" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:output source="=body" target="stand" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_stand</bpmn:incoming>
+      <bpmn:outgoing>f_stand_konten</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="konten_lesen" name="Konten lesen (Delta)">
+      <bpmn:documentation>delta-users ab stand.usersDeltaLink. Leerer Cursor heisst: den ganzen Mandanten einmal aufzählen und dabei den Cursor setzen — der Lauf, der nichts schreiben darf.
+
+Das $select ist bewusst schmal: jedes Feld mehr ist Speicher in einer Prozessvariablen, und die ist durch das Budget ATLAS_LIMIT_VARIABLE begrenzt. maxUsers lässt einen zu grossen Lauf am Worker scheitern, statt eine gekürzte Änderungsmenge zu liefern, die Atlas als vollständig verbuchen würde.
+
+Gelöschte Objekte kommen mit @removed markiert mit; sie sind das eine der beiden Austrittssignale (das andere ist accountEnabled: false).
+
+Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-users"
+                              deltaLink="=stand.usersDeltaLink"
+                              select="id,userPrincipalName,displayName,mail,accountEnabled"
+                              maxUsers="2000"
+                              resultVariable="konten" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_stand_konten</bpmn:incoming>
+      <bpmn:outgoing>f_konten_gruppen</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="gruppen_lesen" name="Gruppen lesen (Delta)">
+      <bpmn:documentation>delta-groups ab stand.groupsDeltaLink. Die Mitgliedschaften kommen als members@delta mit — Entra-Objekt-Ids, nicht Atlas-Benutzer-Ids; die Übersetzung macht Atlas.
+
+Konten werden vor den Gruppen gelesen, aber darauf kommt es nicht an: eine Mitgliedschaft, deren Konto noch niemand gelesen hat, bleibt am Gruppendatensatz stehen und löst sich in einem späteren Lauf von selbst auf. Verworfen wird sie nie — eine Delta-Abfrage nennt sie kein zweites Mal.
+
+Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-groups"
+                              deltaLink="=stand.groupsDeltaLink"
+                              select="id,displayName"
+                              maxUsers="2000"
+                              resultVariable="gruppen" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_konten_gruppen</bpmn:incoming>
+      <bpmn:outgoing>f_gruppen_melden</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="abgleich_melden" name="Abgleich melden">
+      <bpmn:documentation>POST /api/v1/directory-sync. Meldet beide Änderungsmengen und beide Cursor, und bekommt zurück, was der Lauf entschieden hat.
+
+apply: false — hier steht der Schalter. Der Nullwert des Feldes bedeutet „nichts schreiben": wer es vergisst, bekommt einen Bericht und keinen übernommenen Mandanten. Nach der Durchsicht von `bericht` wird in der eigenen Kopie dieses Modells true daraus, und das Modell neu deployt.
+
+fromRevision pinnt die Meldung an den Stand, gegen den gelesen wurde. Das Job-Protokoll liefert mindestens einmal; eine zweite Zustellung trägt dieselbe Revision, findet sie nicht mehr aktuell und schreibt nichts.
+
+Die Cursor werden erst durch diesen Aufruf verschoben — und nur, wenn tatsächlich geschrieben wurde. Genau deshalb kann der Trockenlauf beliebig oft laufen, ohne Änderungen zu verlieren.
+
+Schreibt: bericht = { applied, mode, reason, revision, everApplied, counts, notes, notesOmitted }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+          <zeebe:header key="path" value="/api/v1/directory-sync" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="={apply: false, fromRevision: stand.revision, users: konten.value, usersDeltaLink: konten.deltaLink, groups: gruppen.value, groupsDeltaLink: gruppen.deltaLink}" target="body" />
+          <zeebe:output source="=body" target="bericht" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gruppen_melden</bpmn:incoming>
+      <bpmn:outgoing>f_melden_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Bericht liegt vor">
+      <bpmn:documentation>`bericht` steht in den Instanzvariablen und ist dort zu lesen: Zahlen für das Erwartbare, vollständige Zeilen (notes) für das Bemerkenswerte — Zusammenführungen, Deaktivierungen, Verweigerungen, nicht auflösbare Mitgliedschaften. Solange applied false ist, sagt reason warum.</bpmn:documentation>
+      <bpmn:incoming>f_melden_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_stand" sourceRef="start_stuendlich" targetRef="stand_lesen" />
+    <bpmn:sequenceFlow id="f_stand_konten" sourceRef="stand_lesen" targetRef="konten_lesen" />
+    <bpmn:sequenceFlow id="f_konten_gruppen" sourceRef="konten_lesen" targetRef="gruppen_lesen" />
+    <bpmn:sequenceFlow id="f_gruppen_melden" sourceRef="gruppen_lesen" targetRef="abgleich_melden" />
+    <bpmn:sequenceFlow id="f_melden_ende" sourceRef="abgleich_melden" targetRef="ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_entra_verzeichnis_abgleich">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_stuendlich">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="144" y="225" width="53" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_stand" bpmnElement="stand_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_konten" bpmnElement="konten_lesen">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gruppen" bpmnElement="gruppen_lesen">
+        <dc:Bounds x="550" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_melden" bpmnElement="abgleich_melden">
+        <dc:Bounds x="700" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="852" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="826" y="225" width="89" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_stand" bpmnElement="f_start_stand">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_stand_konten" bpmnElement="f_stand_konten">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_konten_gruppen" bpmnElement="f_konten_gruppen">
+        <di:waypoint x="500" y="200" /><di:waypoint x="550" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppen_melden" bpmnElement="f_gruppen_melden">
+        <di:waypoint x="650" y="200" /><di:waypoint x="700" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_melden_ende" bpmnElement="f_melden_ende">
+        <di:waypoint x="800" y="200" /><di:waypoint x="852" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

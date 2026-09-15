@@ -122,6 +122,36 @@ const (
 	// under an operator's hand: a migration (ADR-0162) or an explicit reindex. Appended
 	// last so every prior value type keeps its numeric value on the log.
 	VTVariableIndex
+
+	// VTEntitlement is what somebody holds: a principal, a catalogue item, since
+	// when, and where the knowledge came from
+	// (ADR-0312).
+	//
+	// It is engine state rather than a sidecar record for one reason that decides
+	// it: an entitlement outlives the process instance that produced it, by years.
+	// The instance is eligible for retention deletion long before somebody stops
+	// holding their VPN access, so the fact cannot live in the instance's history —
+	// and a sidecar file would put an access record outside the log that every
+	// other engine fact rebuilds from.
+	//
+	// It carries a principal *reference* and nothing else about a person. That is
+	// what keeps applyToState free of any key access, and it is what makes erasure
+	// possible at all: an append-only log cannot forget what it was given in the
+	// clear. Appended last so every prior value type keeps its numeric value on the
+	// log.
+	VTEntitlement
+
+	// VTEntitlementHistory is a hold that has ended: the inventory row as it stood,
+	// plus when and why it stopped being recorded
+	// (ADR-0346).
+	//
+	// A separate type rather than a flag on VTEntitlement, because the two answer
+	// different questions and a value that means one thing on one event and another
+	// on another is one nobody can read. It is also the only value type in the
+	// portal that is written and never updated: a hold ends once.
+	//
+	// Appended last so every prior value type keeps its numeric value on the log.
+	VTEntitlementHistory
 )
 
 func (t ValueType) String() string {
@@ -142,6 +172,10 @@ func (t ValueType) String() string {
 		return "Variable"
 	case VTIncident:
 		return "Incident"
+	case VTEntitlement:
+		return "Entitlement"
+	case VTEntitlementHistory:
+		return "EntitlementHistory"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -380,6 +414,20 @@ const (
 	// dropping of an activity-local scope out of the timeline. Appended at the end so
 	// every prior intent keeps its numeric value on the log.
 	IntentVariableElementSet
+
+	// IntentEntitlementGranted and IntentEntitlementRevoked record that somebody
+	// started or stopped holding a catalogue item
+	// (ADR-0312).
+	//
+	// They are the inventory's only two events, and there is deliberately no third
+	// for editing one. An entitlement is observed or derived, never authored: the
+	// day somebody can edit one directly is the day the inventory stops being
+	// evidence and becomes an opinion. A correction is a revoke and a grant, both of
+	// which say when they happened.
+	//
+	// Appended at the end so every prior intent keeps its numeric value on the log.
+	IntentEntitlementGranted
+	IntentEntitlementRevoked
 )
 
 func (i Intent) String() string {
@@ -432,6 +480,10 @@ func (i Intent) String() string {
 		return "VariableUpdated"
 	case IntentIncidentCreated:
 		return "IncidentCreated"
+	case IntentEntitlementGranted:
+		return "EntitlementGranted"
+	case IntentEntitlementRevoked:
+		return "EntitlementRevoked"
 	case IntentIncidentResolved:
 		return "IncidentResolved"
 	case IntentDataObjectCreated:

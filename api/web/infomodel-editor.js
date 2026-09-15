@@ -1137,6 +1137,13 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             other.lifecycle.statesFrom = target.value;
           }
         }
+        // And every store that holds it, which is the third reference by name and was
+        // the one this loop missed: a store left naming a class nothing declares is
+        // refused on save (`store-unknown-class`), so the rename could not be saved at
+        // all until somebody renamed the class back to whatever the store still said.
+        for (const st of state.model.stores || []) {
+          if (st.class === before) st.class = target.value;
+        }
         c.name = target.value;
         markDirty(); syncCanvas(); renderProblems();
         return;
@@ -1730,7 +1737,16 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     }
     const c = selectedClass();
     if (c) {
-      if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.`)) return;
+      // A delete says what it would break before it is confirmed (ADR-0331). A store
+      // keeps naming its class by name, and nothing can follow that for a class that
+      // is going away — so the cost is stated here rather than met as a refusal on
+      // the next save.
+      const held = (state.model.stores || []).filter((st) => st.class === c.name).map((st) => st.name);
+      const alsoKept = held.length
+        ? ` ${held.length === 1 ? "The store" : "The stores"} ${held.map((n) => `"${n}"`).join(", ")} ` +
+          `${held.length === 1 ? "holds" : "hold"} it, and the model will not save until that is settled.`
+        : "";
+      if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.${alsoKept}`)) return;
       state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
       state.model.associations = state.model.associations.filter(
         (x) => x.from.classId !== c.id && x.to.classId !== c.id);

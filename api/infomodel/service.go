@@ -469,6 +469,17 @@ func (s *Service) VocabularyOnLoop(applicationID string) (*Vocabulary, error) {
 	return NewVocabulary(models), nil
 }
 
+// ModelsOnLoop is every stored model, newest first. Like VocabularyOnLoop it runs
+// inside an existing loop turn, so callers must already hold one.
+//
+// It answers no access question, deliberately: the catalogue reading that needs it
+// also needs the application's *processes*, which only the server can reach, so it
+// is one turn on the server's side that filters the models and gathers the processes
+// together. A model this returns has not been authorized for anybody yet.
+func (s *Service) ModelsOnLoop() ([]Model, error) {
+	return s.store.LoadAll()
+}
+
 const notFound = "no such information model"
 
 func (s *Service) readModel(r *http.Request, id string) (Model, *operationRefusal, error) {

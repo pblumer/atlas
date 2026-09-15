@@ -304,9 +304,12 @@ func (s *Server) handlePromoteRelease(w http.ResponseWriter, r *http.Request) {
 // The artifacts come from the *deployment* records the release points at, not from
 // the application's current drafts: a release is the frozen thing that shipped, and
 // the drafts may have moved on since. Members that are not processes are skipped —
-// forms and decisions do not travel yet (ADR-0128 Phase 2 records only processes),
-// and silently sending nothing for them is better than sending something the
-// receiver cannot deploy.
+// forms and decisions do not travel yet, and silently sending nothing for them is
+// better than sending something the receiver cannot deploy. A release does now
+// record its decisions (ADR-0319), so what
+// is missing here is the transport for them, not the manifest: promoting a
+// decision-only application reaches the target with nothing to deploy, exactly as
+// it did before decisions were recorded at all.
 //
 // Must be called on the run-loop goroutine (the deploy store's owner). Errors are
 // reported through outErr so the caller's do() closure can bail cleanly.

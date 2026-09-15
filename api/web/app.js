@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { copyText } from "./clipboard.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -17,7 +18,7 @@ import { copyText } from "./clipboard.js";
 import { renderMarkdown, markdownToPlain } from "./markdown.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow, addWorkerFlow,
-  incidentWorkerChip,
+  incidentWorkerChip, resolveCauseFlow, resolveCauseQuick, resolveSelectionFlow,
   repairFormFlow,
 } from "./incidents.js";
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
@@ -29,6 +30,8 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { refDeleteWarning } from "./dmnref-impact.js";
+import { versionDeleteState } from "./decision-cleanup.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
@@ -552,10 +555,50 @@ async function deployDemo() {
 // this person holds. The Console itself is "any": its dashboard, workers and AI
 // access are everybody's, and the admin screens inside it say so individually
 // below.
+//
+// `separate: true` marks an entry that is a page of its own rather than a view of
+// this application, and it opens in its own window. The two portal surfaces are
+// the only ones: they carry the catalogue's brand instead of the console's, they
+// are written for people who never open the modeller, and they load their own
+// message catalogue — so routing to one is leaving Atlas's shell, not moving inside
+// it. Replacing the console with them in the same tab put whoever followed the
+// entry on a page whose only way back was one small link, and asked somebody who
+// was in the middle of something to lose it to look at an order.
+//
+// The back link on those pages stays regardless. It is not for this drawer — it is
+// for whoever arrives from the link in an approval notification, who has no console
+// tab behind them at all.
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  // The service portal is a page of its own, not a view of this app, so its route
+  // is a path and not a hash — written without a leading slash, because a route in
+  // this table is what the handbook appends to the site root (href="/" + route),
+  // and "//portal.html" would be a protocol-relative URL to a host of that name.
+  // It is written for people who never open the modeler
+  // — ordering a laptop and seeing where the order stands — and it carries the
+  // brand of the catalogue the visitor belongs to rather than this console's.
+  //
+  // Without this line the page existed and nothing led to it: it was built, served
+  // and reachable only by somebody who already knew the URL. Held by
+  // TestBothPortalSurfacesAreReachableFromTheMenu.
+  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
+  // The approver's half of the same surface, and a separate page for the same
+  // reason: it answers to a different person. Until now it was reached only
+  // through the link in its notification mail, so an approver who deleted the mail
+  // had no way back to a decision somebody is waiting on.
+  //
+  // Gated at "user" because there is no approver role to gate on: a product names
+  // a person, a group, or the orderer's superior, so anybody signed in may hold an
+  // approval tomorrow without holding one today. The entry is therefore shown to
+  // everybody and is empty for most, which is the honest cost of having no role to
+  // ask: a count on it would fix that, and nothing here keeps one yet.
+  { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user", separate: true },
+  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
+  // catalogue means choosing from processes already deployed, never deploying one,
+  // so it is deliberately not the modeller's role — deploy is code execution.
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -585,10 +628,22 @@ const TOPNAV = {
     { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
     { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
+    // Where Atlas and the target systems disagree about who holds what
+    // (ADR-0334). Operations rather than Catalogue: maintaining a
+    // catalogue is authoring, and acting on a finding is repair — the three acts
+    // are the operator's role on the server too.
+    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
+    // The second kind of thing addressed to a person
+    // (ADR-0341). Not Operations, where reconciliation
+    // sits: a finding is repair and the operator's, while this asks a line manager
+    // whether somebody on their team still needs something — and a line manager has
+    // never opened Operations. Not one of the two portal pages either: those carry
+    // the catalogue's brand and are written for people outside the tooling.
+    { name: "Access review", route: "#/tasks/recertification", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
@@ -600,8 +655,13 @@ const TOPNAV = {
   // processes — and Instances is the instance level, the actual objects running
   // processes carry. UML draws those as two different diagrams, and Atlas already
   // splits design time from run time the same way.
+  // Between the two altitudes sits the vocabulary read as a vocabulary: every class of
+  // every model together, and where each is used. Model is per document, Business
+  // objects is across them, and only the second can say that two applications model an
+  // Order twice (ADR-0338).
   data: [
     { name: "Model", route: "#/data", role: "modeler" },
+    { name: "Business objects", route: "#/data/objects", role: "modeler" },
     { name: "Instances", route: "#/data/instances", role: "operator" },
   ],
 };
@@ -900,9 +960,20 @@ function handbookHelp(path) {
   // the workshop chapter is the one that builds exactly that, end to end.
   if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
   if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  // Before the Tasks rule below, and it has to be: a prefix match on "#/tasks"
+  // would swallow it. An access review is not a user task — it is not in the engine
+  // at all — so the forms chapter would answer a question nobody asked here.
+  if (path.startsWith("#/tasks/recertification")) return H("beispiele", "Rezertifizierung");
   if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
+  // Reconciliation sits in Operations and is not an operations topic. A discrepancy
+  // is a disagreement about who holds what, and the operations chapter is about
+  // incidents — a token that is stuck. Pointing there would tell a reader that a
+  // finding is a malfunction, which is the one thing this whole slice takes pains to
+  // say it is not: nothing is broken, two records disagree, and a person decides.
+  // The examples chapter is where that is actually explained.
+  if (path.startsWith("#/operations/reconciliation")) return H("beispiele", "Reconciliation");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
   // Panorama and Data each have a chapter of their own, and both are places a
   // person arrives at without having read anything: the landscape because it is
@@ -1021,8 +1092,13 @@ function syncIncidentBadge(appId) {
 function paintApps() {
   const nav = document.getElementById("drawer-apps");
   if (!nav) return;
+  // The "opens elsewhere" mark is a CSS ::after on the target attribute rather than
+  // a span here: it is presentation, it must not join the link's accessible name,
+  // and a glyph inside the text would change what every test reading this menu
+  // sees for a reason that has nothing to do with them.
   nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}">${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
+    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
 }
 
@@ -1039,7 +1115,8 @@ function setChrome(appId, route) {
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
-  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/") ||
+    route.includes("/modeler/dmn/new") || route.includes("/modeler/dmn/e/") || route.includes("/modeler/dmn/d/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -1607,6 +1684,7 @@ const GRANTABLE_ROLES = [
   { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
+  { id: "productmanager", name: "Product manager", what: "maintain the portal's catalogues and products, and publish releases" },
 ];
 
 function userForm(u) {
@@ -2162,7 +2240,8 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          person's own task list, <span class="chip">productmanager</span> to maintain the portal's
+          catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
@@ -2348,7 +2427,14 @@ function wireOrgPresence(showPresence, presencePill) {
 // SSO_ROLES is what a rule may grant. `user` is missing on purpose — everybody who
 // can sign in at all holds it, so offering it as a grant would suggest it could be
 // withheld.
-const SSO_ROLES = ["admin", "modeler", "operator"];
+//
+// `productmanager` belongs here and its absence was a real gap rather than a
+// cosmetic one. Where this mapping is on, it *owns* the roles: a role granted by
+// hand in the form above is replaced at that person's next sign-in. So in an
+// installation whose accounts come from the provider — which is the installation
+// this mapping exists for — a role the form offers and this list does not is a role
+// that cannot be held for longer than one login, however carefully it was granted.
+const SSO_ROLES = ["admin", "modeler", "operator", "productmanager"];
 
 function ssoRuleRow(rule, groups) {
   const roles = new Set(rule.roles || []);
@@ -2702,18 +2788,22 @@ async function viewModelerHome() {
   const projRows = document.getElementById("proj-rows");
 
   const renderProjects = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { projRows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const all = [...drafts, ...refs, ...forms];
+    // A decision that exists only as a draft is still one of the application's
+    // artifacts, so it counts (ADR-0321); a draft on a decision
+    // that is in the model is that decision, already counted as its reference.
+    const all = [...drafts, ...refs, ...forms, ...decDrafts.filter((d) => !d.refId)];
     const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
     const ungrouped = all.filter((a) => !a.projectId || !known.has(a.projectId));
 
@@ -2867,15 +2957,26 @@ async function viewProjectDetail(id) {
   const root = document.getElementById("pd");
 
   const render = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    // A stored DMN model nothing points at belongs to no application, which is what
+    // this view is (ADR-0330). It is only
+    // asked for here, and a failure costs the section rather than the page — a
+    // remote temis resolver has no folder to list and answers 409.
+    let orphanModels = [];
+    if (ungrouped) {
+      try {
+        orphanModels = ((await api("GET", "/api/v1/dmn-models")) || []).filter((m) => !m.referenced);
+      } catch { orphanModels = []; }
+    }
 
     const known = new Set(projects.map((p) => p.id));
     const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
@@ -2886,6 +2987,13 @@ async function viewProjectDetail(id) {
     setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
+    // A decision draft is work that has not been written to the model
+    // (ADR-0321). One on a decision that is in the model is a
+    // marker on that decision's row; one on a decision that is not is a row of its
+    // own, because nothing else in this table represents it.
+    const ddl = decDrafts.filter(mine);
+    const draftFor = new Set(ddl.filter((d) => d.refId).map((d) => d.refId));
+    const looseDecDrafts = ddl.filter((d) => !d.refId);
 
     // Scope gating (ADR-0071). Ungrouped is the un-scoped personal/legacy bucket,
     // so it stays fully writable; a real project's actions follow the caller's
@@ -2927,17 +3035,54 @@ async function viewProjectDetail(id) {
       const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
       const items = [{ label: "View", icon: "▦", href }, { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } }];
       if (canWrite) items.unshift(
-        { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
+        { label: "Edit", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
       if (canWrite) items.push(
         ...moveItems(r.projectId, "moveref", r.id),
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
       );
+      // A decision carrying a draft says so where the author looks for it, because
+      // what a publish would ship is the model, not that work.
+      const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">Draft</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
+        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A decision that has never been written to the model: its draft is the only
+    // copy, so it is listed, marked, and says plainly that a publish will not carry
+    // it (ADR-0321).
+    const decDraftRow = (d) => {
+      const href = `#/modeler/dmn/d/${encodeURIComponent(d.id)}`;
+      const items = [{ label: "Open", icon: "→", href }];
+      if (canWrite) items.push(
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
+      );
+      return `<tr>
+        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href)}
+        <td class="muted">Decision</td>
+        <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A model in the store that no reference points at. Nothing else in this table
+    // represents it, and nothing anywhere else in the product does either — which is
+    // the whole reason it is drawn (ADR-0330).
+    const orphanModelRow = (m) => {
+      const items = canWrite ? [
+        { label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } },
+        { sep: true },
+        { label: "Delete model", icon: "🗑", act: "delmodel", data: { handle: m.handle }, danger: true },
+      ] : [];
+      const what = m.valid
+        ? `${m.decisions.length} decision${m.decisions.length === 1 ? "" : "s"}: ${esc(m.decisions.join(", "))}`
+        : "does not compile";
+      return `<tr>
+        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">No reference</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        <td class="muted">Decision model</td>
+        <td class="muted" data-sort="0">—</td>
+        <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
     };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
@@ -2953,12 +3098,15 @@ async function viewProjectDetail(id) {
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
-    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") + fl.map(formRow).join("");
+    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") +
+      looseDecDrafts.map(decDraftRow).join("") + orphanModels.map(orphanModelRow).join("") +
+      fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
+      { label: "Decision (DMN)", icon: "▦", act: "newdec" },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
       { sep: true },
@@ -3026,15 +3174,19 @@ async function viewProjectDetail(id) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
+        case "newdec": createDecision(ungrouped ? "" : id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
         case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
         case "valproj": validateProject(id); break;
         case "valref": validateDmnRef(b.dataset.id); break;
-        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }, render); break;
+        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
+        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
+        case "delmodel": deleteStoredModel(b.dataset.handle, render); break;
+        case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
         case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
         case "moveref": moveDmnRef(b.dataset.key, b.dataset.pid, render); break;
@@ -3596,6 +3748,20 @@ function pickFile(accept) {
     document.body.appendChild(inp);
     inp.click();
   });
+}
+
+// createDecision opens the decision editor on a seed model, filing what it saves
+// under the application. It is the decision counterpart of "BPMN diagram" in the
+// same menu — an application can be built out of decisions with no diagram in it at
+// all, and publishing it deploys them as runtime artifacts (ADR-0319).
+//
+// It navigates rather than opening a window over this one: a decision is edited on a
+// page of its own, like a diagram and a form
+// (ADR-0320).
+function createDecision(projectId) {
+  location.hash = projectId
+    ? "#/modeler/dmn/new/p/" + encodeURIComponent(projectId)
+    : "#/modeler/dmn/new";
 }
 
 // createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
@@ -4813,31 +4979,18 @@ function toggleSetSecret(row, name, workers, put, reload) {
   form.querySelector('[name="value"]').focus();
 }
 
-// editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,
-// on save, keeps the Project Explorer in sync. Editing overwrites the model in
-// place under the same handle, so the reference (and any business-rule-task
-// selection) stays valid; only the display name can drift, so a rename in the
-// editor is mirrored onto the reference here. The editor module is imported lazily
-// — same discipline as the BPMN editor — so the Modeler home stays light. When the
-// model can't be edited locally (a remote temis service, or a dangling handle) the
-// editor surfaces the failure itself and resolves to null, leaving the row as-is.
-async function editDmnRef(ref, reload) {
+// editDmnRef opens the decision editor on a reference's model. Editing overwrites
+// the model in place under the same handle, so the reference (and any
+// business-rule-task selection) stays valid; a rename in the editor is mirrored onto
+// the reference by the editor itself. A reference with no locally editable model (a
+// remote temis service, or a dangling handle) has nothing to open, and says so here
+// rather than navigating to an editor that would only report the same thing.
+function editDmnRef(ref) {
   if (!ref.modelRef) {
-    toast("Diese DMN-Referenz hat kein lokal editierbares Modell.", "err");
+    toast("This decision has no locally editable model.", "err");
     return;
   }
-  const { openDmnEditor } = await import("./dmn-editor.js");
-  const result = await openDmnEditor({ api, toast, projectId: ref.projectId || "", modelRef: ref.modelRef });
-  if (!result) return; // cancelled or failed (the editor already reported why)
-  // Editing keeps the handle; mirror a decision rename onto the reference so the
-  // Explorer label doesn't go stale.
-  const newName = (result.name || "").trim();
-  if (newName && newName !== ref.name) {
-    try {
-      await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(ref.id)}`, { name: newName });
-    } catch (e) { toast("Modell gespeichert, Umbenennen fehlgeschlagen: " + e.message, "err"); }
-  }
-  await reload();
+  location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
@@ -4848,12 +5001,61 @@ async function moveDmnRef(id, projectId, reload) {
   await reload();
 }
 
+// referenceStoredModel puts a reference back on a model in the store that has none,
+// which is the recovery from having deleted the last one
+// (ADR-0330). It re-uses the existing
+// handle rather than re-uploading, so the model is *recovered* rather than copied —
+// a re-upload would file a second model under a suffixed handle (ADR-0222).
+async function referenceStoredModel(handle, suggested, reload) {
+  const name = (window.prompt("Reference name (how it shows in Atlas)", suggested || handle) || "").trim();
+  if (!name) return;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
+    toast(`Added DMN reference "${name}"`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+  await reload();
+}
+
+// deleteStoredModel removes a model file nothing points at — the end of the road
+// ADR-0330 opened by making it visible (ADR-0336).
+// It is offered only on an unreferenced row, and the server refuses a referenced
+// handle anyway.
+//
+// The sentence says what survives, because that is what a reader is unsure of: a
+// decision already deployed from this model keeps evaluating, since its record
+// carries its own copy and never reads the file.
+async function deleteStoredModel(handle, reload) {
+  if (!window.confirm(`Delete the model file ${handle}.dmn? Decisions already deployed from it keep running — they carry their own copy. This cannot be undone.`)) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-models/${encodeURIComponent(handle)}`);
+    toast(`Deleted the model ${handle}.dmn`, "ok");
+  } catch (e) { toast("could not delete the model: " + e.message, "err"); }
+  await reload();
+}
+
 async function deleteDmnRef(id, reload) {
-  if (!window.confirm("Delete this DMN reference? The temis model itself is not affected.")) return;
+  // The impact is a read and may fail; when it does the confirm falls back to the
+  // plain sentence rather than blocking a deletion the author is entitled to make.
+  let impact = null;
+  try { impact = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(id)}/impact`); } catch { impact = null; }
+  if (!window.confirm(refDeleteWarning(impact))) return;
   try {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
     toast("Deleted DMN reference", "ok");
   } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+  await reload();
+}
+
+// A decision that exists only as a draft has nothing behind it, so deleting the
+// draft is deleting the decision (ADR-0321) — said plainly, because
+// the same word on a decision that *is* in the model means only "throw away the
+// unsaved work".
+async function deleteDecisionDraft(id, reload) {
+  if (!window.confirm("Delete this decision draft? It has never been saved to the model, so nothing else has a copy.")) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-drafts/${encodeURIComponent(id)}`);
+    toast("Deleted decision draft", "ok");
+  } catch (e) { toast("could not delete draft: " + e.message, "err"); }
   await reload();
 }
 
@@ -5144,33 +5346,54 @@ async function viewInstances() {
     })
     : "—";
 
-  // loadIncidents pulls the server's unresolved incidents once per refresh. This
-  // overview is server-wide, so it is the unscoped list — capped like the Incidents
-  // page, and a capped page is said out loud rather than quietly undercounting. It is
-  // deliberately a separate read: the summary endpoint is O(1) per definition by
-  // design (ADR-0083) and must not grow a scan.
+  // loadIncidents counts the server's unresolved incidents per definition, once per
+  // refresh, off the incident *summary* rather than off the list
+  // (ADR-0337). One column of this table needs a number, and the row
+  // list answered it by transferring every incident on the server — megabytes of
+  // near-identical JSON per refresh under the flood this column exists to flag. The
+  // summary is one line per cause whatever the population, and a per-definition count is
+  // its groups summed. It stays a separate read: the instances summary endpoint is O(1)
+  // per definition by design (ADR-0083) and must not grow a scan.
   const loadIncidents = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
-      const rows = (data && data.incidents) || [];
-      incTruncated = headers.get("X-Incidents-Truncated") === "true";
+      const sum = await api("GET", "/api/v1/incidents/summary");
+      const groups = (sum && sum.groups) || [];
+      // A group the cap left out is still counted in `total`, so the column is a lower
+      // bound in exactly that case — said out loud below rather than quietly undercounted.
+      incTruncated = !!(sum && sum.groupsTruncated);
       incByDef = new Map();
-      incByInstance = new Map();
-      for (const r of rows) {
-        if (r.processDefKey) {
-          const d = String(r.processDefKey);
-          incByDef.set(d, (incByDef.get(d) || 0) + 1);
-        }
-        const i = String(r.processInstanceKey);
-        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      for (const g of groups) {
+        if (!g.processDefKey) continue;
+        const d = String(g.processDefKey);
+        incByDef.set(d, (incByDef.get(d) || 0) + (g.count || 0));
       }
     } catch { /* best-effort: the lists still render, just without the flags */ }
     const note = document.getElementById("ops-inc-note");
     if (note) {
       note.innerHTML = incTruncated
-        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More incidents than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More causes than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
         : "";
     }
+  };
+
+  // loadIncidentsByInstance is the *other* incident read this view needs, and the one
+  // that still walks rows: the variable search shows individual instances, and "which
+  // of these is stuck" is a per-instance question the cause summary cannot answer —
+  // a group counts tokens on an element, not which instance each belongs to.
+  //
+  // So it stays the capped list, and it is paid only when somebody runs a search rather
+  // than on every refresh of the overview. Under a flood its page cap bites and the
+  // flags become a lower bound, exactly as they were before the summary existed; the
+  // Incidents view is where a flood is actually read (ADR-0337).
+  const loadIncidentsByInstance = async () => {
+    try {
+      const { data } = await apiRaw("GET", "/api/v1/incidents");
+      incByInstance = new Map();
+      for (const r of (data && data.incidents) || []) {
+        const i = String(r.processInstanceKey);
+        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      }
+    } catch { /* best-effort: the results still render, just without the flags */ }
   };
 
   // incidentCell renders one process row's Incidents cell: the total over every
@@ -5369,7 +5592,7 @@ async function viewInstances() {
       // Refresh the incident buckets with the search: these rows are individual
       // instances, and a stale flag on the surface an operator debugs from is worse
       // than the extra read.
-      await loadIncidents();
+      await loadIncidentsByInstance();
       rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
@@ -5634,17 +5857,32 @@ function overrideCell(r) {
   return sel + note;
 }
 
-// viewIncidents is the Operations "Incidents" view: every unresolved incident on
-// this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
-// a *job* incident (a service-task job whose retries ran out and parked) and a
-// job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
-// stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
-// diagram and to that instance's replay (ADR-0151), and resolves in place over POST
-// /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
-// fresh retry budget; a timer incident re-arms the element against the instance's
-// current variables (re-raising if it still fails). The list shares the task list's
-// ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
-// order.
+// viewIncidents is the Operations "Incidents" view: what is stuck on this server, and
+// the ways out of it (ADR-0061). Two shapes of incident land here: a *job* incident (a
+// service-task job whose retries ran out and parked) and a job-less *timer* incident (a
+// boundary / event-subprocess timer whose FEEL schedule stopped resolving,
+// ADR-0064/0111).
+//
+// It opens on *causes*, not on rows (ADR-0337). One broken worker parks
+// every instance that reaches its task, so the honest reading of "3 412 incidents" is
+// one line — this element of this process, this failure, 3 412 tokens behind it — and
+// the actions that belong to a whole cause sit on that line: fix the worker it names,
+// then clear everything it parked in one call. The row list below is still there, and
+// still carries every per-incident way out, but it is now a *page* of a chosen cause
+// rather than the whole population rendered into the DOM.
+//
+// Each row links to the stuck element on the live diagram and to that instance's replay
+// (ADR-0151) and resolves in place over POST /incidents/{elementInstanceKey}/resolve: a
+// job incident re-activates its job with a fresh retry budget; a timer incident re-arms
+// the element against the instance's current variables (re-raising if it still fails).
+
+// How many incident rows one page of the table renders. The API's own ceiling is 5000;
+// asking for it put thousands of rows (each with an actions menu) into the DOM, which is
+// what made this view slow to open, slow to filter and slow to refresh. A cause is what
+// an operator acts on, so a page is for reading a sample of one — 200 rows is more than
+// anybody scrolls, and the shared table enhancer stays instant over it.
+const INCIDENT_ROWS_PAGE = 200;
+
 // incidentMenu is the row's non-primary actions, behind the ⋯ menu every other table
 // in the console puts them behind. Resolving is the one action that belongs on the row;
 // correcting the data and reconfiguring the integration are the two ways to make that
@@ -5677,73 +5915,258 @@ function incidentMenu(r, i) {
   return items;
 }
 
+// causeMenu is the same idea one level up: the ways out that apply to every incident of
+// a cause at once. Correcting variables is deliberately absent — that is per-instance
+// data, and there is no honest bulk form for it; what a cause shares is its *worker*.
+function causeMenu(g, i) {
+  const items = [];
+  if (g.connector && g.connectorId) {
+    items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { cause: i } });
+  } else if (g.connector && g.connectorKind) {
+    items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { cause: i } });
+  } else if (g.connector) {
+    items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
+  }
+  if (g.processDefKey) {
+    items.push({ label: "Open the live diagram ↗", icon: "→", href: `#/operations/p/${g.processDefKey}` });
+  }
+  return items;
+}
+
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
       <h1>Incidents</h1>
-      <button class="btn neutral" id="refresh" title="Reload the incident list">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload the causes and the incident list">Refresh</button>
     </div>
-    <p class="muted">Every unresolved incident on this server — where a token is
-    stuck waiting for an operator (ADR-0061). A <b>job</b> incident is a service task
-    whose retries ran out and parked; a <b>timer</b> incident is a recurring boundary
-    or event-subprocess timer whose FEEL schedule stopped resolving (ADR-0111).
-    <b>Resolve</b> re-activates the work: a parked job retries with the budget you
-    grant, a timer re-arms against the instance's current variables — re-raising if it
-    still fails.</p>
+    <p class="muted">Where a token is stuck waiting for an operator (ADR-0061). A <b>job</b>
+    incident is a service task whose retries ran out and parked; a <b>timer</b> incident is a
+    recurring boundary or event-subprocess timer whose FEEL schedule stopped resolving
+    (ADR-0111). The table below groups them by <b>cause</b> — the element that parked — because
+    one broken integration parks every instance that reaches it: fix what the cause names, then
+    <b>Resolve all</b> clears everything behind it in one go. <b>Resolve</b> re-activates the work:
+    a parked job retries with the budget you grant, a timer re-arms against the instance's current
+    variables — re-raising if it still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
+      <table data-dt-key="incident-causes">
+        <thead><tr><th>Process</th><th>Element</th><th>Kind</th><th>Incidents</th><th>Since</th><th>Message</th><th></th></tr></thead>
+        <tbody id="causes"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="between" style="margin-top:18px">
+      <h2 style="font-size:15px;margin:0" id="rows-title">Incidents</h2>
+      <button class="btn ghost" id="scope-clear" hidden title="Show incidents of every cause again">Show all causes</button>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="tasks-bulk" id="inc-bulk" hidden></div>
       <table data-dt-key="incidents">
-        <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th class="row-pick"></th><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
+  const causesBody = document.getElementById("causes");
   const tbody = document.getElementById("rows");
   const note = document.getElementById("inc-note");
-  let current = []; // the rendered page, so a Resolve click has the whole incident
+  const rowsTitle = document.getElementById("rows-title");
+  const scopeClear = document.getElementById("scope-clear");
 
-  const load = async () => {
+  let causes = [];        // the summary's groups: one per cause, biggest first
+  let current = [];       // the rendered row page, so an action has the whole incident
+  let scope = null;       // the cause the row list is showing, or null for all of them
+  const picked = new Set(); // elementInstanceKey of every ticked row
+
+  // The summary: one walk on the server, one line per cause, whatever the population.
+  // This is also what makes the view usable while a flood is being produced — its size
+  // does not grow with the number of parked tokens.
+  const loadCauses = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
-      const rows = (data && data.incidents) || [];
-      current = rows;
-      note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
-        ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
+      const sum = await api("GET", "/api/v1/incidents/summary");
+      causes = (sum && sum.groups) || [];
+      note.innerHTML = sum && sum.groupsTruncated
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">${sum.total} incidents over more causes than this table holds; ${sum.ungrouped} are not in a row below.</p>`
         : "";
-      if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
+      if (!causes.length) {
+        causesBody.innerHTML = `<tr><td colspan="7" class="empty">No incidents — nothing is stuck.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r, i) => {
-        // The instance opens on the live diagram of its own version, with the token
-        // (and now the incident badge) on the stuck element; ▶ replays it step by step.
-        const inst = r.processDefKey
-          ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
-             <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
-          : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
-        // The element is named by its diagram id — what the modeler and the diagram
-        // call it; the element instance key (the resolve key) and the compiled index
-        // ride along as a title for anyone cross-referencing the graph.
-        const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
-        const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
+      causesBody.innerHTML = causes.map((g, i) => {
+        const proc = g.processDefKey
+          ? `<a href="#/operations/p/${g.processDefKey}" title="Open this version's live diagram, where every stuck token is marked">${esc(g.processId || String(g.processDefKey))}</a>${g.version ? ` <span class="muted">v${g.version}</span>` : ""}`
+          : `<span class="muted" title="These instances' definition is no longer deployed">(undeployed)</span>`;
+        const el = `<span style="font-family:ui-monospace,monospace">${esc(g.elementId || "#" + g.elementIndex)}</span>`;
+        const msg = `${esc(g.message || "—")}${g.messageVaries
+          ? ` <span class="muted" title="The incidents in this group do not all carry the same message; this is the oldest one">· and others</span>`
+          : ""}${incidentWorkerChip(g)}`;
         return `<tr>
-          <td>${inst}</td>
+          <td data-filter="${esc((g.processId || "") + " " + (g.processDefKey || ""))}">${proc}</td>
           <td>${el}</td>
-          <td>${cause}</td>
-          <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
-          <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+          <td>${incidentPill(g)}</td>
+          <td data-sort="${g.count}"><b>${g.count}</b></td>
+          <td data-sort="${g.oldestRaisedAt || 0}" class="muted nowrap" title="The oldest incident of this cause; the newest is ${esc(fmtRaised(g.newestRaisedAt))}">${esc(fmtRaised(g.oldestRaisedAt))}</td>
+          <td>${msg}</td>
           <td class="row-actions">
-            <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
-            ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
+            <button class="btn ghost" data-show="${i}" title="List this cause's incidents below">Show</button>
+            ${g.processDefKey
+              ? `<button class="btn sm" data-resolve-cause="${i}" title="Clear every incident of this cause and retry its work">Resolve all…</button>`
+              // Without a definition there is nothing to scope the resolve by — every
+              // selector left would reach other processes' incidents too. The rows below
+              // still resolve, one or several at a time, by their own keys.
+              : `<span class="muted" title="These instances' definition is gone, so this cause cannot be named as a scope — resolve the rows below instead">no scope</span>`}
+            ${dropdown("⋯", "icon-btn", causeMenu(g, i))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      causesBody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
 
-  // One delegated handler for every row's Resolve button (the tbody persists across
-  // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
-  // and the POST are the shared incident flow every surface uses (ADR-0151).
+  // scopeQuery is the row page's scope: the selected cause, written as the same
+  // selector the bulk resolve takes, so the rows shown and the incidents a "Resolve
+  // all" touches are one query asked twice.
+  const scopeQuery = () => {
+    const q = [`limit=${INCIDENT_ROWS_PAGE}`];
+    if (scope) {
+      if (scope.processDefKey) q.push(`process=${scope.processDefKey}`);
+      if (scope.elementId) q.push(`element=${encodeURIComponent(scope.elementId)}`);
+      // The compiled index as well as the id: an instance whose definition is no
+      // longer deployed has no BPMN id to scope by, and a scope with the element left
+      // out is the whole definition — a much larger set than the line clicked.
+      if (Number.isInteger(scope.elementIndex)) q.push(`elementIndex=${scope.elementIndex}`);
+      if (scope.type) q.push(`type=${encodeURIComponent(scope.type)}`);
+    }
+    return "?" + q.join("&");
+  };
+
+  const renderBulk = () => {
+    const bulk = document.getElementById("inc-bulk");
+    if (!bulk) return;
+    const n = picked.size;
+    bulk.hidden = n === 0;
+    if (!n) { bulk.innerHTML = ""; return; }
+    bulk.innerHTML = `
+      <span class="tasks-bulk-count">${n} selected</span>
+      <span class="tasks-bulk-actions">
+        <button class="btn small" id="inc-bulk-resolve" title="Clear the selected incidents and retry their work">Resolve selected…</button>
+        <button class="btn ghost small" id="inc-bulk-clear" title="Clear the current selection">Clear</button>
+      </span>`;
+    bulk.querySelector("#inc-bulk-clear").addEventListener("click", () => { picked.clear(); renderRowsFromCurrent(); });
+    bulk.querySelector("#inc-bulk-resolve").addEventListener("click", async () => {
+      const chosen = current.filter((r) => picked.has(String(r.elementInstanceKey)));
+      if (await resolveSelectionFlow({ api, toast, incidents: chosen })) {
+        picked.clear();
+        await load();
+      }
+    });
+  };
+
+  const renderRowsFromCurrent = () => {
+    if (!current.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${scope
+        ? "No incidents left on this cause — it may have been resolved already."
+        : "No incidents — nothing is stuck."}</td></tr>`;
+      renderBulk();
+      return;
+    }
+    tbody.innerHTML = current.map((r, i) => {
+      // The instance opens on the live diagram of its own version, with the token
+      // (and now the incident badge) on the stuck element; ▶ replays it step by step.
+      const inst = r.processDefKey
+        ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
+           <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
+        : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
+      // The element is named by its diagram id — what the modeler and the diagram
+      // call it; the element instance key (the resolve key) and the compiled index
+      // ride along as a title for anyone cross-referencing the graph.
+      const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
+      const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
+      const key = String(r.elementInstanceKey);
+      return `<tr>
+        <td class="row-pick"><input type="checkbox" data-pick="${esc(key)}"${picked.has(key) ? " checked" : ""} aria-label="Select this incident"/></td>
+        <td>${inst}</td>
+        <td>${el}</td>
+        <td>${cause}</td>
+        <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
+        <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+        <td class="row-actions">
+          <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
+          ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
+      </tr>`;
+    }).join("");
+    renderBulk();
+  };
+
+  // One page of rows, scoped to the selected cause. Capped deliberately: the answer to
+  // a flood is the cause table above, not ten thousand rows in the DOM.
+  const loadRows = async () => {
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/incidents" + scopeQuery());
+      current = (data && data.incidents) || [];
+      // A selection only means anything for rows that are still on the page.
+      const onPage = new Set(current.map((r) => String(r.elementInstanceKey)));
+      for (const key of [...picked]) if (!onPage.has(key)) picked.delete(key);
+      const capped = headers.get("X-Incidents-Truncated") === "true";
+      rowsTitle.textContent = scope
+        ? `${scope.elementId || "Element #" + scope.elementIndex} · ${scope.processId || scope.processDefKey}${capped ? ` — first ${current.length} of ${scope.count}` : ` — ${current.length}`}`
+        : capped ? `Incidents — the first ${current.length}` : `Incidents — ${current.length}`;
+      scopeClear.hidden = !scope;
+      renderRowsFromCurrent();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // The causes first, then the rows: a cause that has just been resolved must stop
+  // scoping the list below, or the page sits on an empty selection of something that no
+  // longer exists.
+  const load = async () => {
+    await loadCauses();
+    if (scope) {
+      scope = causes.find((g) => g.processDefKey === scope.processDefKey
+        && g.elementId === scope.elementId && g.type === scope.type) || null;
+    }
+    await loadRows();
+  };
+
+  // One delegated handler per table (each tbody persists across reloads; the rows
+  // inside it do not, so per-row listeners would leak). The dialogs and the POSTs are
+  // the shared incident flows every surface uses (ADR-0151).
+  causesBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-show], button[data-resolve-cause], .dropdown-menu button[data-act]");
+    if (!btn) return;
+    if (btn.dataset.show !== undefined) {
+      scope = causes[Number(btn.dataset.show)] || null;
+      picked.clear();
+      await loadRows();
+      tbody.closest(".card").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const g = causes[Number(btn.dataset.resolveCause ?? btn.dataset.cause)];
+    if (!g) return;
+    // A cause's worker is the fix for every incident behind it; the flows are the
+    // per-incident ones (ADR-0160/0287), which only ever needed one representative.
+    const act = btn.dataset.act;
+    const retry = () => resolveCauseQuick({ api, toast, group: g });
+    const changed = act === "fixconn"
+      ? !!(await fixWorkerFlow({ api, toast, incident: g, retry, extraLabel: `Save & retry ${g.count}` }))
+      : act === "addconn"
+        ? !!(await addWorkerFlow({ api, toast, incident: g, retry, extraLabel: `Add & retry ${g.count}` }))
+        : !!(await resolveCauseFlow({ api, toast, group: g }));
+    if (changed) {
+      picked.clear();
+      await load();
+      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+    }
+  });
+
+  tbody.addEventListener("change", (e) => {
+    const box = e.target.closest("input[type=checkbox][data-pick]");
+    if (!box) return;
+    if (box.checked) picked.add(box.dataset.pick);
+    else picked.delete(box.dataset.pick);
+    renderBulk();
+  });
+
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve], .dropdown-menu button[data-act]");
     if (!btn) return;
@@ -5768,13 +6191,15 @@ async function viewIncidents() {
             : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
-      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+      refreshIncidentBadge();
     }
   });
 
+  scopeClear.addEventListener("click", async () => { scope = null; picked.clear(); await loadRows(); });
   document.getElementById("refresh").addEventListener("click", load);
   await load();
 }
+
 
 // viewMailOutbox is the Operations "Outbox" view: the messages a mail worker on
 // the *preview* provider delivered in-server instead of sending (ADR-0150).
@@ -6707,7 +7132,20 @@ async function viewDecisionDetail(id) {
     result marked <b>&#8862;</b> to see the decision table with the matched rule
     highlighted — a rule that never matches (a string compared against a number, a
     stray space, a wrong type) shows its condition in red.</p>
+    <h2 style="margin-top:20px">Deployed versions</h2>
+    <p class="muted">Every version of this decision the engine holds, newest first.
+    <b>Held by</b> names the deployed processes that pinned this exact version when they
+    were deployed — they carry no copy of it, so it cannot be removed while they exist.
+    Removing a version history goes oldest first: the current version cannot go while
+    older ones remain, because the next deploy would silently fall back to one of
+    them.</p>
     <div class="card" style="padding:0">
+      <table data-dt-key="decision-versions">
+        <thead><tr><th>Version</th><th>Key</th><th>Model</th><th>Deployed</th><th>Held by</th><th></th></tr></thead>
+        <tbody id="version-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card" style="padding:0; margin-top:20px">
       <table data-dt-key="decision-evals">
         <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
@@ -6717,37 +7155,69 @@ async function viewDecisionDetail(id) {
   const tbody = document.getElementById("rows");
   const pop = document.getElementById("dec-pop");
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
-  const fmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
-  const cellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
-  const tablesOf = (r) => (r && r.trace && Array.isArray(r.trace.tables)) ? r.trace.tables : [];
-  const matchedNums = (r) => {
-    const nums = [];
-    for (const t of tablesOf(r)) for (const rule of (t.rules || [])) if (rule.matched) nums.push(rule.index + 1);
-    return [...new Set(nums)];
-  };
+  // The rule matrix is drawn by dmn-trace.js, the one renderer the decision
+  // editor's Test panel also uses, so a trace reads the same in both places.
+  const tablesOf = (r) => traceTablesOf(r && r.trace);
+  const matchedNums = (r) => matchedRuleNumbers(r && r.trace);
+  const miniTable = (tt, n) => renderTraceTable(tt, n);
 
-  // miniTable renders one decision table as a compact matrix (mirrors temis' Operate
-  // view): a row per rule, input columns + output, the matched rule highlighted and
-  // each cell tinted by whether its condition held.
-  const miniTable = (tt, n) => {
-    const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
-    const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
-    const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
-    const ins = tt.inputs || [];
-    const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
-      `<th>${esc(i.expression)} <code>= ${esc(fmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
-    const body = (tt.rules || []).map((r) => {
-      const cells = ins.map((_, k) => {
-        const c = r.conditions && r.conditions[k];
-        const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
-        return `<td class="${cls}">${c ? esc(cellText(c.entry)) : ""}</td>`;
-      }).join("");
-      const out = r.matched && r.outputs ? esc(r.outputs.map(fmtVal).join(", ")) : "";
-      return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
+  // The deployed versions of this decision, and what holds each of them
+  // (ADR-0336). It is the only place in the product
+  // that answers "what is using this version", which is a question asked without a
+  // deletion in mind — and the place a deletion has to stand.
+  const versionRows = document.getElementById("version-rows");
+  const loadVersions = async () => {
+    let rows = [];
+    try {
+      rows = await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`) || [];
+    } catch (e) {
+      versionRows.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      return;
+    }
+    if (!rows.length) {
+      versionRows.innerHTML = `<tr><td colspan="6" class="empty">
+        This decision has no deployment of its own. It is evaluated from the model
+        bundled with the process that calls it.</td></tr>`;
+      return;
+    }
+    versionRows.innerHTML = rows.map((r) => {
+      const held = (r.pinnedBy || []).length
+        ? (r.pinnedBy || []).map((p) =>
+            `<a href="#/operations/p/${p.key}" title="${esc(`${p.processId} v${p.version} pinned this version at deploy time`)}">${esc(p.name || p.processId)}</a>`
+          ).join(", ")
+        : '<span class="muted">—</span>';
+      // The server decides; this only keeps the reader from clicking into a refusal,
+      // and carries its reason as the tooltip.
+      const state = versionDeleteState(r, rows);
+      const action = state.deletable
+        ? `<button class="btn ghost" data-delver="${r.key}" title="Remove this deployed version">Delete</button>`
+        : `<span class="muted" title="${esc(state.why)}">held</span>`;
+      return `<tr>
+        <td><b>v${r.version}</b>${r.current ? ' <span class="pill ok"><span class="dot"></span>current</span>' : ""}</td>
+        <td class="muted">${r.key}</td>
+        <td class="muted">${esc(r.resourceName || r.modelName || "—")}</td>
+        <td class="muted" data-sort="${r.deployedAt || 0}">${esc(fmtTime(r.deployedAt))}${r.deployedBy ? " · " + esc(r.deployedBy) : ""}</td>
+        <td>${held}</td>
+        <td class="row-actions">${action}</td></tr>`;
     }).join("");
-    return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
-      `<table class="mgrid">${hr}${body}</table></div>`;
+    enhanceViewTables();
   };
+  versionRows.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-delver]");
+    if (!btn) return;
+    if (!window.confirm("Remove this deployed version? Processes already pinned to it keep running against it — this is refused if any are.")) return;
+    btn.disabled = true;
+    try {
+      await api("DELETE", `/api/v1/decision-deployments/${encodeURIComponent(btn.dataset.delver)}`);
+      toast("Removed the deployed version", "ok");
+    } catch (err) {
+      // The server's refusal is the explanation: it names what is holding the
+      // version, or why the current one cannot go yet.
+      toast(err.message, "err");
+      btn.disabled = false;
+    }
+    await loadVersions();
+  });
 
   let evals = [];
   const load = async () => {
@@ -6762,7 +7232,7 @@ async function viewDecisionDetail(id) {
       tbody.innerHTML = evals.map((r, i) => {
         const ins = r.inputs && typeof r.inputs === "object" ? Object.entries(r.inputs) : [];
         const pills = ins.length
-          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(fmtVal(v))}</span>`).join("")}</div>`
+          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(traceValue(v))}</span>`).join("")}</div>`
           : '<span class="muted">—</span>';
         const outs = r.outputs && typeof r.outputs === "object" ? Object.entries(r.outputs) : [];
         const nums = matchedNums(r);
@@ -6772,7 +7242,7 @@ async function viewDecisionDetail(id) {
           ? `<div class="res">${outs.map(([k, v], oi) =>
               `<div class="res-row${hoverable}" data-ev="${i}"${hoverable ? ' tabindex="0"' : ""}>
                 <span class="res-key">${esc(k)}</span>
-                <span class="res-val">${esc(fmtVal(v))}</span>
+                <span class="res-val">${esc(traceValue(v))}</span>
                 ${oi === 0 ? badge : ""}
               </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
@@ -6815,8 +7285,8 @@ async function viewDecisionDetail(id) {
   tbody.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showPop(row); });
   tbody.addEventListener("focusout", hidePop);
 
-  document.getElementById("refresh").addEventListener("click", load);
-  await load();
+  document.getElementById("refresh").addEventListener("click", () => { load(); loadVersions(); });
+  await Promise.all([load(), loadVersions()]);
 }
 
 // ---------- Tasks (Outlook-style inbox, ADR-0028) ----------
@@ -8317,6 +8787,23 @@ async function viewModelDifference(applicationId) {
   await mod.mountModelDifference(view, { api, applicationId, application });
 }
 
+// viewObjectCatalog lists every class of every model the caller can see, and
+// viewObjectDetail opens one of them with everywhere it is used
+// (ADR-0338). They are the
+// vocabulary's own reading: the canvas and the model list are both per document, so
+// neither could answer "what else depends on this Order" or show the estate's classes
+// together. Both are read-only and both live in one module, because the list's rows and
+// the detail's tables say the same things about the same subject.
+async function viewObjectCatalog() {
+  const mod = await import("./business-objects.js");
+  await mod.mountObjectCatalog(view, { api });
+}
+
+async function viewObjectDetail(modelId, className) {
+  const mod = await import("./business-objects.js");
+  await mod.mountObjectDetail(view, { api, modelId, className });
+}
+
 // viewInfoModel opens one model on the class canvas, which lives in its own module
 // so the shell stays small.
 async function viewInfoModel(id) {
@@ -8544,6 +9031,13 @@ async function viewEditor(key, projectId) {
 async function viewEditorDraft(id) {
   const gen = navGen;
   const mod = await import("./editor.js");
+  // A decision authored for one of this diagram's business rule tasks left what it
+  // saved behind on the way out; the task adopts it as the editor mounts, which is
+  // what keeps the ADR-0062 round trip working now that it is a navigation rather
+  // than a window (ADR-0320). One-shot: taking it
+  // clears it, so reopening the diagram later does not re-apply it.
+  const { takeAdoption } = await import("./dmn-editor.js");
+  const adopt = takeAdoption(id);
   // An existing draft carries its own projectId; resolve it so the editor can
   // offer a "back to project" breadcrumb (the route alone doesn't name it).
   let projectId = "";
@@ -8554,7 +9048,21 @@ async function viewEditorDraft(id) {
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
   if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
-  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project, adopt });
+}
+
+// viewDmnEditor mounts the decision editor
+// (ADR-0320). refId edits an existing decision; without it a new one is authored,
+// filed into projectId. draftId opens a decision that exists only as a draft, which
+// has no reference to be addressed by (ADR-0321). forTask is the
+// {processId, elementId} of the business rule task the author pressed "＋ New
+// decision" on, which decides where back goes and whose task adopts what is saved to
+// the model.
+async function viewDmnEditor({ refId, draftId, projectId, forTask } = {}) {
+  const gen = navGen;
+  const mod = await import("./dmn-editor.js");
+  if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
+  await mod.mountDmnEditor(view, { api, toast, refId, draftId, projectId, forTask });
 }
 
 // generateFor, when given, is the {processId, elementId} the "Create a new form" link
@@ -8588,7 +9096,7 @@ async function viewInstanceReplay(key) {
 // ---------- Router ----------
 // viewDmnViewer renders a referenced DMN model: its decision requirements graph
 // (decisions, input data, and the requirements between them) drawn read-only from
-// the graph the embedded engine exposes, with a Bearbeiten button that opens the
+// the graph the embedded engine exposes, with an Edit button that opens the
 // embedded dmn-js editor (ADR-0062) on the same model. The SVG itself is a
 // picture, not an edit surface — editing happens in the modeler overlay, and on
 // save the view re-renders from the updated model.
@@ -8598,7 +9106,7 @@ async function viewDmnViewer(refId) {
   let g, ref = null;
   try {
     // The graph carries no model handle, so the reference is fetched alongside it
-    // to know which model the Bearbeiten button should open.
+    // to know which model the Edit button should open.
     const [graph, refs] = await Promise.all([
       api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`),
       api("GET", "/api/v1/dmnrefs").catch(() => []),
@@ -8629,13 +9137,13 @@ async function viewDmnViewer(refId) {
     } catch { /* keep the generic "← Project" label, which still links correctly */ }
   };
   const editBtn = ref && ref.modelRef
-    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Bearbeiten</button>` : "";
-  // Re-render from the updated model once the editor closes on a save; also
-  // resolves the back link's project name.
+    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Edit</button>` : "";
+  // Edit navigates to the decision editor's own page; coming back re-renders this
+  // viewer from the stored model. Also resolves the back link's project name.
   const wireEdit = () => {
     const b = document.getElementById("dmn-edit");
-    if (b) b.addEventListener("click", async () => {
-      await editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name }, () => viewDmnViewer(refId));
+    if (b) b.addEventListener("click", () => {
+      editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name });
     });
     resolveBack();
   };
@@ -8653,7 +9161,7 @@ async function viewDmnViewer(refId) {
       <div class="row">${editBtn}</div>
     </div>
     <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
-    <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
+    <p class="muted" style="font-size:12px">This decision can be edited in Atlas (<b>Edit</b>) or used from a business rule task through the Modeler's decision picker.</p></div>`;
   wireEdit();
 }
 
@@ -8904,6 +9412,8 @@ function routeTitle(path) {
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
     [/^#\/data\/instances$/, "Instances · Data"],
+    [/^#\/data\/objects\/.+/, "Business object · Data"],
+    [/^#\/data\/objects$/, "Business objects · Data"],
     [/^#\/data\/m\//, "Class diagram · Data"],
     [/^#\/data$/, "Model · Data"],
     [/^#\/panorama\/starmap$/, "Starmap · Panorama"],
@@ -8944,6 +9454,7 @@ async function route() {
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/panorama")) appId = "panorama";
   else if (path.startsWith("#/data")) appId = "data";
+  else if (path.startsWith("#/catalog")) appId = "catalog";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
@@ -8976,6 +9487,22 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/catalog") {
+      const gen = navGen;
+      const { viewCatalogs } = await import("./catalog-admin.js");
+      return await viewCatalogs({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    const cd = path.match(/^#\/catalog\/c\/(.+)$/);
+    if (cd) {
+      const gen = navGen;
+      const { viewCatalogDetail } = await import("./catalog-admin.js");
+      // me travels with the context because one card on that page is the owner's
+      // alone (ADR-0071): an editor may change the catalogue and not who else can.
+      return await viewCatalogDetail({
+        api, toast, view, isSuperseded: () => superseded(gen),
+        me: AUTH.user, enforced: AUTH.enabled,
+      }, decodeURIComponent(cd[1]));
+    }
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
@@ -8998,6 +9525,42 @@ async function route() {
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
+    // The decision editor, before the viewer below: "new" and "e/…" would otherwise
+    // be read as reference ids by its catch-all
+    // (ADR-0320). The /for/… tail is the shape
+    // ADR-0260 gave "Create a new form" pressed on a step — here it is "＋ New
+    // decision" pressed on a business rule task, and it is what sends the author
+    // back to that diagram.
+    const dnewdec = path.match(/^#\/modeler\/dmn\/new(?:\/p\/([^/]+))?(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dnewdec) {
+      return await viewDmnEditor({
+        projectId: dnewdec[1] ? decodeURIComponent(dnewdec[1]) : "",
+        forTask: dnewdec[3]
+          ? { processId: decodeURIComponent(dnewdec[2]), elementId: decodeURIComponent(dnewdec[3]) }
+          : null,
+      });
+    }
+    const dedit = path.match(/^#\/modeler\/dmn\/e\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dedit) {
+      return await viewDmnEditor({
+        refId: decodeURIComponent(dedit[1]),
+        forTask: dedit[3]
+          ? { processId: decodeURIComponent(dedit[2]), elementId: decodeURIComponent(dedit[3]) }
+          : null,
+      });
+    }
+    // A decision draft has no reference to be addressed by, so it is addressed by
+    // itself (ADR-0321). Before the viewer's catch-all, like its
+    // siblings.
+    const ddraft = path.match(/^#\/modeler\/dmn\/d\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (ddraft) {
+      return await viewDmnEditor({
+        draftId: decodeURIComponent(ddraft[1]),
+        forTask: ddraft[3]
+          ? { processId: decodeURIComponent(ddraft[2]), elementId: decodeURIComponent(ddraft[3]) }
+          : null,
+      });
+    }
     const dv = path.match(/^#\/modeler\/dmn\/(.+)$/);
     if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
@@ -9016,12 +9579,25 @@ async function route() {
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/tasks/recertification") {
+      const { viewRecertification } = await import("./recertification.js");
+      return await viewRecertification({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/operations/reconciliation") {
+      const { viewReconciliation } = await import("./reconciliation.js");
+      return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
     if (path === "#/panorama") return await viewPanoramaModels();
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
     if (path === "#/data") return await viewInfoModels();
+    if (path === "#/data/objects") return await viewObjectCatalog();
+    // …/objects/{modelId}/{class}: both are encoded, because a class name is a name a
+    // person chose ("Line item") and a model id is opaque.
+    const imo = path.match(/^#\/data\/objects\/([^/]+)\/(.+)$/);
+    if (imo) return await viewObjectDetail(decodeURIComponent(imo[1]), decodeURIComponent(imo[2]));
     if (path === "#/data/instances") return await viewDataInstances();
     const imm = path.match(/^#\/data\/m\/(.+)$/);
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));

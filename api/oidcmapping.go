@@ -31,13 +31,17 @@ import (
 //   - **A claim grants; it never grants by absence.** Every rule is an exact match
 //     on a value the token carries. A person the provider says nothing about
 //     matches nothing and is granted nothing.
-//   - **`user` is a floor, not a grant.** What the mapping decides is `admin`,
-//     `modeler` and `operator` — the roles that change what somebody may do to the
-//     instance. Anybody who can sign in at all keeps `user`, so a group that goes
-//     away does not leave a person unable to open their own task list.
-//   - **It owns the groups it names, and no others.** Roles are a closed set of
-//     four that Atlas defines, so "the mapping decides the roles" is a complete
-//     sentence and a hand-granted role does not survive the next login. Groups are
+//   - **`user` is a floor, not a grant.** What the mapping decides is every other
+//     grantable role — `admin`, `modeler`, `operator`, `productmanager` — the ones
+//     that change what somebody may do to the instance. Anybody who can sign in at
+//     all keeps `user`, so a group that goes away does not leave a person unable to
+//     open their own task list.
+//   - **It owns the groups it names, and no others.** Roles are a closed set that
+//     Atlas defines, so "the mapping decides the roles" is a complete
+//     sentence and a hand-granted role does not survive the next login. That last
+//     clause is why a grantable role missing from the editor's list is a defect
+//     and not an omission: here it would be granted by hand and taken away again
+//     at the next login, which looks like the role not working. Groups are
 //     an open set that people create for their own reasons, and a mapping that
 //     never mentions a group has said nothing about it — so a membership an
 //     administrator added by hand to a group no rule names is left alone.
@@ -48,7 +52,7 @@ type oidcMapRule struct {
 	// object ids and role names here; Atlas compares, it does not interpret.
 	Value string `json:"value"`
 
-	// Roles the value grants, from the four Atlas enforces (ADR-0209).
+	// Roles the value grants, from the ones Atlas enforces (ADR-0209).
 	Roles []string `json:"roles,omitempty"`
 
 	// Groups the value puts the person in, by Atlas group id (ADR-0180). Ids rather

@@ -1,0 +1,32 @@
+{
+  "tags": ["Modeler", "Decisions", "Documentation"],
+  "title": {
+    "en": "The process document now contains the decision tables too",
+    "de": "Die Prozessdokumentation enthält jetzt auch die Entscheidungstabellen"
+  },
+  "summary": {
+    "en": "A process document already reproduced what each step runs — a script task's source, a branch's condition — verbatim, so a reader outside Atlas could check it rather than take it on trust. The one step it said nothing about was the business rule task, which is the one whose whole behaviour lives outside the diagram: the section named the step and stopped, and the rules that actually decide the outcome were somewhere else. Each such section now carries the call as the diagram holds it — which decision, how it binds and what that means, the result variable, and the values fed in — and, under it, the decision's rule table, set exactly as the decision's own document sets it. The rules are read from the model behind the decision where there is one and from the deployed version otherwise, and the document names which of the two it read. A step evaluated by an external temis worker says so and names the worker instead of pretending to hold rules it does not have.",
+    "de": "Eine Prozessdokumentation gab bisher schon wieder, was ein Schritt ausführt — den Quelltext eines Skript-Tasks, die Bedingung einer Verzweigung — und zwar wörtlich, damit Lesende ausserhalb von Atlas es prüfen können, statt es glauben zu müssen. Der einzige Schritt, zu dem sie nichts sagte, war die Geschäftsregelaufgabe — ausgerechnet jener, dessen Verhalten vollständig ausserhalb des Diagramms liegt: Der Abschnitt nannte den Schritt und hörte auf, die tatsächlich entscheidenden Regeln standen anderswo. Jeder solche Abschnitt führt nun den Aufruf so auf, wie das Diagramm ihn hält — welche Entscheidung, wie sie gebunden ist und was das bedeutet, die Ergebnisvariable und die übergebenen Werte — und darunter die Regeltabelle der Entscheidung, gesetzt genau wie in deren eigener Dokumentation. Die Regeln stammen aus dem Modell hinter der Entscheidung, sofern es eines gibt, sonst aus der ausgelieferten Version; die Dokumentation nennt, welche der beiden gelesen wurde. Ein Schritt, der über einen externen temis-Worker ausgewertet wird, sagt das und nennt den Worker, statt Regeln vorzugeben, die er nicht hält."
+  },
+  "tutorial": {
+    "en": [
+      "Open a diagram with a business rule task in the Modeler.",
+      "Choose ⋯ → Documentation and press Publish version.",
+      "Open the PDF: the task's section now names the decision, its binding and its inputs, and sets the rule table underneath.",
+      "The line above the table says where the rules came from — the model behind the decision, or the deployed version when there is no model."
+    ],
+    "de": [
+      "Ein Diagramm mit einer Geschäftsregelaufgabe im Modeler öffnen.",
+      "«⋯ → Documentation» wählen und «Publish version» drücken.",
+      "Das PDF öffnen: Der Abschnitt des Schritts nennt nun die Entscheidung, ihre Bindung und ihre Eingaben und setzt darunter die Regeltabelle.",
+      "Die Zeile über der Tabelle sagt, woher die Regeln stammen — aus dem Modell hinter der Entscheidung oder aus der ausgelieferten Version, wenn es kein Modell gibt."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

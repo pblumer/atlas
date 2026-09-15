@@ -39,6 +39,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,7 +88,10 @@ import (
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/tracing"
 
+	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/formgen"
+	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/token"
@@ -203,6 +207,19 @@ type Server struct {
 	nextKey     uint64
 	versions    map[string]int32 // bpmnProcessId → highest version deployed
 	deploys     *deployStore     // durable sidecar for deployments (ADR-0019)
+	// decisionDeploys is the durable sidecar for decision deployments — DMN models
+	// published as runtime artifacts in their own right
+	// (ADR-0319) — and decisionVersions the
+	// per-decision-id version counter it rebuilds at startup, the decision
+	// counterpart of versions above.
+	decisionDeploys  *decisionStore
+	decisionVersions map[string]int32
+	// keySpace is the durable floor under nextKey: the highest definition key this
+	// installation has ever issued. Without it the counter is rebuilt from the
+	// surviving records, and deleting the highest-keyed one hands its key — and the
+	// instance history filed under it — to the next deploy
+	// (ADR-0339).
+	keySpace *keySpaceStore
 	// landscapes is what the Starmap last read this server's *structure* as
 	// (ADR-0211 §7). It holds no health and nobody's view of anything — see
 	// [meshFacts] — and it lives here, under the same single-owner discipline as the
@@ -258,13 +275,50 @@ type Server struct {
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
-	apiTokens           *apiTokenIndex    // in-memory hash->token index, same discipline as the deploy one
-	targets             *targetStore      // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions         map[string]int32  // applicationId → highest release version published (ADR-0128)
+	// directorySync holds one record: where the Entra mirror resumes from and how
+	// many runs have written (ADR-0332).
+	directorySync *directorySyncStore
+	// inventoryLoads holds one record per target system: whether a commissioning
+	// load has ever been applied for it, and what the loads amounted to
+	// (ADR-0333). The inventory itself cannot answer
+	// the first question — "loaded and found nothing" leaves it as empty as "never
+	// loaded" — and those two call for opposite actions.
+	inventoryLoads *inventoryLoadStore
+	// discrepancies is the durable journal of what Atlas and the target systems
+	// disagreed about (ADR-0334). Transitions rather than samples:
+	// a disagreement that persists is one record whose last-seen moment moves, and
+	// one that goes away is that record closed.
+	discrepancies *discrepancyStore
+	// recertifications is what people attested about the inventory
+	// (ADR-0341): the campaigns, and the judgements made in
+	// them. It answers the question the journal beside it cannot — not "is this
+	// record true" but "is this right still needed", which only a person can say.
+	recertifications *recertifyStore
+	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
+	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
-	processDocs *processdoc.Service
+	processDocs  *processdoc.Service
+	decisionDocs *decisiondoc.Service
+	// catalogs serves the self-service portal's product catalogues and the releases
+	// published from them (ADR-0312). Another
+	// area service on the ADR-0147 shape: its own store, the run loop for every
+	// access, no engine state anywhere.
+	catalogs *catalog.Service
+	// orders serves the portal's orders: what somebody asked for, against one
+	// frozen catalogue release.
+	orders *order.Service
+	// catalogStore and orderStore are the same two stores the services above hold,
+	// kept here for one reader that is neither of them: the approval page
+	// (approvals.go) joins a running task to the order it decides and the catalogue
+	// that order came from, and has to do it off the run loop, because it walks the
+	// open tasks (ADR-0239). Sidecar stores are written atomically and may be read
+	// directly for exactly that reason — it is the same access the order service is
+	// already built with (catalogStore.Release below).
+	catalogStore *catalog.Store
+	orderStore   *order.Store
 	// taskFolders serves the Tasks app's saved filters (ADR-0268).
 	taskFolders *taskfolder.Service
 	// formGen writes a form from a description and from the process it belongs to
@@ -313,6 +367,8 @@ type Server struct {
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
+	favourites       *favouriteStore     // one list of marked products per account (ADR-0348)
+	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-0321)
 	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	repository       []repositoryPackage // curated, bundled repository catalog, immutable after New (ADR-0081)
@@ -1067,6 +1123,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	decisionDeploys, err := newDecisionStore(filepath.Join(dataDir, "decisions"))
+	if err != nil {
+		return nil, err
+	}
+	// Opened beside the two stores whose records carry definition keys, because it is
+	// what stops one of those keys being issued twice.
+	keySpace, err := newKeySpaceStore(filepath.Join(dataDir, "keyspace"))
+	if err != nil {
+		return nil, err
+	}
 	// The engine-wide job-type table. Every compiled process is resolved through it
 	// before it is deployed, so the job type a service task's job carries means the
 	// same thing across definitions (ADR-0007/0157).
@@ -1107,6 +1173,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	processDocStore, err := processdoc.NewStore(filepath.Join(dataDir, "process-docs"))
+	if err != nil {
+		return nil, err
+	}
+	decisionDocStore, err := decisiondoc.NewStore(filepath.Join(dataDir, "decision-docs"))
+	if err != nil {
+		return nil, err
+	}
+	catalogStore, err := catalog.NewStore(filepath.Join(dataDir, "catalog"))
+	if err != nil {
+		return nil, err
+	}
+	orderStore, err := order.NewStore(filepath.Join(dataDir, "orders"))
 	if err != nil {
 		return nil, err
 	}
@@ -1162,11 +1240,37 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	favourites, err := newFavouriteStore(filepath.Join(dataDir, "favourites"))
+	if err != nil {
+		return nil, err
+	}
+	dmnDrafts, err := newDmnDraftStore(filepath.Join(dataDir, "dmn-drafts"))
+	if err != nil {
+		return nil, err
+	}
 	users, err := newUserStore(filepath.Join(dataDir, "users"))
 	if err != nil {
 		return nil, err
 	}
 	groups, err := newGroupStore(filepath.Join(dataDir, "groups"))
+	if err != nil {
+		return nil, err
+	}
+	directorySync, err := newDirectorySyncStore(filepath.Join(dataDir, "directory-sync"))
+	if err != nil {
+		return nil, err
+	}
+	inventoryLoads, err := newInventoryLoadStore(filepath.Join(dataDir, "inventory-loads"))
+	if err != nil {
+		return nil, err
+	}
+	discrepancies, err := newDiscrepancyStore(filepath.Join(dataDir, "discrepancies"))
+	if err != nil {
+		return nil, err
+	}
+	recertifications, err := newRecertifyStore(
+		filepath.Join(dataDir, "recertification-campaigns"),
+		filepath.Join(dataDir, "recertification-rows"))
 	if err != nil {
 		return nil, err
 	}
@@ -1228,8 +1332,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		nextKey:     1,
 		versions:    map[string]int32{},
 		deploys:     ds,
-		jobTypes:    jobTypes,
-		workers:     newWorkerRegistry(nil),
+
+		// Its own group: gofmt aligns a literal's contiguous run, and folding these
+		// into the one above would rewrite every line of it for no change in meaning.
+		decisionDeploys:  decisionDeploys,
+		keySpace:         keySpace,
+		decisionVersions: map[string]int32{},
+		jobTypes:         jobTypes,
+		workers:          newWorkerRegistry(nil),
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -1266,6 +1376,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
+		favourites:        favourites,
+		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
 		repository:        repositoryCatalog,
@@ -1283,6 +1395,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
 		groups:            groups,
+		directorySync:     directorySync,
+		inventoryLoads:    inventoryLoads,
+		discrepancies:     discrepancies,
+		recertifications:  recertifications,
 		sessions:          newSessionStore(defaultSessionTTL),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),
@@ -1330,6 +1446,104 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// Decision documentation is the same area service for a second artifact kind
+	// (ADR-0324). It takes no deployment lookup: a decision
+	// document is a sign-off artifact and is usually published before the decision
+	// is deployed, so the field would be empty in the case it exists for.
+	s.decisionDocs = decisiondoc.New(
+		s.runLoop,
+		decisionDocStore,
+		func(clientIP string) bool { return s.publicRate.allow(clientIP) },
+		token.New,
+	)
+	// The portal catalogue is another area service on the same shape: it takes the
+	// run loop, its store, and the server clock, and nothing else.
+	s.catalogs = catalog.New(s.runLoop, catalogStore, func() int64 { return s.now() },
+		// "Passes as an administrator here" — which with enforcement off is everybody,
+		// exactly as Server.isAdmin answers it for every other area. Written with the
+		// nil check because a request carries no principal when nobody is signed in.
+		func(p *httpapi.Principal) bool { return !s.authEnabled || (p != nil && p.HasRole(RoleAdmin)) })
+	// Orders read releases straight from the catalogue store. The closure runs
+	// inside the order service's own run-loop closure, so it must not dispatch
+	// onto the loop again — Do is a rendezvous, and a nested one would deadlock.
+	// The wake is the fulfilment process's only prompt: a settled line publishes
+	// a message correlated on the order id, and the orchestrator parked on it asks
+	// what may start next. Publishing runs the processor, which is a visit to the
+	// loop of its own — so the order service calls this outside its own closure.
+	s.catalogStore, s.orderStore = catalogStore, orderStore
+	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
+		catalogStore.Release, s.catalogs.MayOrderFrom,
+		// Which groups the recipient is in, for the eligibility check
+		// (ADR-0347). It reuses the principal synthesis the
+		// reminder route needed — the same question, asked about somebody who is not
+		// calling — and takes its group ids and nothing else.
+		func(recipient string) ([]string, error) {
+			p, err := s.principalOf(recipient)
+			if err != nil {
+				return nil, err
+			}
+			return p.GroupIDs, nil
+		},
+		func(message, orderID string, vars map[string]string) error {
+			start := make([]model.VariableValue, 0, len(vars))
+			for name, value := range vars {
+				start = append(start, model.VariableValue{Name: name, Kind: model.VarString, Text: value})
+			}
+			// A map has no order and start variables are written in the order given,
+			// so sort: the same order must produce the same log, live and on replay.
+			sort.Slice(start, func(i, j int) bool { return start[i].Name < start[j].Name })
+			s.do(func() { s.proc.PublishMessage(message, orderID, start...) })
+			return s.drive()
+		},
+		// The notification's link is built on the operator's configured origin and
+		// on nothing else. Deriving it from whichever host the orderer happened to
+		// reach would put an internal address in a mail to somebody who cannot
+		// resolve it.
+		func() string { return s.externalURL },
+		// The inventory. A right the portal granted is engine state, not order
+		// state, because it outlives the order: the instance that produced it is
+		// eligible for retention deletion long before the right ends, and a record
+		// that cannot be rebuilt after that is not a record. Origin is set here and
+		// not by the order service — an order can only ever produce an ordered
+		// right, and a package that cannot name another origin cannot mislabel one.
+		func(g order.Grant) error {
+			s.do(func() {
+				s.proc.GrantEntitlement(model.EntitlementValue{
+					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
+					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
+					// The end travels with the grant, computed from the ceiling the
+					// release froze (ADR-0344). It is set
+					// only here, which is what keeps it off adopted and legacy rights:
+					// neither is granted by an order, and neither knows when it began.
+					Until: g.Until,
+				})
+			})
+			return s.drive()
+		},
+		// And the closing of a hold. The reason is Returned and never anything
+		// else: this callback is reached only from a line that reached Returned,
+		// which is a right that was given back. The correction path — a right
+		// reconciliation found the target system does not have — goes through
+		// handleRevokeDiscrepancy and says so there, because the two rows assert
+		// different things (ADR-0346).
+		func(principal, itemID string, at int64, by string) error {
+			s.do(func() {
+				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
+			})
+			return s.drive()
+		},
+		// And what they already hold, for the basket's second resolution. Read off
+		// the loop: it is one person's inventory, but it is a scan (ADR-0239).
+		func(principal string) (map[string]bool, error) {
+			out := map[string]bool{}
+			err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+				return rv.EntitlementsOf(principal, func(v *model.EntitlementValue) error {
+					out[v.ItemID] = true
+					return nil
+				})
+			})
+			return out, err
+		})
 	// The Tasks app's folders are the second such area. Both collaborators are the
 	// server's for the same reason: the editor's value lists come from the
 	// deployment registry and the user store, which only the loop may read, and the
@@ -1422,9 +1636,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// in the limits package is what notices.
 	s.formGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
+	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
+	s.catalogs.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless
@@ -1598,6 +1814,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err := s.applyOffloadedKinds(); err != nil {
 		return nil, err
 	}
+	// The floor first, so the counter starts above every key ever issued rather than
+	// above every key that still has a record. loadDeployments then raises it further
+	// for the records that survive, which is what keeps an installation that predates
+	// the floor correct.
+	if err := s.loadKeyFloor(); err != nil {
+		return nil, err
+	}
 	if err := s.loadDeployments(); err != nil {
 		return nil, err
 	}
@@ -1609,6 +1832,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Same discipline for the per-process documentation counter, so an export after
 	// a restart continues the sequence instead of minting a second v1 (ADR-0143).
 	if err := s.processDocs.LoadVersions(); err != nil {
+		return nil, err
+	}
+	// And for the per-decision one (ADR-0324).
+	if err := s.decisionDocs.LoadVersions(); err != nil {
 		return nil, err
 	}
 	// Peer deploy tokens (ADR-0129) into the in-memory index the auth middleware
@@ -2305,101 +2532,174 @@ func (s *Server) drive() error {
 // restores diagrams, names, versions, and the ability to advance recovered
 // instances (ADR-0019). It runs before the loop serves traffic, so touching the
 // registry and the processor directly here respects the single-writer invariant.
+//
+// Two stores feed it: process deployments and decision deployments
+// (ADR-0319). They share one key space and
+// each lists in ascending key order, so merging them replays registration in the
+// order it happened live. That ordering is not cosmetic: a definition deployed
+// before deploy-time pinning still resolves latest binding against "the newest
+// model registered, of either kind", and rebuilding that pointer out of order
+// would silently hand it a different model than it had before the restart.
 func (s *Server) loadDeployments() error {
-	recs, err := s.deploys.LoadAll()
+	procs, err := s.deploys.LoadAll()
 	if err != nil {
 		return err
 	}
-	for _, rec := range recs {
-		// Recompile exactly the process this record represents (a collaboration's
-		// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
-		// without the deploy-time validation gate
-		// (ADR-0177). This definition passed the gate
-		// that existed when it was deployed and its instances have been running under
-		// it since; a rule added to the compiler afterwards is a reason to tell the
-		// operator, not to refuse to start. The model on disk did not change.
-		cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
-		if err != nil {
-			// A stored model that no longer compiles *at all* is still a hard,
-			// actionable error rather than a silently dropped definition (ADR-0019):
-			// there is no definition to bring back, so its instances could not advance
-			// either way. Name the record, since acting on it means editing that file.
-			return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+	decisions, err := s.decisionDeploys.LoadAll()
+	if err != nil {
+		return err
+	}
+	for i, j := 0, 0; i < len(procs) || j < len(decisions); {
+		if j == len(decisions) || (i < len(procs) && procs[i].Key < decisions[j].Key) {
+			if err := s.restoreDeployment(procs[i]); err != nil {
+				return err
+			}
+			i++
+			continue
 		}
-		if len(problems) > 0 {
-			// Not silent: the model is drifting from what the compiler now asks for,
-			// and the next deploy of it will be refused. Named per deployment so the
-			// operator can go straight to the model that needs fixing.
+		if err := s.restoreDecisionDeployment(decisions[j]); err != nil {
+			return err
+		}
+		j++
+	}
+	return nil
+}
+
+// restoreDeployment brings one process deployment back: recompile, re-resolve its
+// job types, re-register its bundled DMN models and its resolved decision
+// bindings, and put it in the in-memory registry. Split out of loadDeployments so
+// the two record kinds can be replayed in one merged key order.
+func (s *Server) restoreDeployment(rec persistedDeployment) error {
+	// Recompile exactly the process this record represents (a collaboration's
+	// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
+	// without the deploy-time validation gate
+	// (ADR-0177). This definition passed the gate
+	// that existed when it was deployed and its instances have been running under
+	// it since; a rule added to the compiler afterwards is a reason to tell the
+	// operator, not to refuse to start. The model on disk did not change.
+	cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
+	if err != nil {
+		// A stored model that no longer compiles *at all* is still a hard,
+		// actionable error rather than a silently dropped definition (ADR-0019):
+		// there is no definition to bring back, so its instances could not advance
+		// either way. Name the record, since acting on it means editing that file.
+		return fmt.Errorf("api: reload deployment %d (%s v%d) from %s: %w", rec.Key, rec.ProcessID, rec.Version, s.deploys.fileFor(rec.Key), err)
+	}
+	if len(problems) > 0 {
+		// Not silent: the model is drifting from what the compiler now asks for,
+		// and the next deploy of it will be refused. Named per deployment so the
+		// operator can go straight to the model that needs fixing.
+		logging.Warn(logging.DeploymentReloadedWithProblems,
+			"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+			slog.Uint64("deploymentKey", rec.Key),
+			slog.String("processId", rec.ProcessID),
+			slog.Int64("version", int64(rec.Version)),
+			slog.String("artifact", "bpmn"),
+			slog.String("problems", compiler.SummarizeProblems(problems)))
+	}
+	cp.Version = rec.Version
+	// Restore the decision bindings this definition was deployed with
+	// (ADR-0319), before the processor sees
+	// it. A record with no policy marker predates deploy-time pinning, so it is
+	// deliberately left unpinned and keeps resolving latest at task activation.
+	if rec.BindingPolicy == bindingPinned {
+		cp.PinDecisions(rec.decisionPins())
+	}
+	// Re-resolve the job types the same way the original deploy did. The registry
+	// is durable and never recycles an index, so this lands on exactly the indices
+	// the jobs already in state were written under (ADR-0007/0157).
+	if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
+		return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
+	}
+	s.proc.Deploy(cp)
+	// Re-register the process's DMN models so its business rule tasks evaluate
+	// after a restart, exactly as they did when first deployed (ADR-0014). The
+	// models are snapshotted in the deployment record (a legacy record carries a
+	// single model), so no temis reference has to be re-resolved here.
+	for _, dmnXML := range rec.dmnModels() {
+		// The same split as the BPMN model above
+		// (ADR-0177), for the same reason: refusing a
+		// snapshotted DMN model here undeploys nothing, it only keeps the server from
+		// starting. A decision that stopped compiling since the deploy fails when it
+		// is evaluated — a job error on a worker, which the engine has an answer for
+		// — while every other decision in the model keeps answering.
+		dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
+		if err != nil {
+			return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
+		}
+		if dmnProblems != "" {
 			logging.Warn(logging.DeploymentReloadedWithProblems,
-				"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+				"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
 				slog.Uint64("deploymentKey", rec.Key),
 				slog.String("processId", rec.ProcessID),
 				slog.Int64("version", int64(rec.Version)),
-				slog.String("artifact", "bpmn"),
-				slog.String("problems", compiler.SummarizeProblems(problems)))
+				slog.String("artifact", "dmn"),
+				slog.String("problems", dmnProblems))
 		}
-		cp.Version = rec.Version
-		// Re-resolve the job types the same way the original deploy did. The registry
-		// is durable and never recycles an index, so this lands on exactly the indices
-		// the jobs already in state were written under (ADR-0007/0157).
-		if err := cp.ResolveJobTypes(s.jobTypes.Intern); err != nil {
-			return fmt.Errorf("api: resolve job types for deployment %d (%s v%d): %w", rec.Key, rec.ProcessID, rec.Version, err)
-		}
-		s.proc.Deploy(cp)
-		// Re-register the process's DMN models so its business rule tasks evaluate
-		// after a restart, exactly as they did when first deployed (ADR-0014). The
-		// models are snapshotted in the deployment record (a legacy record carries a
-		// single model), so no temis reference has to be re-resolved here.
-		for _, dmnXML := range rec.dmnModels() {
-			// The same split as the BPMN model above
-			// (ADR-0177), for the same reason: refusing a
-			// snapshotted DMN model here undeploys nothing, it only keeps the server from
-			// starting. A decision that stopped compiling since the deploy fails when it
-			// is evaluated — a job error on a worker, which the engine has an answer for
-			// — while every other decision in the model keeps answering.
-			dmnProblems, err := s.dmnRegistry.Reload(rec.Key, []byte(dmnXML))
-			if err != nil {
-				return fmt.Errorf("api: reload dmn model for def %d (%s) from %s: %w", rec.Key, rec.ProcessID, s.deploys.fileFor(rec.Key), err)
-			}
-			if dmnProblems != "" {
-				logging.Warn(logging.DeploymentReloadedWithProblems,
-					"a DMN model bundled with a deployed definition no longer compiles cleanly; the definition keeps running and the decisions that still compile keep answering — fix the model and deploy it again",
-					slog.Uint64("deploymentKey", rec.Key),
-					slog.String("processId", rec.ProcessID),
-					slog.Int64("version", int64(rec.Version)),
-					slog.String("artifact", "dmn"),
-					slog.String("problems", dmnProblems))
-			}
-		}
-		// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
-		// before timers tick, so a start timer restored from the log finds the definition
-		// inactive and skips instantiation. loadDeployments does not re-arm timers (they
-		// come back from the WAL), so this is the only place recovery re-applies the gate.
-		if rec.Inactive {
-			s.proc.SetProcessActive(rec.Key, false)
-		}
-		s.deployments[rec.Key] = &deployment{
-			Key:        rec.Key,
-			ProcessID:  rec.ProcessID,
-			Name:       rec.Name,
-			Version:    rec.Version,
-			DeployedAt: rec.DeployedAt,
-			ProjectID:  rec.ProjectID,
-			DeployedBy: rec.DeployedBy,
-			xml:        []byte(rec.XML),
-			cp:         cp,
-			inactive:   rec.Inactive,
+	}
+	// Restore the deactivation flag (ADR-0119) before the loop serves traffic and
+	// before timers tick, so a start timer restored from the log finds the definition
+	// inactive and skips instantiation. loadDeployments does not re-arm timers (they
+	// come back from the WAL), so this is the only place recovery re-applies the gate.
+	if rec.Inactive {
+		s.proc.SetProcessActive(rec.Key, false)
+	}
+	s.deployments[rec.Key] = &deployment{
+		Key:        rec.Key,
+		ProcessID:  rec.ProcessID,
+		Name:       rec.Name,
+		Version:    rec.Version,
+		DeployedAt: rec.DeployedAt,
+		ProjectID:  rec.ProjectID,
+		DeployedBy: rec.DeployedBy,
+		xml:        []byte(rec.XML),
+		cp:         cp,
+		inactive:   rec.Inactive,
 
-			diagramUpdatedAt: rec.DiagramUpdatedAt,
-			diagramUpdatedBy: rec.DiagramUpdatedBy,
+		diagramUpdatedAt: rec.DiagramUpdatedAt,
+		diagramUpdatedBy: rec.DiagramUpdatedBy,
+	}
+	s.order = append(s.order, rec.Key)
+	if rec.Version > s.versions[rec.ProcessID] {
+		s.versions[rec.ProcessID] = rec.Version
+	}
+	if rec.Key >= s.nextKey {
+		s.nextKey = rec.Key + 1
+	}
+	return nil
+}
+
+// restoreDecisionDeployment brings one decision deployment back: recompile its
+// persisted DMN source into the registry under the key it was deployed with, and
+// resume its per-decision version counters
+// (ADR-0319). Nothing compiled was ever
+// persisted, so the registry is rebuilt from source here — off the processor, and
+// before the loop serves traffic.
+func (s *Server) restoreDecisionDeployment(rec persistedDecision) error {
+	// The same ADR-0177 split the bundled models above get, for the same reason:
+	// refusing a decision that has stopped compiling cleanly undeploys nothing, it
+	// only keeps the server from starting. A decision whose logic no longer compiles
+	// fails when it is evaluated — a job error on a worker, which the engine has an
+	// answer for — while every other decision in the model keeps answering.
+	problems, err := s.dmnRegistry.ReloadDecision(rec.Key, []byte(rec.XML))
+	if err != nil {
+		return fmt.Errorf("api: reload decision deployment %d from %s: %w", rec.Key, s.decisionDeploys.fileFor(rec.Key), err)
+	}
+	if problems != "" {
+		logging.Warn(logging.DeploymentReloadedWithProblems,
+			"a deployed decision no longer compiles cleanly; it was restored and the decisions that still compile keep answering — fix the model and publish it again",
+			slog.Uint64("deploymentKey", rec.Key),
+			slog.String("modelRef", rec.ModelRef),
+			slog.String("artifact", "dmn"),
+			slog.String("problems", problems))
+	}
+	for _, d := range rec.Decisions {
+		if d.Version > s.decisionVersions[d.ID] {
+			s.decisionVersions[d.ID] = d.Version
 		}
-		s.order = append(s.order, rec.Key)
-		if rec.Version > s.versions[rec.ProcessID] {
-			s.versions[rec.ProcessID] = rec.Version
-		}
-		if rec.Key >= s.nextKey {
-			s.nextKey = rec.Key + 1
-		}
+	}
+	if rec.Key >= s.nextKey {
+		s.nextKey = rec.Key + 1
 	}
 	return nil
 }
@@ -2715,6 +3015,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// names. The token in the URL is the whole authorization, and the handlers rate
 	// limit them.
 	mountFunc(accessPublic, roleAny, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
+	mountFunc(accessPublic, roleAny, "GET "+decisiondoc.PublicPath+"{token}", s.decisionDocs.HandlePublic)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}", s.handlePublicFormPage)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/start", s.handlePublicFormStart)

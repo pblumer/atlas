@@ -486,6 +486,13 @@ type statsResp struct {
 	UnresolvedIncidents int `json:"unresolvedIncidents"`
 }
 
+// createInstanceResp answers a start with the definition it started and the engine's
+// live counts, and not with the instance key: that key is minted inside the batch on the
+// single writer and frozen into the activation event, and nothing carries it back out
+// (invariants I3/I6). A caller that needs the identity of what it just started therefore
+// reconstructs it from the instance listing around the call — which is a guess when two
+// callers start the same definition at once. Closing that is
+// ADR-0335.
 type createInstanceResp struct {
 	DefinitionKey uint64    `json:"definitionKey"`
 	Stats         statsResp `json:"stats"`
@@ -751,13 +758,22 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	var (
 		refs    []dmnRef
 		loadErr error
+		// The decisions already deployed in their own right: a latest-bound task
+		// naming one needs no model bundled with this process, because the deploy
+		// pins it to that deployment's key
+		// (ADR-0327). Registry
+		// state, so it is read on the loop beside the references.
+		deployedDecisionIDs map[string]bool
 	)
-	s.do(func() { refs, loadErr = s.dmnrefs.LoadAll() })
+	s.do(func() {
+		refs, loadErr = s.dmnrefs.LoadAll()
+		deployedDecisionIDs = s.dmnRegistry.LatestDecisionIDs()
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
-	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs, deployedDecisionIDs)
 	if dmnErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 		return
@@ -907,6 +923,12 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	if err != nil {
 		return nil, err, nil
 	}
+	// Spend the keys ParseAll just handed out, durably, before any record claims one
+	// (ADR-0339). ParseAll assigned
+	// s.nextKey+i, so this reserves exactly that span and leaves the counter past it.
+	if _, err := s.reserveKeys(len(deployables)); err != nil {
+		return nil, nil, err
+	}
 	dmnStrings := make([]string, len(dmnXMLs))
 	for i, x := range dmnXMLs {
 		dmnStrings[i] = string(x)
@@ -924,16 +946,24 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			name = deployables[i].ProcessName
 		}
 
+		// Resolve every latest-bound decision reference to an exact decision
+		// deployment, now, once (ADR-0319).
+		// After this the definition names a concrete model and nothing about which
+		// version it runs is decided again — not on the worker, not on replay (I5/I6).
+		pins := s.pinDecisions(cp)
+
 		if err := s.deploys.Save(persistedDeployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			ProjectID:  projectID,
-			DeployedBy: deployedBy,
-			XML:        string(body),
-			DMNXMLs:    dmnStrings,
+			Key:              key,
+			ProcessID:        pid,
+			Name:             name,
+			Version:          version,
+			DeployedAt:       deployedAt,
+			ProjectID:        projectID,
+			DeployedBy:       deployedBy,
+			XML:              string(body),
+			DMNXMLs:          dmnStrings,
+			BindingPolicy:    bindingPinned,
+			DecisionBindings: pins,
 		}); err != nil {
 			return deployed, nil, err
 		}
@@ -979,9 +1009,8 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			cp:         cp,
 		}
 		s.order = append(s.order, key)
-		if key >= s.nextKey {
-			s.nextKey = key + 1
-		}
+		// The counter is already past this key: reserveKeys above moved it, durably,
+		// before any of these records existed.
 		// A model that binds to a directory names a bind-password reference, and this
 		// server's supervised AD worker may not be holding that one yet — it is handed
 		// exactly the references the deployed models make (adWorkerEnv).
@@ -2445,50 +2474,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var (
-		found   bool
-		notExec bool
-		runErr  error
-		statErr error
-		stats   statsResp
-	)
-	var driveNeeded bool
-	s.do(func() {
-		d, ok := s.deployments[key]
-		if !ok {
-			return
-		}
-		found = true
-		// A non-executable process is descriptive-only; refuse to start it (the UI
-		// also hides it, but this guards the API and public start paths directly).
-		if d.cp != nil && !d.cp.IsExecutable() {
-			notExec = true
-			return
-		}
-		s.proc.CreateInstance(key, startVars...)
-		driveNeeded = true
-	})
-	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop — and the
-	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-0266).
-	if driveNeeded {
-		if runErr = s.drive(); runErr == nil {
-			stats, statErr = s.statsOffLoop()
-		}
-	}
-	switch {
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
-	case notExec:
-		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
-	case runErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
-	case statErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
-	}
+	s.startInstance(w, key, startVars)
 }
 
 // parseStartVariables reads {"variables": {name: value}} from a request body
@@ -4295,10 +4281,16 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 				// What the task is actually asking the person to do, if the modeler
 				// wrote it down (ADR-0025).
 				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
-				// The assignee is the job's runtime value (claim/unclaim rewrite it,
-				// ADR-0042); candidate groups stay the compile-time attribute.
+				// Both halves of the assignment are the job's runtime values: the
+				// assignee because claim and unclaim rewrite it (ADR-0042), the
+				// candidate groups because a model may name them with an expression
+				// and what it evaluated to belongs to this instance
+				// (ADR-0318). The model's own value
+				// is the fallback for a job written before the job carried them.
 				tr.Assignee = jv.Assignee
-				tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				if tr.CandidateGroups = jv.CandidateGroups; tr.CandidateGroups == "" {
+					tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				}
 				tr.FormID = cp.Intern(detail.FormId)
 				tr.Priority = detail.Priority
 				// The due date is frozen on the job as an absolute instant
@@ -4796,10 +4788,14 @@ func incidentType(v *model.IncidentValue) string {
 }
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
-// view (ADR-0061). Optionally scoped to one process instance (?instance=) or one
-// deployed definition (?process=): the replay badges a single instance's incidents
-// and the live view a whole version's, and neither should have to pull the server's
-// entire — page-capped — incident list to find its own (ADR-0151).
+// view (ADR-0061). Scoped by the shared [incidentSelector]: one process instance
+// (?instance=) or one deployed definition (?process=), because the replay badges a
+// single instance's incidents and the live view a whole version's and neither should
+// pull the server's entire — page-capped — list to find its own (ADR-0151); and, since
+// a flood is read by cause, one BPMN element (?element=), one kind (?type=) or a
+// fragment of the message (?message=), which are the group's rows
+// (ADR-0337). The same selector is what a bulk resolve takes, so what
+// this page shows and what that action touches cannot disagree.
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
@@ -4812,21 +4808,10 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			limit = maxTaskListMax
 		}
 	}
-	var instanceFilter, processFilter uint64
-	for _, f := range []struct {
-		name string
-		dst  *uint64
-	}{{"instance", &instanceFilter}, {"process", &processFilter}} {
-		q := strings.TrimSpace(r.URL.Query().Get(f.name))
-		if q == "" {
-			continue
-		}
-		n, err := strconv.ParseUint(q, 10, 64)
-		if err != nil {
-			httpapi.Error(w, http.StatusBadRequest, "invalid "+f.name+" (want a key)")
-			return
-		}
-		*f.dst = n
+	sel, selErr := incidentSelectorFromQuery(r)
+	if selErr != nil {
+		httpapi.Error(w, http.StatusBadRequest, selErr.Error())
+		return
 	}
 	list := []incidentView{}
 	truncated := false
@@ -4837,48 +4822,12 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	// precisely when it is. The view is a second gain — an incident resolved while
 	// the page is being built can no longer appear half-described.
 	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
-		// One instance is looked up once however many of its elements are stuck, and
-		// a flood of incidents is usually a flood on few instances.
-		type instanceCtx struct {
-			defKey    uint64
-			processID string
-			cp        *compiler.CompiledProcess
-		}
-		resolved := map[uint64]instanceCtx{}
 		// One resolver for the whole page: the worker store is read once, not once
 		// per parked token, and not at all when nothing on the page is on a worker
 		// task (ADR-0159). It reads a durable sidecar, which is safe to do off the
 		// loop (ADR-0265).
 		connectorFor := s.incidentConnectorLookup()
-		lookup := func(piKey uint64) (instanceCtx, error) {
-			if ctx, ok := resolved[piKey]; ok {
-				return ctx, nil
-			}
-			var ctx instanceCtx
-			pi, ok, err := rv.ProcessInstance(piKey)
-			if err != nil {
-				return ctx, err
-			}
-			if ok {
-				ctx.defKey = pi.ProcessDefKey
-				if d, ok := defs[pi.ProcessDefKey]; ok {
-					ctx.processID, ctx.cp = d.ProcessID, d.cp
-				}
-			}
-			resolved[piKey] = ctx
-			return ctx, nil
-		}
-		err := rv.Incidents(func(elKey uint64, v *model.IncidentValue) error {
-			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
-				return nil
-			}
-			ctx, err := lookup(v.ProcessInstanceKey)
-			if err != nil {
-				return err
-			}
-			if processFilter != 0 && ctx.defKey != processFilter {
-				return nil
-			}
+		return unlessTruncated(walkIncidents(rv, defs, sel, func(elKey uint64, v *model.IncidentValue, ctx incidentCtx, elementID string) error {
 			if len(list) >= limit {
 				truncated = true
 				return errListTruncated // page full: bound the response even under a flood of failures
@@ -4895,14 +4844,13 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 				Message:            v.Message,
 			}
 			if ctx.cp != nil {
-				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+				view.ElementID = elementID
 				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
 				view.RepairForm = ctx.cp.RepairForm(v.ElementId)
 			}
 			list = append(list, view)
 			return nil
-		})
-		return unlessTruncated(err)
+		}))
 	})
 	switch {
 	case errors.Is(scanErr, errLoopClosing):
@@ -4936,6 +4884,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Completing is deciding: it writes the form's answer into the instance and
+	// lets the process act on it. Who may (taskauthority.go) is asked before the
+	// processor is told anything.
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
 	var (
@@ -5044,6 +4999,14 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	// Claiming and releasing are gated with completion, and have to be: releasing
+	// somebody else's task is how a caller who may not complete it makes sure
+	// nobody can. An approval left holderless is an order stuck until an operator
+	// repairs it (taskauthority.go).
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
 	var (
@@ -5827,7 +5790,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The message travels; the SMTP host and password do not. What names the
 		// credential is the worker's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
-		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey, mailDirectory{s})
 		if err != nil {
 			return nil
 		}

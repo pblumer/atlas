@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Unvereinbarkeit (ADR-0342)
+  — wöchentlich melden, wer eine verbotene Kombination hält.
+
+  Alles, was das Portal bisher über Zugriff gelernt hat, ist **aufdeckend oder
+  zeitlich**: die Bestandsaufnahme hält fest, was da war, der Abgleich prüft, ob es
+  stimmt, die Rezertifizierung fragt, ob es noch berechtigt ist, die Befristung
+  beendet es von selbst. Alle vier betrachten *ein* Recht, und alle vier schauen
+  *danach*.
+
+  Keines kann die älteste Kontrolle der Zugriffssteuerung aussprechen: **diese
+  beiden Dinge darf nie dieselbe Person halten.** Wer Lieferanten anlegen darf, darf
+  nicht auch Zahlungen an sie freigeben. Kein Recht ist für sich falsch — die
+  Kombination ist es.
+
+    Timer-Start "wöchentlich"        timeCycle R/P7D (ADR-0051)
+     -> [REST GET /api/v1/conflicts]  -> `bericht`
+     -> Gateway "etwas gefunden?"
+        -> [Mail an die Betriebsführung]  -> Ende "gemeldet"
+        -> Ende "nichts gefunden"
+
+  ────────────────────────────────────────────────────────────────────────────────
+  EIN KONFLIKT HAT KEINEN SCHULDIGEN.
+
+  Jeder andere Mechanismus dieser Reihe handelt auf einem Paar (Person, Produkt).
+  Ein Konflikt ist ein Paar von Paaren. Auf die Frage, was hier falsch ist, lautet
+  die ehrliche Antwort: keines der beiden Rechte, und beide zusammen. Welches die
+  Person für ihre Arbeit braucht, ist eine Frage über die Arbeit und nicht über den
+  Katalog.
+
+  Deshalb entzieht hier nichts automatisch — das wäre nicht Vorsicht, sondern
+  Arithmetik: ein selbsttätiges Mittel müsste eine Hälfte wählen, und die falsche zu
+  wählen nimmt das Recht weg, das gebraucht wird, und lässt das andere stehen.
+
+  Der Befund nennt **beide** Seiten und ist ein Befund und nicht zwei. Zwei Befunde
+  luden zwei Menschen ein, je „ihre" Hälfte zu bereinigen — was entweder nichts tut
+  oder beide entfernt.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  DIE REGEL GILT RÜCKWIRKEND, DIE BEFRISTUNG NICHT. Das sieht ähnlich aus und ist
+  es nicht: eine Befristung ist Teil dessen, was vergeben wurde, und liesse sich
+  nachträglich nur mit einem erfundenen Startdatum anwenden. Eine Unvereinbarkeit
+  ist eine Aussage darüber, was **jetzt** nebeneinander bestehen darf — eine Regel,
+  die am Tag ihrer Veröffentlichung nicht für den Bestand gilt, wäre Zierde.
+
+  Wer also eine Regel erklärt, bekommt am selben Tag ihre Verletzungen zu sehen.
+  Bei einem grossen Bestand können das viele auf einmal sein, und keine davon räumt
+  irgendetwas von selbst ab. Das ist richtig so und es ist auch viel Arbeit, die an
+  einem Morgen eintrifft.
+
+  Voraussetzungen beim Betreiber:
+    * Ein REST-Worker namens "atlas" mit einem API-Token der Rolle `operator`.
+    * Ein Mail-Worker namens "portal", wie ihn die Genehmigungsverfahren verwenden.
+    * Mindestens ein Katalog mit einer Kante der Art `excludes` und einer
+      veröffentlichten Freigabe. Ohne das ist `bericht.pairs` null, und der Bericht
+      sagt genau das — nicht „sauber".
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_unvereinbarkeit"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_unvereinbarkeit" name="Unvereinbarkeit: wer hält, was nicht zusammengehört" isExecutable="true">
+    <bpmn:documentation>Meldet wöchentlich, wer eine Kombination hält, die der Katalog verbietet.
+
+Ein Konflikt hat keinen Schuldigen: kein Recht ist für sich falsch, die Kombination ist es. Deshalb entzieht hier nichts automatisch — ein selbsttätiges Mittel müsste eine Hälfte wählen, und die falsche zu wählen nimmt das Recht weg, das gebraucht wird.
+
+Anders als eine Befristung gilt eine Unvereinbarkeit rückwirkend. Eine Befristung ist Teil dessen, was vergeben wurde; eine Unvereinbarkeit ist eine Aussage darüber, was jetzt nebeneinander bestehen darf.
+
+Worker-only (ADR-0172): der Mailzugang liegt nie in der Engine.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_woche" name="wöchentlich">
+      <bpmn:documentation>Wiederholungszyklus R/P7D (ADR-0051). Wöchentlich, weil die Bestellstrecke den Konflikt bereits verhindert: was hier auftaucht, entstand ausserhalb — durch eine neu erklärte Regel, eine Bestandsaufnahme oder eine übernommene Berechtigung. Das sind Ereignisse von Wochen, nicht von Stunden.</bpmn:documentation>
+      <bpmn:outgoing>f_start_lesen</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_woche">
+        <bpmn:timeCycle>R/P7D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="konflikte_lesen" name="Konflikte lesen">
+      <bpmn:documentation>GET /api/v1/conflicts. Geprüft wird gegen die **neueste** Freigabe jedes Katalogs — was eine ältere Freigabe verbot, ist das, was der Katalog einmal sagte.
+
+Zuerst zu lesen ist `pairs`: wie viele Unvereinbarkeiten überhaupt erklärt sind. „Niemand hält eine verbotene Kombination" bedeutet etwas anderes, wenn die Antwort keine von keinen ist.
+
+Schreibt: bericht = { pairs, counts, findings, omitted, note }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+          <zeebe:header key="path" value="/api/v1/conflicts" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:output source="=body" target="bericht" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_lesen_gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_gefunden" name="etwas gefunden?" default="f_gw_nichts">
+      <bpmn:documentation>Der Leerfall bekommt ein eigenes sichtbares Ende. Im Log soll stehen, dass geprüft *und* nichts gefunden wurde — und `bericht.note` unterscheidet „niemand hält eine verbotene Kombination" von „es ist gar keine erklärt".
+
+Der Vorgabeweg ist „nichts melden". Ein Gateway, dessen Vorgabe eine Mail ist, meldet bei jeder unerwarteten Antwortform etwas.</bpmn:documentation>
+      <bpmn:incoming>f_lesen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_melden</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_nichts</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="melden" name="Betriebsführung benachrichtigen">
+      <bpmn:documentation>Eine Mail an eine Gruppe — `to="=empfaenger"` nennt eine Kennung, keine Adresse; aufgelöst wird sie im Server im Moment des Versands (ADR-0314).
+
+Gemeldet wird an die Betriebsführung und nicht an die betroffene Person. Wer eine verbotene Kombination hält, hat sie sich in aller Regel nicht selbst gegeben, und eine Nachricht an ihn stellt eine Frage, die er nicht beantworten kann: welche Hälfte er aufgeben soll, ist eine Entscheidung über seine Arbeit.
+
+Der Text nennt die Anzahl und den ältesten Befund. `findings[1]` ist der älteste, weil der Bericht danach sortiert — was am längsten besteht, hat am längsten niemand angesehen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="portal"
+          to="=empfaenger"
+          subject="=&#34;Unvereinbare Berechtigungen: &#34; + string(bericht.counts.findings) + &#34; Fall/Fälle&#34;"
+          body="=&#34;Guten Tag\n\n&#34; + string(bericht.counts.findings) + &#34; verbotene Kombination(en) bei &#34; + string(bericht.counts.people) + &#34; Person(en), gegen &#34; + string(bericht.pairs) + &#34; erklaerte Regel(n).\n\nAeltester Fall: &#34; + bericht.findings[1].principal + &#34; haelt &#34; + bericht.findings[1].a + &#34; und &#34; + bericht.findings[1].b + &#34;.\n\nEs wird nichts automatisch entzogen. Welche Haelfte aufgegeben wird, ist eine Entscheidung ueber die Arbeit der Person; der Weg dorthin ist eine Rueckgabe der Bestellzeile oder eine Rezertifizierung, und beide halten fest, wer entschieden hat.\n\nFreundliche Gruesse\nIhr Leistungsportal&#34;" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_melden</bpmn:incoming>
+      <bpmn:outgoing>f_melden_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende_gemeldet" name="gemeldet">
+      <bpmn:documentation>Gemeldet, nicht behoben. Dieser Prozess ist der erste dieser Reihe, der überhaupt keinen Weg hinzufügt, Zugriff zu entziehen — die Mittel gibt es bereits, und beide halten fest, wer entschieden hat.</bpmn:documentation>
+      <bpmn:incoming>f_melden_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_nichts" name="nichts gefunden">
+      <bpmn:documentation>`bericht.note` sagt, welche Leere es ist: niemand hält eine verbotene Kombination, oder es ist überhaupt keine erklärt. Die zweite sieht wie die erste aus und ist der weit häufigere Fall.</bpmn:documentation>
+      <bpmn:incoming>f_gw_nichts</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_lesen" sourceRef="start_woche" targetRef="konflikte_lesen" />
+    <bpmn:sequenceFlow id="f_lesen_gw" sourceRef="konflikte_lesen" targetRef="gw_gefunden" />
+    <bpmn:sequenceFlow id="f_gw_melden" name="gefunden" sourceRef="gw_gefunden" targetRef="melden">
+      <bpmn:conditionExpression>= bericht.counts.findings &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_melden_ende" sourceRef="melden" targetRef="ende_gemeldet" />
+    <bpmn:sequenceFlow id="f_gw_nichts" name="nichts" sourceRef="gw_gefunden" targetRef="ende_nichts" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_unvereinbarkeit">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_woche">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="138" y="225" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lesen" bpmnElement="konflikte_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_gefunden">
+        <dc:Bounds x="400" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="382" y="232" width="87" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_melden" bpmnElement="melden">
+        <dc:Bounds x="510" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_gemeldet" bpmnElement="ende_gemeldet">
+        <dc:Bounds x="662" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="648" y="145" width="65" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_nichts" bpmnElement="ende_nichts">
+        <dc:Bounds x="510" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="478" y="305" width="101" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_lesen" bpmnElement="f_start_lesen">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lesen_gw" bpmnElement="f_lesen_gw">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_melden" bpmnElement="f_gw_melden">
+        <di:waypoint x="425" y="175" /><di:waypoint x="425" y="120" /><di:waypoint x="510" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_melden_ende" bpmnElement="f_melden_ende">
+        <di:waypoint x="610" y="120" /><di:waypoint x="662" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_nichts" bpmnElement="f_gw_nichts">
+        <di:waypoint x="425" y="225" /><di:waypoint x="425" y="280" /><di:waypoint x="510" y="280" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

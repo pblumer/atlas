@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "A relationship is drawn from the class it starts at, the way a sequence flow is.",
+  "reviewedThrough": "Products can be marked as favourites.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -116,8 +116,8 @@
         "de": "Entscheidungen als Tabellen"
       },
       "text": {
-        "en": "DMN business rule tasks with an embedded decision-table editor. Domain experts change the rules without redeploying the process, and every evaluation is recorded with inputs, outputs and the rule that hit.",
-        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Fachleute ändern die Regeln ohne Redeploy des Prozesses, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
+        "en": "DMN business rule tasks with an embedded decision-table editor. A decision is published as a versioned artifact of its own, a deployed process keeps evaluating the exact version it was deployed against, and every evaluation is recorded with inputs, outputs and the rule that hit.",
+        "de": "DMN-Business-Rule-Tasks mit eingebettetem Decision-Table-Editor. Eine Entscheidung wird als eigenständig versioniertes Artefakt veröffentlicht, ein deployter Prozess wertet weiterhin genau die Version aus, gegen die er deployt wurde, und jede Auswertung wird mit Inputs, Outputs und getroffener Regel protokolliert."
       }
     },
     {
@@ -127,8 +127,8 @@
         "de": "Daten mit einem Modell dahinter"
       },
       "text": {
-        "en": "An information model of classes, their members and the lifecycle each one moves through — modelled by hand, or read back off the processes that actually write it. The deploy checks the models against it, and the two readings side by side say what is planned and not yet built — a backlog, not drift.",
-        "de": "Ein Informationsmodell aus Klassen, ihren Attributen und dem Lebenszyklus, den jede durchläuft — von Hand modelliert oder aus den Prozessen zurückgelesen, die es tatsächlich schreiben. Das Deployment prüft die Modelle dagegen, und die beiden Lesungen nebeneinander zeigen, was geplant und noch nicht gebaut ist — ein Backlog, kein Auseinanderlaufen."
+        "en": "An information model of classes, their members and the lifecycle each one moves through — modelled by hand, or read back off the processes that actually write it. The deploy checks the models against it, and the two readings side by side say what is planned and not yet built — a backlog, not drift. Every class says where it is used, down to the element that writes it.",
+        "de": "Ein Informationsmodell aus Klassen, ihren Attributen und dem Lebenszyklus, den jede durchläuft — von Hand modelliert oder aus den Prozessen zurückgelesen, die es tatsächlich schreiben. Das Deployment prüft die Modelle dagegen, und die beiden Lesungen nebeneinander zeigen, was geplant und noch nicht gebaut ist — ein Backlog, kein Auseinanderlaufen. Jede Klasse zeigt, wo sie verwendet wird — bis hin zum Element, das sie schreibt."
       }
     },
     {
@@ -171,8 +171,8 @@
         "de": "Betriebsreife Werkzeuge"
       },
       "text": {
-        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
-        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
+        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, grouped by cause and resolvable in bulk, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
+        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, nach Ursache gruppiert und als Gruppe auflösbar, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
       }
     },
     {

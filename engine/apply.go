@@ -248,6 +248,39 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DecOpenJobs()
 		}
 
+	case model.VTEntitlement:
+		switch h.Intent {
+		case model.IntentEntitlementGranted:
+			// A function of the event alone — no clock, no lookup, nothing derived
+			// — which is what lets an access record rebuild identically from the log
+			// years after the instance that produced it was deleted (I4/I6).
+			return tx.PutEntitlement(&v.entitlement)
+		case model.IntentEntitlementRevoked:
+			// A revocation written before holds left a history behind
+			// (ADR-0346). The log is append-only and replayed
+			// whole, so this arm cannot be deleted: an installation upgrading into
+			// that record replays years of them.
+			//
+			// It drops the hold without a row, which is what those events meant and
+			// all they can mean — the fields a row needs were never written. A
+			// history that invented them would be worse than one that starts on the
+			// day the family did.
+			return tx.DeleteEntitlement(v.entitlement.Principal, v.entitlement.ItemID)
+		}
+
+	case model.VTEntitlementHistory:
+		if h.Intent == model.IntentEntitlementRevoked {
+			// Closing a hold reads the hold. That is a departure from the arm above
+			// and stays inside I4/I6, which require the fold to be deterministic and
+			// free of side effects, not free of reads: it reads state this same
+			// pipeline built, through the same indexed batch, in the same order, live
+			// and on replay alike. Everything that could *not* be derived that way —
+			// the moment, the reason, who decided — travels in the event.
+			e := &v.entitlementEnd
+			_, err := tx.EndEntitlement(e.Principal, e.ItemID, e.EndedAt, e.EndedReason, e.EndedBy)
+			return err
+		}
+
 	case model.VTIncident:
 		switch h.Intent {
 		case model.IntentIncidentCreated:

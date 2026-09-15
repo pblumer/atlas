@@ -318,6 +318,59 @@ func resolveIncidentBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// resolveIncidentsBody builds the bulk-resolve request from the tool arguments:
+// either an explicit key set or a scope, never both, and the API refuses a scope
+// that names nothing (ADR-0337).
+func resolveIncidentsBody(args map[string]any) ([]byte, error) {
+	payload := map[string]any{}
+	if raw, ok := args["keys"]; ok {
+		arr, isArray := raw.([]any)
+		if !isArray {
+			return nil, fmt.Errorf("argument %q must be an array of element instance keys", "keys")
+		}
+		keys := make([]uint64, 0, len(arr))
+		for i, el := range arr {
+			k, err := argUint(map[string]any{"key": el}, "key")
+			if err != nil {
+				return nil, fmt.Errorf("keys[%d] must be a non-negative integer", i)
+			}
+			keys = append(keys, k)
+		}
+		payload["keys"] = keys
+	}
+	for _, name := range []string{"processDefKey", "processInstanceKey", "elementIndex", "retries", "limit"} {
+		if _, ok := args[name]; !ok {
+			continue
+		}
+		n, err := argUint(args, name)
+		if err != nil {
+			return nil, err
+		}
+		payload[name] = n
+	}
+	for _, name := range []string{"elementId", "type", "message"} {
+		if v := optString(args, name); v != "" {
+			payload[name] = v
+		}
+	}
+	_, hasKeys := payload["keys"]
+	scoped := false
+	for _, name := range []string{"processDefKey", "processInstanceKey", "elementId", "elementIndex", "type", "message"} {
+		if _, ok := payload[name]; ok {
+			scoped = true
+		}
+	}
+	if !hasKeys && !scoped {
+		return nil, fmt.Errorf("name what to resolve: %q, or a scope (%q / %q / %q / %q / %q / %q)",
+			"keys", "processDefKey", "processInstanceKey", "elementId", "elementIndex", "type", "message")
+	}
+	if hasKeys && scoped {
+		return nil, fmt.Errorf("provide either %q or a scope, not both", "keys")
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 // incidentsPage folds the {incidents:[…]} body and the X-Incidents-Truncated
 // header the list endpoint returns into one JSON envelope {incidents, truncated},
 // so the truncation signal survives as data (ADR-0016). The list is capped, not
@@ -560,6 +613,74 @@ func authoringTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_try_decision",
+			Description: "Try a DMN model against sample inputs without deploying anything: returns what the " +
+				"decision produced and the temis trace saying which rules fired and why. The model is the one " +
+				"in the request, so this works on a decision that is stored nowhere yet — use it to check a " +
+				"decision table you just wrote before atlas_upload_decision_model or atlas_deploy_decision. " +
+				"Omit decisionId to be told what the model offers and which inputs each decision wants.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"xml":        stringProp("The full DMN XML document to try."),
+					"decisionId": stringProp("Which decision in the model to run. Omitted, the model is only described."),
+					"inputs":     map[string]any{"type": "object", "description": "The decision's input values, by input data name."},
+				},
+				"required": []any{"xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				payload := map[string]any{"xml": xml}
+				if id, _ := args["decisionId"].(string); id != "" {
+					payload["decisionId"] = id
+				}
+				if in, ok := args["inputs"].(map[string]any); ok {
+					payload["inputs"] = in
+				}
+				body, _ := json.Marshal(payload)
+				return asText(c.post("/api/v1/decisions/evaluate", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_deploy_decision",
+			Description: "Deploy one DMN model as a decision deployment: durable, versioned, and " +
+				"evaluable on its own, without publishing the whole application around it. The " +
+				"counterpart of atlas_deploy for a single diagram. Use it to try a decision on the " +
+				"engine; use atlas_upload_decision_model plus atlas_register_decision first when a " +
+				"business rule task must also be able to name it, since the picker resolves " +
+				"references, not deployments.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"xml":       stringProp("The full DMN XML document to deploy."),
+					"projectId": stringProp("Optional application id to file the deployment under."),
+					"modelRef":  stringProp("Optional model handle this was authored as, recorded as the deployment's provenance."),
+				},
+				"required": []any{"xml"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				xml, err := argString(args, "xml")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{}
+				if pid, _ := args["projectId"].(string); pid != "" {
+					q.Set("projectId", pid)
+				}
+				if ref, _ := args["modelRef"].(string); ref != "" {
+					q.Set("modelRef", ref)
+				}
+				path := "/api/v1/decision-deployments"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.post(path, "application/xml", []byte(xml)))
+			},
+		},
+		{
 			Name: "atlas_register_decision",
 			Description: "Register a decision reference (name + modelRef) so a business rule task's " +
 				"calledDecision resolves to an uploaded model at deploy time, optionally under a project. " +
@@ -598,6 +719,55 @@ func authoringTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/decisions/deployed"))
+			},
+		},
+		{
+			Name: "atlas_decision_deployments",
+			Description: "List the DMN decisions deployed as durable runtime artifacts — one row per decision " +
+				"and version, with the application it was published from, the model and checksum behind it, and " +
+				"whether it is the current version. This is what a process's latest-bound business rule task is " +
+				"pinned to when the process is deployed, so a superseded version stays listed as long as a " +
+				"definition still evaluates it. Optionally narrowed to one application or to one decision's " +
+				"version history.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": stringProp("Only decisions published from this application (from atlas_list_applications)."),
+					"decisionId":    stringProp("Only this decision's versions, newest first."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				if v := optString(args, "applicationId"); v != "" {
+					q.Set("applicationId", v)
+				}
+				if v := optString(args, "decisionId"); v != "" {
+					q.Set("decisionId", v)
+				}
+				path := "/api/v1/decision-deployments"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_deployed_decision_model",
+			Description: "Get the DMN XML of one deployed decision by its deployment key (from " +
+				"atlas_decision_deployments) — the exact source the runtime was built from. Different from " +
+				"atlas_get_decision_model, which reads the design-time model file behind a handle: that file is " +
+				"edited in place, so only the deployment still knows what a running process evaluates.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"key": stringProp("The decision deployment key (from atlas_decision_deployments).")},
+				"required":   []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argString(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/decision-deployments/" + url.PathEscape(key) + "/xml"))
 			},
 		},
 		{

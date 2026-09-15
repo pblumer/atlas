@@ -254,6 +254,65 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_class_catalog",
+			Description: "The class catalogue: every business object, value type and enumeration across " +
+				"the information models you can see, with where each one is used. One list across " +
+				"applications on purpose — two applications modelling the same Order is the failure the " +
+				"information model exists to prevent, and a per-model listing cannot show it. Each row " +
+				"says what the class holds (members, business key, lifecycle states) and how much depends " +
+				"on it: how many processes use it, how many reads and writes, which members and states " +
+				"they actually touch, and how many places the vocabulary itself refers to it. A class with " +
+				"no process use is not unused — check `usage.modelUses`, which for an enumeration is " +
+				"normally the whole answer. Only deployed processes are read, so \"used by nothing\" means " +
+				"nothing deployed; a Modeler draft is not in it.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"applicationId": stringProp("Optional process application to narrow to (from atlas_list_applications). Omitted, every application you can see is listed."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path := "/api/v1/infomodel/classes"
+				if id := strings.TrimSpace(optString(args, "applicationId")); id != "" {
+					path += "?applicationId=" + url.QueryEscape(id)
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_class_usage",
+			Description: "Where one class is used, and how — the question to ask *before* proposing to " +
+				"rename a member, retire an enumeration literal or drop a state. `processes` lists every " +
+				"deployed process that declares a data object of the class and every element that reads " +
+				"it, writes it, writes one member of it, moves it into a state, or names the store it is " +
+				"kept in, each with the element id, the member and the state. `model` lists what the " +
+				"vocabulary itself does with it: an attribute typed with it, an association, a lifecycle " +
+				"taking its states from it, a store holding it — for an enumeration usually the only uses " +
+				"there are. Nothing is inferred: a data object with no declared type is not counted as a " +
+				"use of the class its name resembles. Only the deployed, active, latest version of each " +
+				"process is read, so an empty `processes` does not mean no draft uses it.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":    stringProp("The information model id the class belongs to (from atlas_list_information_models)."),
+					"class": stringProp("The class name, e.g. \"Order\"."),
+				},
+				"required": []any{"id", "class"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				class, err := argString(args, "class")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/infomodel/models/" + url.PathEscape(id) +
+					"/usage?class=" + url.QueryEscape(class)))
+			},
+		},
+		{
 			Name: "atlas_instance_object_graph",
 			Description: "Derive one process instance's object diagram: its data objects as UML object " +
 				"nodes with their attributes and business keys, and the lines between them. Two things " +

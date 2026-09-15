@@ -23,7 +23,7 @@ func identProcess(t *testing.T, key uint64, version int32, names ...string) (*co
 	t.Helper()
 	b := compiler.NewBuilder(key, "identitaet", version)
 	start := b.AddStartEvent()
-	task := b.AddUserTask("Review", "editor", "reviewers", "", 50, 0, 3)
+	task := b.AddUserTask("Review", compiler.Assignment{Literal: "editor"}, compiler.Assignment{Literal: "reviewers"}, "", 50, 0, 3)
 	end := b.AddEndEvent()
 	b.Connect(start, task)
 	b.Connect(task, end)

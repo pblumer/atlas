@@ -416,7 +416,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         process as a diagram, deploy it, and Atlas runs it step by step – reliably, traceably and durably stored.
         Decisions live in <b>DMN</b> tables.</p>
 
-      <h3 data-l="de">Die sechs Apps</h3><h3 data-l="en">The six apps</h3>
+      <h3 data-l="de">Die neun Apps</h3><h3 data-l="en">The nine apps</h3>
       <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps. Das Menü zeigt nur,
         was deine <a href="#konten">Rolle</a> erreicht – wer keine Modelle bearbeiten darf, sieht Modeler,
         Panorama und Data gar nicht erst.</p>
@@ -440,6 +440,32 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p class="lead" data-l="de">Der Posteingang für menschliche Aufgaben (User-Tasks) mit Formularen.</p>
           <p class="lead" data-l="en">The inbox for human work (user tasks) with forms.</p>
           <a class="applink" href="/#/tasks">→ Tasks</a></div>
+        <div class="card"><b>Portal</b>
+          <p class="lead" data-l="de">Das Leistungsportal: den eigenen Katalog durchsehen, etwas bestellen und
+            sehen, wo eine Bestellung steht – bis hin zur Rückgabe. Eine eigene Seite, nicht Teil dieser
+            Oberfläche, und sie trägt die Farben des Katalogs, dem man zugeordnet ist.</p>
+          <p class="lead" data-l="en">The service portal: browse the catalogue you are the audience for, order
+            something, and see where an order stands – down to giving it back. A page of its own rather than a
+            view of this shell, and it wears the brand of the catalogue you belong to.</p>
+          <a class="applink" href="/portal.html">→ Portal</a></div>
+        <div class="card"><b>Approvals</b>
+          <p class="lead" data-l="de">Die Genehmigungen, die an einen selbst adressiert sind: was bestellt wurde,
+            für wen, und unter welcher Regel es genehmigt wird. Wer nie um eine Genehmigung gebeten wird, findet
+            hier eine leere Liste – es gibt keine Genehmiger-Rolle, auf die das Menü filtern könnte.</p>
+          <p class="lead" data-l="en">The approvals addressed to you: what was ordered, for whom, and under which
+            rule it is decided. Somebody never asked to approve anything finds an empty list here – there is no
+            approver role for the menu to filter on.</p>
+          <a class="applink" href="/genehmigung.html">→ Approvals</a></div>
+        <div class="card"><b>Catalogue</b>
+          <p class="lead" data-l="de">Hier wird der Katalog gefüllt: Produkte erfassen, sie an
+            die Prozesse binden, die sie bereitstellen und entziehen, festlegen was was enthält
+            und was zuerst da sein muss – und veröffentlichen. Bis zur ersten Veröffentlichung
+            zeigt das Portal niemandem etwas.</p>
+          <p class="lead" data-l="en">Where the catalogue is filled: define products, bind them
+            to the processes that provision and revoke them, say what contains what and what has
+            to exist first – and publish. Until the first release the portal shows nobody
+            anything.</p>
+          <a class="applink" href="/#/catalog">→ Catalogue</a></div>
         <div class="card"><b>Operations</b>
           <p class="lead" data-l="de">Laufende Instanzen beobachten, Incidents lösen, Entscheidungen prüfen.</p>
           <p class="lead" data-l="en">Watch running instances, resolve incidents, inspect decisions.</p>
@@ -1972,6 +1998,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         </details>
         <p class="rz-how"><span data-l="de">Ein <code>dataObject</code> ist ein benannter Datenspeicher im Prozess; eine <code>dataObjectReference</code> zeigt darauf. Eine <code>dataOutputAssociation</code> <b>schreibt</b> ein Feld (<code>from</code>-Ausdruck → <code>to</code>-Feld), eine <code>dataInputAssociation</code> <b>liest</b> es (<code>sourceRef</code> → Variable). Nutze Datenobjekte, wenn der Datenfluss im Diagramm sichtbar sein soll; für einfaches „Variable setzen“ genügt ein <a href="#rz-script-value">Script-Task</a>.</span><span data-l="en">A <code>dataObject</code> is a named data store in the process; a <code>dataObjectReference</code> points at it. A <code>dataOutputAssociation</code> <b>writes</b> a field (<code>from</code> expression → <code>to</code> field), a <code>dataInputAssociation</code> <b>reads</b> it (<code>sourceRef</code> → variable). Use data objects when the data flow should be visible in the diagram; for a simple "set a variable" a <a href="#rz-script-value">script task</a> is enough.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Der Datenzustand auf dem Diagramm:</b> Ein Datenobjekt trägt neben seinem Namen einen <b>Datenzustand</b> — das <code>[ARCHIVIERT]</code> in eckigen Klammern unter dem Kasten. Er steht im Eigenschaften-Panel und wird auf dem Diagramm mitgezeichnet, denn oft ist er das Einzige, was zwei Kästen desselben Objekts unterscheidet. <b>Zurückgenommen dargestellt</b> wird er dort, wo ihn nichts schreibt: Ein Zustand an einem Kasten, auf den eine <code>dataOutputAssociation</code> zeigt, wird ausgeführt, landet im Ereignislog und wird gegen den Lebenszyklus der Klasse geprüft. Ein Zustand an einem Kasten, der nur <i>gelesen</i> wird, fällt beim Kompilieren weg — er beschreibt eine Erwartung an diese Stelle, aber keine Maschine handelt danach und keine Prüfung erreicht ihn, auch der Tippfehler-Check nicht.</span><span data-l="en"><b>The data state on the diagram:</b> beside its name a data object carries a <b>data state</b> — the <code>[ARCHIVIERT]</code> in square brackets under the box. It is set in the properties panel and drawn on the diagram, because it is often the only thing that tells two boxes of the same object apart. It is <b>set back</b> wherever nothing writes it: a state on a box a <code>dataOutputAssociation</code> points at is executed, lands in the event log and is checked against the class’s lifecycle. A state on a box that is only <i>read</i> is dropped when the model compiles — it documents what this step expects, but nothing acts on it and no check reaches it, the typo check included.</span></p>
         <p class="rz-how"><span data-l="de"><b>Prozessübergreifend:</b> BPMN sagt nur, wie ein Datenobjekt <i>heisst</i> — sein <code>itemSubjectRef</code> zeigt auf einen Typ, den die Spezifikation bewusst offen lässt. Unter <b>Data › Model</b> zeichnest du diesen Typ als UML-Klasse: Attribute mit Typ und Kardinalität, und einen <b>fachlichen Schlüssel</b>, der <code>Order#ORD-1</code> in drei Prozessen zur selben Bestellung macht. Ein ERD wäre hier die falsche Notation — dessen Vokabular ist Speicherung, und wo ein Datum liegt, entscheidet der Data Store, nicht das Modell.</span><span data-l="en"><b>Across processes:</b> BPMN only says what a data object is <i>called</i> — its <code>itemSubjectRef</code> points at a type the specification deliberately leaves open. Under <b>Data › Model</b> you draw that type as a UML class: attributes with types and multiplicities, and a <b>business key</b> that makes <code>Order#ORD-1</code> the same order in three processes. An ERD would be the wrong notation here — its vocabulary is storage, and where a datum lives is the data store's question, not the model's.</span></p>
         <p class="rz-how"><span data-l="de"><b>Vorhandenes Modell importieren:</b> Wer sein Datenmodell schon in einem UML-Werkzeug gezeichnet hat, tippt es nicht ab: <b>Data › Information model › Import…</b> liest das <b>XMI 2.5.1</b>, das Enterprise Architect, Papyrus und Visual Paradigm exportieren — und ebenso Atlas’ eigenes JSON, mit dem ein Modell von einer Applikation oder Installation in eine andere umzieht. Welches Format vorliegt, erkennt Atlas am Dokument. Da Atlas bewusst nur einen kleinen Teil von UML führt, sagt ein echtes Dokument stets Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden. Nichts davon lehnt die Datei ab, und nichts davon verschwindet stillschweigend: Jede Stelle erscheint im Bericht, benannt und als <i>verworfen</i>, <i>angepasst</i> oder <i>wissenswert</i> markiert. Den Bericht liest man, bevor gespeichert wird. Zwei Lesarten sind Absicht: Ein als Identifikator markiertes Attribut ohne genannte Multiplizität gilt als Pflichtfeld — sonst ginge der fachliche Schlüssel verloren —, und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei.</span><span data-l="en"><b>Importing a model you already have:</b> if your data model is already drawn in a UML tool, do not retype it: <b>Data › Information model › Import…</b> reads the <b>XMI 2.5.1</b> that Enterprise Architect, Papyrus and Visual Paradigm export — and Atlas’s own JSON, which is how a model moves from one application or installation to another. Which of the two it is, Atlas reads off the document. Because Atlas deliberately authors a small part of UML, a real document always says things it has no place for — an interface, an operation, a relationship with three ends. None of that refuses your file, and none of it disappears quietly: every one of them appears in the report, named and marked <i>dropped</i>, <i>adjusted</i> or <i>worth knowing</i>. You read that report before anything is stored. Two readings are deliberate: an attribute marked as the identifier with no multiplicity stated counts as required — otherwise the business key would be lost — and a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a file of its own.</span></p>
         <p class="rz-how"><span data-l="de"><b>Was geprüft wird:</b> Sobald ein Datenobjekt einen Typ trägt, schlägt Atlas ihn beim Deploy und in der Problems-Leiste nach: ein Typ, den niemand modelliert hat, ein Schreibvorgang auf ein Feld, das die Klasse nicht hat — und, ganz ohne Modell, eine Aufgabe, die ein Objekt liest, das keine Aufgabe davor schreibt. <b>Keiner dieser Befunde verweigert ein Deployment</b>: Ein Prozess wird regelmässig gezeichnet, bevor das Vokabular dazu existiert.</span><span data-l="en"><b>What gets checked:</b> once a data object carries a type, Atlas resolves it at deploy and in the Problems bar: a type nobody has modelled, a write to a field the class does not have — and, needing no model at all, an activity that reads an object no activity before it writes. <b>None of these refuses a deploy</b>: a process is routinely drawn before the vocabulary it names exists.</span></p>
@@ -4198,6 +4225,466 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-entra-verzeichnis-abgleich">
+        <h4><span class="rz-emoji" aria-hidden="true">🧭</span>
+          <span data-l="de">Verzeichnis-Abgleich: Konten aus Entra führen</span><span data-l="en">Directory sync: accounts kept from Entra</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-users</span><span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Trockenlauf</span><span class="tag" data-l="en">dry run</span>
+          <span class="tag">R/PT1H</span>
+          <span class="tag">examples/entra-verzeichnis-abgleich.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Wer im Verzeichnis steht, soll in Atlas ein Konto haben – und wer gegangen ist, keines
+              mehr. Bisher entstand ein Atlas-Konto erst bei der ersten Anmeldung, was am Tag der Inbetriebnahme einen
+              fast leeren Benutzerspeicher bedeutet. Dieser Prozess führt Konten und Gruppen stündlich aus
+              Entra nach, <b>ohne dass Entra Atlas erreichen muss</b>: Atlas fragt von sich aus, es gibt keinen
+              eingehenden Bereitstellungspunkt und keine Netzwerköffnung.</p>
+            <p data-l="de"><b>Der erste Lauf schreibt nichts.</b> Er zählt den ganzen Mandanten auf, entscheidet
+              alles und legt einen Bericht ab – Zahlen für das Erwartbare, ganze Zeilen für das
+              Bemerkenswerte: welche Konten zusammengeführt würden, wer deaktiviert würde, was sich nicht
+              auflösen liess. Erst wenn ein Mensch das gelesen hat, wird umgeschaltet.</p>
+            <p data-l="en">Whoever is in the directory should have an account in Atlas – and whoever has left
+              should not. Until now an Atlas account only came into being at somebody's first sign-in, which means an
+              almost empty user store on the day an installation goes live. This process keeps accounts and groups
+              from Entra hourly, <b>without Entra having to reach Atlas</b>: Atlas asks of its own accord, so there is
+              no inbound provisioning endpoint and no hole in the network.</p>
+            <p data-l="en"><b>The first run writes nothing.</b> It enumerates the whole tenant, decides everything and
+              leaves a report – numbers for the expected, whole lines for the notable: which accounts would be
+              merged, who would be disabled, what could not be resolved. Only once a person has read it does anybody
+              switch it on.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein Timer-Start mit <code>timeCycle R/PT1H</code> (ADR-0051) holt zuerst
+              <code>GET /api/v1/directory-sync</code> – beide Graph-Cursor und die Revision, gegen die gelesen
+              wird. Zwei <code>atlas:entraConnector</code>-Tasks lesen <code>delta-users</code> und
+              <code>delta-groups</code> ab diesen Cursorn, und <code>POST /api/v1/directory-sync</code> meldet beides
+              zurück. Der Schalter ist ein Feld der Meldung: <code>apply</code>, nicht <code>dryRun</code> –
+              ein fehlendes JSON-Feld ist der Nullwert, und der muss „nichts schreiben“ heißen.</p>
+            <p data-l="de">Drei Eigenschaften tragen das: <b>ein Codepfad</b> – der Trockenlauf entscheidet mit
+              demselben Code, nur der letzte Schritt fällt aus; <b>der Cursor bleibt stehen</b>, solange nichts
+              geschrieben wurde, sonst wären genau die angesehenen Änderungen verloren; und
+              <code>fromRevision</code> macht eine zweite Zustellung wirkungslos. Das Token trägt den Scope
+              <code>directory</code> und erreicht diese beiden Routen – deployen kann es nicht.</p>
+            <p data-l="en">A timer start with <code>timeCycle R/PT1H</code> (ADR-0051) first fetches
+              <code>GET /api/v1/directory-sync</code> – both Graph cursors and the revision the run reads
+              against. Two <code>atlas:entraConnector</code> tasks read <code>delta-users</code> and
+              <code>delta-groups</code> from those cursors, and <code>POST /api/v1/directory-sync</code> reports both
+              back. The switch is a field of the message: <code>apply</code>, not <code>dryRun</code> – an absent
+              JSON field is the zero value, and the zero value has to mean "write nothing".</p>
+            <p data-l="en">Three properties carry it: <b>one code path</b> – the dry run decides with the same
+              code and only the last step is skipped; <b>the cursor stays put</b> while nothing is written, or the
+              very changes just examined would be lost; and <code>fromRevision</code> makes a second delivery inert.
+              The token carries the <code>directory</code> scope and reaches those two routes – it cannot
+              deploy.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-bestandsaufnahme">
+        <h4><span class="rz-emoji" aria-hidden="true">🗃️</span>
+          <span data-l="de">Bestandsaufnahme: eintragen, was es schon gibt</span><span data-l="en">Commissioning load: recording what is already there</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Trockenlauf</span><span class="tag" data-l="en">dry run</span>
+          <span class="tag">legacy</span>
+          <span class="tag" data-l="de">ohne Timer</span><span class="tag" data-l="en">no timer</span>
+          <span class="tag">examples/bestandsaufnahme.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Am Tag der Inbetriebnahme ist das Inventar leer und die Wirklichkeit voll: Jede
+              Gruppenmitgliedschaft und jede Lizenz existiert bereits. Würde man in diesem Zustand abgleichen,
+              wäre <b>jedes Recht im Betrieb eine Abweichung</b> – und jede Abweichung trägt eine ausführbare
+              Handlung „im Zielsystem entfernen“. Genau so sperrt sich ein neues Berechtigungswerkzeug beim
+              ersten Lauf selbst aus.</p>
+            <p data-l="de">Dieser Prozess trägt daher zuerst ein, was da ist – mit dem Ursprung
+              <code>legacy</code>: <i>das gab es vor uns, wir haben es nicht vergeben, und wir behaupten es auch
+              nicht</i>. Der wertvollste Teil des Berichts ist dabei nicht, was eingetragen würde, sondern
+              <code>unmapped</code>: <b>was der Betrieb vergibt, ohne dass es im Katalog steht</b>. Diese Liste gab
+              es vorher nirgends.</p>
+            <p data-l="en">On the day an installation goes live the inventory is empty and reality is full: every
+              group membership and every licence already exists. Reconciling in that state would report <b>every
+              privilege in the estate as a discrepancy</b> – and each discrepancy carries an executable "remove it
+              in the target system". That is how a new access-governance tool locks a company out of itself on its
+              first run.</p>
+            <p data-l="en">So this process first records what is there – with origin <code>legacy</code>: <i>this
+              predates us, we did not grant it, and we are not claiming we did</i>. The most valuable part of the
+              report is not what would be recorded but <code>unmapped</code>: <b>what the estate grants that the
+              catalogue does not model</b>. Nothing could produce that list before.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein <code>atlas:entraConnector</code>-Task liest <code>delta-groups</code> ohne Cursor –
+              eine vollständige Aufzählung – und <code>POST /api/v1/inventory-load</code> meldet je Mitgliedschaft
+              eine Beobachtung: wer (Objekt-Id) hält was (Gruppen-Objekt-Id). Atlas löst beides selbst auf: das
+              Subjekt über das gespiegelte Konto, das Recht über die <b>Zielverweise am Produkt</b>
+              (System + Referenz). Genau deshalb steht die Zuordnung im Katalog und nicht im Worker – sonst
+              bestünde der Bericht aus Behauptungen, denen man nicht widersprechen kann.</p>
+            <p data-l="de"><b>Kein Timer</b>, mit Absicht: eine Bestandsaufnahme ist eine Handlung mit einem
+              Verantwortlichen. <code>apply: false</code> ist der Nullwert, also der sichere. Ein zweiter Lauf ist
+              von Bauart her harmlos – die Meldung trägt absolute Aussagen, keine Fortschreibung – und das
+              Anfangsdatum eines schon erfassten Rechts wird nie verschoben. Über ein Recht, das ein Auftrag
+              erteilt hat, wird nichts geschrieben: das wäre der Verlust des Auftrags dahinter.</p>
+            <p data-l="en">One <code>atlas:entraConnector</code> task reads <code>delta-groups</code> with no cursor –
+              a full enumeration – and <code>POST /api/v1/inventory-load</code> reports one observation per
+              membership: who (object id) holds what (group object id). Atlas resolves both itself: the subject
+              through the mirrored account, the right through the <b>product's target references</b>
+              (system + ref). That is exactly why the join lives in the catalogue and not in the worker –
+              otherwise the report would consist of claims nobody can disagree with.</p>
+            <p data-l="en"><b>No timer</b>, deliberately: a commissioning load is an act with somebody
+              responsible for it. <code>apply: false</code> is the zero value, so the zero value is the safe one. A
+              second run is harmless by construction – the message carries absolute statements rather than a
+              cursor – and the start date of a right already recorded is never moved. Nothing is written over a
+              right an order granted: that would lose the order behind it.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-abgleich">
+        <h4><span class="rz-emoji" aria-hidden="true">⚖️</span>
+          <span data-l="de">Abgleich: stimmt noch, was wir behaupten?</span><span data-l="en">Reconciliation: is what we claim still true?</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Bereich</span><span class="tag" data-l="en">scope</span>
+          <span class="tag" data-l="de">handelt nie selbst</span><span class="tag" data-l="en">never acts</span>
+          <span class="tag">R/P1D</span>
+          <span class="tag" data-l="de">Austrittsprüfung</span><span class="tag" data-l="en">leaver check</span>
+          <span class="tag">examples/abgleich.bpmn</span>
+          <span class="tag">examples/austrittspruefung.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Das Inventar behauptet etwas, das Atlas nicht garantieren kann: dass ein Recht in
+              einem anderen System besteht. Zielsysteme werden ausserhalb verändert – jemand entfernt eine
+              Mitgliedschaft, ein Skript räumt auf – und die Behauptung verfällt lautlos. <b>Ein Inventar,
+              das niemand prüft, ist eine Liste von Dingen, die einmal wahr waren.</b></p>
+            <p data-l="de">Der Abgleich findet <b>zwei Richtungen</b>. Die erwartete: jemand hält etwas, das
+              niemand vergeben hat. Die andere ist die gefährliche: Atlas führt ein Recht, das es nicht mehr
+              gibt – und beantwortet damit die Frage „wer hatte wann Zugriff“ mit einer selbstsicheren
+              Unwahrheit. <b>Gehandelt wird nie automatisch</b>: übernehmen, im Zielsystem entziehen oder
+              die Aufzeichnung streichen sind drei einzelne Entscheidungen eines Menschen.</p>
+            <p data-l="de">Beim Austritt lautet die Frage anders: hält diese Person <b>irgendwo</b> noch
+              etwas? Aus Gruppenlesungen lässt sich das nicht zusammensetzen – man müsste jede Gruppe
+              abgleichen und die Abwesenheit der Person in allen feststellen. Deshalb kann ein Lauf
+              wahlweise Referenzen <i>oder</i> Personen nennen, deren Bestand er vollständig gelesen hat.
+              <code>austrittspruefung.bpmn</code> geht diesen zweiten Weg, und das leere Ergebnis ist dort
+              die gesuchte Antwort: der Bericht sagt im Klartext, dass die Person draussen ist – ein
+              Nachweis, der wie „keine Daten“ aussieht, wird als Fehler gelesen und nicht als Beleg.</p>
+            <p data-l="en">The inventory asserts something Atlas cannot guarantee: that a right exists in
+              another system. Target systems are changed from outside – somebody removes a membership, a
+              script tidies up – and the assertion decays silently. <b>An inventory nobody checks is a list
+              of things that were once true.</b></p>
+            <p data-l="en">Reconciliation finds <b>two directions</b>. The expected one: somebody holds
+              something nobody granted. The other is the dangerous one: Atlas records a right that no longer
+              exists – answering "who had access when" with a confident falsehood. <b>Nothing is ever acted
+              on automatically</b>: adopt, deprovision or revoke are three separate decisions by a person.</p>
+            <p data-l="en">An offboarding asks a different question: does this person still hold
+              <b>anything</b>? Group readings cannot be assembled into that answer – you would have to
+              reconcile every group and establish the person's absence from all of them. So a run may name
+              references <i>or</i> the people whose holdings it read completely.
+              <code>austrittspruefung.bpmn</code> takes that second route, and there the empty result is the
+              answer being looked for: the report says in plain words that the person is out – a proof that
+              looks like "no data" gets read as a failure rather than as evidence.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Der ganze Entwurf hängt an einem Feld. Die Bestandsaufnahme meldet, was sie
+              <i>gefunden</i> hat – Schweigen bedeutet dort nichts. Hier bedeutet Schweigen etwas, und deshalb
+              nennt jeder Lauf in <code>refs</code> die Referenzen, die er <b>vollständig</b> gelesen hat.
+              Innerhalb davon wird verglichen, ausserhalb wird nichts geschlossen: ein Recht ausserhalb des
+              Bereichs ist nicht fehlend, sondern <b>ungeprüft</b>. Es gibt keinen Vorgabewert – „nichts“
+              wäre nutzlos, „alles“ eine Vermutung, die eine abgebrochene Lesung in die Meldung verwandelt,
+              der Betrieb habe seine Zugriffe verloren.</p>
+            <p data-l="de">Festgehalten werden <b>Übergänge, keine Messwerte</b>: zehn Läufe über dieselbe
+              Uneinigkeit ergeben einen Datensatz, und der Lauf, in dem sie verschwindet, schliesst ihn.
+              Das Journal zählt zudem Episoden – eine Mitgliedschaft, die jemand immer wieder neu setzt, ist
+              selbst der Befund.</p>
+            <p data-l="de">Die zweite Achse, <code>subjects</code>, ist dieselbe Zusicherung um neunzig
+              Grad gedreht, und beide setzen sich zusammen: ein Lauf darf „diese zwei Gruppen vollständig,
+              und alles, was Ada hält“ melden. Geschlossen wird ein Befund nur für Paare, die der Lauf
+              tatsächlich geprüft hat. Ein Subjekt, das sich auf kein Konto auflöst, gilt dabei nie als
+              sauber: <b>die Abwesenheit eines Kontos ist nicht die Abwesenheit von Zugriff.</b></p>
+            <p data-l="en">The whole design hangs on one field. A commissioning load reports what it
+              <i>found</i> – silence means nothing there. Here silence means something, so every run names in
+              <code>refs</code> the references it read <b>completely</b>. Inside that scope both directions are
+              compared; outside it nothing is concluded – a right outside the scope is not missing, it is
+              <b>unexamined</b>. There is no default: "nothing" is useless and "everything" is a guess that
+              turns a truncated read into a report that the estate has lost its access.</p>
+            <p data-l="en">It records <b>transitions, not samples</b>: ten runs over one disagreement make one
+              record, and the run where it disappears is the one that closes it. The journal also counts
+              episodes – a membership somebody keeps re-adding is itself the finding.</p>
+            <p data-l="en">The second axis, <code>subjects</code>, is the same promise turned ninety
+              degrees, and the two compose: a run may say "these two groups whole, and everything Ada
+              holds". A finding is closed only for pairs the run actually examined. A subject that resolves
+              to no account is never a clean result: <b>the absence of an account is not the absence of
+              access.</b></p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-unvereinbarkeit">
+        <h4><span class="rz-emoji" aria-hidden="true">⚔️</span>
+          <span data-l="de">Unvereinbarkeit: was nie zusammengehört</span><span data-l="en">Incompatible rights: what must never be held together</span></h4>
+        <p class="bsp-tags">
+          <span class="tag">excludes</span>
+          <span class="tag" data-l="de">verhindert statt findet</span><span class="tag" data-l="en">prevents, not detects</span>
+          <span class="tag" data-l="de">kein Schuldiger</span><span class="tag" data-l="en">no culprit</span>
+          <span class="tag">R/P7D</span>
+          <span class="tag">examples/unvereinbarkeit.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Bestandsaufnahme, Abgleich, Rezertifizierung und Befristung sind alle
+              <b>aufdeckend oder zeitlich</b>: sie betrachten je <i>ein</i> Recht, und sie schauen
+              <i>danach</i>. Keines kann die älteste Kontrolle der Zugriffssteuerung aussprechen –
+              <b>diese beiden Dinge darf nie dieselbe Person halten</b>. Wer Lieferanten anlegen darf,
+              darf nicht auch Zahlungen an sie freigeben.</p>
+            <p data-l="de"><b>Ein Konflikt hat keinen Schuldigen.</b> Kein Recht ist für sich falsch;
+              die Kombination ist es. Welche Hälfte die Person für ihre Arbeit braucht, ist eine Frage
+              über die Arbeit und nicht über den Katalog – deshalb entzieht hier nichts automatisch,
+              und der Befund nennt immer beide Seiten.</p>
+            <p data-l="en">The commissioning load, reconciliation, recertification and expiry are all
+              <b>detective or temporal</b>: each looks at <i>one</i> right, and each looks <i>after</i>.
+              None can express the oldest control in access governance – <b>these two things must never
+              be held by the same person</b>. Whoever may create a supplier must not also approve
+              payments to it.</p>
+            <p data-l="en"><b>A conflict has no culprit.</b> Neither right is wrong on its own; the
+              combination is. Which half the person needs to do their job is a question about the job,
+              not about the catalogue – so nothing here revokes automatically, and a finding always
+              names both sides.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Erklärt wird es als dritte Kantenart im Katalog: <code>excludes</code>, neben
+              Struktur und Reihenfolge. Sie ist die <b>einzige symmetrische</b> – „A nicht mit B“ ist
+              genau „B nicht mit A“ –, und die Freigabe schreibt deshalb <b>beide Richtungen</b> auf.
+              Eine Freigabe mit nur einer Richtung machte jeden Lesenden dafür verantwortlich, die
+              Konvention zu kennen, und wer sie falsch hätte, fände die Hälfte der Verletzungen und
+              meldete den Bestand als halb sauber.</p>
+            <p data-l="de">Eine Bestellung, die eine verbotene Kombination herstellen würde, wird
+              <b>abgelehnt</b> – gegen das bereits Gehaltene und gegen denselben Warenkorb. Aufdecken
+              hiesse, die Kombination so lange bestehen zu lassen, wie das Aufdecken dauert.
+              <b>Rückwirkend gilt sie trotzdem:</b> anders als eine Befristung, die Teil des Vergebenen
+              ist, sagt eine Unvereinbarkeit, was <i>jetzt</i> nebeneinander bestehen darf.</p>
+            <p data-l="en">It is declared as a third edge kind in the catalogue: <code>excludes</code>,
+              beside structure and precedence. It is the <b>only symmetric one</b> – "A not with B" is
+              exactly "B not with A" – so the release writes <b>both directions</b> down. A release
+              recording one would make every reader responsible for knowing which, and a reader who got
+              it wrong would find half the violations and report the estate as half clean.</p>
+            <p data-l="en">An order that would create a forbidden combination is <b>refused</b> – against
+              what is already held and against the same basket. Detecting instead would let the
+              combination exist for as long as detection takes. <b>It still applies retroactively:</b>
+              unlike an expiry, which is part of what was granted, an incompatibility says what may
+              coexist <i>now</i>.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-erinnerung">
+        <h4><span class="rz-emoji" aria-hidden="true">✉️</span>
+          <span data-l="de">Erinnerung: was auf wen wartet</span><span data-l="en">Reminders: what is waiting for whom</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Mail</span><span class="tag" data-l="en">mail</span>
+          <span class="tag">pending-work</span>
+          <span class="tag" data-l="de">Aufruf-Aktivität</span><span class="tag" data-l="en">call activity</span>
+          <span class="tag">R/P7D</span>
+          <span class="tag">examples/erinnerung/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Das Portal bittet Menschen um dreierlei – eine Bestellzeile genehmigen, eine
+              Rezertifizierungszeile beantworten, eine Aufgabe erledigen. Nichts davon geschieht,
+              solange niemand Atlas öffnet und nachsieht. <b>Eine Kampagne, von der niemand erfährt,
+              ist eine Kampagne, die niemand beantwortet</b> – und jede unbeantwortete Zeile wird
+              korrekt als <i>nicht bescheinigt</i> festgehalten.</p>
+            <p data-l="de"><b>Eine falsche Erinnerung kostet mehr, als zehn richtige einbringen.</b>
+              Wer an Arbeit erinnert wird, die nicht seine ist oder die er längst erledigt hat, lernt,
+              dass diese Nachrichten Rauschen sind – und löscht die nächste, auf die es ankam,
+              ungelesen.</p>
+            <p data-l="en">The portal asks people for three things – decide an order line, answer a
+              recertification row, do a task. None of it happens while nobody opens Atlas and looks.
+              <b>A campaign nobody is told about is a campaign nobody answers</b> – and every
+              unanswered row is correctly recorded as <i>not certified</i>.</p>
+            <p data-l="en"><b>One wrong reminder costs more than ten right ones earn.</b> Somebody
+              reminded about work that is not theirs, or that they already did, learns that these
+              messages are noise – and deletes the next one, the one that mattered, unread.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Die Mailstrecke gab es längst: <code>to=</code> nennt eine Kennung, und der
+              Server löst die Adresse im Moment des Versands auf – so gerät keine Adresse in eine
+              Variable, eine Bestellung oder das Ereignisprotokoll. <b>Was fehlte, war die Frage:</b>
+              jede Route, die „was wartet“ beantwortet, beantwortet es nur für den Aufrufenden, und ein
+              Erinnerungslauf ist nicht die Person, an die er erinnert.</p>
+            <p data-l="de"><code>GET /api/v1/pending-work?principal=…</code> ist diese Frage und ist dem
+              <b>Operator</b> vorbehalten: ein Portal, in dem jeder die offenen Posten jedes anderen
+              aufzählen kann, ist ein Organigramm mit Arbeitslasten daran. Der Scope
+              <code>reminders</code> erreicht genau diese eine Route. Gelistet wird nur, was die Person
+              <i>jetzt</i> tun kann – keine Zeile einer geschlossenen Kampagne, keine bereits
+              entschiedene. <b>Atlas verschickt nichts</b>; das Modell tut es.</p>
+            <p data-l="en">The mail path already existed: <code>to=</code> names a reference and the
+              server resolves the address at the moment of sending, so no address enters a variable, an
+              order or the event log. <b>What was missing was the question:</b> every route that answers
+              "what is waiting" answers only for the caller, and a reminder is not the person it is
+              reminding.</p>
+            <p data-l="en"><code>GET /api/v1/pending-work?principal=…</code> is that question and it is
+              the <b>operator's</b>: a portal where any user can enumerate any other's pending work has
+              turned an inbox into an organisation chart with workloads attached. The
+              <code>reminders</code> scope reaches exactly this one route. Only what the person can act
+              on <i>now</i> is listed – nothing from a closed campaign, nothing already decided.
+              <b>Atlas does not send</b>; the model does.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-befristung">
+        <h4><span class="rz-emoji" aria-hidden="true">⏳</span>
+          <span data-l="de">Befristung: Zugriff, der von selbst endet</span><span data-l="en">Time-bounded access: rights that end by themselves</span></h4>
+        <p class="bsp-tags">
+          <span class="tag">maxDays</span>
+          <span class="tag" data-l="de">Ablauf ist nicht Entzug</span><span class="tag" data-l="en">expiry is not removal</span>
+          <span class="tag" data-l="de">Rückgabe der Bestellzeile</span><span class="tag" data-l="en">order return</span>
+          <span class="tag">R/P1D</span>
+          <span class="tag">examples/befristung.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Alles, was das Portal vergibt, vergibt es bisher <b>auf Dauer</b>. Das fällt am Tag
+              des Baus niemandem auf und ist der Grund, weshalb es Bestandsaufnahme, Abgleich und
+              Rezertifizierung gibt: alle drei suchen Zugriff, der nicht da sein sollte — nachdem er da
+              ist.</p>
+            <p data-l="de">Die Rezertifizierung ist dabei der manuelle Ersatz für eine fehlende
+              Befristung, und sie wird in der knappsten Währung des Systems bezahlt: der Aufmerksamkeit
+              einer Führungskraft. <b>Eine Frage, die gar nicht gestellt werden musste, ist mehr wert als
+              eine bessere Art, sie zu stellen.</b> Ein Produkt nennt mit <code>maxDays</code> eine
+              Obergrenze, und wer darunter bestellt, bekommt ein Recht, das von selbst endet.</p>
+            <p data-l="en">Everything the portal grants, it grants <b>forever</b>. Nobody notices on the
+              day it is built, and it is why the commissioning load, reconciliation and recertification
+              exist: all three look for access that should not be there, after it is there.</p>
+            <p data-l="en">Recertification is the manual compensation for a missing expiry, and it is
+              paid for in the scarcest currency in the system: a line manager's attention. <b>A question
+              that did not need to be asked is worth more than a better way of asking it.</b> A product
+              names a ceiling with <code>maxDays</code>, and anything ordered under it gets a right that
+              ends by itself.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de"><b>Ablauf ist nicht Entzug.</b> Am Tag nach dem Ende hat das Zielsystem die
+              Mitgliedschaft immer noch; es ist nichts gelaufen. Wahr ist nur, dass Atlas gesagt hat, der
+              Zugriff hätte enden sollen. Ein abgelaufenes Recht bleibt deshalb <b>geführt</b> und wird
+              als überfällig gemeldet — den Datensatz beim Ticken der Uhr zu löschen hiesse zu behaupten,
+              jemand habe einen Zugriff nicht, den er nachweislich hat.</p>
+            <p data-l="de">Zurückgegeben wird über die <b>Bestellzeile</b>, und das ist stärker als bei
+              den Geschwistern: nur ein bestelltes Recht trägt je ein Ende, also hat ein ablaufendes
+              Recht immer eine Bestellung hinter sich — und deren Rückgabe entzieht nach der
+              eingefrorenen Freigabe. Die Obergrenze gilt nie für ein gefundenes Recht: dessen Startdatum
+              ist der Moment des Findens, und eine Frist darauf liesse einen ganzen Betrieb am Jahrestag
+              seiner Inbetriebnahme ablaufen.</p>
+            <p data-l="en"><b>Expiry is not removal.</b> The day after the end the target system still
+              has the membership; nothing has run. All that is true is that Atlas said the access should
+              have ended. So an expired right stays <b>held</b> and is reported overdue — dropping the
+              record when a clock ticks would assert that somebody does not have access they demonstrably
+              do.</p>
+            <p data-l="en">It is given back through the <b>order line</b>, which is stronger than what
+              its siblings can use: only an ordered right ever carries an end, so an expiring right
+              always has an order behind it, and an order's return revokes by the frozen release. The
+              ceiling never applies to a found right: its start is the moment it was found, and a
+              deadline measured from that would expire a whole estate on the anniversary of its own
+              commissioning.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-rezertifizierung">
+        <h4><span class="rz-emoji" aria-hidden="true">🖊️</span>
+          <span data-l="de">Rezertifizierung: braucht das noch jemand?</span><span data-l="en">Recertification: does anybody still need this?</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-users</span>
+          <span class="tag" data-l="de">je Zeile ein Mensch</span><span class="tag" data-l="en">one row, one person</span>
+          <span class="tag" data-l="de">Schweigen zählt nicht</span><span class="tag" data-l="en">silence is not an answer</span>
+          <span class="tag">R/P91D</span>
+          <span class="tag">examples/rezertifizierung.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Über den Zugriff eines Menschen lassen sich drei Fragen stellen. Die Bestellung
+              beantwortet <i>darf er das haben</i>, der Abgleich <i>hat er es wirklich</i> – und diese
+              hier <b>braucht er es noch</b>. Die dritte stellte bisher niemand, und sie ist nicht die
+              kleine Schwester der anderen beiden: ein korrekt genehmigtes, korrekt eingerichtetes und
+              korrekt geführtes Recht kann trotzdem falsch sein.</p>
+            <p data-l="de"><b>So entsteht falscher Zugriff in den meisten Betrieben:</b> Leute wechseln
+              die Rolle und behalten, was die alte brauchte. Niemand hat etwas unrechtmässig vergeben,
+              und niemand hat etwas entzogen – denn Entziehen ist jemandes Aufgabe und damit niemandes.</p>
+            <p data-l="en">Three questions can be asked about somebody's access. Ordering answers <i>may
+              they have it</i>, reconciliation <i>do they actually have it</i> – and this one <b>do they
+              still need it</b>. Nothing asked the third until now, and it is not the smaller sibling of
+              the other two: a properly approved, properly provisioned and correctly recorded right can
+              still be wrong.</p>
+            <p data-l="en"><b>This is how wrong access accumulates in most estates:</b> people change
+              roles and keep what the old one needed. Nobody granted anything improperly, and nobody
+              removed anything either, because removing is somebody's job and therefore nobody's.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Der ganze Entwurf ist die Weigerung, eine Unterschrift billig zu machen. Es
+              gibt <b>keinen Weg, mehrere Zeilen auf einmal zu beantworten</b> – weder im Bildschirm noch
+              in der Schnittstelle. Eine im Block beantwortete Kampagne ist eine Unterschrift ohne
+              Prüfung, und die ist schlimmer als keine, weil eine prüfende Stelle sie glaubt.</p>
+            <p data-l="de"><b>Schweigen ist nie eine Entscheidung.</b> Eine Kampagne schliesst mit
+              unbeantworteten Zeilen, und die bleiben unbeantwortet: „Schweigen heisst behalten“ erfindet
+              eine Bestätigung, die niemand gegeben hat, „Schweigen heisst entziehen“ sperrt Leute aus,
+              weil jemand in den Ferien war. <code>undecided</code> ist deshalb eine eigene Zahl und kein
+              Rest. Wer prüft, bestimmt das Modell und nicht Atlas – eine Vorgesetztensuche ist eine
+              Verzeichnisfrage, genau wie bei der Genehmigungsregel <code>superior</code>.</p>
+            <p data-l="en">The whole design is a refusal to make a signature cheap. There is <b>no way to
+              answer several rows at once</b> – not in the screen and not in the API. A campaign answered
+              in bulk is a signature with no reading behind it, and that is worse than none, because an
+              auditor believes it.</p>
+            <p data-l="en"><b>Silence is never a decision.</b> A campaign closes with unanswered rows in
+              it and they stay unanswered: "silence means keep" invents an attestation nobody gave,
+              "silence means revoke" locks people out because somebody was on holiday. So
+              <code>undecided</code> is a first-class count rather than a remainder. Who reviews is the
+              model's to decide, not Atlas's – a line-manager lookup is a directory question, exactly as
+              it is for the <code>superior</code> approval rule.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
       <div class="bsp" id="bsp-entra-onboarding-selfservice">
         <h4><span class="rz-emoji" aria-hidden="true">🙋</span>
           <span data-l="de">Onboarding-Self-Service mit Freigabe</span><span data-l="en">Onboarding self-service with an approval</span></h4>
@@ -6356,7 +6843,13 @@ atlas worker --connector mssql</code></pre>
           einmal, und die <a href="/#/operations">Instances</a>-Liste hat eine Spalte
           <b>Incidents</b>, die direkt auf die betroffene Version führt. Der Zähler am
           Navigationspunkt <b>Incidents</b> sagt dir schon vorher, dass überhaupt etwas
-          feststeckt.</li>
+          feststeckt. Geht ein Worker kaputt, parkt er <i>jede</i> Instanz, die seine Aufgabe erreicht –
+          tausende Incidents mit einer einzigen Ursache. Die Incidents-Ansicht öffnet deshalb nach
+          <b>Ursache</b> gruppiert: eine Zeile je Element eines Prozesses, mit Anzahl, Meldung und dem
+          Worker, an dem es hängt. Du reparierst den Worker an dieser Zeile und räumst mit
+          <b>Resolve all</b> alles dahinter in einem Schritt weg; einzelne Zeilen kannst du unten
+          ankreuzen und gemeinsam auflösen. Beachte: ein erneuter Versuch ohne behobene Ursache parkt
+          dieselben Tokens sofort wieder.</li>
         <li data-l="en"><b><a href="/#/operations/incidents">Incidents</a></b> – when a token can't proceed (job
           failed, expression error, missing variable), an <b>incident</b> is raised. You fix the cause and resolve
           it – the instance resumes. You don't have to go to the list for that: the stuck element is marked red and
@@ -6364,7 +6857,12 @@ atlas worker --connector mssql</code></pre>
           beside the diagram, and <b>Resolve</b> is one click right there. In the live view, "All instances" shows
           every stuck instance of a version at once, and the <a href="/#/operations">Instances</a>
           list has an <b>Incidents</b> column that opens the affected version. The count on the
-          <b>Incidents</b> nav entry tells you something is stuck before you open anything.</li>
+          <b>Incidents</b> nav entry tells you something is stuck before you open anything. When a worker
+        breaks it parks <i>every</i> instance that reaches its task – thousands of incidents with a single
+        cause. So the Incidents view opens grouped by <b>cause</b>: one line per element of a process, with
+        the count, the message and the worker it hangs on. You repair that worker from the line and clear
+        everything behind it with <b>Resolve all</b>; individual rows below can be ticked and resolved
+        together. Mind that retrying without fixing the cause parks the same tokens again straight away.</li>
         <li data-l="de"><b><a href="/#/operations/decisions">Decisions</a></b> – jede ausgewertete DMN-Entscheidung
           mit Ein- und Ausgaben.</li>
         <li data-l="en"><b><a href="/#/operations/decisions">Decisions</a></b> – every evaluated DMN decision with
@@ -6979,11 +7477,13 @@ atlas worker --connector mssql</code></pre>
       <p data-l="en">The same path exists in the other direction: a model authored in one application can be moved
         to another, or to another installation, without retyping it.</p>
 
-      <h3 data-l="de">Zwei Höhen: Model und Instances</h3><h3 data-l="en">Two altitudes: Model and Instances</h3>
+      <h3 data-l="de">Zwei Höhen, drei Ansichten</h3><h3 data-l="en">Two altitudes, three views</h3>
       <p data-l="de">Die App teilt sich in genau die zwei Ebenen, die auch UML unterscheidet &ndash; und die Atlas
-        ohnehin schon trennt, nämlich Entwurfszeit und Laufzeit:</p>
+        ohnehin schon trennt, nämlich Entwurfszeit und Laufzeit. Die Typebene wird dabei zweimal gelesen: einmal
+        als Dokument, einmal als Vokabular über alle Dokumente hinweg.</p>
       <p data-l="en">The app splits into exactly the two levels UML distinguishes &ndash; and that Atlas already
-        separates anyway, namely design time and run time:</p>
+        separates anyway, namely design time and run time. The type level is read twice: once as a document, once
+        as a vocabulary across all of them.</p>
       <table>
         <thead><tr>
           <th data-l="de">Ansicht</th><th data-l="en">View</th>
@@ -6994,6 +7494,12 @@ atlas worker --connector mssql</code></pre>
           <tr><td><b>Model</b></td>
             <td data-l="de">Was ein Auftrag <i>ist</i> &ndash; die Typebene, das Klassendiagramm.</td>
             <td data-l="en">What an order <i>is</i> &ndash; the type level, the class diagram.</td>
+            <td><code>modeler</code></td></tr>
+          <tr><td><b>Business objects</b></td>
+            <td data-l="de">Welche Geschäftsobjekte es überhaupt gibt &ndash; jede Klasse jedes Modells, über
+              Applikationen hinweg, und wo jede verwendet wird.</td>
+            <td data-l="en">Which business objects exist at all &ndash; every class of every model, across
+              applications, and where each of them is used.</td>
             <td><code>modeler</code></td></tr>
           <tr><td><b>Instances</b></td>
             <td data-l="de">Welche Aufträge gerade unterwegs sind &ndash; die Instanzebene, gruppiert nach dem Typ,
@@ -7008,6 +7514,60 @@ atlas worker --connector mssql</code></pre>
         ein Link, den man weiterschicken kann.</p>
       <p data-l="en">A data object with no declared type is not hidden in <b>Instances</b> but shown as
         <i>no declared type</i>. The filter lives in the URL, so a datum you found is a link you can send on.</p>
+
+      <h3 data-l="de">Wo ein Business Object verwendet wird</h3>
+      <h3 data-l="en">Where a business object is used</h3>
+      <p data-l="de">Was ein Auftrag <i>ist</i>, zeigt das Klassendiagramm. Was von ihm <i>abhängt</i>, zeigte
+        bisher nichts &ndash; und das ist die Frage, die jede Änderung stellt: Wer schreibt dieses Attribut? Wer
+        setzt diesen Zustand? Wird diese Enumeration überhaupt noch gebraucht? <b>Data → Business objects</b>
+        beantwortet sie.</p>
+      <p data-l="en">What an order <i>is</i>, the class diagram shows. What <i>depends</i> on it, nothing showed
+        &ndash; and that is the question every change asks: who writes this attribute? Who sets this state? Is this
+        enumeration still needed at all? <b>Data → Business objects</b> answers it.</p>
+      <p data-l="de">Die Liste führt jede Klasse jedes Informationsmodells, das man sehen darf &ndash;
+        Geschäftsobjekte, Wertetypen und Enumerationen zusammen, in der gewohnten sortier- und filterbaren Tabelle.
+        Bewusst über Applikationen hinweg: Dass zwei Applikationen denselben Auftrag zweimal modellieren, ist genau
+        der Fehler, den das Informationsmodell verhindern soll &ndash; eine Ebene höher &ndash; und in einer Ansicht
+        pro Modell ist er nicht zu sehen.</p>
+      <p data-l="en">The list carries every class of every information model you may view &ndash; business objects,
+        value types and enumerations together, in the familiar sortable, filterable table. Across applications on
+        purpose: two applications modelling the same order twice is exactly the failure the information model exists
+        to prevent, one level up, and a per-model view cannot show it.</p>
+      <p data-l="de">Ein Klick auf einen Namen öffnet die Detailansicht. Sie zeigt zuerst, was die Klasse ist &ndash;
+        Attribute oder Literale, Business Key, Lebenszyklus &ndash; und dann, <b>wo und wie</b> sie verwendet wird:</p>
+      <p data-l="en">Clicking a name opens the detail page. It shows what the class is first &ndash; attributes or
+        literals, business key, lifecycle &ndash; and then <b>where and how</b> it is used:</p>
+      <ul>
+        <li data-l="de"><b>In Prozessen:</b> jeder deployte Prozess, der ein Datenobjekt dieser Klasse deklariert,
+          und jedes Element, das es liest, schreibt, ein Attribut davon setzt, es in einen Zustand überführt oder den
+          Datenspeicher nennt, in dem es liegt &ndash; mit Element, Attribut und Zustand im Klartext.</li>
+        <li data-l="en"><b>In processes:</b> every deployed process that declares a data object of this class, and
+          every element that reads it, writes it, sets one member of it, moves it into a state or names the data
+          store it is kept in &ndash; with the element, the member and the state named.</li>
+        <li data-l="de"><b>Im Modell selbst:</b> jedes Attribut, das mit dieser Klasse typisiert ist, jede
+          Beziehung, jeder Lebenszyklus, der seine Zustände aus dieser Enumeration bezieht, jeder Datenspeicher, der
+          sie hält. Für eine Enumeration ist das üblicherweise die <i>einzige</i> Art von Verwendung &ndash; deshalb
+          stehen die beiden Listen nebeneinander und werden nicht zu einer verrechnet.</li>
+        <li data-l="en"><b>In the model itself:</b> every attribute typed with this class, every association, every
+          lifecycle taking its states from this enumeration, every data store holding it. For an enumeration that is
+          usually the <i>only</i> kind of use there is &ndash; which is why the two lists sit beside each other
+          rather than being added up into one.</li>
+      </ul>
+      <div class="note">
+        <div class="lbl" data-l="de">Was die Ansicht nicht sieht</div>
+        <div class="lbl" data-l="en">What the view does not see</div>
+        <p data-l="de">Gelesen wird, was diese Installation tatsächlich ausführt: die deployte, aktive, jeweils
+          neueste Version jedes Prozesses. Ein Entwurf im Modeler ist nicht dabei &ndash; er ist nicht kompiliert, und
+          alle Entwürfe für eine Liste zu übersetzen hiesse, die Antwort davon abhängig zu machen, ob die Arbeit
+          anderer Leute gerade parst. «Von nichts verwendet» heisst also: von nichts <i>Deploytem</i>. Und geraten
+          wird nicht: Ein Datenobjekt ohne deklarierten Typ gilt nicht als Verwendung der Klasse, an deren Namen es
+          erinnert.</p>
+        <p data-l="en">What is read is what this installation actually runs: the deployed, active, latest version of
+          each process. A Modeler draft is not in it &ndash; it is not compiled, and compiling every draft to answer a
+          list would make the answer depend on whether somebody else's work in progress parses. So "used by nothing"
+          means by nothing <i>deployed</i>. And nothing is guessed: a data object with no declared type does not count
+          as a use of the class its name resembles.</p>
+      </div>
     </section>
 
     <!-- ==================== ROLE: PROCESS DEVELOPER ==================== -->

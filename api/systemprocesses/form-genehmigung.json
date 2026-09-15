@@ -1,0 +1,27 @@
+{
+  "components": [
+    {
+      "type": "text",
+      "text": "## Genehmigung\n\nBestellt für **{{recipient}}**",
+      "id": "kopf"
+    },
+    { "type": "textfield", "key": "itemId", "label": "Leistung", "disabled": true, "id": "leistung" },
+    { "type": "textfield", "key": "orderId", "label": "Auftrag", "disabled": true, "id": "auftrag" },
+    {
+      "type": "checkbox",
+      "key": "genehmigt",
+      "label": "Genehmigen",
+      "id": "genehmigt"
+    },
+    {
+      "type": "textarea",
+      "key": "begruendung",
+      "label": "Begründung bei Ablehnung",
+      "description": "Wird der bestellenden Person mitgeteilt. Bei einer Ablehnung erforderlich.",
+      "id": "begruendung"
+    }
+  ],
+  "type": "default",
+  "id": "genehmigung",
+  "schemaVersion": 16
+}

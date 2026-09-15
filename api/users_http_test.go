@@ -20,6 +20,14 @@ import (
 // bootstrap admin with a known password so tests can log in.
 func newAuthServer(t *testing.T, adminUser, adminPass string) (*httptest.Server, string) {
 	t.Helper()
+	return newAuthServerWith(t, adminUser, adminPass)
+}
+
+// newAuthServerWith is newAuthServer with extra options. A case that needs the
+// embedded platform processes — the portal's fulfilment and approval models — asks
+// for them here rather than by standing up its own server.
+func newAuthServerWith(t *testing.T, adminUser, adminPass string, opts ...api.Option) (*httptest.Server, string) {
+	t.Helper()
 	t.Setenv("ATLAS_ADMIN_USERNAME", adminUser)
 	t.Setenv("ATLAS_ADMIN_PASSWORD", adminPass)
 	dir := t.TempDir()
@@ -35,7 +43,7 @@ func newAuthServer(t *testing.T, adminUser, adminPass string) (*httptest.Server,
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir, api.WithAuth())
+	srv, err := api.New(proc, store, dir, append([]api.Option{api.WithAuth()}, opts...)...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}
@@ -60,6 +68,13 @@ func newClient(t *testing.T) *http.Client {
 
 func cReq(t *testing.T, c *http.Client, ts *httptest.Server, method, path, body string) (int, []byte) {
 	t.Helper()
+	return cReqTyped(t, c, ts, method, path, "application/json", body)
+}
+
+// cReqTyped is cReq with the media type named, for the routes that take raw bytes
+// rather than JSON and read the format from the header.
+func cReqTyped(t *testing.T, c *http.Client, ts *httptest.Server, method, path, contentType, body string) (int, []byte) {
+	t.Helper()
 	var r io.Reader
 	if body != "" {
 		r = strings.NewReader(body)
@@ -69,7 +84,7 @@ func cReq(t *testing.T, c *http.Client, ts *httptest.Server, method, path, body 
 		t.Fatalf("new request: %v", err)
 	}
 	if body != "" {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	res, err := c.Do(req)
 	if err != nil {

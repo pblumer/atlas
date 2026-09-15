@@ -250,6 +250,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/collaborations/{key}/runtime", s.handleCollaborationRuntime, apiOp{
 			summary: "Read a collaboration's live runtime state", tag: "Collaborations", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
 
+		{"POST", "/api/v1/instances", s.handleCreateInstanceByProcessID, apiOp{
+			summary: "Start the newest deployed version of a process by its BPMN process id — the way a model addresses another process, which knows an id and must not pin a version (a definition key pins one; use the route below for that)", tag: "Instances", role: RoleOperator,
+			req: jsonBody("Process id and initial variables", schemaObj(map[string]any{
+				"processId": tString(), "variables": tObject(),
+			}, "processId")),
+			resp: jsonBody("Created instance", tObject())}},
 		{"POST", "/api/v1/processes/{key}/instances", s.handleCreateInstance, apiOp{
 			summary: "Start a process instance", tag: "Instances", role: RoleOperator,
 			req:  jsonBody("Initial variables", schemaObj(map[string]any{"variables": tObject()})),
@@ -306,6 +312,34 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/jobs", s.handleListInstanceJobs, apiOp{
 			summary: "List the activatable jobs an instance is parked on (any type) — the read side of POST /jobs/{key}/complete", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Activatable jobs", tArray())}},
+		{"POST", "/api/v1/decision-deployments", s.handleDeployDecision, apiOp{
+			summary: "Deploy one DMN model as a decision deployment — the counterpart of POST /api/v1/deployments for a single diagram, through the same durable path a publish uses (ADR-0322). Body: the DMN XML. ?projectId= files it under an application, ?artifactId= and ?modelRef= record where it was authored", tag: "Decisions", role: RoleModeler,
+			req:  xmlBody("DMN XML"),
+			resp: jsonBody("The deployment key and the version each of its decisions is now at", tObject())}},
+		// roleAny, like GET /api/v1/processes, which it is the decision counterpart of
+		// and which exposes the same class of fact (a key, a version, when and by whom
+		// it was deployed). The decision editor reads it to show the version a decision
+		// is deployed at, and a modeler is not an operator (ADR-0209 roles are flat).
+		{"GET", "/api/v1/decision-deployments", s.handleListDecisionDeployments, apiOp{
+			summary: "List the DMN decisions deployed as runtime artifacts — one row per decision and version, with the application, model and checksum each came from; ?applicationId= narrows to one application and ?decisionId= to one decision's version history", tag: "Decisions", role: roleAny,
+			resp: jsonBody("Deployed decision definitions", tArray())}},
+		// roleAny, like GET /api/v1/processes/{key}/xml, which is its BPMN counterpart
+		// and exposes strictly more: a deployed process model carries its scripts, its
+		// FEEL conditions, its worker types and its connector configuration. A process
+		// document reads this to show the rules behind a business rule task whose
+		// decision has no model, and a modeler is not an operator (ADR-0209).
+		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
+			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: roleAny,
+			resp: xmlBody("DMN XML")}},
+		{"DELETE", "/api/v1/decision-deployments/{key}", s.handleDeleteDecisionDeployment, apiOp{
+			summary: "Remove a decision deployment. Refused with 409 while a deployed process definition is pinned to it — pins survive an instance ending, so a live count is not the test — and while it is the current version of a decision that has older versions still deployed (ADR-0336). Deleting one that is already gone succeeds",
+			tag:     "Decisions", role: RoleModeler, status: http.StatusNoContent}},
+		{"POST", "/api/v1/decisions/evaluate", s.handleTryDecision, apiOp{
+			summary: "Try a DMN model against sample inputs and get the temis trace back — what a decision returns and which rules fired, for the model in the request rather than anything deployed. Nothing is stored, keyed, or registered, and the DMN registry is untouched. With no decisionId it only describes what the model offers and its inputs. A model that does not compile comes back 200 with ok:false (ADR-0326)", tag: "Decisions", role: RoleModeler,
+			req: jsonBody("The model to try, the decision to run, and its inputs", schemaObj(map[string]any{
+				"xml": tString(), "decisionId": tString(), "inputs": tObject(),
+			}, "xml")),
+			resp: jsonBody("What the model offers and, when a decision was named, what it produced", tObject())}},
 		{"GET", "/api/v1/decisions/deployed", s.handleDeployedDecisions, apiOp{
 			summary: "List deployed and evaluated DMN decisions, one row per decision, with the processes that use it and its evaluation usage", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Deployed decisions", tArray())}},
@@ -387,7 +421,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents, optionally scoped to one instance (?instance=) or definition (?process=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget) or message fragment (?message=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tArray())}},
+		{"GET", "/api/v1/incidents/summary", s.handleIncidentSummary, apiOp{
+			summary: "What is stuck, by cause: one group per (definition, element, kind) with its count, its raised-at window, a representative message and the worker behind it — the constant-size reading of a flood, scoped like the list (?process=, ?instance=)", tag: "Incidents", role: RoleOperator,
+			resp: jsonBody("Incident causes", tObject())}},
+		{"POST", "/api/v1/incidents/resolve", s.handleResolveIncidents, apiOp{
+			summary: "Resolve a selected set of incidents — body {keys:[…]} for an explicit selection, or a scope {processDefKey?, processInstanceKey?, elementId?, elementIndex?, type?, message?, limit?} to clear a whole cause (repeat while remaining=true); \"retries\" is the budget each resumed job gets (default 1)", tag: "Incidents", role: RoleOperator,
+			req: jsonBody("Selection", schemaObj(map[string]any{
+				"keys": tArray(), "processDefKey": tInteger(), "processInstanceKey": tInteger(),
+				"elementId": tString(), "elementIndex": tInteger(), "type": tString(), "message": tString(),
+				"retries": tInteger(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Bulk resolve result", tObject())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
 			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents", role: RoleOperator,
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),
@@ -456,35 +501,73 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  xmlBody("MIM/FIM XOML, or an Export-FIMConfig XML that embeds one"),
 			resp: jsonBody("Created draft identity and conversion report", tObject())}},
 
-		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession, apiOp{
+		{"GET", "/api/v1/drafts/{id}/session", s.handleDraftSession(s.bpmnDraftSession()), apiOp{
 			summary: "Join a draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			resp: eventStreamBody("SSE stream of session frames")}},
-		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/join", s.handleDraftSessionJoin(s.bpmnDraftSession()), apiOp{
 			summary: "Join a draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
 			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
-		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/poll", s.handleDraftSessionPoll(s.bpmnDraftSession()), apiOp{
 			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
-		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/leave", s.handleDraftSessionLeave(s.bpmnDraftSession()), apiOp{
 			summary: "Leave a draft's live session, releasing the participant's locks — idempotent (ADR-0140 M2)", tag: "Live Sessions", role: RoleModeler,
 			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/presence", s.handleDraftSessionPresence(s.bpmnDraftSession()), apiOp{
 			summary: "Update a participant's presence (selected element) in a draft's live session (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Presence update", schemaObj(map[string]any{
 				"participantId": tString(), "selection": tString(),
 			}, "participantId")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/lock", s.handleDraftSessionLock(s.bpmnDraftSession()), apiOp{
 			summary: "Acquire or release a per-element edit lock in a draft's live session; acquiring an element another participant holds is a 409 (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Lock action", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "action": tString(),
 			}, "participantId", "elementId", "action")),
 			status: http.StatusNoContent}},
-		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange, apiOp{
+		{"POST", "/api/v1/drafts/{id}/session/change", s.handleDraftSessionChange(s.bpmnDraftSession()), apiOp{
 			summary: "Broadcast an element change to a draft's live session participants — relayed live, not persisted (ADR-0140)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Element change", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "xml": tString(),
+			}, "participantId", "elementId")),
+			status: http.StatusNoContent}},
+
+		// Co-editing a decision (ADR-0323): ADR-0140's session,
+		// over a decision draft rather than a BPMN one. Same registry, same transport,
+		// same lock semantics — the handlers take the subject, so this is a second
+		// binding rather than a second implementation.
+		{"GET", "/api/v1/dmn-drafts/{id}/session", s.handleDraftSession(s.dmnDraftSession()), apiOp{
+			summary: "Join a decision draft's live collaboration session — a Server-Sent Events stream of sync, presence, lock, and change frames for real-time co-editing by people and AI agents (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
+			resp: eventStreamBody("SSE stream of session frames")}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/join", s.handleDraftSessionJoin(s.dmnDraftSession()), apiOp{
+			summary: "Join a decision draft's live session without an event stream — for an AI agent over MCP that cannot hold an SSE connection; returns the sync snapshot (self id, roster, locks) and is driven with poll/presence/lock/change (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
+			req:  jsonBody("Optional display name", schemaObj(map[string]any{"name": tString()})),
+			resp: jsonBody("Sync snapshot with the joined participant's id", tObject())}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/poll", s.handleDraftSessionPoll(s.dmnDraftSession()), apiOp{
+			summary: "Drain a participant's buffered frames and read the current roster and locks — the request/response read side for an agent with no live stream, and its liveness signal (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
+			req:  jsonBody("Polling participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			resp: jsonBody("Roster, locks, and buffered events", tObject())}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/leave", s.handleDraftSessionLeave(s.dmnDraftSession()), apiOp{
+			summary: "Leave a decision draft's live session, releasing the participant's locks — idempotent (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
+			req:    jsonBody("Leaving participant", schemaObj(map[string]any{"participantId": tString()}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/presence", s.handleDraftSessionPresence(s.dmnDraftSession()), apiOp{
+			summary: "Update a participant's presence (selected element) in a decision draft's live session (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Presence update", schemaObj(map[string]any{
+				"participantId": tString(), "selection": tString(),
+			}, "participantId")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/lock", s.handleDraftSessionLock(s.dmnDraftSession()), apiOp{
+			summary: "Acquire or release a lock in a decision draft's live session. In the requirements graph an element is a decision or an input datum; opening a decision's table locks that decision, because a table row has no stable identity to lock. Acquiring what another participant holds is a 409 (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
+			req: jsonBody("Lock action", schemaObj(map[string]any{
+				"participantId": tString(), "elementId": tString(), "action": tString(),
+			}, "participantId", "elementId", "action")),
+			status: http.StatusNoContent}},
+		{"POST", "/api/v1/dmn-drafts/{id}/session/change", s.handleDraftSessionChange(s.dmnDraftSession()), apiOp{
+			summary: "Broadcast an element change to a decision draft's live session participants — relayed live, not persisted (ADR-0323)", tag: "Live Sessions", role: RoleModeler,
 			req: jsonBody("Element change", schemaObj(map[string]any{
 				"participantId": tString(), "elementId": tString(), "xml": tString(),
 			}, "participantId", "elementId")),
@@ -659,6 +742,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/derived", s.handleDerivedModel, apiOp{
 			summary: "Derive an application's information model from the processes that use it — the classes their data objects carry, the members their writes target, and the states and transitions they actually reach, with what could not be read (a business key above all) stated beside it. A reading of what is built, never written into an authored model (?applicationId= required)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Derived information model", tObject())}},
+		{"GET", "/api/v1/infomodel/classes", s.handleInfomodelCatalog, apiOp{
+			summary: "The class catalogue: every business object, value type and enumeration across the information models you may view, with how many processes use each, which members and states they touch, and how many places the vocabulary itself uses it. One list across applications, because a vocabulary maintained per application is still one vocabulary; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Every modelled class, with where each is used", tArray())}},
 		{"POST", "/api/v1/infomodel/models", s.infomodel.HandleCreate, apiOp{
 			summary: "Start an empty information model for a process application", tag: "Information model", role: RoleModeler,
 			req: jsonBody("New information model", schemaObj(map[string]any{
@@ -688,6 +774,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/models/{id}/schema", s.infomodel.HandleSchema, apiOp{
 			summary: "Project one class (?class=Order) to a JSON Schema — the derived, read-only contract a value of that class is checked against, together with what the projection could not carry", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("JSON Schema projection", tObject())}},
+		{"GET", "/api/v1/infomodel/models/{id}/usage", s.handleInfomodelUsage, apiOp{
+			summary: "Where one class (?class=Order) is used and how: every deployed process that declares, reads, writes or stores it — with the element, the member a write targets and the state it moves the object into — plus every place the vocabulary itself uses it (an attribute typed with it, an association, a lifecycle taking its states from it, a store holding it). Computed on every call and stored nowhere", tag: "Information model", role: RoleModeler,
+			resp: jsonBody("Where one class is used, and how", tObject())}},
 
 		// The business architecture (ADR-0305):
 		// what the organisation must be able to do, above the processes that do it.
@@ -783,6 +872,163 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/public-links/{token}", s.handleRevokePublicLink, apiOp{
 			summary: "Revoke a public start link", tag: "Forms", role: RoleModeler, resp: jsonBody("Revoked token", tObject())}},
 
+		// The self-service portal's catalogue
+		// (ADR-0312). Publishing is where the work
+		// happens: a release proves the graphs acyclic, resolves every process
+		// binding, checks the translations and the ranks, and computes the wave
+		// schedule an order follows — so ordering never interprets a graph, and a
+		// modelling error surfaces for whoever published it rather than as an
+		// incident for whoever orders at 23:00. Reading a catalogue is open to any
+		// signed-in identity because a portal user browses one; changing it needs
+		// the role that maintains them.
+		{"GET", "/api/v1/catalogs", s.catalogs.HandleListCatalogs, apiOp{
+			summary: "Every product catalogue, lowest rank first", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Catalogues", tArray())}},
+		{"POST", "/api/v1/catalogs", s.catalogs.HandleCreateCatalog, apiOp{
+			summary: "Create a product catalogue", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue", schemaObj(map[string]any{
+				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
+				"items": tArray(), "groups": tArray(),
+			})),
+			resp: jsonBody("The created catalogue", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}", s.catalogs.HandleGetCatalog, apiOp{
+			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("The catalogue", tObject())}},
+		{"PATCH", "/api/v1/catalogs/{id}", s.catalogs.HandleUpdateCatalog, apiOp{
+			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Catalogue changes", schemaObj(map[string]any{
+				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
+				"items": tArray(), "groups": tArray(), "edges": tArray(),
+			})),
+			resp: jsonBody("The updated catalogue", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/releases", s.catalogs.HandlePublish, apiOp{
+			summary: "Publish a catalogue: validate it and freeze a release, or answer with every problem that stops it (422)", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The published release", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
+			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/portal/favourites", s.handleListFavourites, apiOp{
+			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"PUT", "/api/v1/portal/favourites/{itemId}", s.handleSetFavourite, apiOp{
+			summary: "Mark one product. Marking what is already marked writes nothing and answers the list, so a star pressed twice does not churn the store",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"DELETE", "/api/v1/portal/favourites/{itemId}", s.handleClearFavourite, apiOp{
+			summary: "Unmark one product. Clearing what is not marked is the state the caller asked for rather than an error",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+
+		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
+			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
+			resp: jsonBody("Products", tArray())}},
+		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule and the processes that provision and deprovision it", tag: "Catalogue", role: RoleProductManager,
+			req: jsonBody("Product", schemaObj(map[string]any{
+				"id": tString(), "homeCatalog": tString(), "state": tString(),
+				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
+				"approval": tObject(), "provisionProcess": tString(),
+				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
+				"targets": tArray(),
+			}, "id")),
+			resp: jsonBody("The saved product", tObject())}},
+
+		{"PUT", "/api/v1/catalogs/{id}/theme", s.catalogs.HandleSetTheme, apiOp{
+			summary: "Set or clear a catalogue's appearance: the source accent colour and one of the shipped typefaces. Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
+			req: jsonBody("Theme", schemaObj(map[string]any{
+				"accent": tString(), "typeface": tString(),
+			})),
+			resp: jsonBody("The updated catalogue", tObject())}},
+		{"GET", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleGetLogo, apiOp{
+			summary: "A catalogue's brand mark; 404 when it has none, and 404 too for a catalogue you may not read — unlike the instance logo this one is not public", tag: "Catalogue", role: roleAny,
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleSetLogo, apiOp{
+			summary: "Upload a catalogue's brand mark — raw PNG or SVG body, max 512 KiB. Administration, like the appearance it belongs to", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "PNG or SVG bytes (Content-Type sets the format)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleDeleteLogo, apiOp{
+			summary: "Remove a catalogue's brand mark, so the portal falls back to the operator's", tag: "Catalogue", role: RoleAdmin, status: http.StatusNoContent}},
+		{"POST", "/api/v1/catalogs/{id}/import", s.catalogs.HandleImport, apiOp{
+			summary: "Derive catalogue drafts from an ArchiMate model: Products and Business Services become products, compositions become integral parts and aggregations optional ones. Nothing becomes orderable, and a product already stored is left as it is", tag: "Catalogue", role: RoleProductManager,
+			req:  jsonBody("An ArchiMate Open Exchange document", tObject()),
+			resp: jsonBody("What was imported, and what was skipped", tObject())}},
+		// The approver's page (ADR-0311). One call answers
+		// everything it shows, because the chain behind an approval — task, order,
+		// release, catalogue — is one the approver may walk no step of themselves.
+		{"POST", "/api/v1/orders/{id}/cancel", s.handleCancelOrder, apiOp{
+			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
+			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
+			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
+			resp: jsonBody("The order, and the process now revoking the line", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/escalate", s.handleEscalateApproval, apiOp{
+			summary: "Move one line's approval to the superior the caller names, or stall it when there is none — one hop per call, because each call is one deadline that elapsed. Never decides: silence is not a refusal", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom the caller's directory says the current approver reports to; empty means nobody does", schemaObj(map[string]any{
+				"superior": tString(),
+			})),
+			resp: jsonBody("Where the approval sits now, and whether it can go further", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/reassign", s.handleReassignApproval, apiOp{
+			summary: "Give a stuck approval to somebody a person chose, recording who intervened. Refuses to give it to the caller themselves: the escalation path exists so a stalled approval reaches somebody who will act on it", tag: "Order", role: RoleOperator,
+			req: jsonBody("Whom to give it to", schemaObj(map[string]any{
+				"to": tString(),
+			}, "to")),
+			resp: jsonBody("Where the approval sits now", tObject())}},
+		{"GET", "/api/v1/approvals/stalled", s.handleStalledApprovals, apiOp{
+			summary: "Every approval that can escalate no further — the chain ran out or the directory looped. A stall records a fact, and this is where somebody who can act reads it; an approval nobody can escalate and nobody is looking at is how an order waits forever", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Stalled approvals", tArray())}},
+		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
+			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
+			resp: jsonBody("Approvals", tArray())}},
+		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
+			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"GET", "/api/v1/inventory", s.handleInventory, apiOp{
+			summary: "What you hold today: every entitlement recorded against you, newest first, with where the knowledge came from (ordered, adopted or legacy) and the order that granted it. An administrator may ask about somebody else with ?principal=. Read from the inventory and never from orders — an order is deleted by retention long before the access it granted ends", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("One principal's inventory", tObject())}},
+		{"GET", "/api/v1/portal/catalog", s.catalogs.HandleMyCatalog, apiOp{
+			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("Your catalogue", tObject())}},
+		// Portal orders (ADR-0312). An order names
+		// exactly one release and carries the schedule that release computed, so
+		// fulfilment reads one record and never recomputes a graph — and what was
+		// ordered cannot change because somebody edited a product while an approval
+		// was pending. Reading is confined to your own orders by the handler, not by
+		// the role: an order somebody else placed is not yours to see.
+		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
+			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
+			req: jsonBody("Order", schemaObj(map[string]any{
+				"releaseId": tString(), "items": tArray(), "recipient": tString(),
+			}, "releaseId", "items")),
+			resp: jsonBody("The placed order", tObject())}},
+		{"GET", "/api/v1/orders", s.orders.HandleList, apiOp{
+			summary: "Your own orders, newest first", tag: "Order", role: RoleUser,
+			resp: jsonBody("Orders", tArray())}},
+		{"GET", "/api/v1/orders/{id}", s.orders.HandleGet, apiOp{
+			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
+			resp: jsonBody("The order", tObject())}},
+
+		// The two calls an orchestrator makes to drive an order: what may start,
+		// and what came back. Operator work rather than the orderer's — nobody
+		// reports the result of their own provisioning, and an operator drives
+		// orders that are not theirs.
+		{"GET", "/api/v1/orders/{id}/next", s.orders.HandleNext, apiOp{
+			summary: "Which of an order's lines may be started now, each with the process that provisions it and the variant chosen: those still waiting whose preconditions are all provisioned", tag: "Order", role: RoleOperator,
+			resp: jsonBody("Lines ready to start", tArray())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}", s.orders.HandleReport, apiOp{
+			summary: "Record one line's provisioning outcome (done, skipped, failed or running) and propagate what it stopped", tag: "Order", role: RoleOperator,
+			req: jsonBody("Outcome", schemaObj(map[string]any{
+				"status": tString(),
+			}, "status")),
+			resp: jsonBody("The updated order", tObject())}},
+
+		{"POST", "/api/v1/orders/{id}/lines/{item}/decision", s.orders.HandleDecide, apiOp{
+			summary: "Record that an approver refused a line, with who decided and why — reporting will not take a rejection, because that is a decision with an author rather than a provisioning outcome", tag: "Order", role: RoleOperator,
+			req: jsonBody("Decision", schemaObj(map[string]any{
+				"by": tString(), "reason": tString(),
+			}, "by", "reason")),
+			resp: jsonBody("The updated order", tObject())}},
+
 		// Process documentation (ADR-0143): a process published as one structured PDF
 		// — the diagram plus every element's documentation and annotations — as an
 		// immutable, per-process numbered version, optionally shared through a
@@ -819,6 +1065,45 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The version, now private", tObject())}},
 		{"DELETE", "/api/v1/documentation/{id}", s.processDocs.HandleDelete, apiOp{
 			summary: "Prune a documentation version, taking its public link with it (ADR-0143)", tag: "Documentation", role: RoleModeler,
+			status: http.StatusNoContent}},
+
+		// Decision documentation (ADR-0324): the same design
+		// for a second artifact kind. A DMN decision published as one structured PDF
+		// — the requirements graph plus every decision's prose, inputs and rule table
+		// — as an immutable, per-decision numbered version, optionally shared through
+		// a revocable public link. The version line is about sign-off, not about what
+		// is running: the decision deployment record (ADR-0319) answers that, and a
+		// document is routinely published from a draft before anything is deployed.
+		{"POST", "/api/v1/decisions/{decisionId}/documentation", s.decisionDocs.HandleCreate, apiOp{
+			summary: "Publish the next documentation version of a decision: the produced PDF plus the decision prose and rule tables it describes", tag: "Documentation", role: RoleModeler,
+			req: jsonBody("Documentation upload", schemaObj(map[string]any{
+				"title": tString(), "note": tString(), "modelName": tString(), "modelRef": tString(),
+				"xml": tString(), "decisions": tArray(), "pdfBase64": tString(),
+			}, "pdfBase64")),
+			resp: jsonBody("The minted documentation version", tObject())}},
+		{"GET", "/api/v1/decisions/{decisionId}/documentation", s.decisionDocs.HandleList, apiOp{
+			summary: "A decision's documentation history, newest version first", tag: "Documentation", role: roleAny,
+			resp: jsonBody("Documentation versions", tArray())}},
+		{"POST", "/api/v1/decisions/{decisionId}/documentation/prune", s.decisionDocs.HandlePrune, apiOp{
+			summary: "Prune a decision's documentation history to the newest `keep` versions, deleting older ones and their PDFs", tag: "Documentation", role: RoleModeler,
+			req: jsonBody("Retention limit", schemaObj(map[string]any{
+				"keep": tInteger(),
+			}, "keep")),
+			resp: jsonBody("The versions that were pruned", tObject())}},
+		{"GET", "/api/v1/decision-docs/{id}", s.decisionDocs.HandleGet, apiOp{
+			summary: "Fetch one decision documentation version in full: metadata, the documented decisions and rule tables, and the DMN source it was produced from", tag: "Documentation", role: roleAny,
+			resp: jsonBody("Documentation version", tObject())}},
+		{"GET", "/api/v1/decision-docs/{id}/pdf", s.decisionDocs.HandleGetPDF, apiOp{
+			summary: "Download a decision documentation version's PDF", tag: "Documentation", role: roleAny,
+			resp: &bodySpec{mediaType: "application/pdf", schema: tString(), desc: "The published PDF document"}}},
+		{"POST", "/api/v1/decision-docs/{id}/share", s.decisionDocs.HandleShare, apiOp{
+			summary: "Share one decision documentation version: mint (or return) its revocable public link. Idempotent — a URL readers already hold never rotates", tag: "Documentation", role: RoleModeler,
+			resp: jsonBody("The version with its share link", tObject())}},
+		{"DELETE", "/api/v1/decision-docs/{id}/share", s.decisionDocs.HandleUnshare, apiOp{
+			summary: "Revoke a decision documentation version's public link", tag: "Documentation", role: RoleModeler,
+			resp: jsonBody("The version, now private", tObject())}},
+		{"DELETE", "/api/v1/decision-docs/{id}", s.decisionDocs.HandleDelete, apiOp{
+			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
@@ -1062,6 +1347,9 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN reference artifacts", tag: "DMN References", role: RoleModeler, resp: jsonBody("References", tArray())}},
 		{"PATCH", "/api/v1/dmnrefs/{id}", s.handleUpdateDmnRef, apiOp{
 			summary: "Update a DMN reference: move it to a project and/or rename it", tag: "DMN References", role: RoleModeler, req: jsonBody("Update", tObject()), resp: jsonBody("Updated reference", tObject())}},
+		{"GET", "/api/v1/dmnrefs/{id}/impact", s.handleDmnRefImpact, apiOp{
+			summary: "What deleting this DMN reference would break: the decisions its model provides, which of them no other reference provides, and the deployed definitions and drafts that could then not be deployed, each with its binding. A read that refuses nothing — the Console renders it in the delete confirm (ADR-0331)",
+			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Deletion impact", tObject())}},
 		{"DELETE", "/api/v1/dmnrefs/{id}", s.handleDeleteDmnRef, apiOp{
 			summary: "Delete a DMN reference", tag: "DMN References", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmnrefs/{id}/validate", s.handleValidateDmnRef, apiOp{
@@ -1070,10 +1358,29 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List DMN decisions (with inputs and outputs) available from DMN references", tag: "DMN References", role: RoleModeler, resp: jsonBody("Decisions", tArray())}},
 		{"GET", "/api/v1/dmnrefs/{id}/graph", s.handleDmnRefGraph, apiOp{
 			summary: "A DMN reference's decision requirements graph for the read-only viewer", tag: "DMN References", role: RoleModeler, resp: jsonBody("Model graph", tObject())}},
+		{"POST", "/api/v1/dmn-layout", s.handleDmnLayout, apiOp{
+			summary: "Regenerate a DMN model's decision requirements diagram — discards any existing DMNDI and returns the model with a freshly laid-out graph, backing the decision editor's Auto-layout action. A pure transform: nothing is compiled, stored, or deployed (ADR-0325)", tag: "Decisions", role: RoleModeler,
+			req:  xmlBody("DMN XML"),
+			resp: xmlBody("DMN XML with a regenerated decision requirements diagram")}},
 		{"GET", "/api/v1/dmn-models/{ref}/xml", s.handleDmnModelXML, apiOp{
 			summary: "The raw DMN model XML for a model handle, for the embedded DMN editor", tag: "DMN References", role: RoleModeler, resp: jsonBody("DMN XML", tObject())}},
+		{"GET", "/api/v1/dmn-models", s.handleListDmnModels, apiOp{
+			summary: "List the local DMN model store — one row per stored handle with what the model declares and whether any DMN reference points at it. A model nothing points at is reachable nowhere else, which is what this exists for (ADR-0330)",
+			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Stored DMN models", tArray())}},
+		{"DELETE", "/api/v1/dmn-models/{ref}", s.handleDeleteDmnModel, apiOp{
+			summary: "Remove a stored DMN model file. Refused with 409 while any DMN reference points at the handle, because deleting it would leave them unresolved; a decision deployment's modelRef does not block, since that record carries its own XML and never reads the file (ADR-0336)",
+			tag:     "DMN References", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
-			summary: "Upload a DMN model file into the local model store and return its reference handle", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
+			summary: "Upload a DMN model file into the local model store and return its reference handle. ?handle= overwrites that model in place. Otherwise the handle is derived from ?name=: with ?from= present (the model handle this editing session opened, empty for a decision that has none) the derived handle must be free, or the upload is refused with 409 rather than silently forking a second copy (ADR-0222); without ?from= a taken handle is suffixed, which is the upsert an import or an agent wants", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
+
+		{"POST", "/api/v1/dmn-drafts", s.handleSaveDmnDraft, apiOp{
+			summary: "Save decision work in progress, without writing the model every reference resolves. Keyed by the decision's reference id, or by a minted id for a decision that is not in the model yet (ADR-0321)", tag: "Decision drafts", role: RoleModeler, req: jsonBody("Decision draft", tObject()), resp: jsonBody("Saved decision draft", tObject())}},
+		{"GET", "/api/v1/dmn-drafts", s.handleListDmnDrafts, apiOp{
+			summary: "List decision drafts", tag: "Decision drafts", role: RoleModeler, resp: jsonBody("Decision drafts", tArray())}},
+		{"GET", "/api/v1/dmn-drafts/{id}/xml", s.handleDmnDraftXML, apiOp{
+			summary: "Fetch a decision draft's DMN XML", tag: "Decision drafts", role: RoleModeler, resp: xmlBody("DMN XML")}},
+		{"DELETE", "/api/v1/dmn-drafts/{id}", s.handleDeleteDmnDraft, apiOp{
+			summary: "Discard a decision draft — what the editor does once the work has been written to the model, and what \"Discard draft\" does", tag: "Decision drafts", role: RoleModeler, status: http.StatusNoContent}},
 
 		// ADR-0203: configured Workers are the design-time configuration resource;
 		// /api/v1/workers remains the existing runtime/Operations view above.
@@ -1303,6 +1610,113 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Add a user to a group (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Updated group", tObject())}},
 		{"DELETE", "/api/v1/groups/{id}/members/{userId}", s.handleRemoveGroupMember, apiOp{
 			summary: "Remove a user from a group (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Updated group", tObject())}},
+
+		{"GET", "/api/v1/directory-sync", s.handleDirectorySyncState, apiOp{
+			summary: "Where the Entra mirror resumes from: the revision to pin a report to, the two Graph delta cursors, and whether this installation has ever applied a synchronisation. Refused outright when this server runs without authentication",
+			tag:     "Directory", role: RoleOperator,
+			resp: jsonBody("Sync state", schemaObj(map[string]any{
+				"revision": tInteger(), "usersDeltaLink": tString(), "groupsDeltaLink": tString(),
+				"everApplied": tBool(), "lastAppliedAt": tInteger(),
+			}))}},
+		{"POST", "/api/v1/directory-sync", s.handleDirectorySync, apiOp{
+			summary: "Report one Entra delta read — the changed accounts and groups plus the cursors they ended at — and receive what it decided. Writes nothing unless `apply` is true and `fromRevision` is still current, so an omitted field reports rather than provisions. Refused outright when this server runs without authentication",
+			tag:     "Directory", role: RoleOperator,
+			req: jsonBody("A change set, and whether it may be written", schemaObj(map[string]any{
+				"apply": tBool(), "fromRevision": tInteger(),
+				"users": tArray(), "usersDeltaLink": tString(),
+				"groups": tArray(), "groupsDeltaLink": tString(),
+			})),
+			resp: jsonBody("What the run decided, whether or not it wrote it", tObject())}},
+
+		{"GET", "/api/v1/inventory-load", s.handleInventoryLoadState, apiOp{
+			summary: "Whether a commissioning load has ever been applied for one target system (?system=), when it last wrote, when it last only reported, and how many rights it has recorded. The inventory itself cannot answer the first question: a system loaded and found empty looks exactly like one nobody ever loaded",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Load state for one system", schemaObj(map[string]any{
+				"system": tString(), "everApplied": tBool(), "lastAppliedAt": tInteger(),
+				"lastReportedAt": tInteger(), "runs": tInteger(), "granted": tInteger(),
+			}))}},
+		{"POST", "/api/v1/inventory-load", s.handleInventoryLoad, apiOp{
+			summary: "Report the rights one reading of one target system found, and receive what it decided: which would be recorded as pre-existing (origin `legacy`), which are already held by a better authority and left alone, which subjects resolve to no account, and which references no product claims. Writes nothing unless `apply` is true, so an omitted field reports. It only ever adds — a right this batch does not mention is never revoked, because a batch is one system's partial answer and silence is not evidence",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("What one target system was found to grant, and whether it may be written", schemaObj(map[string]any{
+				"apply": tBool(), "system": tString(), "observations": tArray(),
+			})),
+			resp: jsonBody("What the load decided, whether or not it wrote it", tObject())}},
+
+		{"POST", "/api/v1/reconciliation", s.handleReconcile, apiOp{
+			summary: "Compare one reading of one target system against the inventory and record what changed. Name what the reading covered completely — `refs` (these references, read whole), `subjects` (everything these people hold here, read whole), or both; at least one is required. This route reads absence as a finding, so a recorded right not seen inside that scope is reported as missing, and outside it nothing is concluded at all. A subject scope is what answers \"is this person out of everything\", which a group listing structurally cannot. It writes no entitlement and touches no target system: the two directions it finds are acted on one at a time, by a person",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("A complete reading of a declared scope", schemaObj(map[string]any{
+				"system": tString(), "refs": tArray(), "subjects": tArray(), "observations": tArray(),
+			}, "system")),
+			resp: jsonBody("What the run found, and the transitions it recorded", tObject())}},
+		{"GET", "/api/v1/reconciliation", s.handleListDiscrepancies, apiOp{
+			summary: "Every disagreement that still stands, newest first, optionally one system's (?system=). A closed finding is history and stays in the journal; this answers what is wrong now",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Open findings", tArray())}},
+		{"POST", "/api/v1/reconciliation/{id}/adopt", s.handleAdoptDiscrepancy, apiOp{
+			summary: "Accept an unmanaged right into the inventory, recorded with origin `adopted` — Atlas did not grant it and does not claim to. For a finding of kind `unmanaged` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+		{"POST", "/api/v1/reconciliation/{id}/deprovision", s.handleDeprovisionDiscrepancy, apiOp{
+			summary: "Take away an unmanaged right by running the product's deprovisioning process — never a direct worker call. The process is the catalogue's as it stands now, which is a weaker guarantee than an order's return has, because a right nobody ordered has no frozen release. For a finding of kind `unmanaged` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+		{"POST", "/api/v1/reconciliation/{id}/revoke", s.handleRevokeDiscrepancy, apiOp{
+			summary: "Stop asserting a right the target system does not have: remove the inventory record. It touches no target system — there is nothing there to touch, which is the finding — and the journal keeps what Atlas used to claim. For a finding of kind `missing` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+
+		{"GET", "/api/v1/conflicts", s.handleConflicts, apiOp{
+			summary: "Who holds a combination the catalogue forbids. A catalogue declares one with an edge of kind `excludes`, and unlike a product's maximum duration it takes effect for **everybody** the day it is published — an expiry is part of what was granted, a conflict is a statement about what may coexist now. Nothing here acts: a conflict is a fact about a pair, and no rule can say which half is wrong, so the remedy is an order's return or an access review and both record who decided",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Who holds a forbidden pair, oldest combination first", tObject())}},
+
+		{"GET", "/api/v1/pending-work", s.handlePendingWork, apiOp{
+			summary: "What is waiting for you across the portal: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
+			tag:     "Order", role: RoleUser,
+			resp: jsonBody("The items waiting, oldest first, and the counts", tObject())}},
+
+		{"GET", "/api/v1/entitlements/expiring", s.handleExpiring, apiOp{
+			summary: "What is due to end within `?within=` days (default 30), and everything already past its end. A right past its end is still **held** — the target system still has it and nothing has run — so this reports a debt rather than a state of the world, and the record stays true. It acts on nothing: the deprovisioning is the product's own process, run by a modelled one. `unendable` counts the overdue rights whose product binds no such process, because no amount of running it will reduce them",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("What ends soon, what should have ended, and the counts", tObject())}},
+
+		{"GET", "/api/v1/entitlements/history", s.handleEntitlementHistory, apiOp{
+			summary: "What this principal **used to** hold: every hold that has ended, most recently ended first. `?principal=` asks about somebody else and needs the **admin** role, exactly as the inventory does. `?at=` (RFC 3339 or unix nanoseconds) answers the access review's real question instead — what the record said they held at that moment, drawn from the ended holds *and* from what is still held. Every row says whether it is evidence of access or only of a claim: a hold closed as `corrected` is one reconciliation found the target system did not have, and reporting it as a period of access would assert what ADR-0334 declined to decide. The row survives the order that produced it, which retention deletes long before the access ends, and `overdueDays` is the only surviving trace that a right outstayed the end it was granted with",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The ended holds, or what the record said at a moment", tObject())}},
+
+		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
+			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("What to certify and who answers for it", schemaObj(map[string]any{
+				"name": tString(), "items": tArray(), "principals": tArray(),
+				"reviewers": tObject(), "dueAt": tInteger(),
+			}, "name")),
+			resp: jsonBody("The campaign and the questions it asks", tObject())}},
+		{"GET", "/api/v1/recertification", s.handleListRecertifications, apiOp{
+			summary: "Every campaign, newest first, headers only",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Campaigns", tArray())}},
+		{"GET", "/api/v1/recertification/{id}", s.handleReadRecertification, apiOp{
+			summary: "One campaign with its rows and its counts. `?mine=true` narrows it to the rows the caller may answer, which is what a reviewer wants: a manager opening a five-thousand-row campaign to find their four is being asked to work for the software. `undecided` is a first-class count and never a subtraction — a row nobody answered is not certified",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The campaign, its rows and its counts", tObject())}},
+		{"POST", "/api/v1/recertification/{id}/close", s.handleCloseRecertification, apiOp{
+			summary: "Declare a campaign over. It changes no row: a campaign closes with undecided rows still in it, and that number is the finding. Closing that certified the remainder would manufacture a signature nobody gave; closing that revoked it would take access away because somebody was on holiday",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The campaign, now closed", tObject())}},
+		{"POST", "/api/v1/recertification/{id}/rows/{row}/keep", s.handleKeepRecertifyRow, apiOp{
+			summary: "Attest that this right is still needed. Writes no entitlement — nothing changed, the judgement is what is new. One row per call: there is deliberately no way to answer several at once, because a campaign answered in bulk is a signature without a reading behind it. Authorised by the row rather than by the role: the reviewer it names may answer it, as may an operator or an administrator",
+			tag:     "Catalogue", role: RoleUser,
+			req:  jsonBody("An optional note", schemaObj(map[string]any{"note": tString()})),
+			resp: jsonBody("The row, now decided", tObject())}},
+		{"POST", "/api/v1/recertification/{id}/rows/{row}/revoke", s.handleRevokeRecertifyRow, apiOp{
+			summary: "Attest that this right is no longer needed, and run the product's deprovisioning process — never a direct worker call. A right already gone by the time the decision arrives is recorded and starts nothing: a campaign is a snapshot and the estate moves under it. A decided row cannot be decided again, because an attestation says what somebody judged at one moment",
+			tag:     "Catalogue", role: RoleUser,
+			req:  jsonBody("An optional note", schemaObj(map[string]any{"note": tString()})),
+			resp: jsonBody("The row, now decided", tObject())}},
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},

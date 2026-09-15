@@ -26,6 +26,13 @@ import (
 // the file is created with O_EXCL so concurrent uploads pick distinct handles
 // without a lock — writing a model file is not engine state, so it never touches
 // the processor.
+//
+// Writing a model is the act with an audience: a handle is what every reference,
+// every application's publish and the business-rule-task picker resolve. So the
+// decision editor's Save no longer comes here — it keeps a draft
+// (ADR-0321) — and what does come here says so with ?from=, which
+// turns a taken handle into a named refusal instead of a silently suffixed second
+// copy (ADR-0222).
 func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 	dir, ok := s.dmnModelDir()
 	if !ok {
@@ -66,12 +73,41 @@ func (s *Server) handleUploadDmnModel(w http.ResponseWriter, r *http.Request) {
 		if handle == "" {
 			handle = "model"
 		}
-		f, err := writeUniqueModel(dir, handle, body)
-		if err != nil {
-			httpapi.Error(w, http.StatusInternalServerError, "store model: "+err.Error())
+		// ADR-0222's rule, opted into the same way it is everywhere else: a caller
+		// that says which model its editing session opened (?from=, empty for a
+		// decision that has none yet) is telling us it means *this* decision, so the
+		// handle it would land on has to be free. Suffixing it to base-2 instead
+		// files a second model under a name the author never chose and leaves two
+		// decisions in the Explorer with the same display name, told apart only by
+		// the handle in the row's subtitle. A caller that omits ?from= — an import, a
+		// source-tree apply, an MCP authoring tool — keeps the plain upsert.
+		//
+		// ?overwrite=true is the author answering "replace it" to that refusal. It is
+		// deliberately the same derivation rather than a handle the client computes,
+		// so the Console never has to re-implement sanitizeHandle to name the file it
+		// is replacing.
+		origin, identityAware := modelOrigin(r)
+		taken := fileExists(filepath.Join(dir, handle+".dmn"))
+		switch {
+		case identityAware && taken && origin != handle && r.URL.Query().Get("overwrite") != "true":
+			httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
+				"a decision model is already stored as %q — rename this decision, or save it over that model deliberately", handle+".dmn"))
 			return
+		case identityAware && taken:
+			// The session's own model, or a replacement the author just chose.
+			if err := writeModelInPlace(dir, handle, body); err != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "store model: "+err.Error())
+				return
+			}
+			final = handle
+		default:
+			f, err := writeUniqueModel(dir, handle, body)
+			if err != nil {
+				httpapi.Error(w, http.StatusInternalServerError, "store model: "+err.Error())
+				return
+			}
+			final = f
 		}
-		final = f
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"modelRef":  final,
@@ -87,6 +123,18 @@ func (s *Server) dmnModelDir() (string, bool) {
 		return dr.Dir, true
 	}
 	return "", false
+}
+
+// modelOrigin reports the model handle the calling editing session opened, and
+// whether the caller passed ?from= at all. Present (even empty) it makes the upload
+// identity-aware, which is what turns a taken handle into a refusal rather than a
+// silently suffixed copy; absent it keeps the upsert every non-interactive writer
+// depends on (ADR-0222).
+func modelOrigin(r *http.Request) (string, bool) {
+	if !r.URL.Query().Has("from") {
+		return "", false
+	}
+	return sanitizeHandle(r.URL.Query().Get("from")), true
 }
 
 // sanitizeHandle turns a filename or model name into a safe DMN reference handle:

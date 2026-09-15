@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Erinnerung, je Person (ADR-0343)
+  — eine Person fragen, was auf sie wartet, und höchstens eine Mail schicken.
+
+  Gerufen von proc_erinnerung, einmal je prüfender Person. Bekommt genau eine
+  Variable: `person`.
+
+    Start (Aufruf)                   Variable `person`
+     -> [REST GET /api/v1/pending-work?principal=…]  -> `offen`
+     -> Gateway "etwas offen?"
+        -> [Mail an person]          -> Ende "erinnert"
+        -> Ende "nichts offen"
+
+  ────────────────────────────────────────────────────────────────────────────────
+  DIESER PROZESS FILTERT NICHT SELBST.
+
+  Er fragt und glaubt der Antwort. Das ist Absicht: die Route listet bewusst nichts,
+  was die Person jetzt nicht tun kann — keine Zeile einer geschlossenen Kampagne,
+  keine bereits entschiedene, keine weitereskalierte Genehmigung. Diese Regel an
+  zwei Orten zu führen hiesse, sie an einem der beiden falsch zu führen.
+
+  `counts.total` entscheidet, ob überhaupt etwas geschickt wird. Genau dafür zählt
+  die Route und listet nicht nur: wer erst eine Liste holen muss, um festzustellen,
+  dass sie leer ist, verschickt ziemlich oft eine Mail, die nichts sagt.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  DIE ADRESSE STEHT NIRGENDS IN DIESEM MODELL. `to="=person"` nennt eine Kennung;
+  api/maildirectory.go löst sie im Server im Moment des Versands auf. So gerät keine
+  Adresse in eine Variable, in eine Bestellung oder ins Ereignisprotokoll
+  (ADR-0314) — dieselbe Regel, nach der die
+  Genehmigungsverfahren `to="=approvalRef"` schreiben.
+
+  Der Link wird aus `portalBaseUrl` gebaut, und wenn der leer ist, sagt die Mail, wo
+  zu suchen ist, statt einen Link zu drucken, dem niemand folgen kann.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_erinnerung_person"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_erinnerung_person" name="Erinnerung an eine Person" isExecutable="true">
+    <bpmn:documentation>Fragt für eine Person, was auf sie wartet, und schickt höchstens eine Mail.
+
+Filtert nicht selbst: die Route listet bewusst nur, was die Person jetzt tun kann, und dieselbe Regel an zwei Orten zu führen hiesse, sie an einem der beiden falsch zu führen.
+
+Die Adresse steht nirgends hier. `to="=person"` nennt eine Kennung; aufgelöst wird sie im Server im Moment des Versands (ADR-0314).</bpmn:documentation>
+
+    <bpmn:startEvent id="start_person" name="Aufruf">
+      <bpmn:documentation>Gerufen mit `person` — einer Atlas-Kennung, wie sie in der Kampagne steht. Sonst nichts: was diese Person schuldet, fragt dieser Prozess selbst.</bpmn:documentation>
+      <bpmn:outgoing>f_start_fragen</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="offenes_fragen" name="Offenes erfragen">
+      <bpmn:documentation>GET /api/v1/pending-work?principal=… — die Frage, die es vorher nicht gab. Jede andere Route, die „was wartet" beantwortet, beantwortet es nur für den Aufrufenden, und ein Erinnerungslauf ist nicht die Person, an die er erinnert.
+
+Der Parameter ist dem Operator vorbehalten. Der Scope `reminders` erreicht genau diese eine Route, und die Rolle des Kontos dahinter ist es, die das Fragen über andere erlaubt — zwei Schlösser an derselben Tür.
+
+Schreibt: offen = { principal, counts, items, omitted }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/pending-work?principal=&#34; + person" target="path" />
+          <zeebe:output source="=body" target="offen" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_fragen</bpmn:incoming>
+      <bpmn:outgoing>f_fragen_gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_offen" name="etwas offen?" default="f_gw_nichts">
+      <bpmn:documentation>`counts.total` und nicht die Länge der Liste: die Liste ist für die Lesbarkeit gekürzt, die Zähler gehen über alles. Wer die gekürzte Liste zählt, schickt bei einundfünfzig offenen Posten dieselbe Mail wie bei fünfzig und bei null keine — das erste ist ungenau, das zweite wäre falsch.
+
+Der Vorgabeweg ist „nichts schicken". Ein Gateway, dessen Vorgabe eine Mail ist, verschickt bei jeder unerwarteten Antwortform eine.</bpmn:documentation>
+      <bpmn:incoming>f_fragen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_mail</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_nichts</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="mail_senden" name="Erinnerung senden">
+      <bpmn:documentation>Ein Mail-Task wie in den mitgelieferten Genehmigungsverfahren. `to="=person"` ist eine Kennung und keine Adresse.
+
+Der Text nennt die Anzahl und die erste Zeile im Klartext. „Sie haben 3 offene Posten" schickt den Lesenden auf die Suche; `offen.items[1].what` sagt, worum es geht.
+
+Fehlt `portalBaseUrl`, sagt die Mail, wo zu suchen ist, statt einen Link zu drucken, dem niemand folgen kann — dieselbe Vorsichtsmassnahme wie in den Genehmigungsmails.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:mailConnector connector="portal"
+          to="=person"
+          subject="=&#34;Erinnerung: &#34; + string(offen.counts.total) + &#34; offene(r) Posten im Leistungsportal&#34;"
+          body="=&#34;Guten Tag\n\nIm Leistungsportal warten &#34; + string(offen.counts.total) + &#34; Posten auf Sie.\n\nZuerst: &#34; + offen.items[1].what + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden alles im Leistungsportal dieser Atlas-Instanz.&#34; else portalBaseUrl + offen.items[1].link) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_mail</bpmn:incoming>
+      <bpmn:outgoing>f_mail_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende_erinnert" name="erinnert">
+      <bpmn:documentation>Eine Mail an eine Person. Was sie damit tut, sieht Atlas nicht — und hält deshalb auch nicht fest, dass erinnert wurde: ein solcher Vermerk wäre Atlas' Aufzeichnung über eine Mail, die es nicht verschickt hat und nicht sehen kann.</bpmn:documentation>
+      <bpmn:incoming>f_mail_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_nichts" name="nichts offen">
+      <bpmn:documentation>Kein Posten, keine Mail. Das ist der häufigste Ausgang und der wichtigste: eine Erinnerung an nichts ist genau die, nach der die nächste ungelesen gelöscht wird.</bpmn:documentation>
+      <bpmn:incoming>f_gw_nichts</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_fragen" sourceRef="start_person" targetRef="offenes_fragen" />
+    <bpmn:sequenceFlow id="f_fragen_gw" sourceRef="offenes_fragen" targetRef="gw_offen" />
+    <bpmn:sequenceFlow id="f_gw_mail" name="offen" sourceRef="gw_offen" targetRef="mail_senden">
+      <bpmn:conditionExpression>= offen.counts.total &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_mail_ende" sourceRef="mail_senden" targetRef="ende_erinnert" />
+    <bpmn:sequenceFlow id="f_gw_nichts" name="nichts" sourceRef="gw_offen" targetRef="ende_nichts" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_erinnerung_person">
+      <bpmndi:BPMNShape id="di_start_p" bpmnElement="start_person">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="146" y="225" width="49" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_fragen" bpmnElement="offenes_fragen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw_p" bpmnElement="gw_offen">
+        <dc:Bounds x="400" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="386" y="232" width="79" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_mail" bpmnElement="mail_senden">
+        <dc:Bounds x="510" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_erinnert_p" bpmnElement="ende_erinnert">
+        <dc:Bounds x="662" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="648" y="145" width="65" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_nichts" bpmnElement="ende_nichts">
+        <dc:Bounds x="510" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="490" y="305" width="77" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_fragen" bpmnElement="f_start_fragen">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_fragen_gw" bpmnElement="f_fragen_gw">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_mail" bpmnElement="f_gw_mail">
+        <di:waypoint x="425" y="175" /><di:waypoint x="425" y="120" /><di:waypoint x="510" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_mail_ende" bpmnElement="f_mail_ende">
+        <di:waypoint x="610" y="120" /><di:waypoint x="662" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_nichts" bpmnElement="f_gw_nichts">
+        <di:waypoint x="425" y="225" /><di:waypoint x="425" y="280" /><di:waypoint x="510" y="280" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
