@@ -204,6 +204,10 @@ var catalogSources = []catalogSource{
 		ID: "bestandsaufnahme", App: "Beispiel: Bestandsaufnahme (Entra)",
 		Files: []string{"bestandsaufnahme.bpmn"},
 	},
+	{
+		ID: "abgleich", App: "Beispiel: Abgleich (Entra)",
+		Files: []string{"abgleich.bpmn"},
+	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the

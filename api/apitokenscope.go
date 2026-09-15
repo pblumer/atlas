@@ -147,6 +147,13 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeInventory: {
 		"GET /api/v1/inventory-load",
 		"POST /api/v1/inventory-load",
+		// The reconciliation *run* and nothing else of that surface. A scheduled
+		// process may compare unattended, because comparing writes no entitlement
+		// and reaches no target system — it records a journal entry. The three
+		// actions are deliberately absent: each of them either changes what Atlas
+		// asserts about somebody's access or takes access away, and neither belongs
+		// behind a credential a model carries (ADR-draft-reconciliation).
+		"POST /api/v1/reconciliation",
 	},
 	// The transport, both the exact path and everything under it, because that is
 	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET

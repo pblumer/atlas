@@ -1607,6 +1607,30 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("What the load decided, whether or not it wrote it", tObject())}},
 
+		{"POST", "/api/v1/reconciliation", s.handleReconcile, apiOp{
+			summary: "Compare one reading of one target system against the inventory and record what changed. `refs` is required and names what the reading covered completely — this route reads absence as a finding, so a recorded right not seen inside that scope is reported as missing, and outside it nothing is concluded at all. It writes no entitlement and touches no target system: the two directions it finds are acted on one at a time, by a person",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("A complete reading of a declared scope", schemaObj(map[string]any{
+				"system": tString(), "refs": tArray(), "observations": tArray(),
+			}, "system", "refs")),
+			resp: jsonBody("What the run found, and the transitions it recorded", tObject())}},
+		{"GET", "/api/v1/reconciliation", s.handleListDiscrepancies, apiOp{
+			summary: "Every disagreement that still stands, newest first, optionally one system's (?system=). A closed finding is history and stays in the journal; this answers what is wrong now",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Open findings", tArray())}},
+		{"POST", "/api/v1/reconciliation/{id}/adopt", s.handleAdoptDiscrepancy, apiOp{
+			summary: "Accept an unmanaged right into the inventory, recorded with origin `adopted` — Atlas did not grant it and does not claim to. For a finding of kind `unmanaged` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+		{"POST", "/api/v1/reconciliation/{id}/deprovision", s.handleDeprovisionDiscrepancy, apiOp{
+			summary: "Take away an unmanaged right by running the product's deprovisioning process — never a direct worker call. The process is the catalogue's as it stands now, which is a weaker guarantee than an order's return has, because a right nobody ordered has no frozen release. For a finding of kind `unmanaged` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+		{"POST", "/api/v1/reconciliation/{id}/revoke", s.handleRevokeDiscrepancy, apiOp{
+			summary: "Stop asserting a right the target system does not have: remove the inventory record. It touches no target system — there is nothing there to touch, which is the finding — and the journal keeps what Atlas used to claim. For a finding of kind `missing` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},
 	}

@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-inventory-can-now-be-checked-rather-than-trusted",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The inventory can now be checked rather than trusted.",
+        "de": "The inventory can now be checked rather than trusted."
+      },
+      "summary": {
+        "en": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it.",
+        "de": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-inventory-is-taken-before-it-is-enforced",
       "version": "Unreleased",
       "date": null,
@@ -335,27 +353,6 @@
           "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
         ]
       }
-    },
-    {
-      "id": "switching-drafts-on-the-starmap-while-it-happens-to-be-refre",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Drafts switch on the Starmap stays where you put it",
-        "de": "Der Drafts-Schalter der Starmap bleibt, wo Sie ihn hinstellen"
-      },
-      "summary": {
-        "en": "The Starmap re-reads the landscape on its own while you have it open. That read and the one the Drafts switch makes could be in flight at the same time, and if the automatic one happened to land second it overwrote the picture and put the switch back — the drafts appeared and then vanished again under the hand that had just asked for them, with nothing said about why. Your answer wins now: an automatic read that arrives after you have asked for a different landscape is dropped rather than applied, and the timer does not start one while the switch's own request is still running.",
-        "de": "Die Starmap liest die Landschaft von selbst nach, solange sie offen ist. Dieses Lesen und das des Drafts-Schalters konnten gleichzeitig unterwegs sein, und traf das automatische zufällig als Zweites ein, überschrieb es das Bild und stellte den Schalter zurück — die Drafts erschienen und verschwanden wieder unter der Hand, die sie gerade angefordert hatte, ohne jeden Hinweis. Jetzt gewinnt Ihre Antwort: Ein automatisches Lesen, das eintrifft, nachdem Sie eine andere Landschaft angefordert haben, wird verworfen statt angewendet, und der Zeitgeber startet keines, solange die Anfrage des Schalters noch läuft."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
     }
   ]
 }
