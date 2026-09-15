@@ -208,6 +208,153 @@ export async function resolveIncidentFlow({ api, toast, incident }) {
   }
 }
 
+// ---------- Many at a time (ADR-0337) ----------
+//
+// One broken worker parks every instance that reaches its task, and then the four
+// per-incident ways out above are all the wrong size: the fix was applied once, and
+// clearing what it parked is a thousand clicks through a dialog that asks for a retry
+// budget each time. The two flows below are that same resolve over a *set* — a whole
+// cause from the summary, or the rows an operator ticked — over the server's bulk
+// endpoint, which bounds each call and says whether more is left.
+
+// resolveBatches drains one bulk-resolve selection, repeating while the server reports
+// that its per-call cap was hit. The guard is a stop against a server that kept saying
+// "more" — better a wrong count than a page that loops forever.
+async function resolveBatches(api, body) {
+  let resolved = 0, notFound = 0;
+  for (let guard = 0; guard < 1000; guard++) {
+    const res = await api("POST", "/api/v1/incidents/resolve", body);
+    resolved += res.resolved || 0;
+    notFound += res.notFound || 0;
+    if (!res.remaining) break;
+  }
+  return { resolved, notFound };
+}
+
+// causeScope writes one summary group as the selector the server evaluates. The
+// compiled element index rides along with the BPMN id because the id is the one thing
+// a group can be missing — an instance whose definition is no longer deployed has no
+// compiled process to resolve it — and a scope that quietly dropped the element would
+// resolve the whole definition instead of the line that was clicked.
+function causeScope(group, retries) {
+  const body = { processDefKey: group.processDefKey, type: group.type, retries };
+  if (group.elementId) body.elementId = group.elementId;
+  if (Number.isInteger(group.elementIndex)) body.elementIndex = group.elementIndex;
+  return body;
+}
+
+// askBulkResolve asks for the retry budget once for the whole set, and says plainly
+// what a bulk retry does when the cause is still broken — which is the mistake this
+// action makes cheap to repeat. Resolves to the budget, or null when cancelled.
+function askBulkResolve({ title, count, timer, message, note }) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-ov";
+    ov.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-label="Resolve incidents">
+        <div class="modal-head"><h2>${esc(title)}</h2></div>
+        <div class="modal-body">
+          <p class="muted" style="margin:0 0 10px">${timer
+            ? "Each timer re-arms against its instance's current variables. One whose schedule still doesn't resolve raises its incident again."
+            : "Each parked job goes back on the activatable index and a worker retries it. <b>Fix the cause first</b> — a retry against an unfixed cause fails again and parks the same tokens with a new incident."}</p>
+          ${note ? `<p class="muted" style="margin:0 0 10px">${note}</p>` : ""}
+          ${message ? `<p class="inc-modal-msg">${esc(message)}</p>` : ""}
+          <label class="field"><span>Retries to grant each${timer ? " (ignored by a timer incident)" : ""}</span>
+            <input id="inc-bulk-retries" type="number" min="1" step="1" value="1" ${timer ? "disabled" : ""}/></label>
+        </div>
+        <div class="modal-foot">
+          <button class="btn neutral" data-inc-cancel title="Close without resolving anything">Cancel</button>
+          <button class="btn" data-inc-go title="Clear these incidents and retry their work">Resolve ${count}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const input = ov.querySelector("#inc-bulk-retries");
+    const close = (value) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(value); };
+    const go = () => {
+      const n = timer ? 1 : parseInt(input.value, 10);
+      if (!Number.isInteger(n) || n <= 0) { input.focus(); return; }
+      close(n);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") close(null);
+      if (e.key === "Enter" && document.body.contains(ov)) go();
+    };
+    document.addEventListener("keydown", onKey);
+    ov.querySelector("[data-inc-cancel]").addEventListener("click", () => close(null));
+    ov.querySelector("[data-inc-go]").addEventListener("click", go);
+    ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
+    (timer ? ov.querySelector("[data-inc-go]") : input).focus();
+    if (input && !timer) input.select();
+  });
+}
+
+// resolveCauseFlow clears a whole cause: every incident on one element of one
+// definition, which is what a flood actually is. The scope posted is the group's own
+// key — the same predicate the rows below it were listed with — so what the operator
+// read and what the server resolves are one query. Resolves the number cleared, or 0.
+export async function resolveCauseFlow({ api, toast, group }) {
+  const retries = await askBulkResolve({
+    title: `Resolve ${group.count} incident${group.count === 1 ? "" : "s"} on ${group.elementId || "this element"}?`,
+    count: group.count,
+    timer: group.type === "timer",
+    message: group.message,
+    note: group.messageVaries
+      ? "These incidents do not all carry the same message — the one below is a sample."
+      : "",
+  });
+  if (retries === null) return 0;
+  try {
+    const { resolved } = await resolveBatches(api, causeScope(group, retries));
+    toast(`Resolved ${resolved} incident${resolved === 1 ? "" : "s"}`, "ok");
+    return resolved;
+  } catch (e) {
+    toast("Bulk resolve failed: " + (e && e.message ? e.message : e), "err");
+    return 0;
+  }
+}
+
+// resolveCauseQuick is the cause-sized twin of resolveIncidentQuick: clear everything
+// behind one cause with a single attempt each, no dialog. It is what "& retry" means on
+// a worker the operator has just corrected from a cause — the fix was applied to the
+// thing all of them share, so retrying one of them and leaving the rest parked would be
+// an odd half-measure. Resolves the number cleared.
+export async function resolveCauseQuick({ api, toast, group }) {
+  try {
+    const { resolved } = await resolveBatches(api, causeScope(group, 1));
+    toast(`Resolved ${resolved} incident${resolved === 1 ? "" : "s"} — retrying`, "ok");
+    return resolved;
+  } catch (e) {
+    toast("Bulk resolve failed: " + (e && e.message ? e.message : e), "err");
+    return 0;
+  }
+}
+
+// resolveSelectionFlow clears the rows an operator ticked — the hand-picked set, for
+// when a cause is only partly fixed, or when the page is showing several. Resolves the
+// number cleared, or 0.
+export async function resolveSelectionFlow({ api, toast, incidents }) {
+  if (!incidents.length) return 0;
+  const retries = await askBulkResolve({
+    title: `Resolve ${incidents.length} selected incident${incidents.length === 1 ? "" : "s"}?`,
+    count: incidents.length,
+    timer: incidents.every((inc) => incidentKind(inc) === "timer"),
+  });
+  if (retries === null) return 0;
+  try {
+    const { resolved, notFound } = await resolveBatches(api, {
+      keys: incidents.map((inc) => inc.elementInstanceKey),
+      retries,
+    });
+    toast(notFound
+      ? `Resolved ${resolved}; ${notFound} were already gone`
+      : `Resolved ${resolved} incident${resolved === 1 ? "" : "s"}`, "ok");
+    return resolved;
+  } catch (e) {
+    toast("Bulk resolve failed: " + (e && e.message ? e.message : e), "err");
+    return 0;
+  }
+}
+
 // fixVariablesFlow is the other half of resolving: a retry alone repeats whatever
 // failed, so an operator who has read the message usually has to correct the data
 // first. It opens the instance's variables, writes what was changed through the
@@ -534,7 +681,7 @@ function askCompletion(inc) {
 // is a fact frozen when the token parked (I6), while the worker is live state that
 // may already have been edited. Resolves "resolved" when the incident was also
 // cleared, "saved" when only the worker was changed, and null when nothing happened.
-export async function fixWorkerFlow({ api, toast, incident }) {
+export async function fixWorkerFlow({ api, toast, incident, retry, extraLabel = "Save & retry" }) {
   let workers = [];
   try {
     workers = (await api("GET", "/api/v1/connectors")) || [];
@@ -554,7 +701,7 @@ export async function fixWorkerFlow({ api, toast, incident }) {
   const res = await editWorkerFlow({
     api, toast, worker: c,
     intro: `${incident.elementId || "This task"} is parked on this worker: ${incident.message || "(no message)"}`,
-    extraLabel: "Save & retry",
+    extraLabel,
     okToast: "",
   });
   if (!res) return null;
@@ -562,7 +709,12 @@ export async function fixWorkerFlow({ api, toast, incident }) {
     toast("Worker updated — the incident is still open", "ok");
     return "saved";
   }
-  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+  // What "& retry" resolves is the caller's to say: one incident from a row, or the
+  // whole cause from the summary — the fix was to the thing all of them share.
+  const retried = retry
+    ? await retry()
+    : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+  return retried ? "resolved" : "saved";
 }
 
 // addWorkerFlow creates the worker the parked task names, then retries it. It is
@@ -574,12 +726,12 @@ export async function fixWorkerFlow({ api, toast, incident }) {
 // model's (ADR-0036/0041) — so neither is typed and neither can be got wrong. Resolves
 // "resolved" when the incident was also cleared, "saved" when only the worker was
 // created, and null when nothing happened.
-export async function addWorkerFlow({ api, toast, incident }) {
+export async function addWorkerFlow({ api, toast, incident, retry, extraLabel = "Add & retry" }) {
   if (!incident.connector || !incident.connectorKind) return null;
   const res = await createWorkerFlow({
     api, toast, name: incident.connector, kind: incident.connectorKind,
     intro: `${incident.elementId || "This task"} is parked on this worker: ${incident.message || "(no message)"}`,
-    extraLabel: "Add & retry",
+    extraLabel,
     okToast: "",
   });
   if (!res) return null;
@@ -587,7 +739,10 @@ export async function addWorkerFlow({ api, toast, incident }) {
     toast("Worker added — the incident is still open", "ok");
     return "saved";
   }
-  return (await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey })) ? "resolved" : "saved";
+  const retried = retry
+    ? await retry()
+    : await resolveIncidentQuick({ api, toast, key: incident.elementInstanceKey });
+  return retried ? "resolved" : "saved";
 }
 
 // bindIncidentActions wires one surface's incident block: the actions on every row,

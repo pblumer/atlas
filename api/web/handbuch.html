@@ -6598,7 +6598,13 @@ atlas worker --connector mssql</code></pre>
           einmal, und die <a href="/#/operations">Instances</a>-Liste hat eine Spalte
           <b>Incidents</b>, die direkt auf die betroffene Version führt. Der Zähler am
           Navigationspunkt <b>Incidents</b> sagt dir schon vorher, dass überhaupt etwas
-          feststeckt.</li>
+          feststeckt. Geht ein Worker kaputt, parkt er <i>jede</i> Instanz, die seine Aufgabe erreicht –
+          tausende Incidents mit einer einzigen Ursache. Die Incidents-Ansicht öffnet deshalb nach
+          <b>Ursache</b> gruppiert: eine Zeile je Element eines Prozesses, mit Anzahl, Meldung und dem
+          Worker, an dem es hängt. Du reparierst den Worker an dieser Zeile und räumst mit
+          <b>Resolve all</b> alles dahinter in einem Schritt weg; einzelne Zeilen kannst du unten
+          ankreuzen und gemeinsam auflösen. Beachte: ein erneuter Versuch ohne behobene Ursache parkt
+          dieselben Tokens sofort wieder.</li>
         <li data-l="en"><b><a href="/#/operations/incidents">Incidents</a></b> – when a token can't proceed (job
           failed, expression error, missing variable), an <b>incident</b> is raised. You fix the cause and resolve
           it – the instance resumes. You don't have to go to the list for that: the stuck element is marked red and
@@ -6606,7 +6612,12 @@ atlas worker --connector mssql</code></pre>
           beside the diagram, and <b>Resolve</b> is one click right there. In the live view, "All instances" shows
           every stuck instance of a version at once, and the <a href="/#/operations">Instances</a>
           list has an <b>Incidents</b> column that opens the affected version. The count on the
-          <b>Incidents</b> nav entry tells you something is stuck before you open anything.</li>
+          <b>Incidents</b> nav entry tells you something is stuck before you open anything. When a worker
+        breaks it parks <i>every</i> instance that reaches its task – thousands of incidents with a single
+        cause. So the Incidents view opens grouped by <b>cause</b>: one line per element of a process, with
+        the count, the message and the worker it hangs on. You repair that worker from the line and clear
+        everything behind it with <b>Resolve all</b>; individual rows below can be ticked and resolved
+        together. Mind that retrying without fixing the cause parks the same tokens again straight away.</li>
         <li data-l="de"><b><a href="/#/operations/decisions">Decisions</a></b> – jede ausgewertete DMN-Entscheidung
           mit Ein- und Ausgaben.</li>
         <li data-l="en"><b><a href="/#/operations/decisions">Decisions</a></b> – every evaluated DMN decision with

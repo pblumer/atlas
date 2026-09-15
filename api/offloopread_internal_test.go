@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -202,14 +203,21 @@ func TestListAndTimelineDuringShutdown(t *testing.T) {
 	}
 }
 
-// TestStatsAndIncidentsDuringShutdown pins the two endpoints converted alongside the
-// login to the off-loop read path, and it discriminates rather than merely covers.
+// TestStatsAndIncidentsDuringShutdown pins the endpoints converted to the off-loop
+// read path, and it discriminates rather than merely covers.
 //
 // A closure handed to do() is silently skipped once the loop is closing, so the old
 // handlers answered 200: /stats with three zeros, which reads as "the engine is
 // empty", and /incidents with an empty list, which reads as "nothing is stuck". Both
 // are answers an operator would act on, and both were untrue. Only a handler that
 // takes its view through readOffLoop can tell "no answer" from "the empty answer".
+//
+// The cause summary and the bulk resolve are the same hazard one size up
+// (ADR-0337): a summary of {"total":0} says the server is healthy,
+// and a bulk resolve reporting {"resolved":0} says the scope matched nothing — when
+// in truth neither was ever asked. Both must refuse instead, in either mode: the
+// scope selects through readOffLoop, and the explicit-keys mode reaches the same
+// refusal through the stats read it answers with.
 func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 	srv, closeSrv := newOffLoopServer(t)
 	closeSrv()
@@ -221,6 +229,11 @@ func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 	}{
 		{"stats", srv.handleStats, httptest.NewRequest("GET", "/api/v1/stats", nil)},
 		{"incidents", srv.handleListIncidents, httptest.NewRequest("GET", "/api/v1/incidents", nil)},
+		{"incident summary", srv.handleIncidentSummary, httptest.NewRequest("GET", "/api/v1/incidents/summary", nil)},
+		{"bulk resolve by scope", srv.handleResolveIncidents,
+			httptest.NewRequest("POST", "/api/v1/incidents/resolve", strings.NewReader(`{"type":"job"}`))},
+		{"bulk resolve by keys", srv.handleResolveIncidents,
+			httptest.NewRequest("POST", "/api/v1/incidents/resolve", strings.NewReader(`{"keys":[1]}`))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()

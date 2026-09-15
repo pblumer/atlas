@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An incident flood is read by cause, and cleared in one action.** Every incident surface
+  built so far answers "what is stuck here" one incident at a time, which is the right size
+  until a worker stops answering: then every instance that reaches its task parks, and a few
+  thousand incidents are one cause with one fix that the product treats as a few thousand
+  problems. The list returned rows — megabytes of near-identical JSON per refresh, thousands
+  of DOM rows in a table that filters in the browser — and clearing them was one dialog per
+  incident.
+
+  `GET /api/v1/incidents/summary` answers instead in **one line per cause**: the (definition,
+  element, kind) triple, with how many tokens are behind it, the window it has been running,
+  a representative message, and the worker the parked task resolves through — so the fix is
+  reachable from the cause and not only from a row. Its size is the number of causes, not the
+  number of incidents.
+
+  `POST /api/v1/incidents/resolve` is the matching action, in the shape bulk termination
+  settled (ADR-0090): an explicit set of ticked keys, or a scope — `processDefKey`,
+  `processInstanceKey`, `elementId` (or `elementIndex`, for a group whose definition is
+  no longer deployed and so resolves to no id), `type`, `message` — resolved in bounded batches
+  (`remaining=true` → repeat). A scope must name at least one selector; resolving every
+  incident on the server is asked for deliberately with `{"type":"job"}` rather than by
+  leaving a field out. The listing gained `?element=`, `?elementIndex=`, `?type=` and `?message=` and evaluates
+  the **same selector**, so what an operator reads and what the action touches cannot
+  disagree. Both tools exist over MCP too (`atlas_incident_summary`,
+  `atlas_resolve_incidents`).
+
+  **Operations → Incidents** opens on those causes, with *Resolve all*, the worker fix and a
+  scoped row page beside each; the rows keep every per-incident way out and gain tick-boxes
+  for a hand-picked set. Repairing the worker from a cause retries the whole cause, because
+  the fix was to the thing all of them share. The Instances overview reads its Incidents
+  column from the summary — the same column, from a couple of hundred bytes instead of
+  megabytes.
+
 - **A deployed decision version can now be removed, and so can a model file nothing
   points at.** Both stores only ever grew: every Deploy in the decision editor minted a
   version carrying the full DMN source, and every upload left a file behind.

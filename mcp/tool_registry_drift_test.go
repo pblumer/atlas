@@ -87,6 +87,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_incidents":               "GET /api/v1/incidents",
 	"atlas_workers":                      "GET /api/v1/workers",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
+	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
+	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
 	"atlas_migration_plan":               "POST /api/v1/instances/{key}/migrate/plan",
 	"atlas_migrate_instance":             "POST /api/v1/instances/{key}/migrate",
 	"atlas_migrate_instances":            "POST /api/v1/processes/{key}/migrate-instances",
