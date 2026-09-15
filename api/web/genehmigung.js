@@ -43,6 +43,19 @@ const STRINGS = {
     'appr.all': 'Alle Genehmigungen',
     'appr.more': 'Es gibt weitere offene Aufgaben, als diese Seite auf einmal durchsucht.',
     'appr.stale': 'Die verlinkte Genehmigung ist nicht mehr offen oder nicht Ihre.',
+    'appr.search': 'Suchen',
+    'appr.search.hint': 'Produkt, Person, Auftrag oder Katalog',
+    'appr.sort': 'Sortierung',
+    'appr.sort.oldest': 'Älteste zuerst',
+    'appr.sort.newest': 'Neueste zuerst',
+    'appr.sort.product': 'Nach Produkt',
+    'appr.sort.recipient': 'Nach Person',
+    'appr.sort.due': 'Frist zuerst',
+    'appr.noMatch': 'Keine Genehmigung entspricht der Suche.',
+    'appr.clear': 'Suche zurücksetzen',
+    'appr.count': 'von',
+    'appr.escalated': 'weitergereicht',
+    'appr.due': 'Frist',
   },
   en: {
     'appr.title': 'Approvals',
@@ -65,6 +78,19 @@ const STRINGS = {
     'appr.all': 'All approvals',
     'appr.more': 'There are more open tasks than this page searches at once.',
     'appr.stale': 'The approval that link named is no longer open, or is not yours.',
+    'appr.search': 'Search',
+    'appr.search.hint': 'Product, person, order or catalogue',
+    'appr.sort': 'Order',
+    'appr.sort.oldest': 'Oldest first',
+    'appr.sort.newest': 'Newest first',
+    'appr.sort.product': 'By product',
+    'appr.sort.recipient': 'By person',
+    'appr.sort.due': 'Due first',
+    'appr.noMatch': 'No approval matches the search.',
+    'appr.clear': 'Clear search',
+    'appr.count': 'of',
+    'appr.escalated': 'passed on',
+    'appr.due': 'Due',
   },
 };
 
@@ -158,6 +184,12 @@ function renderMark(approval) {
 
 const state = {
   approvals: [],
+  // query and sort are how an approver finds one decision among forty
+  // (ADR-draft-approval-list-order). They live here and not in the URL: this page
+  // is reached from a mail link that already carries ?order=, and a second set of
+  // parameters on the same link would be two ways to say where somebody is.
+  query: '',
+  sort: 'oldest',
   selected: null,
   stale: false,
   reason: '',
@@ -262,16 +294,136 @@ function select(a) {
   render();
 }
 
+// --- Finding one decision among forty ----------------------------------------
+//
+// The page shows one thing well (ADR-0311) and that is deliberate: the common
+// approver decides perhaps four times a year, and a tool with Deployments and
+// Incidents in it is one they ask a colleague to use. So this is a search field
+// and a sort control rather than a five-column table — the list has one row per
+// approval carrying two facts, and a table would be heavier than the page's
+// purpose.
+
+// ageKey is how old an approval is, as the server itself measures it.
+//
+// The job key is monotonic and the approvals endpoint already pages by it, so a
+// higher key is a newer task. That is the only age this page can read: a task
+// carries no created-at, and inventing one from a clock here would be a number
+// nobody can check.
+function ageKey(a) {
+  return (a.task && a.task.key) || 0;
+}
+
+// matches reports whether one approval survives the search.
+//
+// One field across every column rather than a field per column, because an
+// approver looking for "the laptop for Ada" does not know which column they are
+// searching — and a five-field row would ask them to.
+function matches(a) {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    textOf(a.texts, a.itemId), a.itemId, a.recipient, a.orderer, a.orderId,
+    textOf(a.catalogTexts, a.catalogId),
+  ].some((v) => String(v || '').toLowerCase().includes(q));
+}
+
+const SORTS = {
+  // Oldest first is the default, and it is a change from the endpoint's own
+  // order. What has waited longest is what nobody has looked at — the argument
+  // the recertification and conflict reports both make about their own lists —
+  // and a work list read from the top should start there.
+  oldest: (a, b) => ageKey(a) - ageKey(b),
+  newest: (a, b) => ageKey(b) - ageKey(a),
+  product: (a, b) => textOf(a.texts, a.itemId).localeCompare(textOf(b.texts, b.itemId), locale),
+  recipient: (a, b) => String(a.recipient || '').localeCompare(String(b.recipient || ''), locale),
+  // A due date first, and everything without one after it in age order: a task
+  // somebody put a deadline on is a different thing from one nobody did, and
+  // sorting the undated in among them would bury the deadlines.
+  due: (a, b) => {
+    const da = (a.task && a.task.dueDate) || 0;
+    const db = (b.task && b.task.dueDate) || 0;
+    if (!da !== !db) return da ? -1 : 1;
+    if (da !== db) return da - db;
+    return ageKey(a) - ageKey(b);
+  },
+};
+
+function visibleApprovals() {
+  return state.approvals.filter(matches).sort(SORTS[state.sort] || SORTS.oldest);
+}
+
+// rowNote is what the row says beyond the product and the person.
+//
+// Only what the approval actually carries. An assignment record exists once a
+// deadline or a person has moved the approval, and its absence is the answer
+// "nobody has had to chase this" — so a row without one says nothing rather than
+// showing an invented age.
+function rowNote(a) {
+  const bits = [];
+  const due = a.task && a.task.dueDate;
+  if (due) bits.push(`${t('appr.due')} ${new Date(due).toLocaleDateString(locale)}`);
+  if (a.assignment && (a.assignment.escalations || []).length) {
+    bits.push(t('appr.escalated'));
+  }
+  return bits.join(' · ');
+}
+
+function renderControls(shown) {
+  return el('div', { class: 'controls' },
+    el('input', {
+      type: 'search', id: 'appr-search', value: state.query,
+      placeholder: t('appr.search.hint'), 'aria-label': t('appr.search'),
+      oninput: (e) => {
+        state.query = e.target.value;
+        // Repaint the list alone, or the caret jumps to the end of the field
+        // somebody is typing in the middle of.
+        repaintList();
+      },
+    }),
+    el('label', { class: 'sortwrap' },
+      el('span', { class: 'muted' }, t('appr.sort')),
+      el('select', {
+        id: 'appr-sort',
+        onchange: (e) => { state.sort = e.target.value; repaintList(); },
+      }, Object.keys(SORTS).map((k) => el('option', {
+        value: k, ...(state.sort === k ? { selected: 'selected' } : {}),
+      }, t(`appr.sort.${k}`))))),
+    el('span', { class: 'muted count' }, `${shown} ${t('appr.count')} ${state.approvals.length}`));
+}
+
+let listNode = null;
+
+function repaintList() {
+  if (!listNode) return;
+  const shown = visibleApprovals();
+  listNode.replaceChildren(...listBodies(shown));
+  const count = document.querySelector('.controls .count');
+  if (count) count.textContent = `${shown.length} ${t('appr.count')} ${state.approvals.length}`;
+}
+
+function listBodies(shown) {
+  if (!shown.length) {
+    return [el('li', { class: 'muted' }, t('appr.noMatch'))];
+  }
+  return shown.map((a) => el('li', {},
+    el('button', { class: 'pick', onclick: () => select(a) },
+      el('strong', {}, textOf(a.texts, a.itemId)),
+      el('span', { class: 'muted' }, ` — ${t('appr.for')} ${a.recipient || '\u2014'}`),
+      rowNote(a) ? el('span', { class: 'muted note' }, rowNote(a)) : null)));
+}
+
 function renderList() {
   if (!state.approvals.length) {
     return el('div', { class: 'empty' },
       el('p', {}, t('appr.none')),
       el('p', { class: 'muted' }, t('appr.none.hint')));
   }
-  return el('ul', { class: 'list' }, state.approvals.map((a) => el('li', {},
-    el('button', { class: 'pick', onclick: () => select(a) },
-      el('strong', {}, textOf(a.texts, a.itemId)),
-      el('span', { class: 'muted' }, ` — ${t('appr.for')} ${a.recipient || '—'}`)))));
+  const shown = visibleApprovals();
+  listNode = el('ul', { class: 'list' }, listBodies(shown));
+  // The controls are shown from the first row rather than past a threshold: a
+  // list that grew a search box at the eleventh approval would be a different
+  // page each time somebody arrived.
+  return el('div', {}, renderControls(shown.length), listNode);
 }
 
 function renderDecision() {
@@ -306,11 +458,26 @@ function renderDecision() {
       }, t('appr.reject'))));
 }
 
+// paint replaces the page's children, dropping the ones that are not there.
+//
+// replaceChildren is not el(): it turns a non-node argument into a *text node*,
+// so a `cond ? node : null` argument renders the word "null" on screen whenever
+// the condition is false. This page has three such slots — an error, a stale
+// link, a truncation notice — and none of them is usually filled, so an ordinary
+// load has always shown "nullnullnull" above the list and "null" below it.
+//
+// Filtering here rather than at each call site, because the next conditional
+// child written the obvious way would reintroduce it. The portal carried the same
+// defect and is fixed the same way.
+function paint(root, ...children) {
+  root.replaceChildren(...children.flat().filter((c) => c != null && c !== false));
+}
+
 function render() {
   const root = document.getElementById('app');
   if (!root) return;
   const a = state.selected;
-  root.replaceChildren(
+  paint(root,
     el('header', {},
       el('div', { class: 'brand' },
         renderMark(a),
