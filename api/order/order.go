@@ -192,6 +192,14 @@ type Line struct {
 	// A form is not a rule; what has to survive is what was answered, and "cost
 	// centre 4711" stays true whatever the form does afterwards. The id says which
 	// set of questions it answered.
+	// Price is what the release said this product cost when the order was placed
+	// (ADR-draft-product-price). Frozen here for the reason
+	// the approval rule and the ceiling are: an approver saw a figure and decided on
+	// it, and a catalogue edit afterwards must not make the record show a different
+	// one than the one that was approved.
+	//
+	// Displayed and never computed — see [catalog.Item.Price].
+	Price      string            `json:"price,omitempty"`
 	ConfigForm string            `json:"configForm,omitempty"`
 	Config     map[string]string `json:"config,omitempty"`
 	// Amendments are the corrections made to Config after the recipient already

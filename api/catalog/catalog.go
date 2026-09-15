@@ -254,8 +254,58 @@ type Item struct {
 	// rendering out of itself on purpose, and would send it to every browser that
 	// opens the portal.
 	ConfigForm string `json:"configForm,omitempty"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// Price is what this product costs, written as the catalogue's maintainer wants
+	// it read — "CHF 1'200.–", "49.– / Monat", "im Grundpaket enthalten"
+	// (ADR-draft-product-price). Empty is the ordinary case
+	// and means the catalogue says nothing about cost.
+	//
+	// # Why a string and not a number with a currency
+	//
+	// Because it is **displayed and never computed**. A number invites a total, a
+	// total invites two products in different currencies, and that invites a rate
+	// and a date — a money model, decided by an installation's finance rules and not
+	// by this package. Everything that makes a price *arithmetic* is absent on
+	// purpose, and a string is the honest shape of "this is what it says on the
+	// shelf".
+	//
+	// The cost of that is stated rather than hidden: nothing can add these up. The
+	// surface that needs a figure most is the approval, and an approval decides one
+	// line — so the one number it shows is the one number it needs. A basket total
+	// would need the money model above, and that is a different measure.
+	//
+	// # Why it is frozen into the release like a rule
+	//
+	// It is not a rule, and it travels like one anyway. An approver saw a figure and
+	// decided on it; a catalogue edit next week must not make the record show a
+	// different figure than the one that was approved. That is the same sentence as
+	// the approval rule's and the ceiling's, and it is the reason this is on the
+	// line as well as in the release.
+	Price string `json:"price,omitempty"`
+	// Category is the heading this product sits under in the portal — "Arbeitsplatz",
+	// "Kommunikation", "Fachanwendungen" (ADR-draft-product-category).
+	// Empty is the ordinary case and puts the product under the heading the portal
+	// names for products that have none.
+	//
+	// # Why a field and not an entity
+	//
+	// Because it is **a heading and nothing else**. An entity would carry its own
+	// texts, its own ordering, its own visibility and its own lifecycle, and each of
+	// those is a thing to publish, migrate and get wrong. A heading has none of them:
+	// it is the word above a column.
+	//
+	// The costs are real and stated rather than hidden. A category has **no ordering
+	// of its own**, so the portal sorts alphabetically — there is nothing on a string
+	// to sort by, and inventing a rank here would be the entity arriving through the
+	// back door. It has **no translation**: it reads the same in every language the
+	// catalogue offers, unlike every product name beside it. And two spellings are
+	// two categories, with nothing to notice that "Arbeitsplatz" and "Arbeitsplätze"
+	// were meant as one.
+	//
+	// If any of those turns out to matter, the answer is the entity, and this field
+	// is what it would be migrated from.
+	Category  string `json:"category,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different

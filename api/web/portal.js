@@ -97,6 +97,10 @@ const STRINGS = {
     'line.close': 'Abbrechen',
     'line.amended': 'Korrigiert',
     'line.amendedFrom': 'vorher',
+    'info.price': 'Kosten',
+    'price.none': 'Der Katalog nennt keine Kosten.',
+    'cat.none': 'Ohne Kategorie',
+    'cat.all': 'Alle',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
     'tbl.placed': 'bestellt',
@@ -108,7 +112,6 @@ const STRINGS = {
     'tbl.searchOrder': 'Auftrag suchen',
     'tbl.searchStatus': 'Status suchen',
     'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
-    'note.noCategories': 'Atlas kennt heute keine Kategorie über dem Bundle. Diese Spalte zeigt deshalb den Katalog selbst; sie wird zur Kategorie, sobald der Katalog eine führt.',
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
     'info.title': 'Angaben zum Service',
@@ -211,6 +214,10 @@ const STRINGS = {
     'line.close': 'Cancel',
     'line.amended': 'Corrected',
     'line.amendedFrom': 'was',
+    'info.price': 'Cost',
+    'price.none': 'The catalogue names no cost.',
+    'cat.none': 'Without a category',
+    'cat.all': 'All',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
     'tbl.placed': 'ordered',
@@ -222,7 +229,6 @@ const STRINGS = {
     'tbl.searchOrder': 'Search order',
     'tbl.searchStatus': 'Search status',
     'tbl.noMatch': 'No order matches the search.',
-    'note.noCategories': 'Atlas has no category level above the bundle today. This column therefore shows the catalogue itself; it becomes the category as soon as a catalogue carries one.',
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
     'info.title': 'About this service',
@@ -403,6 +409,11 @@ const state = {
   // Lovelace" and the order carries the principal id, because a display name is
   // not something the server can resolve and an id is not something a person can
   // read (ADR-0356).
+  // category narrows the cascade to one heading
+  // (ADR-draft-product-category). Three values, because
+  // there are three questions: null is every heading, '' is the bucket for
+  // products that carry none, and anything else is that heading.
+  category: null,
   forWhomLabel: '',
   // people is the principals directory, users only, loaded once and only for a
   // caller who may order in somebody else's name. It is the list every member and
@@ -456,8 +467,37 @@ function partsOf(release, id) {
 }
 
 // levelsOf returns the four columns for where the cascade currently stands.
+// categoriesOf is every heading this release's top-level products carry, plus the
+// bucket for the ones that carry none (ADR-draft-product-category).
+//
+// Sorted alphabetically, because a heading is a string and there is nothing on it
+// to sort by. An ordering of its own would be the entity the decision refused,
+// arriving through the back door.
+//
+// The bucket is always last and only appears when something is in it: a heading
+// for nothing is a heading nobody can use, and hiding uncategorised products
+// entirely would lose them.
+function categoriesOf(release) {
+  const named = new Set();
+  let uncategorised = false;
+  for (const it of products(release)) {
+    const c = (it.category || '').trim();
+    if (c) named.add(c); else uncategorised = true;
+  }
+  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
+  if (uncategorised) out.push('');
+  return out;
+}
+
+// inCategory reports whether a top-level product belongs under the heading now
+// selected. null is every heading, which is what the portal opens on.
+function inCategory(item) {
+  if (state.category === null) return true;
+  return (item.category || '').trim() === state.category;
+}
+
 function levelsOf(release) {
-  const bundles = products(release).map((i) => ({ id: i.id, integral: false }));
+  const bundles = products(release).filter(inCategory).map((i) => ({ id: i.id, integral: false }));
   const offerings = state.bundle ? partsOf(release, state.bundle) : [];
   const services = state.offering ? partsOf(release, state.offering) : [];
   return { bundles, offerings, services };
@@ -741,6 +781,12 @@ function infoPanel(item) {
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
+    // As the catalogue wrote it, never reformatted. A price here is a sentence
+    // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
+    // parsed it into a number would be inventing the money model the catalogue
+    // deliberately does not have (ADR-draft-product-price).
+    el('p', { class: 'muted' },
+      `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
     el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
     el('p', { class: 'muted' },
       `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
@@ -909,13 +955,32 @@ function renderCatalogue() {
   const { bundles, offerings, services } = levelsOf(rel);
   const name = (id) => textOf((by[id] || {}).texts, id);
 
-  // Kategorie. One row, the catalogue itself, and a note saying why — see the
-  // comment on levelsOf: there is no category in the data, and filling the
-  // column with a guess would be the one thing worse than leaving it honest.
+  // Kategorie. The headings the products themselves carry
+  // (ADR-draft-product-category), with "all" above them so
+  // the column is never a dead end. It was the catalogue's own name and a note
+  // saying the data had no category; it has one now.
+  const headings = categoriesOf(rel);
+  const pick = (value) => () => {
+    state.category = state.category === value ? null : value;
+    // A heading the open bundle does not belong to would leave two columns showing
+    // something the first no longer selects.
+    state.bundle = '';
+    state.offering = '';
+    state.info = '';
+    render();
+  };
   const category = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.category')),
-    cell({ text: textOf(state.catalog.texts, state.catalog.id), open: true }),
-    el('p', { class: 'note' }, t('note.noCategories')));
+    cell({
+      text: t('cat.all'),
+      open: state.category === null,
+      onOpen: () => { state.category = null; state.bundle = ''; state.offering = ''; render(); },
+    }),
+    headings.map((h) => cell({
+      text: h || t('cat.none'),
+      open: state.category === h,
+      onOpen: pick(h),
+    })));
 
   const bundleCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.bundle')),
@@ -1592,7 +1657,12 @@ function renderServices() {
     el('div', { class: 'cascade' },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
-        cell({ text: state.catalog ? textOf(state.catalog.texts, state.catalog.id) : '' })),
+        // The headings of what this person actually holds, not the whole
+        // catalogue's: this screen answers "what do I have", and a heading with
+        // nothing of theirs under it would be a column of other people's shelves.
+        [...new Set(ids.map((id) => ((by[id] || {}).category || '').trim()))]
+          .sort((a, b) => a.localeCompare(b, locale))
+          .map((c) => cell({ text: c || t('cat.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.bundle')),
         at(0).map(row)),

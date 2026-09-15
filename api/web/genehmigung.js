@@ -31,6 +31,8 @@ const STRINGS = {
     'appr.by': 'Bestellt von',
     'appr.order': 'Auftrag',
     'appr.catalog': 'Katalog',
+    'appr.price': 'Kosten',
+    'appr.price.none': 'Der Katalog nennt keine Kosten.',
     'appr.approve': 'Genehmigen',
     'appr.reject': 'Ablehnen',
     'appr.reason': 'Begründung',
@@ -66,6 +68,8 @@ const STRINGS = {
     'appr.by': 'Ordered by',
     'appr.order': 'Order',
     'appr.catalog': 'Catalogue',
+    'appr.price': 'Cost',
+    'appr.price.none': 'The catalogue names no cost.',
     'appr.approve': 'Approve',
     'appr.reject': 'Refuse',
     'appr.reason': 'Reason',
@@ -409,6 +413,7 @@ function listBodies(shown) {
     el('button', { class: 'pick', onclick: () => select(a) },
       el('strong', {}, textOf(a.texts, a.itemId)),
       el('span', { class: 'muted' }, ` — ${t('appr.for')} ${a.recipient || '\u2014'}`),
+      a.price ? el('span', { class: 'muted' }, ` — ${a.price}`) : null,
       rowNote(a) ? el('span', { class: 'muted note' }, rowNote(a)) : null)));
 }
 
@@ -439,7 +444,13 @@ function renderDecision() {
       el('dt', {}, t('appr.for')), el('dd', {}, a.recipient || '—'),
       el('dt', {}, t('appr.by')), el('dd', {}, a.orderer || '—'),
       el('dt', {}, t('appr.order')), el('dd', {}, a.orderId),
-      el('dt', {}, t('appr.catalog')), el('dd', {}, textOf(a.catalogTexts, a.catalogId || '—'))),
+      el('dt', {}, t('appr.catalog')), el('dd', {}, textOf(a.catalogTexts, a.catalogId || '—')),
+      // The figure the order froze, as the catalogue wrote it. An approver
+      // deciding without it is deciding half the question — and a page that
+      // reformatted it would be inventing a money model the catalogue does not
+      // have (ADR-draft-product-price).
+      el('dt', {}, t('appr.price')),
+      el('dd', a.price ? {} : { class: 'muted' }, a.price || t('appr.price.none'))),
     el('label', { class: 'reason' },
       el('span', {}, t('appr.reason')),
       el('textarea', {

@@ -92,6 +92,42 @@
       }
     },
     {
+      "id": "a-product-says-what-kind-of-thing-it-is-and-the-portal-s-fir",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product says what kind of thing it is, and the portal's first column finally carries data.",
+        "de": "A product says what kind of thing it is, and the portal's first column finally carries data."
+      },
+      "summary": {
+        "en": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service.",
+        "de": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-product-can-say-what-it-costs-and-the-approver-sees-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can say what it costs, and the approver sees it.",
+        "de": "A product can say what it costs, and the approver sees it."
+      },
+      "summary": {
+        "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
+        "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
       "version": "Unreleased",
       "date": null,
@@ -175,42 +211,6 @@
       "summary": {
         "en": "The portal browsed and did not find.",
         "de": "The portal browsed and did not find."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-approval-list-can-be-searched-and-ordered",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The approval list can be searched and ordered.",
-        "de": "The approval list can be searched and ordered."
-      },
-      "summary": {
-        "en": "It rendered every open approval in whatever order the endpoint returned — newest first — which is fine at three and a wall at forty.",
-        "de": "It rendered every open approval in whatever order the endpoint returned — newest first — which is fine at three and a wall at forty."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "two-pages-rendered-the-literal-word-null",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Two pages rendered the literal word \"null\".",
-        "de": "Two pages rendered the literal word \"null\"."
-      },
-      "summary": {
-        "en": "render() passed cond ?",
-        "de": "render() passed cond ?"
       },
       "link": {
         "label": "Changelog",

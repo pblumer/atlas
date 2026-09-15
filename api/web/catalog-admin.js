@@ -485,7 +485,7 @@ function sharingCard(cat, me, enforced) {
 }
 
 // productForm renders the editor for one product, or for a new one.
-function productForm(it, cat, langs, procIDs, formList) {
+function productForm(it, cat, langs, procIDs, formList, items) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
   const opt = (id, sel, label) =>
@@ -511,6 +511,28 @@ function productForm(it, cat, langs, procIDs, formList) {
       </select></label>
       <label class="field">Approver (a username for a named person, a group for a group; empty otherwise)
         <input name="aref" value="${esc(ap.ref || "")}" autocomplete="off"></label>
+      <label class="field">Category
+        <span class="muted" style="display:block; margin:2px 0 6px">The heading this
+          product sits under in the portal &mdash; <code>Arbeitsplatz</code>,
+          <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
+          its own (the portal sorts alphabetically), no translation, and two spellings
+          are two headings. Leave it empty and the product sits under the portal's
+          heading for those that carry none.</span>
+        <input name="category" value="${esc(v.category || "")}" autocomplete="off"
+          list="known-categories" placeholder="Arbeitsplatz">
+        <datalist id="known-categories">${
+  [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
+    .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
+      <label class="field">Cost
+        <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
+          read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
+          <code>im Grundpaket enthalten</code>. It is <b>shown and never computed</b>:
+          nothing adds these up, because a total would need a currency, a rate and a date
+          that are your finance rules and not the catalogue's. It is frozen into the
+          release, so an approver's figure stays the figure they decided on. Leave it
+          empty to say nothing about cost.</span>
+        <input name="price" value="${esc(v.price || "")}" autocomplete="off"
+          placeholder="CHF 1'200.&ndash;"></label>
       <label class="field">Details the orderer fills in
         <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
@@ -681,12 +703,12 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList);
+      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items);
       wireProductForm();
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList);
+      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items);
       wireProductForm();
       return;
     }
@@ -799,6 +821,8 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const body = {
         id: pid, homeCatalog: id, state: f.get("state"), texts,
         approval: { kind: f.get("akind"), ref: String(f.get("aref") || "").trim() },
+        category: String(f.get("category") || "").trim(),
+        price: String(f.get("price") || "").trim(),
         configForm: f.get("configForm") || "",
         provisionProcess: f.get("provisionProcess") || "",
         deprovisionProcess: f.get("deprovisionProcess") || "",
