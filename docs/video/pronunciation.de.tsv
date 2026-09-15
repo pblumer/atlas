@@ -1,0 +1,20 @@
+# Pronunciation substitutions for the speech synthesizer (Piper).
+# One rule per line:  <as written><TAB><as spoken>
+# Applies to the audio only, never to the caption on screen. Matching is
+# whole-word and case-insensitive.
+#
+# Abbreviations that have to be spelled out:
+BPMN	Be Pe Em En
+MCP	Em Ce Pe
+API	A Pe I
+KI	Ka I
+DMN	De Em En
+REST	Rest
+#
+# English terms whose German reading gets in the way:
+Write-Ahead-Log	Rait-Ähedd-Logg
+Deployments	Diplojments
+deployed	diplojd
+deployen	diplojen
+Commit	Komitt
+Engine	Endschin

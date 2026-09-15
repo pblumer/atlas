@@ -41,3 +41,10 @@ go.work.sum
 
 # Playwright output, if a run is started from the repository root rather than e2e/.
 test-results/
+
+# The video workbench (docs/video): everything one run produces — the voice model,
+# the WAV fragments, the raw recording and the finished MP4. What describes the
+# video (narration script, pronunciation table, scripts) is committed; what a run
+# makes of it is not.
+/docs/video/build/
+__pycache__/
