@@ -6047,6 +6047,61 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     </select>`;
   }
 
+  // enumTypingMember resolves the member a write path targets and answers with the
+  // «enumeration» that types it, or null. One level of nesting, exactly as the member
+  // picker walks it and for the same reason.
+  function enumTypingMember(cls, path) {
+    if (!cls || !path) return null;
+    let current = cls;
+    const segments = path.split(".");
+    for (let i = 0; i < segments.length; i++) {
+      const attr = (current.attributes || []).find((a) => a.name === segments[i]);
+      if (!attr) return null;
+      const next = attr.type && classNamed(attr.type);
+      if (i < segments.length - 1) {
+        if (!next) return null;
+        current = next;
+        continue;
+      }
+      return next && next.stereotype === "enumeration" && (next.literals || []).length ? next : null;
+    }
+    return null;
+  }
+
+  // literalOf reads a stored FEEL value back as the literal it names, or "" when it
+  // names none. A picker that could not recognise its own output would reset to the
+  // first option every time the panel re-rendered, quietly rewriting the model.
+  function literalOf(fromBody, enumeration) {
+    const raw = String(fromBody || "").trim().replace(/^=\s*/, "").trim();
+    const m = /^"([^"\\]*)"$/.exec(raw) || /^'([^'\\]*)'$/.exec(raw);
+    if (!m) return "";
+    return (enumeration.literals || []).includes(m[1]) ? m[1] : "";
+  }
+
+  // The values a member typed by an «enumeration» may take, offered rather than
+  // remembered (ADR-draft-an-enumeration-says-which-values-a-member-may-take). It is the
+  // fourth of the four questions the model can answer — after which class, which state
+  // and which member — and the only one that was still free text, so `= "aktive"`
+  // deployed, ran, and wrote a string nothing would ever match.
+  //
+  // The escape is not optional here the way it is on the other pickers. A value is a
+  // FEEL expression and a computed one is a real thing to want, so the list always ends
+  // in a way out; a picker that cannot be left would be lying about what this field is.
+  // `stored` is what the model holds, so a value that is not one of the literals — an
+  // expression, or a literal the enumeration has not caught up with — opens on the
+  // escape rather than on "not set". A picker that showed "not set" over a value the
+  // model *does* hold would erase it on the next save.
+  function literalSelectHTML(enumeration, current, stored, attrs) {
+    const lit = (enumeration.literals || []).map((l) =>
+      `<option value="${esc(l)}"${l === current ? " selected" : ""}>${esc(l)}</option>`).join("");
+    const other = !current && String(stored || "").trim() !== "";
+    return `<select ${attrs} title="The values ${esc(enumeration.name)} declares">
+      <option value=""${current || other ? "" : " selected"}>— not set —</option>
+      ${lit}
+      <option ${OTHER}${other ? " selected" : ""}>A FEEL expression instead…</option>
+    </select>`;
+  }
+
   // One write of a data output association: what goes in, and which member it lands in.
   // BPMN gives a data association `assignment [0..*]`, so a step that captures a form's
   // worth of fields is one arrow with a row per field rather than one arrow per field
@@ -6059,6 +6114,19 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   // question deserves the same control, and an author who has met one knows this one.
   function dataWriteCardHTML(i, cls, fromBody, toBody) {
     const picker = cls ? memberSelectHTML(cls, toBody, `class="dw-to"`) : "";
+    // Where the member is typed by an «enumeration», the value is a closed set and is
+    // offered as one. A value the list does not contain — a FEEL expression, or a
+    // literal the model has not caught up with — keeps the free field, revealed.
+    const enumeration = enumTypingMember(cls, toBody);
+    const chosen = enumeration ? literalOf(fromBody, enumeration) : "";
+    const freeValue = `<label class="field"${enumeration && chosen ? " hidden" : ""} id="f-dw-expr-${i}-field">
+        <span>${enumeration ? "FEEL expression" : "FEEL value"} <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+        <input type="text" class="dw-from" id="f-dw-expr-${i}" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>`;
+    const valueField = enumeration
+      ? `<label class="field"><span>Value <span class="muted">(${esc(enumeration.name)})</span></span>
+          ${literalSelectHTML(enumeration, chosen, fromBody, `class="dw-lit"`)}</label>
+         ${freeValue}`
+      : freeValue;
     return `<div class="io-map" data-write="1" data-i="${i}">
       <div class="io-map-head">
         <span class="io-map-chevron" aria-hidden="true">▾</span>
@@ -6069,8 +6137,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         <label class="field"><span>Target member <span class="muted">(optional)</span></span>
           ${picker || `<input type="text" class="dw-to" value="${esc(toBody || "")}" placeholder="name"/>`}</label>
         ${picker ? otherFieldHTML(`f-dw-other-${i}`, "Member path", "customer.name") : ""}
-        <label class="field"><span>FEEL value <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
-          <input type="text" class="dw-from" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>
+        ${valueField}
       </div>
     </div>`;
   }
@@ -6106,6 +6173,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   function classSelectHTML(current) {
     const byModel = new Map();
     for (const c of vocab.classes) {
+      // An «enumeration» is machinery of the model — an attribute's type, or the states
+      // a lifecycle takes (ADR-0306) — and no process carries one as a data object. The
+      // difference reading already says so where it excludes them from the backlog for
+      // exactly that reason; offering one here contradicted it, and a data object typed
+      // as a closed set of strings is not a thing the engine can carry.
+      if (c.stereotype === "enumeration") continue;
       if (!byModel.has(c.modelId)) byModel.set(c.modelId, { name: c.modelName, classes: [] });
       byModel.get(c.modelId).classes.push(c);
     }
@@ -7329,10 +7402,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         }
         return (to.value || "").trim();
       };
-      const readRows = () => cards().map((card) => ({
-        from: (card.querySelector(".dw-from").value || "").trim(),
-        to: rowTo(card),
-      }));
+      // The value is the literal picker's when the member is typed by an «enumeration»
+      // and a literal is chosen; the free expression field otherwise, which is also
+      // where the picker's escape sends the author
+      // (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+      const rowFrom = (card) => {
+        const free = () => (card.querySelector(".dw-from").value || "").trim();
+        const lit = card.querySelector(".dw-lit");
+        if (!lit || choseOther(lit)) return free();
+        return lit.value ? `="${lit.value}"` : "";
+      };
+      const readRows = () => cards().map((card) => ({ from: rowFrom(card), to: rowTo(card) }));
       const saveWrites = () => savePreservingPanel(() => setAssignments(modeler, element, bo, readRows()));
       const count = () => {
         const c = dwGroup.querySelector(".io-group-count");
@@ -7349,7 +7429,19 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal(`f-dw-other-${card.dataset.i}`);
           title.textContent = dataWriteTitle(rowTo(card));
           saveWrites();
+          // Re-rendered, because which control the *value* is depends on what the member
+          // is: an «enumeration»-typed member is picked from a list and anything else is
+          // typed. saveWrites has already read every field, so nothing half-typed is lost.
+          show(element);
         });
+        const lit = card.querySelector(".dw-lit");
+        if (lit) {
+          lit.addEventListener("change", (e) => {
+            if (choseOther(e.target)) return reveal(`f-dw-expr-${card.dataset.i}`);
+            saveWrites();
+            show(element);
+          });
+        }
         const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
         if (other) {
           other.addEventListener("change", () => {

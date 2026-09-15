@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "an-enumeration-now-says-which-values-a-member-may-take-and-i",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A status you pick instead of spell",
+        "de": "Einen Status auswählen statt schreiben"
+      },
+      "summary": {
+        "en": "When a write targets a field whose type is an «enumeration», the value is now chosen from the values that enumeration declares, rather than typed. A computed value is still possible and is one item down the same list. When you deploy, a fixed value that is none of the declared ones is reported: the string is what matching is done by, and nothing else, so a status spelled slightly wrong runs for months and matches nothing. Only fixed values are judged, never one your process works out while it runs. The class diagram also joins the two boxes now: an enumeration that types an attribute used to sit unconnected beside the class that used it, with only the class body naming it.",
+        "de": "Zielt ein Schreibvorgang auf ein Feld, dessen Typ eine «enumeration» ist, wird der Wert jetzt aus den Werten ausgewählt, die diese Enumeration deklariert, statt getippt. Ein berechneter Wert bleibt möglich und steht einen Eintrag weiter unten in derselben Liste. Beim Deployen wird ein fester Wert gemeldet, der keiner der deklarierten ist: Verglichen wird über die Zeichenkette und über nichts sonst, ein leicht falsch geschriebener Status läuft also monatelang und trifft nie. Beurteilt werden nur feste Werte, nie einer, den Ihr Prozess zur Laufzeit ermittelt. Auch im Klassendiagramm sind die beiden Kästen jetzt verbunden: Eine Enumeration, die ein Attribut typisiert, stand bisher unverbunden neben der Klasse, die sie nutzt, und nur der Klassenrumpf nannte sie."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Data"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Data",
+          "de": "Daten öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-write-arrow-can-set-several-members-of-a-data-object-at-on",
       "version": "Unreleased",
       "date": null,
@@ -321,48 +350,6 @@
           "Vor jeder Darstellung countedBasis und walkedBasis lesen: Die Zählungen gelten seit Beginn, die Zeiten nur für den Zeitraum.",
           "In notMeasured nachsehen, welche deklarierten Kennzahlen unberührt blieben und warum."
         ]
-      }
-    },
-    {
-      "id": "atlas-now-reads-the-difference-between-what-your-processes-b",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See what you have planned but not built yet",
-        "de": "Sehen, was geplant, aber noch nicht gebaut ist"
-      },
-      "summary": {
-        "en": "Your processes say what your data actually is; your information model says what you want it to be. Atlas now shows the difference, in two lists that are never mixed: what is planned and not built — your backlog, and explicitly not a defect — and what is built and not described, which usually means write it down. It also tells you plainly what it never compared, because derivation cannot see a business key or an attribute's type, so a short list is not a clean bill. Nothing is changed in either document.",
-        "de": "Ihre Prozesse sagen, was Ihre Daten tatsächlich sind; Ihr Informationsmodell sagt, was sie sein sollen. Atlas zeigt jetzt die Differenz, in zwei Listen, die nie vermischt werden: was geplant und nicht gebaut ist — Ihr Backlog, und ausdrücklich kein Fehler — und was gebaut und nicht beschrieben ist, was meist heisst: aufschreiben. Es sagt auch offen, was es nie verglichen hat, denn ein Geschäftsschlüssel oder ein Attributtyp lässt sich aus Prozessen nicht ablesen; eine kurze Liste ist also kein Freispruch. An beiden Dokumenten wird nichts geändert."
-      },
-      "link": {
-        "label": "ADR-0301",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0301-derive-the-model-from-the-processes.md"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and press As built…, then pick your application.",
-          "Follow Planned against built in the header — or go straight there from the model list.",
-          "Left is your backlog: states, members and classes the model declares that no process builds yet.",
-          "Read the box at the bottom before concluding anything: it names what the comparison never looked at."
-        ],
-        "de": [
-          "Unter Daten auf As built… klicken und die Anwendung wählen.",
-          "Oben Planned against built folgen — oder direkt aus der Modellliste dorthin gehen.",
-          "Links steht Ihr Backlog: Zustände, Attribute und Klassen, die das Modell deklariert und noch kein Prozess baut.",
-          "Den Kasten unten lesen, bevor Sie etwas schliessen: er nennt, was der Vergleich nie angesehen hat."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Data",
-          "de": "Daten öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

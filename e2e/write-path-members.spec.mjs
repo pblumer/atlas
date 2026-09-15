@@ -242,3 +242,79 @@ test("a row added after a deletion does not inherit another row's escape field",
   await expect(page.locator("#f-dw-other-0")).toBeHidden();
   expect(page.__errors).toEqual([]);
 });
+
+// The values an «enumeration» declares, offered rather than remembered
+// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+//
+// It is the fourth of the four questions the model can answer for a write arrow, after
+// which class, which state and which member — and the only one that was still free
+// text, so `= "urgnt"` deployed, ran, and wrote a string nothing would ever match.
+const valueOf = (page, i = 0) => page.evaluate((n) => {
+  const bo = window.__atlasModeler.get("elementRegistry").get("doa_1").businessObject;
+  const asg = (bo.assignment && bo.assignment[n]) || {};
+  return (asg.from && asg.from.body) || "";
+}, i);
+
+test("a member an enumeration types is written from a list of its literals", async ({ page }) => {
+  await selectWrite(page);
+  // `total` is a number, so the value is an expression and stays one.
+  await expect(page.locator(".dw-lit")).toHaveCount(0);
+
+  await member(page).selectOption("priority");
+  const values = page.locator(".dw-lit");
+  await expect(values).toHaveCount(1);
+  await expect(values.locator("option")).toHaveText(["— not set —", "low", "normal", "urgent",
+    "A FEEL expression instead…"]);
+  expect(page.__errors).toEqual([]);
+});
+
+test("choosing a literal writes it as a FEEL string", async ({ page }) => {
+  // The stored form is an ordinary FEEL literal, so nothing about the model, the
+  // compiler or the engine changes — only the authoring.
+  await selectWrite(page);
+  await member(page).selectOption("priority");
+  await page.locator(".dw-lit").selectOption("urgent");
+  await expect.poll(() => valueOf(page)).toBe('="urgent"');
+  expect(page.__errors).toEqual([]);
+});
+
+test("a chosen literal comes back chosen", async ({ page }) => {
+  // A picker that could not read its own output back would reset on every re-render and
+  // quietly rewrite the model.
+  await selectWrite(page);
+  await member(page).selectOption("priority");
+  await page.locator(".dw-lit").selectOption("normal");
+  await expect.poll(() => valueOf(page)).toBe('="normal"');
+  await selectWrite(page);
+  await expect(page.locator(".dw-lit")).toHaveValue("normal");
+});
+
+test("an expression is still possible, and is what the field opens on", async ({ page }) => {
+  // A computed value is a real thing to want, so the list always ends in a way out —
+  // and a value the list does not contain must not read as "not set", which would erase
+  // it on the next save.
+  await selectWrite(page);
+  await member(page).selectOption("priority");
+  await page.locator(".dw-lit").selectOption({ label: "A FEEL expression instead…" });
+  const expr = page.locator("#f-dw-expr-0");
+  await expect(expr).toBeVisible();
+  await expr.fill("=if urgent then \"urgent\" else \"low\"");
+  await expr.blur();
+  await expect.poll(() => valueOf(page)).toBe('=if urgent then "urgent" else "low"');
+
+  // Re-rendered, the row opens on the escape with the expression intact.
+  await selectWrite(page);
+  await expect(page.locator(".dw-lit option[selected]")).toHaveText("A FEEL expression instead…");
+  await expect(page.locator("#f-dw-expr-0")).toHaveValue('=if urgent then "urgent" else "low"');
+  expect(page.__errors).toEqual([]);
+});
+
+test("changing the member back to an ordinary one restores the expression field", async ({ page }) => {
+  await selectWrite(page);
+  await member(page).selectOption("priority");
+  await expect(page.locator(".dw-lit")).toHaveCount(1);
+  await member(page).selectOption("total");
+  await expect(page.locator(".dw-lit")).toHaveCount(0);
+  await expect(page.locator("#f-dw-expr-0")).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});

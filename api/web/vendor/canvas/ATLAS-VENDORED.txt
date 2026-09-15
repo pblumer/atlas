@@ -81,4 +81,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-929ccd06a7188f0c9b725b6bb5fa0682bb484d62752e7b90d83ba24d12981233
+df7ddfb13946578703443d51212ae7fec8cc64564fa94c2c228df310cb49bb9d

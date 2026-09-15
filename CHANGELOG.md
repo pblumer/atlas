@@ -14,6 +14,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An «enumeration» now says which values a member may take, and is drawn as part of the
+  class diagram.** Four questions an author answers while drawing a write arrow have the
+  same shape, and only three of them were asked that way: which class is this data
+  object, which state does the write move it into, which member does it target — and
+  then, in free text, what goes in. Where the member's type is an «enumeration», the
+  model has already written down the complete list of values it may hold. The write row
+  offers them, and a value that is computed still takes any FEEL expression, because a
+  picker that cannot be left would be lying about what the field is.
+
+  At deploy, a value that is **constant** is checked against the literals, and one that
+  is none of them is a warning worded like the unknown-state warning, for the same
+  reason: a model that is merely behind its process is not broken. Constant means an
+  expression that reads no variable — the inputs decide, not what an evaluation happens
+  to return, because `=if x then "approved" else "approvd"` with `x` unbound hands back a
+  perfectly concrete else branch that the process may never write.
+
+  On the class diagram, an «enumeration» that types an attribute is joined to the class
+  that uses it, derived and never authored, the way a data store's line and the
+  `«lifecycle»` line already are. Until now it was the one box that floated: the
+  compartment said `status : Lebenszustand` and nothing held the two together. One line
+  per pair, labelled with the attributes that justify it, and none where the `«lifecycle»`
+  line already joins them — a derived line is routed straight, so a second would be drawn
+  on the first. A straight line's label also moved to its midpoint, where it was landing
+  on the target box.
+  ([ADR-draft-an-enumeration-says-which-values-a-member-may-take](docs/adr/draft-an-enumeration-says-which-values-a-member-may-take.md),
+  [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
 - **A write arrow can set several members of a data object at once.** A step that
   captures a form's worth of fields writes them from one arrow with a row per field,
   rather than one arrow per field. BPMN always allowed this — a data association carries

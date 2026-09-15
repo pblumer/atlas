@@ -231,6 +231,7 @@ const MARKERS = {
   // a reader it is a dependency and not a generalization. The path deliberately has no
   // Z: closing it would draw the triangle that means "is a kind of".
   "lifecycle-link": { id: "uml-open-arrow", path: "M0,0 L10,5 L0,10", fill: "none", at: "target" },
+  "type-link": { id: "uml-open-arrow", path: "M0,0 L10,5 L0,10", fill: "none", at: "target" },
 };
 
 function ensureMarker(canvas, kind) {
@@ -266,13 +267,13 @@ UmlRenderer.prototype.drawConnection = function(parent, connection) {
   // A store's line to its class is an annotation, not a relationship — a store and
   // its class do not relate, one *is kept in* the other (ADR-0230 §7) — so it is not
   // one of the edges, and nothing that counts relationships counts it.
-  // A store's line to its class, and a class's line to the enumeration its states come
-  // from, are annotations rather than relationships: a store and its class do not
-  // relate, one *is kept in* the other (ADR-0230 §7), and a class does not relate to an
-  // enumeration, it *takes its states from* one
-  // (ADR-0306). Neither is an
+  // A store's line to its class, and a class's two lines to an enumeration, are
+  // annotations rather than relationships: a store and its class do not relate, one *is
+  // kept in* the other (ADR-0230 §7), and a class does not relate to an enumeration — it
+  // *takes its states from* one (ADR-0306) or *is typed by* one
+  // (ADR-draft-an-enumeration-says-which-values-a-member-may-take). None of them is an
   // association, so nothing that counts relationships counts them.
-  const derived = bo.element === "store-link" || bo.element === "lifecycle-link";
+  const derived = bo.element === "store-link" || bo.element === "lifecycle-link" || bo.element === "type-link";
   const g = svg("g", {
     class: derived ? `uml-${bo.element}` : `uml-edge ${bo.kind || "association"}`,
     "data-id": bo.id || "",
@@ -290,7 +291,15 @@ UmlRenderer.prototype.drawConnection = function(parent, connection) {
   // the many dependencies UML allows this one is.
   const label = bo.element === "lifecycle-link" ? "\u00ABlifecycle\u00BB" : bo.name;
   if (label) {
-    const mid = connection.waypoints[Math.floor(connection.waypoints.length / 2)];
+    // A bent line has a middle waypoint to hang the label on. A straight one — which
+    // every derived line is — has only its two ends, and picking the middle *index* of
+    // two points picks the second: the label then sits on the target box rather than on
+    // the line, and two lines arriving at the same box write their labels on top of each
+    // other. The midpoint is what "the middle" meant all along.
+    const w = connection.waypoints;
+    const mid = w.length > 2
+      ? w[Math.floor(w.length / 2)]
+      : { x: (w[0].x + w[1].x) / 2, y: (w[0].y + w[1].y) / 2 };
     text(g, label, { x: mid.x, y: mid.y - 4, class: "uml-edge-label", "text-anchor": "middle" });
   }
   // The ends carry the role and the multiplicity, which is the half of a class
@@ -477,7 +486,7 @@ UmlRules.prototype.init = function() {
       (source.businessObject || {}).stereotype, (target.businessObject || {}).stereotype).length > 0;
   });
   this.addRule("elements.delete", ({ elements }) =>
-    elements.filter((e) => !/^uml:(store|lifecycle)-link$/.test(e.type || "")));
+    elements.filter((e) => !/^uml:(store|lifecycle|type)-link$/.test(e.type || "")));
   this.addRule("shape.resize", () => false); // a class is as tall as its members make it
 };
 
@@ -740,6 +749,40 @@ export class ClassCanvas {
       if (!from) continue;
       link(`lclink-${cls.id}`, "uml:lifecycle-link", this.shapes.get(cls.id), byName.get(from),
         { element: "lifecycle-link", kind: "lifecycle-link" });
+    }
+    // And the class's line to each «enumeration» that *types* one of its attributes —
+    // derived the same way, from the attribute's type, and never authored
+    // (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+    //
+    // Only enumerations. An attribute typed by another class is what an association is
+    // for, and the author draws that one deliberately; deriving a second line beside it
+    // would double every association in the model. An enumeration is never the end of an
+    // association, which is exactly why it is the box that otherwise floats.
+    //
+    // One line per pair, labelled with the attributes that justify it: a derived edge is
+    // routed straight, dock to dock, with no lane spreading, so three attributes of one
+    // enumeration drawn as three edges would be three lines on the same pixels — a
+    // diagram saying one line where there are three, and a click that can only ever
+    // reach whichever was drawn last.
+    for (const cls of model.classes || []) {
+      if (cls.stereotype === "enumeration") continue;
+      const statesFrom = cls.lifecycle && cls.lifecycle.statesFrom;
+      const byEnum = new Map();
+      for (const a of cls.attributes || []) {
+        if (!a.name || !a.type) continue;
+        const target = byName.get(a.type);
+        if (!target || (target.businessObject || {}).stereotype !== "enumeration") continue;
+        // The «lifecycle» edge already joins this pair and is the stronger statement of
+        // the two. A second straight line would land on top of it; the attribute stays
+        // legible in the compartment beneath.
+        if (a.type === statesFrom) continue;
+        if (!byEnum.has(a.type)) byEnum.set(a.type, []);
+        byEnum.get(a.type).push(a.name);
+      }
+      for (const [type, attrs] of byEnum) {
+        link(`tylink-${cls.id}-${type}`, "uml:type-link", this.shapes.get(cls.id), byName.get(type),
+          { element: "type-link", kind: "type-link", name: attrs.join(", ") });
+      }
     }
   }
 
