@@ -283,9 +283,14 @@ type Server struct {
 	// a disagreement that persists is one record whose last-seen moment moves, and
 	// one that goes away is that record closed.
 	discrepancies *discrepancyStore
-	apiTokens     *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
-	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions   map[string]int32 // applicationId → highest release version published (ADR-0128)
+	// recertifications is what people attested about the inventory
+	// (ADR-draft-access-recertification): the campaigns, and the judgements made in
+	// them. It answers the question the journal beside it cannot — not "is this
+	// record true" but "is this right still needed", which only a person can say.
+	recertifications *recertifyStore
+	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
+	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -1246,6 +1251,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	recertifications, err := newRecertifyStore(
+		filepath.Join(dataDir, "recertification-campaigns"),
+		filepath.Join(dataDir, "recertification-rows"))
+	if err != nil {
+		return nil, err
+	}
 	connectors, err := newConnectorStore(filepath.Join(dataDir, "connectors"))
 	if err != nil {
 		return nil, err
@@ -1368,6 +1379,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		directorySync:     directorySync,
 		inventoryLoads:    inventoryLoads,
 		discrepancies:     discrepancies,
+		recertifications:  recertifications,
 		sessions:          newSessionStore(defaultSessionTTL),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),

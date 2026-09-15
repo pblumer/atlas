@@ -181,21 +181,28 @@ func (s *Server) handleDeprovisionDiscrepancy(w http.ResponseWriter, r *http.Req
 		if opErr != nil {
 			return opErr
 		}
-		return s.startDeprovisioning(process, rec)
+		return s.startDeprovisioningFor(process, rec.ItemID, rec.Principal,
+			"reconciliation: unmanaged in "+rec.System)
 	})
 }
 
-// startDeprovisioning starts the process with what a deprovisioning needs to know.
+// startDeprovisioningFor starts the process with what a deprovisioning needs to
+// know.
 //
 // The variables are the ones an order's return hands over, minus the order: there
 // is no order. A process written for both reads `orderId` as empty and has to cope,
 // which is stated here and in the shipped example rather than left as a surprise
 // for whoever reuses their return process for this.
-func (s *Server) startDeprovisioning(process string, rec discrepancyRecord) error {
+//
+// `reason` is free text and it is the only thing that differs between the two
+// callers. It is not a code, deliberately: what a deprovisioning process does with
+// it is write it into a ticket or a log line for a person, and an enum would send
+// that person back here to look up what it meant.
+func (s *Server) startDeprovisioningFor(process, itemID, principal, reason string) error {
 	vars := []model.VariableValue{
-		{Name: "itemId", Kind: model.VarString, Text: rec.ItemID},
-		{Name: "recipient", Kind: model.VarString, Text: rec.Principal},
-		{Name: "reason", Kind: model.VarString, Text: "reconciliation: unmanaged in " + rec.System},
+		{Name: "itemId", Kind: model.VarString, Text: itemID},
+		{Name: "recipient", Kind: model.VarString, Text: principal},
+		{Name: "reason", Kind: model.VarString, Text: reason},
 	}
 	var (
 		key   uint64

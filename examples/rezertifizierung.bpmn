@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Rezertifizierung (ADR-draft-access-recertification)
+  — quartalsweise fragen, ob die Rechte, die Leute haben, noch gebraucht werden.
+
+  Über den Zugriff eines Menschen lassen sich drei Fragen stellen. Die Bestellung
+  beantwortet *darf er das haben*. Der Abgleich beantwortet *hat er es wirklich*.
+  Diese hier beantwortet *braucht er es noch* — und die stellte bisher niemand.
+
+  Das ist nicht die kleine Schwester der beiden anderen. Ein Recht, das ordentlich
+  genehmigt, ordentlich eingerichtet und korrekt geführt ist, kann trotzdem falsch
+  sein, und in den meisten Betrieben ist genau das der Hauptweg, auf dem falscher
+  Zugriff entsteht: Leute wechseln die Rolle und behalten, was die alte brauchte.
+  Niemand hat etwas unrechtmässig vergeben, und niemand hat etwas entzogen — denn
+  Entziehen ist jemandes Aufgabe und damit niemandes.
+
+    Timer-Start "quartalsweise"      timeCycle R/P91D (ADR-0051)
+     -> [entra delta-users]          alle Konten samt Vorgesetzten -> `konten`
+     -> [REST POST /api/v1/recertification]  Kampagne eröffnen -> `kampagne`
+     -> Ende
+
+  ────────────────────────────────────────────────────────────────────────────────
+  WER PRÜFT, BESTIMMT DIESES MODELL — UND NICHT ATLAS.
+
+  Atlas löst keine Vorgesetzten auf. api/escalation.go hat diese Frage bereits
+  entschieden: eine Vorgesetztensuche ist eine Verzeichnisfrage und gehört damit in
+  ein modelliertes Verfahren — die Genehmigungsregel `superior` arbeitet genauso.
+
+  Deshalb liest dieser Prozess `manager` mit und baut daraus `reviewers`: eine
+  Abbildung von der haltenden Person auf die Person, die für sie antwortet. Wen
+  diese Abbildung nicht nennt, dessen Zeile ist **nicht zugeordnet** — das ist die
+  Antwort „niemand“ und kein Fehler. Sie landet bei der Person, die die Kampagne
+  eröffnet hat. Eine Person ohne Vorgesetzten im Verzeichnis darf die
+  Rezertifizierung eines ganzen Betriebs nicht verhindern.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  ZUERST ABGLEICHEN, DANN REZERTIFIZIEREN.
+
+  Eine Rezertifizierung bescheinigt das **Inventar**, und das Inventar behauptet
+  etwas, das Atlas nicht garantieren kann. Über einen ungeprüften Bestand laufen
+  lassen heisst: jede Unterschrift steht unter einem Datensatz, der womöglich nicht
+  stimmt — eine Führungskraft bestätigt, dass jemand ein Recht noch braucht, das er
+  seit drei Monaten gar nicht mehr hat.
+
+  Deshalb ist die Reihenfolge Bestandsaufnahme -> Abgleich -> Rezertifizierung, und
+  deshalb ist eine Zeile, zu der ein offener Befund steht, als **strittig**
+  gekennzeichnet. Gekennzeichnet und nicht verweigert: ein einzelner Befund darf
+  keine Kampagne über Tausende von Rechten blockieren, und wer diese eine Zeile
+  prüft, weiss womöglich genau, was passiert ist. Nur antworten darf er nicht, ohne
+  es zu wissen.
+
+  SCHWEIGEN IST NIE EINE ENTSCHEIDUNG. Eine Kampagne schliesst mit unbeantworteten
+  Zeilen, und die bleiben unbeantwortet. „Schweigen heisst behalten“ erfindet eine
+  Bestätigung, die niemand gegeben hat; „Schweigen heisst entziehen“ sperrt Leute
+  aus, weil jemand in den Ferien war. `kampagne.counts.undecided` ist deshalb eine
+  eigene Zahl und kein Rest.
+
+  DIESER PROZESS ENTSCHEIDET NICHTS. Er stellt die Fragen. Beantwortet werden sie
+  einzeln, von Menschen, unter **Tasks -> Access review**:
+    POST /api/v1/recertification/{id}/rows/{row}/keep     noch nötig
+    POST /api/v1/recertification/{id}/rows/{row}/revoke   nicht mehr nötig
+
+  Es gibt bewusst keinen Weg, mehrere Zeilen auf einmal zu beantworten. Eine
+  Bescheinigung ist genau so viel wert wie die Prüfung dahinter, und eine im Block
+  beantwortete Kampagne ist eine Unterschrift ohne Prüfung — schlimmer als keine,
+  weil eine prüfende Stelle sie glaubt.
+
+  Voraussetzungen beim Betreiber:
+    * Ein Entra-Worker (hier "contoso") mit User.Read.All — lesend genügt.
+    * Ein REST-Worker namens "atlas" mit einem API-Token, das die Rolle `operator`
+      erreicht. Eröffnen ist die Aufgabe dessen, der den Betrieb führt; die beiden
+      Antworten dagegen sind an `user` gebunden, weil eine Führungskraft genau das
+      ist. Dieser Prozess eröffnet nur.
+    * Gepflegte Konten mit `manager` im Verzeichnis. Fehlt er, entstehen nicht
+      zugeordnete Zeilen — sichtbar, gezählt, und Sache des Eröffnenden.
+
+  NICHT GEPRÜFT: ob `delta-users` dieses Workers `manager` ausliefert. In Graph ist
+  das eine Navigationseigenschaft und keine gewöhnliche Spalte; kommt sie nicht mit,
+  ist `reviewers` leer und die ganze Kampagne landet als nicht zugeordnet beim
+  Eröffnenden. Das ist sichtbar und nicht still — `kampagne.counts.unassigned` sagt
+  es —, aber es ist dann nichts, was jemand als erledigt abhaken sollte.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_rezertifizierung"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_rezertifizierung" name="Rezertifizierung: braucht das noch jemand?" isExecutable="true">
+    <bpmn:documentation>Eröffnet quartalsweise eine Rezertifizierungskampagne über das Inventar und ordnet jede Frage der Führungskraft der haltenden Person zu.
+
+Drei Fragen lassen sich über Zugriff stellen: darf jemand das haben (Bestellung), hat er es wirklich (Abgleich), braucht er es noch (hier). Die dritte ist keine kleinere Fassung der anderen beiden — ein korrekt genehmigtes, korrekt eingerichtetes und korrekt geführtes Recht kann trotzdem falsch sein, weil Leute die Rolle wechseln und behalten, was die alte brauchte.
+
+Wer prüft, bestimmt dieses Modell. Atlas löst keine Vorgesetzten auf: das ist eine Verzeichnisfrage und gehört in ein Verfahren, genau wie bei der Genehmigungsregel `superior`. Wen die Abbildung nicht nennt, dessen Zeile ist nicht zugeordnet und landet beim Eröffnenden — kein Fehler, sondern die Antwort „niemand“.
+
+Der Prozess entscheidet nichts. Er stellt die Fragen; beantwortet werden sie einzeln von Menschen unter Tasks → Access review. Mehrere auf einmal zu beantworten ist bewusst nicht vorgesehen.
+
+Worker-only (ADR-0172): der Mandanten-Zugang liegt nie in der Engine.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_quartal" name="quartalsweise">
+      <bpmn:documentation>Wiederholungszyklus R/P91D (ADR-0051). Ein Quartal ist die übliche Kadenz für eine Zugriffsrezertifizierung, und der Grund steht hier und nicht im Quelltext: häufiger, und die Fragen werden abgenickt; seltener, und ein Rollenwechsel bleibt ein halbes Jahr unbemerkt.
+
+91 Tage und nicht P3M: Atlas unterstützt bei Timern bewusst nur den Tages- und Zeitanteil von ISO-8601, weil die Länge eines Monats vom Kalender abhängt. Wer den Lauf auf einen Quartalsanfang legen will, nimmt statt des Zyklus einen Zeitpunkt und plant den nächsten selbst.
+
+Anders als beim Abgleich, der täglich läuft: der Abgleich fragt Maschinen, diese Kampagne fragt Menschen. Was Menschen kostet, darf nicht täglich laufen.</bpmn:documentation>
+      <bpmn:outgoing>f_start_konten</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_quartal">
+        <bpmn:timeCycle>R/P91D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="konten_lesen" name="Konten und Vorgesetzte lesen">
+      <bpmn:documentation>delta-users ohne deltaLink: eine vollständige Aufzählung der Konten. `select` nennt `manager` ausdrücklich mit — ohne ihn ist die Abbildung leer und die ganze Kampagne landet als nicht zugeordnet beim Eröffnenden.
+
+NICHT GEPRÜFT: ob dieser Worker `manager` ausliefert. In Graph ist das eine Navigationseigenschaft und keine gewöhnliche Spalte. Bleibt sie aus, ist das sichtbar (`kampagne.counts.unassigned`) und nicht still — aber es ist dann nichts, was jemand als erledigt abhaken sollte.
+
+Schreibt: konten = { value, deltaLink }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-users"
+                              select="id,mail,manager"
+                              maxUsers="2000"
+                              resultVariable="konten" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_konten</bpmn:incoming>
+      <bpmn:outgoing>f_konten_eroeffnen</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="kampagne_eroeffnen" name="Kampagne eröffnen">
+      <bpmn:documentation>POST /api/v1/recertification. Eröffnet die Kampagne und bekommt die Fragen zurück, die sie stellt.
+
+`items` und `principals` bleiben weg: die Kampagne deckt das ganze Inventar ab. Das ist hier ungefährlich und beim Abgleich wäre es das nicht — dieser Endpunkt schliesst aus Abwesenheit gar nichts. Er baut eine Liste von Fragen, und eine Frage zu jedem Recht im Betrieb ist eine grosse Kampagne und keine falsche.
+
+`reviewers` wird aus den gelesenen Konten gebaut: Objekt-Id der haltenden Person auf Objekt-Id ihrer Führungskraft. Atlas löst beide Seiten selbst gegen die gespiegelten Konten auf, sodass das Verzeichnis-Vokabular genügt.
+
+Konten ohne `manager` werden übersprungen. Nicht ausgelassen im stillen Sinn: die zugehörigen Zeilen entstehen trotzdem, nur ohne Zuordnung, und werden als solche gezählt.
+
+Schreibt: kampagne = { id, name, rows, counts, reason }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+          <zeebe:header key="path" value="/api/v1/recertification" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="={name: &quot;Quartalsweise Zugriffsprüfung&quot;, reviewers: context(flatten(for k in konten.value return (if get value(k, &quot;manager&quot;) = null then [] else [{key: k.id, value: get value(get value(k, &quot;manager&quot;), &quot;id&quot;)}])))}" target="body" />
+          <zeebe:output source="=body" target="kampagne" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_konten_eroeffnen</bpmn:incoming>
+      <bpmn:outgoing>f_eroeffnen_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Fragen stehen">
+      <bpmn:documentation>`kampagne` steht in den Instanzvariablen. Zuerst zu lesen ist `counts.unassigned` — die Zeilen, die niemand zugeordnet bekam, und damit die Zeilen, die sonst niemand beantwortet. Dann `counts.disputed`: Rechte, über die Inventar und Zielsystem gerade uneinig sind.
+
+`counts.undecided` beginnt bei allem und ist der Zweck der Kampagne, nicht ihr Fehler. Er wird nicht dadurch kleiner, dass jemand die Kampagne schliesst.</bpmn:documentation>
+      <bpmn:incoming>f_eroeffnen_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_konten" sourceRef="start_quartal" targetRef="konten_lesen" />
+    <bpmn:sequenceFlow id="f_konten_eroeffnen" sourceRef="konten_lesen" targetRef="kampagne_eroeffnen" />
+    <bpmn:sequenceFlow id="f_eroeffnen_ende" sourceRef="kampagne_eroeffnen" targetRef="ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_rezertifizierung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_quartal">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="134" y="225" width="74" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_konten" bpmnElement="konten_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_eroeffnen" bpmnElement="kampagne_eroeffnen">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="552" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="530" y="225" width="81" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_konten" bpmnElement="f_start_konten">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_konten_eroeffnen" bpmnElement="f_konten_eroeffnen">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_eroeffnen_ende" bpmnElement="f_eroeffnen_ende">
+        <di:waypoint x="500" y="200" /><di:waypoint x="552" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

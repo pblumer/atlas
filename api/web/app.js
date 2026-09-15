@@ -637,6 +637,13 @@ const TOPNAV = {
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
+    // The second kind of thing addressed to a person
+    // (ADR-draft-access-recertification). Not Operations, where reconciliation
+    // sits: a finding is repair and the operator's, while this asks a line manager
+    // whether somebody on their team still needs something — and a line manager has
+    // never opened Operations. Not one of the two portal pages either: those carry
+    // the catalogue's brand and are written for people outside the tooling.
+    { name: "Access review", route: "#/tasks/recertification", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
@@ -948,6 +955,10 @@ function handbookHelp(path) {
   // the workshop chapter is the one that builds exactly that, end to end.
   if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
   if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  // Before the Tasks rule below, and it has to be: a prefix match on "#/tasks"
+  // would swallow it. An access review is not a user task — it is not in the engine
+  // at all — so the forms chapter would answer a question nobody asked here.
+  if (path.startsWith("#/tasks/recertification")) return H("beispiele", "Rezertifizierung");
   if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
@@ -9321,6 +9332,10 @@ async function route() {
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/tasks/recertification") {
+      const { viewRecertification } = await import("./recertification.js");
+      return await viewRecertification({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/reconciliation") {
       const { viewReconciliation } = await import("./reconciliation.js");
       return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });
