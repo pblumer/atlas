@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Products can be marked as favourites.** The smallest measure in the plan, and the one
+  whose two decisions are the kind that get made by accident.
+
+  **A favourite is a bookmark and never an entitlement.** It stores a product id and nothing
+  else — no release, no catalogue, no variant. It says "show me this again", not "I may have
+  this", and everything deciding whether the person may still *order* it is asked at read time
+  by the routes that already decide it.
+
+  The tidier-looking alternative is a trap: validating a mark against the caller's catalogue
+  at write time would mean a catalogue reassignment starts **refusing** marks the person
+  already has, and a withdrawn product makes an existing list unwritable — the list would
+  break on exactly the events it should survive. Marks that no longer resolve are counted
+  rather than hidden, because a star that stopped appearing with no word looks like the page
+  lost it.
+
+  **Yours only, with no `?principal=`.** Every other portal read has one for an operator
+  administering an estate. Nothing needs to see what another person bookmarked, and a
+  parameter nobody needs is a surface to keep closed.
+
+  One product per call rather than a list per call: a replace-the-list write would silently
+  drop whatever a second tab marked in between. Marking what is already marked writes nothing,
+  so a star pressed twice does not churn a stored file, and the list is sorted on write so the
+  stored bytes are a function of the set rather than of the order somebody pressed things in.
+
+  In the portal it is a filter over the columns and not a fourth destination — a favourite is
+  still a product in the catalogue, and a separate screen would hide what it is part of. A
+  bundle is kept when something under it is marked, or starring a service would hide the way
+  to reach it.
+
 - **A product can now say who may receive it.** A catalogue carries an audience and that gate
   is fail-closed — but it was the *only* gate: whoever was in a catalogue's audience could
   order anything in it, and the sole thing between a person and domain administration was an

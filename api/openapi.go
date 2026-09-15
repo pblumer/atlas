@@ -907,6 +907,19 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
 			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/portal/favourites", s.handleListFavourites, apiOp{
+			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"PUT", "/api/v1/portal/favourites/{itemId}", s.handleSetFavourite, apiOp{
+			summary: "Mark one product. Marking what is already marked writes nothing and answers the list, so a star pressed twice does not churn the store",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"DELETE", "/api/v1/portal/favourites/{itemId}", s.handleClearFavourite, apiOp{
+			summary: "Unmark one product. Clearing what is not marked is the state the caller asked for rather than an error",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+
 		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
 			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Products", tArray())}},

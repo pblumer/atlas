@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "products-can-be-marked-as-favourites",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Products can be marked as favourites.",
+        "de": "Products can be marked as favourites."
+      },
+      "summary": {
+        "en": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident.",
+        "de": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-product-can-now-say-who-may-receive-it",
       "version": "Unreleased",
       "date": null,
@@ -243,24 +261,6 @@
       "summary": {
         "en": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted.",
         "de": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "atlas-keeps-its-accounts-and-groups-from-a-microsoft-entra-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing.",
-        "de": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing."
-      },
-      "summary": {
-        "en": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there.",
-        "de": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there."
       },
       "link": {
         "label": "Changelog",
