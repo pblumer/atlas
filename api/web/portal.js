@@ -89,6 +89,14 @@ const STRINGS = {
     'cfg.loading': 'Formular wird geladen …',
     'cfg.failed': 'Dieses Formular lässt sich nicht laden. Bestellen ist weiterhin möglich; die Angaben fehlen dann.',
     'cfg.invalid': 'Einige Angaben sind noch nicht vollständig. Bitte korrigieren Sie sie vor dem Bestellen.',
+    'line.withdraw': 'Position zurückziehen',
+    'line.withdrawing': 'Wird zurückgezogen …',
+    'line.details': 'Angaben ändern',
+    'line.save': 'Angaben speichern',
+    'line.saving': 'Wird gespeichert …',
+    'line.close': 'Abbrechen',
+    'line.amended': 'Korrigiert',
+    'line.amendedFrom': 'vorher',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
     'tbl.placed': 'bestellt',
@@ -195,6 +203,14 @@ const STRINGS = {
     'cfg.loading': 'Loading the form …',
     'cfg.failed': 'This form cannot be loaded. Ordering still works; the details will be missing.',
     'cfg.invalid': 'Some details are not complete yet. Please correct them before ordering.',
+    'line.withdraw': 'Withdraw this position',
+    'line.withdrawing': 'Withdrawing …',
+    'line.details': 'Change the details',
+    'line.save': 'Save the details',
+    'line.saving': 'Saving …',
+    'line.close': 'Cancel',
+    'line.amended': 'Corrected',
+    'line.amendedFrom': 'was',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
     'tbl.placed': 'ordered',
@@ -408,6 +424,9 @@ const state = {
   config: {},
   // configError names the product whose form is not valid yet, empty for none.
   configError: '',
+  // editing names the position whose details are open for correction, as
+  // "<orderId>|<itemId>", empty for none (ADR-draft-amending-an-order-line).
+  editing: '',
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -1034,7 +1053,7 @@ function renderBasket() {
         state.configError === x.id
           ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
         el('div', {
-          'data-configfor': x.id,
+          'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
       : null);
@@ -1054,7 +1073,13 @@ function renderBasket() {
 // statements, and a second copy of those rules would be wrong the first time
 // somebody edits the form.
 
-// mounted holds the live form instances by item id. A render replaces their
+// amendKey is the bucket a correction's answers live in. It is deliberately not
+// the item id: the same product can be in the basket and in an order at once, and
+// one set of answers for both would put what somebody is correcting into what they
+// are about to buy.
+function amendKey(orderID, itemID) { return `amend:${orderID}:${itemID}`; }
+
+// mounted holds the live form instances by mount key. A render replaces their
 // containers, so each one is read back, destroyed and built again.
 const mounted = new Map();
 // schemas caches a form definition per id, so redrawing the basket does not refetch
@@ -1096,7 +1121,7 @@ function answersFor(rel, shown) {
 // mountConfigForms builds every form the basket is showing. Asynchronous because
 // the form runtime is a lazy import; the container says so meanwhile.
 async function mountConfigForms() {
-  const hosts = [...document.querySelectorAll('[data-configfor]')];
+  const hosts = [...document.querySelectorAll('[data-configkey]')];
   for (const [, form] of mounted) {
     try { form.destroy(); } catch { /* already gone with its container */ }
   }
@@ -1114,7 +1139,7 @@ async function mountConfigForms() {
   }
 
   for (const host of hosts) {
-    const itemID = host.dataset.configfor;
+    const itemID = host.dataset.configkey;
     const formID = host.dataset.formid;
     try {
       if (!schemas.has(formID)) {
@@ -1275,7 +1300,13 @@ let orderRowsNode = null;
 
 function repaintOrderRows() {
   if (!orderRowsNode) return;
+  // The same two steps render() takes, and for the same reason: a correction's
+  // form is inside these rows, it does not survive its container being replaced,
+  // and typing in a column filter must not empty a cost centre somebody is in the
+  // middle of fixing.
+  harvest();
   orderRowsNode.replaceChildren(...orderRowBodies());
+  mountConfigForms();
 }
 
 function orderRowBodies() {
@@ -1309,13 +1340,149 @@ function orderRowBodies() {
         l.blockedBy && l.blockedBy.length
           ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
         l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
+        amendedNote(l),
         returnable(o, l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
             onclick: () => giveBack(o, l),
           }, state.busy ? t('portal.returning') : t('portal.return'))
-          : null))))));
+          : null,
+        withdrawable(l)
+          ? el('button', {
+            class: 'linkish',
+            disabled: state.busy,
+            onclick: () => withdrawLine(o, l),
+          }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
+          : null,
+        correctable(l)
+          ? el('button', {
+            class: 'linkish',
+            disabled: state.busy,
+            onclick: () => {
+              harvest();
+              state.editing = state.editing === `${o.id}|${l.itemId}` ? '' : `${o.id}|${l.itemId}`;
+              state.configError = '';
+              render();
+            },
+          }, t('line.details'))
+          : null,
+        detailsPanel(o, l)))))));
+}
+
+// --- Changing one position ---------------------------------------------------
+//
+// Two acts, and the page keeps them as far apart as the server does
+// (ADR-draft-amending-an-order-line). Withdrawing a
+// position takes it back; correcting the details changes what was recorded about
+// it and never what it is. Ordering something else is neither, and the page does
+// not pretend otherwise: give it back and order the other thing.
+
+// withdrawable mirrors the server's rule so the page does not offer what it will
+// refuse. Two things: the status must be one that has not happened yet, and the
+// position must not be one its whole always carries — the basket does not let
+// anybody deselect such a part, and offering it here would be the same rule
+// holding in one screen and not the other.
+function withdrawable(line) {
+  return !line.integral && (line.status === 'pending' || line.status === 'blocked');
+}
+
+// correctable mirrors the other half. A position that asks for no details has none
+// to correct; one being provisioned now is refused until its process has finished;
+// a closed one delivered nothing under these details.
+function correctable(line) {
+  if (!line.configForm) return false;
+  return ['pending', 'blocked', 'done', 'returning', 'returnFailed'].includes(line.status);
+}
+
+async function withdrawLine(order, line) {
+  state.busy = true;
+  state.error = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/cancel`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await load();
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function saveDetails(order, line) {
+  const key = amendKey(order.id, line.itemId);
+  const form = mounted.get(key);
+  if (form) {
+    const { errors } = form.submit();
+    if (errors && Object.keys(errors).length) {
+      state.configError = key;
+      render();
+      return;
+    }
+  }
+  harvest();
+  state.busy = true;
+  state.error = '';
+  state.configError = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/details`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: state.config[key] || {} }),
+      });
+    state.editing = '';
+    delete state.config[key];
+    await load();
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+// detailsPanel is the correction, open under the position it belongs to.
+function detailsPanel(order, line) {
+  const key = amendKey(order.id, line.itemId);
+  if (state.editing !== `${order.id}|${line.itemId}`) return null;
+  // Seeded from what the order carries, so the form opens on what was answered
+  // rather than empty — a correction is an edit, not a second filling-in.
+  if (!state.config[key]) state.config[key] = { ...(line.config || {}) };
+  return el('div', { class: 'card cfg', style: 'margin-top:8px' },
+    state.configError === key ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+    el('div', { 'data-configkey': key, 'data-formid': line.configForm },
+      el('p', { class: 'note' }, t('cfg.loading'))),
+    el('div', { class: 'row', style: 'margin-top:10px' },
+      el('button', {
+        class: 'primary', disabled: state.busy,
+        onclick: () => saveDetails(order, line),
+      }, state.busy ? t('line.saving') : t('line.save')),
+      el('button', {
+        disabled: state.busy,
+        onclick: () => {
+          harvest();
+          state.editing = '';
+          state.configError = '';
+          delete state.config[key];
+          render();
+        },
+      }, t('line.close'))));
+}
+
+// amendedNote says a position's details were corrected after it was held, and what
+// they said before. Kept on the page rather than only in the record: somebody
+// reading their own order should not have to ask why the cost centre changed.
+function amendedNote(line) {
+  const list = line.amendments || [];
+  if (!list.length) return null;
+  const was = list.map((a) => Object.entries(a.was || {})
+    .map(([k, v]) => `${k}: ${v}`).join(', ')).filter(Boolean);
+  return el('span', { class: 'muted' },
+    ` (${t('line.amended')}${was.length ? `, ${t('line.amendedFrom')} ${was.join(' / ')}` : ''})`);
 }
 
 function renderOrders() {

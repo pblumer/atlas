@@ -168,6 +168,8 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/instances":                         "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
 	"GET /api/v1/approvals/stalled":                  "an operations list still settling with the portal around it; a tool is a public contract",
 	"POST /api/v1/orders/{id}/cancel":                "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
+	"POST /api/v1/orders/{id}/lines/{item}/cancel":   "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
+	"POST /api/v1/orders/{id}/lines/{item}/details":  "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
 	"POST /api/v1/orders/{id}/lines/{item}/return":   "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/{id}/lines/{item}/escalate": "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
 	"POST /api/v1/orders/{id}/lines/{item}/reassign": "same: an intervention records the person who made it, and an agent is not one",

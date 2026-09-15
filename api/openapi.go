@@ -968,6 +968,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
 			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
 			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/cancel", s.handleCancelLine, apiOp{
+			summary: "Withdraw one position rather than the whole order. Yours for an order you placed, or an operator's for any. A position already running or finished keeps its outcome, and one its whole always carries cannot be taken back on its own — the basket does not let anybody deselect it either, and the refusal names what to withdraw instead", tag: "Order", role: RoleUser,
+			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The order with that position withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/details", s.handleAmendLine, apiOp{
+			summary: "Correct the details somebody gave when they ordered — the answers to the product's configuration form. What is *held* is never changed in place: another product is a return and a new order. A position not yet attempted is simply corrected; one the recipient already holds records the correction beside the old answers, with who and when, because correcting the record does not move the laptop; one being provisioned now is refused until its process has finished", tag: "Order", role: RoleUser,
+			req: jsonBody("The corrected answers and an optional reason", schemaObj(map[string]any{
+				"config": tObject(), "reason": tString(),
+			})),
+			resp: jsonBody("The order with the corrected position", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
 			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order, and the process now revoking the line", tObject())}},

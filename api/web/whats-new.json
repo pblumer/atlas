@@ -92,6 +92,24 @@
       }
     },
     {
+      "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One position can be withdrawn on its own, and its details corrected.",
+        "de": "One position can be withdrawn on its own, and its details corrected."
+      },
+      "summary": {
+        "en": "The story asks to modify or delete positions directly.",
+        "de": "The story asks to modify or delete positions directly."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-product-can-ask-the-orderer-for-what-its-name-does-not-say",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "render() passed cond ?",
         "de": "render() passed cond ?"
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-catalogue-can-now-be-read-backwards",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The catalogue can now be read backwards.",
-        "de": "The catalogue can now be read backwards."
-      },
-      "summary": {
-        "en": "Every question it answered ran forwards: a product names what it contains, what it needs, what it excludes.",
-        "de": "Every question it answered ran forwards: a product names what it contains, what it needs, what it excludes."
       },
       "link": {
         "label": "Changelog",
