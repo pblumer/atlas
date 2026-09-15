@@ -31,6 +31,8 @@ import KeyboardMoveSelectionModule from "diagram-js/lib/features/keyboard-move-s
 // is the stylesheet that dresses it — vendoring the library brought both. What Atlas
 // supplies is the list of entries, which is the only part that is Atlas's.
 import PaletteModule from "diagram-js/lib/features/palette";
+import ContextPadModule from "diagram-js/lib/features/context-pad";
+import ConnectModule from "diagram-js/lib/features/connect";
 import { append, attr, create } from "tiny-svg";
 import inherits from "inherits-browser";
 import RuleProvider from "diagram-js/lib/features/rules/RuleProvider";
@@ -464,12 +466,15 @@ Subset.prototype.allowedBetween = function(source, target) {
 // stays refused is what the subset refuses — an enumeration is a closed set of
 // values, so nothing points at it, and no line may be drawn that the server would
 // then reject.
-function UmlRules(eventBus, umlSubset) {
+function UmlRules(eventBus, umlSubset, umlConnectKind) {
   this.subset = umlSubset;
+  // The kind a context-pad drag is carrying, or null. It is held by its own service
+  // rather than on the rules, because the rules answer questions and the drag is state.
+  this.armed = umlConnectKind;
   RuleProvider.call(this, eventBus);
 }
 inherits(UmlRules, RuleProvider);
-UmlRules.$inject = ["eventBus", "umlSubset"];
+UmlRules.$inject = ["eventBus", "umlSubset", "umlConnectKind"];
 
 UmlRules.prototype.init = function() {
   this.addRule("elements.move", ({ shapes, target }) => {
@@ -482,8 +487,14 @@ UmlRules.prototype.init = function() {
   this.addRule("connection.create", ({ source, target }) => {
     if (!source || !target || source === target) return false;
     if (source.type !== "uml:class" || target.type !== "uml:class") return false;
-    return this.subset.allowedBetween(
-      (source.businessObject || {}).stereotype, (target.businessObject || {}).stereotype).length > 0;
+    const allowed = this.subset.allowedBetween(
+      (source.businessObject || {}).stereotype, (target.businessObject || {}).stereotype);
+    // Dragging out of the context pad names the kind before a target is chosen, so the
+    // question is not "may these two relate at all" but "may they relate *like this*".
+    // Asking the narrower question is what makes the drag refuse a composition onto a
+    // value type while the pointer is still over it, instead of on the drop.
+    const kind = this.armed && this.armed.kind;
+    return kind ? allowed.includes(kind) : allowed.length > 0;
   });
   this.addRule("elements.delete", ({ elements }) =>
     elements.filter((e) => !/^uml:(store|lifecycle|type)-link$/.test(e.type || "")));
@@ -526,11 +537,74 @@ const PaletteProviderModule = {
   umlPalette: ["type", UmlPalette],
 };
 
+// ConnectKind is the one piece of state a context-pad drag carries that diagram-js has
+// nowhere to put: which *kind* of relationship is being drawn. Connect.start takes a
+// start shape and a point and nothing else, and the connection.create rule is asked
+// with only a source and a target — so the kind is held here, between the drag that
+// names it and the two places that read it.
+function ConnectKind(eventBus) {
+  this.kind = null;
+  // Cleared on cleanup rather than on end: a drag abandoned on empty canvas, or with
+  // Escape, never reaches end, and a kind left armed would narrow the next drag's rule
+  // to a relationship nobody asked for.
+  eventBus.on("connect.cleanup", () => { this.kind = null; });
+}
+ConnectKind.$inject = ["eventBus"];
+
+// UmlContextPad hands diagram-js's context pad the entries the host built, the way
+// UmlPalette does — and for the same reason: what may be drawn between two classes is
+// the served subset (ADR-0230), and a pad that read its own list from a table it
+// invented is how the pad and the write path come to disagree.
+//
+// An entry with a `connect` kind starts a drag; anything else is a plain click. The
+// icons are the palette's, by class name, because a composition drawn from the pad and
+// a composition drawn from the palette are the same thing and must not look different.
+function UmlContextPad(contextPad, connect, umlConnectKind, config) {
+  this.read = (config && config.entries) || (() => []);
+  this.connect = connect;
+  this.armed = umlConnectKind;
+  contextPad.registerProvider(this);
+}
+UmlContextPad.$inject = ["contextPad", "connect", "umlConnectKind", "config.umlContextPad"];
+
+UmlContextPad.prototype.getContextPadEntries = function(element) {
+  const out = {};
+  for (const e of this.read(element.businessObject || {}) || []) {
+    if (e.connect) {
+      // click and dragstart both, exactly as bpmn-js binds its connect entry: a drag
+      // draws to a target, and a click starts one that follows the pointer until the
+      // next click. autoActivate is passed through untouched, which is what tells the
+      // two apart.
+      const start = (event, target, autoActivate) => {
+        this.armed.kind = e.connect;
+        this.connect.start(event, target, autoActivate);
+      };
+      out[e.id] = {
+        group: e.group || "connect", className: `uml-pi uml-pi-${e.id}`, title: e.title,
+        action: { click: start, dragstart: start },
+      };
+      continue;
+    }
+    out[e.id] = {
+      group: e.group || "edit", className: `uml-pi uml-pi-${e.id}`, title: e.title,
+      action: { click: (event, target) => e.onClick(target.businessObject || {}, event) },
+    };
+  }
+  return out;
+};
+
+const ContextPadProviderModule = {
+  __depends__: [ContextPadModule, ConnectModule],
+  __init__: ["umlContextPad"],
+  umlContextPad: ["type", UmlContextPad],
+};
+
 const RulesProviderModule = {
   __depends__: [RulesModule],
   __init__: ["umlRules"],
   umlRules: ["type", UmlRules],
   umlSubset: ["type", Subset],
+  umlConnectKind: ["type", ConnectKind],
 };
 
 const VIEW_MODULES = [
@@ -539,6 +613,7 @@ const VIEW_MODULES = [
 const EDIT_MODULES = [
   ModelingModule, MoveModule, RulesProviderModule, LassoToolModule,
   KeyboardModule, KeyboardMoveSelectionModule, PaletteProviderModule,
+  ContextPadProviderModule,
 ];
 
 export class ClassCanvas {
@@ -552,6 +627,9 @@ export class ClassCanvas {
       subset: options.subset || { matrix: {} },
       // What the palette offers, asked for again every time it is rebuilt.
       umlPalette: { entries: options.paletteEntries || (() => []) },
+      // And what the context pad offers, asked for again every time it opens — which
+      // is every selection, so an entry may depend on what is selected.
+      umlContextPad: { entries: options.contextPadEntries || (() => []) },
       modules: this.editable ? [...VIEW_MODULES, ...EDIT_MODULES] : VIEW_MODULES,
     });
     this.canvas = this.diagram.get("canvas");
@@ -592,6 +670,31 @@ export class ClassCanvas {
       eventBus.on(["lasso.selection.cleanup", "lasso.cleanup"], () => {
         options.onTool?.(null);
         palette().updateToolHighlight("");
+      });
+      // A relationship drawn out of the context pad is *reported*, never created here.
+      // diagram-js would happily add the connection to its own model, and the next
+      // sync would wipe it: reconcile rebuilds every line from the host's document,
+      // which is the one copy that exists. So the drop is handed over and the default
+      // is stopped — at a priority above diagram-js's own handler, which is what makes
+      // "stopped" mean it never ran rather than it ran and was undone.
+      eventBus.on("connect.end", 2000, (e) => {
+        const { source, target, canExecute, start, hover } = e.context || {};
+        const kind = this.diagram.get("umlConnectKind").kind;
+        if (!kind) return false;
+        if (!canExecute || !source || !target) {
+          // Dropped on something the subset refuses. The pointer already said so — the
+          // target never lit — but a red cursor is not a reason, and the refusal here
+          // has one the author can act on. bpmn-js drops such a gesture in silence;
+          // this canvas has spent its whole life teaching the notation at exactly this
+          // moment, and going quiet because the gesture changed would be a regression
+          // dressed as parity.
+          if (start && hover && start !== hover) {
+            options.onConnectRefused?.(kind, start.businessObject, hover.businessObject);
+          }
+          return false;
+        }
+        options.onConnect?.(kind, source.businessObject, target.businessObject);
+        return false;
       });
       this.commandStack = this.diagram.get("commandStack");
       // One event for "the picture changed", whatever changed it — a drag, an undo,

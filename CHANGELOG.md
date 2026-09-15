@@ -14,6 +14,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A relationship is drawn from the class it starts at, the way a sequence flow is.**
+  Selecting a class on the information model's canvas now opens the little menu beside
+  it that the BPMN modeler has had all along: the relationship kinds that class could
+  actually reach something with, and a bin. Drag one onto the class at the other end and
+  the line is drawn.
+
+  Drawing used to be a mode. The kind was armed in the palette, and the next two classes
+  clicked became its ends — which had to be entered before the classes were looked at,
+  remembered between the two clicks, and aimed from a convention nothing on screen
+  stated. Which end a composition's diamond goes on is the question the notation turns
+  on, and it was answered by the order somebody happened to click.
+
+  The subset now answers under the pointer rather than after the drop: a target that
+  cannot take this kind of relationship never lights, and the question asked is the
+  narrow one — not whether two classes may relate, but whether they may relate *like
+  this*. A drop on a refused target still says why, in the same words the deploy would
+  use. The BPMN modeler drops such a gesture in silence; this canvas has explained the
+  notation at that exact moment since the palette did the drawing.
+
+  The armed palette mode still works. It is the only way to draw a relationship without
+  a pointer that can drag, and removing it is a separate decision.
+  ([ADR-draft-draw-a-relationship-from-the-class-it-starts-at](docs/adr/draft-draw-a-relationship-from-the-class-it-starts-at.md),
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
 - **An «enumeration» now says which values a member may take, and is drawn as part of the
   class diagram.** Four questions an author answers while drawing a write arrow have the
   same shape, and only three of them were asked that way: which class is this data
