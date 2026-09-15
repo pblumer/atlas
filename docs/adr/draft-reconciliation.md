@@ -20,8 +20,8 @@ assertion Atlas cannot guarantee, because target systems are changed outside Atl
 So it decays. An administrator removes a group membership in a hurry; a script tidies up;
 a merger moves people wholesale. Every one of those makes the inventory wrong, silently,
 and an inventory nobody checks is a list of things that were once true. The
-commissioning load (ADR-draft-inventory-commissioning-load) filled it; nothing since has
-asked whether it is still right.
+commissioning load ([ADR-0333](0333-inventory-commissioning-load.md)) filled it; nothing
+since has asked whether it is still right.
 
 **The question this record answers: how does Atlas compare what it believes against what
 a target system holds, without the comparison itself becoming the thing that locks people
@@ -222,7 +222,7 @@ journal and renders the report; `api/reconcilestore.go` is the durable journal;
 
 - [ADR-0312](0312-portal-catalogue-order-inventory.md) — the three models, the origins,
   the reconciliation section this implements, and the open question it answers.
-- ADR-draft-inventory-commissioning-load — the inventory this compares against, and the
+- [ADR-0333](0333-inventory-commissioning-load.md) — the inventory this compares against, and the
   opposite treatment of silence.
 - [ADR-0239](0239-off-loop-queries.md) — why the whole-inventory walk runs off the loop.
 - [ADR-0194](0194-api-tokens.md) — the scope the comparison joins and the actions do not.
