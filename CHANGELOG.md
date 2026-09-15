@@ -337,6 +337,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Restoring a backup from another installation no longer attaches this one's history
+  to a foreign process.** The portable design-time backup
+  ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carries `deployments/` and
+  `decisions/`, which are filed by definition key — and it does not carry the counter
+  that issues those keys, because that counter is runtime. So the archive held records
+  whose identity was minted by a sequence it left behind, and the restore resolved the
+  ambiguity by overwriting.
+
+  Measured: install A deploys `alpha`, which takes key 1. Install B deploys `beta`,
+  which also takes key 1, and runs one instance to completion. Restore A's backup onto
+  B — the documented use — and after the restart key 1 is `alpha`, `beta` is gone from
+  the listing, and `alpha` reports one finished instance plus a visit on element
+  `wait`, which it has never reached. The per-element aggregates are keyed by
+  definition key and element index, so a foreign definition did not merely inherit the
+  numbers, it redistributed them across its own elements.
+
+  Measured too: the archive carried `settings/node.json`, so B came back answering with
+  A's node id — two running installations claiming one identity, and no provenance left
+  to tell where the rest of the archive came from.
+
+  A restored deployment record is now written only when its key is free, or when the
+  record already there is the same deployment — the same `processId` at the same
+  `version`, or for a decision deployment the same decisions at the same versions.
+  Anything else is held back, and the response and the Console name the keys and both
+  sides of the clash. The node identity no longer travels, on the way out or the way
+  in, so an archive taken before this cannot carry one either. Restoring an
+  installation's own backup, including an older one, is unchanged.
+
+  The whole-instance snapshot ([ADR-0109](docs/adr/0109-full-instance-snapshot.md)) was
+  never affected and is unchanged: it carries the key space, the job-type table and the
+  WAL together and drops the derived state, so it is one consistent point in time —
+  measured, a restore left nothing inherited and no key reused.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
+
 - **A job-type index is never issued twice, so a worker cannot be handed another
   type's work.** The engine-wide job-type table maps a model-authored task type to the
   integer index a job on disk carries, and a worker polling by type is resolved through

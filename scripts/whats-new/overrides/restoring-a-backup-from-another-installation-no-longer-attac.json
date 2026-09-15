@@ -1,0 +1,30 @@
+{
+  "tags": ["Operations", "Engine"],
+  "title": {
+    "en": "A restored backup no longer takes over another server's numbers",
+    "de": "Ein wiederhergestelltes Backup übernimmt nicht mehr die Nummern eines anderen Servers"
+  },
+  "summary": {
+    "en": "The backup file under Console → System is meant to move your models to another Atlas — a new box, a test server, a colleague's. Every deployed process in it carries a number, and Atlas files that process's history under that number: which instances finished, how often each step was reached. The number is handed out by the server that deployed the process, and the backup does not carry the counter that hands it out. So restoring onto a server that had already used that number replaced its process with the one from the file, and the history stayed where it was — a process deployed somewhere else reported instances it had never run, on steps it had never reached, and the process that really did the work disappeared from the list. The backup also carried the server's own identity, so the restoring server started answering as the one the file came from. Both are fixed: a deployed process whose number is already in use here is no longer taken, and the restore says which ones and why, so you can decide whether you wanted a fresh server. A server keeps its own identity through a restore. Restoring your own backup onto your own server is unchanged, and so is the full snapshot, which carries the counter and the history together and was never affected.",
+    "de": "Die Backup-Datei unter «Console → System» ist dafür gedacht, Ihre Modelle auf ein anderes Atlas zu bringen — einen neuen Server, eine Testumgebung, den Rechner einer Kollegin. Jeder ausgelieferte Prozess darin trägt eine Nummer, und unter dieser Nummer legt Atlas die Historie dieses Prozesses ab: welche Instanzen abgeschlossen wurden, wie oft jeder Schritt erreicht wurde. Die Nummer vergibt der Server, der den Prozess ausgeliefert hat, und das Backup enthält den Zähler nicht, der sie vergibt. Beim Wiederherstellen auf einem Server, der diese Nummer bereits vergeben hatte, wurde dessen Prozess durch den aus der Datei ersetzt, während die Historie liegen blieb: Ein anderswo ausgelieferter Prozess meldete Instanzen, die er nie ausgeführt hatte, auf Schritten, die er nie erreicht hatte — und der Prozess, der die Arbeit tatsächlich geleistet hatte, verschwand aus der Liste. Zusätzlich enthielt das Backup die Identität des Servers, sodass der wiederherstellende Server fortan als derjenige antwortete, aus dem die Datei stammte. Beides ist behoben: Ein ausgelieferter Prozess, dessen Nummer hier bereits vergeben ist, wird nicht mehr übernommen, und die Wiederherstellung nennt, welche und warum — so lässt sich entscheiden, ob ein frischer Server gemeint war. Ein Server behält seine eigene Identität. Das Wiederherstellen des eigenen Backups auf dem eigenen Server bleibt unverändert, ebenso der vollständige Snapshot, der Zähler und Historie gemeinsam trägt und nie betroffen war."
+  },
+  "tutorial": {
+    "en": [
+      "Open Console → System and download the backup file.",
+      "Upload it on another Atlas under Restore.",
+      "The result line names any deployed process it did not take, with the number and both sides of the clash."
+    ],
+    "de": [
+      "«Console → System» öffnen und die Backup-Datei herunterladen.",
+      "Sie auf einem anderen Atlas unter «Restore» hochladen.",
+      "Die Ergebniszeile nennt jeden ausgelieferten Prozess, der nicht übernommen wurde — mit der Nummer und beiden Seiten des Konflikts."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open System",
+      "de": "System öffnen"
+    },
+    "route": "#/console/system"
+  }
+}
