@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"net/url"
 	"strconv"
 )
 
@@ -656,9 +657,11 @@ func runtimeTools() []Tool {
 				"its elementInstanceKey (pass it to atlas_resolve_incident), processInstanceKey, processDefKey, " +
 				"processId, jobKey, elementId (the BPMN id of the stuck element; elementIndex is its compiled " +
 				"index), type (\"job\" or \"timer\"), raisedAt, and message. Optional 'instance' / 'process' " +
-				"scope the list to one process instance or one deployed definition, and 'limit' bounds the page. " +
-				"Returns {incidents, truncated}; when 'truncated' is true, more incidents exist than were " +
-				"returned — resolve some, scope the query, or raise the limit.",
+				"scope the list to one process instance or one deployed definition, 'element' / 'type' / " +
+				"'message' narrow it to one BPMN element, one kind, or a fragment of the failure text, and " +
+				"'limit' bounds the page. Returns {incidents, truncated}; when 'truncated' is true, more " +
+				"incidents exist than were returned — under a flood call atlas_incident_summary instead, which " +
+				"answers in one line per cause, and clear whole causes with atlas_resolve_incidents.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -677,6 +680,10 @@ func runtimeTools() []Tool {
 						"minimum":     1,
 						"description": "Only incidents of instances of this deployed definition key.",
 					},
+					"element":      stringProp("Only incidents parked on this BPMN element id (the 'elementId' of a row, or of an atlas_incident_summary group)."),
+					"elementIndex": map[string]any{"type": "integer", "minimum": 0, "description": "Only incidents parked on this compiled element index — what a group whose definition is no longer deployed has instead of a BPMN id."},
+					"type":         stringProp("Only incidents of this kind: \"job\", \"timer\" or \"budget\"."),
+					"message":      stringProp("Only incidents whose message contains this text (case-insensitive)."),
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -688,6 +695,22 @@ func runtimeTools() []Tool {
 					}
 					if present {
 						path += sep + name + "=" + strconv.FormatUint(v, 10)
+						sep = "&"
+					}
+				}
+				// Not optPositiveUint: 0 is a real element index, so "present" and
+				// "positive" are different questions here.
+				if _, ok := args["elementIndex"]; ok {
+					v, err := argUint(args, "elementIndex")
+					if err != nil {
+						return "", err
+					}
+					path += sep + "elementIndex=" + strconv.FormatUint(v, 10)
+					sep = "&"
+				}
+				for _, name := range []string{"element", "type", "message"} {
+					if v := optString(args, name); v != "" {
+						path += sep + name + "=" + url.QueryEscape(v)
 						sep = "&"
 					}
 				}
@@ -722,6 +745,78 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.post("/api/v1/incidents/"+strconv.FormatUint(key, 10)+"/resolve", "application/json", body))
+			},
+		},
+		{
+			Name: "atlas_incident_summary",
+			Description: "What is stuck, by cause — the reading to use when many tokens are parked, because " +
+				"its size is the number of causes and not the number of incidents. Returns {total, groups, " +
+				"groupsTruncated, ungrouped}: each group is one (processDefKey, elementId, type) with its " +
+				"'count', the 'oldestRaisedAt'/'newestRaisedAt' window it has been running, a representative " +
+				"'message' (the oldest incident's) with 'messageVaries' when the group holds more than one " +
+				"wording, and the worker the parked task resolves through ('connector', 'connectorKind', " +
+				"'connectorId' — an empty id means no worker is configured under that name, which is often the " +
+				"cause itself). Groups come biggest first, so the flood is the first row. Optional 'process' / " +
+				"'instance' scope it like atlas_list_incidents. Fix the cause the group names, then clear it " +
+				"with atlas_resolve_incidents using the same processDefKey/elementId/type.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"instance": map[string]any{"type": "integer", "minimum": 1, "description": "Only incidents of this process instance key."},
+					"process":  map[string]any{"type": "integer", "minimum": 1, "description": "Only incidents of instances of this deployed definition key."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, sep := "/api/v1/incidents/summary", "?"
+				for _, name := range []string{"instance", "process"} {
+					v, present, err := optPositiveUint(args, name)
+					if err != nil {
+						return "", err
+					}
+					if present {
+						path += sep + name + "=" + strconv.FormatUint(v, 10)
+						sep = "&"
+					}
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_resolve_incidents",
+			Description: "Resolve many incidents in one call — what to use after fixing a cause that parked " +
+				"a whole population. Two mutually exclusive modes: pass 'keys', an explicit array of " +
+				"elementInstanceKey values (from atlas_list_incidents), or a scope — any of 'processDefKey', " +
+				"'processInstanceKey', 'elementId', 'type', 'message' — which resolves every incident matching " +
+				"it, bounded per call by 'limit'. A scope must name at least one of those: resolving every " +
+				"incident on the server is asked for deliberately with type=\"job\". 'retries' is the budget " +
+				"each resumed job gets (default 1); a retry against an unfixed cause parks the token again " +
+				"with the new reason, so fix first and resolve after. Returns {resolved, notFound, remaining, " +
+				"stats}: 'remaining' true means the per-call cap was hit — call again with the same arguments " +
+				"until it is false.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"keys": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "integer"},
+						"description": "Explicit elementInstanceKey values to resolve. Mutually exclusive with the scope fields.",
+					},
+					"processDefKey":      map[string]any{"type": "integer", "minimum": 1, "description": "Resolve incidents of instances of this deployed definition."},
+					"processInstanceKey": map[string]any{"type": "integer", "minimum": 1, "description": "Resolve incidents of this one process instance."},
+					"elementId":          stringProp("Resolve incidents parked on this BPMN element id (an atlas_incident_summary group's elementId)."),
+					"elementIndex":       map[string]any{"type": "integer", "minimum": 0, "description": "Resolve incidents parked on this compiled element index (a group's elementIndex) — the way to name the element of a group whose definition is no longer deployed, where no BPMN id can be resolved. Use it with processDefKey; an index means nothing outside its own definition."},
+					"type":               stringProp("Resolve incidents of this kind: \"job\", \"timer\" or \"budget\"."),
+					"message":            stringProp("Resolve incidents whose message contains this text (case-insensitive)."),
+					"retries":            map[string]any{"type": "integer", "minimum": 1, "description": "Attempts to grant each re-activated job (default 1)."},
+					"limit":              map[string]any{"type": "integer", "minimum": 1, "description": "Scope-mode per-call cap (default 500, capped at 5000). Repeat while remaining is true."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body, err := resolveIncidentsBody(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/incidents/resolve", "application/json", body))
 			},
 		},
 		{

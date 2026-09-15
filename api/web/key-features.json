@@ -171,8 +171,8 @@
         "de": "Betriebsreife Werkzeuge"
       },
       "text": {
-        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
-        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
+        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, grouped by cause and resolvable in bulk, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
+        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, nach Ursache gruppiert und als Gruppe auflösbar, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
       }
     },
     {
