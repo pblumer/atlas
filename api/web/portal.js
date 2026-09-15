@@ -85,6 +85,10 @@ const STRINGS = {
     'for.hits': 'Personen',
     'for.none': 'Niemand mit diesem Namen. Kennung, Benutzername oder Mailadresse geht auch.',
     'for.clear': 'Wieder für mich selbst bestellen',
+    'cfg.title': 'Angaben zu dieser Leistung',
+    'cfg.loading': 'Formular wird geladen …',
+    'cfg.failed': 'Dieses Formular lässt sich nicht laden. Bestellen ist weiterhin möglich; die Angaben fehlen dann.',
+    'cfg.invalid': 'Einige Angaben sind noch nicht vollständig. Bitte korrigieren Sie sie vor dem Bestellen.',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
     'tbl.placed': 'bestellt',
@@ -187,6 +191,10 @@ const STRINGS = {
     'for.hits': 'people',
     'for.none': 'Nobody by that name. An id, username or mail address works too.',
     'for.clear': 'Order for myself again',
+    'cfg.title': 'Details for this service',
+    'cfg.loading': 'Loading the form …',
+    'cfg.failed': 'This form cannot be loaded. Ordering still works; the details will be missing.',
+    'cfg.invalid': 'Some details are not complete yet. Please correct them before ordering.',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
     'tbl.placed': 'ordered',
@@ -390,6 +398,16 @@ const state = {
   // not use is worse than no field, because it looks like a permission that
   // failed rather than one they never had.
   mayOrderForOthers: false,
+  // config holds what somebody filled in per product, keyed by item id and then by
+  // the form's own field key (ADR-draft-order-line-configuration).
+  //
+  // Kept in state rather than read off the page at the last moment, because the
+  // basket is redrawn whenever anything on it changes and a rendered form does not
+  // survive its container being replaced. What was typed is captured back into here
+  // before each redraw and handed to the form again as its prefill.
+  config: {},
+  // configError names the product whose form is not valid yet, empty for none.
+  configError: '',
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -546,10 +564,38 @@ function itemsById(release) {
 // guess at rules the release carries.
 async function order() {
   if (!state.basket.size) return;
+  // Every form is asked whether it is complete before anything is sent. The form
+  // runtime decides that, against the schema's own rules — refusing here rather
+  // than letting the order go keeps what was typed on screen instead of losing it
+  // to a round trip that fails somewhere else.
+  state.configError = '';
+  for (const [itemID, form] of mounted) {
+    let errors;
+    try { ({ errors } = form.submit()); } catch { continue; }
+    if (errors && Object.keys(errors).length) {
+      state.configError = itemID;
+      render();
+      return;
+    }
+  }
+  harvest();
+
   state.busy = true;
   state.error = '';
   render();
   try {
+    const rel = state.release || {};
+    const chosen = [];
+    const seen = new Set();
+    const add = (id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      chosen.push({ id });
+      for (const p of (rel.includes || {})[id] || []) add(p);
+    };
+    for (const id of state.basket) add(id);
+    const config = answersFor(rel, chosen);
+
     await api('/api/v1/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -557,10 +603,13 @@ async function order() {
         releaseId: state.release.id,
         items: [...state.basket],
         ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
+        ...(Object.keys(config).length ? { config } : {}),
       }),
     });
     state.basket.clear();
     state.chosen.clear();
+    state.config = {};
+    state.configError = '';
     state.inBasket = false;
     state.view = 'orders';
     await load();
@@ -952,7 +1001,7 @@ function renderBasket() {
   };
   for (const id of state.basket) add(id, false);
 
-  return el('div', { class: 'cascade' },
+  const cols = el('div', { class: 'cascade' },
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.bundle')),
       shown.filter((x) => !x.integral).map((x) => cell({
@@ -971,6 +1020,123 @@ function renderBasket() {
         trail: infoButton(x.id),
       }))),
     el('div', { class: 'col' }), el('div', { class: 'col' }));
+
+  // The forms below the basket rather than beside each row: a form is taller than a
+  // row and an integral part asks its own questions, so a column that had to hold
+  // both would put the cascade and a text field in the same width.
+  const asking = shown.filter((x) => configFormOf(rel, x.id));
+
+  return el('div', {},
+    cols,
+    asking.length
+      ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },
+        el('h3', {}, `${t('cfg.title')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
+        state.configError === x.id
+          ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+        el('div', {
+          'data-configfor': x.id,
+          'data-formid': configFormOf(rel, x.id),
+        }, el('p', { class: 'note' }, t('cfg.loading'))))))
+      : null);
+}
+
+// --- What a product needs that its name does not say -------------------------
+//
+// A laptop is not fully described by being a laptop: somebody has to say which
+// cost centre it is booked to. A product names an Atlas form, and the basket is
+// where it is filled in — the last screen before an order exists, and the one that
+// already shows what will actually be provisioned
+// (ADR-draft-order-line-configuration).
+//
+// The form is rendered by Atlas's own form runtime, the one the Tasks app and the
+// incident repair already use. Nothing here interprets a field: which questions
+// there are, which are required and what counts as valid are the form's own
+// statements, and a second copy of those rules would be wrong the first time
+// somebody edits the form.
+
+// mounted holds the live form instances by item id. A render replaces their
+// containers, so each one is read back, destroyed and built again.
+const mounted = new Map();
+// schemas caches a form definition per id, so redrawing the basket does not refetch
+// what has not changed.
+const schemas = new Map();
+
+// harvest reads what is currently typed into every mounted form back into state.
+// Called before the page is redrawn, because a form does not survive its container
+// being replaced and whatever was typed would go with it.
+function harvest() {
+  for (const [itemID, form] of mounted) {
+    try {
+      const { data } = form.submit();
+      state.config[itemID] = { ...(data || {}) };
+    } catch { /* a form that cannot be read keeps the last values we had */ }
+  }
+}
+
+// configFormOf names the form a product asks for, or '' for one that asks nothing.
+function configFormOf(rel, id) {
+  const it = itemsById(rel)[id];
+  return (it && it.configForm) || '';
+}
+
+// answersFor is what will be sent: only the products actually in the basket, and
+// only those that ask something. The server refuses anything else, and it is right
+// to — but a page that sent it anyway would turn a stale basket into a refused
+// order the person cannot explain.
+function answersFor(rel, shown) {
+  const out = {};
+  for (const x of shown) {
+    if (!configFormOf(rel, x.id)) continue;
+    const given = state.config[x.id];
+    if (given && Object.keys(given).length) out[x.id] = given;
+  }
+  return out;
+}
+
+// mountConfigForms builds every form the basket is showing. Asynchronous because
+// the form runtime is a lazy import; the container says so meanwhile.
+async function mountConfigForms() {
+  const hosts = [...document.querySelectorAll('[data-configfor]')];
+  for (const [, form] of mounted) {
+    try { form.destroy(); } catch { /* already gone with its container */ }
+  }
+  mounted.clear();
+  if (!hosts.length) return;
+
+  let Form;
+  try {
+    const mod = await import('./formviewer.js');
+    mod.ensureFormStyles();
+    ({ Form } = await mod.loadFormViewer());
+  } catch {
+    for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
+    return;
+  }
+
+  for (const host of hosts) {
+    const itemID = host.dataset.configfor;
+    const formID = host.dataset.formid;
+    try {
+      if (!schemas.has(formID)) {
+        const def = await api(`/api/v1/forms/${encodeURIComponent(formID)}`);
+        schemas.set(formID, def && def.schema);
+      }
+      const schema = schemas.get(formID);
+      if (!schema) throw new Error('no schema');
+      const form = new Form({ container: host });
+      // Handed back what was typed before the last redraw, which is what makes the
+      // basket survivable: adding a second product must not empty the first's form.
+      await form.importSchema(
+        typeof schema === 'string' ? JSON.parse(schema) : schema,
+        state.config[itemID] || {});
+      mounted.set(itemID, form);
+    } catch {
+      // A form id that no longer resolves is a stale binding in the catalogue, not
+      // a broken basket. Say so and leave the order possible: refusing it here
+      // would let one edited form stop every order for that product.
+      paint(host, el('p', { class: 'note' }, t('cfg.failed')));
+    }
+  }
 }
 
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
@@ -1494,6 +1660,9 @@ function paint(root, ...children) {
 function render() {
   const root = document.getElementById('app');
   if (!root) return;
+  // Before the page is replaced, not after: a mounted form goes with its container,
+  // and what was typed into it would go too.
+  harvest();
   paint(root,
     el('header', {},
       el('div', { class: 'brand' },
@@ -1518,6 +1687,10 @@ function render() {
         : state.view === 'services' ? 'nav.services' : 'nav.catalog')),
     currentView(),
     renderActions());
+  // After the page exists. Fire and forget: the containers say they are loading
+  // until this finishes, and a failure to load the runtime leaves a sentence rather
+  // than an empty box.
+  mountConfigForms();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

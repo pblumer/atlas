@@ -214,9 +214,48 @@ type Item struct {
 	// week does not change what an order placed this week was placed against — which
 	// matters less for a search than for a rule, and is still the property that
 	// makes a release a release.
-	Keywords  []string `json:"keywords,omitempty"`
-	CreatedAt int64    `json:"createdAt"`
-	UpdatedAt int64    `json:"updatedAt"`
+	Keywords []string `json:"keywords,omitempty"`
+	// ConfigForm names the Atlas form somebody fills in when they order this
+	// product: the cost centre, the site, the employee number — whatever this one
+	// product needs that its name does not say
+	// (ADR-draft-order-line-configuration). Empty is the
+	// ordinary case and means the product is fully described by what it is.
+	//
+	// # Why a form id and not a field list of its own
+	//
+	// Atlas already has forms: a definition with an id, an editor, a renderer, a
+	// generator, and two surfaces rendering them. A second way to declare "these
+	// are the fields somebody fills in" would be a second thing to author, a second
+	// thing to render, and a second set of field types to keep level with the
+	// first. The catalogue names an id and interprets nothing.
+	//
+	// # What the catalogue does *not* do with it
+	//
+	// It never resolves it. The form store is the `api` package's and this package
+	// cannot see it, exactly as it cannot see which processes are deployed — and
+	// for the same reason the two provisioning bindings are stored as plain ids.
+	// The authoring screen offers only forms that exist, which is where that check
+	// belongs: at the moment somebody chooses, not at the moment somebody orders.
+	//
+	// # Why the release freezes the id and not the form
+	//
+	// A release freezes what an order was placed against, and the reason is always
+	// the same: a rule relaxed next week must not change what somebody was held to
+	// this week. That argument is about *rules*. A form is a set of questions, and
+	// what has to survive is the **answers** — which the order line carries, with
+	// their field keys, for as long as the order exists. "Cost centre 4711" stays
+	// true whatever the form does afterwards.
+	//
+	// The honest cost is stated in the record: a form that gains a field next week
+	// leaves every earlier order without a value for it, and a provisioning process
+	// that reads it finds nothing. That is true of every variable a process reads
+	// and is the process's business; copying a form-js document into every release
+	// would put a rendering artifact inside a design-time model that has kept
+	// rendering out of itself on purpose, and would send it to every browser that
+	// opens the portal.
+	ConfigForm string `json:"configForm,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different

@@ -178,6 +178,22 @@ type Line struct {
 	// stricter one — which is the same sentence as the one about the approval rule,
 	// and true for the same reason.
 	MaxDays int `json:"maxDays,omitempty"`
+	// ConfigForm and Config are what somebody filled in when they ordered this
+	// product, and the form they filled it in on
+	// (ADR-draft-order-line-configuration).
+	//
+	// Both or neither: a set of answers with no form is a map of keys nobody can
+	// interpret, and a form with no answers on a line that was placed means the
+	// question was never asked.
+	//
+	// The **answers** are what is frozen here, and deliberately not the questions.
+	// A release freezes rules — the approval, the ceiling, the bindings — because a
+	// rule relaxed next week must not change what somebody was held to this week.
+	// A form is not a rule; what has to survive is what was answered, and "cost
+	// centre 4711" stays true whatever the form does afterwards. The id says which
+	// set of questions it answered.
+	ConfigForm string            `json:"configForm,omitempty"`
+	Config     map[string]string `json:"config,omitempty"`
 	// Approval is the rule this line is approved under, copied from the release
 	// like the bindings are. It travels for the same reason: the rule belongs to
 	// the catalogue, and reading it when the line is reached would let a product's
