@@ -41,6 +41,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The approval list can be searched and ordered.** It rendered every open approval in
+  whatever order the endpoint returned — newest first — which is fine at three and a wall at
+  forty. The story asks for what a wall needs.
+
+  A search field, a sort control and a count. Deliberately **not** a table with a filter per
+  column, for the reason [ADR-0311](docs/adr/0311-portal-approval-page.md) gives: the common
+  approver is a line manager who decides perhaps four times a year, and a page that grew into
+  a console is one they will ask a colleague to operate. One field matches across the product,
+  the recipient, the orderer, the order id and the catalogue, because somebody looking for
+  "the laptop for Ada" does not know which column they are searching.
+
+  **Oldest first is now the default**, which changes what the page did. What has waited
+  longest is what nobody has looked at — the argument the recertification campaign and the
+  conflict report each make about their own lists.
+
+  Age is the job key, because a user task carries no created-at and the approvals endpoint
+  already pages by it; a clock reading taken in the browser would be a number nobody can
+  check. A row shows a due date where the model set one and *passed on* where an assignment
+  record exists — and says nothing where it does not, because that absence is the answer
+  "nobody has had to chase this".
+
+  Due dates sort ahead of everything undated: a task somebody put a deadline on is a different
+  thing from one nobody did, and sorting the undated in among them would bury the deadlines.
+
+### Fixed
+
+- **Two pages rendered the literal word "null".** `render()` passed `cond ? node : null` to
+  `replaceChildren`, which — unlike the `el()` helper beside it — turns a non-node argument
+  into a *text* node. The approval page has three such slots (an error, a stale link, a
+  truncation notice) and none is usually filled, so an ordinary load showed `nullnullnull`
+  above the list and `null` below it; the portal showed one under its header. Both have
+  carried it since they were written. A `paint()` helper filters, in both.
+
 - **The catalogue can now be read backwards.** Every question it answered ran forwards: a
   product names what it contains, what it needs, what it excludes. That is the question an
   *order* asks, and the portal, the basket and the fulfilment schedule are all built on it.
