@@ -56,17 +56,29 @@ _Changed_ / _Removed_ for each version.
 
   The whole design hangs on one required field. A commissioning load reports what it
   *found* and never what it did not; reconciliation reads absence as a finding, which
-  makes the same silence dangerous. So a run names in `refs` the references it read
-  **completely**, and outside that scope nothing is concluded — a right outside it is not
-  missing, it is unexamined. There is no default: "nothing" is useless and "everything" is
-  a guess that turns a truncated read into a report that the estate has lost its access.
+  makes the same silence dangerous. So a run names what it read **completely**, and
+  outside that scope nothing is concluded — a right outside it is not missing, it is
+  unexamined. There is no default: "nothing" is useless and "everything" is a guess that
+  turns a truncated read into a report that the estate has lost its access.
+
+  The scope has **two axes**, and one run may use both: `refs` names references read
+  whole, `subjects` names the people whose holdings were read whole. The second is what
+  answers an offboarding — *is this person out of everything?* — which a group listing
+  structurally cannot: you would have to reconcile every group in the system and observe
+  the person's absence from all of them. A subject-scoped run is confined to the system it
+  names, so a leaver check against Active Directory never reports somebody's Jira rights
+  as missing, and a subject that resolves to no account is reported rather than counted
+  clean — **the absence of an account is not the absence of access**. The clean result
+  gets its own sentence in the report, because a verification that returns nothing
+  otherwise looks exactly like a run that did nothing.
 
   It records **transitions, not samples**: ten runs over one disagreement make one record,
   and the run where it goes away closes it. Nothing is ever acted on automatically — adopt
   (`origin: adopted`, the first writer that origin has had), deprovision through the
   product's own process, or revoke the record are three separate calls by a person, and
   none of them is reachable with the worker credential that may run the comparison.
-  `examples/abgleich.bpmn` is the modelled process, and **Operations → Reconciliation**
+  `examples/abgleich.bpmn` is the nightly modelled process and
+  `examples/austrittspruefung.bpmn` the leaver check, and **Operations → Reconciliation**
   is where somebody reads a finding before acting on it — the three actions are not
   guarded alike, because adopt and revoke are recoverable and deprovisioning is not.
 

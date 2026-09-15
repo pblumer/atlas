@@ -1614,11 +1614,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("What the load decided, whether or not it wrote it", tObject())}},
 
 		{"POST", "/api/v1/reconciliation", s.handleReconcile, apiOp{
-			summary: "Compare one reading of one target system against the inventory and record what changed. `refs` is required and names what the reading covered completely — this route reads absence as a finding, so a recorded right not seen inside that scope is reported as missing, and outside it nothing is concluded at all. It writes no entitlement and touches no target system: the two directions it finds are acted on one at a time, by a person",
+			summary: "Compare one reading of one target system against the inventory and record what changed. Name what the reading covered completely — `refs` (these references, read whole), `subjects` (everything these people hold here, read whole), or both; at least one is required. This route reads absence as a finding, so a recorded right not seen inside that scope is reported as missing, and outside it nothing is concluded at all. A subject scope is what answers \"is this person out of everything\", which a group listing structurally cannot. It writes no entitlement and touches no target system: the two directions it finds are acted on one at a time, by a person",
 			tag:     "Catalogue", role: RoleOperator,
 			req: jsonBody("A complete reading of a declared scope", schemaObj(map[string]any{
-				"system": tString(), "refs": tArray(), "observations": tArray(),
-			}, "system", "refs")),
+				"system": tString(), "refs": tArray(), "subjects": tArray(), "observations": tArray(),
+			}, "system")),
 			resp: jsonBody("What the run found, and the transitions it recorded", tObject())}},
 		{"GET", "/api/v1/reconciliation", s.handleListDiscrepancies, apiOp{
 			summary: "Every disagreement that still stands, newest first, optionally one system's (?system=). A closed finding is history and stays in the journal; this answers what is wrong now",
