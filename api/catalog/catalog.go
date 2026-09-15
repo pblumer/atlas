@@ -179,6 +179,21 @@ const (
 	// the edge the fulfilment order is computed over, and the only one whose
 	// direction means "after".
 	EdgeRequires EdgeKind = "requires"
+	// EdgeExcludes is incompatibility: From and To must never be held by the same
+	// person (ADR-draft-conflicting-rights). The clerk who may create a supplier
+	// must not also approve payments to it — neither right is wrong, the
+	// combination is.
+	//
+	// A third question rather than a shading of the other two, and put beside them
+	// for the reason they are apart: an edge kind that means two things is one
+	// nobody can read.
+	//
+	// **The only symmetric kind.** The other three mean something different read
+	// backwards; "A must not be held with B" is exactly "B must not be held with
+	// A". [Publish] is where that is resolved, by writing both directions into the
+	// release — a reader that checked one would find half the violations and report
+	// the estate as half clean.
+	EdgeExcludes EdgeKind = "excludes"
 )
 
 // Structural reports whether this edge describes containment rather than order.

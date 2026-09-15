@@ -543,6 +543,13 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
 	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
 
+	// Conflicts (ADR-draft-conflicting-rights). Omitted for the reason GET
+	// /api/v1/inventory is, and one of its own: a list of who holds which forbidden
+	// combination is other people's access with the sensitive part highlighted. It
+	// is the shortest path from "read the inventory" to "name the people worth
+	// looking at", which is a thing to hand a person and not a tool.
+	"GET /api/v1/conflicts": "who holds a forbidden combination is other people's access with the interesting part marked",
+
 	// Pending work (ADR-draft-pending-work). Omitted, and the second mode is why.
 	//
 	// Asking what is waiting for *you* would be harmless as a tool. Asking what is

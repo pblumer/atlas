@@ -250,6 +250,14 @@ type Limits struct {
 	// refusal.
 	ExpiringReport int32
 
+	// ConflictReport is how many held incompatible pairs one answer lists
+	// (ADR-draft-conflicting-rights). The counts are over everything, so a cut list
+	// costs a second request and never a wrong number. A rule declared over a large
+	// estate can produce a great many findings at once and none of them is cleared
+	// automatically — which is correct, and is also why the list is bounded and the
+	// number is not.
+	ConflictReport int32
+
 	// PendingWorkItems is how many waiting items one person's answer lists
 	// (ADR-draft-pending-work). Small, because the consumer is a reminder and a
 	// reminder listing two hundred lines is one nobody reads to the end. The counts
@@ -312,6 +320,7 @@ func Default() Limits {
 		ExpiringWindow:        365,
 		ExpiringReport:        500,
 		PendingWorkItems:      50,
+		ConflictReport:        500,
 	}
 }
 

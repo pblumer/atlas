@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The catalogue can now say what must never be held together.** Everything the portal had
+  learned about access was **detective or temporal**: the commissioning load records what was
+  there, reconciliation checks whether the record is true, recertification asks whether it is
+  justified, an expiry ends it by itself. All four look at one right at a time, and all four
+  look *after*. None could express the oldest control in access governance — the clerk who
+  may create a supplier must not also approve payments to it.
+
+  A catalogue declares it as a third edge kind, `excludes`, beside structure and precedence.
+  It is the **only symmetric** kind — "A must not be held with B" is exactly the reverse — so
+  publishing writes **both directions** into the release. A release recording one would make
+  every reader responsible for knowing which, and a reader that got it wrong would find half
+  the violations and report the estate as half clean, silently. Publishing refuses an item
+  that excludes itself.
+
+  **An order that would create a forbidden combination is refused at placement**, against
+  what the recipient already holds and against the rest of the same basket. Detecting instead
+  would let the combination exist for as long as detection takes, which is a detective
+  control with extra steps. The refusal names both items and which side is already held.
+
+  `GET /api/v1/conflicts` reports who already holds one, against the **current** release —
+  and that is the deliberate opposite of the expiry ceiling, which never reaches a right
+  granted before it was declared. An expiry is part of what was granted; an incompatibility
+  is a statement about what may coexist now, so declaring a rule surfaces its violations the
+  same day.
+
+  **A conflict has no culprit**, and that is why nothing here acts: it is a fact about a
+  pair, no rule can say which half is wrong, and an automatic remedy would have to choose —
+  taking away the right the person actually needs while leaving the other. The remedy is an
+  order's return or an access review, both of which already exist and both of which record
+  who decided. This is the first slice in this line of work that adds no new way to take
+  access away. `examples/unvereinbarkeit.bpmn` is the modelled process.
+
 - **A reminder can now ask what is waiting for somebody else.** The portal asks people for
   three different things — decide an order line, answer a recertification row, do a task —
   and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows

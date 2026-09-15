@@ -1654,6 +1654,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 
+		{"GET", "/api/v1/conflicts", s.handleConflicts, apiOp{
+			summary: "Who holds a combination the catalogue forbids. A catalogue declares one with an edge of kind `excludes`, and unlike a product's maximum duration it takes effect for **everybody** the day it is published — an expiry is part of what was granted, a conflict is a statement about what may coexist now. Nothing here acts: a conflict is a fact about a pair, and no rule can say which half is wrong, so the remedy is an order's return or an access review and both record who decided",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Who holds a forbidden pair, oldest combination first", tObject())}},
+
 		{"GET", "/api/v1/pending-work", s.handlePendingWork, apiOp{
 			summary: "What is waiting for you across the portal: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
 			tag:     "Order", role: RoleUser,

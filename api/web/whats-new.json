@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The catalogue can now say what must never be held together.",
+        "de": "The catalogue can now say what must never be held together."
+      },
+      "summary": {
+        "en": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself.",
+        "de": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-reminder-can-now-ask-what-is-waiting-for-somebody-else",
       "version": "Unreleased",
       "date": null,
@@ -287,49 +305,6 @@
           "Dort «⋯ → Delete» wählen.",
           "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
           "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-dmn-model-whose-last-reference-is-deleted-is-no-longer-los",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision model you removed the reference to can be found again",
-        "de": "Ein Entscheidungsmodell ohne Referenz ist wieder auffindbar"
-      },
-      "summary": {
-        "en": "Everything in Atlas that shows decisions — the picker, the catalogue, an application's artifact list, a publish — reads DMN references, not the model files themselves. So deleting a reference took the model out of the product while leaving it on disk: still there, reachable only by a handle you had to remember, and invisible everywhere. The usual recovery was to upload the file again, which filed a second copy under a slightly different name. Not assigned — the place artifacts that belong to no application already live — now also lists the stored models nothing points at, with what each one declares and an Add reference action that puts a reference back on the existing file rather than copying it. A model that no longer compiles is listed too, because somebody who has to fix it has to find it first. And the delete confirm now says where the file goes instead of assuring you it is unaffected.",
-        "de": "Alles, was in Atlas Entscheidungen anzeigt — die Auswahl, der Katalog, die Artefaktliste einer Anwendung, ein Publish — liest DMN-Referenzen, nicht die Modelldateien selbst. Das Löschen einer Referenz nahm das Modell also aus dem Produkt heraus und liess es auf der Platte zurück: weiterhin vorhanden, nur noch über einen Handle erreichbar, den man sich merken musste, und überall unsichtbar. Die übliche Rettung bestand darin, die Datei erneut hochzuladen — womit eine zweite Kopie unter leicht abweichendem Namen entstand. «Nicht zugeordnet» — der Ort, an dem Artefakte ohne Anwendung ohnehin schon liegen — führt nun auch die gespeicherten Modelle auf, auf die nichts zeigt, mit dem, was jedes davon deklariert, und einer Aktion «Add reference», die eine Referenz auf die bestehende Datei zurücksetzt, statt sie zu kopieren. Ein Modell, das nicht mehr kompiliert, wird ebenfalls aufgeführt, denn wer es reparieren soll, muss es zuerst finden. Und der Löschdialog sagt jetzt, wohin die Datei geht, statt zu versichern, sie sei nicht betroffen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "In the Modeler, open Not assigned.",
-          "Stored decision models that no reference points at are listed there, marked No reference.",
-          "Choose ⋯ → Add reference on one to put it back in the catalogue under a name you pick.",
-          "It reappears in the business rule task's decision picker straight away."
-        ],
-        "de": [
-          "Im Modeler «Nicht zugeordnet» öffnen.",
-          "Gespeicherte Entscheidungsmodelle, auf die keine Referenz zeigt, sind dort aufgeführt und mit «No reference» gekennzeichnet.",
-          "Bei einem davon «⋯ → Add reference» wählen, um es unter einem selbst gewählten Namen zurück in den Katalog zu holen.",
-          "Es erscheint unmittelbar wieder in der Entscheidungsauswahl der Geschäftsregelaufgabe."
         ]
       },
       "try": {

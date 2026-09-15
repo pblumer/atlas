@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -201,6 +202,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	var (
 		out   Order
 		empty bool
+		clash *conflict
 		opErr error
 	)
 	s.loop.Do(func() {
@@ -210,6 +212,14 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 			// a record of nothing, and it would settle as completed the moment it
 			// was created.
 			empty = true
+			return
+		}
+		// Refused here rather than reported later, which is the whole point of a
+		// preventive control (ADR-draft-conflicting-rights): detection means the
+		// forbidden combination exists in the real world for as long as detection
+		// takes, and a control that permits what it forbids and then reports it is a
+		// detective control with extra steps.
+		if clash = conflictIn(rel, ordered, has); clash != nil {
 			return
 		}
 
@@ -229,6 +239,8 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "place order: "+opErr.Error())
 	case empty:
 		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
+	case clash != nil:
+		httpapi.Error(w, http.StatusConflict, clash.reason())
 	default:
 		// Start the fulfilment process for it. Durable first, then the side effect
 		// (I2): the order stands whether or not this succeeds, and a failure here
@@ -619,4 +631,68 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		}
 		httpapi.JSON(w, http.StatusOK, got)
 	}
+}
+
+// conflict is one incompatible pair an order would create
+// (ADR-draft-conflicting-rights).
+//
+// It names both items, never one. A conflict is a fact about a pair, and no rule
+// can say which half is wrong — the person needs one of them to do their job, and
+// which one is a question about the job rather than about the catalogue.
+type conflict struct {
+	// Ordered is the item this order asked for. Other is what it is incompatible
+	// with, and Held says whether the recipient already has that other half or is
+	// asking for it in the same basket.
+	Ordered string
+	Other   string
+	Held    bool
+}
+
+// reason is the sentence the placer reads.
+func (c conflict) reason() string {
+	if c.Held {
+		return fmt.Sprintf("%q cannot be held together with %q, which the recipient already "+
+			"has. Neither is wrong on its own — the catalogue says the combination is. Giving "+
+			"up whichever is no longer needed is a return or an access review, and both record "+
+			"who decided", c.Ordered, c.Other)
+	}
+	return fmt.Sprintf("%q and %q cannot be held together, and this order asks for both. "+
+		"Neither is wrong on its own — the catalogue says the combination is", c.Ordered, c.Other)
+}
+
+// conflictIn finds the first incompatibility an order would create, against what the
+// recipient holds and against the rest of the same basket.
+//
+// The first rather than all of them, deliberately: an order is refused whole, so a
+// second conflict changes nothing about the outcome and a list of them reads as a
+// bigger problem than the one that has to be solved. The next placement finds the
+// next one.
+//
+// Deterministic, because the refusal is a message somebody may quote back: the
+// ordered items are walked in the order the release expanded them, and each item's
+// exclusions are already sorted by [catalog.Publish].
+func conflictIn(rel catalog.Release, ordered []string, held map[string]bool) *conflict {
+	if len(rel.Excludes) == 0 {
+		return nil
+	}
+	asking := make(map[string]bool, len(ordered))
+	for _, id := range ordered {
+		asking[id] = true
+	}
+	for _, id := range ordered {
+		for _, other := range rel.Excludes[id] {
+			switch {
+			case held[other]:
+				return &conflict{Ordered: id, Other: other, Held: true}
+			case asking[other]:
+				// Both halves in one basket. Reported once rather than twice: the
+				// walk would meet the same pair again from the other side, and two
+				// refusals about one pair is one refusal too many.
+				if id < other {
+					return &conflict{Ordered: id, Other: other}
+				}
+			}
+		}
+	}
+	return nil
 }
