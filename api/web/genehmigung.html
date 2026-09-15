@@ -68,6 +68,22 @@
           border:1px solid var(--border); border-radius:10px; padding:14px 16px;
           font:inherit; color:var(--text); cursor:pointer; }
   .pick:hover { border-color:var(--accent); }
+  /* What the row says beyond the product and the person: a due date, or that the
+     approval has been passed on. Kept on its own line so a row without either
+     reads exactly as it did before. */
+  .pick .note { display:block; font-size:12px; margin-top:2px; }
+  /* Finding one decision among forty (ADR-0354). Layout
+     only — every colour below is a token this page already declares. */
+  .controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .controls input[type="search"] { flex:1 1 220px; min-width:0; font:inherit; font-size:14px;
+                                   padding:7px 10px; border-radius:8px;
+                                   border:1px solid var(--border-strong);
+                                   background:var(--surface); color:var(--text); }
+  .sortwrap { display:flex; align-items:center; gap:6px; }
+  .sortwrap select { font:inherit; font-size:14px; padding:6px 8px; border-radius:8px;
+                     border:1px solid var(--border-strong); background:var(--surface);
+                     color:var(--text); }
+  .controls .count { font-size:13px; white-space:nowrap; }
   .muted { color:var(--muted); font-size:13px; }
   .empty { background:var(--surface); border:1px dashed var(--border-strong); border-radius:10px;
            padding:24px; text-align:center; }

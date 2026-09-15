@@ -270,6 +270,16 @@ func checkItems(in Input, add func(Problem)) {
 				break
 			}
 		}
+		// A blank keyword matches every query at once, which is the opposite of a
+		// search term (ADR-0355).
+		for _, k := range it.Keywords {
+			if strings.TrimSpace(k) == "" {
+				add(Problem{Item: it.ID, Message: "names a blank keyword; an empty term " +
+					"matches every search at once, so the product would surface for " +
+					"everything anybody typed"})
+				break
+			}
+		}
 		if it.Lifecycle.From != 0 && it.Lifecycle.Until != 0 && it.Lifecycle.Until <= it.Lifecycle.From {
 			add(Problem{Item: it.ID, Message: "orderable window ends before it begins"})
 		}
@@ -657,6 +667,16 @@ func freeze(items []Item) []Item {
 		// field promises.
 		if len(it.Targets) > 0 {
 			it.Targets = append([]TargetRef(nil), it.Targets...)
+		}
+		// The same for the two plain string lists. They were missed once already —
+		// Eligible shipped sharing its backing array with the catalogue — which is
+		// why TestAReleaseSharesNothingWithTheCatalogue walks the struct by
+		// reflection instead of naming the fields a reader happened to remember.
+		if len(it.Eligible) > 0 {
+			it.Eligible = append([]string(nil), it.Eligible...)
+		}
+		if len(it.Keywords) > 0 {
+			it.Keywords = append([]string(nil), it.Keywords...)
 		}
 		out[i] = it
 	}

@@ -932,13 +932,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
 
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule and the processes that provision and deprovision it", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
 				"approval": tObject(), "provisionProcess": tString(),
 				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
-				"targets": tArray(),
+				"targets": tArray(), "keywords": tArray(), "eligible": tArray(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
