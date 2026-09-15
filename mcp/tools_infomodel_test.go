@@ -338,3 +338,132 @@ func TestInformationModelToolArgumentErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestClassCatalogAndUsageTools drive the reading an agent needs *before* it proposes
+// a change: which business objects exist at all, and what a rename would break. They
+// are the only tools that answer from the class's side rather than the process's.
+func TestClassCatalogAndUsageTools(t *testing.T) {
+	atlas := newAtlas(t)
+
+	var app struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(callOne(t, atlas, "atlas_create_application",
+		map[string]any{"name": "Sales"})), &app); err != nil || app.ID == "" {
+		t.Fatalf("create application: %v", err)
+	}
+	var created struct {
+		ID       string `json:"id"`
+		Revision int64  `json:"revision"`
+	}
+	if err := json.Unmarshal([]byte(callOne(t, atlas, "atlas_create_information_model",
+		map[string]any{"applicationId": app.ID, "name": "Sales data"})), &created); err != nil {
+		t.Fatalf("create model: %v", err)
+	}
+	callOne(t, atlas, "atlas_save_information_model", map[string]any{
+		"id": created.ID, "revision": created.Revision,
+		"classes": []any{
+			map[string]any{
+				"id": "tmp-order", "name": "Order", "stereotype": "businessObject",
+				"identity": []any{"id"},
+				"attributes": []any{
+					map[string]any{"name": "id", "type": "string", "multiplicity": "1"},
+					map[string]any{"name": "status", "type": "OrderStatus", "multiplicity": "1"},
+				},
+			},
+			map[string]any{
+				"id": "tmp-status", "name": "OrderStatus", "stereotype": "enumeration",
+				"literals": []any{"received", "approved"},
+			},
+		},
+	})
+
+	// The process has to belong to the application, because a usage is read from what
+	// that application deploys.
+	callOne(t, atlas, "atlas_save_draft", map[string]any{"xml": infomodelDataBPMN, "projectId": app.ID})
+	callOne(t, atlas, "atlas_deploy_application", map[string]any{"id": app.ID})
+
+	type usageSummary struct {
+		Processes int      `json:"processes"`
+		Uses      int      `json:"uses"`
+		Writes    int      `json:"writes"`
+		States    []string `json:"states"`
+		ModelUses int      `json:"modelUses"`
+	}
+	var catalog []struct {
+		Name            string       `json:"name"`
+		Stereotype      string       `json:"stereotype"`
+		Members         int          `json:"members"`
+		ApplicationName string       `json:"applicationName"`
+		Usage           usageSummary `json:"usage"`
+	}
+	raw := callOne(t, atlas, "atlas_class_catalog", map[string]any{"applicationId": app.ID})
+	if err := json.Unmarshal([]byte(raw), &catalog); err != nil {
+		t.Fatalf("decode catalogue: %v (%s)", err, raw)
+	}
+	byName := map[string]usageSummary{}
+	kinds := map[string]string{}
+	for _, row := range catalog {
+		byName[row.Name] = row.Usage
+		kinds[row.Name] = row.Stereotype
+		if row.ApplicationName != "Sales" {
+			t.Errorf("%s does not name its application: %q", row.Name, row.ApplicationName)
+		}
+	}
+	if len(catalog) != 2 || kinds["OrderStatus"] != "enumeration" {
+		t.Fatalf("catalogue = %+v", catalog)
+	}
+	if o := byName["Order"]; o.Processes != 1 || o.Writes != 1 || o.Uses != 2 {
+		t.Errorf("Order usage = %+v, want one process, one write, two uses", o)
+	}
+	// The case an agent would otherwise get wrong: an enumeration no process declares
+	// is used by the class that is typed with it, and deleting it would break that.
+	if s := byName["OrderStatus"]; s.Processes != 0 || s.ModelUses != 1 {
+		t.Errorf("OrderStatus usage = %+v, want no process use and one model use", s)
+	}
+
+	var usage struct {
+		Class struct {
+			Name string `json:"name"`
+		} `json:"class"`
+		Processes []struct {
+			Kind      string `json:"kind"`
+			ElementID string `json:"elementId"`
+			State     string `json:"state"`
+		} `json:"processes"`
+		Model []struct {
+			Kind  string `json:"kind"`
+			Class string `json:"class"`
+			Name  string `json:"name"`
+		} `json:"model"`
+	}
+	raw = callOne(t, atlas, "atlas_class_usage", map[string]any{"id": created.ID, "class": "Order"})
+	if err := json.Unmarshal([]byte(raw), &usage); err != nil {
+		t.Fatalf("decode usage: %v (%s)", err, raw)
+	}
+	if usage.Class.Name != "Order" {
+		t.Fatalf("usage = %+v", usage)
+	}
+	seen := map[string]string{}
+	for _, p := range usage.Processes {
+		seen[p.Kind] = p.ElementID + "/" + p.State
+	}
+	if seen["declare"] != "/received" || seen["write"] != "record/approved" {
+		t.Errorf("process uses = %+v", usage.Processes)
+	}
+	// And the enumeration's side of the same fact, from its own page.
+	raw = callOne(t, atlas, "atlas_class_usage", map[string]any{"id": created.ID, "class": "OrderStatus"})
+	if err := json.Unmarshal([]byte(raw), &usage); err != nil {
+		t.Fatalf("decode enumeration usage: %v (%s)", err, raw)
+	}
+	if len(usage.Model) != 1 || usage.Model[0].Kind != "attribute" ||
+		usage.Model[0].Class != "Order" || usage.Model[0].Name != "status" {
+		t.Errorf("model uses of OrderStatus = %+v", usage.Model)
+	}
+
+	// A class nobody models is refused rather than answered with an empty usage.
+	if _, isErr := callTolerant(t, atlas, "atlas_class_usage",
+		map[string]any{"id": created.ID, "class": "Invoice"}); !isErr {
+		t.Error("the usage of a class nothing declares was answered rather than refused")
+	}
+}

@@ -648,8 +648,13 @@ const TOPNAV = {
   // processes — and Instances is the instance level, the actual objects running
   // processes carry. UML draws those as two different diagrams, and Atlas already
   // splits design time from run time the same way.
+  // Between the two altitudes sits the vocabulary read as a vocabulary: every class of
+  // every model together, and where each is used. Model is per document, Business
+  // objects is across them, and only the second can say that two applications model an
+  // Order twice (ADR-draft-where-a-business-object-is-used).
   data: [
     { name: "Model", route: "#/data", role: "modeler" },
+    { name: "Business objects", route: "#/data/objects", role: "modeler" },
     { name: "Instances", route: "#/data/instances", role: "operator" },
   ],
 };
@@ -8771,6 +8776,23 @@ async function viewModelDifference(applicationId) {
   await mod.mountModelDifference(view, { api, applicationId, application });
 }
 
+// viewObjectCatalog lists every class of every model the caller can see, and
+// viewObjectDetail opens one of them with everywhere it is used
+// (ADR-draft-where-a-business-object-is-used). They are the
+// vocabulary's own reading: the canvas and the model list are both per document, so
+// neither could answer "what else depends on this Order" or show the estate's classes
+// together. Both are read-only and both live in one module, because the list's rows and
+// the detail's tables say the same things about the same subject.
+async function viewObjectCatalog() {
+  const mod = await import("./business-objects.js");
+  await mod.mountObjectCatalog(view, { api });
+}
+
+async function viewObjectDetail(modelId, className) {
+  const mod = await import("./business-objects.js");
+  await mod.mountObjectDetail(view, { api, modelId, className });
+}
+
 // viewInfoModel opens one model on the class canvas, which lives in its own module
 // so the shell stays small.
 async function viewInfoModel(id) {
@@ -9379,6 +9401,8 @@ function routeTitle(path) {
     [/^#\/operations\/p\//, "Live view · Operations"],
     [/^#\/operations$/, "Instances · Operations"],
     [/^#\/data\/instances$/, "Instances · Data"],
+    [/^#\/data\/objects\/.+/, "Business object · Data"],
+    [/^#\/data\/objects$/, "Business objects · Data"],
     [/^#\/data\/m\//, "Class diagram · Data"],
     [/^#\/data$/, "Model · Data"],
     [/^#\/panorama\/starmap$/, "Starmap · Panorama"],
@@ -9554,6 +9578,11 @@ async function route() {
     const pm = path.match(/^#\/panorama\/models\/(.+)$/);
     if (pm) return await viewPanoramaModel(decodeURIComponent(pm[1]));
     if (path === "#/data") return await viewInfoModels();
+    if (path === "#/data/objects") return await viewObjectCatalog();
+    // …/objects/{modelId}/{class}: both are encoded, because a class name is a name a
+    // person chose ("Line item") and a model id is opaque.
+    const imo = path.match(/^#\/data\/objects\/([^/]+)\/(.+)$/);
+    if (imo) return await viewObjectDetail(decodeURIComponent(imo[1]), decodeURIComponent(imo[2]));
     if (path === "#/data/instances") return await viewDataInstances();
     const imm = path.match(/^#\/data\/m\/(.+)$/);
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
