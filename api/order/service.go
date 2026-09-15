@@ -215,7 +215,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Refused here rather than reported later, which is the whole point of a
-		// preventive control (ADR-draft-conflicting-rights): detection means the
+		// preventive control (ADR-0342): detection means the
 		// forbidden combination exists in the real world for as long as detection
 		// takes, and a control that permits what it forbids and then reports it is a
 		// detective control with extra steps.
@@ -634,7 +634,7 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 }
 
 // conflict is one incompatible pair an order would create
-// (ADR-draft-conflicting-rights).
+// (ADR-0342).
 //
 // It names both items, never one. A conflict is a fact about a pair, and no rule
 // can say which half is wrong — the person needs one of them to do their job, and

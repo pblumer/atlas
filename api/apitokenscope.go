@@ -98,7 +98,7 @@ const (
 	apiScopeStatus = "status"
 
 	// apiScopeReminders reaches one route: what is waiting for one named person
-	// (ADR-draft-pending-work). It is what a reminder process carries.
+	// (ADR-0343). It is what a reminder process carries.
 	//
 	// A scope of its own rather than an addition to apiScopeInventory, which would
 	// have been the cheap choice because the reconciliation run is already there.

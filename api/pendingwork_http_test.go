@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// What is waiting for one person, over HTTP (ADR-draft-pending-work).
+// What is waiting for one person, over HTTP (ADR-0343).
 //
 // The route exists because every other route that answers this answers only for
 // the caller, and a reminder process is not the person it is reminding. So the

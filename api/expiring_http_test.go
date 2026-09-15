@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// Time-bounded rights, end to end (ADR-draft-time-bounded-entitlements).
+// Time-bounded rights, end to end (ADR-0344).
 //
 // The path that matters is the one through an order, because that is the only path
 // that may produce an end: the ceiling reaches a grant through the release, and

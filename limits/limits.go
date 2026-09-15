@@ -238,7 +238,7 @@ type Limits struct {
 	RecertifyNote int64
 
 	// ExpiringWindow is how far ahead one read may look, in days
-	// (ADR-draft-time-bounded-entitlements). A ceiling on a *question* rather than
+	// (ADR-0344). A ceiling on a *question* rather than
 	// on a message, and it earns that: a window wide enough to cover every right
 	// with an end turns "what ends soon" into a list of the whole inventory, which
 	// is a different route's job and a different cost.
@@ -251,7 +251,7 @@ type Limits struct {
 	ExpiringReport int32
 
 	// ConflictReport is how many held incompatible pairs one answer lists
-	// (ADR-draft-conflicting-rights). The counts are over everything, so a cut list
+	// (ADR-0342). The counts are over everything, so a cut list
 	// costs a second request and never a wrong number. A rule declared over a large
 	// estate can produce a great many findings at once and none of them is cleared
 	// automatically — which is correct, and is also why the list is bounded and the
@@ -259,7 +259,7 @@ type Limits struct {
 	ConflictReport int32
 
 	// PendingWorkItems is how many waiting items one person's answer lists
-	// (ADR-draft-pending-work). Small, because the consumer is a reminder and a
+	// (ADR-0343). Small, because the consumer is a reminder and a
 	// reminder listing two hundred lines is one nobody reads to the end. The counts
 	// are over everything, so a message can say "and 190 more" truthfully.
 	PendingWorkItems int32

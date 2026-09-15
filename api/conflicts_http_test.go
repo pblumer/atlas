@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// Incompatible rights, end to end (ADR-draft-conflicting-rights).
+// Incompatible rights, end to end (ADR-0342).
 //
 // Two halves have to hold, and they are different claims: an order that would
 // create a forbidden combination is refused, and a combination that already exists

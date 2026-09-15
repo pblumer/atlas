@@ -1,4 +1,4 @@
-# ADR-DRAFT: A conflict is a fact about a pair, and no rule can say which half is wrong
+# ADR-0342: A conflict is a fact about a pair, and no rule can say which half is wrong
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -21,7 +21,7 @@ Everything the portal has learned to do about access is **detective or temporal*
 The commissioning load records what was there ([ADR-0333](0333-inventory-commissioning-load.md));
 reconciliation checks whether the record is true ([ADR-0334](0334-reconciliation.md));
 recertification asks whether it is justified (ADR-0341);
-an expiry ends it by itself (ADR-draft-time-bounded-entitlements). All of them look
+an expiry ends it by itself (ADR-0344). All of them look
 at one right at a time, and all of them look *after*.
 
 None of them can express the oldest control in access governance: **these two things

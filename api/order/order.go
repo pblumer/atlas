@@ -173,7 +173,7 @@ type Line struct {
 	DeprovisionProcess string `json:"deprovisionProcess,omitempty"`
 	// MaxDays is the product's ceiling on how long the right this line grants may
 	// last, copied from the release for the reason the two processes above are
-	// (ADR-draft-time-bounded-entitlements). A ceiling relaxed in the catalogue
+	// (ADR-0344). A ceiling relaxed in the catalogue
 	// after somebody ordered must not lengthen what they were granted under the
 	// stricter one — which is the same sentence as the one about the approval rule,
 	// and true for the same reason.

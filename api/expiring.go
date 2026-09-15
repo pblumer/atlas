@@ -15,7 +15,7 @@ import (
 )
 
 // What is due to end, and what should have ended already
-// (ADR-draft-time-bounded-entitlements).
+// (ADR-0344).
 //
 // # Why this reports rather than acts
 //

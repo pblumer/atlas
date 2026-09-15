@@ -11,7 +11,7 @@ import (
 )
 
 // Who already holds a combination the catalogue forbids
-// (ADR-draft-conflicting-rights).
+// (ADR-0342).
 //
 // # Why this looks at the current catalogue and not at each grant's release
 //

@@ -281,7 +281,7 @@ type recertifyCounts struct {
 	Unassigned int `json:"unassigned"`
 	Disputed   int `json:"disputed"`
 	// Ending counts the rows whose right ends by itself
-	// (ADR-draft-time-bounded-entitlements). It is the one count here that is good
+	// (ADR-0344). It is the one count here that is good
 	// news: those questions did not need to be asked, and the number says how much
 	// of the campaign a ceiling on the product would have removed.
 	Ending int `json:"ending"`
