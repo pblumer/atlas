@@ -1,7 +1,10 @@
 package api
 
 import (
+	"encoding/hex"
 	"fmt"
+	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -171,6 +174,47 @@ func TestJobTypeIndicesSurviveAReload(t *testing.T) {
 	for name, used := range before {
 		if fresh == used {
 			t.Errorf("a job type registered after the restart reused %d, held by %q", fresh, name)
+		}
+	}
+}
+
+// TestAJobTypeIndexIsNeverHandedToAnotherTypeAcrossARestart is the registry's
+// guarantee seen through the server that owns it
+// (ADR-draft-the-job-type-index-space-never-goes-backwards).
+//
+// The unit tests prove the table; this proves the wiring, and it is the only level
+// at which the failure is visible as what it costs: a job parked by one process
+// carries a number, and a worker subscribed to a different type must never be handed
+// it. The entry is removed by hand because that is the case the package doc names,
+// and because no route removes one — see the record for why that is not a reason to
+// leave the counter derived.
+func TestAJobTypeIndexIsNeverHandedToAnotherTypeAcrossARestart(t *testing.T) {
+	dir := t.TempDir()
+	stack := bootDecisionStack(t, dir)
+
+	orders := deployProcess(t, stack.x, jobTypeBPMN("orders", "send-email"))
+	if code, b := stack.x.do(http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", orders), "{}"); code != http.StatusOK {
+		t.Fatalf("start instance: %d %s", code, b)
+	}
+	parked, ok := stack.srv.jobTypes.Index("send-email")
+	if !ok {
+		t.Fatal("send-email was never interned")
+	}
+	if err := os.Remove(filepath.Join(dir, "jobtypes", hex.EncodeToString([]byte("send-email"))+".json")); err != nil {
+		t.Fatalf("remove the entry: %v", err)
+	}
+	stack.shutdown()
+
+	rebooted := bootDecisionStack(t, dir)
+	defer rebooted.shutdown()
+	deployProcess(t, rebooted.x, jobTypeBPMN("logistics", "ship-parcel"))
+	for _, name := range []string{"ship-parcel", "send-email"} {
+		idx, ok := rebooted.srv.jobTypes.Index(name)
+		if !ok {
+			t.Fatalf("%s was never interned after the restart", name)
+		}
+		if idx == parked {
+			t.Errorf("%s was issued %d, the index the orders process's parked job carries", name, idx)
 		}
 	}
 }

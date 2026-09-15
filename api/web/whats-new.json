@@ -160,6 +160,47 @@
       }
     },
     {
+      "id": "a-job-type-index-is-never-issued-twice-so-a-worker-cannot-be",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A task type's number is never given to another task type",
+        "de": "Die Nummer eines Aufgabentyps wird nie einem anderen Aufgabentyp gegeben"
+      },
+      "summary": {
+        "en": "A service task in a diagram names the kind of work it needs — \"send-email\", \"charge-card\" — and Atlas gives each kind a number. Waiting work is stored under that number, and a worker asking for a kind of work is answered by it, so a number handed to a second kind would hand that worker somebody else's work. Atlas worked the numbers out at startup from the list of kinds it could still read, which is right only as long as that list never loses an entry. It can: a file removed by hand or missing from a partial restore, and — with no editing at all — a kind whose name a later Atlas version turns into a built-in, which is then dropped from the list on purpose and took its number with it. The numbers are now written down as they are handed out, so one that has been used is never used again, whatever becomes of the entry that held it. An installation that upgrades gets its record written on the first start after the upgrade.",
+        "de": "Eine Service-Task im Diagramm benennt die Art von Arbeit, die sie braucht — «send-email», «charge-card» — und Atlas gibt jeder Art eine Nummer. Wartende Arbeit wird unter dieser Nummer abgelegt, und ein Worker, der nach einer Art Arbeit fragt, wird darüber bedient. Eine Nummer, die an eine zweite Art vergeben wird, würde diesem Worker also fremde Arbeit zuteilen. Atlas ermittelte die Nummern beim Start aus der Liste der Arten, die es noch lesen konnte — was nur stimmt, solange diese Liste keinen Eintrag verliert. Das kann sie: eine von Hand entfernte Datei oder eine, die bei einer unvollständigen Wiederherstellung fehlt, und — ganz ohne Eingriff — eine Art, deren Name in einer späteren Atlas-Version zu einem eingebauten wird und die deshalb bewusst aus der Liste fällt, wobei sie ihre Nummer mitnahm. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird, was auch immer aus dem Eintrag wird, der sie hielt. Eine aktualisierte Installation hält ihren Stand beim ersten Start nach dem Update fest."
+      },
+      "link": {
+        "label": "ADR-0007",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
+      },
+      "tags": [
+        "Operations",
+        "Engine"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations → Workers and look at the job types the engine knows.",
+          "Each model-authored type keeps the number it was first given, for the life of the installation.",
+          "`atlas check-job-types --data-dir …` answers the same question about a backup, without starting a server."
+        ],
+        "de": [
+          "«Operations → Workers» öffnen und die der Engine bekannten Job-Typen ansehen.",
+          "Jeder im Modell definierte Typ behält die Nummer, die er zuerst erhalten hat, über die gesamte Lebensdauer der Installation.",
+          "«atlas check-job-types --data-dir …» beantwortet dieselbe Frage zu einer Sicherung, ohne einen Server zu starten."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Workers",
+          "de": "Workers öffnen"
+        },
+        "route": "#/operations/workers"
+      }
+    },
+    {
       "id": "a-deleted-definition-s-key-is-never-issued-again-so-a-new-pr",
       "version": "Unreleased",
       "date": null,
@@ -347,28 +388,6 @@
         "label": "ADR-0320",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0320-the-decision-editor-is-a-page.md"
       }
-    },
-    {
-      "id": "the-hosted-example-apps-find-the-instance-they-just-started-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The example apps find the instance they just started, however busy the engine is",
-        "de": "Die Beispiel-Apps finden die soeben gestartete Instanz, egal wie ausgelastet die Engine ist"
-      },
-      "summary": {
-        "en": "The example apps Atlas serves itself — the travel-booking wizard and the two order-to-cash pages — start a process and then have to find that instance again, both to open its first form and to tell when it has finished. They looked for it in the plain instance list, which is a page rather than the whole set: it is capped, and it fills with the oldest running instances first. On a server holding more running instances than the cap, an app's own instance was never on the page it was searching, so pressing Start ended in a script error while the process itself was running perfectly well — and nothing about the app had changed, only the number of instances in front of it. The pages now ask for one process definition's instances, newest first, and read their own instance by its key. Neither question depends on how busy the engine is any more.",
-        "de": "Die Beispiel-Apps, die Atlas selbst ausliefert — der Reisebuchungs-Assistent und die beiden Order-to-Cash-Seiten — starten einen Prozess und müssen diese Instanz danach wiederfinden: einmal, um ihr erstes Formular zu öffnen, und einmal, um zu erkennen, dass sie fertig ist. Gesucht haben sie in der einfachen Instanzliste, und die ist eine Seite und nicht der ganze Bestand: Sie ist gedeckelt und füllt sich zuerst mit den ältesten laufenden Instanzen. Auf einem Server mit mehr laufenden Instanzen als dem Deckel stand die eigene Instanz nie auf der Seite, die durchsucht wurde. Ein Klick auf Start endete dann mit einem Skriptfehler, obwohl der Prozess selbst einwandfrei lief — und an der App hatte sich nichts geändert, nur die Zahl der Instanzen davor. Die Seiten fragen jetzt die Instanzen einer Prozessdefinition ab, neueste zuerst, und lesen die eigene Instanz über ihren Schlüssel. Keine der beiden Fragen hängt noch davon ab, wie ausgelastet die Engine ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Examples",
-        "API"
-      ]
     }
   ]
 }
