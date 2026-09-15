@@ -188,7 +188,33 @@ type Item struct {
 	// approval rule beside it, so a restriction relaxed next week cannot retroact
 	// on an order placed this week and a restriction *added* next week cannot
 	// invalidate one already approved.
-	Eligible  []string `json:"eligible,omitempty"`
+	Eligible []string `json:"eligible,omitempty"`
+	// Keywords are the words somebody might search for that are not the product's
+	// name: synonyms, the vendor's own term, the abbreviation everybody uses, the
+	// thing it replaced (ADR-draft-catalogue-search).
+	//
+	// # Why this exists rather than searching the name alone
+	//
+	// The story it serves names the case exactly: find a service *when the exact
+	// product name is not known*. A search over names answers only for somebody who
+	// already knows what the thing is called, which is the person who least needs
+	// a search.
+	//
+	// # Why one flat list and not one per language
+	//
+	// Every other text on an item is per locale, and this deliberately is not. A
+	// synonym list is for **finding**, not for displaying, and a searcher's language
+	// is not the catalogue's: somebody reading a German catalogue types "laptop" as
+	// readily as "Notebook", and an abbreviation like "M365" belongs to no language
+	// at all. Splitting the list by locale would hide a term from exactly the person
+	// who needed it, and would ask a product manager to maintain in two places what
+	// they think of once.
+	//
+	// It travels into the release like everything else here, so a term added next
+	// week does not change what an order placed this week was placed against — which
+	// matters less for a search than for a rule, and is still the property that
+	// makes a release a release.
+	Keywords  []string `json:"keywords,omitempty"`
 	CreatedAt int64    `json:"createdAt"`
 	UpdatedAt int64    `json:"updatedAt"`
 }

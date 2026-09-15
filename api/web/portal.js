@@ -110,6 +110,12 @@ const STRINGS = {
     'fav.none': 'Sie haben nichts als Favorit gemerkt.',
     'fav.unresolved': 'Favoriten, die dieser Katalog nicht führt',
     'fav.full': 'Mehr Favoriten als ein Konto führen darf. Entfernen Sie einen, bevor Sie einen weiteren merken.',
+    'find.label': 'Leistung suchen',
+    'find.hint': 'Name, Abkürzung oder wofür Sie es brauchen',
+    'find.none': 'Keine Leistung entspricht der Suche.',
+    'find.hits': 'Treffer',
+    'find.clear': 'Suche zurücksetzen',
+    'find.where': 'in',
   },
   en: {
     'portal.title': 'Service portal',
@@ -203,6 +209,12 @@ const STRINGS = {
     'fav.none': 'You have marked nothing as a favourite.',
     'fav.unresolved': 'Favourites this catalogue does not carry',
     'fav.full': 'That is more favourites than one account may keep. Remove one before marking another.',
+    'find.label': 'Find a service',
+    'find.hint': 'Name, abbreviation, or what you need it for',
+    'find.none': 'No service matches the search.',
+    'find.hits': 'matches',
+    'find.clear': 'Clear search',
+    'find.where': 'in',
   },
 };
 
@@ -351,6 +363,10 @@ const state = {
   // destination in the nav: a favourite is still a product in the catalogue, and
   // pulling it onto its own screen would hide what it is part of.
   favouritesOnly: false,
+  // query is what somebody is looking for. A search is not a fifth column: while
+  // it is set the cascade is replaced by a flat list of matches, each showing the
+  // path it sits on (ADR-draft-catalogue-search).
+  query: '',
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -650,6 +666,106 @@ function keepFavourites(rel, entries) {
     || [...state.favourites].some((f) => carriedBy(rel, e.id, f)));
 }
 
+// --- Finding a service ------------------------------------------------------
+//
+// A search is not a fifth column. A cascade is for *browsing* — it shows what a
+// thing is part of — and a search is for *finding*, where the person does not
+// know which level the thing sits at. Filtering the four columns would leave a
+// match three clicks deep with nothing on screen to say it was there.
+//
+// So while a query is set the cascade is replaced by a flat list, and each hit
+// carries the path it sits on, so the answer says both *what* and *where*.
+
+// searchable is every word one item can be found by.
+//
+// Every locale's text, not just the one being rendered: a person reading a German
+// catalogue may well type the English name, and hiding a product from somebody
+// who typed a word the catalogue itself carries would be the search failing at
+// the one job it has.
+function searchable(item) {
+  return [
+    item.id,
+    ...Object.values(item.texts || {}),
+    ...(item.keywords || []),
+  ].join(' ').toLowerCase();
+}
+
+// pathTo names where an item sits, outermost first. One level is enough for the
+// screen: "in Productivity Enabling" tells somebody which branch to open, and the
+// full chain rendered as prose would be a worse answer to the same question.
+function pathTo(rel, by, id) {
+  for (const [whole, parts] of Object.entries(rel.includes || {})) {
+    if ((parts || []).includes(id)) return textOf((by[whole] || {}).texts, whole);
+  }
+  for (const [whole, parts] of Object.entries(rel.options || {})) {
+    if ((parts || []).includes(id)) return textOf((by[whole] || {}).texts, whole);
+  }
+  return '';
+}
+
+function searchHits(rel) {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return [];
+  // Every word must appear somewhere, so "vpn zugang" narrows rather than widens.
+  // A search that grew its answer as somebody typed more would be teaching them
+  // to type less.
+  const words = q.split(/\s+/);
+  return (rel.items || []).filter((it) => {
+    const hay = searchable(it);
+    return words.every((w) => hay.includes(w));
+  });
+}
+
+// renderSearch is the flat answer.
+function renderSearch(rel, by) {
+  const hits = searchHits(rel);
+  if (!hits.length) {
+    return el('div', { class: 'empty' }, el('p', {}, t('find.none')));
+  }
+  return el('div', { class: 'cascade' },
+    el('div', { class: 'col', style: 'grid-column: 1 / -1' },
+      el('div', { class: 'colhead' }, `${hits.length} ${t('find.hits')}`),
+      hits.map((it) => {
+        const where = pathTo(rel, by, it.id);
+        return cell({
+          text: textOf(it.texts, it.id),
+          // Choosing a hit takes the person to where it lives, rather than
+          // ordering it from a list that does not show what it comes with.
+          onOpen: () => {
+            state.query = '';
+            const parent = parentOf(rel, it.id);
+            state.bundle = parent.bundle || it.id;
+            state.offering = parent.offering || '';
+            state.info = it.id;
+            render();
+          },
+          lead: starButton(it.id),
+          trail: where
+            ? el('span', { class: 'muted', style: 'font-size:12px' }, `${t('find.where')} ${where}`)
+            : null,
+        });
+      })));
+}
+
+// parentOf resolves which bundle and which offering an item sits under, so a hit
+// can open the cascade where the thing actually is.
+function parentOf(rel, id) {
+  const up = (child) => {
+    for (const [whole, parts] of Object.entries(rel.includes || {})) {
+      if ((parts || []).includes(child)) return whole;
+    }
+    for (const [whole, parts] of Object.entries(rel.options || {})) {
+      if ((parts || []).includes(child)) return whole;
+    }
+    return '';
+  };
+  const first = up(id);
+  if (!first) return {};
+  const second = up(first);
+  if (!second) return { bundle: first };
+  return { bundle: second, offering: first };
+}
+
 function renderCatalogue() {
   if (!state.catalog) {
     return el('div', { class: 'empty' },
@@ -711,8 +827,26 @@ function renderCatalogue() {
   // it, and the person cannot tell that from a catalogue that moved under them.
   const unresolved = [...state.favourites].filter((id) => !by[id]).length;
 
+  // The part of the screen a query replaces. Built as a thunk because typing
+  // repaints it without re-rendering the page: re-rendering would replace the
+  // search field somebody is typing into, and the caret would jump to the end of
+  // the word after every character. This is the same trick the order filters use,
+  // for the same reason.
+  const body = () => (state.query.trim() !== ''
+    ? [renderSearch(rel, by)]
+    : [el('div', { class: 'cascade' }, category, bundleCol, offeringCol, serviceCol),
+      state.info && by[state.info]
+        ? el('div', { style: 'margin-top:16px' }, infoPanel(by[state.info])) : null]);
+  catalogueBody = body;
+  catalogueBodyNode = el('div', {}, body());
+
   return el('div', {},
     el('div', { class: 'favbar' },
+      el('input', {
+        type: 'search', id: 'find', value: state.query,
+        placeholder: t('find.hint'), 'aria-label': t('find.label'),
+        oninput: (e) => { state.query = e.target.value; repaintCatalogueBody(); },
+      }),
       el('label', {},
         el('input', {
           type: 'checkbox', id: 'fav-only',
@@ -724,8 +858,18 @@ function renderCatalogue() {
         ? el('span', { class: 'muted' }, t('fav.none')) : null,
       unresolved
         ? el('span', { class: 'muted' }, `${t('fav.unresolved')}: ${unresolved}`) : null),
-    el('div', { class: 'cascade' }, category, bundleCol, offeringCol, serviceCol),
-    state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(by[state.info])) : null);
+    catalogueBodyNode);
+}
+
+// What a keystroke redraws, and the node it redraws into. Both are reset by every
+// render; a repaint before the first render, or after the view moved elsewhere, is
+// a no-op rather than a write into a node nobody is looking at.
+let catalogueBodyNode = null;
+let catalogueBody = () => [];
+
+function repaintCatalogueBody() {
+  if (!catalogueBodyNode || !catalogueBodyNode.isConnected) return;
+  paint(catalogueBodyNode, catalogueBody());
 }
 
 // renderBasket is the second step of the same screen: what has been chosen,
