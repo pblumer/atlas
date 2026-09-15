@@ -280,7 +280,30 @@ type Item struct {
 	// different figure than the one that was approved. That is the same sentence as
 	// the approval rule's and the ceiling's, and it is the reason this is on the
 	// line as well as in the release.
-	Price     string `json:"price,omitempty"`
+	Price string `json:"price,omitempty"`
+	// Category is the heading this product sits under in the portal — "Arbeitsplatz",
+	// "Kommunikation", "Fachanwendungen" (ADR-draft-product-category).
+	// Empty is the ordinary case and puts the product under the heading the portal
+	// names for products that have none.
+	//
+	// # Why a field and not an entity
+	//
+	// Because it is **a heading and nothing else**. An entity would carry its own
+	// texts, its own ordering, its own visibility and its own lifecycle, and each of
+	// those is a thing to publish, migrate and get wrong. A heading has none of them:
+	// it is the word above a column.
+	//
+	// The costs are real and stated rather than hidden. A category has **no ordering
+	// of its own**, so the portal sorts alphabetically — there is nothing on a string
+	// to sort by, and inventing a rank here would be the entity arriving through the
+	// back door. It has **no translation**: it reads the same in every language the
+	// catalogue offers, unlike every product name beside it. And two spellings are
+	// two categories, with nothing to notice that "Arbeitsplatz" and "Arbeitsplätze"
+	// were meant as one.
+	//
+	// If any of those turns out to matter, the answer is the entity, and this field
+	// is what it would be migrated from.
+	Category  string `json:"category,omitempty"`
 	CreatedAt int64  `json:"createdAt"`
 	UpdatedAt int64  `json:"updatedAt"`
 }

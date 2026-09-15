@@ -932,14 +932,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
 
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the portal groups it under — a heading and nothing else, with no ordering, no translation and no entity behind it", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
 				"approval": tObject(), "provisionProcess": tString(),
 				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
 				"targets": tArray(), "keywords": tArray(), "eligible": tArray(),
-				"configForm": tString(), "price": tString(),
+				"configForm": tString(), "price": tString(), "category": tString(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 

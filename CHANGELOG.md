@@ -114,6 +114,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product says what kind of thing it is, and the portal's first column finally
+  carries data.** The portal's cascade has drawn four columns since the layout
+  landed — Kategorie, Bundle, Angebot, Service. The first one was filled with the
+  catalogue's own name and a note reading *"Atlas has no category level above the
+  bundle today"*: a placeholder telling the truth, because there was nowhere for a
+  product to say what kind of thing it was. A catalogue of eight products does not
+  need headings. A catalogue of two hundred is unusable without them.
+
+  A product now carries a **category**, and it is a **plain string the maintainer
+  types** while they have the product open, offered back through a list of the
+  headings already in the catalogue so the second product is spelled like the
+  first. The column shows **Alle** above the headings, so it is never a dead end;
+  the headings alphabetically, by the locale's own rule; and **Ohne Kategorie**
+  last, appearing only when something is in it — a heading for nothing is a heading
+  nobody can use, and hiding uncategorised products instead would lose them. The
+  services view groups what a person already holds by the same headings, so "where
+  do I find this" has one answer on both sides of the portal. Publishing refuses a
+  category that is present and **blank**, because blank is the bucket's own value
+  and a product that meant to say something and lost it would be invisible against
+  one that never said anything.
+
+  **A heading, not an entity, and the three costs are stated rather than hidden.**
+  Nothing in Atlas branches on a category — no rule, no approval, no eligibility,
+  no process binding reads it; it is a way of *looking* at a release. Every property
+  that would justify an entity is a property something else would need, and no such
+  something exists. So: the headings have **no ordering of their own** (a rank on a
+  category is the entity this refused, arriving through the back door, and a test
+  holds the sort against it); they are **not translated**, unlike every other text
+  on a product, which is a genuine regression against the rest of the surface; and
+  **two spellings are two categories**, recorded as a deliberate non-check so that
+  the day it becomes intolerable, the reason it was tolerable is on file.
+
 - **A product can say what it costs, and the approver sees it.** There was **no price
   field anywhere in Atlas** — not on a product, not on an order line, not on the
   approval surface — so an approver was asked to approve a laptop without being told
