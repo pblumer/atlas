@@ -117,8 +117,14 @@ func rowID(campaign, principal, itemID, variantID string) string {
 
 // campaignID is derived from the name and the moment, for the same reason:
 // reopening the same campaign name next quarter must be a different campaign.
-func campaignID(name string, at int64) string {
-	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d", name, at))
+//
+// The moment is in **nanoseconds** even though the campaign records its opening in
+// seconds, and that is not an inconsistency to tidy up. Two campaigns of the same
+// name opened in the same second would otherwise be one id, and the second would
+// overwrite the first — a campaign's rows replaced by another's, which is evidence
+// destroyed by a name collision and a clock too coarse to see it.
+func campaignID(name string, atNanos int64) string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d", name, atNanos))
 	return "cmp_" + hex.EncodeToString(sum[:8])
 }
 
@@ -132,8 +138,8 @@ func disputeKey(principal, itemID string) string { return principal + "\x00" + i
 // record argues for — what is being attested is what the person saw, and a row that
 // re-resolved its origin or its dispute at render time would quietly change the
 // question between being asked and being answered.
-func buildCampaign(msg recertifyOpen, in recertifyInput, by string, now int64) recertifyCampaign {
-	id := campaignID(msg.Name, now)
+func buildCampaign(msg recertifyOpen, in recertifyInput, by string, now, atNanos int64) recertifyCampaign {
+	id := campaignID(msg.Name, atNanos)
 
 	// The scope, as sets. Empty means "everything", which is stated rather than
 	// implied: a campaign over the whole inventory is a big campaign and not a

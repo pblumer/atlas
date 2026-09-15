@@ -40,7 +40,7 @@ func TestAnEmptyScopeIsEverything(t *testing.T) {
 		aHolding("usr_ada", "vpn", model.OriginOrdered),
 		aHolding("usr_bo", "sap", model.OriginLegacy),
 	)
-	cmp := buildCampaign(recertifyOpen{Name: "all"}, in, "usr_root", 10)
+	cmp := buildCampaign(recertifyOpen{Name: "all"}, in, "usr_root", 10, 10)
 
 	if len(cmp.Rows) != 2 {
 		t.Fatalf("%d row(s), want both rights in the estate: %+v", len(cmp.Rows), cmp.Rows)
@@ -59,7 +59,7 @@ func TestAScopeNarrowsByProductAndByPerson(t *testing.T) {
 	)
 	cmp := buildCampaign(recertifyOpen{
 		Name: "vpn for ada", Items: []string{"vpn"}, Principals: []string{"ada@example.org"},
-	}, in, "usr_root", 10)
+	}, in, "usr_root", 10, 10)
 
 	if len(cmp.Rows) != 1 {
 		t.Fatalf("%d row(s), want the one pair both halves of the scope name: %+v",
@@ -80,7 +80,7 @@ func TestAPersonIsNamedHoweverTheCallerKnowsThem(t *testing.T) {
 	in := anEstate(aHolding("usr_ada", "vpn", model.OriginOrdered))
 
 	for _, named := range []string{"usr_ada", "oid-ada", "ada@example.org", "ADA@example.org"} {
-		cmp := buildCampaign(recertifyOpen{Name: "n", Principals: []string{named}}, in, "usr_root", 10)
+		cmp := buildCampaign(recertifyOpen{Name: "n", Principals: []string{named}}, in, "usr_root", 10, 10)
 		if len(cmp.Rows) != 1 {
 			t.Errorf("naming Ada as %q produced %d row(s), want 1", named, len(cmp.Rows))
 		}
@@ -96,7 +96,7 @@ func TestANameNothingResolvesIsKeptRatherThanDropped(t *testing.T) {
 	in := anEstate(aHolding("usr_ada", "vpn", model.OriginOrdered))
 	cmp := buildCampaign(recertifyOpen{
 		Name: "ghosts", Principals: []string{"nobody@example.org"},
-	}, in, "usr_root", 10)
+	}, in, "usr_root", 10, 10)
 
 	if len(cmp.Rows) != 0 {
 		t.Fatalf("%d row(s) for somebody Atlas has never heard of", len(cmp.Rows))
@@ -117,7 +117,7 @@ func TestAReviewerIsResolvedOnBothSides(t *testing.T) {
 	in := anEstate(aHolding("usr_ada", "vpn", model.OriginOrdered))
 	cmp := buildCampaign(recertifyOpen{
 		Name: "n", Reviewers: map[string]string{"oid-ada": "bo@example.org"},
-	}, in, "usr_root", 10)
+	}, in, "usr_root", 10, 10)
 
 	if len(cmp.Rows) != 1 {
 		t.Fatalf("%d row(s), want 1", len(cmp.Rows))
@@ -136,7 +136,7 @@ func TestAHolderNobodyReviewsIsUnassignedRatherThanRefused(t *testing.T) {
 	)
 	cmp := buildCampaign(recertifyOpen{
 		Name: "n", Reviewers: map[string]string{"ada@example.org": "usr_bo"},
-	}, in, "usr_root", 10)
+	}, in, "usr_root", 10, 10)
 
 	c := countRows(cmp.Rows)
 	if c.Rows != 2 {
@@ -161,7 +161,7 @@ func TestARowCarriesWhatTheReviewerWasShown(t *testing.T) {
 		ID: "dsc_1", Kind: recMissing, Principal: "usr_ada", ItemID: "vpn",
 	}
 
-	cmp := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 10)
+	cmp := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 10, 10)
 	row := cmp.Rows[0]
 
 	switch {
@@ -185,9 +185,9 @@ func TestARowCarriesWhatTheReviewerWasShown(t *testing.T) {
 // cannot exist and a decision cannot land on a row it was not meant for.
 func TestTheSameCampaignAsksEachPairOnce(t *testing.T) {
 	in := anEstate(aHolding("usr_ada", "vpn", model.OriginOrdered))
-	first := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 10)
-	again := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 10)
-	later := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 20)
+	first := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 10, 10)
+	again := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 10, 10)
+	later := buildCampaign(recertifyOpen{Name: "n"}, in, "usr_root", 20, 20)
 
 	if first.Rows[0].ID != again.Rows[0].ID {
 		t.Error("the same pair in the same campaign has two ids")
@@ -224,5 +224,43 @@ func TestUndecidedIsCountedRatherThanSubtracted(t *testing.T) {
 			"certified", c.Undecided)
 	case c.Unassigned != 4 || c.Disputed != 1:
 		t.Errorf("counts = %+v, want the addressing and the disputes counted independently", c)
+	}
+}
+
+// TestCampaignsAreOrderedNewestFirst, over opening times that actually differ.
+//
+// The campaign somebody is answering is almost always the most recent one, and a
+// reviewer scrolling past four closed quarters to reach it is a reviewer who
+// answers faster than they read. A tie is broken by id rather than left to the
+// store, because a list whose order came from whatever the filesystem returned
+// would be a different list on every read — which is how the HTTP test that used to
+// stand here passed locally and failed in CI.
+func TestCampaignsAreOrderedNewestFirst(t *testing.T) {
+	store, err := newRecertifyStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	for _, c := range []recertifyCampaign{
+		{ID: "cmp_b", Name: "Q2", OpenedAt: 100},
+		{ID: "cmp_c", Name: "Q3", OpenedAt: 200},
+		{ID: "cmp_a", Name: "Q3 again", OpenedAt: 200},
+	} {
+		if err := store.saveCampaign(c); err != nil {
+			t.Fatalf("save %s: %v", c.ID, err)
+		}
+	}
+
+	got, err := store.listCampaigns()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var ids []string
+	for _, c := range got {
+		ids = append(ids, c.ID)
+	}
+	want := []string{"cmp_a", "cmp_c", "cmp_b"}
+	if strings.Join(ids, ",") != strings.Join(want, ",") {
+		t.Errorf("order = %v, want %v: newest first, and a tie settled by id rather than by "+
+			"the filesystem", ids, want)
 	}
 }

@@ -394,13 +394,22 @@ func TestACampaignNeedsAName(t *testing.T) {
 	}
 }
 
-// TestTheCampaignsAreListedNewestFirst.
+// TestTheCampaignsAreListedAsHeadersAndInAStableOrder.
 //
 // The list is how a reviewer reaches a campaign at all: they are told an access
-// review is running, not given its id. Newest first because the one being answered
-// is almost always the most recent, and a reviewer scrolling past four closed
-// quarters to reach this one is a reviewer who answers faster than they read.
-func TestTheCampaignsAreListedNewestFirst(t *testing.T) {
+// review is running, not given its id.
+//
+// Headers only, and that is the load-bearing part. A list that carried every row of
+// every campaign would send an estate's worth of other people's access down a route
+// whose question is merely which campaigns exist.
+//
+// The order is asserted as *stable* rather than as newest-first, because at second
+// granularity two campaigns opened in one test tie — and a test that passed only
+// because of which file the store happened to read first would be testing the
+// filesystem, which is exactly what the first version of this test did and exactly
+// how it failed. Newest-first is held where it is actually decided, over distinct
+// opening times, in TestCampaignsAreOrderedNewestFirst.
+func TestTheCampaignsAreListedAsHeadersAndInAStableOrder(t *testing.T) {
 	ts, _ := newAuthServer(t, "root", "correct horse battery")
 	c := newClient(t)
 	login(t, c, ts, "root", "correct horse battery")
@@ -409,24 +418,41 @@ func TestTheCampaignsAreListedNewestFirst(t *testing.T) {
 	openCampaign(t, c, ts, `{"name":"Q2 access review"}`)
 	openCampaign(t, c, ts, `{"name":"Q3 access review"}`)
 
-	code, raw := cReq(t, c, ts, "GET", "/api/v1/recertification", "")
-	if code != http.StatusOK {
-		t.Fatalf("GET recertification: %d %s", code, raw)
+	read := func() []map[string]any {
+		t.Helper()
+		code, raw := cReq(t, c, ts, "GET", "/api/v1/recertification", "")
+		if code != http.StatusOK {
+			t.Fatalf("GET recertification: %d %s", code, raw)
+		}
+		var list []map[string]any
+		if err := json.Unmarshal(raw, &list); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return list
 	}
-	var list []map[string]any
-	if err := json.Unmarshal(raw, &list); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+
+	list := read()
 	if len(list) != 2 {
 		t.Fatalf("%d campaign(s), want both: %+v", len(list), list)
 	}
-	// Headers only: a list that carried every row of every campaign would send an
-	// estate's worth of access down a route whose question is "which campaigns exist".
-	if list[0]["rows"] != nil {
-		t.Errorf("the list carries rows; it answers which campaigns exist, not what is in them")
+	for _, c := range list {
+		if c["rows"] != nil {
+			t.Errorf("the list carries rows; it answers which campaigns exist, not what is " +
+				"in them")
+		}
 	}
-	if got := fmt.Sprint(list[0]["name"]); !strings.Contains(got, "Q3") {
-		t.Errorf("first listed campaign is %q, want the newest", got)
+	names := fmt.Sprint(list[0]["name"]) + fmt.Sprint(list[1]["name"])
+	if !strings.Contains(names, "Q2") || !strings.Contains(names, "Q3") {
+		t.Errorf("the list is missing a campaign: %v", names)
+	}
+
+	again := read()
+	for i := range list {
+		if list[i]["id"] != again[i]["id"] {
+			t.Fatalf("two reads returned different orders (%v then %v); a list somebody "+
+				"navigates by position cannot reorder itself between requests",
+				list[i]["id"], again[i]["id"])
+		}
 	}
 }
 

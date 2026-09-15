@@ -184,7 +184,16 @@ func (s *recertifyStore) listCampaigns() ([]recertifyCampaign, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.SliceStable(all, func(i, j int) bool { return all[i].OpenedAt > all[j].OpenedAt })
+	// Newest first, and the id breaks a tie. Opening is recorded in whole seconds,
+	// so two campaigns opened in the same second are the same age — and a list whose
+	// order then came from whatever the filesystem returned would be a different
+	// list on every read.
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].OpenedAt != all[j].OpenedAt {
+			return all[i].OpenedAt > all[j].OpenedAt
+		}
+		return all[i].ID < all[j].ID
+	})
 	return all, nil
 }
 

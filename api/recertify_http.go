@@ -47,7 +47,8 @@ func (s *Server) handleOpenRecertification(w http.ResponseWriter, r *http.Reques
 	}
 
 	by := principalID(r)
-	now := time.Now().Unix()
+	at := time.Now()
+	now := at.Unix()
 
 	var (
 		in     recertifyInput
@@ -95,7 +96,7 @@ func (s *Server) handleOpenRecertification(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	cmp := buildCampaign(msg, in, by, now)
+	cmp := buildCampaign(msg, in, by, now, at.UnixNano())
 	if n := len(cmp.Rows); n > int(s.budgets().RecertifyRows) {
 		// Refused whole rather than truncated. Half a campaign is the shape of
 		// failure this whole line of work exists to avoid: it looks like a complete
