@@ -138,7 +138,14 @@ func (s *Server) handleAdoptDiscrepancy(w http.ResponseWriter, r *http.Request) 
 // claiming otherwise, and the journal keeps what it used to claim.
 func (s *Server) handleRevokeDiscrepancy(w http.ResponseWriter, r *http.Request) {
 	s.actOnDiscrepancy(w, r, recMissing, closedRevoked, func(rec discrepancyRecord) error {
-		s.do(func() { s.proc.RevokeEntitlement(rec.Principal, rec.ItemID) })
+		// Corrected, not returned. Nothing was given back — the finding is that the
+		// target system does not have the right and as far as anybody can tell
+		// never did. The row records the end of a *claim*, which is all this
+		// handler's own comment says it decides (ADR-draft-entitlement-history).
+		at, by := s.now(), principalID(r)
+		s.do(func() {
+			s.proc.RevokeEntitlement(rec.Principal, rec.ItemID, at, model.EndCorrected, by)
+		})
 		if err := s.drive(); err != nil {
 			return fmt.Errorf("revoke: remove the entitlement: %w", err)
 		}

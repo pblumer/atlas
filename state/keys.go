@@ -53,6 +53,7 @@ const (
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
 	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-0312)
+	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-draft-entitlement-history)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key
@@ -711,6 +712,35 @@ func instanceFromReplayKey(k []byte) uint64 {
 func entitlementPrefix(principal string) []byte {
 	out := append([]byte{byte(cfEntitlement)}, principal...)
 	return append(out, 0x00)
+}
+
+// entitlementHistoryPrefix bounds one principal's ended holds. The principal
+// comes first for the reason it does in the inventory — that is the question the
+// family is asked — and the same 0x00 separator keeps a principal whose id
+// prefixes another's from scanning the other's rows into their own answer.
+func entitlementHistoryPrefix(principal string) []byte {
+	out := append([]byte{byte(cfEntitlementHistory)}, principal...)
+	return append(out, 0x00)
+}
+
+// keyEntitlementHistory keys one ended hold.
+//
+// The end time comes before the item id, which is the difference between this
+// family and the inventory and the whole reason it is a separate one. An
+// entitlement key is (principal, item) because holding the same item twice is one
+// entitlement; a history row is an *event*, so the same person holding the same
+// product in 2024 and again in 2026 is two rows and must be. Ordering by end time
+// is also what the questions asked here need: "everything since January" is a
+// range scan, and "what did they hold in March" is bounded from below by it.
+//
+// Big-endian, so byte order is time order. Two holds of different items ending in
+// the same nanosecond are separated by the trailing item id; two holds of the
+// *same* item ending in the same nanosecond cannot occur, because one principal
+// holds one item once (keyEntitlement) and the single writer (invariant I3) gives
+// each revocation its own moment.
+func keyEntitlementHistory(principal string, endedAt int64, itemID string) []byte {
+	out := appendBE64(entitlementHistoryPrefix(principal), uint64(endedAt))
+	return append(out, itemID...)
 }
 
 // keyEntitlement keys one thing one principal holds. Holding the same item twice

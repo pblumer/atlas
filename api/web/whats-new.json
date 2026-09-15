@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-can-now-say-who-may-receive-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can now say who may receive it.",
+        "de": "A product can now say who may receive it."
+      },
+      "summary": {
+        "en": "A catalogue carries an audience and that gate is fail-closed — but it was the only gate: whoever was in a catalogue's audience could order anything in it, and the sole thing between a person and domain administration was an approval rule, which says who decides rather than who may ask.",
+        "de": "A catalogue carries an audience and that gate is fail-closed — but it was the only gate: whoever was in a catalogue's audience could order anything in it, and the sole thing between a person and domain administration was an approval rule, which says who decides rather than who may ask."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-hold-that-ends-now-leaves-a-record-that-it-existed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A hold that ends now leaves a record that it existed.",
+        "de": "A hold that ends now leaves a record that it existed."
+      },
+      "summary": {
+        "en": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all.",
+        "de": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
       "version": "Unreleased",
       "date": null,
@@ -229,88 +265,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-job-type-index-is-never-issued-twice-so-a-worker-cannot-be",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A task type's number is never given to another task type",
-        "de": "Die Nummer eines Aufgabentyps wird nie einem anderen Aufgabentyp gegeben"
-      },
-      "summary": {
-        "en": "A service task in a diagram names the kind of work it needs — \"send-email\", \"charge-card\" — and Atlas gives each kind a number. Waiting work is stored under that number, and a worker asking for a kind of work is answered by it, so a number handed to a second kind would hand that worker somebody else's work. Atlas worked the numbers out at startup from the list of kinds it could still read, which is right only as long as that list never loses an entry. It can: a file removed by hand or missing from a partial restore, and — with no editing at all — a kind whose name a later Atlas version turns into a built-in, which is then dropped from the list on purpose and took its number with it. The numbers are now written down as they are handed out, so one that has been used is never used again, whatever becomes of the entry that held it. An installation that upgrades gets its record written on the first start after the upgrade.",
-        "de": "Eine Service-Task im Diagramm benennt die Art von Arbeit, die sie braucht — «send-email», «charge-card» — und Atlas gibt jeder Art eine Nummer. Wartende Arbeit wird unter dieser Nummer abgelegt, und ein Worker, der nach einer Art Arbeit fragt, wird darüber bedient. Eine Nummer, die an eine zweite Art vergeben wird, würde diesem Worker also fremde Arbeit zuteilen. Atlas ermittelte die Nummern beim Start aus der Liste der Arten, die es noch lesen konnte — was nur stimmt, solange diese Liste keinen Eintrag verliert. Das kann sie: eine von Hand entfernte Datei oder eine, die bei einer unvollständigen Wiederherstellung fehlt, und — ganz ohne Eingriff — eine Art, deren Name in einer späteren Atlas-Version zu einem eingebauten wird und die deshalb bewusst aus der Liste fällt, wobei sie ihre Nummer mitnahm. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird, was auch immer aus dem Eintrag wird, der sie hielt. Eine aktualisierte Installation hält ihren Stand beim ersten Start nach dem Update fest."
-      },
-      "link": {
-        "label": "ADR-0007",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Workers and look at the job types the engine knows.",
-          "Each model-authored type keeps the number it was first given, for the life of the installation.",
-          "`atlas check-job-types --data-dir …` answers the same question about a backup, without starting a server."
-        ],
-        "de": [
-          "«Operations → Workers» öffnen und die der Engine bekannten Job-Typen ansehen.",
-          "Jeder im Modell definierte Typ behält die Nummer, die er zuerst erhalten hat, über die gesamte Lebensdauer der Installation.",
-          "«atlas check-job-types --data-dir …» beantwortet dieselbe Frage zu einer Sicherung, ohne einen Server zu starten."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
-      }
-    },
-    {
-      "id": "a-deleted-definition-s-key-is-never-issued-again-so-a-new-pr",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A new process no longer inherits a deleted one's history",
-        "de": "Ein neuer Prozess erbt nicht mehr die Historie eines gelöschten"
-      },
-      "summary": {
-        "en": "Every deployed process and every deployed decision gets a number, and that number is what the engine files its history under: which instances finished, how often each step was reached, when it last did anything. The number was worked out at startup from the deployments still on disk — which is right only as long as none is ever deleted. Delete the newest one, restart, and the next deployment got the same number back, together with everything filed under it: a process deployed a minute ago would report a finished instance and a step it had never reached. Nothing was lost and nothing crashed; the figures simply belonged to something else. The numbers are now written down as they are handed out, so one that has been used is never used again — even after the deployment that held it is gone. A restart in the middle of a deployment can now leave a gap in the numbering, which costs nothing. An installation that upgrades starts keeping the record from its next deployment onward.",
-        "de": "Jeder ausgelieferte Prozess und jede ausgelieferte Entscheidung erhält eine Nummer, und unter dieser Nummer legt die Engine ihre Historie ab: welche Instanzen abgeschlossen wurden, wie oft jeder Schritt erreicht wurde, wann zuletzt etwas geschah. Die Nummer wurde beim Start aus den noch vorhandenen Auslieferungen ermittelt — was nur stimmt, solange keine je gelöscht wird. Löscht man die neueste und startet neu, bekam die nächste Auslieferung dieselbe Nummer zurück, mitsamt allem, was darunter abgelegt war: Ein vor einer Minute ausgelieferter Prozess meldete eine abgeschlossene Instanz und einen Schritt, den er nie erreicht hatte. Verloren ging nichts und abgestürzt ist nichts; die Zahlen gehörten schlicht zu etwas anderem. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird — auch nicht, wenn die Auslieferung, die sie hielt, verschwunden ist. Ein Neustart mitten in einer Auslieferung kann jetzt eine Lücke in der Nummerierung hinterlassen, was nichts kostet. Eine aktualisierte Installation beginnt mit ihrer nächsten Auslieferung, die Nummern festzuhalten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Processes and note a deployment's key.",
-          "Delete that deployment, restart the server, and deploy something else.",
-          "The new deployment gets a fresh key, and its runtime view starts at zero instances and zero visits."
-        ],
-        "de": [
-          "«Operations → Processes» öffnen und den Schlüssel einer Auslieferung notieren.",
-          "Diese Auslieferung löschen, den Server neu starten und etwas anderes ausliefern.",
-          "Die neue Auslieferung erhält einen neuen Schlüssel, und ihre Laufzeitansicht beginnt bei null Instanzen und null Besuchen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Processes",
-          "de": "Processes öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]

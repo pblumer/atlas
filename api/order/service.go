@@ -48,6 +48,12 @@ type Service struct {
 	// the catalogue service dispatches onto the loop itself and a nested Do would
 	// deadlock.
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error)
+	// groupsOf answers which groups somebody belongs to, for the eligibility check
+	// (ADR-draft-product-eligibility). It asks about the **recipient**, who is not
+	// the caller and therefore has no principal in the request — a manager ordering
+	// for a new hire is the ordinary case, and checking the caller's groups would
+	// refuse exactly that.
+	groupsOf func(string) ([]string, error)
 	// wake tells the fulfilment process that an order moved. The variables it
 	// carries are the message's start variables, which is how the orchestrator
 	// learns anything beyond the order id it correlates on.
@@ -76,7 +82,7 @@ type Service struct {
 	// service's loop closure — writing an engine fact runs the processor, which
 	// is a visit to the loop of its own, and a nested Do would deadlock.
 	grant  func(Grant) error
-	revoke func(principal, itemID string) error
+	revoke func(principal, itemID string, at int64, by string) error
 	// held answers what one principal already holds, as a set of item ids. It is
 	// what makes the basket's second resolution possible — an item the recipient
 	// already has and may not have twice is ordered as skipped rather than
@@ -104,13 +110,14 @@ const (
 func New(loop *runloop.Loop, store *Store, now func() int64,
 	release func(id string) (catalog.Release, bool, error),
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error),
+	groupsOf func(string) ([]string, error),
 	wake func(message, orderID string, vars map[string]string) error,
 	portalBase func() string,
 	grant func(Grant) error,
-	revoke func(principal, itemID string) error,
+	revoke func(principal, itemID string, at int64, by string) error,
 	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
-		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase,
+		release: release, mayOrderFrom: mayOrderFrom, groupsOf: groupsOf, wake: wake, portalBase: portalBase,
 		grant: grant, revoke: revoke, held: held}
 }
 
@@ -199,11 +206,23 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// And which groups the recipient is in, read here for the reason the two above
+	// are: it needs the loop itself, and the placement below already holds it. An
+	// unreadable answer refuses the order rather than placing one — a restriction
+	// that fails open is not a restriction.
+	recipientGroups, groupErr := s.groupsOf(recipient)
+	if groupErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError,
+			"check who the recipient is: "+groupErr.Error())
+		return
+	}
+
 	var (
-		out   Order
-		empty bool
-		clash *conflict
-		opErr error
+		out    Order
+		empty  bool
+		clash  *conflict
+		barred *ineligible
+		opErr  error
 	)
 	s.loop.Do(func() {
 		ordered := rel.Expand(req.Items)
@@ -220,6 +239,14 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// takes, and a control that permits what it forbids and then reports it is a
 		// detective control with extra steps.
 		if clash = conflictIn(rel, ordered, has); clash != nil {
+			return
+		}
+		// And who may receive it at all. Beside the conflict check rather than
+		// before the catalogue gate, because it is the same kind of rule read at the
+		// same moment: what the release says about this basket
+		// (ADR-draft-product-eligibility). The catalogue's audience has already
+		// decided whether this shop is theirs; this decides whether this shelf is.
+		if barred = ineligibleIn(rel, ordered, recipientGroups); barred != nil {
 			return
 		}
 
@@ -241,6 +268,12 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
 	case clash != nil:
 		httpapi.Error(w, http.StatusConflict, clash.reason())
+	case barred != nil:
+		// 403 and not 409: a conflict is a state of the estate that could be
+		// resolved by giving something back, and this is a statement about who the
+		// recipient is. Telling the two apart is what lets a caller know whether
+		// there is anything to do about it.
+		httpapi.Error(w, http.StatusForbidden, barred.reason())
 	default:
 		// Start the fulfilment process for it. Durable first, then the side effect
 		// (I2): the order stands whether or not this succeeds, and a failure here
@@ -552,7 +585,20 @@ func (s *Service) recordInventory(o Order, itemID string, status LineStatus) err
 			OrderID: o.ID, At: o.UpdatedAt, Until: until,
 		})
 	case StatusReturned:
-		return s.revoke(o.Recipient, itemID)
+		// The moment is the order's, not a fresh clock reading: it is the same
+		// frozen, command-time value the grant above uses, so the pair of history
+		// timestamps comes from one source. The actor is whoever asked for the
+		// return, carried on the line since then — what completed it is a
+		// deprovisioning process, and naming that as the decider would attribute a
+		// decision to a robot.
+		var by string
+		for _, l := range o.Lines {
+			if l.ItemID == itemID {
+				by = l.ReturnedBy
+				break
+			}
+		}
+		return s.revoke(o.Recipient, itemID, o.UpdatedAt, by)
 	}
 	return nil
 }

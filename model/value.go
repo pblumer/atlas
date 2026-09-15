@@ -1401,6 +1401,8 @@ func newValue(vt ValueType) Value {
 		return &VariableIndexValue{}
 	case VTEntitlement:
 		return &EntitlementValue{}
+	case VTEntitlementHistory:
+		return &EntitlementHistoryValue{}
 	default:
 		return nil
 	}

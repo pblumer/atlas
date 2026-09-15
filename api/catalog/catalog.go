@@ -158,9 +158,39 @@ type Item struct {
 	// a found right's start as the moment it was found, so a ceiling measured from
 	// it would schedule an entire estate to expire on the anniversary of the day
 	// somebody switched the portal on.
-	MaxDays   int   `json:"maxDays,omitempty"`
-	CreatedAt int64 `json:"createdAt"`
-	UpdatedAt int64 `json:"updatedAt"`
+	MaxDays int `json:"maxDays,omitempty"`
+	// Eligible narrows the catalogue's audience for this one product: the group ids
+	// whose members may **receive** it. Empty is the ordinary case and means no
+	// narrowing (ADR-draft-product-eligibility).
+	//
+	// # Why an item needs this when a catalogue already has an audience
+	//
+	// Because a person sees exactly one catalogue — the highest-ranked one their
+	// groups reach — so "put it in a narrower catalogue" is not a workaround. A
+	// second catalogue does not give anybody a second shop; it is simply hidden
+	// behind the one they already reach. A product that should be available to part
+	// of a catalogue's audience could not be expressed at all.
+	//
+	// # Why empty is not fail-open
+	//
+	// [Catalog.ReachedBy] is fail-closed and stays the gate: nothing here is
+	// reachable by somebody outside the catalogue's audience, whatever this says.
+	// This only ever *narrows* that, so an empty list inherits a restriction rather
+	// than removing one — the opposite of a catalogue with no groups, which would
+	// otherwise be a shop open to everybody while somebody is still filling it.
+	//
+	// # Who is checked
+	//
+	// The **recipient**, never the orderer. A manager ordering a workplace for a
+	// new hire is the ordinary case and must keep working; the question this
+	// answers is who may end up holding the thing, and that is the person it is
+	// for. It reaches an order through the release like the ceiling and the
+	// approval rule beside it, so a restriction relaxed next week cannot retroact
+	// on an order placed this week and a restriction *added* next week cannot
+	// invalidate one already approved.
+	Eligible  []string `json:"eligible,omitempty"`
+	CreatedAt int64    `json:"createdAt"`
+	UpdatedAt int64    `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different
