@@ -41,6 +41,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A catalogue can be searched, and by words it does not display.** The portal browsed
+  and did not find. Four columns cascade from the catalogue to the individual service,
+  which works for somebody who knows roughly where a thing sits and is useless to
+  everybody else — the cascade shows what a thing is *part of*, and that is exactly the
+  knowledge the searcher does not have. "Power BI Pro" sits two levels under "Productivity
+  Enabling", and nobody looking for a reporting tool has a reason to open either.
+
+  A product now carries **keywords**: the synonym, the abbreviation, the vendor's own
+  term, the name of the thing it replaced. They are searched together with every name the
+  item carries, and a publish refuses a blank one — an empty string is contained in every
+  query, so one product holding one would surface for everything anybody typed.
+
+  **The list is flat and not per locale**, unlike every other text on an item. A synonym
+  list is for finding, not for displaying; nothing renders it; and a searcher's language is
+  not the catalogue's. Somebody reading a German catalogue types "laptop" as readily as
+  "Notebook", and "M365" belongs to no language at all. For the same reason the search
+  reads *every* locale's name rather than the one on screen: refusing to match a word the
+  catalogue itself carries would be the search failing at its only job.
+
+  **A query replaces the cascade rather than filtering it.** Filtering the four columns
+  was the obvious shape and is the wrong one — a match three levels deep would leave an
+  empty column on screen and the person would conclude the catalogue does not carry it.
+  So the columns are replaced by a flat list, and each hit says the path it sits on: the
+  answer is both *what* and *where*. Choosing a hit opens the cascade at that item rather
+  than ordering from a list that does not show what the thing comes with.
+
+  The search runs in the browser over the release the page already fetched. Not for speed:
+  a route would re-send data the page has, an index would be a second copy of the
+  catalogue to keep true, and — the part that matters — a server-side search would need
+  its own audience filter, correct forever, in a second place. The page can only search
+  what it was given, and it was given exactly one catalogue.
+
 - **The approval list can be searched and ordered.** It rendered every open approval in
   whatever order the endpoint returned — newest first — which is fine at three and a wall at
   forty. The story asks for what a wall needs.

@@ -20,6 +20,24 @@
       }
     },
     {
+      "id": "a-catalogue-can-be-searched-and-by-words-it-does-not-display",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A catalogue can be searched, and by words it does not display.",
+        "de": "A catalogue can be searched, and by words it does not display."
+      },
+      "summary": {
+        "en": "The portal browsed and did not find.",
+        "de": "The portal browsed and did not find."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-approval-list-can-be-searched-and-ordered",
       "version": "Unreleased",
       "date": null,
@@ -221,24 +239,6 @@
           "de": "Business objects öffnen"
         },
         "route": "#/data/objects"
-      }
-    },
-    {
-      "id": "an-incident-flood-is-read-by-cause-and-cleared-in-one-action",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An incident flood is read by cause, and cleared in one action.",
-        "de": "An incident flood is read by cause, and cleared in one action."
-      },
-      "summary": {
-        "en": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems.",
-        "de": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]
