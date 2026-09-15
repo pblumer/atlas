@@ -4776,10 +4776,14 @@ func incidentType(v *model.IncidentValue) string {
 }
 
 // handleListIncidents lists the unresolved incidents — the operator "what's stuck"
-// view (ADR-0061). Optionally scoped to one process instance (?instance=) or one
-// deployed definition (?process=): the replay badges a single instance's incidents
-// and the live view a whole version's, and neither should have to pull the server's
-// entire — page-capped — incident list to find its own (ADR-0151).
+// view (ADR-0061). Scoped by the shared [incidentSelector]: one process instance
+// (?instance=) or one deployed definition (?process=), because the replay badges a
+// single instance's incidents and the live view a whole version's and neither should
+// pull the server's entire — page-capped — list to find its own (ADR-0151); and, since
+// a flood is read by cause, one BPMN element (?element=), one kind (?type=) or a
+// fragment of the message (?message=), which are the group's rows
+// (ADR-draft-incident-floods). The same selector is what a bulk resolve takes, so what
+// this page shows and what that action touches cannot disagree.
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
 	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
@@ -4792,21 +4796,10 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 			limit = maxTaskListMax
 		}
 	}
-	var instanceFilter, processFilter uint64
-	for _, f := range []struct {
-		name string
-		dst  *uint64
-	}{{"instance", &instanceFilter}, {"process", &processFilter}} {
-		q := strings.TrimSpace(r.URL.Query().Get(f.name))
-		if q == "" {
-			continue
-		}
-		n, err := strconv.ParseUint(q, 10, 64)
-		if err != nil {
-			httpapi.Error(w, http.StatusBadRequest, "invalid "+f.name+" (want a key)")
-			return
-		}
-		*f.dst = n
+	sel, selErr := incidentSelectorFromQuery(r)
+	if selErr != nil {
+		httpapi.Error(w, http.StatusBadRequest, selErr.Error())
+		return
 	}
 	list := []incidentView{}
 	truncated := false
@@ -4817,48 +4810,12 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	// precisely when it is. The view is a second gain — an incident resolved while
 	// the page is being built can no longer appear half-described.
 	scanErr := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
-		// One instance is looked up once however many of its elements are stuck, and
-		// a flood of incidents is usually a flood on few instances.
-		type instanceCtx struct {
-			defKey    uint64
-			processID string
-			cp        *compiler.CompiledProcess
-		}
-		resolved := map[uint64]instanceCtx{}
 		// One resolver for the whole page: the worker store is read once, not once
 		// per parked token, and not at all when nothing on the page is on a worker
 		// task (ADR-0159). It reads a durable sidecar, which is safe to do off the
 		// loop (ADR-0265).
 		connectorFor := s.incidentConnectorLookup()
-		lookup := func(piKey uint64) (instanceCtx, error) {
-			if ctx, ok := resolved[piKey]; ok {
-				return ctx, nil
-			}
-			var ctx instanceCtx
-			pi, ok, err := rv.ProcessInstance(piKey)
-			if err != nil {
-				return ctx, err
-			}
-			if ok {
-				ctx.defKey = pi.ProcessDefKey
-				if d, ok := defs[pi.ProcessDefKey]; ok {
-					ctx.processID, ctx.cp = d.ProcessID, d.cp
-				}
-			}
-			resolved[piKey] = ctx
-			return ctx, nil
-		}
-		err := rv.Incidents(func(elKey uint64, v *model.IncidentValue) error {
-			if instanceFilter != 0 && v.ProcessInstanceKey != instanceFilter {
-				return nil
-			}
-			ctx, err := lookup(v.ProcessInstanceKey)
-			if err != nil {
-				return err
-			}
-			if processFilter != 0 && ctx.defKey != processFilter {
-				return nil
-			}
+		return unlessTruncated(walkIncidents(rv, defs, sel, func(elKey uint64, v *model.IncidentValue, ctx incidentCtx, elementID string) error {
 			if len(list) >= limit {
 				truncated = true
 				return errListTruncated // page full: bound the response even under a flood of failures
@@ -4875,14 +4832,13 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 				Message:            v.Message,
 			}
 			if ctx.cp != nil {
-				view.ElementID = ctx.cp.ElementBpmnId(v.ElementId)
+				view.ElementID = elementID
 				view.Connector, view.ConnectorKind, view.ConnectorID = connectorFor(ctx.cp, v.ElementId)
 				view.RepairForm = ctx.cp.RepairForm(v.ElementId)
 			}
 			list = append(list, view)
 			return nil
-		})
-		return unlessTruncated(err)
+		}))
 	})
 	switch {
 	case errors.Is(scanErr, errLoopClosing):

@@ -418,7 +418,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents, optionally scoped to one instance (?instance=) or definition (?process=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget) or message fragment (?message=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tArray())}},
+		{"GET", "/api/v1/incidents/summary", s.handleIncidentSummary, apiOp{
+			summary: "What is stuck, by cause: one group per (definition, element, kind) with its count, its raised-at window, a representative message and the worker behind it — the constant-size reading of a flood, scoped like the list (?process=, ?instance=)", tag: "Incidents", role: RoleOperator,
+			resp: jsonBody("Incident causes", tObject())}},
+		{"POST", "/api/v1/incidents/resolve", s.handleResolveIncidents, apiOp{
+			summary: "Resolve a selected set of incidents — body {keys:[…]} for an explicit selection, or a scope {processDefKey?, processInstanceKey?, elementId?, elementIndex?, type?, message?, limit?} to clear a whole cause (repeat while remaining=true); \"retries\" is the budget each resumed job gets (default 1)", tag: "Incidents", role: RoleOperator,
+			req: jsonBody("Selection", schemaObj(map[string]any{
+				"keys": tArray(), "processDefKey": tInteger(), "processInstanceKey": tInteger(),
+				"elementId": tString(), "elementIndex": tInteger(), "type": tString(), "message": tString(),
+				"retries": tInteger(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Bulk resolve result", tObject())}},
 		{"POST", "/api/v1/incidents/{key}/resolve", s.handleResolveIncident, apiOp{
 			summary: "Resolve the incident on an element instance and retry its job", tag: "Incidents", role: RoleOperator,
 			req:  jsonBody("Retries to grant the resumed job (default 1)", schemaObj(map[string]any{"retries": tInteger()})),

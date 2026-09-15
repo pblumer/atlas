@@ -392,15 +392,47 @@ const OVERVIEW = {
   // Two incidents on the OLD version and one on the latest: linking to the latest
   // would land the operator on the diagram holding the fewest of them.
   incidents: [
-    { elementInstanceKey: "1001", processInstanceKey: "900001", processDefKey: 6, elementId: "Task_pay", type: "job", jobKey: "5001", raisedAt: 1, message: "boom" },
-    { elementInstanceKey: "1002", processInstanceKey: "900002", processDefKey: 6, elementId: "Task_pay", type: "job", jobKey: "5002", raisedAt: 2, message: "boom" },
-    { elementInstanceKey: "1003", processInstanceKey: "900003", processDefKey: 7, elementId: "Task_pay", type: "job", jobKey: "5003", raisedAt: 3, message: "boom" },
+    { elementInstanceKey: "1001", processInstanceKey: "900001", processDefKey: 6, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5001", raisedAt: 1, message: "boom" },
+    { elementInstanceKey: "1002", processInstanceKey: "900002", processDefKey: 6, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5002", raisedAt: 2, message: "boom" },
+    { elementInstanceKey: "1003", processInstanceKey: "900003", processDefKey: 7, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5003", raisedAt: 3, message: "boom" },
   ],
   search: [
     { key: 900001, processId: "zahlung", processDefKey: 6, version: 1, state: "active", createdAt: 1, variables: [{ name: "betrag", value: "42", kind: "number" }] },
     { key: 900009, processId: "zahlung", processDefKey: 7, version: 2, state: "active", createdAt: 2, variables: [{ name: "betrag", value: "42", kind: "number" }] },
   ],
 };
+
+// groupsOf is the server's incident summary, computed from the same mutable list the
+// mock resolves against: one group per (definition, element, kind), biggest first. The
+// Incidents view and the overview's incident column both read this rather than the rows
+// (ADR-draft-incident-floods), so the mock has to answer it the way the server does or
+// the tests would pass against a shape nothing serves.
+const groupsOf = (incidents) => {
+  const by = new Map();
+  for (const inc of incidents) {
+    const key = `${inc.processDefKey}/${inc.elementId}/${inc.type}`;
+    const g = by.get(key);
+    if (!g) {
+      by.set(key, {
+        processDefKey: inc.processDefKey, processId: inc.processId || "zahlung", version: 1,
+        elementId: inc.elementId, elementIndex: inc.elementIndex, type: inc.type, count: 1,
+        oldestRaisedAt: inc.raisedAt, newestRaisedAt: inc.raisedAt, message: inc.message,
+      });
+      continue;
+    }
+    g.count++;
+    if (inc.raisedAt > g.newestRaisedAt) g.newestRaisedAt = inc.raisedAt;
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count);
+};
+
+// matchesScope evaluates a bulk-resolve body's scope the way the server's shared
+// selector does, so "Resolve all" in these tests really clears a cause and nothing else.
+const matchesScope = (inc, body) => (!body.processDefKey || inc.processDefKey === body.processDefKey)
+  && (!body.elementId || inc.elementId === body.elementId)
+  && (body.elementIndex === undefined || body.elementIndex === null || inc.elementIndex === body.elementIndex)
+  && (!body.type || inc.type === body.type)
+  && (!body.message || (inc.message || "").toLowerCase().includes(String(body.message).toLowerCase()));
 
 const bootOverview = async (page, { truncated = false } = {}) => {
   const errors = [];
@@ -409,6 +441,10 @@ const bootOverview = async (page, { truncated = false } = {}) => {
   // Mutable, so a resolve really removes one and both the table and the nav badge
   // (which reads the count off /stats) have to agree afterwards.
   let incidents = OVERVIEW.incidents.slice();
+  // What the page asked the bulk endpoint for, recorded here in the test process so a
+  // route handler never has to reach back into the page to store it.
+  const bulk = [];
+  page.__bulk = bulk;
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -418,6 +454,18 @@ const bootOverview = async (page, { truncated = false } = {}) => {
         incidents = incidents.filter((i) => i.elementInstanceKey !== m[1]);
         return route.fulfill({ json: { elementInstanceKey: m[1] } });
       }
+      if (path === "/api/v1/incidents/resolve") {
+        const body = JSON.parse(route.request().postData() || "{}");
+        const before = incidents.length;
+        if (body.keys) {
+          const keys = new Set(body.keys.map(String));
+          incidents = incidents.filter((i) => !keys.has(String(i.elementInstanceKey)));
+        } else {
+          incidents = incidents.filter((i) => !matchesScope(i, body));
+        }
+        bulk.push(body);
+        return route.fulfill({ json: { resolved: before - incidents.length, notFound: 0, remaining: false, stats: {} } });
+      }
       return route.fulfill({ json: {} });
     }
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
@@ -426,9 +474,29 @@ const bootOverview = async (page, { truncated = false } = {}) => {
     if (path === "/api/v1/stats") {
       return route.fulfill({ json: { activeProcessInstances: 6, activeElementInstances: 6, unresolvedIncidents: incidents.length } });
     }
-    if (path === "/api/v1/incidents") {
+    if (path === "/api/v1/incidents/summary") {
       return route.fulfill({
-        json: { incidents },
+        json: {
+          total: incidents.length,
+          groups: groupsOf(incidents),
+          groupsTruncated: truncated,
+          ungrouped: truncated ? 2 : 0,
+        },
+      });
+    }
+    if (path === "/api/v1/incidents") {
+      // The view fetches a page of one scope; the mock answers the same selector the
+      // server does, so "Show" really narrows the rows.
+      const idx = url.searchParams.get("elementIndex");
+      const scoped = incidents.filter((i) => matchesScope(i, {
+        processDefKey: Number(url.searchParams.get("process")) || 0,
+        elementId: url.searchParams.get("element") || "",
+        elementIndex: idx === null ? undefined : Number(idx),
+        type: url.searchParams.get("type") || "",
+        message: url.searchParams.get("message") || "",
+      }));
+      return route.fulfill({
+        json: { incidents: scoped },
         headers: truncated ? { "X-Incidents-Truncated": "true" } : {},
       });
     }
@@ -460,7 +528,7 @@ test.describe("instances overview", () => {
     expect(page.__errors).toEqual([]);
   });
 
-  test("a capped incident page says the counts are a lower bound", async ({ page }) => {
+  test("a capped cause summary says the counts are a lower bound", async ({ page }) => {
     await bootOverview(page, { truncated: true });
     await expect(page.locator("#ops-inc-note")).toContainText("lower bound");
     expect(page.__errors).toEqual([]);
@@ -479,6 +547,89 @@ test.describe("instances overview", () => {
     await expect(stuck).toHaveText("⚠ 1");
     await expect(stuck).toHaveAttribute("href", "#/operations/i/900001");
     await expect(results.filter({ hasText: "900009" }).locator("a.pill.err")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
+  });
+});
+
+// The Incidents view opens on *causes* (ADR-draft-incident-floods): one broken
+// integration parks every instance that reaches it, so the useful first reading is
+// "this element of this process, this failure, N tokens behind it" — and the action
+// that matches it clears all N. The row list below stays for reading and for the
+// per-incident ways out, now as a page of a chosen cause.
+const openIncidents = async (page) => {
+  await page.evaluate(() => { location.hash = "#/operations/incidents"; });
+  await expect(page.locator("#view h1").first()).toHaveText("Incidents");
+  await expect(page.locator("#causes tr").first()).toBeVisible();
+};
+
+test.describe("incidents by cause", () => {
+  test("groups the flood into one line per cause, biggest first", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+
+    // Three incidents, two causes: two on v1's Task_pay and one on v2's.
+    const causes = page.locator("#causes tr");
+    await expect(causes).toHaveCount(2);
+    await expect(causes.first()).toContainText("Task_pay");
+    await expect(causes.first()).toContainText("2");
+    // The rows below still list every incident until a cause is chosen.
+    await expect(page.locator("#rows tr")).toHaveCount(3);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Show narrows the row list to that cause", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+
+    await page.locator("#causes tr").first().locator("button[data-show]").click();
+    await expect(page.locator("#rows tr")).toHaveCount(2);
+    await expect(page.locator("#rows-title")).toContainText("Task_pay");
+    // …and back to everything.
+    await page.locator("#scope-clear").click();
+    await expect(page.locator("#rows tr")).toHaveCount(3);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("Resolve all clears the whole cause in one call, not one per row", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+    await expect(page.locator("#topnav .nav-badge[data-badge=incidents]")).toHaveText("3");
+
+    await page.locator("#causes tr").first().locator("button[data-resolve-cause]").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText("Fix the cause first");
+    await modal.locator("[data-inc-go]").click();
+
+    // One request, carrying the cause as its scope — not two single resolves.
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0]).toMatchObject({ processDefKey: 6, elementId: "Task_pay", type: "job", retries: 1 });
+    // The cause is gone, the other one stands, and the nav badge agrees at once.
+    await expect(page.locator("#causes tr")).toHaveCount(1);
+    await expect(page.locator("#rows tr")).toHaveCount(1);
+    await expect(page.locator("#topnav .nav-badge[data-badge=incidents]")).toHaveText("1");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("ticked rows resolve as exactly that set", async ({ page }) => {
+    await bootOverview(page);
+    await openIncidents(page);
+
+    // Nothing selected, no bulk bar: the bar is a consequence of a selection, not a
+    // mode to enter first.
+    await expect(page.locator("#inc-bulk")).toBeHidden();
+    await page.locator("#rows tr").first().locator("input[data-pick]").check();
+    await expect(page.locator("#inc-bulk")).toContainText("1 selected");
+
+    await page.locator("#inc-bulk-resolve").click();
+    const modal = page.locator(".modal-ov");
+    await expect(modal).toBeVisible();
+    await modal.locator("[data-inc-go]").click();
+
+    await expect.poll(() => page.__bulk.length).toBe(1);
+    expect(page.__bulk[0].keys).toEqual(["1001"]);
+    await expect(page.locator("#rows tr")).toHaveCount(2);
+    await expect(page.locator("#inc-bulk")).toBeHidden();
     expect(page.__errors).toEqual([]);
   });
 });
