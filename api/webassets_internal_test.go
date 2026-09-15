@@ -145,3 +145,67 @@ func TestVendoredBundlesMatchTheirRecordedChecksums(t *testing.T) {
 		t.Fatal("no vendored bundle was checked against a recorded sum")
 	}
 }
+
+// unscopedInstanceList matches a hosted app asking for the whole instance listing:
+// GET /instances with no query string. The quoting varies across the pages — a plain
+// string or a template literal — so both spellings are matched, and a trailing "?" or
+// "/" is what tells a scoped call or a sub-resource apart from the collection.
+var unscopedInstanceList = regexp.MustCompile(`["'` + "`" + `]GET["'` + "`" + `]\s*,\s*["'` + "`" + `]/instances["'` + "`" + `]`)
+
+// TestHostedAppsNeverLookForOneInstanceInTheCappedListing.
+//
+// The hosted apps under api/web (ADR-0204) each drive one process instance, and each
+// has to answer two questions about it: which key did my start just create, and what
+// state is it in now. Both were answered by reading GET /api/v1/instances and
+// searching the result.
+//
+// That listing is not the set of instances. Unscoped it is capped at
+// maxInstanceListDefault rows per half, and its active half is scanned in ascending
+// instance-key order — oldest first — so the newest instance is the first thing the
+// cap drops. An engine holding more than a thousand active instances therefore serves
+// a page that cannot contain the instance the caller just started, and a client that
+// treats the page as the whole set finds nothing and concludes the instance does not
+// exist. That is how reisebuchung-kunde.html came to fail with "Cannot read properties
+// of undefined" on a server whose engine was fine and whose instance had started
+// correctly: nothing about the page had changed, only the number of instances in front
+// of it.
+//
+// Two shapes answer these questions without a scan, and a hosted app must use them:
+// GET /instances?process=<defKey> reads that definition's own index, newest first, so
+// the page holds this definition's instances rather than the engine's oldest; and
+// GET /instances/search?q=<instanceKey> is a point read of one instance, live or
+// finished.
+//
+// The rule is checked rather than written down because the failure it prevents is
+// invisible in every environment small enough to develop against. A page that reads
+// the unscoped listing passes every manual test on a fresh engine and breaks in
+// production months later, without a deploy.
+func TestHostedAppsNeverLookForOneInstanceInTheCappedListing(t *testing.T) {
+	pages, err := fs.Glob(webFS, "web/*.html")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(pages) == 0 {
+		t.Fatal("no embedded pages found; this guard would pass vacuously")
+	}
+	for _, page := range pages {
+		body, err := fs.ReadFile(webFS, page)
+		if err != nil {
+			t.Fatalf("read %s: %v", page, err)
+		}
+		for i, line := range strings.Split(string(body), "\n") {
+			if !unscopedInstanceList.MatchString(line) {
+				continue
+			}
+			t.Errorf("%s:%d reads the unscoped instance listing:\n  %s\n"+
+				"That listing is capped at %d rows per half and its active half is scanned "+
+				"oldest-key-first, so on a busy engine it cannot contain a recently started "+
+				"instance — the page finds nothing and reports an instance that is running "+
+				"fine as missing.\n"+
+				"Use GET /instances?process=<defKey> to list one definition's instances "+
+				"newest-first off its own index, or GET /instances/search?q=<instanceKey> "+
+				"to point-read a single instance.",
+				page, i+1, strings.TrimSpace(line), maxInstanceListDefault)
+		}
+	}
+}
