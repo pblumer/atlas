@@ -425,7 +425,7 @@ const state = {
   // configError names the product whose form is not valid yet, empty for none.
   configError: '',
   // editing names the position whose details are open for correction, as
-  // "<orderId>|<itemId>", empty for none (ADR-draft-amending-an-order-line).
+  // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
 };
 
@@ -1373,7 +1373,7 @@ function orderRowBodies() {
 // --- Changing one position ---------------------------------------------------
 //
 // Two acts, and the page keeps them as far apart as the server does
-// (ADR-draft-amending-an-order-line). Withdrawing a
+// (ADR-0359). Withdrawing a
 // position takes it back; correcting the details changes what was recorded about
 // it and never what it is. Ordering something else is neither, and the page does
 // not pretend otherwise: give it back and order the other thing.

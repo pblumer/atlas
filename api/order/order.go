@@ -196,7 +196,7 @@ type Line struct {
 	Config     map[string]string `json:"config,omitempty"`
 	// Amendments are the corrections made to Config after the recipient already
 	// held this line, oldest first
-	// (ADR-draft-amending-an-order-line). Empty is the
+	// (ADR-0359). Empty is the
 	// ordinary case, and it is empty too for a line corrected before anything was
 	// attempted — there is no delivery for the old answers to have been true of.
 	Amendments []AmendedAnswers `json:"amendments,omitempty"`

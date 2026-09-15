@@ -444,6 +444,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0356](0356-person-picker.md) | The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake | Accepted | Landed |
 | [0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) | A portable backup does not overwrite another installation's identity | Accepted | Landed |
 | [0358](0358-order-line-configuration.md) | A product names one Atlas form, and the order line carries the answers | Accepted | Landed |
+| [0359](0359-amending-an-order-line.md) | A position can be withdrawn on its own and its details corrected; what is held is never changed in place | Accepted | Landed |
 
 ## The two states of a record
 

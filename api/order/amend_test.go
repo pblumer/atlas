@@ -6,7 +6,7 @@ import (
 )
 
 // Changing a position after it was ordered
-// (ADR-draft-amending-an-order-line).
+// (ADR-0359).
 //
 // Two acts, kept apart. What is **held** is never changed in place — that would be
 // a different claim about the past, and the access record exists to answer what

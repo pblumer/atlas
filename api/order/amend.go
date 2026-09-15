@@ -6,7 +6,7 @@ import (
 )
 
 // Changing a position after it was ordered, and the two things that means
-// (ADR-draft-amending-an-order-line).
+// (ADR-0359).
 //
 // The story asks to "modify or delete positions directly". Deleting existed only
 // for a whole order — [CancelOrder] takes back everything that has not happened —

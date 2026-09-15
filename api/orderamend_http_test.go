@@ -13,7 +13,7 @@ import (
 )
 
 // Changing one position rather than a whole order, over HTTP
-// (ADR-draft-amending-an-order-line).
+// (ADR-0359).
 //
 // The transitions are proved in api/order. What is proved here is the seam: the
 // routes exist, the refusals arrive as statuses a caller can act on, and the two

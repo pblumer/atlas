@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Who a transition is attributed to (ADR-draft-amending-an-order-line).
+// Who a transition is attributed to (ADR-0359).
 //
 // Every transition kept forever in an order needs a name: a status that says
 // somebody decided, without saying who, is a decision nobody made. The three

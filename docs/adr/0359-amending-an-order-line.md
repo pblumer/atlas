@@ -1,4 +1,4 @@
-# ADR-DRAFT: A position can be withdrawn on its own and its details corrected; what is held is never changed in place
+# ADR-0359: A position can be withdrawn on its own and its details corrected; what is held is never changed in place
 
 - **Status:** Accepted
 - **Implementation:** Landed

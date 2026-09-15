@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/order"
 )
 
-// What the page owes the two acts (ADR-draft-amending-an-order-line).
+// What the page owes the two acts (ADR-0359).
 //
 // The server decides what may be withdrawn and what may be corrected. The page
 // decides what to *offer*, and the two can drift apart in either direction: a

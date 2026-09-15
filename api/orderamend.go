@@ -8,7 +8,7 @@ import (
 )
 
 // Changing one position rather than a whole order
-// (ADR-draft-amending-an-order-line).
+// (ADR-0359).
 //
 // The pure transitions are in api/order (amend.go): what may be withdrawn on its
 // own, what may be corrected, and what a correction then says. This is the part
