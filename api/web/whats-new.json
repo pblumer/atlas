@@ -62,6 +62,24 @@
       }
     },
     {
+      "id": "the-third-question-about-somebody-s-access-can-now-be-asked",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The third question about somebody's access can now be asked.",
+        "de": "The third question about somebody's access can now be asked."
+      },
+      "summary": {
+        "en": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it.",
+        "de": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
       "version": "Unreleased",
       "date": null,
