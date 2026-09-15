@@ -97,6 +97,8 @@ const STRINGS = {
     'line.close': 'Abbrechen',
     'line.amended': 'Korrigiert',
     'line.amendedFrom': 'vorher',
+    'info.price': 'Kosten',
+    'price.none': 'Der Katalog nennt keine Kosten.',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
     'tbl.placed': 'bestellt',
@@ -211,6 +213,8 @@ const STRINGS = {
     'line.close': 'Cancel',
     'line.amended': 'Corrected',
     'line.amendedFrom': 'was',
+    'info.price': 'Cost',
+    'price.none': 'The catalogue names no cost.',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
     'tbl.placed': 'ordered',
@@ -741,6 +745,12 @@ function infoPanel(item) {
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
+    // As the catalogue wrote it, never reformatted. A price here is a sentence
+    // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
+    // parsed it into a number would be inventing the money model the catalogue
+    // deliberately does not have (ADR-draft-product-price).
+    el('p', { class: 'muted' },
+      `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
     el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
     el('p', { class: 'muted' },
       `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),

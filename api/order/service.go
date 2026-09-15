@@ -422,6 +422,7 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 			// The form's id travels with the line beside the answers, so a reader of
 			// the order months later knows which set of questions these answers were
 			// given to — the answers alone are a map of keys nobody can interpret.
+			Price:      it.Price,
 			ConfigForm: it.ConfigForm,
 			Config:     copyAnswers(config[id]),
 			Integral:   carried[id],

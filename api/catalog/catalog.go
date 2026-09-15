@@ -254,8 +254,35 @@ type Item struct {
 	// rendering out of itself on purpose, and would send it to every browser that
 	// opens the portal.
 	ConfigForm string `json:"configForm,omitempty"`
-	CreatedAt  int64  `json:"createdAt"`
-	UpdatedAt  int64  `json:"updatedAt"`
+	// Price is what this product costs, written as the catalogue's maintainer wants
+	// it read — "CHF 1'200.–", "49.– / Monat", "im Grundpaket enthalten"
+	// (ADR-draft-product-price). Empty is the ordinary case
+	// and means the catalogue says nothing about cost.
+	//
+	// # Why a string and not a number with a currency
+	//
+	// Because it is **displayed and never computed**. A number invites a total, a
+	// total invites two products in different currencies, and that invites a rate
+	// and a date — a money model, decided by an installation's finance rules and not
+	// by this package. Everything that makes a price *arithmetic* is absent on
+	// purpose, and a string is the honest shape of "this is what it says on the
+	// shelf".
+	//
+	// The cost of that is stated rather than hidden: nothing can add these up. The
+	// surface that needs a figure most is the approval, and an approval decides one
+	// line — so the one number it shows is the one number it needs. A basket total
+	// would need the money model above, and that is a different measure.
+	//
+	// # Why it is frozen into the release like a rule
+	//
+	// It is not a rule, and it travels like one anyway. An approver saw a figure and
+	// decided on it; a catalogue edit next week must not make the record show a
+	// different figure than the one that was approved. That is the same sentence as
+	// the approval rule's and the ceiling's, and it is the reason this is on the
+	// line as well as in the release.
+	Price     string `json:"price,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different
