@@ -164,5 +164,5 @@ Opt-in, on the decision already open, and never remembered across a selection:
 - relates to ADR-0311 — the approver's own surface, which this extends
 - relates to ADR-0354 — finding one decision among forty, the other half of the
   same problem
-- relates to ADR-draft-product-price — the figure the collective block shows per
+- relates to ADR-0361 — the figure the collective block shows per
   position
