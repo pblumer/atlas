@@ -143,9 +143,24 @@ type Item struct {
 	// twice is not, and [Publish] refuses it — an observation matching two items
 	// cannot be attributed, and guessing between them would write evidence Atlas
 	// invented.
-	Targets   []TargetRef `json:"targets,omitempty"`
-	CreatedAt int64       `json:"createdAt"`
-	UpdatedAt int64       `json:"updatedAt"`
+	Targets []TargetRef `json:"targets,omitempty"`
+	// MaxDays is how long a right this product grants may last, in days, or zero
+	// for one that does not end (ADR-draft-time-bounded-entitlements). It is a
+	// **ceiling declared as policy** — nobody holds this for more than ninety days
+	// — and not a date somebody chose; an order cannot yet name a shorter end
+	// within it.
+	//
+	// It reaches a grant through the release, like the bindings and the approval
+	// rule beside it: a ceiling relaxed in the catalogue next week must not lengthen
+	// a right granted this week under the stricter one.
+	//
+	// It never applies to an adopted or legacy right. A commissioning load records
+	// a found right's start as the moment it was found, so a ceiling measured from
+	// it would schedule an entire estate to expire on the anniversary of the day
+	// somebody switched the portal on.
+	MaxDays   int   `json:"maxDays,omitempty"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different
@@ -164,6 +179,21 @@ const (
 	// the edge the fulfilment order is computed over, and the only one whose
 	// direction means "after".
 	EdgeRequires EdgeKind = "requires"
+	// EdgeExcludes is incompatibility: From and To must never be held by the same
+	// person (ADR-draft-conflicting-rights). The clerk who may create a supplier
+	// must not also approve payments to it — neither right is wrong, the
+	// combination is.
+	//
+	// A third question rather than a shading of the other two, and put beside them
+	// for the reason they are apart: an edge kind that means two things is one
+	// nobody can read.
+	//
+	// **The only symmetric kind.** The other three mean something different read
+	// backwards; "A must not be held with B" is exactly "B must not be held with
+	// A". [Publish] is where that is resolved, by writing both directions into the
+	// release — a reader that checked one would find half the violations and report
+	// the estate as half clean.
+	EdgeExcludes EdgeKind = "excludes"
 )
 
 // Structural reports whether this edge describes containment rather than order.

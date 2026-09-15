@@ -171,6 +171,13 @@ type Line struct {
 	// order granted uses the process that was in force when it was granted.
 	ProvisionProcess   string `json:"provisionProcess,omitempty"`
 	DeprovisionProcess string `json:"deprovisionProcess,omitempty"`
+	// MaxDays is the product's ceiling on how long the right this line grants may
+	// last, copied from the release for the reason the two processes above are
+	// (ADR-draft-time-bounded-entitlements). A ceiling relaxed in the catalogue
+	// after somebody ordered must not lengthen what they were granted under the
+	// stricter one — which is the same sentence as the one about the approval rule,
+	// and true for the same reason.
+	MaxDays int `json:"maxDays,omitempty"`
 	// Approval is the rule this line is approved under, copied from the release
 	// like the bindings are. It travels for the same reason: the rule belongs to
 	// the catalogue, and reading it when the line is reached would let a product's

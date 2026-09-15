@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Erinnerung (ADR-draft-pending-work)
+  — wöchentlich jedem sagen, was auf ihn wartet.
+
+  Das Portal bittet Menschen um dreierlei: eine Bestellzeile genehmigen, eine
+  Rezertifizierungszeile beantworten, eine Aufgabe erledigen. Nichts davon geschieht,
+  solange niemand Atlas öffnet und nachsieht.
+
+  Der Rezertifizierungs-Datensatz benennt das selbst in seinen Folgen: „Nichts
+  erinnert irgendjemanden … eine Kampagne, von der niemand erfährt, ist eine
+  Kampagne, die niemand beantwortet." Eine Kampagne über fünfhundert Zeilen bei
+  vierzig Führungskräften schliesst mit vierhundertachtzig unbeantworteten — jede
+  davon korrekt als *nicht bescheinigt* festgehalten und vollkommen nutzlos.
+
+    Timer-Start "wöchentlich"        timeCycle R/P7D (ADR-0051)
+     -> [REST GET /api/v1/recertification]        -> `kampagnen`
+     -> Gateway "läuft eine?"
+        -> [REST GET .../recertification/{id}]    -> `kampagne`
+        -> [Aufruf proc_erinnerung_person]        Multi-Instance je prüfender Person
+        -> Ende "erinnert"
+        -> Ende "nichts offen"
+
+  ────────────────────────────────────────────────────────────────────────────────
+  ATLAS VERSCHICKT NICHTS. DIESES MODELL VERSCHICKT.
+
+  Die Mailstrecke gibt es längst: ein Mail-Task nennt in `to=` eine Kennung, und
+  api/maildirectory.go löst die Adresse im Server im Moment des Versands auf. So
+  gerät keine Adresse in eine Variable, in eine Bestellung oder ins Ereignisprotokoll
+  (ADR-0314).
+
+  Was fehlte, war die andere Hälfte: jede Route, die „was wartet" beantwortet,
+  beantwortet es **nur für den Aufrufenden**. Ein Erinnerungslauf ist nicht die
+  Person, an die er erinnert — er hatte nichts zu fragen.
+  `GET /api/v1/pending-work?principal=…` ist diese Frage, und sie ist dem Operator
+  vorbehalten: ein Portal, in dem jeder Benutzer die offenen Posten jedes anderen
+  aufzählen kann, ist ein Organigramm mit Arbeitslasten daran.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  EINE FALSCHE ERINNERUNG KOSTET MEHR, ALS ZEHN RICHTIGE EINBRINGEN.
+
+  Wer an Arbeit erinnert wird, die nicht seine ist oder die er längst erledigt hat,
+  lernt, dass diese Nachrichten Rauschen sind — und löscht die nächste, auf die es
+  ankam, ungelesen. Deshalb listet die Route nichts, was die Person jetzt nicht tun
+  kann: keine Zeile einer geschlossenen Kampagne, keine bereits entschiedene, keine
+  Genehmigung, die weitereskaliert ist.
+
+  Dieses Modell hält sich daran, indem es gar nicht erst selbst filtert. Es fragt je
+  Person und schickt nur, wenn `bericht.counts.total > 0`.
+
+  Voraussetzungen beim Betreiber:
+    * Ein REST-Worker namens "atlas" mit einem API-Token des Scopes `reminders`,
+      gehalten von einem Konto mit der Rolle `operator`. Der Scope erreicht genau
+      eine Route; die Rolle ist es, die das Fragen über andere erlaubt.
+    * Ein Mail-Worker namens "portal", wie ihn die mitgelieferten
+      Genehmigungsverfahren verwenden.
+
+  NICHT GEPRÜFT: wie oft zu erinnern richtig ist. Wöchentlich steht hier, weil eine
+  Kampagne in Wochen läuft — nichts in Atlas entscheidet das, und der Datensatz sagt
+  ausdrücklich, dass er es dem Betreiber nicht abnimmt.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_erinnerung"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_erinnerung" name="Erinnerung: was auf wen wartet" isExecutable="true">
+    <bpmn:documentation>Sagt wöchentlich jeder prüfenden Person einer laufenden Rezertifizierungskampagne, was auf sie wartet.
+
+Atlas verschickt nichts. Die Mailstrecke gibt es längst; was fehlte, war die Frage: jede Route, die „was wartet" beantwortet, beantwortet es nur für den Aufrufenden, und ein Erinnerungslauf ist nicht die Person, an die er erinnert.
+
+Eine falsche Erinnerung kostet mehr, als zehn richtige einbringen. Deshalb filtert dieses Modell nicht selbst, sondern fragt je Person und schickt nur, wenn etwas offen ist.
+
+Worker-only (ADR-0172): der Mailzugang liegt nie in der Engine.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_woche" name="wöchentlich">
+      <bpmn:documentation>Wiederholungszyklus R/P7D (ADR-0051). Wöchentlich, weil eine Kampagne in Wochen läuft.
+
+NICHT GEPRÜFT: ob das die richtige Häufigkeit ist. Nichts in Atlas entscheidet das, und der Datensatz nimmt es dem Betreiber ausdrücklich nicht ab — wer täglich erinnert, erinnert täglich.</bpmn:documentation>
+      <bpmn:outgoing>f_start_liste</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_woche">
+        <bpmn:timeCycle>R/P7D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="kampagnen_lesen" name="Kampagnen lesen">
+      <bpmn:documentation>GET /api/v1/recertification. Nur die Kopfsätze — die Liste beantwortet, welche Kampagnen es gibt, und nicht, was in ihnen steht.
+
+Schreibt: kampagnen = Liste von { id, name, openedAt, closedAt, ... }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+          <zeebe:header key="path" value="/api/v1/recertification" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:output source="=body" target="kampagnen" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_liste</bpmn:incoming>
+      <bpmn:outgoing>f_liste_gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_laeuft" name="läuft eine?" default="f_gw_keine">
+      <bpmn:documentation>Ohne laufende Kampagne gibt es nichts zu erinnern, und das bekommt einen eigenen sichtbaren Abschluss. Im Log soll stehen, dass nachgesehen *und* nichts gefunden wurde.
+
+Geprüft wird auf eine offene Kampagne, nicht auf irgendeine: eine geschlossene wartet auf niemanden mehr, und eine Erinnerung an sie wäre eine Unterbrechung ohne Handlung dahinter.</bpmn:documentation>
+      <bpmn:incoming>f_liste_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_lesen</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_keine</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="kampagne_lesen" name="Zeilen der Kampagne lesen">
+      <bpmn:documentation>GET /api/v1/recertification/{id} für die neueste offene Kampagne. Die Liste ist neueste zuerst, also ist die erste offene die gesuchte.
+
+Gelesen wird die Kampagne nur, um an die prüfenden Personen zu kommen. Was jede von ihnen tatsächlich schuldet, wird gleich einzeln erfragt — dieses Modell entscheidet nicht selbst, was offen ist.
+
+Schreibt: kampagne = { id, name, rows, counts, ... }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/recertification/&#34; + (flatten(for k in kampagnen return (if k.closedAt = null then [k.id] else [])))[1]" target="path" />
+          <zeebe:output source="=body" target="kampagne" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gw_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_lesen_ruf</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:callActivity id="je_person" name="Je prüfende Person erinnern">
+      <bpmn:documentation>Parallele Multi-Instance über die *verschiedenen* prüfenden Personen der Kampagne. `distinct values` ist der Grund, weshalb das hier steht und nicht eine Zeile weiter unten: eine Person mit vierzig Zeilen soll eine Mail bekommen und nicht vierzig.
+
+Zeilen ohne Zuordnung tragen keine prüfende Person und fallen hier heraus. Sie sind der Kampagne ihres Eröffnenden, und dieser bekommt seine Erinnerung über denselben Weg — er steht in `openedBy` und wird hier bewusst nicht mitgeschickt, damit dieses Modell sichtbar nur das tut, was die Kampagne selbst benennt.
+
+Der gerufene Prozess bekommt nur `person`; alles Weitere fragt er selbst.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:calledElement processId="proc_erinnerung_person"
+                             propagateAllParentVariables="false"
+                             propagateAllChildVariables="false" />
+        <zeebe:ioMapping>
+          <zeebe:input source="=wer" target="person" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=distinct values(flatten(for r in kampagne.rows return (if r.reviewer = null then [] else [r.reviewer])))" inputElement="wer"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:incoming>f_lesen_ruf</bpmn:incoming>
+      <bpmn:outgoing>f_ruf_ende</bpmn:outgoing>
+    </bpmn:callActivity>
+
+    <bpmn:endEvent id="ende_erinnert" name="erinnert">
+      <bpmn:documentation>Je prüfender Person ein Aufruf, und je Aufruf höchstens eine Mail. Wer nichts offen hat, bekommt keine — das entscheidet der gerufene Prozess anhand dessen, was die Route antwortet.</bpmn:documentation>
+      <bpmn:incoming>f_ruf_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_keine" name="keine Kampagne offen">
+      <bpmn:documentation>Nachgesehen und nichts gefunden. Ein eigener Abschluss, damit die Auswertung der Instanzen den Unterschied am Ende-Ereignis sieht und nicht an einer Variablen.</bpmn:documentation>
+      <bpmn:incoming>f_gw_keine</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_liste" sourceRef="start_woche" targetRef="kampagnen_lesen" />
+    <bpmn:sequenceFlow id="f_liste_gw" sourceRef="kampagnen_lesen" targetRef="gw_laeuft" />
+    <bpmn:sequenceFlow id="f_gw_lesen" name="offene Kampagne" sourceRef="gw_laeuft" targetRef="kampagne_lesen">
+      <bpmn:conditionExpression>= count(flatten(for k in kampagnen return (if k.closedAt = null then [k.id] else []))) &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_lesen_ruf" sourceRef="kampagne_lesen" targetRef="je_person" />
+    <bpmn:sequenceFlow id="f_ruf_ende" sourceRef="je_person" targetRef="ende_erinnert" />
+    <bpmn:sequenceFlow id="f_gw_keine" name="keine" sourceRef="gw_laeuft" targetRef="ende_keine" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_erinnerung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_woche">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="138" y="225" width="66" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_liste" bpmnElement="kampagnen_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_laeuft">
+        <dc:Bounds x="400" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="388" y="232" width="75" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lesen" bpmnElement="kampagne_lesen">
+        <dc:Bounds x="510" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ruf" bpmnElement="je_person">
+        <dc:Bounds x="660" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_erinnert" bpmnElement="ende_erinnert">
+        <dc:Bounds x="812" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="798" y="145" width="65" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_keine" bpmnElement="ende_keine">
+        <dc:Bounds x="510" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="470" y="305" width="117" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_liste" bpmnElement="f_start_liste">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_liste_gw" bpmnElement="f_liste_gw">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_lesen" bpmnElement="f_gw_lesen">
+        <di:waypoint x="425" y="175" /><di:waypoint x="425" y="120" /><di:waypoint x="510" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lesen_ruf" bpmnElement="f_lesen_ruf">
+        <di:waypoint x="610" y="120" /><di:waypoint x="660" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_ruf_ende" bpmnElement="f_ruf_ende">
+        <di:waypoint x="760" y="120" /><di:waypoint x="812" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_keine" bpmnElement="f_gw_keine">
+        <di:waypoint x="425" y="225" /><di:waypoint x="425" y="280" /><di:waypoint x="510" y="280" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

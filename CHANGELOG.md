@@ -14,6 +14,95 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The catalogue can now say what must never be held together.** Everything the portal had
+  learned about access was **detective or temporal**: the commissioning load records what was
+  there, reconciliation checks whether the record is true, recertification asks whether it is
+  justified, an expiry ends it by itself. All four look at one right at a time, and all four
+  look *after*. None could express the oldest control in access governance — the clerk who
+  may create a supplier must not also approve payments to it.
+
+  A catalogue declares it as a third edge kind, `excludes`, beside structure and precedence.
+  It is the **only symmetric** kind — "A must not be held with B" is exactly the reverse — so
+  publishing writes **both directions** into the release. A release recording one would make
+  every reader responsible for knowing which, and a reader that got it wrong would find half
+  the violations and report the estate as half clean, silently. Publishing refuses an item
+  that excludes itself.
+
+  **An order that would create a forbidden combination is refused at placement**, against
+  what the recipient already holds and against the rest of the same basket. Detecting instead
+  would let the combination exist for as long as detection takes, which is a detective
+  control with extra steps. The refusal names both items and which side is already held.
+
+  `GET /api/v1/conflicts` reports who already holds one, against the **current** release —
+  and that is the deliberate opposite of the expiry ceiling, which never reaches a right
+  granted before it was declared. An expiry is part of what was granted; an incompatibility
+  is a statement about what may coexist now, so declaring a rule surfaces its violations the
+  same day.
+
+  **A conflict has no culprit**, and that is why nothing here acts: it is a fact about a
+  pair, no rule can say which half is wrong, and an automatic remedy would have to choose —
+  taking away the right the person actually needs while leaving the other. The remedy is an
+  order's return or an access review, both of which already exist and both of which record
+  who decided. This is the first slice in this line of work that adds no new way to take
+  access away. `examples/unvereinbarkeit.bpmn` is the modelled process.
+
+- **A reminder can now ask what is waiting for somebody else.** The portal asks people for
+  three different things — decide an order line, answer a recertification row, do a task —
+  and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows
+  across forty managers, with nobody told, closes with four hundred and eighty undecided:
+  each correctly recorded as *not certified*, and useless.
+
+  The gap was sharper than "there is no notification". Atlas could already send mail — a
+  modelled process carries a mail task, `to=` names a principal or a group, and the address
+  is resolved in the server at the moment of sending, so it never enters a variable, an
+  order or the event log. **What was missing is that every route answering "what is waiting"
+  answers only for the caller**, and a reminder process is not the person it is reminding.
+
+  `GET /api/v1/pending-work` answers the caller's own; `?principal=` answers somebody
+  else's and is the **operator's**, because a portal where any user can enumerate any other
+  user's pending work has turned an inbox into an organisation chart with workloads
+  attached. A reminder's token carries the new `reminders` scope, which reaches exactly that
+  one route — it cannot read an inventory, run a comparison or decide anything.
+
+  **One wrong reminder costs more than ten right ones earn**, so nothing is listed that the
+  person cannot act on right now: not a row in a campaign that has closed, not one somebody
+  already decided, not an approval that has escalated away. It counts as well as lists,
+  because the first decision a reminder makes is whether to send at all. **Atlas does not
+  send** — `examples/erinnerung/` does, one mail per person rather than one per row.
+
+- **A right can now end by itself.** Everything the portal grants, it granted forever — which
+  nobody notices on the day it is built, and which is why the commissioning load,
+  reconciliation and recertification all exist: three controls that find access which should
+  not be there, *after* it is there. Recertification in particular is the manual compensation
+  for a missing expiry, paid for in the scarcest resource in the system, a line manager's
+  attention. **A question that did not need to be asked is worth more than a better way of
+  asking it.**
+
+  A product declares a ceiling with `maxDays`, it travels into the order line frozen from the
+  release — like the provisioning process, the deprovisioning process and the approval rule
+  already do — and a grant made under it carries an end. Products without one grant
+  open-ended rights, which is every product until somebody sets a ceiling.
+
+  **An expiry is not a removal.** The day after the end the target system still has the
+  membership and nothing has run; all that is true is that Atlas said the access should have
+  ended. So an expired right stays **held** and is reported overdue — dropping the record
+  when a clock ticks would make Atlas assert that somebody does not have access they
+  demonstrably do, which is the direction of wrongness that corrupts the evidence.
+
+  `GET /api/v1/entitlements/expiring` answers what is due within a window and what is past
+  its end. The removing is done by a modelled process returning the **order line**, which is
+  a stronger mechanism than either sibling can use: only an ordered right ever carries an
+  end, so an expiring right always has an order behind it, and a return revokes by the
+  release it was placed against, frozen when it was placed. A right whose order has since
+  been deleted by retention cannot be returned at all, and those are counted apart as
+  `unendable` — a number that never moves has to say why rather than look like a backlog.
+
+  **The ceiling never reaches an adopted or legacy right.** A commissioning load records a
+  found right's start as the moment it was *found*, so a ceiling measured from it would
+  schedule an entire estate to expire on the anniversary of the day somebody switched the
+  portal on. `examples/befristung.bpmn` is the modelled process, and a recertification row
+  whose right ends by itself now says so — those are questions that did not need asking.
+
 - **A business object says where it is used.** The information model gave a data object's
   `itemSubjectRef` a type to resolve against, and every reading built on it since has run
   from the process outwards. The vocabulary itself had none: somebody about to rename

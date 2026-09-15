@@ -1494,6 +1494,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 				s.proc.GrantEntitlement(model.EntitlementValue{
 					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
 					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
+					// The end travels with the grant, computed from the ceiling the
+					// release froze (ADR-draft-time-bounded-entitlements). It is set
+					// only here, which is what keeps it off adopted and legacy rights:
+					// neither is granted by an order, and neither knows when it began.
+					Until: g.Until,
 				})
 			})
 			return s.drive()
