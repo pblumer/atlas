@@ -355,7 +355,7 @@ const state = {
   // forWhom is the recipient an order is placed for, empty for oneself. What is
   // sent: a principal id picked from the directory, or whatever was typed — the
   // server resolves a principal id, a username, a directory id or a mail address
-  // (ADR-draft-person-picker).
+  // (ADR-0356).
   forWhom: '',
   // filters is the orders table's per-column search, keyed by column.
   filters: { company: '', person: '', date: '', order: '', status: '' },
@@ -378,7 +378,7 @@ const state = {
   // two differ after somebody picks from the directory: the field reads "Ada
   // Lovelace" and the order carries the principal id, because a display name is
   // not something the server can resolve and an id is not something a person can
-  // read (ADR-draft-person-picker).
+  // read (ADR-0356).
   forWhomLabel: '',
   // people is the principals directory, users only, loaded once and only for a
   // caller who may order in somebody else's name. It is the list every member and

@@ -441,6 +441,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0353](0353-product-usage.md) | The catalogue answers forwards, and the person who maintains a service asks backwards | Accepted | Landed |
 | [0354](0354-approval-list-order.md) | An approval list is a work list, so it starts where nobody has looked | Accepted | Landed |
 | [0355](0355-catalogue-search.md) | A catalogue is searched over words it carries, in the browser, and a hit says where it lives | Accepted | Landed |
+| [0356](0356-person-picker.md) | The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake | Accepted | Landed |
 
 ## The two states of a record
 

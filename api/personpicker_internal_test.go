@@ -11,7 +11,7 @@ import (
 )
 
 // The recipient field, and who it is for
-// (ADR-draft-person-picker).
+// (ADR-0356).
 //
 // Two things about it are decided on the server and drawn in the browser, which
 // is exactly the kind of agreement that rots without being noticed: the page

@@ -1,4 +1,4 @@
-# ADR-DRAFT: The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake
+# ADR-0356: The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake
 
 - **Status:** Accepted
 - **Implementation:** Landed

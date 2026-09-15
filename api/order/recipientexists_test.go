@@ -13,7 +13,7 @@ import (
 )
 
 // An order names somebody, and the name has to be somebody
-// (ADR-draft-person-picker).
+// (ADR-0356).
 //
 // The recipient is a string out of the request body and nothing resolved it. An
 // order for "Ada Lovelace" — a display name, a typo, a person who left — placed
