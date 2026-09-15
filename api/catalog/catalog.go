@@ -256,7 +256,7 @@ type Item struct {
 	ConfigForm string `json:"configForm,omitempty"`
 	// Price is what this product costs, written as the catalogue's maintainer wants
 	// it read — "CHF 1'200.–", "49.– / Monat", "im Grundpaket enthalten"
-	// (ADR-draft-product-price). Empty is the ordinary case
+	// (ADR-0361). Empty is the ordinary case
 	// and means the catalogue says nothing about cost.
 	//
 	// # Why a string and not a number with a currency
@@ -282,7 +282,7 @@ type Item struct {
 	// line as well as in the release.
 	Price string `json:"price,omitempty"`
 	// Category is the heading this product sits under in the portal — "Arbeitsplatz",
-	// "Kommunikation", "Fachanwendungen" (ADR-draft-product-category).
+	// "Kommunikation", "Fachanwendungen" (ADR-0360).
 	// Empty is the ordinary case and puts the product under the heading the portal
 	// names for products that have none.
 	//

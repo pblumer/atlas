@@ -1,4 +1,4 @@
-# ADR-DRAFT: A price is a sentence the catalogue writes, frozen like a rule and computed by nothing
+# ADR-0361: A price is a sentence the catalogue writes, frozen like a rule and computed by nothing
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -445,6 +445,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) | A portable backup does not overwrite another installation's identity | Accepted | Landed |
 | [0358](0358-order-line-configuration.md) | A product names one Atlas form, and the order line carries the answers | Accepted | Landed |
 | [0359](0359-amending-an-order-line.md) | A position can be withdrawn on its own and its details corrected; what is held is never changed in place | Accepted | Landed |
+| [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted | Landed |
+| [0361](0361-product-price.md) | A price is a sentence the catalogue writes, frozen like a rule and computed by nothing | Accepted | Landed |
 
 ## The two states of a record
 

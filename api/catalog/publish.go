@@ -273,7 +273,7 @@ func checkItems(in Input, add func(Problem)) {
 		// A category of nothing but spaces is a heading nobody can read and nobody
 		// can group by: the portal would render an empty column head, and a second
 		// product with a different number of spaces would sit under a different one
-		// (ADR-draft-product-category).
+		// (ADR-0360).
 		if it.Category != "" && strings.TrimSpace(it.Category) == "" {
 			add(Problem{Item: it.ID, Message: "names a blank category; leave it out for a " +
 				"product the catalogue groups under nothing"})
@@ -281,7 +281,7 @@ func checkItems(in Input, add func(Problem)) {
 		// A price of nothing but spaces is a product that claims to say what it costs
 		// and says nothing — worse than saying nothing at all, because the portal
 		// renders an empty field where a figure belongs
-		// (ADR-draft-product-price).
+		// (ADR-0361).
 		if it.Price != "" && strings.TrimSpace(it.Price) == "" {
 			add(Problem{Item: it.ID, Message: "names a blank price; leave it out for a " +
 				"product the catalogue says nothing about the cost of"})

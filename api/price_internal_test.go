@@ -7,7 +7,7 @@ import (
 )
 
 // The figure, from the catalogue to the person deciding
-// (ADR-draft-product-price).
+// (ADR-0361).
 //
 // What it is frozen for is proved where freezing happens, in api/catalog and
 // api/order. What is left is the two surfaces that show it, and one decision that

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A category is a heading a product writes on itself, not a thing the catalogue owns
+# ADR-0360: A category is a heading a product writes on itself, not a thing the catalogue owns
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -142,6 +142,6 @@ The services view — what a person already holds — groups by the same heading
 
 ## Links
 
-- relates to ADR-draft-product-price — the other field added to a product for the
+- relates to ADR-0361 — the other field added to a product for the
   eye rather than for a rule, and decided the same way
 - relates to ADR-0312 — the three models, and why the release is the frozen one

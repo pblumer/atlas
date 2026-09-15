@@ -193,7 +193,7 @@ type Line struct {
 	// centre 4711" stays true whatever the form does afterwards. The id says which
 	// set of questions it answered.
 	// Price is what the release said this product cost when the order was placed
-	// (ADR-draft-product-price). Frozen here for the reason
+	// (ADR-0361). Frozen here for the reason
 	// the approval rule and the ceiling are: an approver saw a figure and decided on
 	// it, and a catalogue edit afterwards must not make the record show a different
 	// one than the one that was approved.

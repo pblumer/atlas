@@ -58,7 +58,7 @@ type approvalResp struct {
 	// words somebody chose.
 	Texts map[string]string `json:"texts,omitempty"`
 	// Price is what the order says this line costs, as the release froze it
-	// (ADR-draft-product-price). Read from the **line** and
+	// (ADR-0361). Read from the **line** and
 	// not from the release: the line is the order's own record of what was decided
 	// on, and it is what a reader sees years later. Empty where the catalogue says
 	// nothing about cost, which is the ordinary case.
