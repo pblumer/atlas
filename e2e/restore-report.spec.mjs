@@ -1,6 +1,6 @@
 // The line an operator reads after restoring a portable backup
 // (api/web/restore-report.js,
-// ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity).
+// ADR-0357).
 //
 // A restore that quietly declines to take a deployed definition is only honest if it
 // says which one and why, so the sentence is what these assert — not that a function

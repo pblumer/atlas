@@ -1661,7 +1661,7 @@ async function viewConsoleBackup() {
         // A restore that held records back is not a restore that succeeded quietly:
         // the records it declined are the operator's next decision, so the toast says
         // so rather than going green over a partial result
-        // (ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity).
+        // (ADR-0357).
         const held = (data && data.skipped) || 0;
         toast(held ? `Restored, but ${held} deployed definition(s) were not taken` : "Restore complete",
           held ? "warn" : "ok");

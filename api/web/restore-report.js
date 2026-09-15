@@ -1,5 +1,5 @@
 // What a restore did not take
-// (ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity).
+// (ADR-0357).
 //
 // It lives apart from app.js because it is a pure function of what the server
 // reports, so it can be driven and asserted in a browser test without standing up the

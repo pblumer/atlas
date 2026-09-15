@@ -92,7 +92,7 @@ Chosen option: **A**.
   the next boot — the file is a design-time backup, not a whole-engine snapshot.
 
   **Amended by
-  [ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity](draft-a-portable-backup-does-not-overwrite-another-installations-identity.md).**
+  [ADR-0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md).**
   That risk is the case where a key is *missing*. The case where a key is **present
   and now means something else** was not considered here, and it does not fail: the
   overlay succeeded and attached the target's instance history to a foreign
@@ -119,4 +119,4 @@ Chosen option: **A**.
 - relates to ADR-0019 (durable deployment sidecar store), ADR-0005 (durable-before-
   visible), ADR-0044 (auth/admin), ADR-0070 (vault key), ADR-0016 (MCP is a pure
   adapter — why these endpoints carry no tool)
-- amended by [ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity](draft-a-portable-backup-does-not-overwrite-another-installations-identity.md) — what the overlay may not overwrite, and why the node identity stays home
+- amended by [ADR-0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) — what the overlay may not overwrite, and why the node identity stays home

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A portable backup does not overwrite another installation's identity
+# ADR-0357: A portable backup does not overwrite another installation's identity
 
 - **Status:** Accepted
 - **Implementation:** Landed

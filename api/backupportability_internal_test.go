@@ -15,7 +15,7 @@ import (
 )
 
 // The acceptance suite for
-// ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity.
+// ADR-0357.
 //
 // Every case here is two installations, because that is the only instrument that can
 // see the defect: one installation restoring its own archive was always fine, and is

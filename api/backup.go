@@ -228,7 +228,7 @@ func writeRestoredFile(path string, r io.Reader) error {
 }
 
 // writeRestoredBytes is the same write for a member already in memory, which is what
-// the design-time restore has once it has looked at the record (ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity).
+// the design-time restore has once it has looked at the record (ADR-0357).
 func writeRestoredBytes(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

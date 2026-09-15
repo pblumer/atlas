@@ -10,7 +10,7 @@ import (
 )
 
 // What does not travel in a portable backup
-// (ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity).
+// (ADR-0357).
 //
 // The design-time archive (ADR-0107) is documented as a file an author moves between
 // installations, and it is applied as an overlay onto a running one. Two of the things

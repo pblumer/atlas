@@ -442,6 +442,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0354](0354-approval-list-order.md) | An approval list is a work list, so it starts where nobody has looked | Accepted | Landed |
 | [0355](0355-catalogue-search.md) | A catalogue is searched over words it carries, in the browser, and a hit says where it lives | Accepted | Landed |
 | [0356](0356-person-picker.md) | The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake | Accepted | Landed |
+| [0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) | A portable backup does not overwrite another installation's identity | Accepted | Landed |
 
 ## The two states of a record
 
