@@ -331,6 +331,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/decision-deployments/{key}/xml", s.handleDecisionDeploymentXML, apiOp{
 			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: roleAny,
 			resp: xmlBody("DMN XML")}},
+		{"DELETE", "/api/v1/decision-deployments/{key}", s.handleDeleteDecisionDeployment, apiOp{
+			summary: "Remove a decision deployment. Refused with 409 while a deployed process definition is pinned to it — pins survive an instance ending, so a live count is not the test — and while it is the current version of a decision that has older versions still deployed (ADR-0336). Deleting one that is already gone succeeds",
+			tag:     "Decisions", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/decisions/evaluate", s.handleTryDecision, apiOp{
 			summary: "Try a DMN model against sample inputs and get the temis trace back — what a decision returns and which rules fired, for the model in the request rather than anything deployed. Nothing is stored, keyed, or registered, and the DMN registry is untouched. With no decisionId it only describes what the model offers and its inputs. A model that does not compile comes back 200 with ok:false (ADR-0326)", tag: "Decisions", role: RoleModeler,
 			req: jsonBody("The model to try, the decision to run, and its inputs", schemaObj(map[string]any{
@@ -1340,6 +1343,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/dmn-models", s.handleListDmnModels, apiOp{
 			summary: "List the local DMN model store — one row per stored handle with what the model declares and whether any DMN reference points at it. A model nothing points at is reachable nowhere else, which is what this exists for (ADR-0330)",
 			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Stored DMN models", tArray())}},
+		{"DELETE", "/api/v1/dmn-models/{ref}", s.handleDeleteDmnModel, apiOp{
+			summary: "Remove a stored DMN model file. Refused with 409 while any DMN reference points at the handle, because deleting it would leave them unresolved; a decision deployment's modelRef does not block, since that record carries its own XML and never reads the file (ADR-0336)",
+			tag:     "DMN References", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
 			summary: "Upload a DMN model file into the local model store and return its reference handle. ?handle= overwrites that model in place. Otherwise the handle is derived from ?name=: with ?from= present (the model handle this editing session opened, empty for a decision that has none) the derived handle must be free, or the upload is refused with 409 rather than silently forking a second copy (ADR-0222); without ?from= a taken handle is suffixed, which is the upsert an import or an agent wants", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},
 
@@ -1612,6 +1618,30 @@ func (s *Server) apiRoutes() []apiRoute {
 				"apply": tBool(), "system": tString(), "observations": tArray(),
 			})),
 			resp: jsonBody("What the load decided, whether or not it wrote it", tObject())}},
+
+		{"POST", "/api/v1/reconciliation", s.handleReconcile, apiOp{
+			summary: "Compare one reading of one target system against the inventory and record what changed. Name what the reading covered completely — `refs` (these references, read whole), `subjects` (everything these people hold here, read whole), or both; at least one is required. This route reads absence as a finding, so a recorded right not seen inside that scope is reported as missing, and outside it nothing is concluded at all. A subject scope is what answers \"is this person out of everything\", which a group listing structurally cannot. It writes no entitlement and touches no target system: the two directions it finds are acted on one at a time, by a person",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("A complete reading of a declared scope", schemaObj(map[string]any{
+				"system": tString(), "refs": tArray(), "subjects": tArray(), "observations": tArray(),
+			}, "system")),
+			resp: jsonBody("What the run found, and the transitions it recorded", tObject())}},
+		{"GET", "/api/v1/reconciliation", s.handleListDiscrepancies, apiOp{
+			summary: "Every disagreement that still stands, newest first, optionally one system's (?system=). A closed finding is history and stays in the journal; this answers what is wrong now",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Open findings", tArray())}},
+		{"POST", "/api/v1/reconciliation/{id}/adopt", s.handleAdoptDiscrepancy, apiOp{
+			summary: "Accept an unmanaged right into the inventory, recorded with origin `adopted` — Atlas did not grant it and does not claim to. For a finding of kind `unmanaged` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+		{"POST", "/api/v1/reconciliation/{id}/deprovision", s.handleDeprovisionDiscrepancy, apiOp{
+			summary: "Take away an unmanaged right by running the product's deprovisioning process — never a direct worker call. The process is the catalogue's as it stands now, which is a weaker guarantee than an order's return has, because a right nobody ordered has no frozen release. For a finding of kind `unmanaged` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
+		{"POST", "/api/v1/reconciliation/{id}/revoke", s.handleRevokeDiscrepancy, apiOp{
+			summary: "Stop asserting a right the target system does not have: remove the inventory record. It touches no target system — there is nothing there to touch, which is the finding — and the journal keeps what Atlas used to claim. For a finding of kind `missing` only",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("The finding, now closed", tObject())}},
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},

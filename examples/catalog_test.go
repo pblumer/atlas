@@ -204,6 +204,15 @@ var catalogSources = []catalogSource{
 		ID: "bestandsaufnahme", App: "Beispiel: Bestandsaufnahme (Entra)",
 		Files: []string{"bestandsaufnahme.bpmn"},
 	},
+	{
+		// Two processes, one card, and that is the point rather than a saving: they
+		// are the same comparison promising completeness on its two axes. The daily
+		// run names the groups it read whole; the leaver check names the person. A
+		// reader who sees only one of them learns the mechanism as half of itself.
+		ID: "abgleich", App: "Beispiel: Abgleich (Entra)",
+		Files: []string{"abgleich.bpmn", "austrittspruefung.bpmn"},
+		Main:  "abgleich.bpmn",
+	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the

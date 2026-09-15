@@ -3,14 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <title>Atlas DMN reference deletion e2e harness</title>
-    <!-- Drives the real api/web/dmnref-impact.js: the confirm an author reads before
-         deleting a DMN reference is composed from what the server says would stop
-         deploying, so the text itself is the thing worth asserting. -->
+    <!-- Drives the real api/web/dmnref-impact.js and decision-cleanup.js: what an
+         author reads before deleting a decision artifact — the confirm composed from
+         what the server says would stop deploying, and which deployed version the
+         Console offers to remove. Both are the deliverable, so both are asserted as
+         themselves. -->
   </head>
   <body>
     <script type="module">
       import { refDeleteWarning } from "/dmnref-impact.js";
+      import { versionDeleteState } from "/decision-cleanup.js";
       window.__warn = refDeleteWarning;
+      window.__versionState = versionDeleteState;
       window.__ready = true;
     </script>
   </body>

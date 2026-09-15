@@ -44,6 +44,68 @@
       }
     },
     {
+      "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old decision versions can finally be cleared away",
+        "de": "Alte Entscheidungsversionen lassen sich endlich aufräumen"
+      },
+      "summary": {
+        "en": "Every press of Deploy in the decision editor minted a version and kept the whole model with it, and every uploaded model file stayed where it was put. Nothing could take either back, so iterating on a decision — which is what that button is for — cost permanent disk. Both can now be removed, under a rule that protects what is actually running. A deployed version is refused while a deployed process is pinned to it: that process resolved its decision to exactly that version when it was deployed and keeps no copy of it, and the pin outlives the instances that used it — so having nothing running is not enough. It is also refused while it is the newest version of a decision that still has older ones behind it, because removing it would send the next deployment quietly back a version. Clearing a history therefore works oldest first, and the refusal says which of the two reasons applies. Operations' page for a decision now lists every deployed version with the processes holding each one — the first place in Atlas that answers what is using this version — and offers Delete where nothing does. A model file that no reference points at can be deleted from Not assigned; decisions already deployed from it keep running, because they carry their own copy.",
+        "de": "Jeder Druck auf «Deploy» im Entscheidungseditor erzeugte eine Version und behielt das ganze Modell dazu, und jede hochgeladene Modelldatei blieb liegen. Zurücknehmen liess sich beides nicht — das Iterieren an einer Entscheidung, wofür diese Schaltfläche da ist, kostete also dauerhaft Speicher. Beides lässt sich nun entfernen, nach einer Regel, die schützt, was tatsächlich läuft. Eine ausgelieferte Version wird abgelehnt, solange ein ausgelieferter Prozess darauf festgelegt ist: Dieser Prozess hat seine Entscheidung beim Ausliefern auf genau diese Version aufgelöst und hält keine eigene Kopie davon, und die Festlegung überdauert die Instanzen, die sie genutzt haben — dass nichts mehr läuft, genügt also nicht. Abgelehnt wird auch die neueste Version einer Entscheidung, hinter der noch ältere stehen, denn ihr Entfernen würde die nächste Auslieferung stillschweigend eine Version zurückwerfen. Eine Historie räumt man daher von der ältesten Version her ab, und die Ablehnung sagt, welcher der beiden Gründe greift. Die Entscheidungsseite in Operations führt jetzt jede ausgelieferte Version mit den Prozessen auf, die sie halten — die erste Stelle in Atlas, die beantwortet, was eine Version verwendet — und bietet «Delete» dort an, wo nichts sie hält. Eine Modelldatei, auf die keine Referenz zeigt, lässt sich unter «Nicht zugeordnet» löschen; bereits daraus ausgelieferte Entscheidungen laufen weiter, weil sie ihre eigene Kopie tragen."
+      },
+      "link": {
+        "label": "ADR-0329",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0329-a-decision-deployment-is-not-deletable.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations → Decisions and choose a decision.",
+          "Deployed versions lists every version with its key, when it was deployed, and what is holding it.",
+          "A version nothing holds carries a Delete button; one that is held says held, and the tooltip says why.",
+          "For model files, open the Modeler's Not assigned and use ⋯ → Delete model on a row marked No reference."
+        ],
+        "de": [
+          "«Operations → Decisions» öffnen und eine Entscheidung auswählen.",
+          "«Deployed versions» führt jede Version auf, mit Schlüssel, Auslieferungszeitpunkt und dem, was sie hält.",
+          "Eine Version, die nichts hält, trägt eine Schaltfläche «Delete»; eine gehaltene zeigt «held», und der Tooltip nennt den Grund.",
+          "Für Modelldateien im Modeler «Nicht zugeordnet» öffnen und bei einer mit «No reference» markierten Zeile «⋯ → Delete model» wählen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Decisions",
+          "de": "Decisions öffnen"
+        },
+        "route": "#/operations/decisions"
+      }
+    },
+    {
+      "id": "the-inventory-can-now-be-checked-rather-than-trusted",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The inventory can now be checked rather than trusted.",
+        "de": "The inventory can now be checked rather than trusted."
+      },
+      "summary": {
+        "en": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it.",
+        "de": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-inventory-is-taken-before-it-is-enforced",
       "version": "Unreleased",
       "date": null,
@@ -228,6 +290,28 @@
       }
     },
     {
+      "id": "the-hosted-example-apps-find-the-instance-they-just-started-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The example apps find the instance they just started, however busy the engine is",
+        "de": "Die Beispiel-Apps finden die soeben gestartete Instanz, egal wie ausgelastet die Engine ist"
+      },
+      "summary": {
+        "en": "The example apps Atlas serves itself — the travel-booking wizard and the two order-to-cash pages — start a process and then have to find that instance again, both to open its first form and to tell when it has finished. They looked for it in the plain instance list, which is a page rather than the whole set: it is capped, and it fills with the oldest running instances first. On a server holding more running instances than the cap, an app's own instance was never on the page it was searching, so pressing Start ended in a script error while the process itself was running perfectly well — and nothing about the app had changed, only the number of instances in front of it. The pages now ask for one process definition's instances, newest first, and read their own instance by its key. Neither question depends on how busy the engine is any more.",
+        "de": "Die Beispiel-Apps, die Atlas selbst ausliefert — der Reisebuchungs-Assistent und die beiden Order-to-Cash-Seiten — starten einen Prozess und müssen diese Instanz danach wiederfinden: einmal, um ihr erstes Formular zu öffnen, und einmal, um zu erkennen, dass sie fertig ist. Gesucht haben sie in der einfachen Instanzliste, und die ist eine Seite und nicht der ganze Bestand: Sie ist gedeckelt und füllt sich zuerst mit den ältesten laufenden Instanzen. Auf einem Server mit mehr laufenden Instanzen als dem Deckel stand die eigene Instanz nie auf der Seite, die durchsucht wurde. Ein Klick auf Start endete dann mit einem Skriptfehler, obwohl der Prozess selbst einwandfrei lief — und an der App hatte sich nichts geändert, nur die Zahl der Instanzen davor. Die Seiten fragen jetzt die Instanzen einer Prozessdefinition ab, neueste zuerst, und lesen die eigene Instanz über ihren Schlüssel. Keine der beiden Fragen hängt noch davon ab, wie ausgelastet die Engine ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples",
+        "API"
+      ]
+    },
+    {
       "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
       "version": "Unreleased",
       "date": null,
@@ -284,97 +368,6 @@
           "Auf die Linienenden achten: Kugel und gefüllte Pfeilspitze bedeuten Assignment, eine gefüllte Pfeilspitze allein Triggering, eine offene Serving.",
           "Einer Serving-Linie folgen: Die Pfeilspitze sitzt am Prozess, nicht am Worker. Die Legende vermerkt dazu „drawn from the provider“.",
           "Das Bild als SVG oder PNG exportieren — Marken und Legende wandern mit der Datei."
-        ]
-      }
-    },
-    {
-      "id": "the-starmap-s-archimate-view-now-draws-archimate-s-own-symbo",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Starmap's ArchiMate view is drawn in ArchiMate's own symbols",
-        "de": "Die ArchiMate-Ansicht der Starmap wird in ArchiMate-Symbolen gezeichnet"
-      },
-      "summary": {
-        "en": "Picking ArchiMate 3.2 under Notation already mapped every node to an ArchiMate element type and wrote that type under its name — and then drew Atlas's own circles and squares. For the one reader that view exists for, that was the vocabulary without the script. The five mapped kinds are now drawn as the elements themselves: an Application Component with its two lugs, an Application Process as an arrow, an Application Service as a rounded lozenge, an Application Function as a chevron, and a deployment target as a Node's three-dimensional box. The standard allows either a box with a small type icon in the corner or the icon at full size; at the size a node is drawn here a corner icon would be a pixel or two, so the icon is the node, and the written type stays beside it for readers who do not know the notation by sight. The fills are the layer colours everyone recognises — Application #B5FFFF, Technology #C9E7B7 — and the key says plainly what they are: ArchiMate 3.2 defines no colours at all, and these are the convention its own figures and the Archi tool use. They are pale by design, so a red or amber finding still reads above them. A draft, a restricted placeholder and an unresolved dependency keep Atlas's own shape and colour, because ArchiMate has no element for them and dressing them as one would claim something the notation does not.",
-        "de": "Die Auswahl von ArchiMate 3.2 unter „Notation“ ordnete bisher jedem Knoten einen ArchiMate-Elementtyp zu und schrieb diesen Typ unter den Namen — gezeichnet wurden dann aber weiterhin die Kreise und Quadrate von Atlas. Für die Leserschaft, für die diese Ansicht existiert, war das die Sprache ohne die Schrift. Die fünf zugeordneten Arten werden jetzt als die Elemente selbst gezeichnet: eine Application Component mit ihren zwei Laschen, ein Application Process als Pfeil, ein Application Service als abgerundete Raute, eine Application Function als Winkel und ein Deployment-Ziel als dreidimensionaler Kasten eines Node. Der Standard erlaubt beide Formen — einen Kasten mit kleinem Typsymbol in der Ecke oder das Symbol in voller Grösse; in der Grösse, in der ein Knoten hier gezeichnet wird, wären es ein bis zwei Pixel, also ist das Symbol der Knoten. Der geschriebene Typ bleibt daneben stehen, für Lesende, die die Notation nicht auf den ersten Blick erkennen. Die Füllungen sind die bekannten Ebenenfarben — Application #B5FFFF, Technology #C9E7B7 — und die Legende sagt ausdrücklich, was sie sind: ArchiMate 3.2 definiert überhaupt keine Farben; diese sind die Konvention der Abbildungen des Standards und des Werkzeugs Archi. Sie sind bewusst blass gehalten, damit ein roter oder gelber Befund weiterhin darüber lesbar bleibt. Ein Entwurf, ein eingeschränkter Platzhalter und eine nicht aufgelöste Abhängigkeit behalten Form und Farbe von Atlas, denn ArchiMate hat für sie kein Element, und sie als eines zu zeichnen wäre eine Aussage, die die Notation nicht macht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Panorama; the Starmap is its landing view.",
-          "In the header, open the Notation picker and choose \"ArchiMate 3.2\".",
-          "The picture is redrawn in ArchiMate's symbols, in the Application and Technology layer fills.",
-          "Read the loss list under the picture: it names what the projection cannot say, including that the colours are convention rather than standard and that drafts, restricted placeholders and unresolved dependencies keep Atlas's own shape."
-        ],
-        "de": [
-          "Panorama öffnen; die Starmap ist die Einstiegsansicht.",
-          "In der Kopfzeile die Notationsauswahl öffnen und „ArchiMate 3.2“ wählen.",
-          "Das Bild wird in den Symbolen von ArchiMate gezeichnet, in den Füllfarben der Ebenen Application und Technology.",
-          "Die Verlustliste unter dem Bild lesen: Sie nennt, was die Projektion nicht ausdrücken kann — unter anderem, dass die Farben Konvention und nicht Standard sind und dass Entwürfe, eingeschränkte Platzhalter und nicht aufgelöste Abhängigkeiten die Form von Atlas behalten."
-        ]
-      }
-    },
-    {
-      "id": "the-starmap-opens-using-the-whole-window-whatever-the-size-o",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Starmap opens using the whole window",
-        "de": "Die Starmap nutzt beim Öffnen das ganze Fenster"
-      },
-      "summary": {
-        "en": "A small landscape used to open as a few small circles adrift in an empty canvas, and a process attached to nothing — or a handful that call each other and nothing else, like a test flow — could sit at the far edge holding two thirds of the window open behind it. The picture is now drawn at the same density whatever the size of the estate (five nodes fill as much of the window as a hundred and twenty-five do), and nothing is left far enough from the rest of the picture to decide how small everything else is drawn. It applies to every notation, including the Instances and Incidents heatmaps.",
-        "de": "Eine kleine Landschaft wurde bisher als ein paar kleine Kreise auf einer weitgehend leeren Fläche geöffnet, und ein Prozess ohne Verbindung — oder eine Handvoll, die nur sich gegenseitig aufrufen, etwa ein Testablauf — konnte am äusseren Rand sitzen und zwei Drittel des Fensters leer halten. Das Bild wird jetzt unabhängig von der Grösse der Landschaft in derselben Dichte gezeichnet (fünf Knoten füllen so viel Fenster wie hundertfünfundzwanzig), und nichts liegt mehr so weit vom Rest entfernt, dass es bestimmt, wie klein alles andere gezeichnet wird. Das gilt für jede Notation, auch für die Heatmaps Instances und Incidents."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
-    },
-    {
-      "id": "removing-someone-from-an-application-now-takes-their-starmap",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Removing someone from an application takes effect on the Starmap at once",
-        "de": "Wer aus einer Applikation entfernt wird, verliert die Starmap sofort"
-      },
-      "summary": {
-        "en": "The Starmap holds a short reading of what this server is, so that twenty people with the view open cost the engine one reading rather than twenty. It decided who may see what on every request — but from that held reading, and the reading included the application records themselves. An application's members are written on the application, so re-deciding against a record half a minute old gave the answer from half a minute ago. Somebody you removed from an application, an application you sealed to private, an ownership transfer, an application you deleted: in each case the person who had just lost access kept receiving that application's processes for the rest of the window — process names and ids, what calls what, running and finished instance counts, incident counts and ages, and the incident details with their raw error text from workers. That is the material the Starmap otherwise replaces with an anonymous placeholder, and the view's own automatic refresh reached the window without anybody doing anything, because an open tab re-reads on its own. The two stores a sharing scope lives in — applications and workers — are now read on every request, exactly as every other list on this server reads them, so a change of access takes effect on the next request as it does everywhere else. Only structure that carries no sharing scope is still held briefly, so the reason for holding it is intact. Two things get better with it: an application or a worker you create or delete now appears on the Starmap at once instead of within half a minute, and a task pointing at a worker you have just deleted stops pointing at it.",
-        "de": "Die Starmap hält kurz fest, was dieser Server ist, damit zwanzig geöffnete Ansichten die Engine einmal statt zwanzigmal kosten. Wer was sehen darf, wurde bei jeder Anfrage neu entschieden — aber anhand dieses festgehaltenen Standes, und der enthielt die Applikations-Datensätze selbst. Die Mitglieder einer Applikation stehen an der Applikation; eine Entscheidung gegen einen eine halbe Minute alten Datensatz liefert also die Antwort von vor einer halben Minute. Wen Sie aus einer Applikation entfernt, welche Applikation Sie auf privat gestellt, übertragen oder gelöscht haben: Die betroffene Person erhielt die Prozesse dieser Applikation für den Rest des Fensters weiter — Prozessnamen und -IDs, wer wen aufruft, laufende und abgeschlossene Instanzzahlen, Incident-Zahlen und -Alter sowie die Incident-Details mit den unveränderten Fehlermeldungen aus Workern. Genau dieses Material ersetzt die Starmap sonst durch einen anonymen Platzhalter, und die automatische Aktualisierung der Ansicht erreichte das Fenster von selbst, weil ein offener Tab eigenständig nachliest. Die beiden Ablagen, in denen eine Freigabe lebt — Applikationen und Worker —, werden jetzt bei jeder Anfrage gelesen, genau wie jede andere Liste dieses Servers es tut; eine Zugriffsänderung wirkt damit ab der nächsten Anfrage, wie überall sonst. Festgehalten wird nur noch Struktur ohne Freigabe, der Grund für das Festhalten bleibt also bestehen. Zwei Dinge werden dabei besser: Eine Applikation oder ein Worker, die Sie anlegen oder löschen, erscheinen auf der Starmap jetzt sofort statt innerhalb einer halben Minute, und ein Task, der auf einen soeben gelöschten Worker zeigte, zeigt nicht mehr darauf."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Security"
-      ],
-      "tutorial": {
-        "en": [
-          "Nothing to configure — the change is in how the Starmap answers.",
-          "If you have removed anyone from an application recently and want to be sure: open the application under Applications, check its members, and the Starmap will match on its next read.",
-          "If you administer this server, note that a person's session and role are unaffected — only their view of applications and workers changes, and only in the direction of less."
-        ],
-        "de": [
-          "Nichts einzurichten — die Änderung betrifft, wie die Starmap antwortet.",
-          "Falls Sie kürzlich jemanden aus einer Applikation entfernt haben und sichergehen wollen: Applikation unter Applications öffnen, Mitglieder prüfen — die Starmap stimmt ab dem nächsten Lesen damit überein.",
-          "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
         ]
       }
     }

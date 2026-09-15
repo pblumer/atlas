@@ -1238,6 +1238,32 @@ func (q queries) EntitlementsOf(principal string, fn func(v *model.EntitlementVa
 	})
 }
 
+// Entitlements calls fn with every entitlement the inventory holds, in key order:
+// by principal, and within a principal by item.
+//
+// This is the one query that grows with the **population** rather than with one
+// person, and it exists because the inventory's key answers only one direction.
+// "What does Alice hold" is a prefix scan; "who holds VPN access" is not
+// answerable without walking the family, because the principal comes first in the
+// key (see [entitlementPrefix] for why it has to).
+//
+// That asymmetry is the shape of the question ADR-0312 left open — whether
+// reconciliation over a whole estate becomes a population-sized job — and the
+// answer here is: yes, it is one, so it runs off the loop through a read view like
+// every other population-sized query (ADR-0239), once per reconciliation run
+// rather than once per item. A by-item index would remove the walk and would cost
+// a second column family that every write has to keep in step; it is the right
+// trade the day somebody measures this walk hurting, and the wrong one before.
+func (q queries) Entitlements(fn func(v *model.EntitlementValue) error) error {
+	return q.scanPrefix([]byte{byte(cfEntitlement)}, func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTEntitlement, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.EntitlementValue))
+	})
+}
+
 // Entitlement reads whether one principal holds one item. A point read, because
 // "do you already have this" is asked once per product on a catalogue page and a
 // scan per product would make the page cost the inventory.

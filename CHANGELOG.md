@@ -47,6 +47,73 @@ _Changed_ / _Removed_ for each version.
   serve both readings; both are computed on every call and stored nowhere. Both are MCP tools
   too — `atlas_class_catalog` and `atlas_class_usage` — because an agent proposing a rename is
   exactly the caller that cannot otherwise see what it would break.
+- **A deployed decision version can now be removed, and so can a model file nothing
+  points at.** Both stores only ever grew: every Deploy in the decision editor minted a
+  version carrying the full DMN source, and every upload left a file behind.
+  [ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md) had written the
+  rule such a delete would need before any route existed; this is that route, with that
+  rule.
+
+  `DELETE /api/v1/decision-deployments/{key}` refuses while a deployed process is
+  **pinned** to the key — it resolved a `latest`-bound reference to that exact version
+  and carries no copy of the model, and a pin outlives the instances that used it, so
+  "no running instances" is not the test. It also refuses the **current** version of a
+  decision that still has older versions behind it: removing it would send the next
+  deploy quietly back a version, and free a version number the surviving records no
+  longer account for. Removing a version history therefore goes oldest first, and the
+  refusal says which of the two it is. The registry's "newest model providing this
+  decision" pointers are rebuilt from the survivors in deployment order, so what the
+  server answers after a delete and what it answers after a reboot cannot diverge.
+
+  `DELETE /api/v1/dmn-models/{ref}` refuses while any DMN reference points at the
+  handle, because that would leave them unresolved. A decision deployment's `modelRef`
+  does **not** block it: that field is provenance, the record carries its own XML, and
+  the decision keeps evaluating after the file is gone.
+
+  Operations' decision page gains a **Deployed versions** table listing every version
+  with what is pinned to it — the first answer anywhere to "what is using this version"
+  — and offers Delete on the ones that may go. Not assigned gains Delete on an
+  unreferenced model. `atlas_delete_decision_deployment` is the MCP counterpart, so the
+  tool count is now 107. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
+- **The inventory can now be checked rather than trusted.** An entitlement asserts that a
+  right exists in another system — an assertion Atlas cannot guarantee, because target
+  systems are changed from outside it. So it decays silently, and an inventory nobody
+  checks is a list of things that were once true.
+
+  `POST /api/v1/reconciliation` compares one reading of one target system against the
+  inventory and finds both directions: rights held that nothing here granted, and rights
+  recorded that the target system does not have. The second is the one that corrupts the
+  evidence, because an inventory wrong that way answers "who had access when" with a
+  confident falsehood.
+
+  The whole design hangs on one required field. A commissioning load reports what it
+  *found* and never what it did not; reconciliation reads absence as a finding, which
+  makes the same silence dangerous. So a run names what it read **completely**, and
+  outside that scope nothing is concluded — a right outside it is not missing, it is
+  unexamined. There is no default: "nothing" is useless and "everything" is a guess that
+  turns a truncated read into a report that the estate has lost its access.
+
+  The scope has **two axes**, and one run may use both: `refs` names references read
+  whole, `subjects` names the people whose holdings were read whole. The second is what
+  answers an offboarding — *is this person out of everything?* — which a group listing
+  structurally cannot: you would have to reconcile every group in the system and observe
+  the person's absence from all of them. A subject-scoped run is confined to the system it
+  names, so a leaver check against Active Directory never reports somebody's Jira rights
+  as missing, and a subject that resolves to no account is reported rather than counted
+  clean — **the absence of an account is not the absence of access**. The clean result
+  gets its own sentence in the report, because a verification that returns nothing
+  otherwise looks exactly like a run that did nothing.
+
+  It records **transitions, not samples**: ten runs over one disagreement make one record,
+  and the run where it goes away closes it. Nothing is ever acted on automatically — adopt
+  (`origin: adopted`, the first writer that origin has had), deprovision through the
+  product's own process, or revoke the record are three separate calls by a person, and
+  none of them is reachable with the worker credential that may run the comparison.
+  `examples/abgleich.bpmn` is the nightly modelled process and
+  `examples/austrittspruefung.bpmn` the leaver check, and **Operations → Reconciliation**
+  is where somebody reads a finding before acting on it — the three actions are not
+  guarded alike, because adopt and revoke are recoverable and deprovisioning is not.
 
 - **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
   the portal's three models were decided and has had no writer, which meant the inventory
@@ -179,7 +246,39 @@ _Changed_ / _Removed_ for each version.
   clipped by the canvas, so nothing else stopped it. The four properties that rule sets
   are now undone inside the dmn-js subtree, leaving dmn-js's own styling for the class
   alone. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+- **The hosted example apps find the instance they just started again, on an engine of
+  any size.** Each of them — `reisebuchung-kunde.html`, `reisebuchung-einschritt-kunde.html`,
+  `order-to-cash-live.html` and `order-to-cash-jobs.html` — located its own process
+  instance by reading `GET /api/v1/instances` and searching the result. That listing is
+  a page, not the set: unscoped it is capped at 1000 rows per half, and its active half
+  is scanned in ascending instance-key order — oldest first — so the newest instance is
+  the first row the cap drops.
 
+  On a server holding more than a thousand active instances the page therefore cannot
+  contain the instance the app has just created. The diff came back empty and the start
+  failed with `Cannot read properties of undefined (reading 'key')`, while the instance
+  itself was running correctly and sitting on its first user task. Nothing in the pages
+  had changed; the number of instances in front of them had.
+
+  They now read what they actually need. `GET /instances?process=<defKey>` lists one
+  definition's instances off its own index, newest first, and is what the start diff
+  compares; `GET /instances/search?q=<instanceKey>` is a point read of a single
+  instance, live or finished, and is what the poll for "has my instance ended" asks.
+  Both are index-backed, so neither grows with the engine. A start that still cannot
+  find its instance now says so in words rather than throwing on an undefined row.
+
+  Three tests hold this down, because the failure is invisible in any environment small
+  enough to develop against: a page that reads the unscoped listing passes every manual
+  check on a fresh engine and then breaks months later, in production, without a deploy.
+  A browser test drives the real wizard against a mocked engine whose bare listing is
+  full and never carries the instance; a Go test pins the two endpoints the pages now
+  rely on; and a guard over the embedded pages refuses the pattern's return.
+
+  What scoping does not repair is that finding your own instance by elimination is still
+  a guess when two callers start the same definition at once. Closing that means the
+  start answering with the key it minted, which is a change to the engine's command path
+  rather than to a page, and is tracked in
+  [issue #933](https://github.com/pblumer/atlas/issues/933).
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything

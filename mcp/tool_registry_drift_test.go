@@ -26,15 +26,16 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":                 "GET /api/v1/info",
-	"atlas_stats":                "GET /api/v1/stats",
-	"atlas_deploy":               "POST /api/v1/deployments",
-	"atlas_list_processes":       "GET /api/v1/processes",
-	"atlas_get_process_xml":      "GET /api/v1/processes/{key}/xml",
-	"atlas_save_process_diagram": "PUT /api/v1/processes/{key}/diagram",
-	"atlas_delete_process":       "DELETE /api/v1/processes/{key}",
-	"atlas_process_runtime":      "GET /api/v1/processes/{key}/runtime",
-	"atlas_call_activities":      "GET /api/v1/call-activities",
+	"atlas_info":                       "GET /api/v1/info",
+	"atlas_stats":                      "GET /api/v1/stats",
+	"atlas_deploy":                     "POST /api/v1/deployments",
+	"atlas_list_processes":             "GET /api/v1/processes",
+	"atlas_get_process_xml":            "GET /api/v1/processes/{key}/xml",
+	"atlas_save_process_diagram":       "PUT /api/v1/processes/{key}/diagram",
+	"atlas_delete_process":             "DELETE /api/v1/processes/{key}",
+	"atlas_delete_decision_deployment": "DELETE /api/v1/decision-deployments/{key}",
+	"atlas_process_runtime":            "GET /api/v1/processes/{key}/runtime",
+	"atlas_call_activities":            "GET /api/v1/call-activities",
 
 	// The business architecture (ADR-0305):
 	// the map an agent needs in order to say what a process it deploys is *for*.
@@ -456,6 +457,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/dmnrefs/{id}/impact":    "it exists to fill that deletion's confirm dialog, and the deletion is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
 	"GET /api/v1/dmn-models":             "reading the model folder as a folder is housekeeping for the Modeler; an agent resolves a decision through the catalog, not the store",
+	"DELETE /api/v1/dmn-models/{ref}":    "removing a file from that folder is the same housekeeping, and deleting an author's model is not an agent action",
 
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads
@@ -521,6 +523,23 @@ var mcpOmittedRoutes = map[string]string{
 	// running a load makes worth asking.
 	"GET /api/v1/inventory-load":  "the commissioning load is an act with somebody responsible for it, and its state route is only useful beside it",
 	"POST /api/v1/inventory-load": "entering years of evidence must follow a person reading the report, not a tool call made in passing",
+
+	// Reconciliation (ADR-0334). The run is omitted for a reason
+	// this table already knows: reporting a provisioning outcome is absent because
+	// an agent "must not be able to assert on a target system's behalf", and a
+	// reconciliation run asserts something stronger — that a scope was read
+	// *completely*. An agent that made that promise without having read anything
+	// would produce findings that are false and that a person then acts on.
+	//
+	// The three actions are the same class as returning an order line: they change
+	// somebody's access, or what Atlas says about it, and each records who decided.
+	// An agent is not who decided. The list is omitted for the reason GET
+	// /api/v1/inventory is — it reads other people's access.
+	"POST /api/v1/reconciliation":                  "a run asserts that a scope was read completely, which an agent cannot truthfully promise on a target system's behalf",
+	"GET /api/v1/reconciliation":                   "open findings are other people's access, read the same way the inventory is",
+	"POST /api/v1/reconciliation/{id}/adopt":       "accepting a right into the evidence store records who decided, and an agent is not who decided",
+	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
+	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
 
 	// Workers + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each Worker Type: the Modeler's picker reads it to
