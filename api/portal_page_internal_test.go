@@ -92,6 +92,29 @@ func assertCatalogueIsComplete(t *testing.T, page string, got map[string][]strin
 				"every string exists in every locale it offers. Translate them, or drop "+
 				"the locale.", page, locale, missing)
 		}
+
+		// A key written twice in one locale is the failure this whole file is least
+		// able to see otherwise: JavaScript keeps the *last* property silently, so
+		// the catalogue is complete, every locale agrees, nothing is missing — and
+		// one of the two strings simply never renders. It happened to `appr.back`,
+		// which carried both "back to Atlas" on the header link and "all approvals"
+		// on an in-page one; the header link kept working and started reading "all
+		// approvals", so the way back out of the page was there and unrecognisable.
+		seen := map[string]bool{}
+		var twice []string
+		for _, k := range keys {
+			if seen[k] {
+				twice = append(twice, k)
+			}
+			seen[k] = true
+		}
+		if len(twice) > 0 {
+			sort.Strings(twice)
+			t.Errorf("%s: locale %q declares %v more than once.\n"+
+				"The later one silently wins and the earlier string is unreachable — "+
+				"nothing fails, the wrong words simply appear. Give the two uses two "+
+				"keys.", page, locale, twice)
+		}
 	}
 }
 
@@ -345,7 +368,12 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	}
 	// Gated like the Tasks inbox: everybody signed in orders things, and a portal
 	// only modellers can see is a portal for nobody.
-	if !strings.Contains(apps, `{ id: "portal", name: "Portal", route: "portal.html", on: true, role: "user" },`) {
+	//
+	// Matched field by field rather than as one literal line. The entry grows a
+	// field whenever the drawer learns something new about it — `separate` was the
+	// first — and pinning the whole line makes every such addition fail here with a
+	// message about the role gate, which is not what changed.
+	if !strings.Contains(apps, `{ id: "portal", name: "Portal", route: "portal.html", on: true, role: "user"`) {
 		t.Error("the portal entry is not in the expected shape; check its role gate — " +
 			"an ordinary employee must see it")
 	}
@@ -395,6 +423,44 @@ func TestBothPortalSurfacesLeadBackToAtlas(t *testing.T) {
 			t.Errorf("%s hard-codes the back link's label instead of reading %q from the "+
 				"catalogue", page.src, page.key)
 		}
+	}
+}
+
+// TestThePortalSurfacesOpenInTheirOwnWindow: the drawer leaves the console
+// standing when it sends somebody to a page that is not part of it.
+//
+// Both entries are paths rather than hash routes, so following one in the same tab
+// unloads the console entirely — the visitor's place in whatever they were doing
+// goes with it, and the only way back is the one small link on the page they
+// landed on. Opening a window instead makes "back" the thing every browser already
+// does, and it is the shape asked for once the separation was confirmed to be
+// deliberate rather than an oversight.
+func TestThePortalSurfacesOpenInTheirOwnWindow(t *testing.T) {
+	src := readWeb(t, "app.js")
+	apps := jsListIn(t, src, "const APPS = [", "\n];")
+
+	for _, id := range []string{"portal", "approvals"} {
+		var entry string
+		for _, line := range strings.Split(apps, "\n") {
+			if strings.Contains(line, `id: "`+id+`"`) {
+				entry = line
+			}
+		}
+		if entry == "" {
+			t.Fatalf("the APPS list has no %q entry; this test now checks nothing", id)
+		}
+		if !strings.Contains(entry, "separate: true") {
+			t.Errorf("the %q entry is not marked separate, so following it replaces the "+
+				"console in the same tab. It is a page of its own — its own brand, its "+
+				"own message catalogue — and unloading Atlas to reach it costs whoever "+
+				"clicked whatever they had open", id)
+		}
+	}
+	// The flag has to reach the markup, or it is a field nothing reads.
+	if !strings.Contains(src, `a.separate ? ' target="_blank" rel="noopener"'`) {
+		t.Error("paintApps does not turn `separate` into target=_blank. rel=noopener " +
+			"belongs with it: a page opened this way can otherwise reach back through " +
+			"window.opener")
 	}
 }
 
