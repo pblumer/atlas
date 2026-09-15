@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Befristung (ADR-0344)
+  — täglich zurückgeben, was hätte enden sollen.
+
+  Alles, was das Portal vergibt, vergibt es bisher auf Dauer. Das fällt am Tag des
+  Baus niemandem auf und ist der Grund, weshalb es die drei Scheiben davor gibt:
+  Bestandsaufnahme, Abgleich und Rezertifizierung suchen allesamt Zugriff, der nicht
+  da sein sollte — nachdem er da ist.
+
+  Die Rezertifizierung ist dabei der manuelle Ersatz für eine fehlende Befristung,
+  und sie wird in der knappsten Währung des ganzen Systems bezahlt: der Aufmerksamkeit
+  einer Führungskraft. Eine Frage, die gar nicht gestellt werden musste, ist mehr wert
+  als eine bessere Art, sie zu stellen.
+
+    Timer-Start "täglich"            timeCycle R/P1D (ADR-0051)
+     -> [REST GET /api/v1/entitlements/expiring?within=0]  -> `faellig`
+     -> Gateway "etwas überfällig?"
+        -> [REST POST .../orders/{id}/lines/{item}/return]  Multi-Instance
+        -> Ende "zurückgegeben"
+        -> Ende "nichts offen"
+
+  ────────────────────────────────────────────────────────────────────────────────
+  ABLAUF IST NICHT ENTZUG.
+
+  Am 4. März hat das Zielsystem die Gruppenmitgliedschaft immer noch. Es ist nichts
+  gelaufen. Wahr ist nur: Atlas hat gesagt, der Zugriff hätte enden sollen, und er
+  hat nicht geendet. Das ist eine Schuld und kein Weltzustand.
+
+  Deshalb bleibt ein abgelaufenes Recht **geführt**. Es wird nicht entfernt, nicht
+  versteckt und nicht stillschweigend aus dem Inventar genommen — es wird als
+  überfällig gemeldet. Den Datensatz beim Ticken der Uhr zu löschen hiesse, dass
+  Atlas behauptet, jemand habe einen Zugriff nicht, den er nachweislich hat. Genau
+  diese Richtung der Unwahrheit nennt ADR-0334 diejenige, die den Beweis verdirbt.
+
+  ZURÜCKGEGEBEN WIRD ÜBER DIE BESTELLZEILE, und das ist hier stärker als bei den
+  Geschwistern. Nur ein bestelltes Recht trägt je ein Ende, also hat ein ablaufendes
+  Recht immer eine Bestellung hinter sich — und deren Rückgabe entzieht nach der
+  Freigabe, gegen die bestellt wurde, eingefroren zum Zeitpunkt der Bestellung.
+  Abgleich und Rezertifizierung müssen den Katalog im Jetzt lesen, weil ein Recht,
+  das niemand bestellt hat, keine eingefrorene Freigabe besitzt.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  `bericht.counts.unendable` zählt die überfälligen Rechte, deren Bestellung nicht
+  mehr da ist. Ein Recht überlebt seine Bestellung absichtlich — die Instanz dahinter
+  darf nach der Aufbewahrungsfrist gelöscht werden, lange bevor ein mehrjähriges
+  Recht endet. Was so entsteht, räumt kein Lauf dieses Prozesses je ab. Eine Zahl,
+  die sich nie bewegt, muss sagen warum, statt wie ein Rückstand auszusehen.
+
+  DIESER PROZESS VERLÄNGERT NICHTS. Atlas verschiebt kein Enddatum. Zugriff
+  verlängern heisst neu bestellen, mit der Genehmigungsregel, die der Katalog
+  vorschreibt — dieselbe Weigerung wie beim fehlenden vierten Abgleichs-Befehl und
+  bei der fehlenden Neuvergabe in der Rezertifizierung.
+
+  Voraussetzungen beim Betreiber:
+    * Ein REST-Worker namens "atlas" mit einem API-Token der Rolle `user`. Die
+      Rückgabe ist Sache des Bestellers; ein Token, das sie erreicht, sollte die
+      Bestellungen erreichen, um die es geht.
+    * Produkte mit `maxDays`. Ohne das trägt kein Recht ein Ende, und dieser Prozess
+      läuft täglich ins Leere — sichtbar an `counts.withAnEnd`.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_befristung"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_befristung" name="Befristung: zurückgeben, was hätte enden sollen" isExecutable="true">
+    <bpmn:documentation>Gibt täglich die Rechte zurück, deren Ende vorbei ist.
+
+Ablauf ist nicht Entzug. Ein abgelaufenes Recht bleibt geführt, bis tatsächlich etwas gelaufen ist: das Zielsystem hat die Mitgliedschaft noch, und den Datensatz beim Ticken der Uhr zu löschen hiesse, dass Atlas das Gegenteil behauptet.
+
+Zurückgegeben wird über die Bestellzeile. Nur ein bestelltes Recht trägt je ein Ende, also hat ein ablaufendes Recht immer eine Bestellung hinter sich — und deren Rückgabe entzieht nach der eingefrorenen Freigabe, gegen die bestellt wurde. Das ist stärker als der Weg, den Abgleich und Rezertifizierung nehmen müssen.
+
+Verlängert wird nichts. Zugriff verlängern heisst neu bestellen, mit der Genehmigung, die der Katalog vorschreibt.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_taeglich" name="täglich">
+      <bpmn:documentation>Wiederholungszyklus R/P1D (ADR-0051). Täglich, weil ein Tag die Auflösung ist, in der ein Ende überhaupt angegeben wird: `maxDays` zählt Tage, und häufiger zu laufen fände dieselbe Menge.
+
+Wer seltener läuft, sammelt Schuld: zwischen zwei Läufen bleibt jedes abgelaufene Recht bestehen, und `counts.overdue` zeigt genau das an.</bpmn:documentation>
+      <bpmn:outgoing>f_start_lesen</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_taeglich">
+        <bpmn:timeCycle>R/P1D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="faellige_lesen" name="Überfällige lesen">
+      <bpmn:documentation>GET /api/v1/entitlements/expiring?within=0. Das Fenster null beantwortet, was bereits überfällig ist, und sonst nichts.
+
+Bewusst nicht in die Zukunft geschaut: Zurückgeben, was morgen abläuft, nähme jemandem heute den Zugriff weg. Das Fenster ist für Menschen da, die vorausplanen wollen, nicht für diesen Prozess.
+
+Schreibt: bericht = { within, now, counts, rights, note }.
+
+Zuerst zu lesen ist counts.unendable — überfällige Rechte, deren Bestellung nicht mehr da ist. Die räumt kein Lauf dieses Prozesses ab.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="GET" />
+          <zeebe:header key="path" value="/api/v1/entitlements/expiring?within=0" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:output source="=body" target="bericht" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_lesen</bpmn:incoming>
+      <bpmn:outgoing>f_lesen_gw</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="gw_offen" name="etwas überfällig?" default="f_gw_leer">
+      <bpmn:documentation>Der Leerfall bekommt ein eigenes sichtbares Ende, statt still durch eine Multi-Instance über eine leere Liste zu laufen. Im Log soll stehen, dass geprüft *und* nichts gefunden wurde.
+
+Gefiltert wird auf `returnable`: was keine Bestellung mehr hat, kann dieser Prozess nicht zurückgeben, und es jedes Mal erneut zu versuchen erzeugt täglich denselben Zwischenfall. Gemeldet ist es trotzdem — in `counts.unendable`.</bpmn:documentation>
+      <bpmn:incoming>f_lesen_gw</bpmn:incoming>
+      <bpmn:outgoing>f_gw_zurueck</bpmn:outgoing>
+      <bpmn:outgoing>f_gw_leer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="zurueckgeben" name="Bestellzeile zurückgeben">
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/return, als parallele Multi-Instance über die zurückgebbaren überfälligen Rechte.
+
+Der Pfad wird über die Eingabezuordnung `path` gebaut, wie in den mitgelieferten Genehmigungsverfahren. Genau diese Form prüft `TestEverySystemProcessCallsARouteThatExists` gegen die tatsächlich bedienten Routen — ein Pfad, den ein Modell aufruft, ist ein Vertrag wie jeder andere, und in einem Header versteckt wäre er ungeprüft.
+
+Der Rumpf ist klein und bewusst gewählt. Die Route liest keinen; ohne Zuordnung wäre er aber der gesamte sichtbare Variablenraum, einschliesslich des ganzen Berichts.
+
+Die Route startet die Deprovisionierung, die die Bestellung eingefroren hat, und streicht danach das Recht. Nichts davon geschieht hier im Modell: dieser Task bittet darum, und das Verfahren des Produkts tut es.
+
+Eine Zeile, deren Rückgabe an einer Vorrangregel scheitert — etwas anderes braucht sie noch —, antwortet 409. Das ist ein Zwischenfall an dieser Instanz und keine stille Auslassung: jemand muss entscheiden, was zuerst geht.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=&#34;/api/v1/orders/&#34; + recht.orderId + &#34;/lines/&#34; + recht.itemId + &#34;/return&#34;" target="path" />
+          <zeebe:input source="={grund: &#34;Befristung abgelaufen&#34;}" target="body" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=flatten(for r in bericht.rights return (if r.overdue and r.returnable then [r] else []))" inputElement="recht"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:incoming>f_gw_zurueck</bpmn:incoming>
+      <bpmn:outgoing>f_zurueck_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende_zurueck" name="zurückgegeben">
+      <bpmn:documentation>Die Rückgaben sind angestossen. Ob das Zielsystem sie schon vollzogen hat, ist Sache der Deprovisionierungsverfahren — jedes meldet seine Zeile selbst als zurückgegeben.
+
+Bis dahin führt das Inventar das Recht weiter, und der nächste Lauf sieht es erneut als überfällig. Das ist richtig so: gelaufen ist es erst, wenn es gelaufen ist.</bpmn:documentation>
+      <bpmn:incoming>f_zurueck_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:endEvent id="ende_leer" name="nichts offen">
+      <bpmn:documentation>Nichts war überfällig, oder nichts Überfälliges war zurückgebbar. `bericht.counts` unterscheidet die beiden, und `bericht.note` sagt es im Klartext, wenn überhaupt kein Recht ein Ende trägt — der übliche Fall, solange kein Produkt `maxDays` setzt.</bpmn:documentation>
+      <bpmn:incoming>f_gw_leer</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_lesen" sourceRef="start_taeglich" targetRef="faellige_lesen" />
+    <bpmn:sequenceFlow id="f_lesen_gw" sourceRef="faellige_lesen" targetRef="gw_offen" />
+    <bpmn:sequenceFlow id="f_gw_zurueck" name="überfällig und zurückgebbar" sourceRef="gw_offen" targetRef="zurueckgeben">
+      <bpmn:conditionExpression>= bericht.counts.overdue &gt; bericht.counts.unendable</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_zurueck_ende" sourceRef="zurueckgeben" targetRef="ende_zurueck" />
+    <bpmn:sequenceFlow id="f_gw_leer" name="nichts" sourceRef="gw_offen" targetRef="ende_leer" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_befristung">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_taeglich">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="148" y="225" width="45" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_lesen" bpmnElement="faellige_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gw" bpmnElement="gw_offen">
+        <dc:Bounds x="400" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel><dc:Bounds x="382" y="232" width="87" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_zurueck" bpmnElement="zurueckgeben">
+        <dc:Bounds x="510" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_zurueck" bpmnElement="ende_zurueck">
+        <dc:Bounds x="662" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="638" y="145" width="85" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende_leer" bpmnElement="ende_leer">
+        <dc:Bounds x="662" y="262" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="644" y="305" width="73" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_lesen" bpmnElement="f_start_lesen">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_lesen_gw" bpmnElement="f_lesen_gw">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_zurueck" bpmnElement="f_gw_zurueck">
+        <di:waypoint x="425" y="175" /><di:waypoint x="425" y="120" /><di:waypoint x="510" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_zurueck_ende" bpmnElement="f_zurueck_ende">
+        <di:waypoint x="610" y="120" /><di:waypoint x="662" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gw_leer" bpmnElement="f_gw_leer">
+        <di:waypoint x="425" y="225" /><di:waypoint x="425" y="280" /><di:waypoint x="662" y="280" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

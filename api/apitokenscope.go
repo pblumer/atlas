@@ -96,6 +96,22 @@ const (
 	// get the answer, and a credential handed to a peer should be the narrowest one
 	// that answers the question — here, one GET.
 	apiScopeStatus = "status"
+
+	// apiScopeReminders reaches one route: what is waiting for one named person
+	// (ADR-0343). It is what a reminder process carries.
+	//
+	// A scope of its own rather than an addition to apiScopeInventory, which would
+	// have been the cheap choice because the reconciliation run is already there.
+	// That scope's argument is "reads and writes about what the estate holds"; this
+	// is about what people owe, and a scope whose name no longer describes its
+	// contents is one nobody can reason about — which defeats the single property
+	// ADR-0194 asks of a scope, that its reach is short enough to read in a glance
+	// and see whole.
+	//
+	// It cannot read an inventory, run a comparison or decide anything. It can find
+	// out who owes what, and that is all. Sending is not in it either: sending is a
+	// mail task, not a route.
+	apiScopeReminders = "reminders"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -133,6 +149,12 @@ var apiScopeAllowed = map[string][]string{
 	// identity, it never sets one.
 	apiScopeStatus: {
 		"GET /api/v1/node",
+	},
+	// One pattern. The route it names refuses `?principal=` to anything without the
+	// operator role, so this scope's reach and that check are two locks on the same
+	// door — a token minted here still has to be held by an account that may ask.
+	apiScopeReminders: {
+		"GET /api/v1/pending-work",
 	},
 	// Two patterns, and the pair is the whole of what a directory mirror does: ask
 	// where to resume, report what was read. Nothing else is added here without the

@@ -236,6 +236,33 @@ type Limits struct {
 	// that invites an essay gets an essay from the first reviewer and "ok" from
 	// every one after.
 	RecertifyNote int64
+
+	// ExpiringWindow is how far ahead one read may look, in days
+	// (ADR-0344). A ceiling on a *question* rather than
+	// on a message, and it earns that: a window wide enough to cover every right
+	// with an end turns "what ends soon" into a list of the whole inventory, which
+	// is a different route's job and a different cost.
+	ExpiringWindow int32
+
+	// ExpiringReport is how many rights one answer renders. The counts are over
+	// everything either way, so a cut list costs a second request and never a wrong
+	// number — which is why this one is a truncation where a campaign's rows are a
+	// refusal.
+	ExpiringReport int32
+
+	// ConflictReport is how many held incompatible pairs one answer lists
+	// (ADR-0342). The counts are over everything, so a cut list
+	// costs a second request and never a wrong number. A rule declared over a large
+	// estate can produce a great many findings at once and none of them is cleared
+	// automatically — which is correct, and is also why the list is bounded and the
+	// number is not.
+	ConflictReport int32
+
+	// PendingWorkItems is how many waiting items one person's answer lists
+	// (ADR-0343). Small, because the consumer is a reminder and a
+	// reminder listing two hundred lines is one nobody reads to the end. The counts
+	// are over everything, so a message can say "and 190 more" truthfully.
+	PendingWorkItems int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -290,6 +317,10 @@ func Default() Limits {
 		RecertifyRows:         5_000,
 		RecertifyReport:       500,
 		RecertifyNote:         4 << 10,
+		ExpiringWindow:        365,
+		ExpiringReport:        500,
+		PendingWorkItems:      50,
+		ConflictReport:        500,
 	}
 }
 

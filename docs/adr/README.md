@@ -427,6 +427,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0339](0339-the-definition-key-space-never-goes-backwards.md) | The definition key space never goes backwards | Accepted | Landed |
 | [0340](0340-worker-circuit-breaker.md) | An outage stops at the worker, not at every token | Accepted | Not started |
 | [0341](0341-access-recertification.md) | Recertification asks whether a right is still justified, and refuses to let silence answer | Accepted | Landed |
+| [0342](0342-conflicting-rights.md) | A conflict is a fact about a pair, and no rule can say which half is wrong | Accepted | Landed |
+| [0343](0343-pending-work.md) | A reminder has to be able to ask about somebody else, and a person must not | Accepted | Landed |
+| [0344](0344-time-bounded-entitlements.md) | A right may carry an end, and an end that has passed is a debt rather than a fact | Accepted | Landed |
 
 ## The two states of a record
 

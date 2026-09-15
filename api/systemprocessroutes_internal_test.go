@@ -48,21 +48,65 @@ var (
 
 // pathShape reduces a path to what has to match: literal segments, with every
 // filled-in segment written the same way on both sides.
-func pathShape(p string) string { return routeParam.ReplaceAllString(p, "{}") }
+//
+// A query string is cut first. It is not part of the route — the server mounts
+// "/api/v1/entitlements/expiring" and reads `within` off the URL inside the handler
+// — so a model calling it with one is calling the same route. Without this the
+// first model to pass a parameter would fail a guard about paths for a reason that
+// has nothing to do with paths.
+func pathShape(p string) string {
+	if i := strings.IndexByte(p, '?'); i >= 0 {
+		p = p[:i]
+	}
+	return routeParam.ReplaceAllString(p, "{}")
+}
+
+// unescapeQuotes turns either spelling of an escaped quote back into one.
+//
+// XML has two and an author may use either; this guard used to know only the
+// numeric one, and the consequence was not a failure but a **silent skip**: the
+// literals were never found, the shape came out empty, and a path that did not
+// start with /api/ was passed over as somebody else's server. A guard that skips
+// what it cannot parse is worse than no guard, because it reports the same "ok".
+func unescapeQuotes(s string) string {
+	return strings.NewReplacer("&#34;", `"`, "&quot;", `"`).Replace(s)
+}
 
 // feelPathShape turns a FEEL expression that builds a path into the same shape.
+//
 // `"/api/v1/orders/" + orderId + "/next"` is two literals with something between
 // them, which is exactly what `/api/v1/orders/{id}/next` is.
+//
+// The gaps are what this walks, not the literals. An earlier version joined the
+// literals with "{}" and so could only see a filled-in segment *between* two of
+// them: `"/api/v1/recertification/" + id` came out as `/api/v1/recertification/`,
+// which matches no route and fails for a reason that has nothing to do with the
+// path. A parameter at either end is as ordinary as one in the middle.
 func feelPathShape(expr string) string {
-	lits := feelLiteral.FindAllStringSubmatch(expr, -1)
-	parts := make([]string, 0, len(lits))
-	for _, l := range lits {
-		parts = append(parts, l[1])
+	// The leading "=" is FEEL's own marker that this is an expression at all, not
+	// something being substituted into the path. Counting it as a gap put a "{}" in
+	// front of every shape, and a shape that does not begin with /api/ is passed
+	// over as somebody else's server — a silent skip rather than a failure.
+	expr = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(expr), "="))
+	var (
+		b    strings.Builder
+		at   int
+		lits = feelLiteral.FindAllStringSubmatchIndex(expr, -1)
+	)
+	gap := func(from, to int) {
+		// Anything but the concatenation operator and whitespace is something being
+		// substituted in — a variable, a call, a conditional.
+		if strings.Trim(expr[from:to], " \t+") != "" {
+			b.WriteString("{}")
+		}
 	}
-	joined := strings.Join(parts, "{}")
-	// A concatenation reads "…/orders/" + id + "/next": joining leaves the slashes
-	// that were already in the literals, so collapse the doubled ones.
-	return strings.ReplaceAll(pathShape(joined), "//", "/")
+	for _, m := range lits {
+		gap(at, m[0])
+		b.WriteString(expr[m[2]:m[3]])
+		at = m[1]
+	}
+	gap(at, len(expr))
+	return strings.ReplaceAll(pathShape(b.String()), "//", "/")
 }
 
 func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
@@ -90,8 +134,7 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 			var shape string
 			switch {
 			case feelPath.MatchString(block):
-				shape = feelPathShape(strings.ReplaceAll(
-					feelPath.FindStringSubmatch(block)[1], "&#34;", `"`))
+				shape = feelPathShape(unescapeQuotes(feelPath.FindStringSubmatch(block)[1]))
 			case staticHeader.MatchString(block):
 				shape = pathShape(staticHeader.FindStringSubmatch(block)[1])
 			default:
