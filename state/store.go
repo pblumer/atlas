@@ -1279,6 +1279,25 @@ func (q queries) Entitlement(principal, itemID string) (*model.EntitlementValue,
 	return v.(*model.EntitlementValue), true, nil
 }
 
+// EntitlementHistoryOf calls fn with every hold one principal has ended, most
+// recently ended first.
+//
+// Descending, because the family only grows and the question asked of it is
+// almost always about the recent past; a caller after an old period gives a
+// window. There is no whole-family scan beside this one on purpose — "every hold
+// everybody has ever ended" is a question with no bounded answer, and a route
+// that offered it would be a slow way to export the estate's access history.
+func (q queries) EntitlementHistoryOf(principal string, fn func(v *model.EntitlementHistoryValue) error) error {
+	lo := entitlementHistoryPrefix(principal)
+	return q.scanRangeDesc(lo, prefixEnd(lo), func(_, raw []byte) error {
+		v, err := model.DecodeValue(model.VTEntitlementHistory, raw)
+		if err != nil {
+			return err
+		}
+		return fn(v.(*model.EntitlementHistoryValue))
+	})
+}
+
 // EntitlementCount returns how many entitlements the inventory holds. It is the
 // measurement the record's open question asks for — whether a column family of
 // millions stays within a workable checkpoint — and the number an operator reads

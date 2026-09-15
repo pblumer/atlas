@@ -367,6 +367,7 @@ type Server struct {
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
+	favourites       *favouriteStore     // one list of marked products per account (ADR-0348)
 	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-0321)
 	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
@@ -1239,6 +1240,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	favourites, err := newFavouriteStore(filepath.Join(dataDir, "favourites"))
+	if err != nil {
+		return nil, err
+	}
 	dmnDrafts, err := newDmnDraftStore(filepath.Join(dataDir, "dmn-drafts"))
 	if err != nil {
 		return nil, err
@@ -1371,6 +1376,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
+		favourites:        favourites,
 		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
@@ -1467,6 +1473,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogStore, s.orderStore = catalogStore, orderStore
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
+		// Which groups the recipient is in, for the eligibility check
+		// (ADR-0347). It reuses the principal synthesis the
+		// reminder route needed — the same question, asked about somebody who is not
+		// calling — and takes its group ids and nothing else.
+		func(recipient string) ([]string, error) {
+			p, err := s.principalOf(recipient)
+			if err != nil {
+				return nil, err
+			}
+			return p.GroupIDs, nil
+		},
 		func(message, orderID string, vars map[string]string) error {
 			start := make([]model.VariableValue, 0, len(vars))
 			for name, value := range vars {
@@ -1503,8 +1520,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			})
 			return s.drive()
 		},
-		func(principal, itemID string) error {
-			s.do(func() { s.proc.RevokeEntitlement(principal, itemID) })
+		// And the closing of a hold. The reason is Returned and never anything
+		// else: this callback is reached only from a line that reached Returned,
+		// which is a right that was given back. The correction path — a right
+		// reconciliation found the target system does not have — goes through
+		// handleRevokeDiscrepancy and says so there, because the two rows assert
+		// different things (ADR-0346).
+		func(principal, itemID string, at int64, by string) error {
+			s.do(func() {
+				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
+			})
 			return s.drive()
 		},
 		// And what they already hold, for the basket's second resolution. Read off

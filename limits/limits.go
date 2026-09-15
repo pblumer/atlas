@@ -258,6 +258,26 @@ type Limits struct {
 	// number is not.
 	ConflictReport int32
 
+	// HistoryReport is how many ended holds one answer lists
+	// (ADR-0346).
+	//
+	// Larger than the others in this group, and deliberately: every ceiling beside
+	// it bounds a list of problems, and a problem list that needs a high ceiling
+	// is telling you something. This one bounds a person's access history, which
+	// grows with their tenure rather than with anything being wrong — somebody ten
+	// years in a job that changes has a long and entirely healthy list, and a
+	// ceiling that truncated it would omit the oldest rows, which are the ones an
+	// audit reaches for.
+	HistoryReport int32
+
+	// Favourites is how many products one account may mark
+	// (ADR-0348). The smallest ceiling in this file, and the one whose
+	// number is a *product* judgement as much as a budget: a shortcut list nobody
+	// can scan has stopped being a shortcut. It is a budget nonetheless, because
+	// without it one account can grow a stored file without bound by pressing a
+	// star.
+	Favourites int32
+
 	// PendingWorkItems is how many waiting items one person's answer lists
 	// (ADR-0343). Small, because the consumer is a reminder and a
 	// reminder listing two hundred lines is one nobody reads to the end. The counts
@@ -321,6 +341,8 @@ func Default() Limits {
 		ExpiringReport:        500,
 		PendingWorkItems:      50,
 		ConflictReport:        500,
+		HistoryReport:         2000,
+		Favourites:            100,
 	}
 }
 

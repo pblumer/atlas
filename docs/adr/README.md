@@ -431,6 +431,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0343](0343-pending-work.md) | A reminder has to be able to ask about somebody else, and a person must not | Accepted | Landed |
 | [0344](0344-time-bounded-entitlements.md) | A right may carry an end, and an end that has passed is a debt rather than a fact | Accepted | Landed |
 | [0345](0345-the-job-type-index-space-never-goes-backwards.md) | The job-type index space never goes backwards | Accepted | Landed |
+| [0346](0346-entitlement-history.md) | The remedy must not destroy the evidence, so a hold that ends leaves a row | Accepted | Landed |
+| [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
+| [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
 
 ## The two states of a record
 

@@ -42,7 +42,7 @@ func TestNothingIsGivenBackFromUnderSomethingThatNeedsIt(t *testing.T) {
 	if err := Returnable(o, "laptop"); err != nil {
 		t.Fatalf("the laptop, which nothing needs, was refused: %v", err)
 	}
-	o, err = Returning(o, "laptop", 100)
+	o, err = Returning(o, "laptop", 100, "usr_ada")
 	if err != nil {
 		t.Fatalf("Returning: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestNothingIsGivenBackFromUnderSomethingThatNeedsIt(t *testing.T) {
 // TestARevocationIsNotAskedForTwice: two revocations racing against one target
 // system is how a half-deleted account happens.
 func TestARevocationIsNotAskedForTwice(t *testing.T) {
-	o, err := Returning(aHeldOrder(), "laptop", 100)
+	o, err := Returning(aHeldOrder(), "laptop", 100, "usr_ada")
 	if err != nil {
 		t.Fatalf("Returning: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestARevocationIsNotAskedForTwice(t *testing.T) {
 // TestAFailedRevocationCanBeTriedAgain — the ordinary repair: fix the target
 // system, ask once more.
 func TestAFailedRevocationCanBeTriedAgain(t *testing.T) {
-	o, err := Returning(aHeldOrder(), "laptop", 100)
+	o, err := Returning(aHeldOrder(), "laptop", 100, "usr_ada")
 	if err != nil {
 		t.Fatalf("Returning: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestAFailedRevocationCanBeTriedAgain(t *testing.T) {
 	if err := Returnable(o, "laptop"); err != nil {
 		t.Fatalf("a failed revocation could not be retried: %v", err)
 	}
-	if _, err := Returning(o, "laptop", 200); err != nil {
+	if _, err := Returning(o, "laptop", 200, "usr_ada"); err != nil {
 		t.Errorf("Returning after a failure: %v", err)
 	}
 }
@@ -157,7 +157,7 @@ func TestOnlyWhatIsHeldCanBeGivenBack(t *testing.T) {
 	if err := Returnable(Order{ID: "ord_1"}, "nothing"); err == nil {
 		t.Error("a line the order does not carry was given back")
 	}
-	if _, err := Returning(aHeldOrder(), "laptop", 0); err == nil {
+	if _, err := Returning(aHeldOrder(), "laptop", 0, "usr_ada"); err == nil {
 		t.Error("a return with no moment was accepted")
 	}
 }
@@ -171,7 +171,7 @@ func TestAReturnIsReportedOnlyByTheReturnThatWasAskedFor(t *testing.T) {
 		t.Fatal("a held line was recorded as given back without a return being asked for")
 	}
 
-	moving, err := Returning(o, "laptop", 100)
+	moving, err := Returning(o, "laptop", 100, "usr_ada")
 	if err != nil {
 		t.Fatalf("Returning: %v", err)
 	}

@@ -34,12 +34,27 @@ func (p *Processor) GrantEntitlement(v model.EntitlementValue) {
 // Revoking something nobody was recorded as holding is a no-op rather than an
 // error: it is the state the caller asked for, and refusing it would make a
 // reconciliation that removes a privilege twice into a failure.
-func (p *Processor) RevokeEntitlement(principal, itemID string) {
+//
+// The moment and the reason travel in the value, read by the caller at command
+// time and frozen into the event, so replay reproduces them rather than
+// re-reading a clock or a request (I4/I6). Everything else about the hold that is
+// ending — when it began, what it was ordered under, when it was meant to end —
+// is deliberately *not* carried: it is already in state, and reading it where the
+// event is folded is what makes a double revocation write one history row instead
+// of two (ADR-0346).
+//
+// The value is an [model.EntitlementHistoryValue] with those three fields set and
+// the rest left to the fold. A revocation and a hold are different facts, and the
+// event that ends a hold says so in its type.
+func (p *Processor) RevokeEntitlement(principal, itemID string, at int64,
+	reason model.HoldEnd, by string) {
+
 	p.queue = append(p.queue, Command{
-		ValueType: model.VTEntitlement,
+		ValueType: model.VTEntitlementHistory,
 		Intent:    model.IntentEntitlementRevoked,
-		Value: inflightValue{entitlement: model.EntitlementValue{
+		Value: inflightValue{entitlementEnd: model.EntitlementHistoryValue{
 			Principal: principal, ItemID: itemID,
+			EndedAt: at, EndedReason: reason, EndedBy: by,
 		}},
 	})
 }
@@ -58,10 +73,10 @@ func handleEntitlementGranted(c *ProcessingContext) {
 
 // handleEntitlementRevoked records a revocation.
 func handleEntitlementRevoked(c *ProcessingContext) {
-	v := c.cmd.Value.entitlement
+	v := c.cmd.Value.entitlementEnd
 	if !v.Valid() {
 		return
 	}
-	c.appendEvent(0, model.VTEntitlement, model.IntentEntitlementRevoked,
-		inflightValue{entitlement: v})
+	c.appendEvent(0, model.VTEntitlementHistory, model.IntentEntitlementRevoked,
+		inflightValue{entitlementEnd: v})
 }

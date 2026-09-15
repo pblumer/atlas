@@ -84,10 +84,10 @@ func TestRevokingRemovesOnlyWhatItNames(t *testing.T) {
 			Principal: "usr_alice", ItemID: item, Since: 1000,
 		})
 	}
-	p.RevokeEntitlement("usr_alice", "vpn")
+	p.RevokeEntitlement("usr_alice", "vpn", 2000, model.EndReturned, "usr_ada")
 	// Revoking what nobody holds is the state the caller asked for, not an error —
 	// a reconciliation that removes a privilege twice must not fail.
-	p.RevokeEntitlement("usr_alice", "nie-gehabt")
+	p.RevokeEntitlement("usr_alice", "nie-gehabt", 2000, model.EndReturned, "usr_ada")
 	if err := p.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestAnEntitlementOutlivesItsRecovery(t *testing.T) {
 	p1.GrantEntitlement(model.EntitlementValue{
 		Principal: "usr_alice", ItemID: "laptop", Since: 1000,
 	})
-	p1.RevokeEntitlement("usr_alice", "laptop")
+	p1.RevokeEntitlement("usr_alice", "laptop", 2000, model.EndReturned, "usr_ada")
 	if err := p1.RunUntilIdle(); err != nil {
 		t.Fatalf("RunUntilIdle 1: %v", err)
 	}

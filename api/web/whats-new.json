@@ -2,6 +2,60 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "products-can-be-marked-as-favourites",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Products can be marked as favourites.",
+        "de": "Products can be marked as favourites."
+      },
+      "summary": {
+        "en": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident.",
+        "de": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-product-can-now-say-who-may-receive-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can now say who may receive it.",
+        "de": "A product can now say who may receive it."
+      },
+      "summary": {
+        "en": "A catalogue carries an audience and that gate is fail-closed — but it was the only gate: whoever was in a catalogue's audience could order anything in it, and the sole thing between a person and domain administration was an approval rule, which says who decides rather than who may ask.",
+        "de": "A catalogue carries an audience and that gate is fail-closed — but it was the only gate: whoever was in a catalogue's audience could order anything in it, and the sole thing between a person and domain administration was an approval rule, which says who decides rather than who may ask."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-hold-that-ends-now-leaves-a-record-that-it-existed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A hold that ends now leaves a record that it existed.",
+        "de": "A hold that ends now leaves a record that it existed."
+      },
+      "summary": {
+        "en": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all.",
+        "de": "The inventory is present tense by construction — a grant writes a row, a revocation deletes it — and the order behind a right is deleted by retention long before the right ends, which is why the inventory is engine state at all."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
       "version": "Unreleased",
       "date": null,
@@ -211,106 +265,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "atlas-keeps-its-accounts-and-groups-from-a-microsoft-entra-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing.",
-        "de": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing."
-      },
-      "summary": {
-        "en": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there.",
-        "de": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "restoring-a-backup-from-another-installation-no-longer-attac",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A restored backup no longer takes over another server's numbers",
-        "de": "Ein wiederhergestelltes Backup übernimmt nicht mehr die Nummern eines anderen Servers"
-      },
-      "summary": {
-        "en": "The backup file under Console → System is meant to move your models to another Atlas — a new box, a test server, a colleague's. Every deployed process in it carries a number, and Atlas files that process's history under that number: which instances finished, how often each step was reached. The number is handed out by the server that deployed the process, and the backup does not carry the counter that hands it out. So restoring onto a server that had already used that number replaced its process with the one from the file, and the history stayed where it was — a process deployed somewhere else reported instances it had never run, on steps it had never reached, and the process that really did the work disappeared from the list. The backup also carried the server's own identity, so the restoring server started answering as the one the file came from. Both are fixed: a deployed process whose number is already in use here is no longer taken, and the restore says which ones and why, so you can decide whether you wanted a fresh server. A server keeps its own identity through a restore. Restoring your own backup onto your own server is unchanged, and so is the full snapshot, which carries the counter and the history together and was never affected.",
-        "de": "Die Backup-Datei unter «Console → System» ist dafür gedacht, Ihre Modelle auf ein anderes Atlas zu bringen — einen neuen Server, eine Testumgebung, den Rechner einer Kollegin. Jeder ausgelieferte Prozess darin trägt eine Nummer, und unter dieser Nummer legt Atlas die Historie dieses Prozesses ab: welche Instanzen abgeschlossen wurden, wie oft jeder Schritt erreicht wurde. Die Nummer vergibt der Server, der den Prozess ausgeliefert hat, und das Backup enthält den Zähler nicht, der sie vergibt. Beim Wiederherstellen auf einem Server, der diese Nummer bereits vergeben hatte, wurde dessen Prozess durch den aus der Datei ersetzt, während die Historie liegen blieb: Ein anderswo ausgelieferter Prozess meldete Instanzen, die er nie ausgeführt hatte, auf Schritten, die er nie erreicht hatte — und der Prozess, der die Arbeit tatsächlich geleistet hatte, verschwand aus der Liste. Zusätzlich enthielt das Backup die Identität des Servers, sodass der wiederherstellende Server fortan als derjenige antwortete, aus dem die Datei stammte. Beides ist behoben: Ein ausgelieferter Prozess, dessen Nummer hier bereits vergeben ist, wird nicht mehr übernommen, und die Wiederherstellung nennt, welche und warum — so lässt sich entscheiden, ob ein frischer Server gemeint war. Ein Server behält seine eigene Identität. Das Wiederherstellen des eigenen Backups auf dem eigenen Server bleibt unverändert, ebenso der vollständige Snapshot, der Zähler und Historie gemeinsam trägt und nie betroffen war."
-      },
-      "link": {
-        "label": "ADR-0107",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0107-backup-and-restore.md"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Console → System and download the backup file.",
-          "Upload it on another Atlas under Restore.",
-          "The result line names any deployed process it did not take, with the number and both sides of the clash."
-        ],
-        "de": [
-          "«Console → System» öffnen und die Backup-Datei herunterladen.",
-          "Sie auf einem anderen Atlas unter «Restore» hochladen.",
-          "Die Ergebniszeile nennt jeden ausgelieferten Prozess, der nicht übernommen wurde — mit der Nummer und beiden Seiten des Konflikts."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open System",
-          "de": "System öffnen"
-        },
-        "route": "#/console/system"
-      }
-    },
-    {
-      "id": "a-job-type-index-is-never-issued-twice-so-a-worker-cannot-be",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A task type's number is never given to another task type",
-        "de": "Die Nummer eines Aufgabentyps wird nie einem anderen Aufgabentyp gegeben"
-      },
-      "summary": {
-        "en": "A service task in a diagram names the kind of work it needs — \"send-email\", \"charge-card\" — and Atlas gives each kind a number. Waiting work is stored under that number, and a worker asking for a kind of work is answered by it, so a number handed to a second kind would hand that worker somebody else's work. Atlas worked the numbers out at startup from the list of kinds it could still read, which is right only as long as that list never loses an entry. It can: a file removed by hand or missing from a partial restore, and — with no editing at all — a kind whose name a later Atlas version turns into a built-in, which is then dropped from the list on purpose and took its number with it. The numbers are now written down as they are handed out, so one that has been used is never used again, whatever becomes of the entry that held it. An installation that upgrades gets its record written on the first start after the upgrade.",
-        "de": "Eine Service-Task im Diagramm benennt die Art von Arbeit, die sie braucht — «send-email», «charge-card» — und Atlas gibt jeder Art eine Nummer. Wartende Arbeit wird unter dieser Nummer abgelegt, und ein Worker, der nach einer Art Arbeit fragt, wird darüber bedient. Eine Nummer, die an eine zweite Art vergeben wird, würde diesem Worker also fremde Arbeit zuteilen. Atlas ermittelte die Nummern beim Start aus der Liste der Arten, die es noch lesen konnte — was nur stimmt, solange diese Liste keinen Eintrag verliert. Das kann sie: eine von Hand entfernte Datei oder eine, die bei einer unvollständigen Wiederherstellung fehlt, und — ganz ohne Eingriff — eine Art, deren Name in einer späteren Atlas-Version zu einem eingebauten wird und die deshalb bewusst aus der Liste fällt, wobei sie ihre Nummer mitnahm. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird, was auch immer aus dem Eintrag wird, der sie hielt. Eine aktualisierte Installation hält ihren Stand beim ersten Start nach dem Update fest."
-      },
-      "link": {
-        "label": "ADR-0007",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0007-job-worker-protocol.md"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Workers and look at the job types the engine knows.",
-          "Each model-authored type keeps the number it was first given, for the life of the installation.",
-          "`atlas check-job-types --data-dir …` answers the same question about a backup, without starting a server."
-        ],
-        "de": [
-          "«Operations → Workers» öffnen und die der Engine bekannten Job-Typen ansehen.",
-          "Jeder im Modell definierte Typ behält die Nummer, die er zuerst erhalten hat, über die gesamte Lebensdauer der Installation.",
-          "«atlas check-job-types --data-dir …» beantwortet dieselbe Frage zu einer Sicherung, ohne einen Server zu starten."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Workers",
-          "de": "Workers öffnen"
-        },
-        "route": "#/operations/workers"
       }
     }
   ]

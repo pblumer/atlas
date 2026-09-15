@@ -197,6 +197,46 @@ func (t *Tx) DeleteEntitlement(principal, itemID string) error {
 	return t.b.Delete(keyEntitlement(principal, itemID), nil)
 }
 
+// EndEntitlement closes a hold: it writes the history row and deletes the live
+// entitlement, in one transaction.
+//
+// The two together, because either alone is a lie. A delete without the row loses
+// the hold; a row without the delete reports somebody as both holding and having
+// returned the same thing.
+//
+// It reads the hold through this transaction rather than taking it from the
+// caller, and that is the load-bearing choice. The batch is indexed, so the read
+// sees this transaction's own pending writes, which makes it correct in the two
+// cases a frozen copy gets wrong: revoking twice writes one row rather than two
+// (the second read finds nothing), and a grant and a revocation folded in the
+// same batch close the hold that was actually granted. It stays deterministic —
+// it reads state this same pipeline built, in the same order, live and on replay
+// alike (invariants I4/I6) — because every field that could not be derived that
+// way travels in the event instead.
+//
+// Reports whether a hold was there to close. Revoking something nobody held stays
+// the harmless no-op [DeleteEntitlement] describes, and writes no row: a history
+// of holds that never existed is not a smaller error than no history at all.
+func (t *Tx) EndEntitlement(principal, itemID string, endedAt int64,
+	reason model.HoldEnd, endedBy string) (bool, error) {
+
+	var held model.EntitlementValue
+	found, err := t.readInto(keyEntitlement(principal, itemID), &held)
+	if err != nil || !found {
+		return false, err
+	}
+	row := model.EntitlementHistoryValue{
+		Principal: held.Principal, ItemID: held.ItemID, VariantID: held.VariantID,
+		OrderID: held.OrderID, Since: held.Since, Until: held.Until,
+		Origin: held.Origin, EndedAt: endedAt, EndedReason: reason, EndedBy: endedBy,
+	}
+	if err := t.b.Set(keyEntitlementHistory(principal, endedAt, itemID),
+		t.encodeValue(&row), nil); err != nil {
+		return false, err
+	}
+	return true, t.b.Delete(keyEntitlement(principal, itemID), nil)
+}
+
 // --- Incident ---
 
 // PutIncident writes an incident, keyed by the element instance it is attached to.

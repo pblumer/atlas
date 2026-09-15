@@ -97,9 +97,12 @@ func plural(n int) string {
 	return "are still"
 }
 
-// Returning marks a line's revocation as under way. The process itself is started
-// by the caller, which is the half that needs an engine.
-func Returning(o Order, itemID string, at int64) (Order, error) {
+// Returning marks a line's revocation as under way, recording who asked. The
+// process itself is started by the caller, which is the half that needs an engine.
+//
+// by may be empty where nothing identified the caller — single-user mode has no
+// principals — and an empty actor is recorded as empty rather than as a guess.
+func Returning(o Order, itemID string, at int64, by string) (Order, error) {
 	if err := Returnable(o, itemID); err != nil {
 		return o, err
 	}
@@ -110,7 +113,7 @@ func Returning(o Order, itemID string, at int64) (Order, error) {
 	copy(lines, o.Lines)
 	for i := range lines {
 		if lines[i].ItemID == itemID {
-			lines[i].Status = StatusReturning
+			lines[i].Status, lines[i].ReturnedBy = StatusReturning, by
 			break
 		}
 	}

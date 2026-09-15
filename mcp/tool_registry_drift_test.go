@@ -559,6 +559,33 @@ var mcpOmittedRoutes = map[string]string{
 	// to a person. One route, two modes, and a tool cannot expose only the safe one.
 	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
 
+	// Favourites (ADR-0348). Omitted, and not for a disclosure reason:
+	// the routes only ever touch the caller's own list, so there is nothing here to
+	// read about anybody else.
+	//
+	// A favourite is a **navigation aid for a person in front of a screen**. It
+	// exists so somebody can find a product again among hundreds. An assistant does
+	// not navigate a screen — it can list the catalogue and name a product directly
+	// — so a tool here would buy nothing on the read side, and on the write side it
+	// would let a robot set a preference into somebody's portal that they did not
+	// choose and have no obvious way to attribute.
+	"GET /api/v1/portal/favourites":             "a bookmark list is a navigation aid for a person at a screen, which an assistant does not need",
+	"PUT /api/v1/portal/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
+	"DELETE /api/v1/portal/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
+
+	// Access history (ADR-0346). Omitted, and the reason is
+	// not the inventory's.
+	//
+	// The inventory routes are withheld because they are other people's access.
+	// This one is withheld because of what it is *for*: it is the record an access
+	// review reads, and the one structure in the portal built to outlive every
+	// retention rule around it. A tool that could read it lets an assistant
+	// assemble a person's whole access biography — every right, every period, every
+	// decider — in one call, which is a dossier rather than an answer. The `?at=`
+	// mode is sharper still: it reconstructs a past day, which is precisely the
+	// evidence somebody would want before disputing it.
+	"GET /api/v1/entitlements/history": "a person's access history is a biography, and the route reconstructs past days on request",
+
 	// Expiry (ADR-0344). Omitted for the reason GET
 	// /api/v1/inventory is: it is a list of other people's access, with the dates
 	// their access ends attached. That it happens to be read-only does not make it

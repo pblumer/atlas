@@ -220,8 +220,21 @@ type Line struct {
 	// cancellation needs no reason, because the person reading it is the person who
 	// made it. DecidedBy is a principal id.
 	DecidedBy string `json:"decidedBy,omitempty"`
-	DecidedAt int64  `json:"decidedAt,omitempty"`
-	Reason    string `json:"reason,omitempty"`
+
+	// ReturnedBy is who asked for this line to be given back, as a principal id.
+	//
+	// A third actor field beside AbandonedBy and DecidedBy, for the reason those
+	// two are apart: they are different decisions. It is recorded when the return
+	// is *asked for* rather than when it completes, because that is the only moment
+	// a person is present — what finishes a return is a deprovisioning process, and
+	// attributing the decision to it would name a robot where a decision was made.
+	//
+	// It is what the history row carries into the years after this order is deleted
+	// (ADR-0346): without it the record can say a right ended
+	// and not who ended it, which is half of what an access review asks.
+	ReturnedBy string `json:"returnedBy,omitempty"`
+	DecidedAt  int64  `json:"decidedAt,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 // Terminal reports whether this line has finished moving.

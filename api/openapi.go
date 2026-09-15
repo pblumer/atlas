@@ -910,6 +910,19 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
 			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/portal/favourites", s.handleListFavourites, apiOp{
+			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"PUT", "/api/v1/portal/favourites/{itemId}", s.handleSetFavourite, apiOp{
+			summary: "Mark one product. Marking what is already marked writes nothing and answers the list, so a star pressed twice does not churn the store",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"DELETE", "/api/v1/portal/favourites/{itemId}", s.handleClearFavourite, apiOp{
+			summary: "Unmark one product. Clearing what is not marked is the state the caller asked for rather than an error",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+
 		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
 			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Products", tArray())}},
@@ -1671,6 +1684,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "What is due to end within `?within=` days (default 30), and everything already past its end. A right past its end is still **held** — the target system still has it and nothing has run — so this reports a debt rather than a state of the world, and the record stays true. It acts on nothing: the deprovisioning is the product's own process, run by a modelled one. `unendable` counts the overdue rights whose product binds no such process, because no amount of running it will reduce them",
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("What ends soon, what should have ended, and the counts", tObject())}},
+
+		{"GET", "/api/v1/entitlements/history", s.handleEntitlementHistory, apiOp{
+			summary: "What this principal **used to** hold: every hold that has ended, most recently ended first. `?principal=` asks about somebody else and needs the **admin** role, exactly as the inventory does. `?at=` (RFC 3339 or unix nanoseconds) answers the access review's real question instead — what the record said they held at that moment, drawn from the ended holds *and* from what is still held. Every row says whether it is evidence of access or only of a claim: a hold closed as `corrected` is one reconciliation found the target system did not have, and reporting it as a period of access would assert what ADR-0334 declined to decide. The row survives the order that produced it, which retention deletes long before the access ends, and `overdueDays` is the only surviving trace that a right outstayed the end it was granted with",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The ended holds, or what the record said at a moment", tObject())}},
 
 		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
 			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign",
