@@ -420,6 +420,12 @@ The control-flow basics most real models use.
   ([ADR-0336](docs/adr/0336-cleaning-up-the-decision-store.md)).
   Operations' decision page is where that happens, and it answers "what is pinned to
   this version" for the first time.
+  **And the key space underneath both got a floor.** Deleting the highest-keyed
+  definition and restarting used to hand its key back, and the next definition
+  inherited the instance history filed under it — measured, on a process that had
+  never run. The highest key ever issued is now durable, written before the keys it
+  covers are used
+  ([ADR-draft-the-definition-key-space-never-goes-backwards](docs/adr/draft-the-definition-key-space-never-goes-backwards.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

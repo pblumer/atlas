@@ -1,0 +1,30 @@
+{
+  "tags": ["Operations", "Engine"],
+  "title": {
+    "en": "A new process no longer inherits a deleted one's history",
+    "de": "Ein neuer Prozess erbt nicht mehr die Historie eines gelöschten"
+  },
+  "summary": {
+    "en": "Every deployed process and every deployed decision gets a number, and that number is what the engine files its history under: which instances finished, how often each step was reached, when it last did anything. The number was worked out at startup from the deployments still on disk — which is right only as long as none is ever deleted. Delete the newest one, restart, and the next deployment got the same number back, together with everything filed under it: a process deployed a minute ago would report a finished instance and a step it had never reached. Nothing was lost and nothing crashed; the figures simply belonged to something else. The numbers are now written down as they are handed out, so one that has been used is never used again — even after the deployment that held it is gone. A restart in the middle of a deployment can now leave a gap in the numbering, which costs nothing. An installation that upgrades starts keeping the record from its next deployment onward.",
+    "de": "Jeder ausgelieferte Prozess und jede ausgelieferte Entscheidung erhält eine Nummer, und unter dieser Nummer legt die Engine ihre Historie ab: welche Instanzen abgeschlossen wurden, wie oft jeder Schritt erreicht wurde, wann zuletzt etwas geschah. Die Nummer wurde beim Start aus den noch vorhandenen Auslieferungen ermittelt — was nur stimmt, solange keine je gelöscht wird. Löscht man die neueste und startet neu, bekam die nächste Auslieferung dieselbe Nummer zurück, mitsamt allem, was darunter abgelegt war: Ein vor einer Minute ausgelieferter Prozess meldete eine abgeschlossene Instanz und einen Schritt, den er nie erreicht hatte. Verloren ging nichts und abgestürzt ist nichts; die Zahlen gehörten schlicht zu etwas anderem. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird — auch nicht, wenn die Auslieferung, die sie hielt, verschwunden ist. Ein Neustart mitten in einer Auslieferung kann jetzt eine Lücke in der Nummerierung hinterlassen, was nichts kostet. Eine aktualisierte Installation beginnt mit ihrer nächsten Auslieferung, die Nummern festzuhalten."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations → Processes and note a deployment's key.",
+      "Delete that deployment, restart the server, and deploy something else.",
+      "The new deployment gets a fresh key, and its runtime view starts at zero instances and zero visits."
+    ],
+    "de": [
+      "«Operations → Processes» öffnen und den Schlüssel einer Auslieferung notieren.",
+      "Diese Auslieferung löschen, den Server neu starten und etwas anderes ausliefern.",
+      "Die neue Auslieferung erhält einen neuen Schlüssel, und ihre Laufzeitansicht beginnt bei null Instanzen und null Besuchen."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Processes",
+      "de": "Processes öffnen"
+    },
+    "route": "#/operations"
+  }
+}

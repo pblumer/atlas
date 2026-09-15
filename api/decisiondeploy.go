@@ -89,10 +89,17 @@ func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy 
 	if len(models) == 0 {
 		return nil, nil
 	}
+	// Spend the keys durably before any record claims one
+	// (ADR-draft-the-definition-key-space-never-goes-backwards): one reservation for
+	// the whole batch, so a publish of five decisions costs one write and not five.
+	next, err := s.reserveKeys(len(models))
+	if err != nil {
+		return nil, err
+	}
 	recs := make([]persistedDecision, 0, len(models))
 	for _, m := range models {
-		key := s.nextKey
-		s.nextKey++
+		key := next
+		next++
 		entries := make([]deployedDecisionEntry, 0, len(m.decisions))
 		for _, id := range m.decisions {
 			version := s.decisionVersions[id] + 1

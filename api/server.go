@@ -214,6 +214,12 @@ type Server struct {
 	// counterpart of versions above.
 	decisionDeploys  *decisionStore
 	decisionVersions map[string]int32
+	// keySpace is the durable floor under nextKey: the highest definition key this
+	// installation has ever issued. Without it the counter is rebuilt from the
+	// surviving records, and deleting the highest-keyed one hands its key — and the
+	// instance history filed under it — to the next deploy
+	// (ADR-draft-the-definition-key-space-never-goes-backwards).
+	keySpace *keySpaceStore
 	// landscapes is what the Starmap last read this server's *structure* as
 	// (ADR-0211 §7). It holds no health and nobody's view of anything — see
 	// [meshFacts] — and it lives here, under the same single-owner discipline as the
@@ -1115,6 +1121,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	// Opened beside the two stores whose records carry definition keys, because it is
+	// what stops one of those keys being issued twice.
+	keySpace, err := newKeySpaceStore(filepath.Join(dataDir, "keyspace"))
+	if err != nil {
+		return nil, err
+	}
 	// The engine-wide job-type table. Every compiled process is resolved through it
 	// before it is deployed, so the job type a service task's job carries means the
 	// same thing across definitions (ADR-0007/0157).
@@ -1308,6 +1320,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// Its own group: gofmt aligns a literal's contiguous run, and folding these
 		// into the one above would rewrite every line of it for no change in meaning.
 		decisionDeploys:  decisionDeploys,
+		keySpace:         keySpace,
 		decisionVersions: map[string]int32{},
 		jobTypes:         jobTypes,
 		workers:          newWorkerRegistry(nil),
@@ -1757,6 +1770,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// Kinds the operator moved to a worker lose their in-process handler here, after
 	// every registration path has run (ADR-0168).
 	if err := s.applyOffloadedKinds(); err != nil {
+		return nil, err
+	}
+	// The floor first, so the counter starts above every key ever issued rather than
+	// above every key that still has a record. loadDeployments then raises it further
+	// for the records that survive, which is what keeps an installation that predates
+	// the floor correct.
+	if err := s.loadKeyFloor(); err != nil {
 		return nil, err
 	}
 	if err := s.loadDeployments(); err != nil {

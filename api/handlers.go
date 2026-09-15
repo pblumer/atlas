@@ -923,6 +923,12 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	if err != nil {
 		return nil, err, nil
 	}
+	// Spend the keys ParseAll just handed out, durably, before any record claims one
+	// (ADR-draft-the-definition-key-space-never-goes-backwards). ParseAll assigned
+	// s.nextKey+i, so this reserves exactly that span and leaves the counter past it.
+	if _, err := s.reserveKeys(len(deployables)); err != nil {
+		return nil, nil, err
+	}
 	dmnStrings := make([]string, len(dmnXMLs))
 	for i, x := range dmnXMLs {
 		dmnStrings[i] = string(x)
@@ -1003,9 +1009,8 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			cp:         cp,
 		}
 		s.order = append(s.order, key)
-		if key >= s.nextKey {
-			s.nextKey = key + 1
-		}
+		// The counter is already past this key: reserveKeys above moved it, durably,
+		// before any of these records existed.
 		// A model that binds to a directory names a bind-password reference, and this
 		// server's supervised AD worker may not be holding that one yet — it is handed
 		// exactly the references the deployed models make (adWorkerEnv).

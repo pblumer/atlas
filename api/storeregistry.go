@@ -92,6 +92,7 @@ var persistentStores = []storeEntry{
 	{name: "wal", class: classRuntime, why: "the log: every event that ever happened"},
 	{name: "checkpoints", class: classRuntime, onDemand: true, ownMechanism: true, why: "the prefix a compacted log no longer carries"},
 	{name: "jobtypes", class: classRuntime, why: "the numbers already-stored jobs mean by their type; re-interning assigns different ones"},
+	{name: "keyspace", class: classRuntime, why: "the highest definition key ever issued; without it a deleted definition's key comes back and the next one inherits its instance history"},
 	{name: "exporter", class: classRuntime, onDemand: true, why: "how far the event export has read, so a restore does not re-export history"},
 
 	// --- design time -------------------------------------------------------
