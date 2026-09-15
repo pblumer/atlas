@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-refused-publish-said-not-published-and-withheld-every-reas",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A refused publish said \"not published\" and withheld every reason.",
+        "de": "A refused publish said \"not published\" and withheld every reason."
+      },
+      "summary": {
+        "en": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to.",
+        "de": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "who-is-this-failing-for-two-different-reasons-was-answered-a",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself.",
         "de": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-reminder-can-now-ask-what-is-waiting-for-somebody-else",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A reminder can now ask what is waiting for somebody else.",
-        "de": "A reminder can now ask what is waiting for somebody else."
-      },
-      "summary": {
-        "en": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks.",
-        "de": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks."
       },
       "link": {
         "label": "Changelog",
