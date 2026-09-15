@@ -999,6 +999,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
 			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
 			resp: jsonBody("Approvals", tArray())}},
+		{"POST", "/api/v1/approvals/decide", s.handleDecideApprovals, apiOp{
+			summary: "Decide several of one order's approvals as one decision, with one reason. Each is still completed as its own task, because each is still its own process instance; the answer is per line, because there is no transaction spanning them. Refuses keys from more than one order — one reason cannot cover two requests", tag: "Order", role: RoleUser,
+			req: jsonBody("The decision and the approvals it covers", schemaObj(map[string]any{
+				"approved": tBool(),
+				"reason":   tString(),
+				"taskKeys": tArray(),
+			}, "approved", "taskKeys")),
+			resp: jsonBody("What was decided and what was not", tObject())}},
 		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
 			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
 			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},

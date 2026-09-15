@@ -47,6 +47,10 @@ const ownApprovalBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/201005
 type approvalView struct {
 	Task struct {
 		Key uint64 `json:"key"`
+		// ProcessInstanceKey is how a test asks the instance what it was told. An
+		// approval's answer is written into the instance and not into the task, so
+		// this is the only place the decision can be read back from.
+		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 	} `json:"task"`
 	OrderID      string            `json:"orderId"`
 	ItemID       string            `json:"itemId"`

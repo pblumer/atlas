@@ -114,6 +114,49 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An approver decides a request once, instead of deciding it twelve times.** An
+  approval in Atlas is one user task per order line — the approval process is
+  started multi-instance from the order's ready lines, so a workplace ordered as
+  twelve products is twelve process instances and twelve tasks. That shape is
+  right and is unchanged: a line is what gets provisioned, refused, escalated,
+  reassigned and returned, and each of those needs its own instance.
+
+  What was wrong was the surface. The approver of a twelve-line workplace pressed
+  Genehmigen twelve times, read the same recipient twelve times, and on a refusal
+  typed the same reason twelve times. A person doing the same thing for the fourth
+  time is no longer reading it: a surface producing twelve identical clicks has not
+  obtained twelve judgements, it has obtained one and a habit.
+
+  The decision card for a position that is part of a larger request now names **the
+  rest of the request** — each position with its price, not a count, because the
+  thing being agreed to is "I have seen what is in this request" — and offers one
+  checkbox. Ticked, one call decides all of that order's open approvals the caller
+  holds, with one reason, and **each is still completed as its own task**, because
+  each is still its own process instance and each still has to act on what it was
+  told. The count moves onto the buttons, since the button is the last thing
+  somebody reads before the decision is irreversible. A request with one position
+  gets no checkbox and still takes the single-task route.
+
+  **The record is read as one decision, not counted as twelve.** Twelve completions
+  in the same second by the same person on the same order with the same reason are
+  the legible signature of one collective decision — where twelve clicks a minute
+  apart, from somebody who stopped reading after the third, look like twelve
+  examinations and are indistinguishable from them.
+
+  **There is no atomicity and the page says so.** Nothing spans twelve process
+  instances, and a completion that went through has already handed its answer to
+  its process, which may have started provisioning. So the answer is per line:
+  what was decided, and what was not with the reason for each, named on screen.
+  "Eleven of twelve" is a number nobody can act on; "the laptop is still open
+  because it was decided in another tab" is.
+
+  Refused, on the server and not only in the browser: keys from more than one order
+  (one reason cannot cover two people's requests), a refusal with no reason, and
+  more than a hundred keys — which is not a resource limit but a statement about
+  what one decision can plausibly be. The gate is the approval list's and has no
+  operator bypass: an operator who must step in does it on the task itself, where
+  the record says an operator did.
+
 - **A product says what kind of thing it is, and the portal's first column finally
   carries data.** The portal's cascade has drawn four columns since the layout
   landed — Kategorie, Bundle, Angebot, Service. The first one was filled with the

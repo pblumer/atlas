@@ -92,6 +92,24 @@
       }
     },
     {
+      "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An approver decides a request once, instead of deciding it twelve times.",
+        "de": "An approver decides a request once, instead of deciding it twelve times."
+      },
+      "summary": {
+        "en": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks.",
+        "de": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-product-says-what-kind-of-thing-it-is-and-the-portal-s-fir",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one.",
         "de": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-catalogue-can-be-searched-and-by-words-it-does-not-display",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A catalogue can be searched, and by words it does not display.",
-        "de": "A catalogue can be searched, and by words it does not display."
-      },
-      "summary": {
-        "en": "The portal browsed and did not find.",
-        "de": "The portal browsed and did not find."
       },
       "link": {
         "label": "Changelog",

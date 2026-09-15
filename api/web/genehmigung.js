@@ -58,6 +58,11 @@ const STRINGS = {
     'appr.count': 'von',
     'appr.escalated': 'weitergereicht',
     'appr.due': 'Frist',
+    'appr.together': 'Alle Positionen dieser Anfrage gemeinsam entscheiden',
+    'appr.together.hint': 'Die Begründung gilt dann für alle. Jede Position wird weiterhin einzeln abgeschlossen, weil jede ihren eigenen Prozess hat.',
+    'appr.together.also': 'Diese Anfrage umfasst',
+    'appr.together.positions': 'Positionen, die Sie entscheiden können.',
+    'appr.partial': 'Nicht alle Positionen konnten entschieden werden. Die übrigen bleiben offen:',
   },
   en: {
     'appr.title': 'Approvals',
@@ -95,6 +100,11 @@ const STRINGS = {
     'appr.count': 'of',
     'appr.escalated': 'passed on',
     'appr.due': 'Due',
+    'appr.together': 'Decide every position of this request together',
+    'appr.together.hint': 'The reason then covers all of them. Each position is still completed on its own, because each has its own process.',
+    'appr.together.also': 'This request has',
+    'appr.together.positions': 'positions you can decide.',
+    'appr.partial': 'Not every position could be decided. The rest are still open:',
   },
 };
 
@@ -199,6 +209,16 @@ const state = {
   reason: '',
   busy: false,
   decided: false,
+  // together is the approver saying "this is one decision about one request"
+  // (ADR-draft-collective-approval). Opt-in and never remembered across a
+  // selection: a person who ticked it for a twelve-line workplace has not said
+  // anything about the next request they open.
+  together: false,
+  // partial names the positions a collective decision did not get through, which
+  // is the one outcome the page must not round off. There is no transaction
+  // across twelve process instances, so "eleven of twelve" is a thing that can
+  // happen and the approver has to be told which one.
+  partial: [],
   truncated: false,
   error: '',
 };
@@ -239,10 +259,28 @@ async function load() {
   render();
 }
 
+// siblings is every open approval this caller holds on the same order, the
+// selected one included (ADR-draft-collective-approval).
+//
+// An order is the unit because a request is: the approval process runs per line,
+// so a workplace ordered as twelve products is twelve tasks, and the person
+// deciding them is deciding one request. Lines of a *different* order are not
+// here, and the server refuses them too — one reason cannot cover two requests.
+function siblings(a) {
+  if (!a) return [];
+  return state.approvals.filter((o) => o.orderId === a.orderId);
+}
+
 // decide completes the task, which is what hands the answer back to the process.
 // The page does not write the order: what a decision *means* — start provisioning,
 // or record a refusal and tell the orderer — is modelled in the approval process,
 // and a page that did it itself would be a second implementation of it.
+//
+// Two shapes, one decision. Alone it completes the one task, which is the path
+// every other task surface uses. Together it posts the order's approvals to the
+// collective route, which completes each of them as its own task with the same
+// answer — because each is still its own process instance and each still has to
+// act on what it was told.
 async function decide(approved) {
   const a = state.selected;
   if (!a || state.busy) return;
@@ -252,15 +290,32 @@ async function decide(approved) {
     render();
     return;
   }
+  const batch = state.together ? siblings(a) : [a];
   state.busy = true;
   state.error = '';
+  state.partial = [];
   render();
   try {
-    await api(`/api/v1/tasks/${encodeURIComponent(String(a.task.key))}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variables: { genehmigt: approved, begruendung: reason } }),
-    });
+    if (batch.length > 1) {
+      const { body } = await api('/api/v1/approvals/decide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved, reason, taskKeys: batch.map((o) => o.task.key),
+        }),
+      });
+      // A partial result is reported rather than rounded off. The server cannot
+      // promise twelve completions or none — a completion that went through has
+      // already handed its answer to its process — so the page says which ones
+      // did not, and those stay in the list.
+      state.partial = (body && body.skipped) || [];
+    } else {
+      await api(`/api/v1/tasks/${encodeURIComponent(String(a.task.key))}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variables: { genehmigt: approved, begruendung: reason } }),
+      });
+    }
     state.decided = true;
     state.busy = false;
     render();
@@ -294,6 +349,8 @@ function select(a) {
   state.selected = a;
   state.reason = '';
   state.error = '';
+  state.together = false;
+  state.partial = [];
   applyTheme(a);
   render();
 }
@@ -431,13 +488,47 @@ function renderList() {
   return el('div', {}, renderControls(shown.length), listNode);
 }
 
+// renderTogether is the collective decision's whole surface: what else is in this
+// request, and one checkbox (ADR-draft-collective-approval).
+//
+// Opt-in, and absent when the request has one position — a checkbox offering to
+// decide "all one of them" is a control that teaches somebody to tick boxes
+// without reading. The other positions are listed with their prices rather than
+// counted, because the thing being ticked is "I have seen what is in this
+// request", and a number is not something anybody can have seen.
+function renderTogether(rest) {
+  return el('div', { class: 'together' },
+    el('p', { class: 'muted' },
+      `${t('appr.together.also')} ${rest.length + 1} ${t('appr.together.positions')}`),
+    el('ul', { class: 'siblings' }, rest.map((o) => el('li', { class: 'muted' },
+      textOf(o.texts, o.itemId),
+      o.price ? ` — ${o.price}` : ''))),
+    el('label', { class: 'togglewrap' },
+      el('input', {
+        type: 'checkbox', ...(state.together ? { checked: 'checked' } : {}),
+        onchange: (e) => { state.together = e.target.checked; render(); },
+      }),
+      el('span', {}, t('appr.together'))),
+    el('p', { class: 'muted' }, t('appr.together.hint')));
+}
+
 function renderDecision() {
   const a = state.selected;
   if (state.decided) {
     return el('div', { class: 'empty' },
       el('p', {}, t('appr.done')),
+      // What did not go through, named. An approver told "decided" while three
+      // positions are still open would find out from the orderer.
+      state.partial.length
+        ? el('div', {},
+          el('p', {}, t('appr.partial')),
+          el('ul', { class: 'siblings' }, state.partial.map((o) => el('li', { class: 'muted' },
+            `${o.itemId || o.taskKey} — ${o.error || ''}`))))
+        : null,
       el('p', {}, el('a', { href: location.pathname }, t('appr.all'))));
   }
+  const rest = siblings(a).filter((o) => o.task.key !== a.task.key);
+  const count = state.together && rest.length ? ` (${rest.length + 1})` : '';
   return el('div', { class: 'card' },
     el('h3', {}, textOf(a.texts, a.itemId)),
     el('dl', {},
@@ -451,6 +542,7 @@ function renderDecision() {
       // have (ADR-draft-product-price).
       el('dt', {}, t('appr.price')),
       el('dd', a.price ? {} : { class: 'muted' }, a.price || t('appr.price.none'))),
+    rest.length ? renderTogether(rest) : null,
     el('label', { class: 'reason' },
       el('span', {}, t('appr.reason')),
       el('textarea', {
@@ -459,14 +551,17 @@ function renderDecision() {
       }, state.reason),
       el('span', { class: 'muted' }, t('appr.reason.hint'))),
     el('div', { class: 'actions' },
+      // The count is on the buttons and not only beside the checkbox: the button
+      // is what somebody presses, and it is the last thing they read before the
+      // decision is irreversible.
       el('button', {
         class: 'primary', disabled: state.busy ? 'disabled' : null,
         onclick: () => decide(true),
-      }, state.busy ? t('appr.working') : t('appr.approve')),
+      }, state.busy ? t('appr.working') : `${t('appr.approve')}${count}`),
       el('button', {
         class: 'secondary', disabled: state.busy ? 'disabled' : null,
         onclick: () => decide(false),
-      }, t('appr.reject'))));
+      }, `${t('appr.reject')}${count}`)));
 }
 
 // paint replaces the page's children, dropping the ones that are not there.

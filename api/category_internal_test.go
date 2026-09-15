@@ -15,15 +15,16 @@ import (
 // because the data is there, and these hold the three things that would quietly
 // bring it back.
 
-// categorySlice returns the source between from and to.
+// webRegion returns the source between from and to.
 //
-// Every guard below reads the region it guards rather than the file, because a
+// Every source guard on this package's pages reads the region it guards rather
+// than the file (the collective-approval guards use it too), because a
 // search for a bare name over a whole file also finds the declaration of the
 // thing it is meant to prove is *used*, and then stays green when the use is
 // removed. Where a marker has moved the guard stops the test rather than
 // passing: a source check that cannot find its subject proves nothing, and
 // silence is the one answer it must not give.
-func categorySlice(t *testing.T, src, from, to string) string {
+func webRegion(t *testing.T, src, from, to string) string {
 	t.Helper()
 	start := strings.Index(src, from)
 	if start < 0 {
@@ -67,7 +68,7 @@ func TestThePortalGroupsByTheFieldTheReleaseCarries(t *testing.T) {
 	// that decides what falls under the heading now open. Either reading a field
 	// the release does not carry leaves every product under one heading.
 	for _, fn := range []string{"function categoriesOf(", "function inCategory("} {
-		body := categorySlice(t, src, fn, "\n}")
+		body := webRegion(t, src, fn, "\n}")
 		// The selection in state carries the same name as the field on the item, so
 		// a bare search for it also matches a function that only ever reads the
 		// selection. Blind that one out, or the guard passes without a read.
@@ -93,7 +94,7 @@ func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
 	// Read the column's own construction, not the file: the same two labels are
 	// spelled again in the services view, so a file-wide search stays green when
 	// the column stops using them.
-	col := categorySlice(t, src, "const headings = categoriesOf(rel);", "const bundleCol")
+	col := webRegion(t, src, "const headings = categoriesOf(rel);", "const bundleCol")
 	if !strings.Contains(col, "t('cat.all')") {
 		t.Error("the column has no row that clears the selection, so a heading opened " +
 			"by accident cannot be closed again")
@@ -110,7 +111,7 @@ func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
 // decision refused, arriving through the back door — so the sort is the locale's
 // and nothing else.
 func TestAHeadingHasNoOrderingOfItsOwn(t *testing.T) {
-	body := categorySlice(t, readWeb(t, "portal.js"), "function categoriesOf(", "\n}")
+	body := webRegion(t, readWeb(t, "portal.js"), "function categoriesOf(", "\n}")
 	if !strings.Contains(body, "localeCompare") {
 		t.Error("the headings are not sorted by the locale's own rule, so their order " +
 			"is whatever the catalogue happened to store")
