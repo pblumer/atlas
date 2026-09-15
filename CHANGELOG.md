@@ -254,6 +254,17 @@ _Changed_ / _Removed_ for each version.
     [ADR-0266](docs/adr/0266-stats-and-incidents-off-the-loop.md) removed from `/stats`.
     Both callers now take the tally off the loop, before their turn.
 
+  The rule is now checked rather than written down. Five instances of one mistake, none
+  caught by review, is not a case for another paragraph of guidance:
+  `api/pagecount_internal_test.go` fails a build where `fmtCount()` is handed a list
+  length, where a raw read of a capped listing drops the headers that say it is capped,
+  or where such a listing is read with nothing nearby that names its bound. Each rule
+  was verified by putting the original defect back and watching it fail, and the
+  patterns themselves are pinned against known-bad and known-good lines so a guard
+  cannot quietly stop matching and pass as coverage. They do not follow data flow, so
+  they are a tripwire at the places the mistake has been made rather than a proof that
+  it cannot be made again.
+
   ([ADR-draft-a-number-is-a-counter-or-a-walk](docs/adr/draft-a-number-is-a-counter-or-a-walk.md))
 
 - **The live diagram counts every parked token, not the ones a bounded scan reached.**

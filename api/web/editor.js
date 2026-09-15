@@ -2025,6 +2025,13 @@ async function instanceSamples(modeler, api, opts = {}) {
 // The newest version is preferred, but a version deployed a minute ago has no
 // instances yet — then its predecessor's values still describe the same variables,
 // so the walk continues rather than reporting nothing.
+//
+// What comes back is a page of that version's instances, and a page is all this wants:
+// the result is a *sample* of what the variables look like, cut to
+// MAX_SAMPLE_INSTANCES rows below, and nothing here counts it or reports a total. The
+// listing is newest-first within a definition, so the sample is of recent instances
+// rather than of whichever ones the cap happened to reach
+// (ADR-draft-a-number-is-a-counter-or-a-walk).
 async function fetchSamples(api, processId) {
   const procs = await api("GET", "/api/v1/processes");
   const versions = (procs || [])

@@ -129,12 +129,50 @@ taken — and option 3 was rejected on the strength of the two measurements: bot
 failures are reachable on one server with one broken worker, which is not an exotic
 installation.
 
+### The rule is checked, not written down
+
+Five instances of one mistake, none of which was caught by review, is not a case for
+another paragraph of guidance. `api/pagecount_internal_test.go` holds three narrow
+rules over the text of the console, each calibrated against what the codebase actually
+says:
+
+1. **A displayed count is not a list length.** `fmtCount(<anything>.length)` fails.
+   `fmtCount` is the formatter that puts a number in front of a person, so its argument
+   is by definition a figure on screen; a `.length` there is the size of a list
+   presented as the size of a population. One exemption today, by variable name and
+   with its justification beside it — the collaboration replay's message flows, which
+   the server builds uncapped. Forty `fmtCount` call sites, one match: the rule is
+   narrow enough to keep.
+2. **A raw read of a capped listing keeps its headers.** `apiRaw` exists to hand back
+   the response headers; `api()` is there for callers that want only the body. Binding
+   just `data` on a capped listing means the caller asked for the one thing that says
+   the page is a page, and dropped it. This is the instance search's defect exactly,
+   and it fails today only if it is reintroduced.
+3. **A read of a capped listing names its cap.** The loosest of the three and the one
+   to read as a prompt: something within a dozen lines should show the bound was
+   considered — the truncation signal, a cursor, an explicit limit, or prose saying
+   what the page is. It is gameable and that is understood; it fires at the moment
+   somebody adds the next reader of one of these endpoints, which is when the question
+   is cheap and the answer worth writing down.
+
+Each was verified by putting the original defect back and watching the rule fail, and
+`TestThePageCountGuardsStillBite` pins the patterns against known-bad and known-good
+lines so a guard cannot quietly stop matching and pass as coverage.
+
+What they do not do is follow data flow. A count taken from a page two assignments
+from the fetch still gets through — that is how the inbox's folder badges came to be
+wrong, and no regular expression over these files would have found it. They are a
+tripwire at the three places the mistake has been made, not a proof that it cannot be
+made again; the proof, where one is wanted, is a test against a population larger than
+the page.
+
 ### Consequences
 
 - **Positive:** a running instance parked behind an incident can no longer render as
   healthy in the search. A folder badge counts the inbox rather than the page. Nothing
   walks the incident family on the run loop any more — not the overlay, not the Workers
-  view, not the Starmap.
+  view, not the Starmap. And the two sharp shapes of the mistake now fail a test rather
+  than waiting for an installation big enough to expose them.
 - **Negative / trade-offs accepted:** the task-folder counting scan now runs for a
   viewer with no saved folders once their inbox outgrows a page, where before it was
   skipped for them entirely. That reverses a property an existing test asserted ("an
