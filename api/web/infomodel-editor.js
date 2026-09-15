@@ -77,6 +77,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // survives leaving the class it was typed for.
     memberFilter: "",
     search: "",
+    // The where-used reading, once somebody has asked for it, as a Map from class name
+    // to that class's usage summary. Null means nobody asked, which is what leaves the
+    // drawing exactly as it has always been drawn.
+    usage: null,
   };
 
   const stereotypeOf = (name) => subset.stereotypes.find((s) => s.stereotype === name) || subset.stereotypes[0];
@@ -114,7 +118,18 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <span class="im-tool-sep" aria-hidden="true"></span>
             <button type="button" class="icon-btn" data-tool="undo" title="Undo the last move on the canvas (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↺</button>
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
+            <span class="im-tool-sep" aria-hidden="true"></span>
+            <button type="button" class="icon-btn" data-tool="usage" aria-pressed="false"
+              title="Shade by use: bring out the members deployed processes name, fade the ones none of them does"
+              aria-label="Shade by use">◧</button>
           </div>
+          <p class="im-usage-legend" id="im-usage-legend" hidden>
+            <b>Shaded by use.</b> A member some deployed process names is bright; one none of
+            them names is faint. A read takes the whole object, so faint means
+            <i>nothing names it</i> — not that nothing uses it. A faint class is used by no
+            deployed process and nowhere in this model either. Classes and members this
+            reading has never seen — anything renamed or added since — are left as they were.
+          </p>
         </div>
         <div class="im-canvas" id="im-lc-canvas" hidden>
           <p class="im-empty-hint" id="im-lc-empty" hidden>No states yet. Add the state an instance
@@ -351,7 +366,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // that heard, typing in a relationship's name would deselect it on the first key.
     applyingSelection = true;
     try {
-      canvas.sync(state.model, state.validation.findings || [], { unreachable: unreachableNow() });
+      canvas.sync(state.model, state.validation.findings || [],
+        { unreachable: unreachableNow(), usage: usageMarks() });
       // An empty canvas says what to do with it. It is HTML over the drawing rather
       // than text in it: diagram-js fits the viewport to the content, so a sentence
       // drawn on the sheet would be zoomed to fill it.
@@ -381,6 +397,104 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     }
     return out;
   }
+
+  // ---- shading by use ------------------------------------------------------
+  // The where-used reading (ADR-0338) brought onto the drawing, where the question is
+  // actually asked (ADR-draft-the-drawing-says-which-members-are-used).
+  // actually asked. That reading answers "what would this change break" one class at a
+  // time, on a page of its own; somebody about to retire a member is looking at the
+  // class diagram, and walking off it to find out whether anything writes `placedOn`
+  // is a walk most people do not take.
+  //
+  // It is the same reading, not a second one — /api/v1/infomodel/classes, asked once
+  // for this model's application. So the drawing cannot say anything the Business
+  // objects page does not, and there is one computation to keep true.
+  //
+  // What it can say, exactly:
+  //
+  //   - **A member is used** when a deployed process names it: a write targeting that
+  //     member (ADR-0060). A business key counts too, whenever any deployed process
+  //     uses the class at all — no write ever names it, and it is what every store
+  //     lookup and cross-process correlation resolves against, so it is used by every
+  //     use there is. Fading it would point at the one member that must not go.
+  //   - **A member is not named** when nothing deployed writes it by name. That is not
+  //     the same as unused: a read takes the whole object into a variable and what a
+  //     FEEL expression then reads out of it is not a fact of the model (ADR-0301's
+  //     whole-object gap). The legend says so rather than letting faint read as dead.
+  //   - **A class is used by nothing** when no deployed process uses it and the
+  //     vocabulary does not either. Both halves, because an «enumeration» is normally
+  //     declared by no data object at all — a class-level fade counting only processes
+  //     would grey out the most shared elements in the model.
+  //
+  // And what it will not say. A class whose name the reading has never seen — added
+  // since, or renamed a moment ago — is left alone rather than faded: the reading made
+  // no claim about that name, and inventing one would turn every rename into a scare.
+  // Members are shaded only where a process uses the class, since member-level facts
+  // come only from process writes. An «enumeration»'s literals are never shaded: what a
+  // write names is a member, and a literal is not one.
+  //
+  // Asked once, when it is switched on. What it reads is deployed processes, which do
+  // not change while somebody is drawing; what does change is the document, and the
+  // marks follow it on every sync because they are matched by name.
+  async function loadUsage() {
+    const rows = await api("GET", "/api/v1/infomodel/classes?applicationId=" +
+      encodeURIComponent(state.model.applicationId || ""));
+    const byName = new Map();
+    for (const row of rows || []) {
+      if (row.modelId === state.model.id) byName.set(row.name, row.usage || {});
+    }
+    return byName;
+  }
+
+  // usageMarks turns that reading into what the drawing shows. The rule stays here, the
+  // way the relationship matrix does: the canvas is told which classes and which member
+  // names are used, and draws that.
+  function usageMarks() {
+    if (!state.usage) return undefined;
+    const unused = [];
+    const members = {};
+    for (const c of state.model.classes || []) {
+      const u = state.usage.get(c.name);
+      if (!u) continue;
+      if (!u.processes && !u.modelUses) { unused.push(c.id); continue; }
+      if (!u.processes || c.stereotype === "enumeration") continue;
+      const named = new Set(u.attributes || []);
+      for (const k of c.identity || []) named.add(k);
+      members[c.id] = [...named];
+    }
+    return { unused, members };
+  }
+
+  const usageBtn = root.querySelector('[data-tool="usage"]');
+  const usageLegendEl = root.querySelector("#im-usage-legend");
+
+  function reflectUsage() {
+    usageBtn.setAttribute("aria-pressed", String(Boolean(state.usage)));
+    usageBtn.classList.toggle("active", Boolean(state.usage));
+    usageLegendEl.hidden = !state.usage;
+  }
+
+  usageBtn.addEventListener("click", async () => {
+    if (state.usage) {
+      state.usage = null;
+      reflectUsage();
+      syncCanvas();
+      return;
+    }
+    usageBtn.disabled = true;
+    try {
+      state.usage = await loadUsage();
+    } catch (e) {
+      // Nothing shaded, rather than shaded from nothing: a diagram that fades members
+      // on a reading that failed is a diagram saying something nobody checked.
+      toast(`Could not read where these classes are used: ${e.message}`, "err");
+      return;
+    } finally {
+      usageBtn.disabled = false;
+    }
+    reflectUsage();
+    syncCanvas();
+  });
 
   function markDirty() {
     state.dirty = true;

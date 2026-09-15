@@ -375,6 +375,98 @@ test.describe("the verdict is live", () => {
   });
 });
 
+// Where a class is used, read onto the drawing itself
+// (ADR-draft-the-drawing-says-which-members-are-used).
+//
+// The reading is the Business objects page's, asked once for this model's application,
+// so the drawing cannot say anything that page does not. What these pin is the *rule*
+// that turns it into marks — which is the part that can be wrong in a way nobody
+// notices, because a faint member reads as "safe to delete".
+test.describe("shaded by where it is used", () => {
+  // One row per class, as GET /api/v1/infomodel/classes answers it. The last row is
+  // another model's Order: same name, different model, and its members must not be read
+  // as this one's.
+  const CATALOG = [
+    { modelId: "m1", name: "Customer", usage: { processes: 1, modelUses: 1, attributes: [] } },
+    { modelId: "m1", name: "Order", usage: { processes: 2, modelUses: 1, attributes: ["total"] } },
+    { modelId: "m1", name: "Address", usage: { processes: 0, modelUses: 0 } },
+    { modelId: "m1", name: "OrderStatus", usage: { processes: 0, modelUses: 2 } },
+    { modelId: "m2", name: "Order", usage: { processes: 9, modelUses: 9, attributes: ["placedOn"] } },
+  ];
+  const shade = async (page, rows = CATALOG) => {
+    await page.evaluate((r) => { window.__classes = r; }, rows);
+    await page.locator('[data-tool="usage"]').click();
+    await expect(page.locator("#im-usage-legend")).toBeVisible();
+  };
+
+  test("a member a deployed process names comes forward, one nothing names recedes", async ({ page }) => {
+    await shade(page);
+    const order = box(page, "Order");
+    // `total` because a process writes it by name; `id` because it is the business key
+    // — no write ever names one, and it is what every store lookup resolves against, so
+    // fading it would point at the member that must not go.
+    await expect(order.locator(".uml-attr.used .uml-attr-name")).toHaveText(["⚿ id", "total"]);
+    // `placedOn` is named by the *other* model's Order. A name is scoped to its model,
+    // and a reading that joined the two would call a member used on the strength of a
+    // process that has never seen this class.
+    await expect(order.locator(".uml-attr.unused .uml-attr-name")).toHaveText(["placedOn"]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a class nothing uses is faint; one only the vocabulary uses is not", async ({ page }) => {
+    await shade(page);
+    // Used by no process and by nothing in the model either — the only case in which
+    // the reading is entitled to fade a whole class.
+    await expect(box(page, "Address").locator(".uml-class")).toHaveClass(/unused/);
+    // An «enumeration» is normally declared by no data object at all, so a fade that
+    // counted only processes would grey out the most shared elements in the model.
+    await expect(box(page, "OrderStatus").locator(".uml-class")).not.toHaveClass(/unused/);
+    // Customer is used by a process, so its box stands — and no process names either of
+    // its members, so `name` recedes while the key does not.
+    await expect(box(page, "Customer").locator(".uml-class")).not.toHaveClass(/unused/);
+    await expect(box(page, "Customer").locator(".uml-attr.unused .uml-attr-name")).toHaveText(["name"]);
+  });
+
+  test("a name the reading has never seen is left alone, not called unused", async ({ page }) => {
+    await shade(page);
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Bestellung");
+    await expect(box(page, "Bestellung")).toBeVisible();
+    // The reading made no claim about `Bestellung`. Fading it would turn every rename
+    // into a scare about a member nothing had said anything about.
+    await expect(box(page, "Bestellung").locator(".uml-class")).not.toHaveClass(/unused/);
+    await expect(box(page, "Bestellung").locator(".uml-attr.unused")).toHaveCount(0);
+    await expect(box(page, "Bestellung").locator(".uml-attr.used")).toHaveCount(0);
+  });
+
+  test("the reading is asked for this model's application, and pressing again puts the drawing back", async ({ page }) => {
+    await shade(page);
+    expect(await page.evaluate(() => window.__catalogAskedFor)).toContain("applicationId=app-1");
+
+    await page.locator('[data-tool="usage"]').click();
+    await expect(page.locator("#im-usage-legend")).toBeHidden();
+    await expect(page.locator('[data-tool="usage"]')).toHaveAttribute("aria-pressed", "false");
+    // Not "everything bright" — nothing marked at all, which is the drawing as it is
+    // when nobody has asked the question.
+    await expect(page.locator(".uml-attr.used")).toHaveCount(0);
+    await expect(page.locator(".uml-attr.unused")).toHaveCount(0);
+    await expect(page.locator(".uml-class.unused")).toHaveCount(0);
+  });
+
+  test("a reading that cannot be had shades nothing and says so", async ({ page }) => {
+    await page.evaluate(() => { window.__classesFail = true; });
+    await page.locator('[data-tool="usage"]').click();
+    await expect.poll(() => page.evaluate(() => window.__toasts.length)).toBe(1);
+    expect((await page.evaluate(() => window.__toasts))[0].msg)
+      .toContain("Could not read where these classes are used");
+    // A diagram that fades members on a reading that failed is a diagram saying
+    // something nobody checked.
+    await expect(page.locator("#im-usage-legend")).toBeHidden();
+    await expect(page.locator(".uml-attr.unused")).toHaveCount(0);
+    await expect(page.locator('[data-tool="usage"]')).toHaveAttribute("aria-pressed", "false");
+  });
+});
+
 test("the JSON Schema projection is shown as derived, and says what it dropped", async ({ page }) => {
   await box(page, "Order").click();
   await page.locator('[data-act="schema"]').click();

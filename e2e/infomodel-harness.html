@@ -120,7 +120,17 @@
       // What the canvas last asked about, so a test can assert that it sends the model
       // it is holding rather than the one it last saved.
       window.__validated = null;
+      // The where-used reading the drawing shades from — one catalogue row per class,
+      // shaped as GET /api/v1/infomodel/classes answers it. Null is a reading that knows
+      // nothing, which is what every test that is not about the shading gets.
+      window.__classes = null;
+      window.__catalogAskedFor = null;
       const api = async (method, url, body) => {
+        if (method === "GET" && /\/infomodel\/classes\?/.test(url)) {
+          window.__catalogAskedFor = url;
+          if (window.__classesFail) throw new Error("the server cannot be reached");
+          return structuredClone(window.__classes || []);
+        }
         if (method === "POST" && /\/infomodel\/validate$/.test(url)) {
           window.__validated = structuredClone(body);
           if (window.__validateFails) throw new Error("the server cannot be reached");

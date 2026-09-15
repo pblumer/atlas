@@ -114,6 +114,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The class diagram can say which members anything actually uses.** Where a business object
+  is used has been readable since **Data › Business objects** arrived — one class at a time,
+  on a page of its own. The question is asked on the class diagram, with the member under the
+  cursor and the decision half made, and getting the answer meant leaving the drawing, finding
+  the class in a list and coming back. Most people do not take that trip, so the reading
+  existed and the decision was still taken blind.
+
+  A control beside zoom and undo shades the drawing from that same reading. A member some
+  deployed process names comes forward; one none of them names recedes; a class used by no
+  deployed process and by nothing in the model either is faint as a whole.
+
+  What it will not claim is the more important half. Faint means *nothing names it*, not
+  *nothing uses it*: a read takes the whole object, and what an expression then reads out of
+  it is not a fact of the model — the legend says so in those words, on screen for as long as
+  the shading is. A business key is never faint, because no write ever names one and it is
+  what every store lookup and cross-process correlation resolves against. An «enumeration» is
+  not faint for having no process use, because most of them are declared by no data object at
+  all. And a name the reading has never seen — a class added since, or renamed a moment ago —
+  is left exactly as it was drawn, so a rename is not a scare about a member nothing had said
+  anything about.
+
+  Off until it is asked for: every attribute is unused the moment it is typed, and a canvas
+  that greys out new work is one people turn off.
+
 - **The class canvas judges the model while it is being edited, not when it is saved.** The
   Problems panel showed the findings of the *last save*. So every edit that broke the model —
   a store left naming a class that was renamed away, an attribute typed with something that is
