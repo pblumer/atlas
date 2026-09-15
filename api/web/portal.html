@@ -23,7 +23,11 @@
   }
   * { box-sizing: border-box; }
   body { margin:0; font:15px/1.5 var(--font-sans); color:var(--text); background:var(--bg); }
-  #app { max-width: 880px; margin: 0 auto; padding: 32px 20px 80px; }
+  /* Wide, because the catalogue is now a four-column cascade rather than a card
+     grid: Kategorie → Bundle → Marktleistung → Service, the shape the mockups use
+     and the shape a decomposition actually has. 880px was right for cards and
+     would squeeze four columns into strips. */
+  #app { max-width: 1400px; margin: 0 auto; padding: 32px 20px 96px; }
   header { display:flex; align-items:center; justify-content:space-between; gap:16px;
            flex-wrap:wrap; margin-bottom:8px; }
   .brand { display:flex; align-items:center; gap:12px; min-width:0; }
@@ -90,6 +94,75 @@
   .empty p { margin:4px 0; }
   .error { background:#fdecea; border:1px solid var(--danger); color:var(--danger);
            border-radius:8px; padding:10px 14px; }
+  /* --- The shell the mockups describe: a nav row, a view, an action row. ---
+     Layout only. Every colour below is one of the tokens already declared above;
+     nothing here introduces a palette. */
+
+  /* The nav row. Three destinations and a help affordance, with whoever is
+     signed in at the right — the arrangement the mockups use on every screen. */
+  .nav { display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+         border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+         padding:10px 0; margin:16px 0 20px; }
+  .nav .spacer { flex:1 1 auto; }
+  .navlink { background:var(--surface); border:1px solid var(--border-strong); color:var(--text);
+             border-radius:8px; padding:7px 16px; font:inherit; cursor:pointer; }
+  .navlink.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  /* The round "?" the mockups put beside the first entry. */
+  .help { width:30px; height:30px; border-radius:50%; border:1px solid var(--border-strong);
+          background:var(--surface); color:var(--muted); font:inherit; cursor:pointer; }
+  .who { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+  .avatar { width:30px; height:30px; border-radius:50%; border:1px solid var(--border-strong);
+            background:var(--bg); display:flex; align-items:center; justify-content:center;
+            font-size:12px; color:var(--muted); }
+
+  /* The four-column cascade. Equal columns that scroll sideways rather than
+     collapse: a decomposition read at four levels is the point of the screen, and
+     a narrow window should move it, not fold it. */
+  .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
+             gap:12px; overflow-x:auto; }
+  .col { min-width:0; }
+  .colhead { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
+             color:var(--muted); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--border); }
+  .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;
+          border-bottom:1px solid var(--border); }
+  .cell .label { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; font-size:14px; }
+  /* A cell that leads somewhere is the whole label, not a separate chevron: the
+     mockups make the name itself the way into the next column. */
+  button.label { background:none; border:0; padding:0; font:inherit; text-align:left;
+                 color:var(--text); cursor:pointer; }
+  button.label.on { font-weight:600; color:var(--accent-hover); }
+  /* The square −/+/X/i affordances the mockups put at the column edges. Same size
+     so a row of them lines up whatever it carries. */
+  .sq { flex:0 0 auto; width:24px; height:24px; line-height:1; border-radius:6px;
+        border:1px solid var(--border-strong); background:var(--surface); color:var(--text);
+        font:inherit; font-size:13px; cursor:pointer; padding:0; }
+  .sq:disabled { opacity:.45; cursor:default; }
+  .sq.info { color:var(--muted); }
+
+  /* The action row along the bottom. */
+  .actions { display:flex; justify-content:center; align-items:center; gap:12px;
+             flex-wrap:wrap; margin-top:28px; padding-top:16px; border-top:1px solid var(--border); }
+
+  /* The orders table: a filter row above the header, exactly as the mockups draw
+     it — the search sits over the column it searches. */
+  .table { width:100%; border-collapse:collapse; font-size:14px; }
+  .table th, .table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
+                         vertical-align:top; }
+  .table thead th { font-size:12px; text-transform:uppercase; letter-spacing:.04em;
+                    color:var(--muted); font-weight:600; }
+  .table .filters td { border-bottom:0; padding-bottom:0; }
+  .table input { width:100%; font:inherit; font-size:13px; padding:5px 8px;
+                 border:1px solid var(--border-strong); border-radius:6px;
+                 background:var(--surface); color:var(--text); }
+  .tablewrap { overflow-x:auto; }
+  /* A person picker on its own line above the view, for ordering on somebody
+     else's behalf. */
+  .forwhom { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .forwhom input { font:inherit; font-size:14px; padding:6px 10px; border-radius:6px;
+                   border:1px solid var(--border-strong); background:var(--surface);
+                   color:var(--text); min-width:240px; }
+  .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
+
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
 </style>
 </head>
