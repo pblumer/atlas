@@ -145,7 +145,14 @@ func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 // countTaskFolders answers every visible folder's badge from one walk of the open
 // tasks. It is the [taskfolder.CountFunc] the service is built with — the service
 // knows how to decide membership, the server knows where the tasks are.
-func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.User) ([]int, int, bool, error) {
+//
+// The fixed inbox folders are counted on the same walk. They used to be counted in
+// the console instead, off the rows of the newest-first page it had already loaded,
+// so each badge was the size of that page rather than of the inbox: a task assigned
+// to somebody and sitting outside the newest 500 left their "Assigned to me" reading
+// 0 (ADR-draft-a-number-is-a-counter-or-a-walk). One walk, one set of
+// numbers, one truncation flag over all of them.
+func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.User) (taskfolder.Tally, error) {
 	needInstance := false
 	for _, m := range matchers {
 		if m.NeedsInstance() {
@@ -153,24 +160,38 @@ func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.U
 			break
 		}
 	}
-	counts := make([]int, len(matchers))
-	total := 0
+	tally := taskfolder.Tally{
+		PerMatcher: make([]int, len(matchers)),
+		Builtin:    make(map[string]int, len(taskfolder.BuiltinFolders)),
+	}
+	// Every fixed folder is present in the map from the start, zero included: a badge
+	// with no entry would be "not counted" and a badge with a zero is "counted, none",
+	// and the console draws those two differently.
+	for _, b := range taskfolder.BuiltinFolders {
+		tally.Builtin[b.ID] = 0
+	}
 	// One instant for the whole scan, so "overdue" cannot mean two different
 	// moments within a single answer.
 	now := time.Now()
 	budgetHit, err := s.visitOpenTasks(0, needInstance, func(_ uint64, _ taskResp, ft taskfolder.Task) bool {
-		total++
+		tally.Total++
 		for i, m := range matchers {
 			if m.Match(ft, u, now) {
-				counts[i]++
+				tally.PerMatcher[i]++
+			}
+		}
+		for _, b := range taskfolder.BuiltinFolders {
+			if b.Match(ft, u) {
+				tally.Builtin[b.ID]++
 			}
 		}
 		return true
 	})
 	if err != nil {
-		return nil, 0, false, err
+		return taskfolder.Tally{}, err
 	}
-	return counts, total, budgetHit, nil
+	tally.Truncated = budgetHit
+	return tally, nil
 }
 
 // listTasksForFolder writes the open user tasks one folder selects. It keeps the

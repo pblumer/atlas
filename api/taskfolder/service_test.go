@@ -45,17 +45,24 @@ func newService(t *testing.T) (*Service, *Store) {
 			Users:     []Option{{Value: "usr_me", Label: "Patrick"}},
 		}
 	}
-	count := func(ms []*Matcher, u User) ([]int, int, bool, error) {
-		out := make([]int, len(ms))
+	count := func(ms []*Matcher, u User) (Tally, error) {
+		tally := Tally{PerMatcher: make([]int, len(ms)), Builtin: map[string]int{}, Total: len(tasks)}
 		now := time.Now()
 		for i, m := range ms {
 			for _, task := range tasks {
 				if m.Match(task, u, now) {
-					out[i]++
+					tally.PerMatcher[i]++
 				}
 			}
 		}
-		return out, len(tasks), false, nil
+		for _, b := range BuiltinFolders {
+			for _, task := range tasks {
+				if b.Match(task, u) {
+					tally.Builtin[b.ID]++
+				}
+			}
+		}
+		return tally, nil
 	}
 	ids := 0
 	newID := func() (string, error) {
@@ -275,9 +282,16 @@ func TestCountsAreOneScan(t *testing.T) {
 	}
 }
 
-// TestCountsWithNoFoldersDoesNotScan proves the empty sidebar costs nothing: with
-// no folders there is nothing to count, so the engine is not walked at all.
-func TestCountsWithNoFoldersDoesNotScan(t *testing.T) {
+// TestCountsScanEvenWithNoSavedFolders. The sidebar is never empty — the fixed inbox
+// folders are always on it — so the walk runs whether or not this viewer has saved a
+// rule.
+//
+// This reverses an earlier property ("an empty sidebar costs nothing"), deliberately.
+// The fixed badges were counted in the console off the newest-first task page it had
+// already loaded, which cost nothing and was wrong the moment the inbox outgrew that
+// page: a task assigned to somebody and sitting past it left their "Assigned to me"
+// reading 0 (ADR-draft-a-number-is-a-counter-or-a-walk).
+func TestCountsScanEvenWithNoSavedFolders(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -291,16 +305,23 @@ func TestCountsWithNoFoldersDoesNotScan(t *testing.T) {
 
 	scanned := false
 	svc := New(loop, store, func(User) Options { return Options{} },
-		func([]*Matcher, User) ([]int, int, bool, error) {
+		func([]*Matcher, User) (Tally, error) {
 			scanned = true
-			return nil, 0, false, nil
+			return Tally{Builtin: map[string]int{"all": 7}}, nil
 		}, NewID)
 	rec := do(t, svc.HandleCounts, as(http.MethodGet, "", "usr_me"), nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("counts = %d", rec.Code)
 	}
-	if scanned {
-		t.Error("an empty sidebar still scanned the task population")
+	if !scanned {
+		t.Error("the fixed folders went uncounted, which is what left them the size of a page")
+	}
+	var got Counts
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode counts: %v (%s)", err, rec.Body)
+	}
+	if got.Builtin["all"] != 7 {
+		t.Errorf("builtin counts = %v, want the scan's own numbers", got.Builtin)
 	}
 }
 

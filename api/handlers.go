@@ -496,6 +496,17 @@ type instanceResp struct {
 	// (ADR-0115) and exists only in the archive. It cannot be opened, cancelled or
 	// migrated, and what it reports is what the log recorded, not what is true now.
 	Archived bool `json:"archived,omitempty"`
+	// Incidents is how many of this instance's tokens are parked, counted through the
+	// instance's own element index — exact, and bounded by the tokens that instance
+	// holds rather than by anything the rest of the engine is doing.
+	//
+	// A pointer because *absent* and *zero* are different claims and the console acts
+	// on the difference. A row that carries it says "this instance is parked behind n
+	// incidents", zero included; a row without it says nothing either way. Only the
+	// search fills it: its result set is capped at 200, so the per-row walk is paid on
+	// a bounded set, and the search is where a reader concludes an instance is healthy
+	// from the word "active" beside it (ADR-draft-a-number-is-a-counter-or-a-walk).
+	Incidents *int `json:"incidents,omitempty"`
 }
 
 type statsResp struct {

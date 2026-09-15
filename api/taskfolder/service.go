@@ -45,17 +45,38 @@ type Options struct {
 // folder holds, and how many the scan looked at. Truncated says the scan hit its
 // budget, so the numbers are a floor rather than a total — the sidebar says so
 // instead of showing a confident wrong number.
+//
+// Builtin carries the fixed inbox folders ([BuiltinFolders]) from the same walk. The
+// console used to count those itself, off the rows of the newest-first task page it
+// had already loaded, which made every one of them the size of that page: a task
+// assigned to somebody and sitting outside the newest 500 left their "Assigned to me"
+// badge reading 0 (ADR-draft-a-number-is-a-counter-or-a-walk). They are
+// counted here for the same reason the saved ones are — because a page is not a
+// population — and they share this response's Truncated.
 type Counts struct {
 	Folders   map[string]int `json:"folders"`
+	Builtin   map[string]int `json:"builtin"`
 	Total     int            `json:"total"`
 	Truncated bool           `json:"truncated"`
 }
 
-// CountFunc answers "how many open tasks does this rule match, out of how many".
-// It scans the engine, which this package deliberately cannot reach: the server
-// owns that scan and hands it in, the same way the documentation service is handed
-// its deployment lookup.
-type CountFunc func(matchers []*Matcher, u User) (perMatcher []int, total int, truncated bool, err error)
+// Tally is what one walk of the open tasks produced.
+//
+// It is a struct rather than four return values because the walk answers two
+// different questions at once — the saved folders' counts and the fixed ones' — and a
+// caller that wants only one of them should not have to name the other.
+type Tally struct {
+	PerMatcher []int
+	Builtin    map[string]int
+	Total      int
+	Truncated  bool
+}
+
+// CountFunc answers "how many open tasks does each of these rules match, and each of
+// the fixed folders, out of how many". It scans the engine, which this package
+// deliberately cannot reach: the server owns that scan and hands it in, the same way
+// the documentation service is handed its deployment lookup.
+type CountFunc func(matchers []*Matcher, u User) (Tally, error)
 
 // Service serves the task-folder area (ADR-0268).
 // Build it with [New].
@@ -387,7 +408,8 @@ func (s *Service) HandlePreview(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	counts, total, truncated, err := s.count([]*Matcher{m}, Viewer(r))
+	tally, err := s.count([]*Matcher{m}, Viewer(r))
+	counts, total, truncated := tally.PerMatcher, tally.Total, tally.Truncated
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "preview folder: "+err.Error())
 		return
@@ -408,16 +430,22 @@ func (s *Service) HandleCounts(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "count folders: "+err.Error())
 		return
 	}
-	out := Counts{Folders: map[string]int{}}
-	if len(matchers) > 0 {
-		counts, total, truncated, cErr := s.count(matchers, v)
-		if cErr != nil {
-			httpapi.Error(w, http.StatusInternalServerError, "count folders: "+cErr.Error())
-			return
-		}
-		out.Total, out.Truncated = total, truncated
-		for i, f := range folders {
-			out.Folders[f.ID] = counts[i]
+	// The walk runs whether or not this viewer has saved a folder: the fixed ones are
+	// always on screen, and skipping the scan when there were no saved folders is what
+	// left the console counting them off its own page.
+	out := Counts{Folders: map[string]int{}, Builtin: map[string]int{}}
+	tally, cErr := s.count(matchers, v)
+	if cErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "count folders: "+cErr.Error())
+		return
+	}
+	out.Total, out.Truncated, out.Builtin = tally.Total, tally.Truncated, tally.Builtin
+	if out.Builtin == nil {
+		out.Builtin = map[string]int{}
+	}
+	for i, f := range folders {
+		if i < len(tally.PerMatcher) {
+			out.Folders[f.ID] = tally.PerMatcher[i]
 		}
 	}
 	httpapi.JSON(w, http.StatusOK, out)
