@@ -7,7 +7,7 @@ import (
 )
 
 // Writing a decided load, and turning it into something a person reads
-// (ADR-draft-inventory-commissioning-load).
+// (ADR-0333).
 
 // applyInventoryPlan enqueues a plan's grants and does nothing else.
 //

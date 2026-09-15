@@ -13,7 +13,7 @@ import (
 )
 
 // The two routes a commissioning load uses
-// (ADR-draft-inventory-commissioning-load): one that says whether a system has ever
+// (ADR-0333): one that says whether a system has ever
 // been loaded, and one that reports what was found.
 //
 // # Why these are reachable with authentication off, when the directory ones are not

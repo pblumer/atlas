@@ -161,7 +161,7 @@ type Limits struct {
 
 	// InventoryLoad is one commissioning-load message: the rights a reading of one
 	// target system found, reported here to be written down as pre-existing
-	// (ADR-draft-inventory-commissioning-load). Its own budget rather than Payload's
+	// (ADR-0333). Its own budget rather than Payload's
 	// for the same reason DirectorySync is — Payload bounds one answer a process
 	// received, this bounds the one message that may write evidence kept for years.
 	InventoryLoad int64

@@ -9,7 +9,7 @@ import (
 )
 
 // The rules a commissioning load decides by
-// (ADR-draft-inventory-commissioning-load).
+// (ADR-0333).
 //
 // Every one of these is a way the load could quietly destroy or invent evidence
 // that is then kept for years, so each is checked by doing the thing that would

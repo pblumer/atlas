@@ -274,7 +274,7 @@ type Server struct {
 	directorySync *directorySyncStore
 	// inventoryLoads holds one record per target system: whether a commissioning
 	// load has ever been applied for it, and what the loads amounted to
-	// (ADR-draft-inventory-commissioning-load). The inventory itself cannot answer
+	// (ADR-0333). The inventory itself cannot answer
 	// the first question — "loaded and found nothing" leaves it as empty as "never
 	// loaded" — and those two call for opposite actions.
 	inventoryLoads *inventoryLoadStore

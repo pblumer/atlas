@@ -10,7 +10,7 @@ import (
 )
 
 // Filling the inventory on the day the portal is commissioned
-// (ADR-draft-inventory-commissioning-load).
+// (ADR-0333).
 //
 // On that day the inventory is empty and reality is full. Everything the estate
 // already grants — every group membership, every licence — is a right Atlas knows

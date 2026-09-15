@@ -529,7 +529,7 @@ func TestTheCatalogueScreenOffersSharingOnlyToTheOwner(t *testing.T) {
 // TestTheCatalogueScreenCanRecordWhatAProductIsCalledOutside.
 //
 // The target references are the join a commissioning load attributes a right by
-// (ADR-draft-inventory-commissioning-load). An API that accepts them and a screen
+// (ADR-0333). An API that accepts them and a screen
 // that cannot enter them is a working API and an unusable product — which is
 // exactly how the catalogue itself shipped, with no screen at all.
 func TestTheCatalogueScreenCanRecordWhatAProductIsCalledOutside(t *testing.T) {

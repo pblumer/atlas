@@ -508,7 +508,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/directory-sync":  "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 	"POST /api/v1/directory-sync": "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 
-	// The commissioning load (ADR-draft-inventory-commissioning-load). The write half
+	// The commissioning load (ADR-0333). The write half
 	// is omitted for a reason of its own rather than by analogy with the pair above:
 	// the load's entire safeguard is that several thousand permanent records are
 	// entered only after a person has read what would be entered. A tool call makes
