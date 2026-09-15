@@ -296,7 +296,10 @@ async function readInstance(key){
 }
 
 // 2) START — hand Atlas the cart as instance variables. The create response does
-// not carry the instance key, so we diff the scoped listing before and after.
+// not carry the instance key, so we diff the scoped listing before and after. Scoped,
+// that diff is correct on any population — but it is still a guess when two callers
+// start the same definition at once. Closing that needs the engine to answer with the
+// key it minted: https://github.com/pblumer/atlas/issues/933
 async function startInstance(defKey){
   const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{positions:cart.positions, customerType:cart.customerType}});

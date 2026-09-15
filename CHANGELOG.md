@@ -172,6 +172,12 @@ _Changed_ / _Removed_ for each version.
   A browser test drives the real wizard against a mocked engine whose bare listing is
   full and never carries the instance; a Go test pins the two endpoints the pages now
   rely on; and a guard over the embedded pages refuses the pattern's return.
+
+  What scoping does not repair is that finding your own instance by elimination is still
+  a guess when two callers start the same definition at once. Closing that means the
+  start answering with the key it minted, which is a change to the engine's command path
+  rather than to a page, and is tracked in
+  [issue #933](https://github.com/pblumer/atlas/issues/933).
 - **PowerShell runs under `--script-sandbox=strict`, and a profile that cannot start an
   enabled interpreter refuses to boot.** The strict allowlist admitted the installed
   runtimes, the loader and trust files, and a private scratch directory — everything

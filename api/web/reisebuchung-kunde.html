@@ -226,7 +226,9 @@ async function readInstance(key){
 }
 
 // START — the create response carries no instance key, so diff the scoped listing
-// before and after.
+// before and after. Scoped, that diff is correct on any population — but it is still a
+// guess when two callers start the same definition at once. Closing that needs the
+// engine to answer with the key it minted: https://github.com/pblumer/atlas/issues/933
 async function startInstance(defKey){
   const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{}});

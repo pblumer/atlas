@@ -199,7 +199,9 @@ async function findProcess(){
 // rows per half — and its active half comes back oldest-key-first, so the newest
 // instance is the first row the cap drops: on a server holding more active instances
 // than the cap, the one we just started is never on the page and the diff below comes
-// back empty. ?process= reads this definition's own index instead, newest first.
+// back empty. ?process= reads this definition's own index instead, newest first. The
+// diff is then correct on any population, though still a guess when two callers start
+// this definition at once: https://github.com/pblumer/atlas/issues/933
 async function instancesOfProcess(defKey){
   return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
 }
