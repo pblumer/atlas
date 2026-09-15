@@ -114,6 +114,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The class canvas judges the model while it is being edited, not when it is saved.** The
+  Problems panel showed the findings of the *last save*. So every edit that broke the model —
+  a store left naming a class that was renamed away, an attribute typed with something that is
+  gone, a lifecycle whose states drifted from the enumeration they came from, a business object
+  switched to a kind that cannot be stored — was silent while it was being made, and the
+  refusal arrived afterwards, naming an edit whoever made it had stopped thinking about.
+
+  The panel is live now. Every change is judged as it is made, and the bar and the marks on the
+  drawing say so at once. That closes the category rather than one edit at a time, which is how
+  the three known cases had been treated.
+
+  The rules are served, not copied into the browser. `POST /api/v1/infomodel/validate` judges a
+  document the caller is holding and stores nothing — no saved revision, no application scope,
+  and an invalid document is an answer carrying findings rather than an error, because a model
+  mid-edit is *expected* to be invalid. Two copies of a rule set are two rule sets, and the copy
+  the author sees is the one that would drift from the one Save enforces. The same route is an
+  MCP tool, `atlas_validate_information_model`, so an agent can check a model it is composing
+  before writing it anywhere.
+
+  When the server cannot answer, the last verdict stands rather than the bar going blank: a
+  stale finding is closer to the truth than a clean bill of health nobody checked.
+
 - **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
   its own colour, typeface and brand mark since it was built — the portal and the approval
   page paint themselves from it — and no screen offered any of it. The one thing that makes

@@ -309,6 +309,72 @@ test("a refused save shows the server's findings rather than one sentence", asyn
   await expect(page.locator(".phead b")).toHaveText("Ordr");
 });
 
+// The Problems bar used to show the verdict of the *last save*, so every edit that
+// broke the model was silent until somebody pressed Save — and the refusal then named
+// an edit they had stopped thinking about. It now asks the server as the model changes,
+// which is what closes that whole category rather than one case of it
+// (ADR-draft-the-verdict-is-served-not-duplicated).
+test.describe("the verdict is live", () => {
+  test("an edit is judged without saving, and the bar says so", async ({ page }) => {
+    await expect(page.locator(".im-ok")).toBeVisible();
+
+    // The server's answer, not the canvas's: the rules live in one place and are asked
+    // for, never reimplemented here.
+    await page.evaluate(() => {
+      window.__findings = [{ code: "store-unknown-class", reason: "notation", storeId: "st1",
+        message: 'Orders holds "Auftrag", and this model has no class of that name.' }];
+    });
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+
+    await expect(page.locator(".im-problem-head")).toHaveText("1 problem");
+    await expect(page.locator("button.im-problem")).toContainText("no class of that name");
+    // Nothing was saved to earn that answer.
+    expect(await page.evaluate(() => window.__saved)).toBeNull();
+    await expect(page.locator("#im-dirty")).toBeVisible();
+  });
+
+  test("what is judged is the model in the canvas, not the one last saved", async ({ page }) => {
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+    await expect.poll(() => page.evaluate(() => window.__validated)).toBeTruthy();
+
+    const asked = await page.evaluate(() => window.__validated);
+    expect(asked.classes.map((c) => c.name)).toContain("Auftrag");
+    // The whole document, because a rule can be about any part of it — a store names
+    // its class, an association names its ends.
+    expect(asked.stores.map((st) => st.name)).toEqual(["Orders"]);
+    expect(Array.isArray(asked.associations)).toBe(true);
+  });
+
+  test("a verdict that clears is cleared on the bar too", async ({ page }) => {
+    await page.evaluate(() => {
+      window.__findings = [{ code: "unknown-type", reason: "notation", classId: "c2",
+        message: "Something is wrong." }];
+    });
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+    await expect(page.locator(".im-problem-head")).toHaveText("1 problem");
+
+    // The finding goes when what caused it goes, without a save in between.
+    await page.evaluate(() => { window.__findings = []; });
+    await page.locator("#im-c-name").fill("Order");
+    await expect(page.locator(".im-ok")).toBeVisible();
+  });
+
+  test("a server that cannot answer leaves the last verdict standing", async ({ page }) => {
+    await page.evaluate(() => { window.__validateFails = true; });
+    await box(page, "Order").click();
+    await page.locator("#im-c-name").fill("Auftrag");
+
+    // Not blanked into a false "consistent", and not an error thrown at the author:
+    // a verdict nobody could fetch is simply not news.
+    await expect(page.locator(".im-ok")).toBeVisible();
+    await expect(box(page, "Auftrag")).toBeVisible();
+    expect(page.__errors).toEqual([]);
+  });
+});
+
 test("the JSON Schema projection is shown as derived, and says what it dropped", async ({ page }) => {
   await box(page, "Order").click();
   await page.locator('[data-act="schema"]').click();

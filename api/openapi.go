@@ -736,6 +736,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/subset", s.infomodel.HandleSubset, apiOp{
 			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-0230)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Authoring subset", tObject())}},
+		{"POST", "/api/v1/infomodel/validate", s.infomodel.HandleValidate, apiOp{
+			summary: "Judge an information-model document that has not been saved, and store nothing: the same verdict a write is checked against, asked of a document you are still holding. An invalid document is a 200 carrying findings rather than an error, because a model mid-edit is expected to be invalid. It reads no stored model, so it discloses nothing about what exists", tag: "Information model", role: RoleModeler,
+			req: jsonBody("Information model content", schemaObj(map[string]any{
+				"classes": tArray(), "associations": tArray(), "stores": tArray(),
+			})),
+			resp: jsonBody("The verdict, and what it is based on", tObject())}},
 		{"GET", "/api/v1/infomodel/models", s.infomodel.HandleList, apiOp{
 			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Information models", tArray())}},

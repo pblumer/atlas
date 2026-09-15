@@ -29,6 +29,12 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
 // fixed 200 would drop the next one on top of the last.
 const BOX_STEP = 400;
 
+// How long the canvas waits after an edit before asking the server what it thinks of
+// the model. Long enough that typing a class name is one question rather than nine,
+// short enough that the answer arrives while the edit is still the thing being looked
+// at — which is the whole point of not waiting for Save.
+const VALIDATE_DEBOUNCE_MS = 250;
+
 // The bundle carries both canvases; this view wants the UML half of it.
 function loadCanvas() {
   return loadCanvasBundle().then((bundle) => bundle.uml);
@@ -380,6 +386,47 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     state.dirty = true;
     dirtyEl.hidden = false;
     saveBtn.disabled = false;
+    revalidate();
+  }
+
+  // The verdict on the model being edited, asked of the server whenever it changes
+  // (ADR-draft-the-verdict-is-served-not-duplicated).
+  //
+  // Until this existed the panel showed the findings of the *last save*, so every edit
+  // that broke the model was silent until Save — and the refusal then named an edit the
+  // author had stopped thinking about. Checking it here rather than in the browser is
+  // the same choice ADR-0230 made for the relationship matrix: the rules are served,
+  // never duplicated, because two copies of them are two rule sets and the one the
+  // author sees would drift from the one the server enforces.
+  //
+  // Debounced, because markDirty runs on every keystroke in the panel and a verdict per
+  // character is not read anyway. The last request wins: an answer about a model that
+  // has already changed again is not the verdict, so a late one is dropped rather than
+  // painted over a newer one.
+  let validateTimer = null;
+  let validateSeq = 0;
+  function revalidate() {
+    clearTimeout(validateTimer);
+    validateTimer = setTimeout(async () => {
+      const seq = ++validateSeq;
+      let verdict;
+      try {
+        verdict = await api("POST", "/api/v1/infomodel/validate", {
+          classes: state.model.classes,
+          associations: state.model.associations,
+          stores: state.model.stores,
+        });
+      } catch {
+        return; // unreachable or refused: the last verdict stands rather than blanking
+      }
+      if (seq !== validateSeq || !root.isConnected) return;
+      state.validation = verdict && verdict.findings ? verdict : { valid: true, findings: [] };
+      // The problems bar and the marks on the drawing, and deliberately not the side
+      // panel: a row being typed in is not repainted, which is what keeps the caret
+      // where it is.
+      renderProblems();
+      syncCanvas();
+    }, VALIDATE_DEBOUNCE_MS);
   }
 
   // ---- rendering -----------------------------------------------------------

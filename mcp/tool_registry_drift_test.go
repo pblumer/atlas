@@ -139,6 +139,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_instance_lifecycle":           "GET /api/v1/instances/{key}/lifecycle",
 	"atlas_derived_information_model":    "GET /api/v1/infomodel/derived",
 	"atlas_model_difference":             "GET /api/v1/infomodel/difference",
+	"atlas_validate_information_model":   "POST /api/v1/infomodel/validate",
 	"atlas_class_catalog":                "GET /api/v1/infomodel/classes",
 	"atlas_class_usage":                  "GET /api/v1/infomodel/models/{id}/usage",
 }

@@ -105,7 +105,27 @@
       // The saved payload is captured so a test can assert what the canvas actually
       // sends — the local handles in particular, which the server is the one to remap.
       window.__saved = null;
+      // What the server thinks of the document in the canvas. On the real server the
+      // validate route and a refused save are the same rules on the same document, so
+      // they are one state here too: a test sets __findings to say what is wrong, and
+      // both report it. __saveFails alone keeps meaning the one canned finding, which
+      // is what the refused-save test was written against.
+      window.__findings = null;
+      const TAKEN_TYPE = { code: "unknown-type", reason: "notation", classId: "c2", attribute: "shipTo",
+        message: 'Order.shipTo is typed "Adress", and this model has no class of that name.' };
+      const verdict = () => {
+        const findings = window.__findings || (window.__saveFails ? [TAKEN_TYPE] : []);
+        return { valid: findings.length === 0, findings: structuredClone(findings) };
+      };
+      // What the canvas last asked about, so a test can assert that it sends the model
+      // it is holding rather than the one it last saved.
+      window.__validated = null;
       const api = async (method, url, body) => {
+        if (method === "POST" && /\/infomodel\/validate$/.test(url)) {
+          window.__validated = structuredClone(body);
+          if (window.__validateFails) throw new Error("the server cannot be reached");
+          return verdict();
+        }
         if (method === "GET" && /\/infomodel\/subset$/.test(url)) return SUBSET;
         if (method === "GET" && /\/infomodel\/models\/[^/]+$/.test(url)) return structuredClone(MODEL);
         if (method === "GET" && /\/schema\?/.test(url)) {
@@ -121,10 +141,7 @@
           if (window.__saveFails) {
             const err = new Error("the model is not valid");
             err.status = 400;
-            err.body = { error: "the model is not valid", findings: [
-              { code: "unknown-type", reason: "notation", classId: "c2", attribute: "shipTo",
-                message: 'Order.shipTo is typed "Adress", and this model has no class of that name.' },
-            ] };
+            err.body = { error: "the model is not valid", findings: verdict().findings };
             throw err;
           }
           const saved = structuredClone(MODEL);
