@@ -413,6 +413,13 @@ The control-flow basics most real models use.
   and the rule that a decision deployment may not be deleted while a definition is
   pinned to it is written down before any route can break it
   ([ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md)).
+  **The stores stopped growing.** A deployed decision version and an unreferenced
+  model file can both be removed, under that rule plus one it did not foresee — the
+  current version of a decision cannot go while older ones remain, because the
+  version counter is derived from what survives
+  ([ADR-draft-cleaning-up-the-decision-store](docs/adr/draft-cleaning-up-the-decision-store.md)).
+  Operations' decision page is where that happens, and it answers "what is pinned to
+  this version" for the first time.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

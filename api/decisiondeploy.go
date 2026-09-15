@@ -169,6 +169,12 @@ type deployedDecisionResp struct {
 	// version stays deployed and addressable: processes pinned to it keep running
 	// against exactly it, which is the point of the whole record.
 	Current bool `json:"current"`
+	// PinnedBy are the deployed process definitions that resolved a latest-bound
+	// reference to this deployment's key. It is what stops it being deleted
+	// (ADR-draft-cleaning-up-the-decision-store), so it is reported before the act
+	// rather than only in the refusal after it. Filled by the listing; absent on the
+	// rows a deploy echoes back, which are new and can be pinned by nothing.
+	PinnedBy []decisionPinRef `json:"pinnedBy,omitempty"`
 }
 
 // decisionResponses flattens decision-deployment records into one row per
@@ -227,7 +233,20 @@ func (s *Server) handleListDecisionDeployments(w http.ResponseWriter, r *http.Re
 		recs    []persistedDecision
 		loadErr error
 	)
-	s.do(func() { recs, loadErr = s.decisionDeploys.LoadAll() })
+	// The pins are run-loop state (the deployments map and their compiled pins), so
+	// they are read in the same turn as the records. An operator deciding what to
+	// clean up needs to see what is holding a version before clicking, not after.
+	pinsFor := map[uint64][]decisionPinRef{}
+	s.do(func() {
+		if recs, loadErr = s.decisionDeploys.LoadAll(); loadErr != nil {
+			return
+		}
+		for _, rec := range recs {
+			if pins := s.definitionsPinnedTo(rec.Key); len(pins) > 0 {
+				pinsFor[rec.Key] = pins
+			}
+		}
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list decision deployments: "+loadErr.Error())
 		return
@@ -242,6 +261,9 @@ func (s *Server) handleListDecisionDeployments(w http.ResponseWriter, r *http.Re
 		recs = kept
 	}
 	out := decisionResponses(recs)
+	for i := range out {
+		out[i].PinnedBy = pinsFor[out[i].Key]
+	}
 	if decisionID != "" {
 		kept := out[:0]
 		for _, row := range out {
