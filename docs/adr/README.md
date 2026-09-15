@@ -438,6 +438,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0350](0350-a-write-arrow-may-set-several-members.md) | A write arrow may set several members at once | Accepted | Landed |
 | [0351](0351-an-enumeration-says-which-values-a-member-may-take.md) | An «enumeration» says which values a member may take | Accepted | Landed |
 | [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
+| [0353](0353-product-usage.md) | The catalogue answers forwards, and the person who maintains a service asks backwards | Accepted | Landed |
 
 ## The two states of a record
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Reading the catalogue graph backwards, over HTTP (ADR-draft-product-usage).
+// Reading the catalogue graph backwards, over HTTP (ADR-0353).
 //
 // The walk itself has its own tests against a release built in memory. This is
 // the route: what it answers about a real published catalogue, and what it

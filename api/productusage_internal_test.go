@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// Reading the graph backwards (ADR-draft-product-usage).
+// Reading the graph backwards (ADR-0353).
 //
 // The forward direction is exercised everywhere — the portal, the basket, the
 // fulfilment schedule are all built on it. These hold the *reverse*, which is

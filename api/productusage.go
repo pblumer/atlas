@@ -12,7 +12,7 @@ import (
 )
 
 // Reading the catalogue graph backwards
-// (ADR-draft-product-usage).
+// (ADR-0353).
 //
 // Everything the catalogue answers today runs forwards: a product names what it
 // contains, what it needs, what it excludes. That is the question an *order*
