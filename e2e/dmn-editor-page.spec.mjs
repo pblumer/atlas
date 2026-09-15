@@ -743,3 +743,82 @@ test("a decision whose logic is a literal expression does not cover the editor b
   await page.locator("#dmn-test").click();
   await expect(page.locator("#dmn-test-panel")).toBeVisible();
 });
+
+// A business knowledge model — a reusable FEEL function a decision can invoke —
+// does not open in the literal-expression view a decision's expression opens in.
+// dmn-js gives it the *boxed-expression* view: a different component, in its own
+// container, with its own stylesheets.
+//
+// Those stylesheets were not loaded, and the failure was silent in exactly the way
+// no other test catches. The view rendered: the kind marker, the parameter list, the
+// expression body and the result variable were all in the DOM, editing worked, saving
+// worked, and nothing errored. It was simply raw — no boxes, no borders, bare text at
+// the page edge, and the edit buttons that belong to a hovered section sitting
+// permanently on top of the content.
+const BKM_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" id="Definitions_bkm" name="Eligibility" namespace="http://atlas/dmn">
+  <businessKnowledgeModel id="BKM_fee" name="fee">
+    <variable name="fee" typeRef="number" />
+    <encapsulatedLogic kind="FEEL">
+      <formalParameter name="amount" typeRef="number" />
+      <literalExpression id="LE_fee"><text>amount * 0.1</text></literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+  <dmndi:DMNDI>
+    <dmndi:DMNDiagram id="DMNDiagram_bkm">
+      <dmndi:DMNShape id="DMNShape_bkm" dmnElementRef="BKM_fee">
+        <dc:Bounds height="80" width="180" x="160" y="100" />
+      </dmndi:DMNShape>
+    </dmndi:DMNDiagram>
+  </dmndi:DMNDI>
+</definitions>`;
+
+test("a knowledge model's expression opens styled, and the hint says what it is", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: BKM_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  // The knowledge model has a tab of its own, beside the requirements graph.
+  const tabs = page.locator(".editor-bar .etabs#dmn-views button");
+  await expect(tabs).toHaveCount(2);
+  await expect(tabs.nth(1)).toHaveText("fee");
+  await tabs.nth(1).click();
+
+  const box = page.locator(".dmn-canvas .dmn-boxed-expression-container");
+  await expect(box).toBeVisible();
+  // What the author came for is all there: the FEEL kind marker, the formal
+  // parameters a caller passes, and the result variable a decision binds.
+  await expect(box.locator(".function-definition-kind")).toContainText("F");
+  await expect(box.locator(".function-definition-parameters")).toContainText("(amount: number)");
+  await expect(box.locator(".element-variable")).toContainText("Result");
+
+  // Styled, not merely present. Without dmn-js-boxed-expression.css the sections are
+  // borderless — the rule is there but its colour resolves to nothing, so the border
+  // shorthand computes away entirely — and the view is three runs of text on the
+  // canvas rather than one box.
+  const sections = await box.locator(".dmn-boxed-expression-section").count();
+  expect(sections).toBeGreaterThan(1);
+  const borders = await box.locator(".dmn-boxed-expression-section").evaluateAll((els) =>
+    els.map((el) => getComputedStyle(el).borderLeftStyle));
+  expect(borders.every((s) => s === "solid")).toBe(true);
+
+  // And without dmn-js-boxed-expression-controls.css the edit buttons never hide:
+  // they are meant to be clipped away until the section they belong to is hovered,
+  // which is what keeps them off the expression the author is reading.
+  // One for the function kind, one for the formal parameters.
+  await expect(box.locator(".edit-button")).toHaveCount(2);
+  const editButton = box.locator(".edit-button").first();
+  expect(await editButton.evaluate((el) => getComputedStyle(el).clipPath)).toBe("inset(50%)");
+  await box.locator(".function-definition-kind").hover();
+  await expect.poll(() => editButton.evaluate((el) => getComputedStyle(el).clipPath)).toBe("none");
+
+  // The hint under the canvas describes the view that is open. A knowledge model is
+  // not a decision table, and saying so is the difference between a layout that
+  // explains itself and one that looks broken.
+  await expect(page.locator("#dmn-hint")).toContainText("knowledge model");
+  await expect(page.locator("#dmn-hint")).not.toContainText("Model the decision table");
+  await tabs.nth(0).click();
+  await expect(page.locator("#dmn-hint")).toContainText("decision requirements graph");
+});
