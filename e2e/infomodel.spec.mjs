@@ -163,6 +163,47 @@ test("editing a class updates the drawing, and a rename retypes what referred to
   await expect(box(page, "Order").locator(".uml-attr.key")).toHaveCount(0);
 });
 
+// A store names the class it holds by name (DataStore.Class), like an attribute's type
+// and a lifecycle's `statesFrom`. So it has to follow a rename, and cannot follow a
+// delete — which makes the two cases one rule and two behaviours, and neither of them
+// was here before: the rename left the store naming a class nothing declared, and the
+// model was then refused on save with `store-unknown-class`.
+test("a rename follows the store that holds the class, and a delete says it cannot", async ({ page }) => {
+  await box(page, "Order").click();
+  await page.locator("#im-c-name").fill("Auftrag");
+  await expect(box(page, "Auftrag")).toBeVisible();
+
+  await page.locator("#im-save").click();
+  await expect.poll(() => page.evaluate(() => window.__saved)).toBeTruthy();
+  const saved = await page.evaluate(() => window.__saved);
+  // The store came with it. Without this the model does not validate at all, so the
+  // edit could not be saved until the class was renamed back by hand.
+  expect(saved.stores.map((st) => ({ name: st.name, class: st.class })))
+    .toEqual([{ name: "Orders", class: "Auftrag" }]);
+  // And the class itself carries the new name, so the store and the class agree — which
+  // is the whole of what `store-unknown-class` checks.
+  expect(saved.classes.map((c) => c.name)).toContain("Auftrag");
+  expect(saved.classes.map((c) => c.name)).not.toContain("Order");
+  expect(page.__errors).toEqual([]);
+});
+
+test("deleting a class a store holds says so before it is confirmed", async ({ page }) => {
+  const asked = [];
+  // Declined, so nothing is deleted: what is under test is what the question says.
+  page.on("dialog", async (d) => { asked.push(d.message()); await d.dismiss(); });
+
+  await box(page, "Order").click();
+  await page.locator('[data-act="del-class"]').click();
+  await expect.poll(() => asked.length).toBe(1);
+
+  // ADR-0331's rule on this surface: the cost is stated before the click, not met as a
+  // refusal on the next save.
+  expect(asked[0]).toContain("Orders");
+  expect(asked[0]).toContain("will not save");
+  await expect(box(page, "Order")).toBeVisible(); // declined, so it is still there
+  expect(page.__errors).toEqual([]);
+});
+
 // The order of a class's attributes is not a view setting: a class box reads top to
 // bottom, so which attribute comes first is a statement about the class. A business
 // key belongs where a reader looks for it. `attributes` is already an ordered array
