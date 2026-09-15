@@ -492,7 +492,7 @@ type statsResp struct {
 // (invariants I3/I6). A caller that needs the identity of what it just started therefore
 // reconstructs it from the instance listing around the call — which is a guess when two
 // callers start the same definition at once. Closing that is
-// ADR-draft-starting-an-instance-returns-its-key.
+// ADR-0335.
 type createInstanceResp struct {
 	DefinitionKey uint64    `json:"definitionKey"`
 	Stats         statsResp `json:"stats"`

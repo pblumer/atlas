@@ -1,4 +1,4 @@
-# ADR-DRAFT: Starting an instance returns its key
+# ADR-0335: Starting an instance returns its key
 
 - **Status:** Proposed
 - **Implementation:** Not started

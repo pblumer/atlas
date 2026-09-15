@@ -420,6 +420,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0332](0332-entra-directory-provisioning.md) | Accounts and groups are pulled from Entra by delta query, and the first run writes nothing | Accepted | Landed |
 | [0333](0333-inventory-commissioning-load.md) | The inventory is taken before it is enforced, and what it records says Atlas did not grant it | Accepted | Partial |
 | [0334](0334-reconciliation.md) | Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete | Accepted | Landed |
+| [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Proposed | Not started |
 
 ## The two states of a record
 
