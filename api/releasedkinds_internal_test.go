@@ -205,6 +205,11 @@ var adrFileName = regexp.MustCompile(`^(\d{4})-[a-z0-9-]+\.md$`)
 // records rather than the index because the index is generated from them, and a guard
 // that reads the derived copy cannot catch the two disagreeing — that is what
 // docs/adr's own tests are for.
+//
+// This is a test in `api` that reads `docs/`, which is why CI's docs-only short path
+// (the `docs` job in .github/workflows/ci.yml) runs the whole test suite rather than
+// the records' own package: setting a record from Proposed to Accepted can fail *here*,
+// and a shortcut that skipped it would let that through.
 func adrStatuses(t *testing.T) map[int]string {
 	t.Helper()
 	dir := filepath.Join("..", "docs", "adr")

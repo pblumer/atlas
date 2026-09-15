@@ -10,8 +10,67 @@ permissions:
   contents: read
 
 jobs:
+  # What kind of change is this? A pull request that only touches docs/ takes the
+  # `docs` job below instead of the two heavy ones, because the race detector, the
+  # coverage floor, the benchmark harness and a browser cannot be moved by a markdown
+  # file — and a change of two lines in an ADR paid twenty-four minutes for them.
+  #
+  # The gate is a job-level `if`, not a workflow-level `paths-ignore`. The difference
+  # matters if these checks are ever made required: a workflow that never runs leaves
+  # its check pending forever and blocks the merge, while a job skipped by `if` reports
+  # as skipped, which branch protection accepts. The check names also stay put either
+  # way, so nothing outside this file has to learn about the split.
+  #
+  # Only a pull request takes the short path. A push to main runs the full sequence
+  # whatever it carries: it is the last reading before the code is the branch everyone
+  # builds on, and it costs nothing anybody is waiting for.
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so the base of the pull request is present to diff against.
+          fetch-depth: 0
+
+      - name: Classify the diff
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "$EVENT: the full sequence runs, whatever changed."
+            exit 0
+          fi
+          # --no-renames so a file moved out of docs/ lists its old path too; three dots
+          # so this is what the branch changed, not what main changed underneath it.
+          files="$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA")"
+          echo "Changed files:"
+          echo "$files" | sed 's/^/  /'
+          if [ -z "$files" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "An empty diff is not a docs change; taking the full sequence rather than guessing."
+            exit 0
+          fi
+          if echo "$files" | grep -qv '^docs/'; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Something outside docs/ changed: the full sequence."
+          else
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "Only docs/ changed: the docs job."
+          fi
+
   check:
     name: build · vet · fmt · race · cover
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # Same reasoning as the e2e job below: the expensive failure mode is the hang,
     # not the error, and this job had no ceiling at all — a wedged test would have
@@ -96,8 +155,72 @@ jobs:
       - name: Benchmark harness smoke
         run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
 
+  # Everything a docs-only change can actually break, and nothing else.
+  #
+  # "Documentation" is not inert here. docs/adr is a Go package whose tests read every
+  # record *and* every ADR-NNNN citation in the repository, so a renamed record or a
+  # mistyped citation fails here exactly as it would in the full job. The guards that
+  # live elsewhere and read this tree are covered too — api/releasedkinds_internal_test.go
+  # parses each record's Status line, and scripts/whats-new/gen.mjs builds the feed's
+  # links from the file names in docs/adr.
+  #
+  # So this runs the whole test suite rather than a list of test names: an enumeration
+  # would be correct on the day it was written and quietly wrong the day somebody adds
+  # another test that reads docs/. What it leaves out is only the instrumentation that
+  # cannot be moved by a markdown file — the race detector (no markdown ever raced), the
+  # coverage floor (docs carry no statements), the benchmark smoke, and a browser.
+  docs:
+    name: docs · records and the guards that read them
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # docs/adr carries Go (number.go and the guards), so the formatting rule reaches
+      # into this tree like any other.
+      - name: Format check
+        run: |
+          out="$(gofmt -l docs)"
+          if [ -n "$out" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./docs/...
+
+      - name: What's New feed is up to date
+        run: |
+          node scripts/whats-new/gen.mjs
+          if ! git diff --quiet -- api/web/whats-new.json; then
+            echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
+            git --no-pager diff -- api/web/whats-new.json
+            exit 1
+          fi
+
+      # No -race and no -timeout: without the detector the api package is minutes rather
+      # than a quarter of an hour, and Go's default per-package limit is ample again.
+      - name: Test
+        run: go test ./...
+
   e2e:
     name: e2e · token simulation
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # A browser job's failure mode is the hang, not the error: a stalled apt mirror or a
     # wedged browser holds the runner for the six-hour default. Well above the ~1 minute
