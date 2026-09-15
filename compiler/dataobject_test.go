@@ -1008,7 +1008,7 @@ func TestParseDataAssociationErrorInNestedScope(t *testing.T) {
 // TestParseDataOutputAssociationSeveralAssignments is the shape BPMN always allowed
 // and Atlas read as one: a DataAssociation carries `assignment [0..*]`, and a step
 // that captures a form's worth of fields writes them from one arrow rather than from
-// one arrow per field (ADR-draft-a-write-arrow-may-set-several-members).
+// one arrow per field (ADR-0350).
 //
 // What it is most careful about is order. The writes are applied in document order at
 // run time, so the order the parser records them in is not presentation: it decides

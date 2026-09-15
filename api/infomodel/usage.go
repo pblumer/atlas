@@ -320,7 +320,7 @@ func indexProcesses(procs []Process, storeClass map[string]string) map[string][]
 			for _, a := range cp.DataOutputAssociations(id) {
 				object := cp.Intern(a.DataObject)
 				// One row per write rather than per arrow: an arrow may set several
-				// members at once (ADR-draft-a-write-arrow-may-set-several-members), and
+				// members at once (ADR-0350), and
 				// each of them is a use of a different attribute. An arrow with no writes
 				// is ADR-0058's state-only transition — still a use of the object, and
 				// still the one row it has always been.

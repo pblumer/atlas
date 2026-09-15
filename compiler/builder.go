@@ -2299,7 +2299,7 @@ func (b *Builder) AddDataOutputAssociation(node int32, dataObject string, value 
 
 // AddDataOutputAssociationWrites attaches a data-output association carrying several
 // writes — the association's <assignment> elements in document order, which BPMN
-// allows any number of (ADR-draft-a-write-arrow-may-set-several-members). They are
+// allows any number of (ADR-0350). They are
 // applied in order onto one value and appended as one event, so one activity writing
 // five members of one object is one arrow and one fact.
 //

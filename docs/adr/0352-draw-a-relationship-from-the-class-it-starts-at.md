@@ -1,4 +1,4 @@
-# ADR-DRAFT: Draw a relationship from the class it starts at
+# ADR-0352: Draw a relationship from the class it starts at
 
 - **Status:** Accepted
 - **Implementation:** Landed

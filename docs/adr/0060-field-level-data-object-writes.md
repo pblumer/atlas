@@ -73,7 +73,7 @@ member path, `-1` when absent). Everything else is unchanged.
 
 > One target path per association is where this record stopped, and it made a step
 > that fills in a whole record one arrow per field.
-> [ADR-draft-a-write-arrow-may-set-several-members](draft-a-write-arrow-may-set-several-members.md)
+> [ADR-0350](0350-a-write-arrow-may-set-several-members.md)
 > reads every `<assignment>` BPMN allows on one association instead, so the compiled
 > association carries a *list* of writes rather than the single `Value`/`TargetPath`
 > pair described here. Everything below about what one write does is unchanged.

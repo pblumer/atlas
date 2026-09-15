@@ -1,4 +1,4 @@
-# ADR-DRAFT: A write arrow may set several members at once
+# ADR-0350: A write arrow may set several members at once
 
 - **Status:** Accepted
 - **Implementation:** Landed

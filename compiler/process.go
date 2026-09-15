@@ -1268,7 +1268,7 @@ type DataObjectWrite struct {
 // Writes are the association's <assignment> elements, in document order — BPMN gives
 // a data association `assignment [0..*]`, so one arrow may set several members of one
 // object and a step that captures a form's worth of fields need not be drawn as one
-// arrow per field (ADR-draft-a-write-arrow-may-set-several-members). They are applied
+// arrow per field (ADR-0350). They are applied
 // in order onto one accumulating value and appended as one event, so the order is not
 // presentation: two writes to the same member mean the later one. Empty is ADR-0058's
 // state-only transition, which keeps the object's value and moves only its state.

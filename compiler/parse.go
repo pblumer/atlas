@@ -1827,7 +1827,7 @@ type xmlDataObjectReference struct {
 //
 // Assignments is a list because BPMN's DataAssociation declares `assignment [0..*]`
 // and because a step that captures a form's worth of fields should not have to be
-// drawn as one arrow per field (ADR-draft-a-write-arrow-may-set-several-members).
+// drawn as one arrow per field (ADR-0350).
 // It was a single field until then, which is worse than a limitation: encoding/xml
 // overwrites a non-slice field, so a second <assignment> was discarded without a
 // word and the last one silently won.

@@ -629,7 +629,7 @@ func TestAStateOnlyWriteIsNotAWholeObjectWrite(t *testing.T) {
 // TestEveryWriteOnOneArrowIsADerivedMember is what the whole record is for: an author
 // who writes four fields from one arrow gets a model that names all four, where the
 // FEEL context literal that used to be the only one-arrow option named none of them
-// (ADR-draft-a-write-arrow-may-set-several-members).
+// (ADR-0350).
 func TestEveryWriteOnOneArrowIsADerivedMember(t *testing.T) {
 	b := compiler.NewBuilder(1, "hr", 1)
 	start := b.AddStartEvent()

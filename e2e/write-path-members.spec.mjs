@@ -129,7 +129,7 @@ test("an object whose class nothing models leaves the path as free text", async 
   expect(page.__errors).toEqual([]);
 });
 
-// Several writes on one arrow (ADR-draft-a-write-arrow-may-set-several-members).
+// Several writes on one arrow (ADR-0350).
 //
 // This is the half the feature exists for. Before it, a step that captures a form's
 // worth of fields had two options and both were bad: one arrow per field, which turns
@@ -244,7 +244,7 @@ test("a row added after a deletion does not inherit another row's escape field",
 });
 
 // The values an «enumeration» declares, offered rather than remembered
-// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+// (ADR-0351).
 //
 // It is the fourth of the four questions the model can answer for a write arrow, after
 // which class, which state and which member — and the only one that was still free

@@ -172,7 +172,7 @@ test("renaming the enumeration carries the reference with it", async ({ page }) 
 });
 
 // An «enumeration» that *types* an attribute is joined to the class too
-// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+// (ADR-0351).
 //
 // This is ADR-0306's open question, answered: yes, the same enumeration may type an
 // attribute and seed a lifecycle. Until now only the lifecycle drew a line, so an

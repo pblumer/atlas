@@ -53,7 +53,7 @@ const (
 	// «enumeration» types, where that constant is none of the literals it declares. The
 	// model wrote down the complete set of values that member may hold, so a value
 	// outside it is matched by nothing, for ever — the RuleDataUnknownState case one
-	// level down (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+	// level down (ADR-0351).
 	RuleDataNotALiteral = "data.not-a-literal"
 	// RuleDataMemberThroughCollection marks a dotted write path that walks through a
 	// collection attribute — legal to write, but it sets a member of the list value
@@ -296,7 +296,7 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 				continue // untyped or unresolved: already reported, and nothing to check against
 			}
 			// Every write on the arrow, because BPMN lets one carry several and each is
-			// a member target in its own right (ADR-draft-a-write-arrow-may-set-several-members).
+			// a member target in its own right (ADR-0350).
 			for _, w := range a.Writes {
 				path := cp.Intern(w.TargetPath)
 				if path == "" {
@@ -350,7 +350,7 @@ func checkPath(vocab *Vocabulary, class Class, objName, path, element string) []
 // checkLiteralValue judges a write's value against the «enumeration» that types the
 // member it lands in — the fourth of the four questions ADR-0230, ADR-0259 and ADR-0060
 // answer from the model, and the only one that was still free text
-// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+// (ADR-0351).
 //
 // It runs only on a *constant*: an expression with no inputs. That is the precise and
 // complete test for "this value is decided now rather than at run time", and it is the

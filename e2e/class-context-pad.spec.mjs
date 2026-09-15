@@ -1,5 +1,5 @@
 // The context pad on the class canvas
-// (ADR-draft-draw-a-relationship-from-the-class-it-starts-at).
+// (ADR-0352).
 //
 // Drawing a relationship used to be a *mode*: arm a kind in the palette, then remember
 // which class to click first and which second. The pad puts the kinds beside the class

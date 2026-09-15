@@ -537,7 +537,7 @@ func TestCheckDataFlowUnknownStateIsNotAlsoAnIllegalTransition(t *testing.T) {
 // several-writes-per-arrow shape: the check must not stop at the first assignment.
 // One arrow with a good member and a bad one is a deploy that has to fail, and the
 // message has to name the member that is wrong rather than the arrow that carries it
-// (ADR-draft-a-write-arrow-may-set-several-members, ADR-0230 for the class).
+// (ADR-0350, ADR-0230 for the class).
 func TestCheckDataFlowChecksEveryWriteOnOneArrow(t *testing.T) {
 	b := compiler.NewBuilder(1, "sales", 1)
 	start := b.AddStartEvent()
@@ -565,7 +565,7 @@ func TestCheckDataFlowChecksEveryWriteOnOneArrow(t *testing.T) {
 }
 
 // A value written into a member an «enumeration» types
-// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+// (ADR-0351).
 //
 // The model already wrote down every value that member may hold, one literal per line.
 // `= "approvd"` type-checks, deploys, runs, and writes a string no decision, no filter

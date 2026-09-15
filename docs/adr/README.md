@@ -435,6 +435,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
 | [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
 | [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted | Landed |
+| [0350](0350-a-write-arrow-may-set-several-members.md) | A write arrow may set several members at once | Accepted | Landed |
+| [0351](0351-an-enumeration-says-which-values-a-member-may-take.md) | An «enumeration» says which values a member may take | Accepted | Landed |
+| [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
 
 ## The two states of a record
 

@@ -148,7 +148,7 @@ func Derive(cps []*compiler.CompiledProcess) Derivation {
 					}
 					// Every write the arrow carries, because BPMN lets one carry several
 					// and each names a member in its own right
-					// (ADR-draft-a-write-arrow-may-set-several-members). A path names a
+					// (ADR-0350). A path names a
 					// member of this class; a write with no path replaces the whole value
 					// and says nothing about what is inside it, which addPath refuses on
 					// the empty string it interns to. That refusal is itself a fact worth

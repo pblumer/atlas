@@ -647,7 +647,7 @@ func TestDataObjectWriteAttribution(t *testing.T) {
 }
 
 // TestDataOutputAssociationWritesSeveralMembersInOneEvent is the run-time half of
-// ADR-draft-a-write-arrow-may-set-several-members: one arrow carrying several
+// ADR-0350: one arrow carrying several
 // <assignment>s writes all of them, and writes them as ONE fact.
 //
 // The event count is the assertion that matters, and it is why the writes were not

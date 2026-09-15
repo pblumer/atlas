@@ -1,4 +1,4 @@
-# ADR-DRAFT: An «enumeration» says which values a member may take
+# ADR-0351: An «enumeration» says which values a member may take
 
 - **Status:** Accepted
 - **Implementation:** Landed

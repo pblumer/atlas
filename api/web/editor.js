@@ -5890,7 +5890,7 @@ function setAssignment(modeler, element, bo, fromBody, toBody) {
 // setAssignments rebuilds a data association's <assignment> list from panel rows.
 // BPMN declares `assignment [0..*]` on a data association, and a write arrow uses all
 // of it: one arrow may set several members of one object
-// (ADR-draft-a-write-arrow-may-set-several-members). A read uses one, and reaches here
+// (ADR-0350). A read uses one, and reaches here
 // through setAssignment with a single row.
 //
 // A row with neither a value nor a target is dropped rather than written as an empty
@@ -6179,7 +6179,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   }
 
   // The values a member typed by an «enumeration» may take, offered rather than
-  // remembered (ADR-draft-an-enumeration-says-which-values-a-member-may-take). It is the
+  // remembered (ADR-0351). It is the
   // fourth of the four questions the model can answer — after which class, which state
   // and which member — and the only one that was still free text, so `= "aktive"`
   // deployed, ran, and wrote a string nothing would ever match.
@@ -6205,7 +6205,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   // One write of a data output association: what goes in, and which member it lands in.
   // BPMN gives a data association `assignment [0..*]`, so a step that captures a form's
   // worth of fields is one arrow with a row per field rather than one arrow per field
-  // (ADR-draft-a-write-arrow-may-set-several-members). Before that the only one-arrow
+  // (ADR-0350). Before that the only one-arrow
   // option was a FEEL context literal, which draws well and tells the model nothing —
   // the members inside it cannot be read at deploy time, so the write is unchecked and
   // the class derives as memberless.
@@ -7482,7 +7482,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
 
     // The writes of a data output association: one row per <assignment>, which BPMN
-    // allows any number of (ADR-draft-a-write-arrow-may-set-several-members). The group
+    // allows any number of (ADR-0350). The group
     // behaves like an I/O mapping group — add, delete, collapse — because it is the
     // same shape, and an author has already learned it.
     const dwGroup = body.querySelector("[data-write-group]");
@@ -7505,7 +7505,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // The value is the literal picker's when the member is typed by an «enumeration»
       // and a literal is chosen; the free expression field otherwise, which is also
       // where the picker's escape sends the author
-      // (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+      // (ADR-0351).
       const rowFrom = (card) => {
         const free = () => (card.querySelector(".dw-from").value || "").trim();
         const lit = card.querySelector(".dw-lit");

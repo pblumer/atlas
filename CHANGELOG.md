@@ -512,7 +512,7 @@ _Changed_ / _Removed_ for each version.
 
   The armed palette mode still works. It is the only way to draw a relationship without
   a pointer that can drag, and removing it is a separate decision.
-  ([ADR-draft-draw-a-relationship-from-the-class-it-starts-at](docs/adr/draft-draw-a-relationship-from-the-class-it-starts-at.md),
+  ([ADR-0352](docs/adr/0352-draw-a-relationship-from-the-class-it-starts-at.md),
   [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
 - **An «enumeration» now says which values a member may take, and is drawn as part of the
   class diagram.** Four questions an author answers while drawing a write arrow have the
@@ -538,7 +538,7 @@ _Changed_ / _Removed_ for each version.
   line already joins them — a derived line is routed straight, so a second would be drawn
   on the first. A straight line's label also moved to its midpoint, where it was landing
   on the target box.
-  ([ADR-draft-an-enumeration-says-which-values-a-member-may-take](docs/adr/draft-an-enumeration-says-which-values-a-member-may-take.md),
+  ([ADR-0351](docs/adr/0351-an-enumeration-says-which-values-a-member-may-take.md),
   [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
 - **A write arrow can set several members of a data object at once.** A step that
   captures a form's worth of fields writes them from one arrow with a row per field,
@@ -559,7 +559,7 @@ _Changed_ / _Removed_ for each version.
   unchecked and the class derived as having none. Named on their own rows, every member
   is a static fact again: checked against the class, listed in the derived model, and
   compared rather than excluded by the difference reading.
-  ([ADR-draft-a-write-arrow-may-set-several-members](docs/adr/draft-a-write-arrow-may-set-several-members.md),
+  ([ADR-0350](docs/adr/0350-a-write-arrow-may-set-several-members.md),
   [ADR-0060](docs/adr/0060-field-level-data-object-writes.md))
 
 ### Fixed
