@@ -1,4 +1,4 @@
-# ADR-DRAFT: Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent
+# ADR-0349: Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent
 
 - **Status:** Accepted
 - **Implementation:** Landed

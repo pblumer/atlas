@@ -55,7 +55,7 @@ type Service struct {
 	// refuse exactly that.
 	groupsOf func(string) ([]string, error)
 	// mayOrderForOthers answers whether this caller may place an order naming
-	// somebody else as the recipient (ADR-draft-ordering-for-others).
+	// somebody else as the recipient (ADR-0349).
 	//
 	// A separate question from mayOrderFrom, which asks whether the *shop* is
 	// theirs. This asks whether the *order* may be somebody else's, and the two are
@@ -205,7 +205,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// And whose name this order may carry (ADR-draft-ordering-for-others).
+	// And whose name this order may carry (ADR-0349).
 	//
 	// Checked here rather than folded into the recipient's eligibility below,
 	// because the two refuse different things: eligibility asks whether *this

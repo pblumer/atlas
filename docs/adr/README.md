@@ -434,6 +434,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0346](0346-entitlement-history.md) | The remedy must not destroy the evidence, so a hold that ends leaves a row | Accepted | Landed |
 | [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
 | [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
+| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted | Landed |
 
 ## The two states of a record
 

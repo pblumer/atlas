@@ -1484,7 +1484,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 			}
 			return p.GroupIDs, nil
 		},
-		// Whose name an order may carry (ADR-draft-ordering-for-others).
+		// Whose name an order may carry (ADR-0349).
 		//
 		// The operator role, and not a manager relationship, because Atlas cannot
 		// answer what a manager relationship *is*: the escalation path has the
