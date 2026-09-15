@@ -12,7 +12,7 @@ import (
 )
 
 // The acceptance suite for the durable high-water mark
-// (ADR-draft-the-job-type-index-space-never-goes-backwards).
+// (ADR-0345).
 //
 // The guarantee under test is the one this package has always stated: an index,
 // once issued, is never issued again. It is only visible across a reopen, because

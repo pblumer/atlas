@@ -180,7 +180,7 @@ func TestJobTypeIndicesSurviveAReload(t *testing.T) {
 
 // TestAJobTypeIndexIsNeverHandedToAnotherTypeAcrossARestart is the registry's
 // guarantee seen through the server that owns it
-// (ADR-draft-the-job-type-index-space-never-goes-backwards).
+// (ADR-0345).
 //
 // The unit tests prove the table; this proves the wiring, and it is the only level
 // at which the failure is visible as what it costs: a job parked by one process

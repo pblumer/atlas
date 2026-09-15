@@ -1,4 +1,4 @@
-# ADR-DRAFT: The job-type index space never goes backwards
+# ADR-0345: The job-type index space never goes backwards
 
 - **Status:** Accepted
 - **Implementation:** Landed

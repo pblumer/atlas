@@ -154,7 +154,7 @@ that a new definition could adopt it.
   this slice would hide that it is the same case.
 
   **Corrected by
-  [ADR-draft-the-job-type-index-space-never-goes-backwards](draft-the-job-type-index-space-never-goes-backwards.md).**
+  [ADR-0345](0345-the-job-type-index-space-never-goes-backwards.md).**
   "Not reachable" was wrong. Measuring the table rather than reasoning about its
   routes found a second way its counter falls, which needs no delete at all: an entry
   whose *name* a later build turns into a built-in is dropped on load and took its
@@ -194,7 +194,7 @@ that a new definition could adopt it.
 - extends [ADR-0019](0019-durable-deployments.md) — the deployment records and the delete this makes safe
 - extends [ADR-0336](0336-cleaning-up-the-decision-store.md) — the decision delete that made a second route reach it
 - relates to [ADR-0007](0007-job-worker-protocol.md) — the job-type table that states this principle and shares the derivation
-- corrected by [ADR-draft-the-job-type-index-space-never-goes-backwards](draft-the-job-type-index-space-never-goes-backwards.md) — the follow-up above, and why "not reachable" was wrong
+- corrected by [ADR-0345](0345-the-job-type-index-space-never-goes-backwards.md) — the follow-up above, and why "not reachable" was wrong
 - relates to [ADR-0080](0080-runtime-aggregate-counters.md) — the per-element aggregates a reused key inherited
 - relates to [ADR-0083](0083-o1-instance-summary.md) — the finished count a reused key inherited
 - relates to [ADR-0128](0128-process-applications.md) — the release manifest that quotes a key

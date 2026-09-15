@@ -8,7 +8,7 @@ import (
 )
 
 // The high-water mark under the dynamic job-type indices
-// (ADR-draft-the-job-type-index-space-never-goes-backwards).
+// (ADR-0345).
 //
 // This package has always stated the rule outright — "an index, once issued, is
 // permanent: jobs already on disk carry it, so the registry never recycles one, not

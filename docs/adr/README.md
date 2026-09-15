@@ -430,6 +430,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0342](0342-conflicting-rights.md) | A conflict is a fact about a pair, and no rule can say which half is wrong | Accepted | Landed |
 | [0343](0343-pending-work.md) | A reminder has to be able to ask about somebody else, and a person must not | Accepted | Landed |
 | [0344](0344-time-bounded-entitlements.md) | A right may carry an end, and an end that has passed is a debt rather than a fact | Accepted | Landed |
+| [0345](0345-the-job-type-index-space-never-goes-backwards.md) | The job-type index space never goes backwards | Accepted | Landed |
 
 ## The two states of a record
 
