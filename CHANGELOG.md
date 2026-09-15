@@ -337,6 +337,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A job-type index is never issued twice, so a worker cannot be handed another
+  type's work.** The engine-wide job-type table maps a model-authored task type to the
+  integer index a job on disk carries, and a worker polling by type is resolved through
+  it ([ADR-0007](docs/adr/0007-job-worker-protocol.md)). The table has always stated
+  that an index, once issued, is permanent — "jobs already on disk carry it … not even
+  after a record is removed by hand" — and derived its counter from the entries that
+  survived a reload, which is not the same thing.
+
+  Two things lowered it. Measured: remove the highest entry file and restart, and the
+  next new task type is issued that index (`ship-parcel` = 1001, where `send-email`
+  was). And with no editing at all — a stored type whose *name* a later build turns
+  into a built-in is dropped on load, correctly, but its claim on its index was dropped
+  with it, so a store holding such a name at 1005 issued 1005 again to an unrelated
+  type five interns later. A parked job carries the number, not the name.
+
+  The dynamic indices now have a durable high-water mark, kept beside the table and
+  raised **before** the index it covers is issued, so a crash in between costs a gap
+  rather than a repeat; and the load counts every index the store shows it, whether or
+  not this build can still use the name it went to. An installation upgrading gets its
+  mark written on the boot that upgrades, from what its entries still say — the one
+  moment that knowledge exists.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **A deleted definition's key is never issued again, so a new process cannot inherit
   its history.** Every process definition and every decision deployment draws a key
   from one counter, and that key is what the engine files a great deal of durable state
