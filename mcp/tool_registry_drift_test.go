@@ -566,7 +566,7 @@ var mcpOmittedRoutes = map[string]string{
 	// to the part somebody is about to lose.
 	"GET /api/v1/entitlements/expiring": "what ends when is other people's access, read the same way the inventory is",
 
-	// Recertification (ADR-draft-access-recertification). Omitted whole, and this
+	// Recertification (ADR-0341). Omitted whole, and this
 	// one is the sharpest case in the table rather than another instance of it.
 	//
 	// The record's entire design is the refusal of a signature nobody read behind.

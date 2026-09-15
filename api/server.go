@@ -290,7 +290,7 @@ type Server struct {
 	// one that goes away is that record closed.
 	discrepancies *discrepancyStore
 	// recertifications is what people attested about the inventory
-	// (ADR-draft-access-recertification): the campaigns, and the judgements made in
+	// (ADR-0341): the campaigns, and the judgements made in
 	// them. It answers the question the journal beside it cannot — not "is this
 	// record true" but "is this right still needed", which only a person can say.
 	recertifications *recertifyStore

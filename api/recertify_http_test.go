@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// The recertification routes, over HTTP (ADR-draft-access-recertification).
+// The recertification routes, over HTTP (ADR-0341).
 //
 // The inventory these run against is filled through the commissioning load, for
 // the reason the reconciliation tests give: the slices meet here, and a test that

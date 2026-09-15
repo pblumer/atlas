@@ -22,7 +22,7 @@ That is not a gap anybody notices on the day it is built, and it is the reason t
 three slices before this one exist. The commissioning load
 ([ADR-0333](0333-inventory-commissioning-load.md)) records what the estate already
 holds; reconciliation ([ADR-0334](0334-reconciliation.md)) checks whether the record
-is still true; recertification (ADR-draft-access-recertification) asks a person
+is still true; recertification (ADR-0341) asks a person
 whether it is still justified. All three are **detective** controls: they find
 access that should not be there, after it is there.
 

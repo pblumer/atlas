@@ -20,7 +20,7 @@
 Everything the portal has learned to do about access is **detective or temporal**.
 The commissioning load records what was there ([ADR-0333](0333-inventory-commissioning-load.md));
 reconciliation checks whether the record is true ([ADR-0334](0334-reconciliation.md));
-recertification asks whether it is justified (ADR-draft-access-recertification);
+recertification asks whether it is justified (ADR-0341);
 an expiry ends it by itself (ADR-draft-time-bounded-entitlements). All of them look
 at one right at a time, and all of them look *after*.
 

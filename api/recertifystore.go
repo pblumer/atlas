@@ -7,7 +7,7 @@ import (
 )
 
 // The durable record of what somebody attested about somebody else's access
-// (ADR-draft-access-recertification).
+// (ADR-0341).
 //
 // # Why a sidecar, and why two of them
 //

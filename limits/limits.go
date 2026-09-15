@@ -209,7 +209,7 @@ type Limits struct {
 	ReconcileJournal int32
 
 	// Recertify is one message opening a recertification campaign: its name, its
-	// scope, and the map of who reviews whom (ADR-draft-access-recertification).
+	// scope, and the map of who reviews whom (ADR-0341).
 	// The reviewer map is what makes it large — one entry per person in scope — and
 	// it is external input like any other.
 	Recertify int64

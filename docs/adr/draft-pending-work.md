@@ -17,7 +17,7 @@
 
 The portal now asks people for three different things. An approver decides an order
 line ([ADR-0312](0312-portal-catalogue-order-inventory.md)). A reviewer answers a
-recertification row (ADR-draft-access-recertification). Neither happens unless the
+recertification row (ADR-0341). Neither happens unless the
 person opens Atlas and looks.
 
 The recertification record already named this in its own consequences: *"Nothing
