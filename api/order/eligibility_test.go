@@ -117,3 +117,28 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// TestAConflictRefusalNamesBothSidesAndSaysWhichIsHeld.
+//
+// The two sentences differ in what the reader can do next: one half already in
+// the estate is a return or an access review, both halves in one basket is a
+// choice to make before ordering. A refusal that read the same either way would
+// send somebody looking for a right they do not have.
+func TestAConflictRefusalNamesBothSidesAndSaysWhichIsHeld(t *testing.T) {
+	held := conflict{Ordered: "approve-payment", Other: "create-supplier", Held: true}.reason()
+	if !contains(held, "approve-payment") || !contains(held, "create-supplier") {
+		t.Errorf("the refusal does not name both sides: %q", held)
+	}
+	if !contains(held, "already") {
+		t.Errorf("a conflict against something the recipient holds does not say so, so "+
+			"the reader cannot tell it from a basket they can still change: %q", held)
+	}
+
+	basket := conflict{Ordered: "approve-payment", Other: "create-supplier"}.reason()
+	if !contains(basket, "both") {
+		t.Errorf("a conflict inside one basket does not say the order asks for both: %q", basket)
+	}
+	if contains(basket, "already") {
+		t.Errorf("a basket conflict claims the recipient already holds one half: %q", basket)
+	}
+}

@@ -95,6 +95,26 @@ func TestAClosedHoldSurvivesARoundTrip(t *testing.T) {
 	}
 }
 
+// TestAClosedHoldKnowsItsOwnValueType.
+//
+// The fold dispatches on it, so a row that reported the inventory's type would
+// be decoded as a live hold — silently, because the two share their first
+// fields.
+func TestAClosedHoldKnowsItsOwnValueType(t *testing.T) {
+	v := &EntitlementHistoryValue{Principal: "usr_ada", ItemID: "vpn"}
+	if v.ValueType() != VTEntitlementHistory {
+		t.Errorf("ValueType = %v, want VTEntitlementHistory", v.ValueType())
+	}
+	if VTEntitlementHistory.String() != "EntitlementHistory" {
+		t.Errorf("name = %q; a log somebody reads years later should say what the "+
+			"record is", VTEntitlementHistory.String())
+	}
+	if newValue(VTEntitlementHistory) == nil {
+		t.Error("the decoder has no value to decode into, so a replayed revocation " +
+			"would be dropped")
+	}
+}
+
 // TestARowThatNamesNobodyOrNothingIsRefused.
 func TestARowThatNamesNobodyOrNothingIsRefused(t *testing.T) {
 	for _, tc := range []struct {
