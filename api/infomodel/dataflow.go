@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/expr"
 )
 
 // Data-flow checking: what the information model is *for*.
@@ -48,6 +49,12 @@ const (
 	// RuleDataMemberThroughScalar marks a dotted write path that walks through a
 	// primitive or an enumeration, which has no members to walk into.
 	RuleDataMemberThroughScalar = "data.member-through-scalar"
+	// RuleDataNotALiteral marks a write of a *constant* value into a member an
+	// «enumeration» types, where that constant is none of the literals it declares. The
+	// model wrote down the complete set of values that member may hold, so a value
+	// outside it is matched by nothing, for ever — the RuleDataUnknownState case one
+	// level down (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+	RuleDataNotALiteral = "data.not-a-literal"
 	// RuleDataMemberThroughCollection marks a dotted write path that walks through a
 	// collection attribute — legal to write, but it sets a member of the list value
 	// rather than of each element (ADR-0060 leaves list indexing to a follow-up).
@@ -279,10 +286,6 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 	for id := int32(0); int(id) < cp.NodeCount(); id++ {
 		element := cp.ElementBpmnId(id)
 		for _, a := range cp.DataOutputAssociations(id) {
-			path := cp.Intern(a.TargetPath)
-			if path == "" {
-				continue // a whole-object write: the value is FEEL, not a member name
-			}
 			objName := cp.Intern(a.DataObject)
 			do, ok := byName[objName]
 			if !ok {
@@ -292,7 +295,19 @@ func checkMemberWrites(cp *compiler.CompiledProcess, vocab *Vocabulary) []compil
 			if !ok {
 				continue // untyped or unresolved: already reported, and nothing to check against
 			}
-			ps = append(ps, checkPath(vocab, class, objName, path, element)...)
+			// Every write on the arrow, because BPMN lets one carry several and each is
+			// a member target in its own right (ADR-draft-a-write-arrow-may-set-several-members).
+			for _, w := range a.Writes {
+				path := cp.Intern(w.TargetPath)
+				if path == "" {
+					continue // a whole-object write: the value is FEEL, not a member name
+				}
+				if bad := checkPath(vocab, class, objName, path, element); len(bad) > 0 {
+					ps = append(ps, bad...)
+					continue // the path does not resolve; its value has nothing to be checked against
+				}
+				ps = append(ps, checkLiteralValue(vocab, class, objName, path, w.Value, element)...)
+			}
 		}
 	}
 	return ps
@@ -328,6 +343,65 @@ func checkPath(vocab *Vocabulary, class Class, objName, path, element string) []
 			}}
 		}
 		current = next
+	}
+	return nil
+}
+
+// checkLiteralValue judges a write's value against the «enumeration» that types the
+// member it lands in — the fourth of the four questions ADR-0230, ADR-0259 and ADR-0060
+// answer from the model, and the only one that was still free text
+// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+//
+// It runs only on a *constant*: an expression with no inputs. That is the precise and
+// complete test for "this value is decided now rather than at run time", and it is the
+// whole of the rule's honesty. What `=if x then "a" else "b"` produces is not a fact of
+// the model, and judging it would be the false knowledge the derived model reports as a
+// gap. A constant has no inputs to bind, so evaluating it here is pure and total —
+// FEEL's evaluator reads nothing but the expression itself.
+//
+// The path is assumed to resolve: checkPath has already run and reported it otherwise.
+func checkLiteralValue(vocab *Vocabulary, class Class, objName, path string, value *expr.Compiled, element string) []compiler.Problem {
+	if value == nil || len(value.Inputs()) > 0 {
+		return nil
+	}
+	segments := strings.Split(path, ".")
+	current := class
+	for i, seg := range segments {
+		attr, ok := vocab.attribute(current.Name, seg)
+		if !ok {
+			return nil
+		}
+		if i < len(segments)-1 {
+			next, isClass := vocab.Class(attr.Type)
+			if !isClass {
+				return nil
+			}
+			current = next
+			continue
+		}
+		enum, isClass := vocab.Class(attr.Type)
+		if !isClass || enum.Stereotype != StereotypeEnumeration || len(enum.Literals) == 0 {
+			return nil // an ordinary member holds any value of its type; nothing is closed
+		}
+		result, err := value.Eval(nil)
+		if err != nil {
+			return nil // it did not evaluate here; the deploy has nothing to say about it
+		}
+		kind, _, text := expr.Classify(result)
+		if kind == expr.KindNull {
+			return nil // null is how a member is unset, not a value claiming to be a literal
+		}
+		for _, lit := range enum.Literals {
+			if lit == text {
+				return nil
+			}
+		}
+		return []compiler.Problem{{
+			Element: element, Severity: compiler.SeverityWarning, Rule: RuleDataNotALiteral,
+			Message: fmt.Sprintf("This activity writes %q into %s.%s, which is not one of the values %s declares (%s). "+
+				"Add it to the enumeration, or correct the spelling — the value is matched by that string and nothing else.",
+				text, objName, path, enum.Name, strings.Join(enum.Literals, ", ")),
+		}}
 	}
 	return nil
 }

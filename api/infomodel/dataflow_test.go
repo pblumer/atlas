@@ -532,3 +532,136 @@ func TestCheckDataFlowUnknownStateIsNotAlsoAnIllegalTransition(t *testing.T) {
 		t.Errorf("an undeclared state was reported twice: %+v", by[RuleDataIllegalTransition])
 	}
 }
+
+// TestCheckDataFlowChecksEveryWriteOnOneArrow is the guard that matters most for the
+// several-writes-per-arrow shape: the check must not stop at the first assignment.
+// One arrow with a good member and a bad one is a deploy that has to fail, and the
+// message has to name the member that is wrong rather than the arrow that carries it
+// (ADR-draft-a-write-arrow-may-set-several-members, ADR-0230 for the class).
+func TestCheckDataFlowChecksEveryWriteOnOneArrow(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociationWrites(write, "order", "approved", []compiler.DataWrite{
+		{Value: mustExpr(t, "amount"), TargetPath: "id"},          // the class has it
+		{Value: mustExpr(t, "amount"), TargetPath: "shipTo.city"}, // and this one
+		{Value: mustExpr(t, "amount"), TargetPath: "nmae"},        // and not this one
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataUnknownMember]
+	if len(found) != 1 {
+		t.Fatalf("expected one unknown-member problem, got %+v", CheckDataFlow(cp, salesVocabulary(t)))
+	}
+	if !strings.Contains(found[0].Message, "nmae") {
+		t.Errorf("message %q does not name the member that is wrong", found[0].Message)
+	}
+}
+
+// A value written into a member an «enumeration» types
+// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+//
+// The model already wrote down every value that member may hold, one literal per line.
+// `= "approvd"` type-checks, deploys, runs, and writes a string no decision, no filter
+// and no report will ever match — the member-picker failure one level down.
+//
+// The severity is the load-bearing choice, not the detection. It is a warning, worded
+// like RuleDataUnknownState and for the same reason: a model that is merely behind its
+// process is not broken, and refusing the deploy would make the two impossible to
+// develop in either order.
+func TestCheckDataFlowConstantValueAgainstEnumerationLiterals(t *testing.T) {
+	tests := []struct {
+		name, value string
+		wantRule    string
+	}{
+		{"a literal the enumeration declares", `"approved"`, ""},
+		{"one it does not", `"approvd"`, RuleDataNotALiteral},
+		{"a number where literals are strings", "42", RuleDataNotALiteral},
+		// null is how a member is unset, not a value claiming to be one of the literals.
+		{"null", "null", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cp := valueWriter(t, "status", tt.value)
+			found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataNotALiteral]
+			if tt.wantRule == "" {
+				if len(found) != 0 {
+					t.Fatalf("expected no problem, got %+v", found)
+				}
+				return
+			}
+			if len(found) != 1 {
+				t.Fatalf("expected one %s, got %+v", RuleDataNotALiteral, CheckDataFlow(cp, salesVocabulary(t)))
+			}
+			if found[0].Severity != compiler.SeverityWarning {
+				t.Errorf("severity = %q, want warning — the model may simply be behind the process",
+					found[0].Severity)
+			}
+			// The message has to carry the value and the enumeration: without the first
+			// there is nothing to search the model for, and without the second there is
+			// nowhere to go and add it.
+			if !strings.Contains(found[0].Message, "OrderStatus") {
+				t.Errorf("message %q does not name the enumeration", found[0].Message)
+			}
+		})
+	}
+}
+
+// TestCheckDataFlowLeavesAComputedValueAlone is the half that keeps the rule honest,
+// and the expression is chosen to make the guard load-bearing rather than polite.
+//
+// FEEL is null-propagating, so most expressions evaluate to null without their
+// variables and would be skipped anyway. A conditional does not: with an unbound
+// condition it takes its else branch and hands back a perfectly concrete string. A
+// check that evaluated every expression would therefore report the *else branch* of a
+// value whose real result is decided at run time — a warning about a string the process
+// may never write, which is the false knowledge the derived model reports as a gap.
+//
+// Reading any variable is the precise test for "decided later", and it is why the rule
+// looks at the inputs rather than at what the evaluation happened to produce.
+func TestCheckDataFlowLeavesAComputedValueAlone(t *testing.T) {
+	for _, src := range []string{
+		"someVariable",
+		`if someVariable then "approved" else "approvd"`,
+	} {
+		cp := valueWriter(t, "status", src)
+		if found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataNotALiteral]; len(found) != 0 {
+			t.Errorf("a computed value (%s) was judged against the literals: %+v", src, found)
+		}
+	}
+}
+
+// TestCheckDataFlowLeavesAnOrdinaryMemberAlone: only a member an enumeration types has
+// a closed set of values. A string attribute holds any string, and a constant written
+// into one is nothing to report.
+func TestCheckDataFlowLeavesAnOrdinaryMemberAlone(t *testing.T) {
+	cp := valueWriter(t, "id", `"anything at all"`)
+	if found := problemsByRule(CheckDataFlow(cp, salesVocabulary(t)))[RuleDataNotALiteral]; len(found) != 0 {
+		t.Errorf("a plain string member was judged against literals: %+v", found)
+	}
+}
+
+// valueWriter builds Start → write → End writing one member of `order` with the given
+// FEEL value, so the value rather than the path is what a test varies.
+func valueWriter(t *testing.T, targetPath, value string) *compiler.CompiledProcess {
+	t.Helper()
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	write := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, write)
+	b.Connect(write, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociation(write, "order", mustExpr(t, value), "approved", targetPath)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return cp
+}

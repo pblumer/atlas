@@ -170,3 +170,67 @@ test("renaming the enumeration carries the reference with it", async ({ page }) 
   expect(lc.statesFrom).toBe("Lebenszustand");
   expect(page.__errors).toEqual([]);
 });
+
+// An «enumeration» that *types* an attribute is joined to the class too
+// (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+//
+// This is ADR-0306's open question, answered: yes, the same enumeration may type an
+// attribute and seed a lifecycle. Until now only the lifecycle drew a line, so an
+// enumeration a class merely depends on sat unconnected beside it while the compartment
+// said `status : OrderStatus` and nothing held the two together.
+const typeOf = (page, i) => page.locator(`tr[data-attr="${i}"] select[data-f="type"]`);
+
+test("an enumeration that types an attribute is drawn as a dependency", async ({ page }) => {
+  await expect(page.locator(".uml-type-link")).toHaveCount(0);
+  await box(page, "Order").click();
+  await typeOf(page, 2).selectOption("OrderStatus"); // total
+
+  const link = page.locator(".uml-type-link");
+  await expect(link).toHaveCount(1);
+  // The label says *which* attribute, because "depends on" alone is what a dashed line
+  // already says and is not the useful half.
+  await expect(link.locator(".uml-edge-label")).toHaveText("total");
+  expect(page.__errors).toEqual([]);
+});
+
+test("two attributes of one enumeration are one line saying both", async ({ page }) => {
+  // A derived edge is routed straight, dock to dock, with no lane spreading — so two
+  // edges between one pair would be two lines on exactly the same pixels, and a click
+  // could only ever reach whichever was drawn last.
+  await box(page, "Order").click();
+  await typeOf(page, 1).selectOption("OrderStatus"); // placedOn
+  await typeOf(page, 2).selectOption("OrderStatus"); // total
+
+  const link = page.locator(".uml-type-link");
+  await expect(link).toHaveCount(1);
+  await expect(link.locator(".uml-edge-label")).toHaveText("placedOn, total");
+});
+
+test("where the lifecycle already sources from it, the type line is not drawn twice", async ({ page }) => {
+  // sourceOrderFrom leaves Order selected, so its attributes are already on the panel.
+  await sourceOrderFrom(page);
+  await expect(page.locator(".uml-lifecycle-link")).toHaveCount(1);
+  await typeOf(page, 2).selectOption("OrderStatus");
+
+  // The «lifecycle» edge is the stronger statement of the two and it stays; the
+  // attribute is legible in the compartment beneath it.
+  await expect(page.locator(".uml-lifecycle-link")).toHaveCount(1);
+  await expect(page.locator(".uml-type-link")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+test("the type line is derived: never authored, and never counted as a relationship", async ({ page }) => {
+  await box(page, "Order").click();
+  await typeOf(page, 2).selectOption("OrderStatus");
+  await expect(page.locator(".uml-type-link")).toHaveCount(1);
+
+  // It exists because the attribute names the enumeration, so changing the type is what
+  // removes it. There is nothing else to do to it — and nothing that says it is an
+  // association, which is the half a reader counts.
+  await save(page);
+  expect((await page.evaluate(() => window.__saved)).associations).toHaveLength(1);
+
+  await typeOf(page, 2).selectOption("number");
+  await expect(page.locator(".uml-type-link")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});

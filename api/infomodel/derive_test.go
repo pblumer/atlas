@@ -280,6 +280,45 @@ func TestAWriteThatChangesNoStateStillNamesAMember(t *testing.T) {
 	}
 }
 
+// A whole-object write is the case that taught this rule, and it was found on a real
+// model rather than in a fixture: `= {id: identityId, nachname: nachname, …}` writes
+// every field at once, so derivation sees a class with no members at all. Saying
+// nothing about them is right; letting something downstream read that silence as
+// "this class has no members" is how a reader is told five fields are missing that the
+// process demonstrably writes.
+func TestAWholeObjectWriteIsReportedAsSomethingDerivationCannotSeeInto(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociation(task, "order", mustExpr(t, "amount"), "approved", "") // the whole value
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	d := Derive([]*compiler.CompiledProcess{cp})
+	whole := gapsOfKind(d, GapWholeObjectWrite)
+	if len(whole) != 1 || whole[0].Class != "Order" {
+		t.Fatalf("whole-object-write gaps = %+v, want one for Order", whole)
+	}
+	if !strings.Contains(whole[0].Note, "inside") {
+		t.Errorf("the note does not say what was not readable: %q", whole[0].Note)
+	}
+}
+
+func TestAMemberWriteIsNotAWholeObjectWrite(t *testing.T) {
+	// The other side of the rule: a class every write reaches through a path has been
+	// read all the way, so nothing is withheld about its members.
+	d := Derive([]*compiler.CompiledProcess{orderProcess(t)})
+	if got := gapsOfKind(d, GapWholeObjectWrite); len(got) != 0 {
+		t.Errorf("a class written only through paths was marked unreadable: %+v", got)
+	}
+}
+
 func TestAStructuredMemberIsSaidOnceHoweverOftenItIsWrittenInto(t *testing.T) {
 	// Two writes into the same member prove the same one fact. Saying it twice would
 	// read as two problems, and the qualifications are only useful while they are few.
@@ -559,5 +598,76 @@ func TestADerivedModelDoesNotValidateAndThatIsTheHonestAnswer(t *testing.T) {
 	// And the untyped attributes are the reason, said once in the reading itself.
 	if len(gapsOfKind(d, GapNoAttributeTypes)) != 1 {
 		t.Error("the reading does not say its attributes are untyped")
+	}
+}
+
+// TestAStateOnlyWriteIsNotAWholeObjectWrite draws the line the whole-object gap sits
+// on. An association with no <assignment> moves the object's data state and leaves its
+// value alone (ADR-0058) — it replaces nothing, so there is nothing it hides, and
+// reporting it would withhold the member comparison from every class whose lifecycle
+// is driven by state-only transitions. Which is most of them.
+func TestAStateOnlyWriteIsNotAWholeObjectWrite(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociation(task, "order", nil, "approved", "") // state only, no value
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, g := range Derive([]*compiler.CompiledProcess{cp}).Gaps {
+		if g.Kind == GapWholeObjectWrite {
+			t.Fatalf("a state-only transition was read as a whole-object write: %+v", g)
+		}
+	}
+}
+
+// TestEveryWriteOnOneArrowIsADerivedMember is what the whole record is for: an author
+// who writes four fields from one arrow gets a model that names all four, where the
+// FEEL context literal that used to be the only one-arrow option named none of them
+// (ADR-draft-a-write-arrow-may-set-several-members).
+func TestEveryWriteOnOneArrowIsADerivedMember(t *testing.T) {
+	b := compiler.NewBuilder(1, "hr", 1)
+	start := b.AddStartEvent()
+	capture := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, capture)
+	b.Connect(capture, end)
+	b.AddDataObject("identity", "Identity", "draft", false)
+	b.AddDataOutputAssociationWrites(capture, "identity", "captured", []compiler.DataWrite{
+		{Value: mustExpr(t, "surname"), TargetPath: "surname"},
+		{Value: mustExpr(t, "firstName"), TargetPath: "firstName"},
+		{Value: mustExpr(t, "unit"), TargetPath: "orgUnit"},
+	})
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	d := Derive([]*compiler.CompiledProcess{cp})
+	if len(d.Model.Classes) != 1 {
+		t.Fatalf("classes = %d, want 1", len(d.Model.Classes))
+	}
+	var got []string
+	for _, a := range d.Model.Classes[0].Attributes {
+		got = append(got, a.Name)
+	}
+	want := []string{"surname", "firstName", "orgUnit"}
+	if len(got) != len(want) {
+		t.Fatalf("attributes = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("attributes = %v, want %v (the order a reader meets them in)", got, want)
+		}
+	}
+	// And nothing is withheld: every member is readable, so the class is not opaque.
+	for _, g := range d.Gaps {
+		if g.Kind == GapWholeObjectWrite {
+			t.Errorf("an arrow that names every member was read as opaque: %+v", g)
+		}
 	}
 }

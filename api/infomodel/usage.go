@@ -319,11 +319,25 @@ func indexProcesses(procs []Process, storeClass map[string]string) map[string][]
 			}
 			for _, a := range cp.DataOutputAssociations(id) {
 				object := cp.Intern(a.DataObject)
-				u := row(ProcessUseWrite)
-				u.Object, u.ElementID = object, element
-				u.Attribute, u.State = cp.Intern(a.TargetPath), cp.Intern(a.TargetState)
-				u.WritesValue = a.Value != nil
-				add(objectClass[object], u)
+				// One row per write rather than per arrow: an arrow may set several
+				// members at once (ADR-draft-a-write-arrow-may-set-several-members), and
+				// each of them is a use of a different attribute. An arrow with no writes
+				// is ADR-0058's state-only transition — still a use of the object, and
+				// still the one row it has always been.
+				if len(a.Writes) == 0 {
+					u := row(ProcessUseWrite)
+					u.Object, u.ElementID = object, element
+					u.State = cp.Intern(a.TargetState)
+					add(objectClass[object], u)
+					continue
+				}
+				for _, w := range a.Writes {
+					u := row(ProcessUseWrite)
+					u.Object, u.ElementID = object, element
+					u.Attribute, u.State = cp.Intern(w.TargetPath), cp.Intern(a.TargetState)
+					u.WritesValue = true
+					add(objectClass[object], u)
+				}
 			}
 		}
 

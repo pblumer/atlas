@@ -824,16 +824,24 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				keepWire(fmt.Errorf("compiler: data output association on %q target: %w", ownerId, err))
 				return
 			}
-			var valExpr *expr.Compiled
-			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
+			// Every <assignment>, in document order, because the order decides which of
+			// two writes to the same member wins. An assignment with no <from> produces
+			// no value and so is no write — which is also how an association with no
+			// <assignment> at all arrives here, and ADR-0058 makes that state-only.
+			writes := make([]DataWrite, 0, len(a.Assignments))
+			for _, asg := range a.Assignments {
+				from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(asg.From), "="))
+				if from == "" {
+					continue
+				}
 				ce, err := expr.CompileAuto(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
 					return
 				}
-				valExpr = ce
+				writes = append(writes, DataWrite{Value: ce, TargetPath: strings.TrimSpace(asg.To)})
 			}
-			b.AddDataOutputAssociation(ids[ownerId], name, valExpr, state, strings.TrimSpace(a.Assignment.To))
+			b.AddDataOutputAssociationWrites(ids[ownerId], name, state, writes)
 		}
 	}
 	// Every scope, recursively — like wireScopeIO below, and for the same reason: a
@@ -1814,11 +1822,18 @@ type xmlDataObjectReference struct {
 
 // xmlDataOutputAssociation is a <dataOutputAssociation> on an activity: targetRef
 // names the data object (or a <dataObjectReference> to it) the activity writes, and
-// the optional <assignment><from> is a FEEL expression, evaluated over the instance's
-// variables at completion, that produces the written value (ADR-0058).
+// each <assignment><from> is a FEEL expression, evaluated over the instance's
+// variables at completion, that produces a written value (ADR-0058).
+//
+// Assignments is a list because BPMN's DataAssociation declares `assignment [0..*]`
+// and because a step that captures a form's worth of fields should not have to be
+// drawn as one arrow per field (ADR-draft-a-write-arrow-may-set-several-members).
+// It was a single field until then, which is worse than a limitation: encoding/xml
+// overwrites a non-slice field, so a second <assignment> was discarded without a
+// word and the last one silently won.
 type xmlDataOutputAssociation struct {
-	TargetRef  string        `xml:"targetRef"`
-	Assignment xmlAssignment `xml:"assignment"`
+	TargetRef   string          `xml:"targetRef"`
+	Assignments []xmlAssignment `xml:"assignment"`
 }
 
 // xmlAssignment is a data association's <assignment>: a <from> value expression and a
