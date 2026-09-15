@@ -27,6 +27,31 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
 
 const fmtTime = (unix) => unix ? new Date(unix * 1000).toLocaleString() : "—";
 
+// publishRefusal renders why a publish was refused.
+//
+// The server proves a catalogue at publish and answers 422 with every problem at
+// once — each one naming the catalogue or the item it belongs to. That list *is*
+// the work: "no text for declared language de" tells a product manager what to
+// type, and a status code tells them to ask somebody. So the list is rendered as
+// a list, and the fallback is only for a failure that is not a refusal at all.
+function publishRefusal(err) {
+  const problems = ((err.body || {}).problems) || [];
+  if (!problems.length) {
+    // Not a refusal: a 403, a 500, a network fault. err.message is what there is,
+    // and when even that is empty — HTTP/2 carries no reason phrase, so statusText
+    // is "" — the status number is more use than a blank box.
+    return `<pre style="white-space:pre-wrap; margin:8px 0 0">${
+      esc(err.message || `HTTP ${err.status || "?"}`)}</pre>`;
+  }
+  const where = (p) => (p.item ? `item ${p.item}` : p.catalog ? `catalogue ${p.catalog}` : "");
+  return `<p style="margin:8px 0 0">${problems.length} ${
+    problems.length === 1 ? "problem" : "problems"} to fix:</p>
+    <ul style="margin:6px 0 0">${problems.map((p) => {
+    const w = where(p);
+    return `<li>${w ? `<b>${esc(w)}</b> — ` : ""}${esc(p.message)}</li>`;
+  }).join("")}</ul>`;
+}
+
 // The vocabularies, spelled as the server spells them (api/catalog/catalog.go).
 // They are duplicated here rather than fetched because they are part of this
 // screen's shape — a kind the server does not know would be refused on save, and
@@ -501,10 +526,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare) 
       } catch (err) {
         // The refusal is the useful part: the server answers with every problem at
         // once, and a reader needs all of them, not the first.
+        //
+        // A refused publish is 422 with {"problems":[…]} and carries no "error" key,
+        // which is the shape this page must read. Reading err.message instead showed
+        // a card with an empty box under it — the screen said "not published" and
+        // withheld the entire reason, which is the one thing its own comment above
+        // says it must never do.
         report.innerHTML = `<div class="card" style="margin-top:12px; border-color:var(--danger)">
           <b>Not published.</b>
           <p class="muted" style="margin:6px 0 0">Nothing was frozen; the catalogue is unchanged.</p>
-          <pre style="white-space:pre-wrap; margin:8px 0 0">${esc(err.message)}</pre></div>`;
+          ${publishRefusal(err)}</div>`;
       } finally { b.disabled = false; }
     }
   });

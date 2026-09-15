@@ -14,6 +14,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A refused publish said "not published" and withheld every reason.** Publishing is
+  the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text
+  for every declared language, ranks unique — and the server answers **422 with every
+  problem at once**, each naming the catalogue or the item it belongs to. The authoring
+  screen's own opening comment says that list is what it renders, "because the problems
+  are the work, and hiding them behind 'publish failed' would make the screen useless
+  exactly when it matters".
+
+  It did the opposite. The page read `err.message`, which the shared fetch wrapper fills
+  from the body's `error` key — a key a 422 does not have — falling back to
+  `res.statusText`, which is **the empty string over HTTP/2**, because HTTP/2 carries no
+  reason phrase. So a product manager pressed Publish and got a red card reading "Not
+  published. Nothing was frozen" above an empty box, with no way to learn what to fix and
+  nothing on screen admitting that anything had been withheld. The one honest sentence on
+  it — "Never published. Until it is, the portal shows this catalogue to nobody" — then
+  read as a dead end rather than as a to-do list.
+
+  The refusal is now rendered as what it is: every problem, with the product or catalogue
+  it belongs to named. Two tests hold the two halves together — one against the real 422
+  so that renaming `problems` or adding an `error` key fails loudly, one over the page so
+  that reading the wrong half of the body fails.
+
+  **And the empty message was never only this page's.** `apiRaw` backs every screen in the
+  console, and any error body without an `error` key became an `Error` with no message at
+  all. It falls back to the status number now, which is not a good message and is a great
+  deal better than a blank box.
+
 - **"Who is this?" failing for two different reasons was answered as though it were
   one.** Resolving a person fails because the name is nobody's — the caller's input is
   wrong — or because the user store could not be read, which is the server's fault. Both
