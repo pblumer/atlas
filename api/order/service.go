@@ -392,6 +392,22 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 	for _, it := range rel.Items {
 		bound[it.ID] = it
 	}
+	// Which of these arrived because something else in the order always carries it.
+	// Computed from the release rather than from what the caller asked for: the
+	// question is whether *this order* carries it as a part, and an id that was
+	// both chosen and carried is carried — the whole is in the basket either way.
+	inOrder := make(map[string]bool, len(ordered))
+	for _, id := range ordered {
+		inOrder[id] = true
+	}
+	carried := map[string]bool{}
+	for _, id := range ordered {
+		for _, part := range rel.Includes[id] {
+			if inOrder[part] {
+				carried[part] = true
+			}
+		}
+	}
 	out := make([]Line, len(ordered))
 	for i, id := range ordered {
 		it := bound[id]
@@ -408,6 +424,8 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 			// given to — the answers alone are a map of keys nobody can interpret.
 			ConfigForm: it.ConfigForm,
 			Config:     copyAnswers(config[id]),
+			Integral:   carried[id],
+			Includes:   partsOf(rel, id, inOrder),
 			Approval: Approval{
 				Kind: string(it.Approval.Kind),
 				Ref:  it.Approval.Ref,
@@ -472,6 +490,20 @@ func (s *Service) strayAnswers(rel catalog.Release, ordered []string,
 		}
 	}
 	return ""
+}
+
+// partsOf names the parts this line always carries that this order also has, so a
+// refusal can say what carries the part it will not take back. Sorted and copied,
+// because the release's slice must not reach into an order.
+func partsOf(rel catalog.Release, id string, inOrder map[string]bool) []string {
+	var out []string
+	for _, part := range rel.Includes[id] {
+		if inOrder[part] {
+			out = append(out, part)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // copyAnswers is the line's own map, so the request body cannot be edited into an

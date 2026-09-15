@@ -114,6 +114,51 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **One position can be withdrawn on its own, and its details corrected.** The story
+  asks to modify or delete positions directly. Deleting existed only for a **whole
+  order**, so somebody who no longer wanted the second screen had to take the laptop
+  back with it — the per-line transition had been in the package since it was written,
+  with nothing calling it. Modifying did not exist at all.
+
+  **"Modify" is two different acts, and treating them as one is how a record starts
+  lying.**
+
+  Changing *what is held* — another product, another variant — is **not offered**. A
+  line that was provisioned and then quietly became a different product leaves the
+  access record unable to answer what somebody had and when, which is the one question
+  it exists for. The honest path already exists: give it back, order the other thing,
+  and the record carries both with the dates that make it readable.
+
+  Correcting *what was recorded about it* — the answers to the product's configuration
+  form — **is** offered, and what it may do is asked of the status machine that already
+  decides what can still change, rather than decided a second time beside it:
+
+  - A position **not yet attempted** is simply corrected. No amendment is recorded:
+    nothing was delivered under the old answers, and recording one would tell a reader
+    that something had been.
+  - A position the recipient **already holds** is corrected *and the correction is
+    recorded* — what the answers said before, who changed them, when, and why. The
+    laptop is at the wrong site and correcting the record does not move it; an
+    overwrite would leave the order saying something that was never true of the
+    delivery, and a reader could not tell the corrected record from an accurate one.
+    The amendments are a list and not a slot, because details having been wrong twice
+    is a different fact from their having been wrong once.
+  - A position **being provisioned now** is refused, and the refusal says to wait. A
+    process has the line, which is a conversation with a system Atlas does not control.
+  - A **rejected, cancelled or abandoned** position is refused: a closed record of a
+    request that produced nothing.
+
+  Whether a field is required is still the form's own statement, not a second copy of
+  that rule in the order service.
+
+  **A position its whole always carries cannot be withdrawn on its own.** The basket
+  will not let anybody deselect an integral part — a workplace is not a workplace
+  without its account — and a rule enforced when ordering and not afterwards is not a
+  rule. The order could not tell, because it carries the precedence graph and not the
+  composition one, so the line now carries that too, frozen at placement like every
+  other statement about the release. The refusal names what carries the part, because
+  the answer somebody needs is "take back the workplace instead".
+
 - **A product can ask the orderer for what its name does not say.** A laptop is not
   fully described by being a laptop: somebody has to say which cost centre it is booked
   to and which site it goes to. Nothing could hold that — a product declared no fields
