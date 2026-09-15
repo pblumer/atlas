@@ -77,6 +77,19 @@ const (
 	// the ordinary machine role set, and what confines it is this list.
 	apiScopeDirectory = "directory"
 
+	// apiScopeInventory reaches the two commissioning-load routes and nothing else
+	// (ADR-draft-inventory-commissioning-load). The credential behind it is held by
+	// the process that reads a target system's memberships, which is a process
+	// somebody runs once at commissioning and then leaves armed — so the question
+	// "what else could this do if it leaked" needs the same two-line answer the
+	// directory scope has.
+	//
+	// It is a separate scope from apiScopeDirectory rather than an addition to it,
+	// and the separation is the point: the mirror creates accounts, the load records
+	// what they already hold, and a single credential that could do both would be
+	// able to invent a person and then give them the estate's rights in two calls.
+	apiScopeInventory = "inventory"
+
 	// apiScopeStatus reaches this server's node descriptor and nothing else. It is
 	// what ADR-0189 §6 requires of remote correlation: another Atlas asking "who are
 	// you, and what can you be asked for" must not be handed a deploy credential to
@@ -129,6 +142,12 @@ var apiScopeAllowed = map[string][]string{
 		"GET /api/v1/directory-sync",
 		"POST /api/v1/directory-sync",
 	},
+	// Two patterns again, and the same discipline: ask whether this system has ever
+	// been loaded, report what it grants.
+	apiScopeInventory: {
+		"GET /api/v1/inventory-load",
+		"POST /api/v1/inventory-load",
+	},
 	// The transport, both the exact path and everything under it, because that is
 	// how it is mounted. No method: the transport answers POST for JSON-RPC and GET
 	// for the event stream, and confining a scope to one of them would break the
@@ -166,7 +185,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bestandsaufnahme (ADR-draft-inventory-commissioning-load)
+  — einmal lesen, was ein Zielsystem heute schon vergibt, und es als Bestand
+  eintragen, der nicht von Atlas stammt.
+
+  Am Tag der Inbetriebnahme ist das Inventar leer und die Wirklichkeit voll. Jede
+  Gruppenmitgliedschaft, jede Lizenz existiert bereits. Der erste Abgleich gegen die
+  Zielsysteme würde daher jede einzelne davon als Abweichung melden — und jede
+  Abweichung trägt eine ausführbare Handlung "im Zielsystem entfernen". Genau so
+  sperrt sich ein neues Berechtigungswerkzeug beim ersten Lauf selbst aus.
+
+  Dieser Prozess ist die Gegenmassnahme: er trägt ein, was da ist, mit dem Ursprung
+  `legacy` — das heisst: *das gab es vor uns, wir haben es nicht vergeben, und wir
+  behaupten es auch nicht*.
+
+    Manueller Start "Bestandsaufnahme"      kein Timer, mit Absicht
+     -> [entra delta-groups, ohne Cursor]   vollständige Aufzählung -> `gruppen`
+     -> [REST POST /api/v1/inventory-load]  meldet die Beobachtungen -> `bericht`
+     -> Ende
+
+  ────────────────────────────────────────────────────────────────────────────────
+  KEIN TIMER. Das ist die wichtigste Zeile in diesem Modell.
+
+  Eine Bestandsaufnahme ist eine Handlung, die ein Mensch vornimmt, kein Zeitplan.
+  Der ganze Wert des Verfahrens liegt darin, dass mehrere tausend dauerhafte
+  Datensätze erst entstehen, nachdem jemand gelesen hat, was entstehen würde. Ein
+  Startereignis an einer Uhr wäre das stille Gegenteil davon.
+
+  Gestartet wird der Prozess daher von Hand — in Tasks unter "Start", oder über
+  POST /api/v1/processes/{key}/instances.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  DER ERSTE LAUF SCHREIBT NICHTS. Der Meldetask trägt `apply: false`.
+
+  Umschalten heisst: in der eigenen Kopie dieses Modells `apply: false` auf
+  `apply: true` setzen und neu deployen. Bis dahin sagt `bericht.reason` in jedem
+  Lauf ausdrücklich, dass nichts geschrieben wurde und warum, und
+  `bericht.everApplied` bleibt false.
+
+  Ein zweiter Lauf ist harmlos, und zwar von Bauart her: die Meldung trägt absolute
+  Aussagen ("diese Person hält dieses Recht"), keine Fortschreibung. Was schon
+  eingetragen ist, wird beim zweiten Mal als "bereits erfasst" gemeldet und
+  unverändert gelassen — insbesondere wird das Anfangsdatum nicht verschoben. Der
+  Prozess braucht deshalb keinen Cursor und keine Revision, anders als der
+  Verzeichnis-Abgleich.
+
+  WAS DER BERICHT WERT IST — ZUERST ZU LESEN:
+    bericht.unmapped   Rechte, die das Zielsystem vergibt und die kein Produkt im
+                       Katalog beansprucht, absteigend nach Anzahl Betroffener.
+                       Das ist die Liste, die es vorher nirgends gab: was vergeben
+                       wird, ohne dass jemand entschieden hat, es anzubieten.
+    bericht.counts     grant / held / keep / noSubject / noItem / ambiguous.
+                       `noSubject` sind Menschen im Zielsystem ohne Atlas-Konto —
+                       dagegen hilft der Verzeichnis-Abgleich, und zwar vorher.
+    bericht.notes      die einzelnen Zeilen, mit Begründung je Zeile.
+
+  Voraussetzungen beim Betreiber:
+    * Ein Entra-Worker (hier "contoso") mit Group.Read.All — lesend genügt.
+    * Ein REST-Worker namens "atlas", der auf diese Atlas-Instanz zeigt und ein
+      API-Token mit dem Scope "inventory" trägt. Dieser Scope erreicht genau die
+      beiden Bestandsaufnahme-Routen und sonst nichts; er kann insbesondere weder
+      deployen noch Konten anlegen. Er ist bewusst vom Scope "directory" getrennt:
+      der Spiegel legt Konten an, diese Route trägt ein, was sie halten, und ein
+      Zugang, der beides könnte, könnte einen Menschen erfinden und ihm in zwei
+      Aufrufen die Rechte des Betriebs geben.
+    * Gepflegte Zielverweise am Produkt: jedes Produkt sagt im Katalog, wie es im
+      Zielsystem heisst (System + Referenz). Ohne diesen Verweis wird ein Recht
+      nicht falsch zugeordnet, sondern gar nicht — es erscheint unter `unmapped`.
+
+  NICHT GEPRÜFT, UND DESHALB HIER GENANNT: ob Graph bei einer vollständigen
+  Erstaufzählung von /groups/delta die Mitgliedschaften als `members@delta`
+  mitliefert, ist gegen einen echten Mandanten nicht verifiziert — die Umsetzung
+  ist bisher ausschliesslich gegen Testdoppel gelaufen. Bleibt `gruppen.value`
+  ohne Mitglieder, meldet der Bericht schlicht null Beobachtungen; das ist der
+  Hinweis, dass das Lesen anders erfolgen muss (etwa je Gruppe), und nicht etwa
+  ein Zeichen, dass der Betrieb nichts vergibt.
+
+  Die Lizenzvariante sieht gleich aus und liest statt dessen list-users mit
+  select="id,assignedLicenses"; die Beobachtungen sind dann
+  {subject: u.id, ref: l.skuId} über u.assignedLicenses, und `system` heisst
+  "entra-lizenzen" statt "entra".
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_bestandsaufnahme"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_bestandsaufnahme" name="Bestandsaufnahme: Entra-Gruppen" isExecutable="true">
+    <bpmn:documentation>Liest einmalig, welche Entra-Gruppen wer hält, und meldet das dieser Atlas-Instanz als vorbestehenden Bestand.
+
+Was eingetragen wird, trägt den Ursprung `legacy`: Atlas hat es nicht vergeben und sagt das auch. Der Unterschied ist nicht kosmetisch — der spätere Abgleich muss unterscheiden können, was Atlas erteilt hat und was es bloss vorgefunden hat, sonst wird eine Annahme als Beweis abgelegt.
+
+Der Prozess startet von Hand und nicht auf einer Uhr. Er ist eine Handlung mit einem Verantwortlichen, und der Trockenlauf ist nur dann ein Schutz, wenn jemand den Bericht tatsächlich liest.
+
+Er trägt ausschliesslich ein. Ein Recht, das diese Meldung nicht nennt, wird nie entzogen: eine Meldung ist die Teilantwort eines Systems, und Schweigen als Beleg für einen Entzug zu nehmen hiesse, Rechte wegen eines zu früh abgebrochenen Lesevorgangs zu entziehen. Entziehen ist Sache des Abgleichs, mit einem Menschen, der entscheidet.
+
+Worker-only (ADR-0172): der Mandanten-Zugang liegt nie in der Engine.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_bestandsaufnahme" name="Bestandsaufnahme">
+      <bpmn:documentation>Ohne Timer. Eine Bestandsaufnahme wird angestossen, nicht eingeplant — siehe den Kommentar am Kopf dieser Datei.</bpmn:documentation>
+      <bpmn:outgoing>f_start_gruppen</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="gruppen_lesen" name="Gruppen und Mitglieder lesen">
+      <bpmn:documentation>delta-groups ohne deltaLink: eine vollständige Aufzählung der Gruppen des Mandanten samt Mitgliedschaften. Der leere Cursor ist hier kein Sonderfall, sondern der Normalfall — eine Bestandsaufnahme will den ganzen Bestand, nicht die Änderungen.
+
+Der dabei entstehende Cursor wird bewusst nicht gespeichert. Dieser Prozess führt keinen fort: er liest einen Stand, keine Änderungsfolge.
+
+maxUsers begrenzt den Lauf am Worker. Ein zu grosser Bestand scheitert dort, statt eine gekürzte Menge zu liefern, die Atlas als vollständigen Bestand verbuchen würde.
+
+Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-groups"
+                              select="id,displayName"
+                              maxUsers="2000"
+                              resultVariable="gruppen" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_gruppen</bpmn:incoming>
+      <bpmn:outgoing>f_gruppen_melden</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="bestand_melden" name="Bestand melden">
+      <bpmn:documentation>POST /api/v1/inventory-load. Meldet je Mitgliedschaft eine Beobachtung — wer (die Entra-Objekt-Id) hält was (die Gruppen-Objekt-Id) — und bekommt zurück, was der Lauf entschieden hat.
+
+apply: false — hier steht der Schalter. Der Nullwert des Feldes bedeutet "nichts schreiben": wer es vergisst, bekommt einen Bericht und nicht die halbe Mitgliederliste eines Mandanten in einem Beweisspeicher, der Jahre gehalten wird.
+
+Als Referenz steht die Objekt-Id der Gruppe und nicht ihr Anzeigename. Ein Name wird umbenannt, eine Objekt-Id nicht — und der Katalog vergleicht wörtlich, ohne zu normalisieren. Ein Verweis, der sich nur in der Schreibweise unterscheidet, ist für das ausstellende Verzeichnis eine andere Zeichenkette, und eine Ähnlichkeit, die Atlas erfindet, wäre ein zugeordnetes Recht, das niemand entschieden hat.
+
+Verschachtelte Gruppen erscheinen als Mitglied und lösen sich auf kein Konto auf; sie werden als `noSubject` gemeldet und nicht stillschweigend verworfen.
+
+Schreibt: bericht = { applied, mode, system, reason, everApplied, counts, unmapped, notes, notesOmitted }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+          <zeebe:header key="path" value="/api/v1/inventory-load" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="={apply: false, system: &quot;entra&quot;, observations: flatten(for g in gruppen.value return (for m in (if get value(g, &quot;members@delta&quot;) = null then [] else get value(g, &quot;members@delta&quot;)) return {subject: m.id, ref: g.id}))}" target="body" />
+          <zeebe:output source="=body" target="bericht" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gruppen_melden</bpmn:incoming>
+      <bpmn:outgoing>f_melden_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Bericht liegt vor">
+      <bpmn:documentation>`bericht` steht in den Instanzvariablen. Zuerst zu lesen ist `unmapped`: was der Betrieb vergibt, ohne dass es im Katalog steht. Danach `counts.noSubject` — Menschen ohne Atlas-Konto — und erst dann die Zeilen. Solange `applied` false ist, sagt `reason` warum.</bpmn:documentation>
+      <bpmn:incoming>f_melden_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_gruppen" sourceRef="start_bestandsaufnahme" targetRef="gruppen_lesen" />
+    <bpmn:sequenceFlow id="f_gruppen_melden" sourceRef="gruppen_lesen" targetRef="bestand_melden" />
+    <bpmn:sequenceFlow id="f_melden_ende" sourceRef="bestand_melden" targetRef="ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_bestandsaufnahme">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_bestandsaufnahme">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="127" y="225" width="87" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gruppen" bpmnElement="gruppen_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_melden" bpmnElement="bestand_melden">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="552" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="526" y="225" width="89" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="di_f_start_gruppen" bpmnElement="f_start_gruppen">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppen_melden" bpmnElement="f_gruppen_melden">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_melden_ende" bpmnElement="f_melden_ende">
+        <di:waypoint x="500" y="200" /><di:waypoint x="552" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

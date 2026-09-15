@@ -3,6 +3,7 @@ package catalog
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // Publishing a catalogue is where the work happens.
@@ -206,7 +207,62 @@ func checkItems(in Input, add func(Problem)) {
 			add(Problem{Item: it.ID, Message: "orderable window ends before it begins"})
 		}
 	}
+	checkTargets(items, add)
 }
+
+// checkTargets holds what the join to the target systems owes: every reference
+// says both halves, and no two items claim the same one.
+//
+// Ambiguity is the reason this is a publish-time refusal rather than something the
+// load copes with. An observation that matches two items cannot be attributed, and
+// the load's only honest response is to report it and write nothing — so the right
+// that was found stays out of the inventory, and the reconciliation it was loaded
+// to make meaningful reports it as a discrepancy anyway. Catching it here turns a
+// silent hole in the evidence into a sentence the author reads while they are
+// looking at the catalogue.
+//
+// It cannot catch every case: a release carries one catalogue's items, and two
+// catalogues can each be valid while a ref is claimed across them. The load checks
+// again over the whole item store, where that is visible. This one catches the
+// common case at the moment it is made, which is the only moment it is cheap.
+func checkTargets(items []Item, add func(Problem)) {
+	claimed := map[TargetRef]string{}
+	for _, it := range items {
+		seenHere := map[TargetRef]bool{}
+		for _, ref := range it.Targets {
+			switch {
+			case strings.TrimSpace(ref.System) == "":
+				add(Problem{Item: it.ID, Message: "target reference " + quote(ref.Ref) +
+					" names no system, so nothing can ever match it"})
+				continue
+			case strings.TrimSpace(ref.Ref) == "":
+				add(Problem{Item: it.ID,
+					Message: "target reference in system " + quote(ref.System) + " names nothing"})
+				continue
+			}
+			// The same ref twice on one item is a duplicate, not a conflict: it says
+			// the same thing, and reporting it as a clash with itself would be a
+			// puzzle. Worth naming anyway — it is usually a half-finished edit.
+			if seenHere[ref] {
+				add(Problem{Item: it.ID, Message: "target " + quote(ref.System+":"+ref.Ref) +
+					" is listed twice on this product"})
+				continue
+			}
+			seenHere[ref] = true
+			if other, taken := claimed[ref]; taken {
+				add(Problem{Item: it.ID, Message: "target " + quote(ref.System+":"+ref.Ref) +
+					" is already claimed by product " + other +
+					"; a right found under it could be attributed to either, so it would be attributed to neither"})
+				continue
+			}
+			claimed[ref] = it.ID
+		}
+	}
+}
+
+// quote wraps a value the author wrote so an empty or space-padded one is visible
+// in the message rather than vanishing into the sentence.
+func quote(s string) string { return `"` + s + `"` }
 
 // checkEdges holds that every edge lands on an item that exists. An edge into
 // nothing would silently drop a precondition, which is the one failure the
@@ -509,6 +565,14 @@ func freeze(items []Item) []Item {
 				vs[j] = v
 			}
 			it.Variants = vs
+		}
+		// The target references travel by value too. They are a plain slice of
+		// plain structs, so sharing the backing array would be harmless today and
+		// exactly the kind of harmless that stops being so the first time anything
+		// edits one in place — and this copy is what the sentence above the Items
+		// field promises.
+		if len(it.Targets) > 0 {
+			it.Targets = append([]TargetRef(nil), it.Targets...)
 		}
 		out[i] = it
 	}

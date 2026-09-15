@@ -132,6 +132,30 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
 
 const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
 
+// The target references, as one line of `system:reference` each.
+//
+// One per line rather than comma-separated, because a reference is frequently a
+// distinguished name and a distinguished name is full of commas. The system is
+// split on the *first* colon for the same reason in the other direction: an LDAP
+// URL or a scoped SKU carries colons of its own, and splitting on the last one
+// would silently move half the reference into the system name.
+const targetLines = (targets) =>
+  (targets || []).map((t) => `${t.system || ""}:${t.ref || ""}`).join("\n");
+
+const parseTargets = (raw) => String(raw || "").split("\n")
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .map((line) => {
+    const at = line.indexOf(":");
+    // A line with no colon is kept as a reference with no system rather than
+    // dropped. Publishing then refuses it by name, which is how the author finds
+    // out — a line this form quietly swallowed would be a reference somebody
+    // believes they entered.
+    return at < 0
+      ? { system: "", ref: line }
+      : { system: line.slice(0, at).trim(), ref: line.slice(at + 1).trim() };
+  });
+
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
@@ -364,6 +388,17 @@ function productForm(it, cat, langs, procIDs) {
       <label class="field inline"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
+      <label class="field">Known in the target systems as
+        <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
+          <code>system:reference</code> — <code>ad:CN=VPN-Users</code>,
+          <code>entra:ENTERPRISEPACK</code>. This is what a commissioning load joins a right
+          it found to this product by, and it is compared literally, case and all. Leave it
+          empty for anything nothing outside Atlas grants: a load will then never name this
+          product, which is the right answer and not a gap. Two products claiming one
+          reference is refused when the catalogue is published — a right that matches both
+          is attributed to neither.</span>
+        <textarea name="targets" rows="3" spellcheck="false"
+          placeholder="ad:CN=VPN-Users">${esc(targetLines(v.targets))}</textarea></label>
       <div class="row">
         <button class="primary" type="submit">Save</button>
         <button type="button" data-act="cancel-product">Cancel</button>
@@ -519,6 +554,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare) 
         provisionProcess: f.get("provisionProcess") || "",
         deprovisionProcess: f.get("deprovisionProcess") || "",
         multipleAllowed: !!f.get("multipleAllowed"),
+        targets: parseTargets(f.get("targets")),
       };
       try {
         await api("POST", "/api/v1/catalog-products", body);

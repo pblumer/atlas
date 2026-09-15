@@ -525,3 +525,42 @@ func TestTheCatalogueScreenOffersSharingOnlyToTheOwner(t *testing.T) {
 			"which is the grant-amplification the server refuses")
 	}
 }
+
+// TestTheCatalogueScreenCanRecordWhatAProductIsCalledOutside.
+//
+// The target references are the join a commissioning load attributes a right by
+// (ADR-draft-inventory-commissioning-load). An API that accepts them and a screen
+// that cannot enter them is a working API and an unusable product — which is
+// exactly how the catalogue itself shipped, with no screen at all.
+func TestTheCatalogueScreenCanRecordWhatAProductIsCalledOutside(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+
+	if !strings.Contains(src, `name="targets"`) {
+		t.Fatal("the product form has no field for the target references, so the only way " +
+			"to fill in the join a load depends on is a hand-written POST")
+	}
+	if !strings.Contains(src, "targets: parseTargets(") {
+		t.Error("the form renders the field and does not send it; what is typed there is lost on save")
+	}
+
+	// One reference per line, split on the first colon. Both halves of that are
+	// load-bearing and neither is obvious: a distinguished name is full of commas,
+	// so a comma-separated list would cut references in half; and splitting on the
+	// last colon would move part of an LDAP URL or a scoped SKU into the system
+	// name.
+	if !strings.Contains(src, `.split("\n")`) {
+		t.Error("the references are not split by line. A distinguished name contains " +
+			"commas, so anything comma-separated would break CN=X,OU=Y into two references")
+	}
+	if !strings.Contains(src, "line.indexOf(\":\")") {
+		t.Error("the system is not split off at the first colon; splitting anywhere else " +
+			"moves part of a reference that contains colons into the system name")
+	}
+	// A line with no colon must survive as a reference with no system, so publishing
+	// can refuse it by name. Swallowing it would leave the author believing they
+	// entered something.
+	if !strings.Contains(src, `{ system: "", ref: line }`) {
+		t.Error("a line with no system is dropped rather than kept and refused at publish, " +
+			"so a mistyped reference disappears without anybody being told")
+	}
+}
