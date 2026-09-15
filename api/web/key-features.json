@@ -1,6 +1,6 @@
 {
   "_comment": "What the Console's landing page says Atlas *is* (rendered by web/key-features.js, guarded by api/keyfeatures_test.go). A handful of evergreen statements, not a feature list: an entry earns its place by being true a year from now and by changing what somebody expects of the product, not by being new. Every field is required in BOTH languages — a tile that falls back to English is what the EN/DE toggle exists to avoid — the title is a label of at most 60 characters, and the text is one sentence. `reviewedThrough` names the newest CHANGELOG '### Added' bullet this tile has been held against; a change that adds a bullet above it must ask whether the tile is still complete and then move the marker, which is the whole mechanism that keeps this current. Answering \"no, nothing to add\" is the normal case.",
-  "reviewedThrough": "The third question about somebody's access can now be asked.",
+  "reviewedThrough": "An incident flood is read by cause, and cleared in one action.",
   "title": {
     "en": "Key features",
     "de": "Kernmerkmale"
@@ -171,8 +171,8 @@
         "de": "Betriebsreife Werkzeuge"
       },
       "text": {
-        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
-        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
+        "en": "Backup and restore including instance snapshots, recovery checkpoints with WAL compaction, incidents with retries, grouped by cause and resolvable in bulk, migration of running instances onto a new process version, an audit log, Prometheus metrics, an OpenAPI spec, OpenSearch export with history retention, authentication with per-project membership, and versioned git-backed process applications.",
+        "de": "Backup und Restore inklusive Instanz-Snapshots, Recovery-Checkpoints mit WAL-Kompaktierung, Incidents mit Retries, nach Ursache gruppiert und als Gruppe auflösbar, Migration laufender Instanzen auf eine neue Prozessversion, ein Audit-Log, Prometheus-Metriken, OpenAPI-Spec, OpenSearch-Export mit History-Retention, Authentifizierung mit Projekt-Mitgliedschaften und versionierte, git-gestützte Process Applications."
       }
     },
     {

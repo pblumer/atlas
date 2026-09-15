@@ -422,6 +422,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0334](0334-reconciliation.md) | Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete | Accepted | Landed |
 | [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Proposed | Not started |
 | [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted | Landed |
+| [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 
 ## The two states of a record
 

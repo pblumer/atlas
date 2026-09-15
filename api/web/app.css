@@ -266,6 +266,12 @@ td.row-actions { text-align: right; white-space: nowrap; }
 td.row-actions > * { vertical-align: middle; }
 td.row-actions .icon-btn { margin-left: 4px; }
 
+/* The tick-box column of a table whose rows can be acted on as a set (the incidents
+   list). Narrow and centred, so a list that is usually read one row at a time does not
+   pay for the column it only sometimes needs. */
+th.row-pick, td.row-pick { width: 28px; text-align: center; padding-left: 10px; padding-right: 0; }
+td.row-pick input { cursor: pointer; }
+
 /* Operations instances toolbar: a process filter and a jump-to-instance box. */
 .ops-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
 .ops-search { position: relative; flex: 1 1 240px; min-width: 180px; }
