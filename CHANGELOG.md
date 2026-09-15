@@ -217,6 +217,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A deleted definition's key is never issued again, so a new process cannot inherit
+  its history.** Every process definition and every decision deployment draws a key
+  from one counter, and that key is what the engine files a great deal of durable state
+  under: completed instances, the finished count, per-element visit and termination
+  aggregates, last activity, message-flow history — plus a release manifest's members
+  and a decision deployment's pins. The counter was rebuilt at startup as the highest
+  key across *surviving* records, which is correct only while nothing is ever deleted.
+
+  Measured: deploy a process, run one instance to completion, delete the definition,
+  restart, deploy a different process — the new one takes the same key and reports one
+  finished instance and a visit on an element it had never reached. `DELETE
+  /api/v1/processes/{key}` has had this since
+  [ADR-0019](docs/adr/0019-durable-deployments.md); the decision delete
+  ([ADR-0336](docs/adr/0336-cleaning-up-the-decision-store.md)) reaches it too.
+
+  The key space now has a durable floor: the highest key ever issued, persisted
+  **before** the keys it covers are used, and read at boot alongside the surviving
+  records. A crash between the two therefore costs a gap in the numbering, which is
+  free, rather than a repeat, which is not. Both mint sites go through one reservation,
+  so a collaboration of five pools or a publish of five decisions costs one write. An
+  installation upgrading finds no floor on its first boot and is exactly as safe as
+  before until its next deploy — the information was never written down.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **Deleting a DMN reference now says what it would break.** The confirm read "Delete
   this DMN reference? The temis model itself is not affected" — true, and not the
   thing a reader needs. What a reference decides is not the file on disk; it is
