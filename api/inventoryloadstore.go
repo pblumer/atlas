@@ -5,7 +5,7 @@ import (
 )
 
 // Whether this installation has taken its inventory, and of what
-// (ADR-draft-inventory-commissioning-load).
+// (ADR-0333).
 //
 // One record per target system, and it exists to answer exactly one question the
 // inventory itself cannot: *has a load ever been applied for this system?* An empty

@@ -78,7 +78,7 @@ const (
 	apiScopeDirectory = "directory"
 
 	// apiScopeInventory reaches the two commissioning-load routes and nothing else
-	// (ADR-draft-inventory-commissioning-load). The credential behind it is held by
+	// (ADR-0333). The credential behind it is held by
 	// the process that reads a target system's memberships, which is a process
 	// somebody runs once at commissioning and then leaves armed — so the question
 	// "what else could this do if it leaked" needs the same two-line answer the

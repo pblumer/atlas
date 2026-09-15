@@ -3,7 +3,7 @@ package catalog
 import "testing"
 
 // What a product's claim about the target systems owes
-// (ADR-draft-inventory-commissioning-load).
+// (ADR-0333).
 //
 // These references are what a commissioning load joins an observed right to a
 // product by, and everything they can get wrong is silent at the moment it is

@@ -12,7 +12,7 @@ import (
 )
 
 // The commissioning-load routes, over HTTP
-// (ADR-draft-inventory-commissioning-load).
+// (ADR-0333).
 //
 // The slice's whole point is that the first run writes nothing until somebody has
 // read what it would do, and that what it then writes is marked as knowledge Atlas

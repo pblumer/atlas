@@ -81,7 +81,7 @@ type Variant struct {
 // licence SKU, the role, named exactly as that system names it.
 //
 // It exists for the commissioning load and for the reconciliation after it
-// (ADR-draft-inventory-commissioning-load). A target system reports rights in its
+// (ADR-0333). A target system reports rights in its
 // own vocabulary — "CN=VPN-Users", "ENTERPRISEPACK" — and an entitlement holds a
 // catalogue item id. Something has to join the two, and the join has to be *data a
 // person can read*, because the whole value of a load is a report somebody checks
@@ -136,7 +136,7 @@ type Item struct {
 	MultipleAllowed bool `json:"multipleAllowed,omitempty"`
 	// Targets is what this item is called in the systems that actually hold it, and
 	// it is what lets a commissioning load attribute a right it found to this item
-	// (ADR-draft-inventory-commissioning-load). Empty is the ordinary state for an
+	// (ADR-0333). Empty is the ordinary state for an
 	// item nothing outside Atlas grants, and it means no load will ever name it.
 	//
 	// Several are allowed: one service is legitimately two groups. The same ref

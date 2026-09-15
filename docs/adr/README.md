@@ -418,6 +418,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0330](0330-a-model-with-no-reference-stays-findable.md) | A model with no reference stays findable | Accepted | Landed |
 | [0331](0331-deleting-a-dmn-reference-says-what-it-breaks.md) | Deleting a DMN reference says what it would break | Accepted | Landed |
 | [0332](0332-entra-directory-provisioning.md) | Accounts and groups are pulled from Entra by delta query, and the first run writes nothing | Accepted | Landed |
+| [0333](0333-inventory-commissioning-load.md) | The inventory is taken before it is enforced, and what it records says Atlas did not grant it | Accepted | Partial |
 
 ## The two states of a record
 

@@ -1,4 +1,4 @@
-# ADR-DRAFT: The inventory is taken before it is enforced, and what it records says Atlas did not grant it
+# ADR-0333: The inventory is taken before it is enforced, and what it records says Atlas did not grant it
 
 - **Status:** Accepted
 - **Implementation:** Partial

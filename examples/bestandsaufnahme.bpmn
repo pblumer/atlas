@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Bestandsaufnahme (ADR-draft-inventory-commissioning-load)
+  Bestandsaufnahme (ADR-0333)
   — einmal lesen, was ein Zielsystem heute schon vergibt, und es als Bestand
   eintragen, der nicht von Atlas stammt.
 
