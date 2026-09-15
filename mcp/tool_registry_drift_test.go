@@ -508,6 +508,18 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/directory-sync":  "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 	"POST /api/v1/directory-sync": "account provisioning stays behind its own scoped credential, not an assistant's tool call",
 
+	// The commissioning load (ADR-draft-inventory-commissioning-load). The write half
+	// is omitted for a reason of its own rather than by analogy with the pair above:
+	// the load's entire safeguard is that several thousand permanent records are
+	// entered only after a person has read what would be entered. A tool call makes
+	// it something that can happen as a step of whatever an assistant was asked to do
+	// next, which is the same "nobody decided" failure the record rejected the cheap
+	// design for. The read half is harmless on its own and is omitted only because it
+	// answers a question — has a load ever been applied here — that nothing but
+	// running a load makes worth asking.
+	"GET /api/v1/inventory-load":  "the commissioning load is an act with somebody responsible for it, and its state route is only useful beside it",
+	"POST /api/v1/inventory-load": "entering years of evidence must follow a person reading the report, not a tool call made in passing",
+
 	// Workers + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each Worker Type: the Modeler's picker reads it to
 	// badge a kind it is about to author (ADR-0183).
