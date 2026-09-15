@@ -104,7 +104,7 @@ func (s *Service) HandleSetTheme(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(got, p); !found {
 			return
 		}
-		if allowed = p != nil && s.admin(p); !allowed {
+		if allowed = s.admin(p); !allowed {
 			return
 		}
 		got.Theme = in

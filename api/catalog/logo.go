@@ -192,7 +192,7 @@ func (s *Service) HandleSetLogo(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(got, p); !found {
 			return
 		}
-		if allowed = p != nil && s.admin(p); !allowed {
+		if allowed = s.admin(p); !allowed {
 			return
 		}
 		opErr = s.store.SaveLogo(id, data, ct)
@@ -230,7 +230,7 @@ func (s *Service) HandleDeleteLogo(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(got, p); !found {
 			return
 		}
-		if allowed = p != nil && s.admin(p); !allowed {
+		if allowed = s.admin(p); !allowed {
 			return
 		}
 		opErr = s.store.ClearLogo(id)

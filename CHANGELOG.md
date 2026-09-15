@@ -14,6 +14,37 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **With authentication off, a catalogue's appearance could not be set at all.** The
+  predicate every gate in the catalogue package asks is `!authEnabled || (p != nil &&
+  p.HasRole(admin))` — true for everybody when nobody is signed in, which is the rule
+  stated beside it: *enforcement off means there is nobody to be, not nobody who may*.
+  Three gates wrote `p != nil && s.admin(p)` in front of it, and so turned "everybody"
+  back into "nobody".
+
+  So with `--auth=false` — the documented development and demo mode — a catalogue's
+  colour, typeface and brand mark could not be set or removed. Every attempt was **403**,
+  telling somebody the appearance is an administrator's while, as far as the server was
+  concerned, they were nobody. The nil check was never load-bearing: with enforcement on,
+  the predicate already answers false for a nil principal. It only ever subtracted.
+
+  It survived because every test in that package builds its service with the
+  enforcement-**on** shape of the predicate, so nothing modelled the mode in which it
+  bites. There is now a service built the way the server builds one with `--auth=false`,
+  and the other half beside it: an unauthenticated request is still refused while
+  enforcement is on.
+
+- **The catalogue screen said an empty audience means everybody. It means nobody.**
+  `ReachedBy` returns false for a catalogue naming no group — deliberately, and held by a
+  test, because the dangerous default is the one where a catalogue somebody is still
+  filling is already open to all. The field said "empty means everybody" and the list
+  showed an empty audience as "everybody".
+
+  An operator therefore created a catalogue, was told it was open to everybody, and every
+  visitor read "no catalogue is assigned to you" — with the one screen that could have
+  explained it saying the opposite. The behaviour is right; the sentence was the defect.
+  The field now says what happens, and the form says it again under the input while no
+  group is named.
+
 - **A refused publish said "not published" and withheld every reason.** Publishing is
   the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text
   for every declared language, ranks unique — and the server answers **422 with every
@@ -82,6 +113,27 @@ _Changed_ / _Removed_ for each version.
   is the name on the order, not the product.
 
 ### Added
+
+- **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
+  its own colour, typeface and brand mark since it was built — the portal and the approval
+  page paint themselves from it — and no screen offered any of it. The one thing that makes
+  a catalogue somebody *else's* was reachable only by whoever was willing to write JSON by
+  hand, which is the exact state the authoring page exists to end.
+
+  An accent colour with a picker beside the field, the four typefaces the binary ships, and
+  a brand mark uploaded and removed with a preview. Empty means the catalogue wears the
+  instance's appearance, and a button says so in those words.
+
+  The typefaces are a list and not a URL, as the server has it: a web font would reach a
+  third party on every portal page load, carrying the visitor's address there — an outbound
+  dependency on pages that must render when nothing else is reachable. A test holds the four
+  on screen against the four the server ships, in both directions: an option the server
+  refuses is a control that cannot work, and one it accepts but the page omits is a
+  capability lost to a forgotten line.
+
+  Administration and not catalogue maintenance, like the server has it: an editor may change
+  what a catalogue offers and not whose it looks like. The form is drawn for an administrator
+  only, because offering one that always ends in 403 is its own kind of lie.
 
 - **The recipient of an order is picked, not typed — and the field is only shown to
   accounts that may use it.** Ordering in somebody else's name became a first-class
