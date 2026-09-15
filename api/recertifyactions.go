@@ -14,7 +14,7 @@ import (
 )
 
 // The two things a reviewer may say about one right
-// (ADR-draft-access-recertification).
+// (ADR-0341).
 //
 // Two, and one row at a time. There is no third decision and there is no way to
 // answer several rows at once, and neither of those is an omission:

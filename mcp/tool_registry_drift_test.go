@@ -543,7 +543,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
 	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
 
-	// Recertification (ADR-draft-access-recertification). Omitted whole, and this
+	// Recertification (ADR-0341). Omitted whole, and this
 	// one is the sharpest case in the table rather than another instance of it.
 	//
 	// The record's entire design is the refusal of a signature nobody read behind.

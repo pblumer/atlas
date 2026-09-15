@@ -6,7 +6,7 @@ import (
 )
 
 // The screen where somebody answers one question at a time
-// (ADR-draft-access-recertification).
+// (ADR-0341).
 //
 // The record's whole argument is that an attestation is worth the reading behind
 // it. A screen is where that is won or lost: everything the server refuses to make

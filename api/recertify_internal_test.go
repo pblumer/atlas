@@ -8,7 +8,7 @@ import (
 )
 
 // What a campaign asks, before anything answers it
-// (ADR-draft-access-recertification).
+// (ADR-0341).
 //
 // Every one of these is a way a campaign could ask the wrong question, or fail to
 // ask one at all — and an unasked question is the failure that hides, because a

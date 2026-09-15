@@ -1,5 +1,5 @@
 // The questions a recertification campaign asks, and the two answers
-// (ADR-draft-access-recertification).
+// (ADR-0341).
 //
 // # Why this is in Tasks and not in Operations or the portal
 //

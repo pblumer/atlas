@@ -1,4 +1,4 @@
-# ADR-DRAFT: Recertification asks whether a right is still justified, and refuses to let silence answer
+# ADR-0341: Recertification asks whether a right is still justified, and refuses to let silence answer
 
 - **Status:** Accepted
 - **Implementation:** Landed

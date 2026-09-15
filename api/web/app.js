@@ -638,7 +638,7 @@ const TOPNAV = {
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
     // The second kind of thing addressed to a person
-    // (ADR-draft-access-recertification). Not Operations, where reconciliation
+    // (ADR-0341). Not Operations, where reconciliation
     // sits: a finding is repair and the operator's, while this asks a line manager
     // whether somebody on their team still needs something — and a line manager has
     // never opened Operations. Not one of the two portal pages either: those carry

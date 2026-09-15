@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// The recertification routes (ADR-draft-access-recertification).
+// The recertification routes (ADR-0341).
 //
 // Opening a campaign is a population-sized read of the inventory, off the loop,
 // exactly as a reconciliation is — and affordable for the same reason turned

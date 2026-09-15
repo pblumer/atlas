@@ -11,7 +11,7 @@ import (
 )
 
 // What a recertification campaign asks, and what it refuses to assume
-// (ADR-draft-access-recertification).
+// (ADR-0341).
 //
 // Three questions can be asked about somebody's access. Ordering answers *may they
 // have it*; reconciliation answers *do they actually have it*; this answers *do
