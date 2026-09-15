@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -102,7 +103,8 @@ func (s *Server) handlePendingWork(w http.ResponseWriter, r *http.Request) {
 	default:
 		var err error
 		if subject, err = s.principalOf(asked); err != nil {
-			httpapi.Error(w, http.StatusNotFound, err.Error())
+			code, msg := principalRefusal(err)
+			httpapi.Error(w, code, msg)
 			return
 		}
 	}
@@ -166,6 +168,24 @@ func (s *Server) mayAskAboutOthers(pr *httpapi.Principal) bool {
 // answer computed from anything else would diverge from what they actually hold.
 // Roles are deliberately left empty: nothing downstream of here reads them, and
 // filling them in would make this look like a way to act as somebody.
+// principalRefusal says how a failed resolution is answered.
+//
+// A name nobody holds is the caller's mistake: 404, in the resolver's own words,
+// which already name the four spellings that resolve. An unreadable user store is
+// not, and was reading as one — "no such person" is a definite answer, and giving
+// it from a store that could not be read tells an operator their colleague has no
+// account when what happened is that Atlas could not look.
+//
+// It is a function and not two lines in the handler so that both arms can be
+// stated in a test. The arm that matters is the one no HTTP test can reach: a
+// store that fails to load is not something a request can bring about.
+func principalRefusal(err error) (int, string) {
+	if errors.Is(err, httpapi.ErrNoSuchPrincipal) {
+		return http.StatusNotFound, err.Error()
+	}
+	return http.StatusInternalServerError, "resolve principal: " + err.Error()
+}
+
 func (s *Server) principalOf(who string) (*httpapi.Principal, error) {
 	var (
 		out   *httpapi.Principal
@@ -191,8 +211,8 @@ func (s *Server) principalOf(who string) (*httpapi.Principal, error) {
 			}
 		}
 		if !ok {
-			opErr = fmt.Errorf("no account %q; name somebody by principal id, username, "+
-				"directory id or mail address", who)
+			opErr = fmt.Errorf("%w: no account %q; name somebody by principal id, "+
+				"username, directory id or mail address", httpapi.ErrNoSuchPrincipal, who)
 			return
 		}
 		p := &httpapi.Principal{UserID: u.ID, Username: u.Username}

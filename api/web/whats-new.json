@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-refused-publish-said-not-published-and-withheld-every-reas",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A refused publish said \"not published\" and withheld every reason.",
+        "de": "A refused publish said \"not published\" and withheld every reason."
+      },
+      "summary": {
+        "en": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to.",
+        "de": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "who-is-this-failing-for-two-different-reasons-was-answered-a",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "\"Who is this?\" failing for two different reasons was answered as though it were one.",
+        "de": "\"Who is this?\" failing for two different reasons was answered as though it were one."
+      },
+      "summary": {
+        "en": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault.",
+        "de": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "an-order-could-be-placed-in-anybody-s-name",
       "version": "Unreleased",
       "date": null,
@@ -13,6 +49,24 @@
       "summary": {
         "en": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name.",
         "de": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-recipient-of-an-order-is-picked-not-typed-and-the-field-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it.",
+        "de": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it."
+      },
+      "summary": {
+        "en": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one.",
+        "de": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one."
       },
       "link": {
         "label": "Changelog",
@@ -161,84 +215,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-reminder-can-now-ask-what-is-waiting-for-somebody-else",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A reminder can now ask what is waiting for somebody else.",
-        "de": "A reminder can now ask what is waiting for somebody else."
-      },
-      "summary": {
-        "en": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks.",
-        "de": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-right-can-now-end-by-itself",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A right can now end by itself.",
-        "de": "A right can now end by itself."
-      },
-      "summary": {
-        "en": "Everything the portal grants, it granted forever — which nobody notices on the day it is built, and which is why the commissioning load, reconciliation and recertification all exist: three controls that find access which should not be there, after it is there.",
-        "de": "Everything the portal grants, it granted forever — which nobody notices on the day it is built, and which is why the commissioning load, reconciliation and recertification all exist: three controls that find access which should not be there, after it is there."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-business-object-says-where-it-is-used",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Every business object now says where it is used",
-        "de": "Jedes Business Object zeigt jetzt, wo es verwendet wird"
-      },
-      "summary": {
-        "en": "You could always see what an Order is. What you could not see was what depends on it — so renaming a member, retiring an enumeration literal or dropping a state meant guessing. Data now has a Business objects list: every class of every information model you can see, in one sortable, filterable table across all applications. Open one and it says where it is used and how — every deployed process that declares it, and every element that reads it, writes one member of it, moves it into a state or names the store it is kept in, plus everything in the model itself that refers to it.",
-        "de": "Was ein Auftrag ist, war immer sichtbar. Was von ihm abhängt, nicht — ein Attribut umbenennen, ein Literal streichen oder einen Zustand entfernen hiess raten. Data hat jetzt die Liste Business objects: jede Klasse jedes Informationsmodells, das Sie sehen dürfen, in einer sortier- und filterbaren Tabelle über alle Applikationen hinweg. Ein Klick darauf zeigt, wo und wie sie verwendet wird — jeder deployte Prozess, der sie deklariert, und jedes Element, das sie liest, ein Attribut davon schreibt, sie in einen Zustand überführt oder den Speicher nennt, in dem sie liegt, dazu alles im Modell selbst, was auf sie verweist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and switch to the Business objects tab.",
-          "Filter the list by name, kind or application — the Used by column says how many processes depend on each class.",
-          "Click a name to open it: its members and lifecycle first, then every process use with the element, the member and the state named.",
-          "An enumeration used by no process is not unused — its uses are listed under \"Used in the model\"."
-        ],
-        "de": [
-          "Data öffnen und auf den Reiter Business objects wechseln.",
-          "Die Liste nach Name, Art oder Applikation filtern — die Spalte Used by sagt, wie viele Prozesse von einer Klasse abhängen.",
-          "Auf einen Namen klicken: zuerst Attribute und Lebenszyklus, dann jede Verwendung im Prozess mit Element, Attribut und Zustand.",
-          "Eine Enumeration ohne Prozessverwendung ist nicht ungenutzt — ihre Verwendungen stehen unter «Used in the model»."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Business objects",
-          "de": "Business objects öffnen"
-        },
-        "route": "#/data/objects"
       }
     }
   ]

@@ -77,7 +77,12 @@ export async function apiRaw(method, path, body, isXML) {
     // The message is the readable half; the status and the decoded body ride along for
     // the few callers that need to *act* on the failure rather than report it — a 409
     // that names what is in the way, say (ADR-0163).
-    const err = new Error((data && data.error) || res.statusText);
+    // statusText is empty over HTTP/2, which carries no reason phrase — so a body
+    // with no "error" key produced `new Error("")`, and every caller that reports
+    // err.message showed a blank box where the reason belonged. The status number
+    // is not a good message; it is a great deal better than nothing, and it says
+    // out loud that the caller is reading the wrong half of the body.
+    const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
