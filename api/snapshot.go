@@ -128,12 +128,12 @@ func streamFullBackup(w io.Writer, fsys fs.FS, checkpointDir string) error {
 // (WAL leads) and its top-level files into tw.
 func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
 	if checkpointDir != "" {
-		if err := walkDirInto(tw, fsys, checkpointDir); err != nil {
+		if err := walkDirInto(tw, fsys, checkpointDir, nil); err != nil {
 			return err
 		}
 	}
 	for _, name := range fullBackupDirs() {
-		if err := walkDirInto(tw, fsys, name); err != nil {
+		if err := walkDirInto(tw, fsys, name, nil); err != nil {
 			return err
 		}
 	}
@@ -149,7 +149,11 @@ func writeFullBackup(tw *tar.Writer, fsys fs.FS, checkpointDir string) error {
 // named relative to the data-dir root. A directory that was never created is simply
 // absent and skipped. Shared by the design-time backup (ADR-0107) and the full
 // snapshot (ADR-0109).
-func walkDirInto(tw *tar.Writer, fsys fs.FS, name string) error {
+// keep, when non-nil, decides which files this archive carries. The two archives
+// differ in exactly that: the snapshot passes nil and takes the directory whole,
+// while the portable backup leaves this installation's own identity behind (see
+// backupportability.go).
+func walkDirInto(tw *tar.Writer, fsys fs.FS, name string, keep func(string) bool) error {
 	return fs.WalkDir(fsys, name, func(path string, d fs.DirEntry, err error) error {
 		switch {
 		case err != nil:
@@ -159,6 +163,8 @@ func walkDirInto(tw *tar.Writer, fsys fs.FS, name string) error {
 			return err
 		case !d.Type().IsRegular(), strings.HasSuffix(path, ".tmp"):
 			return nil // directories are implied by their files; skip specials and in-flight temps
+		case keep != nil && !keep(path):
+			return nil
 		}
 		return writeFileInto(tw, fsys, path)
 	})

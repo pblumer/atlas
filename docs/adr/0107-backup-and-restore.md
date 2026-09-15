@@ -90,6 +90,14 @@ Chosen option: **A**.
   backup; a restore of deployments needs a restart to run; restoring a design-time
   backup onto an instance whose WAL references now-absent deployments can fail at
   the next boot — the file is a design-time backup, not a whole-engine snapshot.
+
+  **Amended by
+  [ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity](draft-a-portable-backup-does-not-overwrite-another-installations-identity.md).**
+  That risk is the case where a key is *missing*. The case where a key is **present
+  and now means something else** was not considered here, and it does not fail: the
+  overlay succeeded and attached the target's instance history to a foreign
+  definition. The overlay now holds such a record back and reports it, and the
+  archive no longer carries the installation's node identity.
 - **Follow-ups / risks to watch:** a future "full snapshot" (option B) can layer on
   via a Pebble checkpoint + WAL copy + restart-time staging; a live deployment
   reload after restore would remove the restart caveat but needs an idempotent
@@ -111,3 +119,4 @@ Chosen option: **A**.
 - relates to ADR-0019 (durable deployment sidecar store), ADR-0005 (durable-before-
   visible), ADR-0044 (auth/admin), ADR-0070 (vault key), ADR-0016 (MCP is a pure
   adapter — why these endpoints carry no tool)
+- amended by [ADR-draft-a-portable-backup-does-not-overwrite-another-installations-identity](draft-a-portable-backup-does-not-overwrite-another-installations-identity.md) — what the overlay may not overwrite, and why the node identity stays home
