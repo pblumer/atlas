@@ -399,7 +399,7 @@ const state = {
   // failed rather than one they never had.
   mayOrderForOthers: false,
   // config holds what somebody filled in per product, keyed by item id and then by
-  // the form's own field key (ADR-draft-order-line-configuration).
+  // the form's own field key (ADR-0358).
   //
   // Kept in state rather than read off the page at the last moment, because the
   // basket is redrawn whenever anything on it changes and a rendered form does not
@@ -1046,7 +1046,7 @@ function renderBasket() {
 // cost centre it is booked to. A product names an Atlas form, and the basket is
 // where it is filled in — the last screen before an order exists, and the one that
 // already shows what will actually be provisioned
-// (ADR-draft-order-line-configuration).
+// (ADR-0358).
 //
 // The form is rendered by Atlas's own form runtime, the one the Tasks app and the
 // incident repair already use. Nothing here interprets a field: which questions

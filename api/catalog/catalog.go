@@ -218,7 +218,7 @@ type Item struct {
 	// ConfigForm names the Atlas form somebody fills in when they order this
 	// product: the cost centre, the site, the employee number — whatever this one
 	// product needs that its name does not say
-	// (ADR-draft-order-line-configuration). Empty is the
+	// (ADR-0358). Empty is the
 	// ordinary case and means the product is fully described by what it is.
 	//
 	// # Why a form id and not a field list of its own

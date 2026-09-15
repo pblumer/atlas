@@ -171,7 +171,7 @@ type placeReq struct {
 	Recipient string `json:"recipient,omitempty"`
 	// Config carries the answers to each product's configuration form, keyed by
 	// item id and then by the form's own field key
-	// (ADR-draft-order-line-configuration).
+	// (ADR-0358).
 	//
 	// Keyed by item rather than flat because two products in one basket legitimately
 	// ask the same question — two laptops, two cost centres — and a flat map would
@@ -417,7 +417,7 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 }
 
 // strayAnswers reports why a basket's configuration answers do not belong to it,
-// or "" when they do (ADR-draft-order-line-configuration).
+// or "" when they do (ADR-0358).
 //
 // Two refusals, both because the alternative is an order that silently loses
 // something somebody typed:

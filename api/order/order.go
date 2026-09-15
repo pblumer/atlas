@@ -180,7 +180,7 @@ type Line struct {
 	MaxDays int `json:"maxDays,omitempty"`
 	// ConfigForm and Config are what somebody filled in when they ordered this
 	// product, and the form they filled it in on
-	// (ADR-draft-order-line-configuration).
+	// (ADR-0358).
 	//
 	// Both or neither: a set of answers with no form is a map of keys nobody can
 	// interpret, and a form with no answers on a line that was placed means the

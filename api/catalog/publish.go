@@ -273,7 +273,7 @@ func checkItems(in Input, add func(Problem)) {
 		// A form id of nothing but spaces is a product that asks a question nobody
 		// can answer: the portal would look for a form under a name no form has, and
 		// the orderer would be stopped by a blank that cannot be filled in
-		// (ADR-draft-order-line-configuration).
+		// (ADR-0358).
 		if it.ConfigForm != "" && strings.TrimSpace(it.ConfigForm) == "" {
 			add(Problem{Item: it.ID, Message: "names a blank configuration form; " +
 				"leave it out for a product that needs no extra details"})

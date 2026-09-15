@@ -2,7 +2,7 @@ package catalog
 
 import "testing"
 
-// The form a product asks for (ADR-draft-order-line-configuration).
+// The form a product asks for (ADR-0358).
 //
 // The catalogue stores an id and interprets nothing: the form store belongs to the
 // api package and this one cannot see it, exactly as it cannot see which processes

@@ -14,7 +14,7 @@ import (
 )
 
 // What a product needs that its name does not say
-// (ADR-draft-order-line-configuration).
+// (ADR-0358).
 //
 // A laptop is not fully described by being a laptop: somebody has to say which
 // cost centre it is booked to and which site it goes to. None of that could be

@@ -9,7 +9,7 @@ import (
 )
 
 // Where the orderer is asked, and what the two pages owe the field
-// (ADR-draft-order-line-configuration).
+// (ADR-0358).
 //
 // A product declares one Atlas form and the order line carries the answers. Three
 // seams hold that together, and each is a place where one side can quietly stop
