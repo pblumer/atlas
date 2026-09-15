@@ -31,6 +31,7 @@ import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
+import { versionDeleteState } from "./decision-cleanup.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
@@ -3041,7 +3042,11 @@ async function viewProjectDetail(id) {
     // represents it, and nothing anywhere else in the product does either — which is
     // the whole reason it is drawn (ADR-0330).
     const orphanModelRow = (m) => {
-      const items = canWrite ? [{ label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } }] : [];
+      const items = canWrite ? [
+        { label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } },
+        { sep: true },
+        { label: "Delete model", icon: "🗑", act: "delmodel", data: { handle: m.handle }, danger: true },
+      ] : [];
       const what = m.valid
         ? `${m.decisions.length} decision${m.decisions.length === 1 ? "" : "s"}: ${esc(m.decisions.join(", "))}`
         : "does not compile";
@@ -3152,6 +3157,7 @@ async function viewProjectDetail(id) {
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
         case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
+        case "delmodel": deleteStoredModel(b.dataset.handle, render); break;
         case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
         case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
@@ -4979,6 +4985,23 @@ async function referenceStoredModel(handle, suggested, reload) {
     await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
     toast(`Added DMN reference "${name}"`, "ok");
   } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+  await reload();
+}
+
+// deleteStoredModel removes a model file nothing points at — the end of the road
+// ADR-0330 opened by making it visible (ADR-draft-cleaning-up-the-decision-store).
+// It is offered only on an unreferenced row, and the server refuses a referenced
+// handle anyway.
+//
+// The sentence says what survives, because that is what a reader is unsure of: a
+// decision already deployed from this model keeps evaluating, since its record
+// carries its own copy and never reads the file.
+async function deleteStoredModel(handle, reload) {
+  if (!window.confirm(`Delete the model file ${handle}.dmn? Decisions already deployed from it keep running — they carry their own copy. This cannot be undone.`)) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-models/${encodeURIComponent(handle)}`);
+    toast(`Deleted the model ${handle}.dmn`, "ok");
+  } catch (e) { toast("could not delete the model: " + e.message, "err"); }
   await reload();
 }
 
@@ -6858,7 +6881,20 @@ async function viewDecisionDetail(id) {
     result marked <b>&#8862;</b> to see the decision table with the matched rule
     highlighted — a rule that never matches (a string compared against a number, a
     stray space, a wrong type) shows its condition in red.</p>
+    <h2 style="margin-top:20px">Deployed versions</h2>
+    <p class="muted">Every version of this decision the engine holds, newest first.
+    <b>Held by</b> names the deployed processes that pinned this exact version when they
+    were deployed — they carry no copy of it, so it cannot be removed while they exist.
+    Removing a version history goes oldest first: the current version cannot go while
+    older ones remain, because the next deploy would silently fall back to one of
+    them.</p>
     <div class="card" style="padding:0">
+      <table data-dt-key="decision-versions">
+        <thead><tr><th>Version</th><th>Key</th><th>Model</th><th>Deployed</th><th>Held by</th><th></th></tr></thead>
+        <tbody id="version-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card" style="padding:0; margin-top:20px">
       <table data-dt-key="decision-evals">
         <thead><tr><th>When</th><th>Instance</th><th>Element</th><th>Inputs</th><th>Result</th></tr></thead>
         <tbody id="rows"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
@@ -6873,6 +6909,64 @@ async function viewDecisionDetail(id) {
   const tablesOf = (r) => traceTablesOf(r && r.trace);
   const matchedNums = (r) => matchedRuleNumbers(r && r.trace);
   const miniTable = (tt, n) => renderTraceTable(tt, n);
+
+  // The deployed versions of this decision, and what holds each of them
+  // (ADR-draft-cleaning-up-the-decision-store). It is the only place in the product
+  // that answers "what is using this version", which is a question asked without a
+  // deletion in mind — and the place a deletion has to stand.
+  const versionRows = document.getElementById("version-rows");
+  const loadVersions = async () => {
+    let rows = [];
+    try {
+      rows = await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`) || [];
+    } catch (e) {
+      versionRows.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      return;
+    }
+    if (!rows.length) {
+      versionRows.innerHTML = `<tr><td colspan="6" class="empty">
+        This decision has no deployment of its own. It is evaluated from the model
+        bundled with the process that calls it.</td></tr>`;
+      return;
+    }
+    versionRows.innerHTML = rows.map((r) => {
+      const held = (r.pinnedBy || []).length
+        ? (r.pinnedBy || []).map((p) =>
+            `<a href="#/operations/p/${p.key}" title="${esc(`${p.processId} v${p.version} pinned this version at deploy time`)}">${esc(p.name || p.processId)}</a>`
+          ).join(", ")
+        : '<span class="muted">—</span>';
+      // The server decides; this only keeps the reader from clicking into a refusal,
+      // and carries its reason as the tooltip.
+      const state = versionDeleteState(r, rows);
+      const action = state.deletable
+        ? `<button class="btn ghost" data-delver="${r.key}" title="Remove this deployed version">Delete</button>`
+        : `<span class="muted" title="${esc(state.why)}">held</span>`;
+      return `<tr>
+        <td><b>v${r.version}</b>${r.current ? ' <span class="pill ok"><span class="dot"></span>current</span>' : ""}</td>
+        <td class="muted">${r.key}</td>
+        <td class="muted">${esc(r.resourceName || r.modelName || "—")}</td>
+        <td class="muted" data-sort="${r.deployedAt || 0}">${esc(fmtTime(r.deployedAt))}${r.deployedBy ? " · " + esc(r.deployedBy) : ""}</td>
+        <td>${held}</td>
+        <td class="row-actions">${action}</td></tr>`;
+    }).join("");
+    enhanceViewTables();
+  };
+  versionRows.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-delver]");
+    if (!btn) return;
+    if (!window.confirm("Remove this deployed version? Processes already pinned to it keep running against it — this is refused if any are.")) return;
+    btn.disabled = true;
+    try {
+      await api("DELETE", `/api/v1/decision-deployments/${encodeURIComponent(btn.dataset.delver)}`);
+      toast("Removed the deployed version", "ok");
+    } catch (err) {
+      // The server's refusal is the explanation: it names what is holding the
+      // version, or why the current one cannot go yet.
+      toast(err.message, "err");
+      btn.disabled = false;
+    }
+    await loadVersions();
+  });
 
   let evals = [];
   const load = async () => {
@@ -6940,8 +7034,8 @@ async function viewDecisionDetail(id) {
   tbody.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showPop(row); });
   tbody.addEventListener("focusout", hidePop);
 
-  document.getElementById("refresh").addEventListener("click", load);
-  await load();
+  document.getElementById("refresh").addEventListener("click", () => { load(); loadVersions(); });
+  await Promise.all([load(), loadVersions()]);
 }
 
 // ---------- Tasks (Outlook-style inbox, ADR-0028) ----------

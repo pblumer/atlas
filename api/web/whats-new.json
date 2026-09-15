@@ -2,6 +2,50 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Old decision versions can finally be cleared away",
+        "de": "Alte Entscheidungsversionen lassen sich endlich aufräumen"
+      },
+      "summary": {
+        "en": "Every press of Deploy in the decision editor minted a version and kept the whole model with it, and every uploaded model file stayed where it was put. Nothing could take either back, so iterating on a decision — which is what that button is for — cost permanent disk. Both can now be removed, under a rule that protects what is actually running. A deployed version is refused while a deployed process is pinned to it: that process resolved its decision to exactly that version when it was deployed and keeps no copy of it, and the pin outlives the instances that used it — so having nothing running is not enough. It is also refused while it is the newest version of a decision that still has older ones behind it, because removing it would send the next deployment quietly back a version. Clearing a history therefore works oldest first, and the refusal says which of the two reasons applies. Operations' page for a decision now lists every deployed version with the processes holding each one — the first place in Atlas that answers what is using this version — and offers Delete where nothing does. A model file that no reference points at can be deleted from Not assigned; decisions already deployed from it keep running, because they carry their own copy.",
+        "de": "Jeder Druck auf «Deploy» im Entscheidungseditor erzeugte eine Version und behielt das ganze Modell dazu, und jede hochgeladene Modelldatei blieb liegen. Zurücknehmen liess sich beides nicht — das Iterieren an einer Entscheidung, wofür diese Schaltfläche da ist, kostete also dauerhaft Speicher. Beides lässt sich nun entfernen, nach einer Regel, die schützt, was tatsächlich läuft. Eine ausgelieferte Version wird abgelehnt, solange ein ausgelieferter Prozess darauf festgelegt ist: Dieser Prozess hat seine Entscheidung beim Ausliefern auf genau diese Version aufgelöst und hält keine eigene Kopie davon, und die Festlegung überdauert die Instanzen, die sie genutzt haben — dass nichts mehr läuft, genügt also nicht. Abgelehnt wird auch die neueste Version einer Entscheidung, hinter der noch ältere stehen, denn ihr Entfernen würde die nächste Auslieferung stillschweigend eine Version zurückwerfen. Eine Historie räumt man daher von der ältesten Version her ab, und die Ablehnung sagt, welcher der beiden Gründe greift. Die Entscheidungsseite in Operations führt jetzt jede ausgelieferte Version mit den Prozessen auf, die sie halten — die erste Stelle in Atlas, die beantwortet, was eine Version verwendet — und bietet «Delete» dort an, wo nichts sie hält. Eine Modelldatei, auf die keine Referenz zeigt, lässt sich unter «Nicht zugeordnet» löschen; bereits daraus ausgelieferte Entscheidungen laufen weiter, weil sie ihre eigene Kopie tragen."
+      },
+      "link": {
+        "label": "ADR-0329",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0329-a-decision-deployment-is-not-deletable.md"
+      },
+      "tags": [
+        "Operations",
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Operations → Decisions and choose a decision.",
+          "Deployed versions lists every version with its key, when it was deployed, and what is holding it.",
+          "A version nothing holds carries a Delete button; one that is held says held, and the tooltip says why.",
+          "For model files, open the Modeler's Not assigned and use ⋯ → Delete model on a row marked No reference."
+        ],
+        "de": [
+          "«Operations → Decisions» öffnen und eine Entscheidung auswählen.",
+          "«Deployed versions» führt jede Version auf, mit Schlüssel, Auslieferungszeitpunkt und dem, was sie hält.",
+          "Eine Version, die nichts hält, trägt eine Schaltfläche «Delete»; eine gehaltene zeigt «held», und der Tooltip nennt den Grund.",
+          "Für Modelldateien im Modeler «Nicht zugeordnet» öffnen und bei einer mit «No reference» markierten Zeile «⋯ → Delete model» wählen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Decisions",
+          "de": "Decisions öffnen"
+        },
+        "route": "#/operations/decisions"
+      }
+    },
+    {
       "id": "the-inventory-is-taken-before-it-is-enforced",
       "version": "Unreleased",
       "date": null,
@@ -335,27 +379,6 @@
           "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
         ]
       }
-    },
-    {
-      "id": "switching-drafts-on-the-starmap-while-it-happens-to-be-refre",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Drafts switch on the Starmap stays where you put it",
-        "de": "Der Drafts-Schalter der Starmap bleibt, wo Sie ihn hinstellen"
-      },
-      "summary": {
-        "en": "The Starmap re-reads the landscape on its own while you have it open. That read and the one the Drafts switch makes could be in flight at the same time, and if the automatic one happened to land second it overwrote the picture and put the switch back — the drafts appeared and then vanished again under the hand that had just asked for them, with nothing said about why. Your answer wins now: an automatic read that arrives after you have asked for a different landscape is dropped rather than applied, and the timer does not start one while the switch's own request is still running.",
-        "de": "Die Starmap liest die Landschaft von selbst nach, solange sie offen ist. Dieses Lesen und das des Drafts-Schalters konnten gleichzeitig unterwegs sein, und traf das automatische zufällig als Zweites ein, überschrieb es das Bild und stellte den Schalter zurück — die Drafts erschienen und verschwanden wieder unter der Hand, die sie gerade angefordert hatte, ohne jeden Hinweis. Jetzt gewinnt Ihre Antwort: Ein automatisches Lesen, das eintrifft, nachdem Sie eine andere Landschaft angefordert haben, wird verworfen statt angewendet, und der Zeitgeber startet keines, solange die Anfrage des Schalters noch läuft."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
     }
   ]
 }

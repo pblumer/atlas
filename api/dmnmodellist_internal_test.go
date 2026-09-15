@@ -2,10 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -194,5 +196,111 @@ func TestAReferenceSomebodyElseHoldsStillCountsAsOne(t *testing.T) {
 	}
 	if len(got.References) != 0 {
 		t.Fatalf("references = %+v, want none named from a space the caller cannot see", got.References)
+	}
+}
+
+// Removing a stored model (ADR-draft-cleaning-up-the-decision-store). ADR-0330 made
+// an unreferenced model visible; this is what an author does with it once they have
+// looked and decided it is finished.
+
+// TestDeletingAnUnreferencedModelRemovesTheFile: the store stops growing, and the
+// listing that made the orphan visible is what says it is gone.
+func TestDeletingAnUnreferencedModelRemovesTheFile(t *testing.T) {
+	srv, dir := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	seedReferencedDecision(t, x, "eligibility", eligibilityDMN("approve"))
+	refID := theRefFor(t, x, "eligibility")
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmnrefs/"+refID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete ref: %d %s", code, b)
+	}
+	if m := modelByHandle(listModels(t, x), "eligibility"); m == nil || m.Referenced {
+		t.Fatalf("model = %+v, want it listed and unreferenced", m)
+	}
+
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmn-models/eligibility", ""); code != http.StatusNoContent {
+		t.Fatalf("delete model = %d %s, want 204", code, b)
+	}
+	if m := modelByHandle(listModels(t, x), "eligibility"); m != nil {
+		t.Fatalf("model = %+v, want it gone from the store", m)
+	}
+	if files := modelFiles(t, dir); slices.Contains(files, "eligibility") {
+		t.Errorf("model folder = %v, want the file removed from disk", files)
+	}
+	// Idempotent, like every other delete in this tree.
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmn-models/eligibility", ""); code != http.StatusNoContent {
+		t.Errorf("second delete = %d %s, want 204", code, b)
+	}
+}
+
+// TestAReferencedModelIsRefused: deleting it would leave the reference unresolved,
+// which is a state Atlas tolerates but should not create behind an author's back.
+// The refusal names the references, because the remedy is to deal with them.
+func TestAReferencedModelIsRefused(t *testing.T) {
+	srv, dir := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	seedReferencedDecision(t, x, "eligibility", eligibilityDMN("approve"))
+
+	code, b := x.do(http.MethodDelete, "/api/v1/dmn-models/eligibility", "")
+	if code != http.StatusConflict {
+		t.Fatalf("delete = %d %s, want 409: a reference points at it", code, b)
+	}
+	for _, want := range []string{"Eligibility", "delete the reference first"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("refusal = %s, want it to contain %q", b, want)
+		}
+	}
+	if files := modelFiles(t, dir); !slices.Contains(files, "eligibility") {
+		t.Errorf("model folder = %v, want a refused delete to have removed nothing", files)
+	}
+}
+
+// TestADeployedDecisionDoesNotHoldItsModelFile is the distinction the record turns
+// on: a decision deployment's modelRef is provenance, not a dependency. The record
+// carries its own XML, so the decision keeps evaluating after the file it came from
+// is deleted — and refusing here would tie a runtime artifact's lifetime to a
+// design-time file it never reads.
+func TestADeployedDecisionDoesNotHoldItsModelFile(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	seedReferencedDecision(t, x, "eligibility", eligibilityDMN("approve"))
+	rep := deployOneDecision(t, x, "?modelRef=eligibility", eligibilityDMN("approve"))
+	refID := theRefFor(t, x, "eligibility")
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmnrefs/"+refID, ""); code != http.StatusNoContent {
+		t.Fatalf("delete ref: %d %s", code, b)
+	}
+
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmn-models/eligibility", ""); code != http.StatusNoContent {
+		t.Fatalf("delete model = %d %s, want 204: the deployment carries its own copy", code, b)
+	}
+	// The deployment is untouched, its source still readable, and a latest-bound
+	// process still deploys against it.
+	if rows := listDecisionDeployments(t, x, "?decisionId=eligibility"); len(rows) != 1 {
+		t.Fatalf("listing = %+v, want the deployment unaffected", rows)
+	}
+	code, xml := x.do(http.MethodGet, fmt.Sprintf("/api/v1/decision-deployments/%d/xml", rep.Key), "")
+	if code != http.StatusOK || !strings.Contains(string(xml), "approve") {
+		t.Fatalf("deployed source = %d %s, want the record's own XML", code, xml)
+	}
+	key := deployProcess(t, x, eligibilityProcess("orders", "latest"))
+	if got := runAndReadVerdict(t, x, key, "orders"); got != "approve" {
+		t.Errorf("verdict = %q, want the deployed decision still answering with no file behind it", got)
+	}
+}
+
+// TestDeletingAModelTakesBothExtensions: the resolver accepts .dmn and .xml for one
+// handle, so removing only one would make a deleted model come back.
+func TestDeletingAModelTakesBothExtensions(t *testing.T) {
+	srv, dir := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+	if err := os.WriteFile(filepath.Join(dir, "dmn-models", "dish.xml"), []byte(validDMNModel), 0o644); err != nil {
+		t.Fatalf("write dish.xml: %v", err)
+	}
+	if code, b := x.do(http.MethodDelete, "/api/v1/dmn-models/dish", ""); code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s, want 204", code, b)
+	}
+	for _, name := range []string{"dish.dmn", "dish.xml"} {
+		if _, err := os.Stat(filepath.Join(dir, "dmn-models", name)); !os.IsNotExist(err) {
+			t.Errorf("%s still exists, want both spellings of the handle gone", name)
+		}
 	}
 }

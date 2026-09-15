@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -137,4 +138,99 @@ func storedModelHandles(dir string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// handleDeleteDmnModel removes a stored DMN model file
+// (ADR-draft-cleaning-up-the-decision-store). It is the other half of a store that
+// only ever grew: every upload stayed, and ADR-0330 made the unreferenced ones
+// visible without making them removable.
+//
+// One thing has to be true first: no DMN reference may point at the handle. A
+// reference whose model is gone is an unresolved reference — a state Atlas
+// tolerates and reports, but not one a deletion should create behind an author's
+// back, and the remedy (delete the reference, or point it somewhere) is the
+// author's to choose.
+//
+// A decision deployment's modelRef deliberately does **not** block it. That field
+// is provenance: the record carries its own XML and is rebuilt from it at startup
+// (ADR-0319), so a deployed decision keeps evaluating exactly what it was deployed
+// with whether or not the file it came from still exists. Refusing here would tie
+// a runtime artifact's lifetime to a design-time file it does not read.
+func (s *Server) handleDeleteDmnModel(w http.ResponseWriter, r *http.Request) {
+	dir, ok := s.dmnModelDir()
+	if !ok {
+		httpapi.Error(w, http.StatusConflict,
+			"DMN models are served by a remote temis service (ATLAS_DMN_RESOLVER_URL); remove them there")
+		return
+	}
+	handle := sanitizeHandle(r.PathValue("ref"))
+	if handle == "" {
+		httpapi.Error(w, http.StatusBadRequest, "invalid model handle")
+		return
+	}
+
+	var (
+		pointing []dmnRef
+		loadErr  error
+	)
+	s.do(func() {
+		var refs []dmnRef
+		if refs, loadErr = s.dmnrefs.LoadAll(); loadErr != nil {
+			return
+		}
+		for _, rec := range refs {
+			if rec.ModelRef == handle {
+				pointing = append(pointing, rec)
+			}
+		}
+	})
+	if loadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
+		return
+	}
+	if len(pointing) > 0 {
+		// Named, not counted: a reference the caller cannot see still blocks, and
+		// saying so without naming it would leave them with no way forward. The names
+		// are a display name and a handle, which the model store listing already shows
+		// to any modeler.
+		names := make([]string, 0, len(pointing))
+		for _, rec := range pointing {
+			names = append(names, rec.Name)
+		}
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf(
+			"%d DMN reference(s) point at %q: %v. Deleting the model would leave them unresolved — delete the reference first, or point it at another model",
+			len(pointing), handle, names))
+		return
+	}
+
+	removed, err := removeStoredModel(dir, handle)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "delete model: "+err.Error())
+		return
+	}
+	if !removed {
+		// Already gone is the outcome the caller asked for.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeStoredModel deletes the file (or files) a handle resolves through, and
+// reports whether anything was there. Both extensions the resolver accepts are
+// removed, because both are the same handle as far as a reference is concerned —
+// leaving one behind would make a deleted model come back.
+func removeStoredModel(dir, handle string) (bool, error) {
+	removed := false
+	for _, ext := range []string{".dmn", ".xml"} {
+		err := os.Remove(filepath.Join(dir, handle+ext))
+		switch {
+		case err == nil:
+			removed = true
+		case os.IsNotExist(err):
+		default:
+			return removed, err
+		}
+	}
+	return removed, nil
 }

@@ -14,6 +14,35 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A deployed decision version can now be removed, and so can a model file nothing
+  points at.** Both stores only ever grew: every Deploy in the decision editor minted a
+  version carrying the full DMN source, and every upload left a file behind.
+  [ADR-0329](docs/adr/0329-a-decision-deployment-is-not-deletable.md) had written the
+  rule such a delete would need before any route existed; this is that route, with that
+  rule.
+
+  `DELETE /api/v1/decision-deployments/{key}` refuses while a deployed process is
+  **pinned** to the key — it resolved a `latest`-bound reference to that exact version
+  and carries no copy of the model, and a pin outlives the instances that used it, so
+  "no running instances" is not the test. It also refuses the **current** version of a
+  decision that still has older versions behind it: removing it would send the next
+  deploy quietly back a version, and free a version number the surviving records no
+  longer account for. Removing a version history therefore goes oldest first, and the
+  refusal says which of the two it is. The registry's "newest model providing this
+  decision" pointers are rebuilt from the survivors in deployment order, so what the
+  server answers after a delete and what it answers after a reboot cannot diverge.
+
+  `DELETE /api/v1/dmn-models/{ref}` refuses while any DMN reference points at the
+  handle, because that would leave them unresolved. A decision deployment's `modelRef`
+  does **not** block it: that field is provenance, the record carries its own XML, and
+  the decision keeps evaluating after the file is gone.
+
+  Operations' decision page gains a **Deployed versions** table listing every version
+  with what is pinned to it — the first answer anywhere to "what is using this version"
+  — and offers Delete on the ones that may go. Not assigned gains Delete on an
+  unreferenced model. `atlas_delete_decision_deployment` is the MCP counterpart, so the
+  tool count is now 107. ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
 - **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
   the portal's three models were decided and has had no writer, which meant the inventory
   could only ever contain what Atlas itself had granted. On the day an installation goes
