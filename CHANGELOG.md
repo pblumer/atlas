@@ -41,6 +41,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The catalogue can now be read backwards.** Every question it answered ran forwards: a
+  product names what it contains, what it needs, what it excludes. That is the question an
+  *order* asks, and the portal, the basket and the fulfilment schedule are all built on it.
+
+  The person who **maintains** a service asks the opposite, and could not ask it at all. Where
+  is this used, and integrally or optionally? **What needs it** — nobody reading the VPN's own
+  page learns that the laptop cannot be provisioned without it. What may it never be held
+  with? How many people have it, and did this portal grant them or merely find them? A product
+  manager about to retire a service, rebind its provisioning or move it between catalogues had
+  no way to find out what they were about to break.
+
+  `GET /api/v1/catalog-products/{id}/usage` answers all of it out of the edges every release
+  already froze. **No new data, no migration**: the answer has been in the store since the
+  first release was published, with nothing to ask it.
+
+  Merged across catalogues, because a service does not belong to one — the same product
+  carried by two of them is one thing somebody is about to change, and a per-catalogue answer
+  would let them fix one estate and break another. Composition and aggregation stay apart,
+  because retiring an integral part changes what the whole *is* and retiring an optional one
+  does not.
+
+  **Holders are counted and never named.** A list of the people holding one service is the
+  inventory filtered to the interesting part. The count is broken down by origin, because that
+  decides what can be done: an ordered right can be returned through its order, an adopted or
+  legacy one cannot.
+
+  It is an **MCP tool** (`atlas_product_usage`), unlike every other read this line of work
+  added — those were withheld because they are other people's access, and this one names no
+  person at all.
+
+  An unknown product answers 404 rather than an empty report: "nothing uses this" and "this
+  does not exist" are different answers, and an empty one reads as *safe to retire*.
+
 - **Products can be marked as favourites.** The smallest measure in the plan, and the one
   whose two decisions are the kind that get made by accident.
 
