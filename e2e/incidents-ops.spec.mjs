@@ -405,7 +405,7 @@ const OVERVIEW = {
 // groupsOf is the server's incident summary, computed from the same mutable list the
 // mock resolves against: one group per (definition, element, kind), biggest first. The
 // Incidents view and the overview's incident column both read this rather than the rows
-// (ADR-draft-incident-floods), so the mock has to answer it the way the server does or
+// (ADR-0337), so the mock has to answer it the way the server does or
 // the tests would pass against a shape nothing serves.
 const groupsOf = (incidents) => {
   const by = new Map();
@@ -551,7 +551,7 @@ test.describe("instances overview", () => {
   });
 });
 
-// The Incidents view opens on *causes* (ADR-draft-incident-floods): one broken
+// The Incidents view opens on *causes* (ADR-0337): one broken
 // integration parks every instance that reaches it, so the useful first reading is
 // "this element of this process, this failure, N tokens behind it" — and the action
 // that matches it clears all N. The row list below stays for reading and for the

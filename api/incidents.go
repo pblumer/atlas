@@ -14,7 +14,7 @@ import (
 )
 
 // The incident surfaces that are about a *flood* rather than about one parked token
-// (ADR-draft-incident-floods).
+// (ADR-0337).
 //
 // Everything built before this answered "what is stuck here", one incident at a time:
 // the list, the diagram badge, the replay's details, and the four ways out of a single

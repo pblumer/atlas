@@ -1008,7 +1008,7 @@ What it takes to run this for real.
   and live-only, since a finished instance holds no token. The click it takes over is
   the decision inspection's (ADR-0066), which keeps the ⚖ badge it already had.
   The same question asked of **incidents** landed next
-  ([ADR-draft-incident-floods](docs/adr/draft-incident-floods.md)): one broken worker
+  ([ADR-0337](docs/adr/0337-incident-floods.md)): one broken worker
   parks every instance that reaches its task, and the only reading on offer was rows —
   a megabyte of near-identical JSON per refresh, thousands of DOM rows, and a resolve
   dialog per incident. `GET /api/v1/incidents/summary` answers in one line per *cause*

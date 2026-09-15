@@ -208,7 +208,7 @@ export async function resolveIncidentFlow({ api, toast, incident }) {
   }
 }
 
-// ---------- Many at a time (ADR-draft-incident-floods) ----------
+// ---------- Many at a time (ADR-0337) ----------
 //
 // One broken worker parks every instance that reaches its task, and then the four
 // per-incident ways out above are all the wrong size: the fix was applied once, and

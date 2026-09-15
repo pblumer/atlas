@@ -8,7 +8,7 @@ import (
 )
 
 // The two tools an agent triaging a *flood* needs: a reading whose size is the
-// number of causes, and an action that clears one (ADR-draft-incident-floods). An
+// number of causes, and an action that clears one (ADR-0337). An
 // agent that can only page a list and resolve one key at a time is in exactly the
 // position the operator was — reading thousands of rows of the same failure.
 

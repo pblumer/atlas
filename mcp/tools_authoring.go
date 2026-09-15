@@ -320,7 +320,7 @@ func resolveIncidentBody(args map[string]any) ([]byte, error) {
 
 // resolveIncidentsBody builds the bulk-resolve request from the tool arguments:
 // either an explicit key set or a scope, never both, and the API refuses a scope
-// that names nothing (ADR-draft-incident-floods).
+// that names nothing (ADR-0337).
 func resolveIncidentsBody(args map[string]any) ([]byte, error) {
 	payload := map[string]any{}
 	if raw, ok := args["keys"]; ok {

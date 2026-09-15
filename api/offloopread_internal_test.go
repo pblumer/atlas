@@ -213,7 +213,7 @@ func TestListAndTimelineDuringShutdown(t *testing.T) {
 // takes its view through readOffLoop can tell "no answer" from "the empty answer".
 //
 // The cause summary and the bulk resolve are the same hazard one size up
-// (ADR-draft-incident-floods): a summary of {"total":0} says the server is healthy,
+// (ADR-0337): a summary of {"total":0} says the server is healthy,
 // and a bulk resolve reporting {"resolved":0} says the scope matched nothing — when
 // in truth neither was ever asked. Both must refuse instead, in either mode: the
 // scope selects through readOffLoop, and the explicit-keys mode reaches the same

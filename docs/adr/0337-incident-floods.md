@@ -1,4 +1,4 @@
-# ADR-DRAFT: An incident flood is read by cause and resolved in bulk
+# ADR-0337: An incident flood is read by cause and resolved in bulk
 
 - **Status:** Accepted
 - **Implementation:** Landed

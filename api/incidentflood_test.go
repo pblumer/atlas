@@ -10,7 +10,7 @@ import (
 
 // The two surfaces an incident *flood* needs, which the per-incident ones cannot be:
 // a reading whose size is the number of causes rather than the number of parked
-// tokens, and an action that clears a whole cause (ADR-draft-incident-floods).
+// tokens, and an action that clears a whole cause (ADR-0337).
 
 // incidentGroup mirrors one row of the summary: a cause an operator can act on as one
 // thing — which element of which definition parked, why, how many, and the worker /

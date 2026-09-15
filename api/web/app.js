@@ -5332,7 +5332,7 @@ async function viewInstances() {
 
   // loadIncidents counts the server's unresolved incidents per definition, once per
   // refresh, off the incident *summary* rather than off the list
-  // (ADR-draft-incident-floods). One column of this table needs a number, and the row
+  // (ADR-0337). One column of this table needs a number, and the row
   // list answered it by transferring every incident on the server — megabytes of
   // near-identical JSON per refresh under the flood this column exists to flag. The
   // summary is one line per cause whatever the population, and a per-definition count is
@@ -5368,7 +5368,7 @@ async function viewInstances() {
   // So it stays the capped list, and it is paid only when somebody runs a search rather
   // than on every refresh of the overview. Under a flood its page cap bites and the
   // flags become a lower bound, exactly as they were before the summary existed; the
-  // Incidents view is where a flood is actually read (ADR-draft-incident-floods).
+  // Incidents view is where a flood is actually read (ADR-0337).
   const loadIncidentsByInstance = async () => {
     try {
       const { data } = await apiRaw("GET", "/api/v1/incidents");
@@ -5847,7 +5847,7 @@ function overrideCell(r) {
 // boundary / event-subprocess timer whose FEEL schedule stopped resolving,
 // ADR-0064/0111).
 //
-// It opens on *causes*, not on rows (ADR-draft-incident-floods). One broken worker parks
+// It opens on *causes*, not on rows (ADR-0337). One broken worker parks
 // every instance that reaches its task, so the honest reading of "3 412 incidents" is
 // one line — this element of this process, this failure, 3 412 tokens behind it — and
 // the actions that belong to a whole cause sit on that line: fix the worker it names,

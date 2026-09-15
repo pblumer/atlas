@@ -4789,7 +4789,7 @@ func incidentType(v *model.IncidentValue) string {
 // pull the server's entire — page-capped — list to find its own (ADR-0151); and, since
 // a flood is read by cause, one BPMN element (?element=), one kind (?type=) or a
 // fragment of the message (?message=), which are the group's rows
-// (ADR-draft-incident-floods). The same selector is what a bulk resolve takes, so what
+// (ADR-0337). The same selector is what a bulk resolve takes, so what
 // this page shows and what that action touches cannot disagree.
 func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	limit := maxTaskListMax // incidents share the task list's ceiling; the default page is generous
