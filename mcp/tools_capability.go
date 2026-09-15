@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 )
 
@@ -185,6 +186,42 @@ func capabilityTools() []Tool {
 					return "", err
 				}
 				return asText(c.get("/api/v1/capabilities/" + url.PathEscape(key) + "/coverage"))
+			},
+		},
+		{
+			Name: "atlas_measure_capability",
+			Description: "Measure one capability against what actually ran. Returns, per realizing " +
+				"process, how often each end event fired and how often a token was cancelled — both " +
+				"ALL-TIME totals from maintained counters, NOT restricted to the window — plus cycle " +
+				"time over the window, and each declared SLA's attainment. windowDays is REQUIRED " +
+				"(1..400): a reading over all history costs seconds at volume, so it is not offered. " +
+				"An SLA is measured only where it carries thresholdSeconds; one whose threshold is " +
+				"prose is listed under notMeasured with the reason, and every KPI is listed there too " +
+				"because Atlas will not guess which recorded figure a goal refers to. Read countedBasis " +
+				"and walkedBasis before presenting any number: the response mixes two kinds on purpose " +
+				"and says which is which.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{"type": "string", "description": "The capability key."},
+					"windowDays": map[string]any{
+						"type":        "integer",
+						"description": "How many days back the windowed figures cover. Required, 1 to 400.",
+					},
+				},
+				"required": []any{"key", "windowDays"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argString(args, "key")
+				if err != nil {
+					return "", err
+				}
+				days, err := argUint(args, "windowDays")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(fmt.Sprintf("/api/v1/capabilities/%s/measurement?windowDays=%d",
+					url.PathEscape(key), days)))
 			},
 		},
 		{

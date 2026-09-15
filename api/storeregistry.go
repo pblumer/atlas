@@ -96,6 +96,7 @@ var persistentStores = []storeEntry{
 
 	// --- design time -------------------------------------------------------
 	{name: "deployments", class: classDesignTime, why: "the deployed process definitions"},
+	{name: "decisions", class: classDesignTime, why: "the deployed decision definitions, and the DMN source the registry is rebuilt from"},
 	{name: "drafts", class: classDesignTime, why: "work in progress in the Modeler"},
 	{name: "forms", class: classDesignTime, why: "task forms"},
 	{name: "projects", class: classDesignTime, why: "applications and their sharing scopes"},
@@ -105,12 +106,16 @@ var persistentStores = []storeEntry{
 	{name: "releases", class: classDesignTime, why: "published application versions"},
 	{name: "dmnrefs", class: classDesignTime, why: "decision references"},
 	{name: "dmn-models", class: classDesignTime, onDemand: true, why: "decision models"},
+	{name: "dmn-drafts", class: classDesignTime, why: "decision work in progress in the Modeler, before it is written to the model every reference resolves"},
 	{name: "public-links", class: classDesignTime, why: "shared links to forms"},
 	{name: "connectors", class: classDesignTime, why: "worker definitions"},
+	{name: "catalog", class: classDesignTime, why: "the portal's catalogues, the products in them, and the releases orders are placed against"},
+	{name: "orders", class: classInstance, why: "what somebody asked for, and how far each line got"},
 	{name: "repository", class: classDesignTime, why: "the shared artifact repository"},
 	{name: "inbound-subscriptions", class: classDesignTime, why: "which worker receives which message"},
 	{name: "settings", class: classDesignTime, why: "installation settings, including the OIDC claim mapping"},
 	{name: "process-docs", class: classInstance, why: "process documentation"},
+	{name: "decision-docs", class: classInstance, why: "decision documentation — the sign-off artifact for a business rule, with its own version line"},
 	{name: "information-models", class: classInstance, why: "the vocabulary data objects are typed against"},
 	{name: "playground-scenarios", class: classInstance, why: "saved playground scenarios"},
 	{name: "call-overrides", class: classInstance, why: "which process a call activity resolves to on this server"},
@@ -119,6 +124,8 @@ var persistentStores = []storeEntry{
 	// --- identity ----------------------------------------------------------
 	{name: "users", class: classIdentity, why: "accounts and their roles"},
 	{name: "groups", class: classIdentity, why: "group membership, which grants project access"},
+	{name: "directory-sync", class: classIdentity, onDemand: true, why: "where the Entra mirror resumes from; without it the next run enumerates the whole tenant again, which is expensive and safe"},
+	{name: "inventory-loads", class: classIdentity, onDemand: true, why: "whether a commissioning load has ever been applied per target system; without it a restored installation cannot tell a system it loaded and found empty from one it never loaded, and those call for opposite actions"},
 
 	// --- credentials -------------------------------------------------------
 	{name: "api-tokens", class: classCredential, why: "machine access to the API"},

@@ -19,6 +19,15 @@ const (
 	// subject, it carries no password hash, and the pair (source, external id) is
 	// what a federated login resolves by.
 	SourceOIDC = "oidc"
+
+	// SourceEntra marks an account this server mirrored out of a Microsoft Entra
+	// tenant, by reading /users/delta rather than by anybody signing in
+	// (ADR-0332). Its ExternalID is the directory
+	// object id, and so is its DirectoryID — which is the field the mirror actually
+	// resolves by, because an account mirrored onto an identity that already existed
+	// keeps the Source and ExternalID it had. Like an OIDC account it carries no
+	// password hash: nothing can sign in as it without the provider.
+	SourceEntra = "entra"
 )
 
 // Well-known roles. Roles are a free-form list on the user, not a single "admin"
@@ -51,6 +60,21 @@ const (
 	// gets, and on its own it reaches nothing that changes a definition or an
 	// instance.
 	RoleUser = "user"
+
+	// RoleProductManager maintains the self-service portal's catalogues and the
+	// products in them, and publishes releases
+	// (ADR-0315).
+	//
+	// It is deliberately not `modeler`: binding a product to its provisioning and
+	// deprovisioning processes means choosing from processes already deployed,
+	// never deploying one, and `modeler` carries deploy — which is code execution.
+	// Which catalogues a holder may touch is the other axis, answered by the
+	// catalogue's own scope rather than by this role.
+	//
+	// It is never granted by the legacy-roles upgrade below: adding it there would
+	// hand catalogue control to every existing account on the day an operator
+	// installs the update.
+	RoleProductManager = "productmanager"
 )
 
 // legacyRoles is what an identity that predates the role model holds: everything a
@@ -82,17 +106,37 @@ func legacyRoles() []string { return []string{RoleModeler, RoleOperator, RoleUse
 //     record (and the audit trail it anchors).
 //   - PasswordHash is a bcrypt hash for local users and empty for external ones.
 type User struct {
-	ID           string   `json:"id"`
-	Username     string   `json:"username"`
-	Email        string   `json:"email,omitempty"`
-	DisplayName  string   `json:"displayName,omitempty"`
-	Roles        []string `json:"roles"`
-	Disabled     bool     `json:"disabled,omitempty"`
-	Source       string   `json:"source"`
-	ExternalID   string   `json:"externalId,omitempty"`
-	PasswordHash string   `json:"passwordHash,omitempty"`
-	CreatedAt    int64    `json:"createdAt"`
-	UpdatedAt    int64    `json:"updatedAt"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email,omitempty"`
+	DisplayName string   `json:"displayName,omitempty"`
+	Roles       []string `json:"roles"`
+	Disabled    bool     `json:"disabled,omitempty"`
+	Source      string   `json:"source"`
+	ExternalID  string   `json:"externalId,omitempty"`
+
+	// DirectoryID is the object id of the directory entry this account mirrors —
+	// Entra's `id` from /users/delta, which is the same value /users and an ID
+	// token's `oid` claim carry (ADR-0332).
+	//
+	// It is a second field rather than a reuse of ExternalID, and the reason is a
+	// property of Entra rather than a preference. An ID token's `sub` is *pairwise*:
+	// derived from the user and the application, so two applications signing in the
+	// same person receive different subjects, and the subject is therefore not the
+	// directory object id. An account created by a federated login (ADR-0210) holds
+	// that subject in ExternalID and must keep holding it, or the next login stops
+	// finding it and creates a second account. Merging the directory onto such an
+	// account is then exactly this: one record carrying both identities, the subject
+	// it signs in with and the object id the mirror follows it by.
+	//
+	// Stored lower-cased. An object id is a GUID — a number with a spelling, not an
+	// opaque string a provider chose — so case is not information, and normalising on
+	// the way in is what lets the lookup be an equality test.
+	DirectoryID string `json:"directoryId,omitempty"`
+
+	PasswordHash string `json:"passwordHash,omitempty"`
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
 
 	// RolesUpgradedAt is when this record's Roles were last written under the role
 	// model (ADR-0209). Zero means the record predates it,

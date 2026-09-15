@@ -416,7 +416,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         process as a diagram, deploy it, and Atlas runs it step by step – reliably, traceably and durably stored.
         Decisions live in <b>DMN</b> tables.</p>
 
-      <h3 data-l="de">Die sechs Apps</h3><h3 data-l="en">The six apps</h3>
+      <h3 data-l="de">Die neun Apps</h3><h3 data-l="en">The nine apps</h3>
       <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps. Das Menü zeigt nur,
         was deine <a href="#konten">Rolle</a> erreicht – wer keine Modelle bearbeiten darf, sieht Modeler,
         Panorama und Data gar nicht erst.</p>
@@ -440,6 +440,32 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <p class="lead" data-l="de">Der Posteingang für menschliche Aufgaben (User-Tasks) mit Formularen.</p>
           <p class="lead" data-l="en">The inbox for human work (user tasks) with forms.</p>
           <a class="applink" href="/#/tasks">→ Tasks</a></div>
+        <div class="card"><b>Portal</b>
+          <p class="lead" data-l="de">Das Leistungsportal: den eigenen Katalog durchsehen, etwas bestellen und
+            sehen, wo eine Bestellung steht – bis hin zur Rückgabe. Eine eigene Seite, nicht Teil dieser
+            Oberfläche, und sie trägt die Farben des Katalogs, dem man zugeordnet ist.</p>
+          <p class="lead" data-l="en">The service portal: browse the catalogue you are the audience for, order
+            something, and see where an order stands – down to giving it back. A page of its own rather than a
+            view of this shell, and it wears the brand of the catalogue you belong to.</p>
+          <a class="applink" href="/portal.html">→ Portal</a></div>
+        <div class="card"><b>Approvals</b>
+          <p class="lead" data-l="de">Die Genehmigungen, die an einen selbst adressiert sind: was bestellt wurde,
+            für wen, und unter welcher Regel es genehmigt wird. Wer nie um eine Genehmigung gebeten wird, findet
+            hier eine leere Liste – es gibt keine Genehmiger-Rolle, auf die das Menü filtern könnte.</p>
+          <p class="lead" data-l="en">The approvals addressed to you: what was ordered, for whom, and under which
+            rule it is decided. Somebody never asked to approve anything finds an empty list here – there is no
+            approver role for the menu to filter on.</p>
+          <a class="applink" href="/genehmigung.html">→ Approvals</a></div>
+        <div class="card"><b>Catalogue</b>
+          <p class="lead" data-l="de">Hier wird der Katalog gefüllt: Produkte erfassen, sie an
+            die Prozesse binden, die sie bereitstellen und entziehen, festlegen was was enthält
+            und was zuerst da sein muss – und veröffentlichen. Bis zur ersten Veröffentlichung
+            zeigt das Portal niemandem etwas.</p>
+          <p class="lead" data-l="en">Where the catalogue is filled: define products, bind them
+            to the processes that provision and revoke them, say what contains what and what has
+            to exist first – and publish. Until the first release the portal shows nobody
+            anything.</p>
+          <a class="applink" href="/#/catalog">→ Catalogue</a></div>
         <div class="card"><b>Operations</b>
           <p class="lead" data-l="de">Laufende Instanzen beobachten, Incidents lösen, Entscheidungen prüfen.</p>
           <p class="lead" data-l="en">Watch running instances, resolve incidents, inspect decisions.</p>
@@ -1972,6 +1998,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 &lt;/definitions&gt;</code></pre>
         </details>
         <p class="rz-how"><span data-l="de">Ein <code>dataObject</code> ist ein benannter Datenspeicher im Prozess; eine <code>dataObjectReference</code> zeigt darauf. Eine <code>dataOutputAssociation</code> <b>schreibt</b> ein Feld (<code>from</code>-Ausdruck → <code>to</code>-Feld), eine <code>dataInputAssociation</code> <b>liest</b> es (<code>sourceRef</code> → Variable). Nutze Datenobjekte, wenn der Datenfluss im Diagramm sichtbar sein soll; für einfaches „Variable setzen“ genügt ein <a href="#rz-script-value">Script-Task</a>.</span><span data-l="en">A <code>dataObject</code> is a named data store in the process; a <code>dataObjectReference</code> points at it. A <code>dataOutputAssociation</code> <b>writes</b> a field (<code>from</code> expression → <code>to</code> field), a <code>dataInputAssociation</code> <b>reads</b> it (<code>sourceRef</code> → variable). Use data objects when the data flow should be visible in the diagram; for a simple "set a variable" a <a href="#rz-script-value">script task</a> is enough.</span></p>
+        <p class="rz-how"><span data-l="de"><b>Der Datenzustand auf dem Diagramm:</b> Ein Datenobjekt trägt neben seinem Namen einen <b>Datenzustand</b> — das <code>[ARCHIVIERT]</code> in eckigen Klammern unter dem Kasten. Er steht im Eigenschaften-Panel und wird auf dem Diagramm mitgezeichnet, denn oft ist er das Einzige, was zwei Kästen desselben Objekts unterscheidet. <b>Zurückgenommen dargestellt</b> wird er dort, wo ihn nichts schreibt: Ein Zustand an einem Kasten, auf den eine <code>dataOutputAssociation</code> zeigt, wird ausgeführt, landet im Ereignislog und wird gegen den Lebenszyklus der Klasse geprüft. Ein Zustand an einem Kasten, der nur <i>gelesen</i> wird, fällt beim Kompilieren weg — er beschreibt eine Erwartung an diese Stelle, aber keine Maschine handelt danach und keine Prüfung erreicht ihn, auch der Tippfehler-Check nicht.</span><span data-l="en"><b>The data state on the diagram:</b> beside its name a data object carries a <b>data state</b> — the <code>[ARCHIVIERT]</code> in square brackets under the box. It is set in the properties panel and drawn on the diagram, because it is often the only thing that tells two boxes of the same object apart. It is <b>set back</b> wherever nothing writes it: a state on a box a <code>dataOutputAssociation</code> points at is executed, lands in the event log and is checked against the class’s lifecycle. A state on a box that is only <i>read</i> is dropped when the model compiles — it documents what this step expects, but nothing acts on it and no check reaches it, the typo check included.</span></p>
         <p class="rz-how"><span data-l="de"><b>Prozessübergreifend:</b> BPMN sagt nur, wie ein Datenobjekt <i>heisst</i> — sein <code>itemSubjectRef</code> zeigt auf einen Typ, den die Spezifikation bewusst offen lässt. Unter <b>Data › Model</b> zeichnest du diesen Typ als UML-Klasse: Attribute mit Typ und Kardinalität, und einen <b>fachlichen Schlüssel</b>, der <code>Order#ORD-1</code> in drei Prozessen zur selben Bestellung macht. Ein ERD wäre hier die falsche Notation — dessen Vokabular ist Speicherung, und wo ein Datum liegt, entscheidet der Data Store, nicht das Modell.</span><span data-l="en"><b>Across processes:</b> BPMN only says what a data object is <i>called</i> — its <code>itemSubjectRef</code> points at a type the specification deliberately leaves open. Under <b>Data › Model</b> you draw that type as a UML class: attributes with types and multiplicities, and a <b>business key</b> that makes <code>Order#ORD-1</code> the same order in three processes. An ERD would be the wrong notation here — its vocabulary is storage, and where a datum lives is the data store's question, not the model's.</span></p>
         <p class="rz-how"><span data-l="de"><b>Vorhandenes Modell importieren:</b> Wer sein Datenmodell schon in einem UML-Werkzeug gezeichnet hat, tippt es nicht ab: <b>Data › Information model › Import…</b> liest das <b>XMI 2.5.1</b>, das Enterprise Architect, Papyrus und Visual Paradigm exportieren — und ebenso Atlas’ eigenes JSON, mit dem ein Modell von einer Applikation oder Installation in eine andere umzieht. Welches Format vorliegt, erkennt Atlas am Dokument. Da Atlas bewusst nur einen kleinen Teil von UML führt, sagt ein echtes Dokument stets Dinge, für die es hier keinen Platz gibt — eine Schnittstelle, eine Operation, eine Beziehung mit drei Enden. Nichts davon lehnt die Datei ab, und nichts davon verschwindet stillschweigend: Jede Stelle erscheint im Bericht, benannt und als <i>verworfen</i>, <i>angepasst</i> oder <i>wissenswert</i> markiert. Den Bericht liest man, bevor gespeichert wird. Zwei Lesarten sind Absicht: Ein als Identifikator markiertes Attribut ohne genannte Multiplizität gilt als Pflichtfeld — sonst ginge der fachliche Schlüssel verloren —, und ein Dokument ohne Diagrammgeometrie wird auf einem Raster angeordnet, denn XMI verwahrt das Bild in einer eigenen Datei.</span><span data-l="en"><b>Importing a model you already have:</b> if your data model is already drawn in a UML tool, do not retype it: <b>Data › Information model › Import…</b> reads the <b>XMI 2.5.1</b> that Enterprise Architect, Papyrus and Visual Paradigm export — and Atlas’s own JSON, which is how a model moves from one application or installation to another. Which of the two it is, Atlas reads off the document. Because Atlas deliberately authors a small part of UML, a real document always says things it has no place for — an interface, an operation, a relationship with three ends. None of that refuses your file, and none of it disappears quietly: every one of them appears in the report, named and marked <i>dropped</i>, <i>adjusted</i> or <i>worth knowing</i>. You read that report before anything is stored. Two readings are deliberate: an attribute marked as the identifier with no multiplicity stated counts as required — otherwise the business key would be lost — and a document with no diagram geometry is laid out on a grid, because XMI keeps the picture in a file of its own.</span></p>
         <p class="rz-how"><span data-l="de"><b>Was geprüft wird:</b> Sobald ein Datenobjekt einen Typ trägt, schlägt Atlas ihn beim Deploy und in der Problems-Leiste nach: ein Typ, den niemand modelliert hat, ein Schreibvorgang auf ein Feld, das die Klasse nicht hat — und, ganz ohne Modell, eine Aufgabe, die ein Objekt liest, das keine Aufgabe davor schreibt. <b>Keiner dieser Befunde verweigert ein Deployment</b>: Ein Prozess wird regelmässig gezeichnet, bevor das Vokabular dazu existiert.</span><span data-l="en"><b>What gets checked:</b> once a data object carries a type, Atlas resolves it at deploy and in the Problems bar: a type nobody has modelled, a write to a field the class does not have — and, needing no model at all, an activity that reads an object no activity before it writes. <b>None of these refuses a deploy</b>: a process is routinely drawn before the vocabulary it names exists.</span></p>
@@ -4192,6 +4219,134 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               the next run – exactly as <a href="#bsp-galsync">GALSync</a> passes the DirSync cookie through a
               variable. <b>Deleted objects arrive inside <code>value</code> marked <code>@removed</code></b>, so a
               leaver flow does not lose them.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-entra-verzeichnis-abgleich">
+        <h4><span class="rz-emoji" aria-hidden="true">🧭</span>
+          <span data-l="de">Verzeichnis-Abgleich: Konten aus Entra führen</span><span data-l="en">Directory sync: accounts kept from Entra</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-users</span><span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Trockenlauf</span><span class="tag" data-l="en">dry run</span>
+          <span class="tag">R/PT1H</span>
+          <span class="tag">examples/entra-verzeichnis-abgleich.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Wer im Verzeichnis steht, soll in Atlas ein Konto haben – und wer gegangen ist, keines
+              mehr. Bisher entstand ein Atlas-Konto erst bei der ersten Anmeldung, was am Tag der Inbetriebnahme einen
+              fast leeren Benutzerspeicher bedeutet. Dieser Prozess führt Konten und Gruppen stündlich aus
+              Entra nach, <b>ohne dass Entra Atlas erreichen muss</b>: Atlas fragt von sich aus, es gibt keinen
+              eingehenden Bereitstellungspunkt und keine Netzwerköffnung.</p>
+            <p data-l="de"><b>Der erste Lauf schreibt nichts.</b> Er zählt den ganzen Mandanten auf, entscheidet
+              alles und legt einen Bericht ab – Zahlen für das Erwartbare, ganze Zeilen für das
+              Bemerkenswerte: welche Konten zusammengeführt würden, wer deaktiviert würde, was sich nicht
+              auflösen liess. Erst wenn ein Mensch das gelesen hat, wird umgeschaltet.</p>
+            <p data-l="en">Whoever is in the directory should have an account in Atlas – and whoever has left
+              should not. Until now an Atlas account only came into being at somebody's first sign-in, which means an
+              almost empty user store on the day an installation goes live. This process keeps accounts and groups
+              from Entra hourly, <b>without Entra having to reach Atlas</b>: Atlas asks of its own accord, so there is
+              no inbound provisioning endpoint and no hole in the network.</p>
+            <p data-l="en"><b>The first run writes nothing.</b> It enumerates the whole tenant, decides everything and
+              leaves a report – numbers for the expected, whole lines for the notable: which accounts would be
+              merged, who would be disabled, what could not be resolved. Only once a person has read it does anybody
+              switch it on.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein Timer-Start mit <code>timeCycle R/PT1H</code> (ADR-0051) holt zuerst
+              <code>GET /api/v1/directory-sync</code> – beide Graph-Cursor und die Revision, gegen die gelesen
+              wird. Zwei <code>atlas:entraConnector</code>-Tasks lesen <code>delta-users</code> und
+              <code>delta-groups</code> ab diesen Cursorn, und <code>POST /api/v1/directory-sync</code> meldet beides
+              zurück. Der Schalter ist ein Feld der Meldung: <code>apply</code>, nicht <code>dryRun</code> –
+              ein fehlendes JSON-Feld ist der Nullwert, und der muss „nichts schreiben“ heißen.</p>
+            <p data-l="de">Drei Eigenschaften tragen das: <b>ein Codepfad</b> – der Trockenlauf entscheidet mit
+              demselben Code, nur der letzte Schritt fällt aus; <b>der Cursor bleibt stehen</b>, solange nichts
+              geschrieben wurde, sonst wären genau die angesehenen Änderungen verloren; und
+              <code>fromRevision</code> macht eine zweite Zustellung wirkungslos. Das Token trägt den Scope
+              <code>directory</code> und erreicht diese beiden Routen – deployen kann es nicht.</p>
+            <p data-l="en">A timer start with <code>timeCycle R/PT1H</code> (ADR-0051) first fetches
+              <code>GET /api/v1/directory-sync</code> – both Graph cursors and the revision the run reads
+              against. Two <code>atlas:entraConnector</code> tasks read <code>delta-users</code> and
+              <code>delta-groups</code> from those cursors, and <code>POST /api/v1/directory-sync</code> reports both
+              back. The switch is a field of the message: <code>apply</code>, not <code>dryRun</code> – an absent
+              JSON field is the zero value, and the zero value has to mean "write nothing".</p>
+            <p data-l="en">Three properties carry it: <b>one code path</b> – the dry run decides with the same
+              code and only the last step is skipped; <b>the cursor stays put</b> while nothing is written, or the
+              very changes just examined would be lost; and <code>fromRevision</code> makes a second delivery inert.
+              The token carries the <code>directory</code> scope and reaches those two routes – it cannot
+              deploy.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
+      <div class="bsp" id="bsp-bestandsaufnahme">
+        <h4><span class="rz-emoji" aria-hidden="true">🗃️</span>
+          <span data-l="de">Bestandsaufnahme: eintragen, was es schon gibt</span><span data-l="en">Commissioning load: recording what is already there</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Trockenlauf</span><span class="tag" data-l="en">dry run</span>
+          <span class="tag">legacy</span>
+          <span class="tag" data-l="de">ohne Timer</span><span class="tag" data-l="en">no timer</span>
+          <span class="tag">examples/bestandsaufnahme.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Am Tag der Inbetriebnahme ist das Inventar leer und die Wirklichkeit voll: Jede
+              Gruppenmitgliedschaft und jede Lizenz existiert bereits. Würde man in diesem Zustand abgleichen,
+              wäre <b>jedes Recht im Betrieb eine Abweichung</b> – und jede Abweichung trägt eine ausführbare
+              Handlung „im Zielsystem entfernen“. Genau so sperrt sich ein neues Berechtigungswerkzeug beim
+              ersten Lauf selbst aus.</p>
+            <p data-l="de">Dieser Prozess trägt daher zuerst ein, was da ist – mit dem Ursprung
+              <code>legacy</code>: <i>das gab es vor uns, wir haben es nicht vergeben, und wir behaupten es auch
+              nicht</i>. Der wertvollste Teil des Berichts ist dabei nicht, was eingetragen würde, sondern
+              <code>unmapped</code>: <b>was der Betrieb vergibt, ohne dass es im Katalog steht</b>. Diese Liste gab
+              es vorher nirgends.</p>
+            <p data-l="en">On the day an installation goes live the inventory is empty and reality is full: every
+              group membership and every licence already exists. Reconciling in that state would report <b>every
+              privilege in the estate as a discrepancy</b> – and each discrepancy carries an executable "remove it
+              in the target system". That is how a new access-governance tool locks a company out of itself on its
+              first run.</p>
+            <p data-l="en">So this process first records what is there – with origin <code>legacy</code>: <i>this
+              predates us, we did not grant it, and we are not claiming we did</i>. The most valuable part of the
+              report is not what would be recorded but <code>unmapped</code>: <b>what the estate grants that the
+              catalogue does not model</b>. Nothing could produce that list before.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Ein <code>atlas:entraConnector</code>-Task liest <code>delta-groups</code> ohne Cursor –
+              eine vollständige Aufzählung – und <code>POST /api/v1/inventory-load</code> meldet je Mitgliedschaft
+              eine Beobachtung: wer (Objekt-Id) hält was (Gruppen-Objekt-Id). Atlas löst beides selbst auf: das
+              Subjekt über das gespiegelte Konto, das Recht über die <b>Zielverweise am Produkt</b>
+              (System + Referenz). Genau deshalb steht die Zuordnung im Katalog und nicht im Worker – sonst
+              bestünde der Bericht aus Behauptungen, denen man nicht widersprechen kann.</p>
+            <p data-l="de"><b>Kein Timer</b>, mit Absicht: eine Bestandsaufnahme ist eine Handlung mit einem
+              Verantwortlichen. <code>apply: false</code> ist der Nullwert, also der sichere. Ein zweiter Lauf ist
+              von Bauart her harmlos – die Meldung trägt absolute Aussagen, keine Fortschreibung – und das
+              Anfangsdatum eines schon erfassten Rechts wird nie verschoben. Über ein Recht, das ein Auftrag
+              erteilt hat, wird nichts geschrieben: das wäre der Verlust des Auftrags dahinter.</p>
+            <p data-l="en">One <code>atlas:entraConnector</code> task reads <code>delta-groups</code> with no cursor –
+              a full enumeration – and <code>POST /api/v1/inventory-load</code> reports one observation per
+              membership: who (object id) holds what (group object id). Atlas resolves both itself: the subject
+              through the mirrored account, the right through the <b>product's target references</b>
+              (system + ref). That is exactly why the join lives in the catalogue and not in the worker –
+              otherwise the report would consist of claims nobody can disagree with.</p>
+            <p data-l="en"><b>No timer</b>, deliberately: a commissioning load is an act with somebody
+              responsible for it. <code>apply: false</code> is the zero value, so the zero value is the safe one. A
+              second run is harmless by construction – the message carries absolute statements rather than a
+              cursor – and the start date of a right already recorded is never moved. Nothing is written over a
+              right an order granted: that would lose the order behind it.</p>
           </div>
         </div>
         <div class="rz-actions"></div>

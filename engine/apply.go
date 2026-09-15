@@ -248,6 +248,18 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.DecOpenJobs()
 		}
 
+	case model.VTEntitlement:
+		// The inventory's whole fold. Both are a function of the event alone —
+		// no clock, no lookup, nothing derived — which is what lets an access
+		// record rebuild identically from the log years after the instance that
+		// produced it was deleted (I4/I6).
+		switch h.Intent {
+		case model.IntentEntitlementGranted:
+			return tx.PutEntitlement(&v.entitlement)
+		case model.IntentEntitlementRevoked:
+			return tx.DeleteEntitlement(v.entitlement.Principal, v.entitlement.ItemID)
+		}
+
 	case model.VTIncident:
 		switch h.Intent {
 		case model.IntentIncidentCreated:

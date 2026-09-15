@@ -111,7 +111,7 @@ func drive(t *testing.T, cp *compiler.CompiledProcess, jobType int32, reg *mail.
 	}
 	runner := job.NewRunner(store, p)
 	runner.Handle(jobType, func(rd state.Reader) job.Handler {
-		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg)
+		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return cp }, reg, nil)
 	})
 	p.CreateInstance(cp.Key, vars...)
 	return runner.Drive()
@@ -331,7 +331,7 @@ func TestMailConnectorNoCompiledProcess(t *testing.T) {
 	}
 	runner := job.NewRunner(store, p)
 	runner.Handle(jobType, func(rd state.Reader) job.Handler {
-		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry())
+		return mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry(), nil)
 	})
 	p.CreateInstance(cp.Key)
 	if err := runner.Drive(); err != nil {
@@ -346,7 +346,7 @@ func TestMailConnectorNoCompiledProcess(t *testing.T) {
 // element instance has already completed: it is a no-op, not an error.
 func TestMailHandlerElementInstanceGone(t *testing.T) {
 	_, store := openStore(t)
-	h := mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry())
+	h := mail.Handler(store, func(uint64) *compiler.CompiledProcess { return nil }, mail.NewRegistry(), nil)
 	if err := h(job.Job{ElementInstanceKey: 424242}); err != nil {
 		t.Fatalf("handler for a vanished element instance: err=%v, want nil", err)
 	}

@@ -4,14 +4,21 @@
 - **Implementation:** Partial
 - **Date:** 2026-09-09
 - **Deciders:** Atlas maintainers
-- **Open question:** whether the KPIs and SLAs this record lets somebody declare can
-  actually be computed from Atlas's own state at the instance volumes it is aimed at,
-  for an installation that does not run the [ADR-0114](0114-opensearch-event-exporter.md)
-  exporter. Nothing has been measured. The declaration model below is only worth
-  having if the measurement slice can rest on the state store, and the honest
-  fallback — "export to OpenSearch and aggregate there" — is not available to every
-  installation.
-- **Question checked:** 2026-09
+
+> **The open question this record carried is answered.** It asked whether the KPIs and
+> SLAs declared here could actually be computed from Atlas's own state, at volume, for
+> an installation that does not run the
+> [ADR-0114](0114-opensearch-event-exporter.md) exporter — and required that it be
+> answered by measurement rather than by argument.
+>
+> It was measured
+> ([`benchmarks/results/measurement-381825f.md`](../../benchmarks/results/measurement-381825f.md)).
+> **Yes, with one condition:** the readings that walk instances carry a required
+> window. The per-element counters are flat at any volume; the instance walk is linear,
+> which is affordable over a window and not over all history. The exporter is an
+> optimisation for unbounded historical analysis, not a prerequisite. The decision it
+> produced is ADR-0309, and the front matter's open-question
+> lines came off with it rather than being left to expire.
 
 ## Context and problem statement
 

@@ -751,13 +751,22 @@ func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
 	var (
 		refs    []dmnRef
 		loadErr error
+		// The decisions already deployed in their own right: a latest-bound task
+		// naming one needs no model bundled with this process, because the deploy
+		// pins it to that deployment's key
+		// (ADR-0327). Registry
+		// state, so it is read on the loop beside the references.
+		deployedDecisionIDs map[string]bool
 	)
-	s.do(func() { refs, loadErr = s.dmnrefs.LoadAll() })
+	s.do(func() {
+		refs, loadErr = s.dmnrefs.LoadAll()
+		deployedDecisionIDs = s.dmnRegistry.LatestDecisionIDs()
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list dmn references: "+loadErr.Error())
 		return
 	}
-	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs)
+	dmnXMLs, refuse, dmnErr := s.dmnForDeployBody(r.Context(), body, refs, deployedDecisionIDs)
 	if dmnErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "resolve dmn model: "+dmnErr.Error())
 		return
@@ -924,16 +933,24 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 			name = deployables[i].ProcessName
 		}
 
+		// Resolve every latest-bound decision reference to an exact decision
+		// deployment, now, once (ADR-0319).
+		// After this the definition names a concrete model and nothing about which
+		// version it runs is decided again — not on the worker, not on replay (I5/I6).
+		pins := s.pinDecisions(cp)
+
 		if err := s.deploys.Save(persistedDeployment{
-			Key:        key,
-			ProcessID:  pid,
-			Name:       name,
-			Version:    version,
-			DeployedAt: deployedAt,
-			ProjectID:  projectID,
-			DeployedBy: deployedBy,
-			XML:        string(body),
-			DMNXMLs:    dmnStrings,
+			Key:              key,
+			ProcessID:        pid,
+			Name:             name,
+			Version:          version,
+			DeployedAt:       deployedAt,
+			ProjectID:        projectID,
+			DeployedBy:       deployedBy,
+			XML:              string(body),
+			DMNXMLs:          dmnStrings,
+			BindingPolicy:    bindingPinned,
+			DecisionBindings: pins,
 		}); err != nil {
 			return deployed, nil, err
 		}
@@ -2445,50 +2462,7 @@ func (s *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var (
-		found   bool
-		notExec bool
-		runErr  error
-		statErr error
-		stats   statsResp
-	)
-	var driveNeeded bool
-	s.do(func() {
-		d, ok := s.deployments[key]
-		if !ok {
-			return
-		}
-		found = true
-		// A non-executable process is descriptive-only; refuse to start it (the UI
-		// also hides it, but this guards the API and public start paths directly).
-		if d.cp != nil && !d.cp.IsExecutable() {
-			notExec = true
-			return
-		}
-		s.proc.CreateInstance(key, startVars...)
-		driveNeeded = true
-	})
-	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
-	// read-back that follows it are two separate visits to the loop — and the
-	// read-back's is now only long enough to take a view, not to do the counting
-	// (ADR-0266).
-	if driveNeeded {
-		if runErr = s.drive(); runErr == nil {
-			stats, statErr = s.statsOffLoop()
-		}
-	}
-	switch {
-	case !found:
-		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
-	case notExec:
-		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
-	case runErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "run instance: "+runErr.Error())
-	case statErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
-	default:
-		httpapi.JSON(w, http.StatusOK, createInstanceResp{DefinitionKey: key, Stats: stats})
-	}
+	s.startInstance(w, key, startVars)
 }
 
 // parseStartVariables reads {"variables": {name: value}} from a request body
@@ -3060,6 +3034,37 @@ func (s *Server) handleDerivedModel(w http.ResponseWriter, r *http.Request) {
 	var cps []*compiler.CompiledProcess
 	s.do(func() { cps = s.applicationProcessesOnLoop(applicationID) })
 	httpapi.JSON(w, http.StatusOK, infomodel.Derive(cps))
+}
+
+// handleModelDifference answers what the application's processes and its authored
+// model say differently (ADR-0310).
+//
+// It is stateless, which is what makes it possible: ADR-0301 §4 wanted an identity for a
+// derived element that survives a re-derivation, because a *reconciliation* has to
+// remember which change was rejected. Nothing here remembers anything — both sides are
+// computed fresh and compared by name — so there is no identity to keep.
+//
+// A read, like the derivation it stands beside: nothing is written to either model.
+func (s *Server) handleModelDifference(w http.ResponseWriter, r *http.Request) {
+	applicationID := r.URL.Query().Get("applicationId")
+	if strings.TrimSpace(applicationID) == "" {
+		httpapi.Error(w, http.StatusBadRequest, "applicationId is required — a difference is read between one application's processes and its own model")
+		return
+	}
+	var (
+		cps   []*compiler.CompiledProcess
+		vocab *infomodel.Vocabulary
+		err   error
+	)
+	s.do(func() {
+		cps = s.applicationProcessesOnLoop(applicationID)
+		vocab, err = s.infomodel.VocabularyOnLoop(applicationID)
+	})
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "could not read this application's information model")
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, infomodel.Difference(cps, vocab))
 }
 
 // lifecycleView is one data object's declared lifecycle with its own life drawn on
@@ -4264,10 +4269,16 @@ func enrichTaskWith(r elementReader, def taskDefLookup, jobKey uint64, jv *model
 				// What the task is actually asking the person to do, if the modeler
 				// wrote it down (ADR-0025).
 				tr.Documentation = cp.ElementDocumentation(ei.ElementId)
-				// The assignee is the job's runtime value (claim/unclaim rewrite it,
-				// ADR-0042); candidate groups stay the compile-time attribute.
+				// Both halves of the assignment are the job's runtime values: the
+				// assignee because claim and unclaim rewrite it (ADR-0042), the
+				// candidate groups because a model may name them with an expression
+				// and what it evaluated to belongs to this instance
+				// (ADR-0318). The model's own value
+				// is the fallback for a job written before the job carried them.
 				tr.Assignee = jv.Assignee
-				tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				if tr.CandidateGroups = jv.CandidateGroups; tr.CandidateGroups == "" {
+					tr.CandidateGroups = cp.Intern(detail.CandidateGroups)
+				}
 				tr.FormID = cp.Intern(detail.FormId)
 				tr.Priority = detail.Priority
 				// The due date is frozen on the job as an absolute instant
@@ -4907,6 +4918,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Completing is deciding: it writes the form's answer into the instance and
+	// lets the process act on it. Who may (taskauthority.go) is asked before the
+	// processor is told anything.
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
 	var (
 		found  bool
 		runErr error
@@ -5013,6 +5031,14 @@ func (s *Server) assignTask(w http.ResponseWriter, r *http.Request, assignee str
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid task key")
+		return
+	}
+	// Claiming and releasing are gated with completion, and have to be: releasing
+	// somebody else's task is how a caller who may not complete it makes sure
+	// nobody can. An approval left holderless is an order stuck until an operator
+	// repairs it (taskauthority.go).
+	auth, authErr := s.mayWorkTask(r, key)
+	if s.refuseTaskWork(w, auth, authErr) {
 		return
 	}
 	var (
@@ -5796,7 +5822,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		// The message travels; the SMTP host and password do not. What names the
 		// credential is the worker's name, which the worker resolves against its
 		// own configuration — the whole of ADR-0168's decision, in one field.
-		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
+		j, err := mail.Resolve(s.store, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey, mailDirectory{s})
 		if err != nil {
 			return nil
 		}

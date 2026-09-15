@@ -154,7 +154,18 @@ type SLA struct {
 	Name      string `json:"name"`
 	Metric    string `json:"metric"`
 	Threshold string `json:"threshold"`
-	Window    string `json:"window,omitempty"`
+	// ThresholdSeconds is the same threshold as a number, where the author chose to
+	// give one. It is optional and deliberately separate from Threshold rather than
+	// replacing it: "within five business days" is what the business agreed and what
+	// belongs in the record, and no parser should be asked to decide what a business
+	// day means here.
+	//
+	// Supplying it is what makes the SLA measurable — a measurement compares against
+	// this and reports nothing when it is absent, rather than guessing. So the record
+	// stays writable in prose by somebody who has no number, and rewards the one who
+	// does.
+	ThresholdSeconds int64  `json:"thresholdSeconds,omitempty"`
+	Window           string `json:"window,omitempty"`
 	// Scope is internal (a promise between two teams here) or external (a contract or
 	// a regulator). The two carry different consequences, so the record keeps them
 	// apart rather than leaving it to the wording.

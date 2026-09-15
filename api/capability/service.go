@@ -69,6 +69,11 @@ type Service struct {
 	// horizon reads the confirmation horizon from the installation's settings.
 	horizon HorizonResolver
 	now     Clock
+	// measure reads what the engine recorded, off the run loop. It is settable after
+	// construction rather than a constructor argument because it is the one resolver
+	// this service can do without: a server that wires none answers the measurement
+	// route with "this server cannot measure" and every other route unchanged.
+	measure MeasurementResolver
 
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own once it has read the
@@ -745,3 +750,7 @@ func requestActor(r *http.Request) string {
 	}
 	return ""
 }
+
+// SetMeasurementResolver wires the off-loop runtime read (ADR-0239). Called once at
+// start-up, before the service serves anything.
+func (s *Service) SetMeasurementResolver(m MeasurementResolver) { s.measure = m }

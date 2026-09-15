@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -892,5 +893,415 @@ func TestZeroHorizonRestoresTheDefault(t *testing.T) {
 	}
 	if rep.HorizonMonths != 12 {
 		t.Errorf("the report applied %d months after the setting was cleared", rep.HorizonMonths)
+	}
+}
+
+// Measuring a capability is the one read in this area that walks instances, so it is
+// the one that had to be proved affordable before it was built
+// (benchmarks/results/measurement-381825f.md). These tests are about the contract that
+// measurement produced rather than about the arithmetic, which is unit-tested against
+// values in api/capability.
+
+// The window is required, and the refusal says why rather than only that. A caller who
+// omits it is asking for a reading over all history, which is the thing the
+// measurement ruled out.
+func TestMeasurementRefusesAnUnboundedReading(t *testing.T) {
+	ts := newTestServer(t)
+	if code, _ := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"onboarding","name":"Customer onboarding"}`, "application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d", code)
+	}
+	code, body := doReq(t, ts, http.MethodGet, "/api/v1/capabilities/onboarding/measurement", "", "")
+	if code != http.StatusBadRequest {
+		t.Fatalf("missing windowDays = %d %s, want 400", code, body)
+	}
+	if !strings.Contains(string(body), "windowDays") {
+		t.Errorf("refusal = %s, want it to name the parameter", body)
+	}
+	// And a window nobody could mean is refused with the ceiling named, so the caller
+	// learns the bound rather than guessing at it.
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/onboarding/measurement?windowDays=100000", "", "")
+	if code != http.StatusBadRequest || !strings.Contains(string(body), "400") {
+		t.Errorf("oversized window = %d %s, want 400 naming the ceiling", code, body)
+	}
+}
+
+// TestMeasurementSaysWhatEachFigureRestsOn is the property the whole response exists
+// to protect. Outcome counts are all-time and cycle times are windowed; both are
+// integers on a screen, and a client that mixed them would be wrong invisibly.
+func TestMeasurementSaysWhatEachFigureRestsOn(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Onboarding"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		capabilityBPMN("identity-verification"), "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"identity","name":"Verify an identity",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"identity-verification"}],
+		  "slas":[{"name":"Ten minutes","metric":"cycle time","threshold":"within 10 minutes",
+		           "thresholdSeconds":600,"scope":"internal"},
+		          {"name":"Five business days","metric":"cycle time",
+		           "threshold":"within five business days","scope":"internal"}],
+		  "kpis":[{"name":"Verify same day","metric":"cycle time"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/identity/measurement?windowDays=30", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		WindowDays   int    `json:"windowDays"`
+		CountedBasis string `json:"countedBasis"`
+		WalkedBasis  string `json:"walkedBasis"`
+		Processes    []struct {
+			ProcessID string `json:"processId"`
+			Deployed  bool   `json:"deployed"`
+		} `json:"processes"`
+		SLAs []struct {
+			Name             string `json:"name"`
+			ThresholdSeconds int64  `json:"thresholdSeconds"`
+		} `json:"slas"`
+		NotMeasured []struct {
+			Kind string `json:"kind"`
+			Name string `json:"name"`
+		} `json:"notMeasured"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode measurement: %v — %s", err, body)
+	}
+	if got.WindowDays != 30 {
+		t.Errorf("windowDays = %d, want the 30 that was measured", got.WindowDays)
+	}
+	if got.CountedBasis == "" || got.WalkedBasis == "" || got.CountedBasis == got.WalkedBasis {
+		t.Errorf("bases = %q / %q, want two distinct sentences", got.CountedBasis, got.WalkedBasis)
+	}
+	if len(got.Processes) != 1 || got.Processes[0].ProcessID != "identity-verification" || !got.Processes[0].Deployed {
+		t.Errorf("processes = %+v, want the deployed realization", got.Processes)
+	}
+	// The SLA with a number is measured; the one written as prose and the KPI are both
+	// reported as not measured rather than silently absent.
+	if len(got.SLAs) != 1 || got.SLAs[0].ThresholdSeconds != 600 {
+		t.Errorf("slas = %+v, want only the one carrying thresholdSeconds", got.SLAs)
+	}
+	kinds := map[string]bool{}
+	for _, n := range got.NotMeasured {
+		kinds[n.Kind] = true
+	}
+	if !kinds["sla"] || !kinds["kpi"] {
+		t.Errorf("notMeasured = %+v, want both the prose SLA and the KPI named", got.NotMeasured)
+	}
+}
+
+// A capability realised only by a person or a purchased system has nothing this server
+// can measure, and that is a fact about the map rather than a failure of the reading.
+func TestMeasurementOfAnUnautomatedCapabilitySaysSo(t *testing.T) {
+	ts := newTestServer(t)
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"underwriting","name":"Underwrite a loan",
+		  "realizations":[{"kind":"manual","note":"a clerk with a scoring tool"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+	code, body := doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/underwriting/measurement?windowDays=7", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Unrealizable bool       `json:"unrealizable"`
+		Processes    []struct{} `json:"processes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Unrealizable {
+		t.Error("unrealizable = false; a manual realization is nothing this server records")
+	}
+	if len(got.Processes) != 0 {
+		t.Errorf("processes = %d, want none: a manual realization is not a process that failed to deploy", len(got.Processes))
+	}
+}
+
+// measurableBPMN is a process that runs to completion on its own: no task parks it,
+// so creating an instance produces a finished case with a cycle time and a visit on
+// its end event. The end event is distinctly named because the method asks for that,
+// even though the compiler drops the name today.
+func measurableBPMN(processID string) string {
+	return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="` + processID + `" isExecutable="true">
+    <startEvent id="start"/>
+    <endEvent id="verified" name="Verified"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="verified"/>
+  </process>
+</definitions>`
+}
+
+// TestMeasurementCountsWhatActuallyRan is the test the contract tests above do not
+// replace: it runs real instances through a real engine and checks the numbers, not
+// the shape. Everything between the counters and the response — which elements count
+// as an ending, how the window is applied, how a cycle time is derived — is only
+// exercised by a case that actually completed.
+func TestMeasurementCountsWhatActuallyRan(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Verification"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct {
+		ID  string `json:"id"`
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		measurableBPMN("verify"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	const cases = 3
+	for range cases {
+		if code, b := doReq(t, ts, http.MethodPost,
+			fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key),
+			`{}`, "application/json"); code != http.StatusOK && code != http.StatusCreated {
+			t.Fatalf("create instance: %d %s", code, b)
+		}
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"verify","name":"Verify an identity",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"verify"}],
+		  "slas":[{"name":"Instant","metric":"cycle time","threshold":"within an hour",
+		           "thresholdSeconds":3600,"scope":"internal"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/verify/measurement?windowDays=1", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Processes []struct {
+			Outcomes []struct {
+				ElementID string `json:"elementId"`
+				Count     int64  `json:"count"`
+			} `json:"outcomes"`
+			Cases struct {
+				Cases       int64   `json:"cases"`
+				MeanSeconds float64 `json:"meanSeconds"`
+			} `json:"cases"`
+		} `json:"processes"`
+		SLAs []struct {
+			Within int64   `json:"within"`
+			Cases  int64   `json:"cases"`
+			Share  float64 `json:"share"`
+		} `json:"slas"`
+		Unrealizable bool `json:"unrealizable"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode measurement: %v — %s", err, body)
+	}
+	if got.Unrealizable {
+		t.Fatal("unrealizable = true, but a deployed process ran three cases")
+	}
+	if len(got.Processes) != 1 {
+		t.Fatalf("processes = %d, want the one realization", len(got.Processes))
+	}
+	p := got.Processes[0]
+	// The end event is the only element counted as an outcome: the start event was
+	// visited just as often and is not an ending.
+	if len(p.Outcomes) != 1 || p.Outcomes[0].ElementID != "verified" {
+		t.Fatalf("outcomes = %+v, want only the end event", p.Outcomes)
+	}
+	if p.Outcomes[0].Count != cases {
+		t.Errorf("outcome count = %d, want %d", p.Outcomes[0].Count, cases)
+	}
+	// And the window held all three, each of which completed instantly.
+	if p.Cases.Cases != cases {
+		t.Errorf("cases in window = %d, want %d", p.Cases.Cases, cases)
+	}
+	if p.Cases.MeanSeconds < 0 {
+		t.Errorf("mean cycle time = %v, want a non-negative duration", p.Cases.MeanSeconds)
+	}
+	// All three came in under an hour, so the SLA is fully attained — and the share is
+	// reported beside the counts rather than instead of them.
+	if len(got.SLAs) != 1 || got.SLAs[0].Within != cases || got.SLAs[0].Cases != cases {
+		t.Fatalf("attainment = %+v, want %d/%d", got.SLAs, cases, cases)
+	}
+	if got.SLAs[0].Share != 1 {
+		t.Errorf("share = %v, want 1", got.SLAs[0].Share)
+	}
+}
+
+// A window that ended before anything ran holds no case. The counters still report
+// every ending, because they are all-time — which is the mixing the response's two
+// basis sentences exist to keep legible, checked here against real numbers.
+func TestMeasurementWindowExcludesWhatItShould(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Verification"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct{ ID, Key string }
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		measurableBPMN("verify2"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	if code, b := doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key),
+		`{}`, "application/json"); code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create instance: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"verify2","name":"Verify",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"verify2"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/verify2/measurement?windowDays=400", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Processes []struct {
+			Outcomes []struct{ Count int64 } `json:"outcomes"`
+			Cases    struct{ Cases int64 }   `json:"cases"`
+		} `json:"processes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Processes[0].Cases.Cases != 1 || got.Processes[0].Outcomes[0].Count != 1 {
+		t.Errorf("a 400-day window should hold the one case that just ran: %+v", got.Processes[0])
+	}
+}
+
+// A cancelled case is reported, and this is the only test that produces one. The
+// measurement reports cancellations beside outcomes because a token that left an
+// element cancelled did not complete it — and a capability whose cases are being
+// abandoned looks healthy in an outcome distribution that only counts endings.
+func TestMeasurementCountsACancelledCase(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/applications",
+		`{"name":"Onboarding"}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("create application: %d %s", code, body)
+	}
+	var app struct{ ID, Key string }
+	if err := json.Unmarshal(body, &app); err != nil {
+		t.Fatalf("decode application: %v", err)
+	}
+	// capabilityBPMN parks on a service task, which is what makes it cancellable: a
+	// self-completing process leaves nothing to cancel.
+	code, body = doReq(t, ts, http.MethodPost, "/api/v1/deployments?projectId="+app.ID,
+		capabilityBPMN("parks"), "application/xml")
+	if code != http.StatusOK {
+		t.Fatalf("deploy: %d %s", code, body)
+	}
+	var dep struct {
+		Key uint64 `json:"key"`
+	}
+	if err := json.Unmarshal(body, &dep); err != nil {
+		t.Fatalf("decode deploy: %v (%s)", err, body)
+	}
+	code, body = doReq(t, ts, http.MethodPost,
+		fmt.Sprintf("/api/v1/processes/%d/instances", dep.Key), `{}`, "application/json")
+	if code != http.StatusOK && code != http.StatusCreated {
+		t.Fatalf("create instance: %d %s", code, body)
+	}
+	// The create does not return the instance key, so it is read back from the list —
+	// the same way every other cancellation test in this package finds one.
+	_, body = doReq(t, ts, http.MethodGet, "/api/v1/instances", "", "")
+	var insts []struct {
+		Key   uint64 `json:"key"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &insts); err != nil {
+		t.Fatalf("decode instances: %v (%s)", err, body)
+	}
+	if len(insts) != 1 || insts[0].State != "active" {
+		t.Fatalf("instances = %+v, want one parked on the service task", insts)
+	}
+	if code, b := doReq(t, ts, http.MethodDelete,
+		fmt.Sprintf("/api/v1/instances/%d", insts[0].Key), "", ""); code != http.StatusOK {
+		t.Fatalf("cancel instance: %d %s", code, b)
+	}
+	if code, b := doReq(t, ts, http.MethodPost, "/api/v1/capabilities",
+		`{"key":"parks","name":"Parks",
+		  "realizations":[{"kind":"process","applicationKey":"`+app.Key+`","processId":"parks"}]}`,
+		"application/json"); code != http.StatusCreated {
+		t.Fatalf("create capability: %d %s", code, b)
+	}
+
+	code, body = doReq(t, ts, http.MethodGet,
+		"/api/v1/capabilities/parks/measurement?windowDays=1", "", "")
+	if code != http.StatusOK {
+		t.Fatalf("measurement: %d %s", code, body)
+	}
+	var got struct {
+		Processes []struct {
+			Cancellations []struct {
+				ElementID string `json:"elementId"`
+				Count     int64  `json:"count"`
+			} `json:"cancellations"`
+			Outcomes []struct{} `json:"outcomes"`
+		} `json:"processes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v — %s", err, body)
+	}
+	p := got.Processes[0]
+	if len(p.Cancellations) == 0 {
+		t.Fatalf("no cancellation reported, but the parked instance was cancelled: %+v", p)
+	}
+	var onTask int64
+	for _, c := range p.Cancellations {
+		if c.ElementID == "task" {
+			onTask = c.Count
+		}
+	}
+	if onTask != 1 {
+		t.Errorf("cancellations on the parked task = %d, want 1 (got %+v)", onTask, p.Cancellations)
+	}
+	// And no ending was recorded, which is the point: a cancelled case is invisible to
+	// an outcome distribution, so the two are reported side by side.
+	if len(p.Outcomes) != 0 {
+		t.Errorf("outcomes = %+v, want none: the case never reached an end event", p.Outcomes)
 	}
 }

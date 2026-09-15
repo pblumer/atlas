@@ -1,0 +1,572 @@
+package api_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/pblumer/atlas/api"
+)
+
+// ownApprovalBPMN is an installation's own approval model, which is what a
+// catalogue binds when its approval kind is not one of the three built in
+// (see order.Line.ApprovalProcess). It is used here rather than the shipped
+// atlas-genehmigung-fix because that one addresses its task with `=approvalRef`,
+// and Atlas does not evaluate an expression in an assignment definition — the task
+// is assigned to the literal string. That is a defect in the platform models and
+// not in this page, and it is recorded as such; this case is about the page.
+const ownApprovalBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
+  <process id="kunden-genehmigung" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="Genehmigen" name="Genehmigen">
+      <extensionElements>
+        <zeebe:assignmentDefinition assignee="alice"/>
+      </extensionElements>
+    </userTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="Genehmigen"/>
+    <sequenceFlow id="f2" sourceRef="Genehmigen" targetRef="end"/>
+  </process>
+</definitions>`
+
+// The approver's page, end to end: a catalogue with a brand, a product that needs
+// approving, an order placed against a release of it, the approval process
+// started the way the fulfilment model starts it — and then the one call the page
+// makes.
+//
+// It is written as one long case on purpose. Each step is a precondition of the
+// next, and the chain is exactly what was broken twice while this was being built:
+// the approval process id named nothing deployed, and the route that starts a
+// process by id did not exist. A test that mocked either would have passed
+// through both.
+
+type approvalView struct {
+	Task struct {
+		Key uint64 `json:"key"`
+	} `json:"task"`
+	OrderID      string            `json:"orderId"`
+	ItemID       string            `json:"itemId"`
+	Recipient    string            `json:"recipient"`
+	Texts        map[string]string `json:"texts"`
+	CatalogID    string            `json:"catalogId"`
+	CatalogTexts map[string]string `json:"catalogTexts"`
+	Theme        struct {
+		Accent   string `json:"accent"`
+		Typeface string `json:"typeface"`
+	} `json:"theme"`
+}
+
+// approvalsOf reads one client's approvals.
+func approvalsOf(t *testing.T, ts *httptest.Server, c *http.Client) []approvalView {
+	t.Helper()
+	code, body := cReq(t, c, ts, "GET", "/api/v1/approvals", "")
+	if code != http.StatusOK {
+		t.Fatalf("list approvals: %d (%s)", code, body)
+	}
+	var out []approvalView
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode approvals: %v (%s)", err, body)
+	}
+	return out
+}
+
+func TestAnApproverSeesTheirOwnRequestInItsOwnBrand(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	clients := twoUsers(t, ts, admin, "alice", "mallory")
+	alice, mallory := clients[0], clients[1]
+
+	cat, orderID := aCatalogueWithAnOrder(t, ts, admin)
+
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/deployments", ownApprovalBPMN); code != http.StatusOK {
+		t.Fatalf("deploy approval model: %d (%s)", code, b)
+	}
+
+	// And the approval, started by process id exactly as the fulfilment model
+	// starts it — including that the model addresses the process by id and not by
+	// key, which is the route that did not exist.
+	start := fmt.Sprintf(`{"processId":"kunden-genehmigung","variables":{
+		"orderId":%q,"itemId":"vpn","recipient":"usr_kunde","orderer":"root"}}`, orderID)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start approval: %d (%s)", code, b)
+	}
+
+	// What the page reads.
+	got := approvalsOf(t, ts, alice)
+	if len(got) != 1 {
+		t.Fatalf("alice sees %d approvals, want 1", len(got))
+	}
+	a := got[0]
+	if a.OrderID != orderID || a.ItemID != "vpn" {
+		t.Errorf("approval decides %s/%s, want %s/vpn", a.OrderID, a.ItemID, orderID)
+	}
+	if a.Recipient != "usr_kunde" {
+		t.Errorf("recipient = %q", a.Recipient)
+	}
+	// The product in words, not as an id: the whole reason the join happens on the
+	// server, where the release can be read.
+	if a.Texts["de"] != "VPN-Zugang" {
+		t.Errorf("texts = %v, want the product's own name", a.Texts)
+	}
+	if a.CatalogID != cat || a.CatalogTexts["de"] != "Kundenkatalog" {
+		t.Errorf("catalogue = %s %v", a.CatalogID, a.CatalogTexts)
+	}
+	// And the brand, which is the point of the page.
+	if a.Theme.Accent != "#d52b1e" || a.Theme.Typeface != "serif" {
+		t.Errorf("theme = %+v, want the catalogue's", a.Theme)
+	}
+
+	// The approver is not the catalogue's audience and must not become it. The
+	// brand reached them through the task; the catalogue itself stays closed.
+	if code, _ := cReq(t, alice, ts, "GET", "/api/v1/catalogs/"+cat, ""); code != http.StatusNotFound {
+		t.Errorf("the catalogue opened to an approver: %d", code)
+	}
+
+	// And somebody who holds nothing sees nothing.
+	if got := approvalsOf(t, ts, mallory); len(got) != 0 {
+		t.Errorf("a stranger sees %d approvals, want none", len(got))
+	}
+
+	// Deciding is completing the task, which is what the page does.
+	if code, b := cReq(t, alice, ts, "POST",
+		fmt.Sprintf("/api/v1/tasks/%d/complete", a.Task.Key),
+		`{"variables":{"genehmigt":false,"begruendung":"nicht nötig"}}`); code != http.StatusOK {
+		t.Fatalf("alice decides: %d (%s)", code, b)
+	}
+	if got := approvalsOf(t, ts, alice); len(got) != 0 {
+		t.Errorf("a decided approval is still listed: %d", len(got))
+	}
+}
+
+// TestTheMarkTravelsUnderTheTaskAndNotTheCatalogue.
+//
+// An approver is not the catalogue's audience — a line manager approves a request
+// for a customer group they are not in — so the catalogue's own logo route refuses
+// them, and rightly: opening it would open one customer's mark to everybody who
+// ever holds a task. The mark therefore travels under the gate the approver does
+// pass, which is the task.
+func TestTheMarkTravelsUnderTheTaskAndNotTheCatalogue(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	clients := twoUsers(t, ts, admin, "alice", "mallory")
+	alice, mallory := clients[0], clients[1]
+
+	cat, ord := aCatalogueWithAnOrder(t, ts, admin)
+	png := "\x89PNG\r\n\x1a\n" + "mark"
+	if code, b := cReqTyped(t, admin, ts, "PUT", "/api/v1/catalogs/"+cat+"/logo", "image/png", png); code != http.StatusNoContent {
+		t.Fatalf("upload mark: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/deployments", ownApprovalBPMN); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	start := fmt.Sprintf(`{"processId":"kunden-genehmigung","variables":{
+		"orderId":%q,"itemId":"vpn","recipient":"usr_kunde","orderer":"root"}}`, ord)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start approval: %d (%s)", code, b)
+	}
+
+	got := approvalsOf(t, ts, alice)
+	if len(got) != 1 {
+		t.Fatalf("alice sees %d approvals, want 1", len(got))
+	}
+	path := fmt.Sprintf("/api/v1/approvals/%d/logo", got[0].Task.Key)
+
+	code, body := cReq(t, alice, ts, "GET", path, "")
+	if code != http.StatusOK {
+		t.Fatalf("the approver cannot see the mark of the order they are deciding: %d (%s)", code, body)
+	}
+	if string(body) != png {
+		t.Errorf("the mark came back changed: %q", body)
+	}
+	// The catalogue itself stays shut to them, which is the point of the separate
+	// route rather than a widened one.
+	if code, _ := cReq(t, alice, ts, "GET", "/api/v1/catalogs/"+cat+"/logo", ""); code != http.StatusNotFound {
+		t.Errorf("the catalogue's own logo route opened to an approver: %d", code)
+	}
+	// And somebody holding nothing gets neither.
+	if code, _ := cReq(t, mallory, ts, "GET", path, ""); code != http.StatusForbidden {
+		t.Errorf("a stranger reached the mark: %d", code)
+	}
+}
+
+// TestStartingByProcessIdTakesTheNewestVersion: an orchestrator that pinned the
+// version it first saw would keep starting a superseded model for as long as an
+// order stayed open, which is the opposite of what redeploying one means.
+func TestStartingByProcessIdTakesTheNewestVersion(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	for i := 0; i < 2; i++ {
+		if code, b := cReq(t, admin, ts, "POST", "/api/v1/deployments", ownApprovalBPMN); code != http.StatusOK {
+			t.Fatalf("deploy %d: %d (%s)", i, code, b)
+		}
+	}
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/processes", "")
+	if code != http.StatusOK {
+		t.Fatalf("list processes: %d (%s)", code, body)
+	}
+	var procs []struct {
+		Key       uint64 `json:"key"`
+		ProcessID string `json:"processId"`
+		Version   int32  `json:"version"`
+	}
+	if err := json.Unmarshal(body, &procs); err != nil {
+		t.Fatalf("decode processes: %v (%s)", err, body)
+	}
+	var newest uint64
+	var best int32
+	for _, p := range procs {
+		if p.ProcessID == "kunden-genehmigung" && p.Version >= best {
+			newest, best = p.Key, p.Version
+		}
+	}
+	if best < 2 {
+		t.Fatalf("the second deployment did not make a second version (%s)", body)
+	}
+
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/instances", `{"processId":"kunden-genehmigung"}`)
+	if code != http.StatusOK {
+		t.Fatalf("start by id: %d (%s)", code, body)
+	}
+	var started struct {
+		DefinitionKey uint64 `json:"definitionKey"`
+	}
+	if err := json.Unmarshal(body, &started); err != nil {
+		t.Fatalf("decode start: %v (%s)", err, body)
+	}
+	if started.DefinitionKey != newest {
+		t.Errorf("started definition %d, want the newest %d", started.DefinitionKey, newest)
+	}
+}
+
+func TestStartingByProcessIdRefusesWhatIsNotThere(t *testing.T) {
+	ts, _ := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	for _, tc := range []struct {
+		name, body string
+		want       int
+	}{
+		{"no such process", `{"processId":"nichts-dergleichen"}`, http.StatusNotFound},
+		{"no process at all", `{"variables":{"a":1}}`, http.StatusBadRequest},
+		{"not JSON", `nope`, http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", tc.body); code != tc.want {
+				t.Fatalf("= %d (%s), want %d", code, b, tc.want)
+			}
+		})
+	}
+}
+
+// aCatalogueWithAnOrder builds the design-time half these cases need: a branded
+// catalogue, a product in it that needs approving, a release, and one order
+// placed against that release. It returns the catalogue and the order.
+func aCatalogueWithAnOrder(t *testing.T, ts *httptest.Server, admin *http.Client) (string, string) {
+	t.Helper()
+	// A catalogue, branded, owned by the administrator who creates it.
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs",
+		`{"rank":1,"languages":["de"],"texts":{"de":"Kundenkatalog"}}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create catalogue: %d (%s)", code, body)
+	}
+	var cat struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &cat); err != nil {
+		t.Fatalf("decode catalogue: %v (%s)", err, body)
+	}
+	if code, b := cReq(t, admin, ts, "PUT", "/api/v1/catalogs/"+cat.ID+"/theme",
+		`{"accent":"#d52b1e","typeface":"serif"}`); code != http.StatusOK {
+		t.Fatalf("set theme: %d (%s)", code, b)
+	}
+
+	// A product that alice approves, by name.
+	product := `{"id":"vpn","homeCatalog":"` + cat.ID + `","state":"active",` +
+		`"texts":{"de":"VPN-Zugang"},"approval":{"kind":"kunden-genehmigung","ref":"alice"},` +
+		`"provisionProcess":"prov","deprovisionProcess":"deprov"}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products", product); code != http.StatusOK {
+		t.Fatalf("save product: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "PATCH", "/api/v1/catalogs/"+cat.ID,
+		`{"items":["vpn"]}`); code != http.StatusOK {
+		t.Fatalf("offer product: %d (%s)", code, b)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat.ID+"/releases", "")
+	if code != http.StatusCreated {
+		t.Fatalf("publish: %d (%s)", code, body)
+	}
+	var rel struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &rel); err != nil {
+		t.Fatalf("decode release: %v (%s)", err, body)
+	}
+
+	// An order against that release. The maintainer may order from their own
+	// catalogue, which is what lets this run without inventing a customer group.
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders",
+		`{"releaseId":"`+rel.ID+`","items":["vpn"]}`)
+	if code != http.StatusCreated {
+		t.Fatalf("place order: %d (%s)", code, body)
+	}
+	var ord struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &ord); err != nil {
+		t.Fatalf("decode order: %v (%s)", err, body)
+	}
+
+	return cat.ID, ord.ID
+}
+
+// TestTheShippedApprovalModelReachesItsApprover.
+//
+// The three approval processes Atlas ships address their task with an expression
+// — `=approvalRef` for the two that name a person, the group the product named for
+// the third. Until the engine evaluated those, every one of them assigned the
+// literal string and no person held the task, which made every approval in the
+// portal unreachable.
+//
+// This starts the shipped model the way the fulfilment orchestrator starts it and
+// asks the one question that was wrong: who holds the task.
+func TestTheShippedApprovalModelReachesItsApprover(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses())
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	alice := twoUsers(t, ts, admin, "alice")[0]
+
+	start := `{"processId":"atlas-genehmigung-fix","variables":{
+		"orderId":"ord_x","itemId":"vpn","approvalRef":"alice",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start the shipped approval: %d (%s)", code, b)
+	}
+
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d (%s)", code, body)
+	}
+	var tasks []struct {
+		Key       uint64 `json:"key"`
+		ProcessID string `json:"processId"`
+		Assignee  string `json:"assignee"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %d, want 1 (%s)", len(tasks), body)
+	}
+	if tasks[0].Assignee != "alice" {
+		t.Fatalf("the shipped approval is assigned to %q, want alice", tasks[0].Assignee)
+	}
+
+	// And the person it names can actually act on it, which is the other half: an
+	// assignee nobody matches is a task nobody can decide.
+	if code, b := cReq(t, alice, ts, "POST",
+		fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key),
+		`{"variables":{"genehmigt":false,"begruendung":"nein"}}`); code != http.StatusOK {
+		t.Fatalf("the named approver was refused their own task: %d (%s)", code, b)
+	}
+}
+
+// TestTheShippedGroupApprovalNamesTheGroupTheProductChose: the same for the
+// variant that routes to whoever holds a group, where the expression is on
+// candidateGroups rather than on the assignee.
+func TestTheShippedGroupApprovalNamesTheGroupTheProductChose(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses())
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	start := `{"processId":"atlas-genehmigung-rolle","variables":{
+		"orderId":"ord_x","itemId":"vpn","approvalRef":"einkauf",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d (%s)", code, body)
+	}
+	var tasks []struct {
+		CandidateGroups string `json:"candidateGroups"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 || tasks[0].CandidateGroups != "einkauf" {
+		t.Fatalf("candidate groups = %v, want einkauf (%s)", tasks, body)
+	}
+}
+
+// The notification, end to end: the approval process tells the approver, by a
+// reference the server resolves at send time, with a link that names the order
+// line rather than the task.
+
+type outboxMail struct {
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	Body    string   `json:"body"`
+}
+
+func outbox(t *testing.T, ts *httptest.Server, c *http.Client) []outboxMail {
+	t.Helper()
+	code, body := cReq(t, c, ts, "GET", "/api/v1/mail/outbox", "")
+	if code != http.StatusOK {
+		t.Fatalf("read outbox: %d (%s)", code, body)
+	}
+	var out struct {
+		Messages []outboxMail `json:"messages"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode outbox: %v (%s)", err, body)
+	}
+	return out.Messages
+}
+
+func TestTheApproverIsToldWithALinkToTheirOwnPage(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses(),
+		api.WithExternalURL("https://atlas.example.ch"))
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/users",
+		`{"username":"alice","password":"password1","email":"alice@example.ch"}`); code != http.StatusCreated {
+		t.Fatalf("create alice: %d (%s)", code, b)
+	}
+	// A mail worker by the name the shipped approval models address.
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/configured-workers",
+		`{"name":"portal","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
+		t.Fatalf("create the mail worker: %d (%s)", code, b)
+	}
+
+	start := `{"processId":"atlas-genehmigung-fix","variables":{
+		"orderId":"ord_4711","itemId":"vpn","approvalRef":"alice",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root",
+		"portalBaseUrl":"https://atlas.example.ch"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start the approval: %d (%s)", code, b)
+	}
+
+	msgs := outbox(t, ts, admin)
+	if len(msgs) != 1 {
+		t.Fatalf("the outbox holds %d message(s), want 1 — the approver was not told", len(msgs))
+	}
+	m := msgs[0]
+
+	// The model wrote a *username*. What went out is the address on that account,
+	// looked up at send time — so no address was ever in a variable or an order.
+	if len(m.To) != 1 || m.To[0] != "alice@example.ch" {
+		t.Errorf("to = %v, want alice's address resolved from her account", m.To)
+	}
+	if !strings.Contains(m.Subject, "vpn") {
+		t.Errorf("subject = %q; it should say what is waiting", m.Subject)
+	}
+	want := "https://atlas.example.ch/genehmigung.html?order=ord_4711&item=vpn"
+	if !strings.Contains(m.Body, want) {
+		t.Errorf("the mail carries no usable link.\n got: %s\nwant it to contain: %s", m.Body, want)
+	}
+
+	// And the task itself exists and is hers: the notification runs *beside* the
+	// approval and not in front of it. In front, an unconfigured mail worker would
+	// hold the token and there would be no approval at all — worse than an
+	// approval nobody was told about, which at least stands in the approver's list.
+	code, body := cReq(t, admin, ts, "GET", "/api/v1/tasks", "")
+	if code != http.StatusOK {
+		t.Fatalf("list tasks: %d (%s)", code, body)
+	}
+	var tasks []struct {
+		Assignee string `json:"assignee"`
+	}
+	if err := json.Unmarshal(body, &tasks); err != nil {
+		t.Fatalf("decode tasks: %v (%s)", err, body)
+	}
+	if len(tasks) != 1 || tasks[0].Assignee != "alice" {
+		t.Fatalf("tasks = %v, want one assigned to alice (%s)", tasks, body)
+	}
+}
+
+// TestAGroupApprovalTellsEveryoneWhoMayDecideIt: the role variant addresses a
+// group, and the people told have to be the people who may act — a mail to
+// somebody who then cannot decide is worse than no mail.
+func TestAGroupApprovalTellsEveryoneWhoMayDecideIt(t *testing.T) {
+	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses(),
+		api.WithExternalURL("https://atlas.example.ch"))
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	ids := map[string]string{}
+	for _, u := range []string{"anna", "bruno"} {
+		code, b := cReq(t, admin, ts, "POST", "/api/v1/users",
+			`{"username":"`+u+`","password":"password1","email":"`+u+`@example.ch"}`)
+		if code != http.StatusCreated {
+			t.Fatalf("create %s: %d (%s)", u, code, b)
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(b, &created); err != nil {
+			t.Fatalf("decode %s: %v", u, err)
+		}
+		ids[u] = created.ID
+	}
+	code, b := cReq(t, admin, ts, "POST", "/api/v1/groups", `{"name":"einkauf"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create group: %d (%s)", code, b)
+	}
+	var grp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &grp); err != nil {
+		t.Fatalf("decode group: %v", err)
+	}
+	for _, u := range []string{"anna", "bruno"} {
+		if code, b := cReq(t, admin, ts, "PUT",
+			"/api/v1/groups/"+grp.ID+"/members/"+ids[u], ""); code != http.StatusNoContent && code != http.StatusOK {
+			t.Fatalf("add %s: %d (%s)", u, code, b)
+		}
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/configured-workers",
+		`{"name":"portal","kind":"mail","provider":"preview","sender":"portal@example.ch"}`); code != http.StatusOK {
+		t.Fatalf("create the mail worker: %d (%s)", code, b)
+	}
+
+	start := `{"processId":"atlas-genehmigung-rolle","variables":{
+		"orderId":"ord_4711","itemId":"vpn","approvalRef":"einkauf",
+		"provisionProcess":"prov","recipient":"usr_kunde","orderer":"root",
+		"portalBaseUrl":"https://atlas.example.ch"}}`
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", start); code != http.StatusOK {
+		t.Fatalf("start: %d (%s)", code, b)
+	}
+
+	msgs := outbox(t, ts, admin)
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %d, want 1", len(msgs))
+	}
+	got := strings.Join(msgs[0].To, ",")
+	for _, want := range []string{"anna@example.ch", "bruno@example.ch"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("to = %q, missing %s — the group was not resolved to its members", got, want)
+		}
+	}
+}

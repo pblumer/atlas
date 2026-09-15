@@ -414,12 +414,26 @@ func (b DecisionBinding) String() string {
 // person using the Tasks app (ADR-0028). Assignee and CandidateGroups are
 // interned strings from the zeebe:assignmentDefinition extension (-1 if unset).
 type UserTaskDetail struct {
-	JobType         int32
-	Retries         int32
-	Name            int32 // interned element name (the task's human title) → index, -1 if unset
+	JobType int32
+	Retries int32
+	Name    int32 // interned element name (the task's human title) → index, -1 if unset
+	// Assignee and CandidateGroups are the literal halves of the assignment: the
+	// interned strings the model wrote, or -1 when it wrote an expression instead.
 	Assignee        int32
 	CandidateGroups int32
-	FormId          int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
+	// AssigneeExpr and CandidateGroupsExpr are the other half: a FEEL expression
+	// the model wrote with a leading "=", evaluated when the task activates and
+	// frozen into the job-created event, exactly as the due date below is
+	// (ADR-0318). Nil when the model wrote a
+	// literal or nothing.
+	//
+	// The two are exclusive by construction — a value is one or the other — and a
+	// reader must consult the expression first: the literal is -1 whenever an
+	// expression is present, so reading only the literal silently yields an
+	// unassigned task, which is what happened before this existed.
+	AssigneeExpr        *expr.Compiled
+	CandidateGroupsExpr *expr.Compiled
+	FormId              int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
 	// Priority is the task's static importance from zeebe:priorityDefinition
 	// (default 50, Camunda's convention); higher sorts first in the inbox.
 	Priority int32
@@ -965,6 +979,16 @@ type RestExpr struct {
 	Expr    *expr.Compiled
 }
 
+// Assignment is what a model wrote for a user task's assignee or its candidate
+// groups: a literal name, or a FEEL expression to evaluate when the task
+// activates. It is a type rather than two strings so the compiler cannot build a
+// user task while forgetting that one of them was an expression — which is
+// precisely the defect this shape was introduced to make impossible.
+type Assignment struct {
+	Literal string
+	Expr    *expr.Compiled
+}
+
 // RestKV is a named REST field value (one request header or query parameter): its
 // Name and a value that may be literal or a FEEL expression.
 type RestKV struct {
@@ -1338,6 +1362,18 @@ type CompiledProcess struct {
 	documentation      int32               // interned <bpmn:documentation> of the process itself, -1 if none
 	lanes              []LaneDetail        // organizational lanes (ADR-0121); a node's CompiledNode.Lane indexes this
 	strings            []string            // intern table (index → string), for debug/export
+	// decisionPins is the exact decision deployment each latest-bound business rule
+	// task evaluates against, resolved once when this definition was deployed and
+	// restored from the deployment record on reload
+	// (ADR-0319). It is not compiled from
+	// the model — the model says "latest", the deployment says which one that was —
+	// so it is written by PinDecisions after Build and before the definition is
+	// visible to the processor, the same post-compile discipline Version and
+	// ResolveJobTypes already use. decisionsPinned is the policy marker: false means
+	// this definition predates deploy-time pinning and still resolves latest at task
+	// activation (ADR-0063).
+	decisionPins    map[string]uint64
+	decisionsPinned bool
 }
 
 // Node returns the node with the given ElementId.
@@ -1957,6 +1993,99 @@ func (p *CompiledProcess) BusinessRuleDecisions() []string {
 		}
 	}
 	return out
+}
+
+// LatestBoundDecisions returns the DMN decision ids this process's *local,
+// latest-bound* business rule tasks reference, distinct and in node order — the
+// references a deployment has to resolve to an exact decision deployment
+// (ADR-0319).
+//
+// It is deliberately narrower than [CompiledProcess.BusinessRuleDecisions]: a
+// deployment-bound task already names its model (the snapshot registered under
+// this process's own key) and a central decision resolves through its worker
+// (ADR-0050), so neither has a version to pin.
+func (p *CompiledProcess) LatestBoundDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding != BindingLatest {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// BundleBoundDecisions returns the DMN decision ids this process's *local,
+// deployment-bound* business rule tasks reference, distinct and in node order —
+// the references that need a model bundled with this deployment, because that is
+// literally what they evaluate (ADR-0063).
+//
+// It is the complement of [CompiledProcess.LatestBoundDecisions] over the same
+// local tasks, and the deploy-time gate reads the two differently: a latest-bound
+// reference can be satisfied by a decision deployment already in the registry, and
+// a deployment-bound one cannot
+// (ADR-0327).
+func (p *CompiledProcess) BundleBoundDecisions() []string {
+	var out []string
+	seen := map[string]bool{}
+	for i := range p.nodes {
+		if p.nodes[i].Type != TypeBusinessRuleTask {
+			continue
+		}
+		detail := p.BusinessRuleTask(p.nodes[i].Detail)
+		if detail.Connector >= 0 || detail.Binding == BindingLatest {
+			continue
+		}
+		id := p.Intern(detail.DecisionId)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// PinDecisions records the decision deployment each latest-bound reference
+// resolved to, and marks this definition as one that resolved them at deploy time
+// (ADR-0319). An empty or nil map is a
+// meaningful call: it says "this definition was deployed under the pinning policy
+// and had nothing to pin".
+//
+// It mutates the compiled process, so it must be called on the deploying
+// goroutine before the definition is handed to the processor — the same window
+// Version and ResolveJobTypes are set in. After that the definition is read-only
+// and safe for concurrent evaluation.
+func (p *CompiledProcess) PinDecisions(pins map[string]uint64) {
+	p.decisionPins = pins
+	p.decisionsPinned = true
+}
+
+// DecisionsPinned reports whether this definition resolved its latest-bound
+// decision references at deploy time. False means it was deployed before that
+// existed, and its latest-bound tasks still resolve the newest deployed model at
+// task activation (ADR-0063) — the behavior it has been running under.
+func (p *CompiledProcess) DecisionsPinned() bool { return p.decisionsPinned }
+
+// PinnedDecisionKey returns the decision deployment a latest-bound task on this
+// decision id must evaluate against, and ok=false when there is none to use —
+// either because this definition was never pinned, or (defensively) because the
+// pin map does not carry that id. Both fall back to the runtime lookup rather
+// than to a key nobody chose.
+func (p *CompiledProcess) PinnedDecisionKey(decisionId string) (uint64, bool) {
+	if !p.decisionsPinned {
+		return 0, false
+	}
+	key, ok := p.decisionPins[decisionId]
+	return key, ok
 }
 
 // UserTask returns the user-task detail at the given table index.

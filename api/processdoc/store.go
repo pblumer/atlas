@@ -37,6 +37,40 @@ type Code struct {
 	Source string `json:"source"`
 }
 
+// DecisionCall is how a business rule task calls its decision, snapshotted from
+// the diagram at publish time
+// (ADR-0328). It is the one
+// element type whose behaviour lives entirely outside the model, so the record
+// says which decision it runs and how it binds.
+//
+// The decision's *rules* are deliberately not stored here. The PDF reproduces them
+// because a PDF is a handout that has to stand alone; this record is structured
+// state, and a decision's rules are the other artifact's content, versioned under
+// its own documentation record (ADR-0324). Storing them twice would make a process
+// document the second place a rule table can be stale.
+type DecisionCall struct {
+	// DecisionID is the decision the task evaluates. Empty on a task nobody has
+	// finished wiring, which is worth recording as it stands.
+	DecisionID string `json:"decisionId,omitempty"`
+	// Binding is "latest" or "deployment" (ADR-0063) — which version of the
+	// decision this task will evaluate.
+	Binding string `json:"binding,omitempty"`
+	// ResultVariable is the instance variable the outcome is written to.
+	ResultVariable string `json:"resultVariable,omitempty"`
+	// Worker names the temis Worker a task evaluates through instead of a local
+	// decision (ADR-0050). When it is set the rules live in that service.
+	Worker string `json:"worker,omitempty"`
+	// Inputs are the decision inputs the task feeds, each a name and the expression
+	// it is fed from.
+	Inputs []DecisionInput `json:"inputs,omitempty"`
+}
+
+// DecisionInput is one value a business rule task feeds into its decision.
+type DecisionInput struct {
+	Name  string `json:"name"`
+	Value string `json:"value,omitempty"`
+}
+
 // Element is one BPMN element as it was documented: the prose a reader
 // needs about it, snapshotted at publish time so a later edit to the model cannot
 // rewrite what an already-published version says.
@@ -57,6 +91,8 @@ type Element struct {
 	// in the order a reader should meet them. Empty for the many elements that
 	// carry no code.
 	Code []Code `json:"code,omitempty"`
+	// Decision is set only on a business rule task: the decision it calls and how.
+	Decision *DecisionCall `json:"decision,omitempty"`
 }
 
 // Doc is one published documentation version of a process: immutable

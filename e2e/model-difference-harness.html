@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas model-difference e2e harness</title>
+    <!-- Drives the *real* api/web/model-difference.js against a mock `api`, for the
+         difference between what an application's processes build and what its
+         information model plans.
+
+         The fixture carries both directions and a class each side knows nothing of,
+         because the thing worth testing is that they are never blended into one list. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { mountModelDifference } from "/model-difference.js";
+      const view = document.getElementById("view");
+
+      const DIFF = {
+        modeled: true,
+        planned: [
+          { side: "planned-not-built", kind: "state", class: "Order", name: "cancelled",
+            note: "Order may be cancelled, and no process ever puts one there." },
+          { side: "planned-not-built", kind: "member", class: "Order", name: "cancelledOn",
+            note: "Order declares cancelledOn and no process writes it." },
+          { side: "planned-not-built", kind: "transition", class: "Order", from: "approved", to: "received",
+            note: "Order may go from approved to received, and no process makes that move." },
+          { side: "planned-not-built", kind: "class", class: "Invoice",
+            note: "No process in this application carries a Invoice. The class is modelled and nothing builds it yet." },
+        ],
+        built: [
+          { side: "built-not-described", kind: "member", class: "Order", name: "rabatt",
+            note: "A process writes Order.rabatt and the class does not declare it." },
+        ],
+        excluded: [
+          "The business key, which every derived class lacks by construction — nothing in BPMN says which attribute identifies a thing.",
+          "Attribute types and multiplicity: what a write puts into a member is a FEEL expression, and its result type is not a fact of the model.",
+        ],
+      };
+      const AGREED = { modeled: true, planned: [], built: [], excluded: DIFF.excluded };
+      const UNMODELLED = { modeled: false, planned: [], built: [], excluded: [] };
+
+      let payload = DIFF;
+      const api = async (method, url) => (/\/infomodel\/difference\?/.test(url) ? payload : {});
+
+      const mount = () => mountModelDifference(view, {
+        api, applicationId: "app-1", application: { id: "app-1", name: "Identitätsverwaltung" },
+      });
+      window.__mount = mount;
+      window.__mountAgreed = () => { payload = AGREED; return mount(); };
+      window.__mountUnmodelled = () => { payload = UNMODELLED; return mount(); };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

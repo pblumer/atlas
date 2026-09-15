@@ -1,0 +1,29 @@
+{
+  "tags": ["Modeler", "Data"],
+  "title": {
+    "en": "A data object now shows the state it is in",
+    "de": "Ein Datenobjekt zeigt jetzt, in welchem Zustand es ist"
+  },
+  "summary": {
+    "en": "A data object on a diagram can carry a state — identitaet [ARCHIVIERT] — and the canvas never showed it, so a process that draws the same object six times drew six identical boxes and the one thing telling them apart sat in a side panel. The state is written under the object's name now, in the Modeler and in every runtime view. It also shows whether anything acts on it: a state an activity writes is set in full, a state that is only read is set back. Atlas drops the second one when the model is deployed, so it says what the step expects rather than something the engine does — and the difference is now visible instead of implied.",
+    "de": "Ein Datenobjekt im Diagramm kann einen Zustand tragen — identitaet [ARCHIVIERT] —, und die Zeichenfläche zeigte ihn nie. Ein Prozess, der dasselbe Objekt sechsmal zeichnet, zeigte sechs gleiche Kästen, und das Einzige, was sie unterscheidet, lag im Seitenpanel. Der Zustand steht jetzt unter dem Namen des Objekts, im Modeler und in jeder Laufzeitansicht. Er zeigt zugleich, ob überhaupt etwas nach ihm handelt: Ein Zustand, den eine Aktivität schreibt, steht in voller Schrift, ein nur gelesener zurückgenommen. Den zweiten verwirft Atlas beim Deployment — er beschreibt, was der Schritt erwartet, nicht was die Maschine tut, und dieser Unterschied ist nun sichtbar statt gemeint."
+  },
+  "tutorial": {
+    "en": [
+      "Open a process in the Modeler and click a data object — the sheet of paper.",
+      "In the panel, set its Data state, for example ARCHIVIERT. It appears under the object's name on the canvas, in square brackets.",
+      "Draw an arrow from an activity to the object. The step now writes that state, and it is shown in full.",
+      "An arrow the other way only reads the object, and its state is set back — hover it to read why nothing acts on it."
+    ],
+    "de": [
+      "Im Modeler einen Prozess öffnen und ein Datenobjekt anklicken — das Blatt Papier.",
+      "Im Panel den Datenzustand setzen, zum Beispiel ARCHIVIERT. Er erscheint in eckigen Klammern unter dem Namen des Objekts.",
+      "Einen Pfeil von einer Aktivität zum Objekt ziehen: Der Schritt schreibt diesen Zustand nun, und er steht in voller Schrift.",
+      "Ein Pfeil in die andere Richtung liest das Objekt nur, sein Zustand steht zurückgenommen — der Mauszeiger darauf erklärt, warum nichts nach ihm handelt."
+    ]
+  },
+  "try": {
+    "label": { "en": "Open Modeler", "de": "Modeler öffnen" },
+    "route": "#/modeler"
+  }
+}

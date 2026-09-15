@@ -199,3 +199,49 @@ test("the finished document survives base64 encoding for upload", async ({ page 
   expect(decoded.subarray(0, 5).toString("latin1")).toBe("%PDF-");
   expect(decoded.subarray(-6).toString("latin1").trim()).toBe("%%EOF");
 });
+
+test("a table draws its header and every row, and repeats the header across a page break", async ({ page }) => {
+  // The table primitive exists for a decision table
+  // (ADR-0324): the column meanings are what make a rule
+  // readable, so losing them at a page break is the one way this can mislead.
+  const { text, pages } = await page.evaluate(() => {
+    const doc = new window.__pdf.PdfDocument({ title: "Rules" });
+    const rows = [];
+    for (let i = 1; i <= 60; i++) rows.push([String(i), ">= " + i * 100, '"annehmen"']);
+    doc.table(
+      [{ header: "#", width: 0.4 }, { header: "Betrag", width: 1.4 }, { header: "→ Urteil", width: 1.4 }],
+      rows,
+    );
+    const bytes = doc.bytes();
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return { text: s, pages: (s.match(/\/Type \/Page[^s]/g) || []).length };
+  });
+
+  // Every row is there, first and last.
+  expect(text).toContain(">= 100");
+  expect(text).toContain(">= 6000");
+  // Sixty rows do not fit on one page, and the header is drawn once per page.
+  expect(pages).toBeGreaterThan(1);
+  const headers = (text.match(/\(Betrag\) Tj/g) || []).length;
+  expect(headers).toBe(pages);
+});
+
+test("a table cell that is too wide to fit wraps instead of running off the page", async ({ page }) => {
+  const text = await page.evaluate(() => {
+    const doc = new window.__pdf.PdfDocument({ title: "Wide" });
+    doc.table(
+      [{ header: "Condition", width: 1 }, { header: "Result", width: 1 }],
+      [["betrag >= 1000 and land = \"CH\" and kunde.status = \"aktiv\" and antrag.alter < 30", "annehmen"]],
+    );
+    const bytes = doc.bytes();
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return s;
+  });
+  // The long condition is broken over several drawn lines rather than one long
+  // one, and nothing in it is dropped.
+  expect(text).toContain("betrag >= 1000");
+  expect(text).toContain("30");
+  expect((text.match(/Tj/g) || []).length).toBeGreaterThan(3);
+});

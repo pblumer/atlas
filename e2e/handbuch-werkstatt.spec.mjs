@@ -216,17 +216,21 @@ test("the landscape and data chapters exist, in both languages", async ({ page }
   }
 });
 
-test("the welcome chapter offers all six apps, Panorama and Data included", async ({ page }) => {
+test("the welcome chapter offers all nine apps, the portal surfaces included", async ({ page }) => {
   const calls = [];
   installMock(page, calls);
   await page.goto("/handbuch.html");
 
   const cards = page.locator("#willkommen .grid2 .card");
-  await expect(cards).toHaveCount(6);
+  await expect(cards).toHaveCount(9);
   // The routes matter more than the names: a card that names an app but links
   // somewhere else is the failure a reader meets rather than reads.
+  //
+  // The last two are paths rather than hashes because they are pages of their own
+  // and not views of the shell — which is also why they were reachable by nobody
+  // until they were taught here.
   for (const route of ["/#/console", "/#/modeler", "/#/tasks", "/#/operations",
-    "/#/panorama/starmap", "/#/data"]) {
+    "/#/panorama/starmap", "/#/data", "/portal.html", "/genehmigung.html", "/#/catalog"]) {
     await expect(cards.locator(`a[href="${route}"]`)).toHaveCount(1);
   }
 });

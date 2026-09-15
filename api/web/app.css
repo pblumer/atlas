@@ -208,6 +208,14 @@ b { font-weight: 600; }
 #drawer-apps a:hover { background: var(--bg); text-decoration: none; }
 #drawer-apps a.active { background: var(--accent-soft); color: var(--accent); }
 #drawer-apps a .soon { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 500; }
+/* The two portal surfaces are pages of their own and open in their own window, so
+   the drawer says so before the click rather than after it: an entry that silently
+   opens a second window is the same surprise whichever way it is resolved. It is a
+   ::after on the attribute that already carries the fact, so nothing has to keep a
+   second flag in step and the glyph stays out of the link's accessible name. */
+#drawer-apps a[target="_blank"]::after {
+  content: "\2197"; margin-left: auto; font-size: 12px; color: var(--muted); line-height: 1;
+}
 
 /* ---------- Content ---------- */
 main { padding: 22px; max-width: 1120px; margin: 0 auto; }
@@ -401,6 +409,31 @@ textarea::placeholder {
 .field input.id-taken:focus,
 .field input[type="text"].id-taken:focus { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.18); }
 .chip.id-pending { border-style: dashed; border-color: var(--accent); }
+
+/* Decision work that has not been written to the model every reference resolves
+   (ADR-0321). It marks the editor's bar and the Explorer row, and
+   it is a statement of fact rather than a warning — a draft is where an unfinished
+   decision is meant to be — so it reads as an accent, not as an error. */
+.chip.draft-chip { border-style: dashed; border-color: var(--accent); color: var(--accent); }
+
+/* The version a decision is deployed at, on the decision editor's bar
+   (ADR-0322). It is the counterpart of the "Deployment
+   <key>" crumb a BPMN diagram opened from a deployment carries, and it states
+   something that is live in the engine — so it reads solid and settled, next to
+   the dashed draft chip which states the opposite. */
+.chip.deployed-chip { border-color: var(--ok); color: var(--ok); background: var(--ok-soft, transparent); }
+
+/* Trying a decision against sample inputs, in the decision editor
+   (ADR-0326). It is the .start-panel strip the
+   BPMN editor opens for a deploy, plus room for the answer: a row of typed inputs,
+   then the outputs and the rule matrix below them. The matrix can be wider than the
+   window on a table with many inputs, so the panel scrolls rather than the page. */
+.dmn-test-panel { max-height: 46vh; overflow: auto; }
+.dmn-test-inputs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.dmn-test-inputs .field { margin: 0; min-width: 160px; }
+.dmn-test-inputs .field span .muted { font-weight: normal; }
+.dmn-test-result { margin-top: 10px; }
+.dmn-test-result .res { margin-bottom: 10px; }
 
 /* A searchable declaration the model cannot honour (ADR-0244). Red is certain — the
    deploy refuses a repeated name, and a structured value can never be indexed. Amber is
@@ -2092,6 +2125,23 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   pointer-events: auto; cursor: default;
 }
 
+/* A data object's data state, written under its name (drawDataStateLabels). Set in the
+   type bpmn-js gives an external label — 11px Arial — so the two lines read as one
+   caption rather than as a label with an annotation stuck under it. The wrapper is a
+   zero-size pin at the anchor and blocks nothing, so clicks fall through to the box; the
+   text alone takes pointer events, for its hover title.
+   A state nothing writes is set back: it never reaches the compiled model, so the
+   diagram should not present it with the same weight as one the engine acts on. The
+   reduced weight is deliberately readable rather than faint — it is a difference in
+   role, not a disabled control. */
+.data-state-label { position: relative; width: 0; height: 0; pointer-events: none; }
+.data-state-label .ds-text {
+  position: absolute; left: 0; top: 0; transform: translateX(-50%);
+  white-space: nowrap; font: 11px/1.2 Arial, sans-serif; color: var(--text);
+  pointer-events: auto; cursor: default;
+}
+.data-state-label .ds-text.ds-unwritten { color: var(--muted); }
+
 /* ---------- Live collaboration sessions (ADR-0140) ---------- */
 /* A floating roster of co-editors, centered over the canvas, plus a lock badge on
    each element another participant is editing and a brief pulse on a remote edit. */
@@ -2681,33 +2731,30 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 .filter-input { max-width: 280px; margin: 14px 0 12px; }
 tr[hidden] { display: none; }
 
-/* Embedded DMN editor overlay (ADR-0062) — a full-screen modal hosting the
-   vendored dmn-js modeler over the current view (e.g. the BPMN editor). */
-.dmn-overlay {
-  position: fixed; inset: 0; z-index: 60;
-  background: rgba(20, 22, 26, 0.45);
-  display: flex; padding: 24px;
-}
-.dmn-modal {
-  margin: auto; width: 100%; max-width: 1200px; height: 100%;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-}
-.dmn-modal-head {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; border-bottom: 1px solid var(--border);
-}
-.dmn-views { display: flex; gap: 4px; flex-wrap: wrap; }
-.dmn-view-tab {
-  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
-  padding: 4px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer;
-}
-.dmn-view-tab:hover { color: var(--text); }
-.dmn-view-tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+/* The decision editor (ADR-0320). It is a page like
+   the BPMN and form editors, so its frame — .editor, .editor-bar, .etabs,
+   .editor-body — is theirs; only the canvas, the properties column and the hint
+   below them are its own. It was a full-screen modal over the current view until a
+   decision became a deployable artifact in its own right (ADR-0319). */
 .dmn-body { flex: 1; min-height: 0; display: flex; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
+/* dmn-js uses `editor` as a state class inside its own components — the literal
+   expression view is `<div class="literal-expression textarea editor">`, and the
+   DRD's decision-name field carries it too. Atlas's `.editor` is the full-bleed
+   page shell (`position: fixed; inset: var(--topbar-h) 0 0 0`), so those elements
+   were being pinned over the whole viewport: opening a decision whose logic is a
+   literal expression drew its CodeMirror across the bar, and the view tabs, Save,
+   Deploy and Test underneath it could not be clicked. A fixed element is not
+   clipped by the canvas's `overflow: hidden`, so nothing else stopped it.
+   Undoing the four properties that rule sets, inside the dmn-js subtree only,
+   leaves dmn-js's own styling for the class untouched. */
+.dmn-js-parent .editor {
+  position: static;
+  inset: auto;
+  display: block;
+  background: none;
+}
 /* The Camunda-style properties panel column (DRG view). dmn-js-properties-panel
    ships its own internal styling; we only size the column and separate it. */
 .dmn-props { width: 320px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--bg); }
@@ -5456,6 +5503,46 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .dm-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
 .dm-card-head { display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
 .dm-gaps-inline { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+
+/* Planned against built — the difference reading
+   (ADR-0310).
+
+   A list rather than a drawing, because a difference painted onto one of the two
+   pictures is exactly the confusion ADR-0301 names as the cost of having two. The two
+   sides sit as columns and are never blended: a reader acts on them differently, so the
+   layout has to make "which document is this about" answerable at a glance. */
+.md-root { padding: 18px 22px 26px; }
+.md-root .between .btn { white-space: nowrap; }
+.md-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
+@media (max-width: 900px) { .md-cols { grid-template-columns: 1fr; } }
+.md-col { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.md-col h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.md-count {
+  font: 600 11px/1 system-ui, sans-serif; padding: 3px 7px; border-radius: 999px;
+  background: var(--bg); color: var(--muted); border: 1px solid var(--border);
+}
+/* The backlog side carries the accent: it is the direction the pair exists for. The
+   other is information, not work, and is left neutral so it does not compete. */
+.md-col.planned { border-left: 3px solid var(--accent); }
+.md-meaning { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 0 0 12px; }
+.md-class { border-top: 1px solid var(--border); padding: 10px 0 2px; }
+.md-class-head { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; }
+.md-rows { list-style: none; margin: 6px 0 0; padding: 0; }
+.md-rows li {
+  display: grid; grid-template-columns: 74px 1fr; gap: 2px 10px;
+  padding: 6px 0; border-top: 1px dashed var(--border); font-size: 12.5px;
+}
+.md-rows li:first-child { border-top: none; }
+.md-what { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+.md-where { font-weight: 600; }
+.md-note { grid-column: 2; color: var(--muted); line-height: 1.45; }
+.md-none { color: var(--muted); font-size: 12.5px; font-style: italic; margin: 0; }
+.md-excluded {
+  margin-top: 18px; padding: 12px 16px; border: 1px solid var(--border);
+  border-radius: 10px; background: var(--bg); font-size: 12.5px;
+}
+.md-excluded ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
+.md-excluded li { margin: 4px 0; }
 
 /* The bar above the run-time overlay: which object is drawn, where it has got to,
    and — only when more than one object has a machine — which one to draw. */

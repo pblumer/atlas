@@ -2,6 +2,190 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-inventory-is-taken-before-it-is-enforced",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The inventory is taken before it is enforced.",
+        "de": "The inventory is taken before it is enforced."
+      },
+      "summary": {
+        "en": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted.",
+        "de": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "atlas-keeps-its-accounts-and-groups-from-a-microsoft-entra-t",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing.",
+        "de": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing."
+      },
+      "summary": {
+        "en": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there.",
+        "de": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "deleting-a-dmn-reference-now-says-what-it-would-break",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Deleting a decision reference now tells you what it costs",
+        "de": "Das Löschen einer Entscheidungs-Referenz sagt jetzt, was es kostet"
+      },
+      "summary": {
+        "en": "The question before deleting a DMN reference was \"are you sure?\" with one reassuring sentence about the model file, which is not the thing at stake. What a reference decides is whether anything can still be deployed against the decisions in that model: a business rule task set to Deployment evaluates the copy shipped with its own process, and that copy comes from the reference. Delete the last one and that process can never be deployed again — a refusal that turns up weeks later, without a word about the deletion that caused it. The confirm now runs the same check the deploy runs and lists what it finds: which decisions lose their last model, and which deployed processes and drafts could then not be deployed, each with its binding. It also says what is not at risk, because that is the actual fear: running instances are untouched. Nothing is blocked — the reference stays yours to delete — and a draft in an application you cannot see is counted without being named.",
+        "de": "Vor dem Löschen einer DMN-Referenz stand «Sind Sie sicher?» mit einem beruhigenden Satz über die Modelldatei — also nicht über das, worum es geht. Eine Referenz entscheidet darüber, ob überhaupt noch etwas gegen die Entscheidungen dieses Modells ausgeliefert werden kann: Eine auf «Deployment» gesetzte Geschäftsregelaufgabe wertet die Kopie aus, die mit ihrem eigenen Prozess ausgeliefert wird, und diese Kopie stammt aus der Referenz. Löscht man die letzte, lässt sich dieser Prozess nie wieder ausliefern — eine Ablehnung, die Wochen später auftaucht, ohne ein Wort über die Löschung, die sie verursacht hat. Der Bestätigungsdialog führt jetzt dieselbe Prüfung durch wie das Ausliefern und listet auf, was er findet: welche Entscheidungen ihr letztes Modell verlieren und welche ausgelieferten Prozesse und Entwürfe danach nicht mehr ausgeliefert werden könnten, jeweils mit ihrer Bindung. Er sagt auch, was nicht gefährdet ist — denn das ist die eigentliche Sorge: Laufende Instanzen bleiben unberührt. Blockiert wird nichts; die Referenz bleibt Ihre Entscheidung. Ein Entwurf in einer Anwendung, die Sie nicht sehen können, wird gezählt, aber nicht benannt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open an application in the Modeler and find a DMN reference in its artifact list.",
+          "Choose ⋯ → Delete on it.",
+          "The confirm names the decisions that would lose their last model, and every deployed process or draft that could then not be deployed.",
+          "Cancel, and the reference stays. Nothing about the check changes anything."
+        ],
+        "de": [
+          "Eine Anwendung im Modeler öffnen und in ihrer Artefaktliste eine DMN-Referenz suchen.",
+          "Dort «⋯ → Delete» wählen.",
+          "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
+          "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-dmn-model-whose-last-reference-is-deleted-is-no-longer-los",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision model you removed the reference to can be found again",
+        "de": "Ein Entscheidungsmodell ohne Referenz ist wieder auffindbar"
+      },
+      "summary": {
+        "en": "Everything in Atlas that shows decisions — the picker, the catalogue, an application's artifact list, a publish — reads DMN references, not the model files themselves. So deleting a reference took the model out of the product while leaving it on disk: still there, reachable only by a handle you had to remember, and invisible everywhere. The usual recovery was to upload the file again, which filed a second copy under a slightly different name. Not assigned — the place artifacts that belong to no application already live — now also lists the stored models nothing points at, with what each one declares and an Add reference action that puts a reference back on the existing file rather than copying it. A model that no longer compiles is listed too, because somebody who has to fix it has to find it first. And the delete confirm now says where the file goes instead of assuring you it is unaffected.",
+        "de": "Alles, was in Atlas Entscheidungen anzeigt — die Auswahl, der Katalog, die Artefaktliste einer Anwendung, ein Publish — liest DMN-Referenzen, nicht die Modelldateien selbst. Das Löschen einer Referenz nahm das Modell also aus dem Produkt heraus und liess es auf der Platte zurück: weiterhin vorhanden, nur noch über einen Handle erreichbar, den man sich merken musste, und überall unsichtbar. Die übliche Rettung bestand darin, die Datei erneut hochzuladen — womit eine zweite Kopie unter leicht abweichendem Namen entstand. «Nicht zugeordnet» — der Ort, an dem Artefakte ohne Anwendung ohnehin schon liegen — führt nun auch die gespeicherten Modelle auf, auf die nichts zeigt, mit dem, was jedes davon deklariert, und einer Aktion «Add reference», die eine Referenz auf die bestehende Datei zurücksetzt, statt sie zu kopieren. Ein Modell, das nicht mehr kompiliert, wird ebenfalls aufgeführt, denn wer es reparieren soll, muss es zuerst finden. Und der Löschdialog sagt jetzt, wohin die Datei geht, statt zu versichern, sie sei nicht betroffen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "In the Modeler, open Not assigned.",
+          "Stored decision models that no reference points at are listed there, marked No reference.",
+          "Choose ⋯ → Add reference on one to put it back in the catalogue under a name you pick.",
+          "It reappears in the business rule task's decision picker straight away."
+        ],
+        "de": [
+          "Im Modeler «Nicht zugeordnet» öffnen.",
+          "Gespeicherte Entscheidungsmodelle, auf die keine Referenz zeigt, sind dort aufgeführt und mit «No reference» gekennzeichnet.",
+          "Bei einem davon «⋯ → Add reference» wählen, um es unter einem selbst gewählten Namen zurück in den Katalog zu holen.",
+          "Es erscheint unmittelbar wieder in der Entscheidungsauswahl der Geschäftsregelaufgabe."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-that-is-only-deployed-no-longer-blocks-the-deploy",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision you just deployed can now be used right away",
+        "de": "Eine soeben ausgelieferte Entscheidung ist jetzt sofort verwendbar"
+      },
+      "summary": {
+        "en": "Since a decision could be deployed on its own from its editor, there was a state the product invited you into and then refused: you deployed a decision, the business rule task's picker offered it, and deploying the process came back with \"no DMN model provides it — create the decision in Atlas, then deploy\". You had just created it. The check exists to stop a step whose evaluation can never happen, and for a task set to Latest that was simply not the case: deploying resolves it to the newest deployed version of that decision, and the copy bundled with the process is never consulted. The check now distinguishes the two bindings. A task set to Deployment still needs the decision as a model, because it evaluates the copy shipped with its own process — and its refusal now says that, rather than telling you to do something you have already done.",
+        "de": "Seit eine Entscheidung aus ihrem Editor heraus allein ausgeliefert werden kann, gab es einen Zustand, in den das Produkt einlud und den es anschliessend verweigerte: Man lieferte eine Entscheidung aus, die Auswahl der Geschäftsregelaufgabe bot sie an — und das Ausliefern des Prozesses endete mit «no DMN model provides it — create the decision in Atlas, then deploy». Erstellt hatte man sie gerade eben. Die Prüfung existiert, um einen Schritt zu verhindern, dessen Auswertung nie stattfinden kann; für eine auf «Latest» gesetzte Aufgabe traf das schlicht nicht zu: Das Ausliefern löst sie auf die neueste ausgelieferte Version dieser Entscheidung auf, die mit dem Prozess mitgelieferte Kopie wird gar nicht herangezogen. Die Prüfung unterscheidet nun die beiden Bindungen. Eine auf «Deployment» gesetzte Aufgabe braucht die Entscheidung weiterhin als Modell, weil sie die mit dem eigenen Prozess ausgelieferte Kopie auswertet — und ihre Ablehnung sagt das jetzt, statt zu etwas aufzufordern, das längst getan ist."
+      },
+      "link": {
+        "label": "ADR-0322",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0322-deploying-one-decision.md"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions",
+        "Deployment"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and press Deploy.",
+          "Open a diagram, add a business rule task and pick that decision; leave Binding on Latest.",
+          "Press Deploy on the diagram: it goes through, and the task evaluates the decision you deployed.",
+          "Switch Binding to Deployment and the deploy is refused again — that task needs the decision as a model, and the message says why."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und «Deploy» drücken.",
+          "Ein Diagramm öffnen, eine Geschäftsregelaufgabe hinzufügen und diese Entscheidung auswählen; «Binding» auf «Latest» belassen.",
+          "Beim Diagramm «Deploy» drücken: Es geht durch, und die Aufgabe wertet die ausgelieferte Entscheidung aus.",
+          "«Binding» auf «Deployment» umstellen: Das Ausliefern wird wieder abgelehnt — diese Aufgabe braucht die Entscheidung als Modell, und die Meldung sagt, warum."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "a-decision-whose-logic-is-a-literal-expression-no-longer-cov",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A decision whose logic is a literal expression no longer covers the editor's own bar.",
+        "de": "A decision whose logic is a literal expression no longer covers the editor's own bar."
+      },
+      "summary": {
+        "en": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport.",
+        "de": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport."
+      },
+      "link": {
+        "label": "ADR-0320",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0320-the-decision-editor-is-a-page.md"
+      }
+    },
+    {
       "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
       "version": "Unreleased",
       "date": null,
@@ -172,225 +356,6 @@
       "tags": [
         "Panorama"
       ]
-    },
-    {
-      "id": "a-diagram-filed-under-no-application-no-longer-answers-with-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Modeler now says when it cannot check your data",
-        "de": "Der Modeler sagt jetzt, wenn er Ihre Daten nicht prüfen kann"
-      },
-      "summary": {
-        "en": "If a diagram is not filed under an application there is no information model behind it, so nothing about its data objects can be resolved or checked. That used to look like everything being fine: the class field was a plain text box and the Problems panel said \"No problems\". Now the panel names the reason and what to do about it, and an unchecked diagram says \"No problems found — data not checked\" instead of claiming a clean bill it never earned.",
-        "de": "Liegt ein Diagramm unter keiner Anwendung, steht kein Informationsmodell dahinter — nichts an seinen Datenobjekten lässt sich auflösen oder prüfen. Bisher sah das aus, als wäre alles in Ordnung: Das Klassenfeld war ein einfaches Textfeld, und die Problemliste meldete „No problems\". Jetzt nennt das Panel den Grund und den Weg heraus, und ein ungeprüftes Diagramm sagt „No problems found — data not checked\", statt eine Unbedenklichkeit zu behaupten, die es nie erworben hat."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and select a data object.",
-          "If the Class field is a plain text box, read the note under it: either the diagram is filed under no application, or the application models nothing yet — two different remedies.",
-          "For the first: open the process's draft from its application, or deploy it from there.",
-          "The Problems bar tells you the same thing from the other side — it now distinguishes \"nothing wrong\" from \"nothing looked\"."
-        ],
-        "de": [
-          "Einen Prozess im Modeler öffnen und ein Datenobjekt auswählen.",
-          "Ist das Feld Class ein einfaches Textfeld, sagt der Hinweis darunter warum: entweder liegt das Diagramm unter keiner Anwendung, oder die Anwendung modelliert noch nichts — zwei verschiedene Wege heraus.",
-          "Für den ersten Fall: den Draft des Prozesses aus seiner Anwendung heraus öffnen oder von dort deployen.",
-          "Die Problemleiste sagt dasselbe von der anderen Seite — sie unterscheidet jetzt „nichts gefunden\" von „nichts geprüft\"."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-drawing-and-the-capability-register-are-now-one-architectu",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Link a diagram to the capability it draws",
-        "de": "Ein Diagramm mit der Fähigkeit verbinden, die es zeichnet"
-      },
-      "summary": {
-        "en": "Panorama holds the architect's diagram; the register holds what has to be done, with an owner, a scope and the service levels it has promised. Until now nothing connected them except that somebody had written a similar phrase in both places — and renaming either end quietly lost even that, while everything still looked right. Now a Capability on a diagram can name the register entry it draws, and so can a value stream. What is stored on the diagram is only the entry's key; the name is looked up fresh every time the diagram is read, so the drawing can never go stale about the register. Delete the entry and the diagram says the binding is missing, instead of showing a name that stopped meaning anything. The binding is an ordinary ArchiMate property, so it travels with the model into any other tool that reads the format.",
-        "de": "Panorama hält die Zeichnung der Architektin; das Register hält, was getan werden muss, mit Verantwortlichkeit, Geltungsbereich und zugesagten Service Levels. Bisher verband die beiden nichts ausser dem Umstand, dass jemand an beiden Orten eine ähnliche Formulierung geschrieben hatte — und wurde eine der beiden Seiten umbenannt, ging auch das verloren, lautlos, während weiterhin alles richtig aussah. Jetzt kann eine Fähigkeit auf einem Diagramm den Registereintrag benennen, den sie zeichnet, und ein Wertstrom ebenso. Auf dem Diagramm gespeichert wird nur der Schlüssel des Eintrags; der Name wird bei jedem Lesen frisch nachgeschlagen, die Zeichnung kann über das Register also nicht veralten. Wird der Eintrag gelöscht, meldet das Diagramm die Verbindung als fehlend, statt einen Namen zu zeigen, der nichts mehr bedeutet. Die Verbindung ist eine gewöhnliche ArchiMate-Eigenschaft und reist mit dem Modell in jedes andere Werkzeug, das das Format liest."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama",
-        "Architecture"
-      ],
-      "tutorial": {
-        "en": [
-          "File the capability first, if it does not exist: POST /api/v1/capabilities with a key and a name. The key is what the diagram will carry.",
-          "Open the Panorama model and select the Capability element that draws it.",
-          "Bind it: set the atlas.capabilityKey property to the register entry's key. A value stream binds atlas.valueStreamKey the same way.",
-          "Read the model's bindings back to see the entry's current name resolved beside the key, and any binding whose entry no longer exists reported as missing."
-        ],
-        "de": [
-          "Zuerst die Fähigkeit anlegen, falls sie noch nicht existiert: POST /api/v1/capabilities mit Schlüssel und Name. Der Schlüssel ist das, was das Diagramm trägt.",
-          "Das Panorama-Modell öffnen und das Capability-Element auswählen, das sie zeichnet.",
-          "Verbinden: die Eigenschaft atlas.capabilityKey auf den Schlüssel des Registereintrags setzen. Ein Wertstrom wird auf dieselbe Weise über atlas.valueStreamKey verbunden.",
-          "Die Verbindungen des Modells zurücklesen: Neben dem Schlüssel steht der aktuelle Name des Eintrags, und jede Verbindung, deren Eintrag es nicht mehr gibt, wird als fehlend gemeldet."
-        ]
-      }
-    },
-    {
-      "id": "a-value-stream-is-an-element-you-can-draw",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Draw a value stream",
-        "de": "Einen Wertstrom zeichnen"
-      },
-      "summary": {
-        "en": "A value stream is the ordered activity that meets a customer need, and its stages name the capabilities that perform them. Panorama would read one out of a model it imported, but the palette offered no way to create one — so a model containing value streams could be opened, edited around, and never added to. Nothing looked broken, because reading worked. It is in the palette now, on the strategy layer beside Capability, and it connects exactly the way a capability does: a value stream composed of the capabilities its stages perform, a business process realising it, one stream triggering another.",
-        "de": "Ein Wertstrom ist die geordnete Tätigkeit, die ein Kundenbedürfnis erfüllt; seine Stufen benennen die Fähigkeiten, die sie erbringen. Panorama las einen Wertstrom zwar aus einem importierten Modell, aber die Palette bot keine Möglichkeit, einen anzulegen — ein Modell mit Wertströmen liess sich öffnen und drumherum bearbeiten, aber nie ergänzen. Kaputt sah das nicht aus, weil das Lesen funktionierte. Jetzt steht der Wertstrom in der Palette, auf der Strategieebene neben der Fähigkeit, und er lässt sich genau so verbinden wie eine Fähigkeit: ein Wertstrom, der aus den Fähigkeiten seiner Stufen zusammengesetzt ist, ein Geschäftsprozess, der ihn verwirklicht, ein Strom, der einen anderen auslöst."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
-    },
-    {
-      "id": "a-write-into-a-data-object-now-offers-the-members-its-class-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Pick the field you are writing, instead of spelling it",
-        "de": "Das Feld, in das Sie schreiben, auswählen statt tippen"
-      },
-      "summary": {
-        "en": "When an activity writes one field of a data object, that field was free text — and a typo deploys, runs, and writes something nobody ever reads. It is a list now, built from the members the object's class declares, with the type, the multiplicity and the business key beside each one. Where a member is itself a class, its own fields are offered one level down. A name nothing models yet can still be typed, and comes back in the list saying so.",
-        "de": "Wenn eine Aktivität ein einzelnes Feld eines Datenobjekts schreibt, war dieses Feld freier Text — und ein Tippfehler wird deployed, läuft und schreibt etwas, das nie jemand liest. Jetzt ist es eine Liste aus den Attributen, die die Klasse des Objekts deklariert, mit Typ, Multiplizität und Geschäftsschlüssel daneben. Ist ein Attribut selbst eine Klasse, werden deren Felder eine Ebene tiefer angeboten. Ein noch nicht modellierter Name lässt sich weiterhin tippen und erscheint in der Liste mit dem Hinweis darauf."
-      },
-      "link": {
-        "label": "ADR-0060",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0060-data-object-write-paths.md"
-      },
-      "tags": [
-        "Modeler",
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "In the Modeler, draw an arrow from an activity to a data object — that is the data output association.",
-          "Select the arrow. Under Writes data object you now find Target member as a list.",
-          "Pick the field to write, or leave it on the whole object. Members of a member appear indented under it.",
-          "The list only appears once the data object has a class: set it in the object's Class field first."
-        ],
-        "de": [
-          "Im Modeler einen Pfeil von einer Aktivität zu einem Datenobjekt ziehen — das ist die Datenausgabe-Zuweisung.",
-          "Den Pfeil auswählen. Unter Writes data object steht Target member jetzt als Liste bereit.",
-          "Das zu schreibende Feld wählen, oder auf dem ganzen Objekt belassen. Felder eines Feldes stehen eingerückt darunter.",
-          "Die Liste erscheint erst, wenn das Datenobjekt eine Klasse hat: diese zuerst im Feld Class setzen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-milestone-is-an-element-you-can-draw-now",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Mark a milestone where no task sits",
-        "de": "Einen Meilenstein setzen, wo keine Aufgabe steht"
-      },
-      "summary": {
-        "en": "Some points in a process are worth naming even though nobody does any work at them. \"Identity verification started\" is one: the work is what follows it, so there is no task there whose timestamps you could ask about later. BPMN's marker for exactly this is an intermediate throw event with no event definition, and until now Atlas refused it — at Deploy, after the Modeler had drawn it and reported no problems. It works now. Draw the event, leave it without a definition, name it after the point it marks. Nothing waits and no worker is needed; the token flows straight through. What you get is the record: the element is counted, it appears on the instance's timeline in order, and the live diagram lights it up as a token passes — so \"when did this case reach verification\" becomes a question you can answer for each case. A throw event that carries a definition the engine cannot run, such as a timer, is still refused, and now says which one.",
-        "de": "Manche Punkte in einem Prozess lohnt es sich zu benennen, obwohl dort niemand arbeitet. „Identitätsprüfung gestartet\" ist so einer: Die Arbeit folgt erst danach, es gibt dort also keine Aufgabe, nach deren Zeitstempeln man später fragen könnte. Die BPMN-Markierung dafür ist ein Zwischenereignis vom Typ «werfend» ohne Ereignisdefinition, und Atlas hat sie bisher abgelehnt — beim Deploy, nachdem der Modeler sie gezeichnet und keine Probleme gemeldet hatte. Jetzt funktioniert sie. Das Ereignis zeichnen, ohne Definition lassen, nach dem Punkt benennen, den es markiert. Es wartet auf nichts und braucht keinen Worker; der Token fliesst direkt hindurch. Was bleibt, ist die Aufzeichnung: Das Element wird gezählt, erscheint in der richtigen Reihenfolge auf der Zeitachse der Instanz, und das Live-Diagramm leuchtet auf, wenn ein Token vorbeikommt. „Wann hat dieser Fall die Prüfung erreicht?\" ist damit pro Fall beantwortbar. Ein werfendes Ereignis mit einer Definition, die die Engine nicht ausführen kann, etwa einem Timer, wird weiterhin abgelehnt — und sagt nun, welche."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and drop an intermediate event onto the sequence flow where the milestone belongs.",
-          "Leave its type as the plain throw event: do not give it a message, signal, timer or any other definition.",
-          "Name it after the point it marks, in the business's words — \"Identity verification started\", not \"Event_3\". The name is what you will read it by later.",
-          "Deploy and start an instance. The live diagram marks the milestone as the token passes it.",
-          "Open the instance's timeline to see it in order between the elements around it, or read the process's element counts to see how many cases reached it."
-        ],
-        "de": [
-          "Einen Prozess im Modeler öffnen und ein Zwischenereignis auf den Sequenzfluss setzen, wo der Meilenstein hingehört.",
-          "Den Typ als einfaches werfendes Ereignis belassen: keine Nachricht, kein Signal, kein Timer, keine andere Definition.",
-          "Nach dem Punkt benennen, den es markiert, in der Sprache des Fachbereichs — «Identitätsprüfung gestartet», nicht «Event_3». Über den Namen liest man es später.",
-          "Deployen und eine Instanz starten. Das Live-Diagramm markiert den Meilenstein, sobald der Token ihn passiert.",
-          "Die Zeitachse der Instanz öffnen, um ihn in der richtigen Reihenfolge zwischen den umliegenden Elementen zu sehen, oder die Elementzählung des Prozesses lesen, um zu sehen, wie viele Fälle ihn erreicht haben."
-        ]
-      }
-    },
-    {
-      "id": "a-capability-record-now-says-when-somebody-last-read-it-and-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A capability now says when somebody last read it and meant it",
-        "de": "Eine Geschäftsfähigkeit sagt jetzt, wann sie zuletzt jemand gelesen und bestätigt hat"
-      },
-      "summary": {
-        "en": "Atlas can check whether the process a capability names is deployed. It cannot check who owns the capability, what it is responsible for, or what it promised — and those are the fields anybody acts on. A map whose realisations are all green and whose owners left two years ago is worse than no map. Both records now carry a confirmation: when, by whom, who they asked, and a line on what the review found. Only confirming sets it — no edit does, because a date refreshed by a typo fix would claim every field had been re-read. What lapses turns up as a review backlog, one query, the twin of the one for work nobody has automated. The interval is twelve months by default and yours to change.",
-        "de": "Atlas kann prüfen, ob der Prozess, den eine Fähigkeit nennt, deployt ist. Wer sie fachlich verantwortet, wofür sie zuständig ist und was sie zugesagt hat, kann Atlas nicht prüfen — und genau das sind die Felder, nach denen jemand handelt. Eine Landkarte mit lauter grünen Umsetzungen und Verantwortlichen, die vor zwei Jahren gegangen sind, ist schlechter als keine. Beide Datensatzarten tragen jetzt eine Bestätigung: wann, von wem, wen man gefragt hat und eine Zeile zum Ergebnis der Prüfung. Gesetzt wird sie nur durch das Bestätigen selbst, nie durch eine Bearbeitung: Ein Datum, das eine Tippfehlerkorrektur auffrischt, behauptete, jedes Feld sei neu gelesen worden. Was abläuft, erscheint als Prüfrückstand, eine einzige Abfrage, das Gegenstück zu der nach nicht automatisierter Arbeit. Die Frist beträgt standardmässig zwölf Monate und lässt sich ändern."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Architecture",
-        "API"
-      ],
-      "tutorial": {
-        "en": [
-          "Confirm a record you have just re-read: POST /api/v1/capabilities/{key}/confirmation with {\"with\": \"Head of Credit Risk\", \"note\": \"SLA renegotiated to 3 days\"}. Both fields are optional.",
-          "Name who you asked in \"with\". Leaving it empty says you spoke for the record alone, which is legitimate and weaker — the record says which.",
-          "Ask GET /api/v1/capabilities?stale=true for the review backlog.",
-          "GET /api/v1/business-architecture/gaps reports what has lapsed, and names the interval it judged against.",
-          "An administrator can change that interval with PUT /api/v1/settings/confirmation."
-        ],
-        "de": [
-          "Einen soeben erneut gelesenen Datensatz bestätigen: POST /api/v1/capabilities/{key}/confirmation mit {\"with\": \"Leiter Kreditrisiko\", \"note\": \"SLA auf 3 Tage neu verhandelt\"}. Beide Felder sind optional.",
-          "In \"with\" eintragen, wen man gefragt hat. Leer lassen heisst, man stand allein für den Datensatz ein; das ist zulässig und schwächer, und der Datensatz sagt welches von beidem.",
-          "GET /api/v1/capabilities?stale=true liefert den Prüfrückstand.",
-          "GET /api/v1/business-architecture/gaps meldet, was abgelaufen ist, und nennt die zugrunde gelegte Frist.",
-          "Eine Administratorin ändert diese Frist mit PUT /api/v1/settings/confirmation."
-        ]
-      }
     }
   ]
 }

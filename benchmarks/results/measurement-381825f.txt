@@ -1,0 +1,90 @@
+# Atlas measurement-feasibility capture — Milestone B slice B7
+#
+# This is not a performance baseline. It is the evidence for one design question:
+# ADR-0305's open question, whether a business capability's declared KPIs and SLAs
+# are computable from what Atlas already keeps, at volume, WITHOUT the OpenSearch
+# exporter (ADR-0114) that not every installation runs. The record required that it
+# be answered by measurement rather than by argument.
+#
+# Commit:        381825f (branch claude/modest-maxwell-4b4las, off main 5d9174e)
+# Go:            go1.26.0 linux/amd64
+# GOMAXPROCS:    4
+# CPU:           Intel(R) Xeon(R) Processor @ 2.10GHz, 4 cores — shared cloud VM
+# OS / kernel:   Linux 6.18.44-fc-v24
+# Durable store: the benchmark's own temp dir on the container filesystem
+# Date:          2026-09-11
+#
+# Each op is ONE WHOLE READING over the whole population, so ns/op is the cost of
+# answering the question once. The reading is not windowed: an unbounded walk is the
+# upper bound on what any window costs, which is the number the question is about.
+#
+# Two axes, run separately:
+#   1. population  — 100 / 1k / 10k (committed default), then 100k by override
+#   2. process length — 1 / 10 / 30 script tasks at a fixed 10k population
+#
+## Axis 1 — population (-benchtime=20x -count=3)
+
+goos: linux
+goarch: amd64
+pkg: github.com/pblumer/atlas/benchmarks
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+BenchmarkMeasurementOutcomeDistribution/instances=100-4         	      20	      9468 ns/op	     296 B/op	      11 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=100-4         	      20	     14000 ns/op	     296 B/op	      11 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=100-4         	      20	     16715 ns/op	     296 B/op	      11 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=1000-4        	      20	     52460 ns/op	    2333 B/op	      17 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=1000-4        	      20	     44856 ns/op	    1442 B/op	      16 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=1000-4        	      20	     46263 ns/op	    1588 B/op	      16 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=10000-4       	      20	     12069 ns/op	     518 B/op	      13 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=10000-4       	      20	     13407 ns/op	     514 B/op	      13 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=10000-4       	      20	     12588 ns/op	     522 B/op	      13 allocs/op
+BenchmarkMeasurementCancellationRate/instances=100-4            	      20	      1112 ns/op	     241 B/op	       5 allocs/op
+BenchmarkMeasurementCancellationRate/instances=100-4            	      20	      1138 ns/op	     241 B/op	       5 allocs/op
+BenchmarkMeasurementCancellationRate/instances=100-4            	      20	      1074 ns/op	     241 B/op	       5 allocs/op
+BenchmarkMeasurementCancellationRate/instances=1000-4           	      20	      9684 ns/op	    1196 B/op	       8 allocs/op
+BenchmarkMeasurementCancellationRate/instances=1000-4           	      20	      9501 ns/op	     910 B/op	       9 allocs/op
+BenchmarkMeasurementCancellationRate/instances=1000-4           	      20	     15612 ns/op	    1720 B/op	      10 allocs/op
+BenchmarkMeasurementCancellationRate/instances=10000-4          	      20	     12765 ns/op	     459 B/op	       7 allocs/op
+BenchmarkMeasurementCancellationRate/instances=10000-4          	      20	     10183 ns/op	     241 B/op	       5 allocs/op
+BenchmarkMeasurementCancellationRate/instances=10000-4          	      20	     12741 ns/op	     267 B/op	       5 allocs/op
+BenchmarkMeasurementCycleTime/instances=100-4                   	      20	     55378 ns/op	   16351 B/op	     405 allocs/op
+BenchmarkMeasurementCycleTime/instances=100-4                   	      20	     60601 ns/op	   16348 B/op	     405 allocs/op
+BenchmarkMeasurementCycleTime/instances=100-4                   	      20	     59716 ns/op	   16348 B/op	     405 allocs/op
+BenchmarkMeasurementCycleTime/instances=1000-4                  	      20	   2474449 ns/op	  301931 B/op	    5222 allocs/op
+BenchmarkMeasurementCycleTime/instances=1000-4                  	      20	   5316631 ns/op	  269364 B/op	    5222 allocs/op
+BenchmarkMeasurementCycleTime/instances=1000-4                  	      20	   3950084 ns/op	  287803 B/op	    5220 allocs/op
+BenchmarkMeasurementCycleTime/instances=10000-4                 	      20	  78501745 ns/op	 2228032 B/op	   49647 allocs/op
+BenchmarkMeasurementCycleTime/instances=10000-4                 	      20	  84084705 ns/op	 2228247 B/op	   49644 allocs/op
+BenchmarkMeasurementCycleTime/instances=10000-4                 	      20	 126494002 ns/op	 2780369 B/op	   58257 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=100-4               	      20	    184351 ns/op	   40976 B/op	     905 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=100-4               	      20	    158800 ns/op	   40978 B/op	     905 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=100-4               	      20	    171282 ns/op	   40976 B/op	     905 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=1000-4              	      20	  22325453 ns/op	  479901 B/op	   10246 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=1000-4              	      20	  22169067 ns/op	  484381 B/op	   10261 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=1000-4              	      20	  20223512 ns/op	  486585 B/op	   10266 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=10000-4             	      20	 173560839 ns/op	 4643292 B/op	   99652 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=10000-4             	      20	 185728551 ns/op	 4643745 B/op	   99659 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=10000-4             	      20	 192201927 ns/op	 4641587 B/op	   99649 allocs/op
+
+## Axis 1 continued — 100k by ATLAS_BENCH_POPULATIONS override (-benchtime=5x -count=2)
+
+BenchmarkMeasurementOutcomeDistribution/instances=100000-4         	       5	    134155 ns/op	     569 B/op	      19 allocs/op
+BenchmarkMeasurementOutcomeDistribution/instances=100000-4         	       5	     29214 ns/op	     329 B/op	      11 allocs/op
+BenchmarkMeasurementCycleTime/instances=100000-4                   	       5	1214761552 ns/op	28831784 B/op	  598317 allocs/op
+BenchmarkMeasurementCycleTime/instances=100000-4                   	       5	1266839158 ns/op	28810564 B/op	  598309 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=100000-4               	       5	2825494350 ns/op	53749884 B/op	 1098244 allocs/op
+BenchmarkMeasurementPhaseDuration/instances=100000-4               	       5	2903925004 ns/op	53744430 B/op	 1098286 allocs/op
+
+## Axis 2 — process length at a fixed 10k population (-benchtime=10x -count=2)
+
+BenchmarkMeasurementCycleTimeByLength/steps=1-4         	      10	  85514759 ns/op	 2227132 B/op	   49639 allocs/op
+BenchmarkMeasurementCycleTimeByLength/steps=1-4         	      10	  81014580 ns/op	 2229556 B/op	   49659 allocs/op
+BenchmarkMeasurementCycleTimeByLength/steps=10-4        	      10	 105012434 ns/op	 2588730 B/op	   75727 allocs/op
+BenchmarkMeasurementCycleTimeByLength/steps=10-4        	      10	  89479911 ns/op	 2580575 B/op	   75591 allocs/op
+BenchmarkMeasurementCycleTimeByLength/steps=30-4        	      10	 126084691 ns/op	 3404284 B/op	  123257 allocs/op
+BenchmarkMeasurementCycleTimeByLength/steps=30-4        	      10	 171291911 ns/op	 3355488 B/op	   94878 allocs/op
+BenchmarkMeasurementPhaseDurationByLength/steps=1-4     	      10	 190550656 ns/op	 4640667 B/op	   99644 allocs/op
+BenchmarkMeasurementPhaseDurationByLength/steps=1-4     	      10	 204247073 ns/op	 4643612 B/op	   99651 allocs/op
+BenchmarkMeasurementPhaseDurationByLength/steps=10-4    	      10	 198055762 ns/op	 4938924 B/op	  124601 allocs/op
+BenchmarkMeasurementPhaseDurationByLength/steps=10-4    	      10	 215060760 ns/op	 4942747 B/op	  124617 allocs/op
+BenchmarkMeasurementPhaseDurationByLength/steps=30-4    	      10	 311229432 ns/op	 5807060 B/op	  158255 allocs/op
+BenchmarkMeasurementPhaseDurationByLength/steps=30-4    	      10	 257240565 ns/op	 5702132 B/op	  196180 allocs/op

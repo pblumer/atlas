@@ -75,6 +75,15 @@ jobs:
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
       - name: Test (race detector)
+        env:
+          # This runner can enforce the script sandbox, so the end-to-end check that an
+          # interpreter really starts inside it has to run rather than skip. `go test`
+          # hides skips unless it is given -v, so a guard that quietly stopped guarding
+          # anything would look exactly like a guard that passed (ADR-0303).
+          #
+          # Deliberately not in `make race`: a contributor's kernel may have no Landlock
+          # at all, and there the skip is the correct answer rather than a failure.
+          ATLAS_SANDBOX_E2E: required
         run: go test -race -timeout=25m ./...
 
       - name: Coverage floor (>= 95%, ADR-0018)

@@ -1,0 +1,34 @@
+{
+  "tags": ["Modeler", "Decisions"],
+  "title": {
+    "en": "Hand a decision to someone, and work on one together",
+    "de": "Eine Entscheidung weitergeben – und gemeinsam daran arbeiten"
+  },
+  "summary": {
+    "en": "Two things a diagram could do and a decision could not. First: a decision table is the business rule — the thing a compliance officer signs off and an auditor asks about — and it could only be read inside Atlas. The editor's ⋯ menu now publishes it as a PDF: the requirements graph, then every decision with its description, the inputs it reads with their types, and its rule table set as a real table with the hit policy, one row per rule, and each rule's own note underneath. Versions are numbered, never change once published, and can be shared through a link you can revoke — the same way a process document works. It is deliberately separate from the deployed version: a rule is usually approved before it is switched on, which is exactly when there is no deployment to point at. Second: two people can now edit one decision at the same time and see each other — who is here, what they are looking at, and a lock so nobody's work is silently overwritten. The lock is the decision: in the requirements graph you claim a decision by selecting it, and opening a decision's table claims that decision. So two people can work on two decisions of the same model at once; two people cannot fill in one table together, and the editor tells you which it is rather than letting you find out afterwards.",
+    "de": "Zwei Dinge, die ein Diagramm konnte und eine Entscheidung nicht. Erstens: Eine Entscheidungstabelle ist die Geschäftsregel — das, was eine Compliance-Verantwortliche freigibt und wonach eine Revision fragt — und sie war nur innerhalb von Atlas lesbar. Über das Menü «⋯» im Editor lässt sie sich jetzt als PDF veröffentlichen: der Anforderungsgraph, dann jede Entscheidung mit ihrer Beschreibung, den gelesenen Eingaben samt Typen und ihrer Regeltabelle als echte Tabelle — mit Hit Policy, einer Zeile je Regel und der jeweiligen Anmerkung darunter. Versionen sind nummeriert, nach dem Veröffentlichen unveränderlich und über einen widerrufbaren Link teilbar — genau wie bei einer Prozessdokumentation. Sie ist bewusst getrennt von der ausgelieferten Version: Eine Regel wird üblicherweise freigegeben, bevor sie eingeschaltet wird — also genau dann, wenn es noch keine Auslieferung gibt, auf die man zeigen könnte. Zweitens: Zwei Personen können jetzt gleichzeitig an einer Entscheidung arbeiten und sehen einander — wer da ist, worauf jemand schaut, und eine Sperre, damit niemandes Arbeit stillschweigend überschrieben wird. Gesperrt wird die Entscheidung: Im Anforderungsgraphen beansprucht man sie durch Auswählen, und wer die Tabelle einer Entscheidung öffnet, beansprucht damit diese Entscheidung. Zwei Personen können also an zwei Entscheidungen desselben Modells gleichzeitig arbeiten; eine Tabelle gemeinsam ausfüllen können sie nicht — und der Editor sagt es, statt es einen hinterher merken zu lassen."
+  },
+  "tutorial": {
+    "en": [
+      "Open a decision in the Modeler and choose ⋯ → Documentation.",
+      "Give the version a note — what changed, or what it was signed off for — and press Publish version.",
+      "The history lists every version with its PDF. Share… mints a link for a reader with no Atlas account; Revoke kills it.",
+      "For co-editing, open the same decision in two browsers. The avatars at the top of the canvas show who is here.",
+      "Open a decision's table in one of them: the other sees that decision locked, and can work on a different decision of the same model meanwhile."
+    ],
+    "de": [
+      "Eine Entscheidung im Modeler öffnen und «⋯ → Documentation» wählen.",
+      "Der Version eine Notiz geben — was sich geändert hat oder wofür sie freigegeben wurde — und «Publish version» drücken.",
+      "Die Historie führt jede Version mit ihrem PDF. «Share…» erzeugt einen Link für Lesende ohne Atlas-Konto, «Revoke» hebt ihn auf.",
+      "Für das gemeinsame Arbeiten dieselbe Entscheidung in zwei Browsern öffnen. Die Avatare oben auf der Fläche zeigen, wer da ist.",
+      "In einem davon die Tabelle einer Entscheidung öffnen: Die andere Seite sieht diese Entscheidung gesperrt und kann derweil an einer anderen Entscheidung desselben Modells arbeiten."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Modeler",
+      "de": "Modeler öffnen"
+    },
+    "route": "#/modeler"
+  }
+}

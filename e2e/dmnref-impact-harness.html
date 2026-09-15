@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas DMN reference deletion e2e harness</title>
+    <!-- Drives the real api/web/dmnref-impact.js: the confirm an author reads before
+         deleting a DMN reference is composed from what the server says would stop
+         deploying, so the text itself is the thing worth asserting. -->
+  </head>
+  <body>
+    <script type="module">
+      import { refDeleteWarning } from "/dmnref-impact.js";
+      window.__warn = refDeleteWarning;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

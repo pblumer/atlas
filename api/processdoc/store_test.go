@@ -287,6 +287,55 @@ func TestProcessDocStoreCodeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestProcessDocStoreDecisionCallRoundTrip proves a business rule task's call
+// survives the round trip: which decision it runs, how it binds, and what it feeds
+// in (ADR-0328). It is the one
+// element whose behaviour lives entirely outside the BPMN, so a record that dropped
+// it would describe a step that says nothing about what it does.
+//
+// The rules themselves are deliberately absent — they belong to the decision's own
+// documentation record (ADR-0324), and the PDF is where a self-contained copy lives.
+func TestProcessDocStoreDecisionCallRoundTrip(t *testing.T) {
+	s := newProcessDocs(t)
+	rec := Doc{
+		ID: "dec1", ProcessID: "order", Version: 1,
+		Elements: []Element{{
+			ID: "Task_decide", Type: "bpmn:BusinessRuleTask", Name: "Assess",
+			Decision: &DecisionCall{
+				DecisionID: "eligibility", Binding: "latest", ResultVariable: "verdict",
+				Inputs: []DecisionInput{{Name: "amount", Value: "= total"}},
+			},
+		}, {
+			ID: "Task_score", Type: "bpmn:BusinessRuleTask", Name: "Score",
+			Decision: &DecisionCall{DecisionID: "scoring", Worker: "risk-service"},
+		}, {
+			ID: "Task_book", Type: "bpmn:ServiceTask", Name: "Book",
+		}},
+	}
+	if err := s.Save(rec, []byte("%PDF")); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, ok, err := s.Get("dec1")
+	if err != nil || !ok {
+		t.Fatalf("get = (_, %v, %v), want the saved record", ok, err)
+	}
+	call := got.Elements[0].Decision
+	if call == nil || call.DecisionID != "eligibility" || call.Binding != "latest" || call.ResultVariable != "verdict" {
+		t.Fatalf("decision call = %+v, want eligibility bound latest writing verdict", call)
+	}
+	if len(call.Inputs) != 1 || call.Inputs[0].Name != "amount" || call.Inputs[0].Value != "= total" {
+		t.Errorf("inputs = %+v, want the one mapping preserved", call.Inputs)
+	}
+	if w := got.Elements[1].Decision; w == nil || w.Worker != "risk-service" {
+		t.Errorf("worker-backed call = %+v, want the worker named", w)
+	}
+	// Everything that is not a business rule task carries none, rather than an
+	// empty shell a reader would have to interpret.
+	if got.Elements[2].Decision != nil {
+		t.Errorf("service task decision = %+v, want none", got.Elements[2].Decision)
+	}
+}
+
 // TestProcessDocStorePrune proves retention keeps the newest `keep` versions and
 // removes the older ones, PDF and record together — ADR-0143's bounded-growth
 // follow-up. A prune that keeps at least everything removes nothing, and the

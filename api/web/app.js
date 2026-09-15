@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { copyText } from "./clipboard.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -29,6 +30,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow } from "./migrationdialog.js";
 import { openPickModal } from "./pickmodal.js";
+import { refDeleteWarning } from "./dmnref-impact.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
@@ -552,10 +554,50 @@ async function deployDemo() {
 // this person holds. The Console itself is "any": its dashboard, workers and AI
 // access are everybody's, and the admin screens inside it say so individually
 // below.
+//
+// `separate: true` marks an entry that is a page of its own rather than a view of
+// this application, and it opens in its own window. The two portal surfaces are
+// the only ones: they carry the catalogue's brand instead of the console's, they
+// are written for people who never open the modeller, and they load their own
+// message catalogue — so routing to one is leaving Atlas's shell, not moving inside
+// it. Replacing the console with them in the same tab put whoever followed the
+// entry on a page whose only way back was one small link, and asked somebody who
+// was in the middle of something to lose it to look at an order.
+//
+// The back link on those pages stays regardless. It is not for this drawer — it is
+// for whoever arrives from the link in an approval notification, who has no console
+// tab behind them at all.
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  // The service portal is a page of its own, not a view of this app, so its route
+  // is a path and not a hash — written without a leading slash, because a route in
+  // this table is what the handbook appends to the site root (href="/" + route),
+  // and "//portal.html" would be a protocol-relative URL to a host of that name.
+  // It is written for people who never open the modeler
+  // — ordering a laptop and seeing where the order stands — and it carries the
+  // brand of the catalogue the visitor belongs to rather than this console's.
+  //
+  // Without this line the page existed and nothing led to it: it was built, served
+  // and reachable only by somebody who already knew the URL. Held by
+  // TestBothPortalSurfacesAreReachableFromTheMenu.
+  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
+  // The approver's half of the same surface, and a separate page for the same
+  // reason: it answers to a different person. Until now it was reached only
+  // through the link in its notification mail, so an approver who deleted the mail
+  // had no way back to a decision somebody is waiting on.
+  //
+  // Gated at "user" because there is no approver role to gate on: a product names
+  // a person, a group, or the orderer's superior, so anybody signed in may hold an
+  // approval tomorrow without holding one today. The entry is therefore shown to
+  // everybody and is empty for most, which is the honest cost of having no role to
+  // ask: a count on it would fix that, and nothing here keeps one yet.
+  { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user", separate: true },
+  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
+  // catalogue means choosing from processes already deployed, never deploying one,
+  // so it is deliberately not the modeller's role — deploy is code execution.
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager" },
   { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
   { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
@@ -1021,8 +1063,13 @@ function syncIncidentBadge(appId) {
 function paintApps() {
   const nav = document.getElementById("drawer-apps");
   if (!nav) return;
+  // The "opens elsewhere" mark is a CSS ::after on the target attribute rather than
+  // a span here: it is presentation, it must not join the link's accessible name,
+  // and a glyph inside the text would change what every test reading this menu
+  // sees for a reason that has nothing to do with them.
   nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}">${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
+    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
 }
 
@@ -1039,7 +1086,8 @@ function setChrome(appId, route) {
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
   setHelpContext(route); // keep the "?" menu's contextual help pointed at this view
-  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/");
+  const fullBleed = route.includes("/modeler/d/") || route.includes("/modeler/draft/") || route.includes("/modeler/form/") || route.includes("/modeler/new") || route.includes("/operations/p/") ||
+    route.includes("/modeler/dmn/new") || route.includes("/modeler/dmn/e/") || route.includes("/modeler/dmn/d/");
   document.body.classList.toggle("editor-mode", fullBleed);
   // The Tasks inbox is a wide three-pane layout, so it drops the centered
   // max-width the default content column uses while keeping normal padding.
@@ -1607,6 +1655,7 @@ const GRANTABLE_ROLES = [
   { id: "modeler", name: "Modeller", what: "author drafts, forms and decisions — and deploy them" },
   { id: "operator", name: "Operator", what: "start, cancel and repair instances; read runtime data" },
   { id: "user", name: "User", what: "work on tasks and read what they are given" },
+  { id: "productmanager", name: "Product manager", what: "maintain the portal's catalogues and products, and publish releases" },
 ];
 
 function userForm(u) {
@@ -2162,7 +2211,8 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          person's own task list, <span class="chip">productmanager</span> to maintain the portal's
+          catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
@@ -2348,7 +2398,14 @@ function wireOrgPresence(showPresence, presencePill) {
 // SSO_ROLES is what a rule may grant. `user` is missing on purpose — everybody who
 // can sign in at all holds it, so offering it as a grant would suggest it could be
 // withheld.
-const SSO_ROLES = ["admin", "modeler", "operator"];
+//
+// `productmanager` belongs here and its absence was a real gap rather than a
+// cosmetic one. Where this mapping is on, it *owns* the roles: a role granted by
+// hand in the form above is replaced at that person's next sign-in. So in an
+// installation whose accounts come from the provider — which is the installation
+// this mapping exists for — a role the form offers and this list does not is a role
+// that cannot be held for longer than one login, however carefully it was granted.
+const SSO_ROLES = ["admin", "modeler", "operator", "productmanager"];
 
 function ssoRuleRow(rule, groups) {
   const roles = new Set(rule.roles || []);
@@ -2702,18 +2759,22 @@ async function viewModelerHome() {
   const projRows = document.getElementById("proj-rows");
 
   const renderProjects = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { projRows.innerHTML = `<tr><td colspan="4" class="empty">${esc(e.message)}</td></tr>`; return; }
 
     const known = new Set(projects.map((p) => p.id));
-    const all = [...drafts, ...refs, ...forms];
+    // A decision that exists only as a draft is still one of the application's
+    // artifacts, so it counts (ADR-0321); a draft on a decision
+    // that is in the model is that decision, already counted as its reference.
+    const all = [...drafts, ...refs, ...forms, ...decDrafts.filter((d) => !d.refId)];
     const countIn = (pid) => all.filter((a) => (a.projectId || "") === pid).length;
     const ungrouped = all.filter((a) => !a.projectId || !known.has(a.projectId));
 
@@ -2867,15 +2928,26 @@ async function viewProjectDetail(id) {
   const root = document.getElementById("pd");
 
   const render = async () => {
-    let projects = [], drafts = [], refs = [], forms = [];
+    let projects = [], drafts = [], refs = [], forms = [], decDrafts = [];
     try {
-      [projects, drafts, refs, forms] = await Promise.all([
+      [projects, drafts, refs, forms, decDrafts] = await Promise.all([
         api("GET", "/api/v1/applications"),
         api("GET", "/api/v1/drafts"),
         api("GET", "/api/v1/dmnrefs"),
         api("GET", "/api/v1/forms"),
+        api("GET", "/api/v1/dmn-drafts"),
       ]);
     } catch (e) { root.innerHTML = `<div class="card empty">${esc(e.message)}</div>`; return; }
+    // A stored DMN model nothing points at belongs to no application, which is what
+    // this view is (ADR-0330). It is only
+    // asked for here, and a failure costs the section rather than the page — a
+    // remote temis resolver has no folder to list and answers 409.
+    let orphanModels = [];
+    if (ungrouped) {
+      try {
+        orphanModels = ((await api("GET", "/api/v1/dmn-models")) || []).filter((m) => !m.referenced);
+      } catch { orphanModels = []; }
+    }
 
     const known = new Set(projects.map((p) => p.id));
     const proj = ungrouped ? { id: "ungrouped", name: "Not assigned" } : projects.find((p) => p.id === id);
@@ -2886,6 +2958,13 @@ async function viewProjectDetail(id) {
     setTitle(`${proj.name || "Application"} · Modeler`);
     const mine = (a) => ungrouped ? (!a.projectId || !known.has(a.projectId)) : a.projectId === id;
     const dl = drafts.filter(mine), rl = refs.filter(mine), fl = forms.filter(mine);
+    // A decision draft is work that has not been written to the model
+    // (ADR-0321). One on a decision that is in the model is a
+    // marker on that decision's row; one on a decision that is not is a row of its
+    // own, because nothing else in this table represents it.
+    const ddl = decDrafts.filter(mine);
+    const draftFor = new Set(ddl.filter((d) => d.refId).map((d) => d.refId));
+    const looseDecDrafts = ddl.filter((d) => !d.refId);
 
     // Scope gating (ADR-0071). Ungrouped is the un-scoped personal/legacy bucket,
     // so it stays fully writable; a real project's actions follow the caller's
@@ -2927,17 +3006,50 @@ async function viewProjectDetail(id) {
       const href = `#/modeler/dmn/${encodeURIComponent(r.id)}`;
       const items = [{ label: "View", icon: "▦", href }, { label: "Validate", icon: "✔", act: "valref", data: { id: r.id } }];
       if (canWrite) items.unshift(
-        { label: "Bearbeiten", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
+        { label: "Edit", icon: "✎", act: "editref", data: { id: r.id, ref: r.modelRef, pid: r.projectId || "", name: r.name } });
       if (canWrite) items.push(
         ...moveItems(r.projectId, "moveref", r.id),
         { sep: true },
         { label: "Delete", icon: "🗑", act: "delref", data: { id: r.id }, danger: true },
       );
+      // A decision carrying a draft says so where the author looks for it, because
+      // what a publish would ship is the model, not that work.
+      const mark = draftFor.has(r.id) ? `<span class="chip draft-chip">Draft</span> ` : "";
       return `<tr>
-        ${nameCell("DMN", r.name, `temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
+        ${nameCell("DMN", r.name, `${mark}temis model: ${esc(r.modelRef)} · <span data-refstatus="${esc(r.id)}">not validated</span>`, href)}
         <td class="muted">Decision ref</td>
         <td class="muted" data-sort="${r.createdAt || 0}">${esc(fmtTime(r.createdAt))}</td>
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A decision that has never been written to the model: its draft is the only
+    // copy, so it is listed, marked, and says plainly that a publish will not carry
+    // it (ADR-0321).
+    const decDraftRow = (d) => {
+      const href = `#/modeler/dmn/d/${encodeURIComponent(d.id)}`;
+      const items = [{ label: "Open", icon: "→", href }];
+      if (canWrite) items.push(
+        { sep: true },
+        { label: "Delete", icon: "🗑", act: "deldecdraft", data: { id: d.id }, danger: true },
+      );
+      return `<tr>
+        ${nameCell("DMN", d.name || "Decision", `<span class="chip draft-chip">Draft</span> not in the model yet — a publish does not carry it`, href)}
+        <td class="muted">Decision</td>
+        <td class="muted" data-sort="${d.savedAt || 0}">${esc(fmtTime(d.savedAt))}</td>
+        <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
+    };
+    // A model in the store that no reference points at. Nothing else in this table
+    // represents it, and nothing anywhere else in the product does either — which is
+    // the whole reason it is drawn (ADR-0330).
+    const orphanModelRow = (m) => {
+      const items = canWrite ? [{ label: "Add reference", icon: "+", act: "refmodel", data: { handle: m.handle, name: m.modelName || m.handle } }] : [];
+      const what = m.valid
+        ? `${m.decisions.length} decision${m.decisions.length === 1 ? "" : "s"}: ${esc(m.decisions.join(", "))}`
+        : "does not compile";
+      return `<tr>
+        ${nameCell("DMN", m.modelName || m.handle, `<span class="chip draft-chip">No reference</span> ${esc(m.handle)}.dmn · ${what}`, "")}
+        <td class="muted">Decision model</td>
+        <td class="muted" data-sort="0">—</td>
+        <td class="row-actions">${items.length ? dropdown("⋯", "icon-btn", items) : ""}</td></tr>`;
     };
     const formRow = (f) => {
       const href = `#/modeler/form/e/${encodeURIComponent(f.id)}`;
@@ -2953,12 +3065,15 @@ async function viewProjectDetail(id) {
         <td class="row-actions">${dropdown("⋯", "icon-btn", items)}</td></tr>`;
     };
 
-    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") + fl.map(formRow).join("");
+    const bodyRows = dl.map(draftRow).join("") + rl.map(refRow).join("") +
+      looseDecDrafts.map(decDraftRow).join("") + orphanModels.map(orphanModelRow).join("") +
+      fl.map(formRow).join("");
     const newDiagramHref = ungrouped ? "#/modeler/new" : `#/modeler/new/p/${encodeURIComponent(id)}`;
     const newFormHref = ungrouped ? "#/modeler/form/new" : `#/modeler/form/new/p/${encodeURIComponent(id)}`;
     const createItems = [
       { header: "Blank resources" },
       { label: "BPMN diagram", icon: "⚙", href: newDiagramHref },
+      { label: "Decision (DMN)", icon: "▦", act: "newdec" },
       { label: "DMN model (upload .dmn)", icon: "▦", act: "newref" },
       { label: "Form", icon: "▤", href: newFormHref },
       { sep: true },
@@ -3026,15 +3141,18 @@ async function viewProjectDetail(id) {
         case "import": importArtifact(ungrouped ? "" : id, render); break;
         case "import-mim": importMIM(ungrouped ? "" : id, render); break;
         case "srcexport": downloadApplicationSource(id); break;
+        case "newdec": createDecision(ungrouped ? "" : id); break;
         case "newref": createDmnRef(ungrouped ? "" : id, render); break;
         case "shareproj": shareProject(proj, render); break;
         case "renproj": renameProject(id, proj.name, render); break;
         case "delproj": deleteProject(id, proj.name, () => { location.hash = "#/modeler"; }); break;
         case "valproj": validateProject(id); break;
         case "valref": validateDmnRef(b.dataset.id); break;
-        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }, render); break;
+        case "editref": editDmnRef({ id: b.dataset.id, modelRef: b.dataset.ref, projectId: b.dataset.pid, name: b.dataset.name }); break;
         case "deldraft": deleteDraft(b.dataset.key, render); break;
         case "delref": deleteDmnRef(b.dataset.id, render); break;
+        case "refmodel": referenceStoredModel(b.dataset.handle, b.dataset.name, render); break;
+        case "deldecdraft": deleteDecisionDraft(b.dataset.id, render); break;
         case "delform": deleteForm(b.dataset.id, render); break;
         case "movedraft": moveDraft(b.dataset.key, b.dataset.pid, render); break;
         case "moveref": moveDmnRef(b.dataset.key, b.dataset.pid, render); break;
@@ -3596,6 +3714,20 @@ function pickFile(accept) {
     document.body.appendChild(inp);
     inp.click();
   });
+}
+
+// createDecision opens the decision editor on a seed model, filing what it saves
+// under the application. It is the decision counterpart of "BPMN diagram" in the
+// same menu — an application can be built out of decisions with no diagram in it at
+// all, and publishing it deploys them as runtime artifacts (ADR-0319).
+//
+// It navigates rather than opening a window over this one: a decision is edited on a
+// page of its own, like a diagram and a form
+// (ADR-0320).
+function createDecision(projectId) {
+  location.hash = projectId
+    ? "#/modeler/dmn/new/p/" + encodeURIComponent(projectId)
+    : "#/modeler/dmn/new";
 }
 
 // createDmnRef adds a DMN model to a project by uploading a .dmn file: the model is
@@ -4813,31 +4945,18 @@ function toggleSetSecret(row, name, workers, put, reload) {
   form.querySelector('[name="value"]').focus();
 }
 
-// editDmnRef opens the embedded DMN editor (ADR-0062) on a reference's model and,
-// on save, keeps the Project Explorer in sync. Editing overwrites the model in
-// place under the same handle, so the reference (and any business-rule-task
-// selection) stays valid; only the display name can drift, so a rename in the
-// editor is mirrored onto the reference here. The editor module is imported lazily
-// — same discipline as the BPMN editor — so the Modeler home stays light. When the
-// model can't be edited locally (a remote temis service, or a dangling handle) the
-// editor surfaces the failure itself and resolves to null, leaving the row as-is.
-async function editDmnRef(ref, reload) {
+// editDmnRef opens the decision editor on a reference's model. Editing overwrites
+// the model in place under the same handle, so the reference (and any
+// business-rule-task selection) stays valid; a rename in the editor is mirrored onto
+// the reference by the editor itself. A reference with no locally editable model (a
+// remote temis service, or a dangling handle) has nothing to open, and says so here
+// rather than navigating to an editor that would only report the same thing.
+function editDmnRef(ref) {
   if (!ref.modelRef) {
-    toast("Diese DMN-Referenz hat kein lokal editierbares Modell.", "err");
+    toast("This decision has no locally editable model.", "err");
     return;
   }
-  const { openDmnEditor } = await import("./dmn-editor.js");
-  const result = await openDmnEditor({ api, toast, projectId: ref.projectId || "", modelRef: ref.modelRef });
-  if (!result) return; // cancelled or failed (the editor already reported why)
-  // Editing keeps the handle; mirror a decision rename onto the reference so the
-  // Explorer label doesn't go stale.
-  const newName = (result.name || "").trim();
-  if (newName && newName !== ref.name) {
-    try {
-      await api("PATCH", `/api/v1/dmnrefs/${encodeURIComponent(ref.id)}`, { name: newName });
-    } catch (e) { toast("Modell gespeichert, Umbenennen fehlgeschlagen: " + e.message, "err"); }
-  }
-  await reload();
+  location.hash = "#/modeler/dmn/e/" + encodeURIComponent(ref.id);
 }
 
 // moveDmnRef reassigns a DMN reference to a project (or to Ungrouped when "").
@@ -4848,12 +4967,44 @@ async function moveDmnRef(id, projectId, reload) {
   await reload();
 }
 
+// referenceStoredModel puts a reference back on a model in the store that has none,
+// which is the recovery from having deleted the last one
+// (ADR-0330). It re-uses the existing
+// handle rather than re-uploading, so the model is *recovered* rather than copied —
+// a re-upload would file a second model under a suffixed handle (ADR-0222).
+async function referenceStoredModel(handle, suggested, reload) {
+  const name = (window.prompt("Reference name (how it shows in Atlas)", suggested || handle) || "").trim();
+  if (!name) return;
+  try {
+    await api("POST", "/api/v1/dmnrefs", { name, modelRef: handle, projectId: "" });
+    toast(`Added DMN reference "${name}"`, "ok");
+  } catch (e) { toast("could not add DMN reference: " + e.message, "err"); return; }
+  await reload();
+}
+
 async function deleteDmnRef(id, reload) {
-  if (!window.confirm("Delete this DMN reference? The temis model itself is not affected.")) return;
+  // The impact is a read and may fail; when it does the confirm falls back to the
+  // plain sentence rather than blocking a deletion the author is entitled to make.
+  let impact = null;
+  try { impact = await api("GET", `/api/v1/dmnrefs/${encodeURIComponent(id)}/impact`); } catch { impact = null; }
+  if (!window.confirm(refDeleteWarning(impact))) return;
   try {
     await api("DELETE", `/api/v1/dmnrefs/${encodeURIComponent(id)}`);
     toast("Deleted DMN reference", "ok");
   } catch (e) { toast("could not delete reference: " + e.message, "err"); }
+  await reload();
+}
+
+// A decision that exists only as a draft has nothing behind it, so deleting the
+// draft is deleting the decision (ADR-0321) — said plainly, because
+// the same word on a decision that *is* in the model means only "throw away the
+// unsaved work".
+async function deleteDecisionDraft(id, reload) {
+  if (!window.confirm("Delete this decision draft? It has never been saved to the model, so nothing else has a copy.")) return;
+  try {
+    await api("DELETE", `/api/v1/dmn-drafts/${encodeURIComponent(id)}`);
+    toast("Deleted decision draft", "ok");
+  } catch (e) { toast("could not delete draft: " + e.message, "err"); }
   await reload();
 }
 
@@ -6717,37 +6868,11 @@ async function viewDecisionDetail(id) {
   const tbody = document.getElementById("rows");
   const pop = document.getElementById("dec-pop");
   const fmtNano = (ns) => ns ? new Date(ns / 1e6).toLocaleString() : "—";
-  const fmtVal = (v) => (v === null || v === undefined ? "null" : typeof v === "string" ? v : JSON.stringify(v));
-  const cellText = (t) => { const s = (t ?? "").trim(); return s === "" || s === "-" ? "–" : s; };
-  const tablesOf = (r) => (r && r.trace && Array.isArray(r.trace.tables)) ? r.trace.tables : [];
-  const matchedNums = (r) => {
-    const nums = [];
-    for (const t of tablesOf(r)) for (const rule of (t.rules || [])) if (rule.matched) nums.push(rule.index + 1);
-    return [...new Set(nums)];
-  };
-
-  // miniTable renders one decision table as a compact matrix (mirrors temis' Operate
-  // view): a row per rule, input columns + output, the matched rule highlighted and
-  // each cell tinted by whether its condition held.
-  const miniTable = (tt, n) => {
-    const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
-    const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
-    const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
-    const ins = tt.inputs || [];
-    const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
-      `<th>${esc(i.expression)} <code>= ${esc(fmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
-    const body = (tt.rules || []).map((r) => {
-      const cells = ins.map((_, k) => {
-        const c = r.conditions && r.conditions[k];
-        const cls = c ? (c.matched ? "mcell is-ok" : "mcell is-no") : "mcell is-skip";
-        return `<td class="${cls}">${c ? esc(cellText(c.entry)) : ""}</td>`;
-      }).join("");
-      const out = r.matched && r.outputs ? esc(r.outputs.map(fmtVal).join(", ")) : "";
-      return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
-    }).join("");
-    return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
-      `<table class="mgrid">${hr}${body}</table></div>`;
-  };
+  // The rule matrix is drawn by dmn-trace.js, the one renderer the decision
+  // editor's Test panel also uses, so a trace reads the same in both places.
+  const tablesOf = (r) => traceTablesOf(r && r.trace);
+  const matchedNums = (r) => matchedRuleNumbers(r && r.trace);
+  const miniTable = (tt, n) => renderTraceTable(tt, n);
 
   let evals = [];
   const load = async () => {
@@ -6762,7 +6887,7 @@ async function viewDecisionDetail(id) {
       tbody.innerHTML = evals.map((r, i) => {
         const ins = r.inputs && typeof r.inputs === "object" ? Object.entries(r.inputs) : [];
         const pills = ins.length
-          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(fmtVal(v))}</span>`).join("")}</div>`
+          ? `<div class="in-pills">${ins.map(([k, v]) => `<span class="pill-kv"><b>${esc(k)}</b> = ${esc(traceValue(v))}</span>`).join("")}</div>`
           : '<span class="muted">—</span>';
         const outs = r.outputs && typeof r.outputs === "object" ? Object.entries(r.outputs) : [];
         const nums = matchedNums(r);
@@ -6772,7 +6897,7 @@ async function viewDecisionDetail(id) {
           ? `<div class="res">${outs.map(([k, v], oi) =>
               `<div class="res-row${hoverable}" data-ev="${i}"${hoverable ? ' tabindex="0"' : ""}>
                 <span class="res-key">${esc(k)}</span>
-                <span class="res-val">${esc(fmtVal(v))}</span>
+                <span class="res-val">${esc(traceValue(v))}</span>
                 ${oi === 0 ? badge : ""}
               </div>`).join("")}</div>`
           : '<span class="muted">—</span>';
@@ -7986,7 +8111,9 @@ async function viewInfoModels() {
         ${m.documentation ? `<div class="muted" style="font-size:12px; padding-left:54px">${esc(markdownToPlain(m.documentation))}</div>` : ""}</td>
       <td>${app ? `<span class="mi-icon">📦</span>${esc(app.name)}
         <a class="dm-link" href="#/data/derived/${encodeURIComponent(app.id)}"
-           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>`
+           title="What ${esc(app.name)}'s processes actually carry, read from the processes themselves">as built →</a>
+        <a class="dm-link" href="#/data/difference/${encodeURIComponent(app.id)}"
+           title="What this model plans that ${esc(app.name)}'s processes do not build yet, and the other way round">difference →</a>`
         : `<span class="muted">Missing application</span>`}</td>
       <td class="muted">${m.classes} ${m.classes === 1 ? "class" : "classes"}</td>
       <td class="muted">${m.associations}</td>
@@ -8303,6 +8430,18 @@ async function viewDerivedModel(applicationId) {
   await mod.mountDerivedModel(view, { api, applicationId, application });
 }
 
+// viewModelDifference reads the authored model against what the processes build
+// (ADR-0310). It is the
+// third reading of one subject, and it is a list rather than a fourth drawing —
+// precisely so a reader cannot mistake it for either picture.
+async function viewModelDifference(applicationId) {
+  const gen = navGen;
+  const mod = await import("./model-difference.js");
+  const application = await resolveProject(applicationId);
+  if (superseded(gen)) return;
+  await mod.mountModelDifference(view, { api, applicationId, application });
+}
+
 // viewInfoModel opens one model on the class canvas, which lives in its own module
 // so the shell stays small.
 async function viewInfoModel(id) {
@@ -8530,6 +8669,13 @@ async function viewEditor(key, projectId) {
 async function viewEditorDraft(id) {
   const gen = navGen;
   const mod = await import("./editor.js");
+  // A decision authored for one of this diagram's business rule tasks left what it
+  // saved behind on the way out; the task adopts it as the editor mounts, which is
+  // what keeps the ADR-0062 round trip working now that it is a navigation rather
+  // than a window (ADR-0320). One-shot: taking it
+  // clears it, so reopening the diagram later does not re-apply it.
+  const { takeAdoption } = await import("./dmn-editor.js");
+  const adopt = takeAdoption(id);
   // An existing draft carries its own projectId; resolve it so the editor can
   // offer a "back to project" breadcrumb (the route alone doesn't name it).
   let projectId = "";
@@ -8540,7 +8686,21 @@ async function viewEditorDraft(id) {
   } catch { /* best-effort: fall back to a Home-only crumb */ }
   const project = await resolveProject(projectId);
   if (superseded(gen)) return; // a newer navigation landed during the pre-mount fetches
-  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project });
+  await mod.mountEditor(view, { api, toast, draftId: id, projectId, project, adopt });
+}
+
+// viewDmnEditor mounts the decision editor
+// (ADR-0320). refId edits an existing decision; without it a new one is authored,
+// filed into projectId. draftId opens a decision that exists only as a draft, which
+// has no reference to be addressed by (ADR-0321). forTask is the
+// {processId, elementId} of the business rule task the author pressed "＋ New
+// decision" on, which decides where back goes and whose task adopts what is saved to
+// the model.
+async function viewDmnEditor({ refId, draftId, projectId, forTask } = {}) {
+  const gen = navGen;
+  const mod = await import("./dmn-editor.js");
+  if (superseded(gen)) return; // don't mount over a newer view after the dynamic import
+  await mod.mountDmnEditor(view, { api, toast, refId, draftId, projectId, forTask });
 }
 
 // generateFor, when given, is the {processId, elementId} the "Create a new form" link
@@ -8574,7 +8734,7 @@ async function viewInstanceReplay(key) {
 // ---------- Router ----------
 // viewDmnViewer renders a referenced DMN model: its decision requirements graph
 // (decisions, input data, and the requirements between them) drawn read-only from
-// the graph the embedded engine exposes, with a Bearbeiten button that opens the
+// the graph the embedded engine exposes, with an Edit button that opens the
 // embedded dmn-js editor (ADR-0062) on the same model. The SVG itself is a
 // picture, not an edit surface — editing happens in the modeler overlay, and on
 // save the view re-renders from the updated model.
@@ -8584,7 +8744,7 @@ async function viewDmnViewer(refId) {
   let g, ref = null;
   try {
     // The graph carries no model handle, so the reference is fetched alongside it
-    // to know which model the Bearbeiten button should open.
+    // to know which model the Edit button should open.
     const [graph, refs] = await Promise.all([
       api("GET", `/api/v1/dmnrefs/${encodeURIComponent(refId)}/graph`),
       api("GET", "/api/v1/dmnrefs").catch(() => []),
@@ -8615,13 +8775,13 @@ async function viewDmnViewer(refId) {
     } catch { /* keep the generic "← Project" label, which still links correctly */ }
   };
   const editBtn = ref && ref.modelRef
-    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Bearbeiten</button>` : "";
-  // Re-render from the updated model once the editor closes on a save; also
-  // resolves the back link's project name.
+    ? `<button class="btn" id="dmn-edit" title="Edit this decision in Atlas">Edit</button>` : "";
+  // Edit navigates to the decision editor's own page; coming back re-renders this
+  // viewer from the stored model. Also resolves the back link's project name.
   const wireEdit = () => {
     const b = document.getElementById("dmn-edit");
-    if (b) b.addEventListener("click", async () => {
-      await editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name }, () => viewDmnViewer(refId));
+    if (b) b.addEventListener("click", () => {
+      editDmnRef({ id: ref.id, modelRef: ref.modelRef, projectId: ref.projectId || "", name: ref.name });
     });
     resolveBack();
   };
@@ -8639,7 +8799,7 @@ async function viewDmnViewer(refId) {
       <div class="row">${editBtn}</div>
     </div>
     <div id="dmn-canvas" style="overflow:auto;border:1px solid #e5e7eb;border-radius:10px;background:var(--diagram-bg);padding:8px">${renderDrgSvg(g)}</div>
-    <p class="muted" style="font-size:12px">Diese Entscheidung kann direkt in Atlas bearbeitet (<b>Bearbeiten</b>) oder in einem Business-Rule-Task über den Decision-Picker des Modelers verwendet werden.</p></div>`;
+    <p class="muted" style="font-size:12px">This decision can be edited in Atlas (<b>Edit</b>) or used from a business rule task through the Modeler's decision picker.</p></div>`;
   wireEdit();
 }
 
@@ -8930,6 +9090,7 @@ async function route() {
   else if (path.startsWith("#/operations")) appId = "operations";
   else if (path.startsWith("#/panorama")) appId = "panorama";
   else if (path.startsWith("#/data")) appId = "data";
+  else if (path.startsWith("#/catalog")) appId = "catalog";
 
   // Gate the whole app behind login when enforcement is on and no session is
   // active. Auth off (the default) skips this entirely.
@@ -8962,6 +9123,22 @@ async function route() {
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/catalog") {
+      const gen = navGen;
+      const { viewCatalogs } = await import("./catalog-admin.js");
+      return await viewCatalogs({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    const cd = path.match(/^#\/catalog\/c\/(.+)$/);
+    if (cd) {
+      const gen = navGen;
+      const { viewCatalogDetail } = await import("./catalog-admin.js");
+      // me travels with the context because one card on that page is the owner's
+      // alone (ADR-0071): an editor may change the catalogue and not who else can.
+      return await viewCatalogDetail({
+        api, toast, view, isSuperseded: () => superseded(gen),
+        me: AUTH.user, enforced: AUTH.enabled,
+      }, decodeURIComponent(cd[1]));
+    }
     if (path === "#/modeler") return await viewModelerHome();
     if (path === "#/modeler/repository") return await viewRepository();
     const pd = path.match(/^#\/modeler\/p\/(.+)$/);
@@ -8984,6 +9161,42 @@ async function route() {
     if (fe) return await viewFormEditor(decodeURIComponent(fe[1]));
     const dm = path.match(/^#\/modeler\/draft\/(.+)$/);
     if (dm) return await viewEditorDraft(decodeURIComponent(dm[1]));
+    // The decision editor, before the viewer below: "new" and "e/…" would otherwise
+    // be read as reference ids by its catch-all
+    // (ADR-0320). The /for/… tail is the shape
+    // ADR-0260 gave "Create a new form" pressed on a step — here it is "＋ New
+    // decision" pressed on a business rule task, and it is what sends the author
+    // back to that diagram.
+    const dnewdec = path.match(/^#\/modeler\/dmn\/new(?:\/p\/([^/]+))?(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dnewdec) {
+      return await viewDmnEditor({
+        projectId: dnewdec[1] ? decodeURIComponent(dnewdec[1]) : "",
+        forTask: dnewdec[3]
+          ? { processId: decodeURIComponent(dnewdec[2]), elementId: decodeURIComponent(dnewdec[3]) }
+          : null,
+      });
+    }
+    const dedit = path.match(/^#\/modeler\/dmn\/e\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (dedit) {
+      return await viewDmnEditor({
+        refId: decodeURIComponent(dedit[1]),
+        forTask: dedit[3]
+          ? { processId: decodeURIComponent(dedit[2]), elementId: decodeURIComponent(dedit[3]) }
+          : null,
+      });
+    }
+    // A decision draft has no reference to be addressed by, so it is addressed by
+    // itself (ADR-0321). Before the viewer's catch-all, like its
+    // siblings.
+    const ddraft = path.match(/^#\/modeler\/dmn\/d\/([^/]+)(?:\/for\/([^/]+)\/([^/]+))?$/);
+    if (ddraft) {
+      return await viewDmnEditor({
+        draftId: decodeURIComponent(ddraft[1]),
+        forTask: ddraft[3]
+          ? { processId: decodeURIComponent(ddraft[2]), elementId: decodeURIComponent(ddraft[3]) }
+          : null,
+      });
+    }
     const dv = path.match(/^#\/modeler\/dmn\/(.+)$/);
     if (dv) return await viewDmnViewer(decodeURIComponent(dv[1]));
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
@@ -9013,6 +9226,8 @@ async function route() {
     if (imm) return await viewInfoModel(decodeURIComponent(imm[1]));
     const imd = path.match(/^#\/data\/derived\/(.+)$/);
     if (imd) return await viewDerivedModel(decodeURIComponent(imd[1]));
+    const imdiff = path.match(/^#\/data\/difference\/(.+)$/);
+    if (imdiff) return await viewModelDifference(decodeURIComponent(imdiff[1]));
     // Drill into one decision's evaluations (its "instances"). The id is URL-encoded
     // because a DMN decision id may contain spaces or other reserved characters.
     const dd = path.match(/^#\/operations\/decisions\/(.+)$/);

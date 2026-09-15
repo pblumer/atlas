@@ -165,5 +165,9 @@ func (s *Server) handleDmnModelXML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	_, _ = w.Write(xml)
+	// A stored model usually carries no diagram — an agent, temis or a hand writes
+	// the logic, not the picture — and dmn-js draws nothing without one. The diagram
+	// is completed here, on the way to the editor, the way a layout-less BPMN model
+	// gets one on the way to bpmn-js (ADR-0325).
+	_, _ = w.Write(dmn.EnsureDiagram(xml))
 }

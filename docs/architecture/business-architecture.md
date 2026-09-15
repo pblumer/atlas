@@ -424,7 +424,15 @@ reporting the limits of its eyesight as a defect in your architecture. And a ref
 outside your sharing scope is reported as restricted, never as missing.
 
 **The milestone event is built** — see [the milestone marker](#the-milestone-marker)
-above. **So are Panorama's binding keys**: an ArchiMate `Capability` carries
+above. **So is measurement**: `GET /api/v1/capabilities/{key}/measurement?windowDays=N`
+checks a capability's declared SLAs against what ran, alongside the outcome
+distribution and cancellation counts. The window is required, because the measurement
+that settled the record's open question found the instance walk linear — 1.24 seconds
+over 100 000 finished cases — while the per-element counters stay flat at any volume.
+An SLA is measured only where it carries `thresholdSeconds`; one written as prose, and
+every KPI, is listed as not measured with the reason
+([ADR-0309](../adr/0309-measuring-a-capability.md),
+[the evidence](../../benchmarks/results/measurement-381825f.md)). **So are Panorama's binding keys**: an ArchiMate `Capability` carries
 `atlas.capabilityKey` and a `ValueStream` carries `atlas.valueStreamKey`, so a drawing
 and this register are the same architecture seen twice. The key travels in the exchange
 document as an ordinary ArchiMate property; the record's name is resolved on every read,
@@ -433,12 +441,6 @@ so the drawing cannot go stale about the register
 
 **Not built, each a named slice on [Milestone B](../../ROADMAP.md):**
 
-- **Measurement.** Every KPI and SLA in the registry is a *declaration*. Nothing computes
-  one, and the coverage answer says so in a field rather than leaving a client to render
-  a goal as an achievement. The data is there — see
-  [Modelling for measurement](#modelling-for-measurement) — but whether it can be
-  aggregated at the instance volumes this is aimed at, without the OpenSearch exporter,
-  is the open question the decision record carries.
 - **Document-level exchange** of the map on its own, with a dry-run import.
 - **A model-side declaration**, so a process can state the capability it realises where
   the delivery team already works, and carry it through an export.

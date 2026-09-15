@@ -135,6 +135,52 @@ type Limits struct {
 	// to make that safe would be smaller than Variable. That is a defect with its own
 	// fix, not a number to hide in.
 	Collection int64
+
+	// DirectorySync is one directory-synchronisation message: the accounts and
+	// groups a scheduled delta read of Entra reports back for this server to write
+	// (ADR-0332). It is its own budget rather than
+	// Payload's because the two bound different risks — Payload bounds one answer a
+	// process received, this bounds the one message that may create accounts.
+	DirectorySync int64
+
+	// DirectoryObjects is how many directory objects (accounts plus groups) one such
+	// message may carry. It is the batch ceiling, and it is a count and not a size
+	// because what it protects is not memory: the decision and the writes happen in a
+	// single run-loop turn, so every object in a message is time the engine's single
+	// writer spends on this instead of on process execution. A message above the
+	// ceiling is refused whole rather than truncated — a short change set is a wrong
+	// answer that would then be recorded as complete by advancing the cursor.
+	DirectoryObjects int32
+
+	// DirectoryReport is how many individually named lines a synchronisation report
+	// may carry. The report exists to be read by a person before a first run is
+	// applied, and a report nobody finishes reading is one nobody reads: the counts
+	// are unbounded because they are numbers, and this bounds the lines. What does not
+	// fit is counted, never silently dropped.
+	DirectoryReport int32
+
+	// InventoryLoad is one commissioning-load message: the rights a reading of one
+	// target system found, reported here to be written down as pre-existing
+	// (ADR-0333). Its own budget rather than Payload's
+	// for the same reason DirectorySync is — Payload bounds one answer a process
+	// received, this bounds the one message that may write evidence kept for years.
+	InventoryLoad int64
+
+	// InventoryObservations is how many rights one such message may carry. A count
+	// and not a size, because what it protects is not memory: the decision, the
+	// inventory reads it makes and the writes all happen in a single run-loop turn,
+	// so every observation is time the engine's single writer spends on this instead
+	// of on process execution. A message above the ceiling is refused whole rather
+	// than truncated — and here truncation would be worse than elsewhere, since the
+	// load's own record would then say a system was loaded when part of it was not.
+	InventoryObservations int32
+
+	// InventoryReport is how many individually named lines a load's report may carry.
+	// Distinct from DirectoryReport because the two reports are read at different
+	// lengths: a directory report's body is exceptions, while a load's body is the
+	// grants themselves — that is what a person is being asked to authorise, and a
+	// report showing only the exceptions would ask them to approve a number.
+	InventoryReport int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -160,6 +206,21 @@ func Default() Limits {
 		Iterations:   100_000,
 		Variable:     1 << 20,
 		Collection:   16 << 20,
+		// Eight megabytes is a full enumeration of a few tens of thousands of objects
+		// under a narrow $select; two thousand objects is the batch a run-loop turn can
+		// write without the engine noticeably stalling, and five hundred lines is more
+		// than anybody reads in one sitting.
+		DirectorySync:    8 << 20,
+		DirectoryObjects: 2_000,
+		DirectoryReport:  500,
+		// A commissioning load is read in pages, so the per-message numbers are the
+		// directory's rather than larger: two thousand rights is a run-loop turn the
+		// engine absorbs, and eight megabytes carries them with room to spare. The
+		// report is allowed more lines than the directory's because its lines are the
+		// grants, and a first load is read once, carefully, by somebody deciding.
+		InventoryLoad:         8 << 20,
+		InventoryObservations: 2_000,
+		InventoryReport:       2_000,
 	}
 }
 

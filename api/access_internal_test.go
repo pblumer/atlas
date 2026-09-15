@@ -36,6 +36,7 @@ var wantPublicRoutes = []string{
 	// Share links, where the token in the URL is the whole authorization
 	// (ADR-0029/0143). Rate-limited in their handlers.
 	"GET /public/process-docs/{token}",
+	"GET /public/decision-docs/{token}",
 	"GET /public/forms/{token}",
 	"GET /public/forms/{token}/schema",
 	"POST /public/forms/{token}/start",

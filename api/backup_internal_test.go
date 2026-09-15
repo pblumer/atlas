@@ -213,3 +213,22 @@ func TestRestoreDestMapsTheLegacyMarketplaceDirectory(t *testing.T) {
 		})
 	}
 }
+
+// TestABackupCarriesACatalogueLogo closes the assumption the theme record left
+// open. A catalogue's accent rides in its record and is carried because the record
+// is; its brand mark is a file beside the stores, in a subdirectory, and nothing
+// said whether the walk reaches it. Losing every customer's logo on restore while
+// the archive reported success is exactly the failure ADR-0282 was written about.
+func TestABackupCarriesACatalogueLogo(t *testing.T) {
+	fsys := fstest.MapFS{
+		"catalog/catalogs/aa.json":     {Data: []byte(`{"id":"cat_1"}`)},
+		"catalog/logos/6361745f31.png": {Data: []byte("mark")},
+	}
+	var buf bytes.Buffer
+	if err := writeBackup(tar.NewWriter(&buf), fsys); err != nil {
+		t.Fatalf("writeBackup: %v", err)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("catalog/logos/6361745f31.png")) {
+		t.Error("the archive does not carry a catalogue's brand mark")
+	}
+}

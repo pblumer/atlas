@@ -1,5 +1,12 @@
 # Published baseline results
 
+**Not everything here is a baseline.** A file named `measurement-<commit>` is a
+one-off capture taken to answer a specific design question, kept because the question
+was answered by measurement and the evidence should outlive the conversation. The
+first is [`measurement-381825f.md`](measurement-381825f.md): whether a business
+capability's KPIs are computable without the OpenSearch exporter. It is read for its
+shapes, not tracked over time.
+
 This directory holds Atlas's first **published, reproducible** benchmark baseline
 (work programme B of the v0.2.0 *Proof of Reliability & Performance* initiative).
 

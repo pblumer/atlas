@@ -43,6 +43,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_capabilities":            "GET /api/v1/capabilities",
 	"atlas_get_capability":               "GET /api/v1/capabilities/{key}",
 	"atlas_capability_coverage":          "GET /api/v1/capabilities/{key}/coverage",
+	"atlas_measure_capability":           "GET /api/v1/capabilities/{key}/measurement",
 	"atlas_create_capability":            "POST /api/v1/capabilities",
 	"atlas_save_capability":              "PUT /api/v1/capabilities/{key}",
 	"atlas_delete_capability":            "DELETE /api/v1/capabilities/{key}",
@@ -66,6 +67,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_save_draft":                   "POST /api/v1/drafts",
 	"atlas_save_form":                    "POST /api/v1/forms",
 	"atlas_upload_decision_model":        "POST /api/v1/dmn-models",
+	"atlas_deploy_decision":              "POST /api/v1/decision-deployments",
+	"atlas_try_decision":                 "POST /api/v1/decisions/evaluate",
 	"atlas_register_decision":            "POST /api/v1/dmnrefs",
 	"atlas_deploy_project":               "POST /api/v1/projects/{id}/deploy",
 	"atlas_deploy_application":           "POST /api/v1/applications/{id}/deploy",
@@ -98,6 +101,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_terminate_instances":          "POST /api/v1/instances/terminate",
 	"atlas_instance_decisions":           "GET /api/v1/instances/{key}/decisions",
 	"atlas_deployed_decisions":           "GET /api/v1/decisions/deployed",
+	"atlas_decision_deployments":         "GET /api/v1/decision-deployments",
+	"atlas_deployed_decision_model":      "GET /api/v1/decision-deployments/{key}/xml",
 	"atlas_dmnref_graph":                 "GET /api/v1/dmnrefs/{id}/graph",
 	"atlas_get_decision_model":           "GET /api/v1/dmn-models/{ref}/xml",
 	"atlas_collaboration_runtime":        "GET /api/v1/collaborations/{key}/runtime",
@@ -129,6 +134,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_instance_object_graph":        "GET /api/v1/instances/{key}/object-graph",
 	"atlas_instance_lifecycle":           "GET /api/v1/instances/{key}/lifecycle",
 	"atlas_derived_information_model":    "GET /api/v1/infomodel/derived",
+	"atlas_model_difference":             "GET /api/v1/infomodel/difference",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -139,6 +145,55 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// The portal catalogue (ADR-0312). Authoring
+	// one is a plausible agent task — building a catalogue out of an ArchiMate
+	// model is close to what an agent is good at — and these will very likely
+	// become tools. They are not yet, for one reason: an MCP tool is a public
+	// contract, and this surface is half-built. There is no ordering side, no
+	// portal, and the shapes here are still moving with every slice. Exposing them
+	// now would pin a contract to a design that is still settling, which is the
+	// same argument the panorama entries below make.
+	"GET /api/v1/catalogs":                           "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs":                          "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalogs/{id}":                      "portal catalogue surface still being built; a tool is a public contract",
+	"PATCH /api/v1/catalogs/{id}":                    "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalogs/{id}/import":              "portal catalogue surface still being built; a tool is a public contract",
+	"PUT /api/v1/catalogs/{id}/theme":                "an instance's appearance is an operator's choice, not an agent's",
+	"POST /api/v1/instances":                         "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
+	"GET /api/v1/approvals/stalled":                  "an operations list still settling with the portal around it; a tool is a public contract",
+	"POST /api/v1/orders/{id}/cancel":                "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
+	"POST /api/v1/orders/{id}/lines/{item}/return":   "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
+	"POST /api/v1/orders/{id}/lines/{item}/escalate": "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
+	"POST /api/v1/orders/{id}/lines/{item}/reassign": "same: an intervention records the person who made it, and an agent is not one",
+	"GET /api/v1/approvals":                          "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
+	"GET /api/v1/approvals/{key}/logo":               "a brand mark is bytes for a browser; an agent has no use for the image",
+	"GET /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"PUT /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"DELETE /api/v1/catalogs/{id}/logo":              "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"POST /api/v1/catalogs/{id}/releases":            "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalogs/{id}/releases":             "portal catalogue surface still being built; a tool is a public contract",
+	"GET /api/v1/catalog-products":                   "portal catalogue surface still being built; a tool is a public contract",
+	"POST /api/v1/catalog-products":                  "portal catalogue surface still being built; a tool is a public contract",
+	// Ordering, for the same reason. An order is also somebody's own: the handler
+	// confines reads to the orders you placed or are the recipient of, and a tool
+	// acting as a server identity would have no such person to be.
+	"GET /api/v1/portal/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
+	// The inventory. Same shape as the catalogue above — it answers about the
+	// caller — with one more reason on top: a list of somebody's access is exactly
+	// the read that should need a person behind it, and an agent acting as a server
+	// identity is not one. The ?principal= form an administrator uses would hand
+	// every agent the whole estate's access map through one tool call.
+	"GET /api/v1/inventory":   "what one person holds; an agent has no inventory of its own, and the administrator's form of it reads somebody else's access",
+	"POST /api/v1/orders":     "portal ordering surface still being built; a tool is a public contract",
+	"GET /api/v1/orders":      "portal ordering surface still being built, and an order is read as the person who placed it",
+	"GET /api/v1/orders/{id}": "portal ordering surface still being built, and an order is read as the person who placed it",
+	// The orchestrator pair. These drive real provisioning, and an agent that
+	// could report a line as provisioned could make an order say something no
+	// target system ever did — the one place in this surface where a wrong call
+	// is not a wrong answer but a wrong record.
+	"GET /api/v1/orders/{id}/next":                   "orchestrator call; the ordering surface is still being built",
+	"POST /api/v1/orders/{id}/lines/{item}":          "reports a provisioning outcome, which an agent must not be able to assert on a target system's behalf",
+	"POST /api/v1/orders/{id}/lines/{item}/decision": "records somebody's refusal of a request; an agent must not be able to decide on a person's behalf, and the record is kept forever",
 	// The node descriptor (ADR-0189 §6). It answers "which runtime is this" — the
 	// identity another *server* correlates against, not something an agent authors
 	// or runs. An agent already knows which server it is talking to, because it is
@@ -357,7 +412,8 @@ var mcpOmittedRoutes = map[string]string{
 	// rendering transform of BPMN-DI coordinates. An MCP agent authors BPMN-DI
 	// directly (or relies on server-side ensureDiagramLayout on read), so it does
 	// not drive a scenario through this.
-	"POST /api/v1/layout": "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+	"POST /api/v1/layout":     "modeler-time diagram layout regeneration; a rendering concern, not a scenario action",
+	"POST /api/v1/dmn-layout": "the same for a decision requirements graph, and needed even less by an agent: a model an agent uploads is completed on read anyway",
 
 	// MIM/FIM XOML import (#471): a human file-upload in the Modeler that converts a
 	// Microsoft Identity Manager workflow into a BPMN draft. An MCP agent authors BPMN
@@ -395,12 +451,29 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/forms/{id}":          "artifact editing is a UI concern",
 	"PATCH /api/v1/dmnrefs/{id}":         "artifact editing is a UI concern",
 	"DELETE /api/v1/dmnrefs/{id}":        "artifact editing is a UI concern",
+	"GET /api/v1/dmnrefs/{id}/impact":    "it exists to fill that deletion's confirm dialog, and the deletion is a UI concern",
 	"POST /api/v1/dmnrefs/{id}/validate": "modeler-time validation is a UI concern",
+	"GET /api/v1/dmn-models":             "reading the model folder as a folder is housekeeping for the Modeler; an agent resolves a decision through the catalog, not the store",
 
 	// The SSE join stream is a browser transport: an MCP agent cannot hold an
 	// event stream, so it joins via the non-streaming atlas_join_session and reads
 	// with atlas_session_poll instead. The stream endpoint itself carries no tool.
 	"GET /api/v1/drafts/{id}/session": "live SSE co-editing transport for browsers; agents use atlas_join_session + atlas_session_poll (ADR-0140)",
+
+	// Co-editing a decision (ADR-0323) is the same session
+	// over a decision draft. The browser surface is the point of that record; the
+	// agent surface is not duplicated for it, because an agent authoring a decision
+	// already has the turn-based path (atlas_upload_decision_model, and
+	// atlas_try_decision to check it) and six more tools would double the session
+	// surface for a case nobody has asked for. Widening the existing six to take a
+	// decision draft is the follow-up if somebody does.
+	"GET /api/v1/dmn-drafts/{id}/session":           "live SSE co-editing transport for browsers; the agent session surface is not duplicated per artifact kind",
+	"POST /api/v1/dmn-drafts/{id}/session/join":     "the agent session surface is not duplicated per artifact kind; an agent authors a decision turn-based",
+	"POST /api/v1/dmn-drafts/{id}/session/poll":     "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/leave":    "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/presence": "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/lock":     "same as join",
+	"POST /api/v1/dmn-drafts/{id}/session/change":   "same as join",
 
 	// Public start links: a human-sharing feature, not an agent action.
 	"POST /api/v1/public-links":           "human share links, not an agent action",
@@ -424,6 +497,28 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
 	"GET /api/v1/audit":                                 "global access-control history is an admin/UI concern",
+
+	// The directory mirror (ADR-0332). Both routes are
+	// deliberately absent from the tool surface, and not merely unwritten: the pair
+	// exists so that one scheduled process, carrying one narrowly scoped credential,
+	// may create and disable accounts. Advertising it as a tool would put that reach
+	// behind whatever an assistant is asked to do next, which is the opposite of
+	// confining it — and the read half is no better, since it hands out the Graph
+	// cursor whose movement is how a run loses changes.
+	"GET /api/v1/directory-sync":  "account provisioning stays behind its own scoped credential, not an assistant's tool call",
+	"POST /api/v1/directory-sync": "account provisioning stays behind its own scoped credential, not an assistant's tool call",
+
+	// The commissioning load (ADR-0333). The write half
+	// is omitted for a reason of its own rather than by analogy with the pair above:
+	// the load's entire safeguard is that several thousand permanent records are
+	// entered only after a person has read what would be entered. A tool call makes
+	// it something that can happen as a step of whatever an assistant was asked to do
+	// next, which is the same "nobody decided" failure the record rejected the cheap
+	// design for. The read half is harmless on its own and is omitted only because it
+	// answers a question — has a load ever been applied here — that nothing but
+	// running a load makes worth asking.
+	"GET /api/v1/inventory-load":  "the commissioning load is an act with somebody responsible for it, and its state route is only useful beside it",
+	"POST /api/v1/inventory-load": "entering years of evidence must follow a person reading the report, not a tool call made in passing",
 
 	// Workers + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each Worker Type: the Modeler's picker reads it to
@@ -539,6 +634,20 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/documentation/{id}":                      "pruning published history is a human decision, not an agent action",
 	"POST /api/v1/processes/{processId}/documentation/prune": "retention over published history is a human decision, not an agent action",
 
+	// Decision documentation is the same design for a second artifact kind
+	// (ADR-0324), and omitted for the same reasons: the
+	// document is rendered in the browser from dmn-js's own picture, and publishing
+	// or revoking one is a human decision. An agent reads the decision itself with
+	// atlas_get_decision_model and can check it with atlas_try_decision.
+	"POST /api/v1/decisions/{decisionId}/documentation":       "the document is rendered in the browser; an agent has no requirements-graph raster to publish",
+	"GET /api/v1/decisions/{decisionId}/documentation":        "history of a published artifact; an agent reads the model itself via atlas_get_decision_model",
+	"POST /api/v1/decisions/{decisionId}/documentation/prune": "retention over published history is a human decision, not an agent action",
+	"GET /api/v1/decision-docs/{id}":                          "a published artifact's record; an agent reads the model itself via atlas_get_decision_model",
+	"GET /api/v1/decision-docs/{id}/pdf":                      "binary document download is not an agent capability",
+	"POST /api/v1/decision-docs/{id}/share":                   "publishing a decision to an audience outside Atlas is a human decision, not an agent action",
+	"DELETE /api/v1/decision-docs/{id}/share":                 "revoking a publication is a human decision, not an agent action",
+	"DELETE /api/v1/decision-docs/{id}":                       "pruning published history is a human decision, not an agent action",
+
 	// Artifact id availability (ADR-0222): a keystroke-level
 	// probe that colours the Modeler's ID field while it is being typed. An agent
 	// does not type; it saves, and the save itself is the authority — it refuses a
@@ -546,6 +655,16 @@ var mcpOmittedRoutes = map[string]string{
 	// only invite an agent to ask first and then race the answer.
 	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
 	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
+
+	// Decision drafts (ADR-0321): the Modeler's holding place for a
+	// decision an author has not finished. Its whole purpose is that nothing else
+	// resolves it — not the picker, not a publish — so a tool over it would let an
+	// agent write something no other tool can read. An agent that authors a decision
+	// writes the model, which is what atlas_upload_decision_model already does.
+	"POST /api/v1/dmn-drafts":         "a Modeler holding place nothing resolves; an agent writes the model with atlas_upload_decision_model",
+	"GET /api/v1/dmn-drafts":          "a Modeler holding place nothing resolves; an agent reads decisions with atlas_list_decision_refs",
+	"GET /api/v1/dmn-drafts/{id}/xml": "a Modeler holding place nothing resolves; an agent reads the model with atlas_get_decision_model",
+	"DELETE /api/v1/dmn-drafts/{id}":  "discards Modeler work in progress an agent never wrote",
 
 	// Secrets: credential storage; an agent must never read or write it.
 	"GET /api/v1/secrets":           "credential storage is not an agent capability",
