@@ -104,7 +104,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     <td>${c.rank}</td>
     <td>${esc((c.languages || []).join(", ")) || "—"}</td>
     <td>${(c.items || []).length}</td>
-    <td>${esc((c.groups || []).join(", ")) || "<span class='muted'>everybody</span>"}</td>
+    <td>${esc((c.groups || []).join(", ")) || "<span class='muted'>nobody yet</span>"}</td>
     <td>${fmtTime(c.updatedAt)}</td>
   </tr>`).join("");
 
@@ -114,7 +114,9 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     </div>
     <p class="muted" style="max-width:62ch">A catalogue is what one audience is offered.
       Which one a person sees is decided by their groups and its rank — the highest rank
-      they reach wins — so two catalogues may not share a rank.</p>
+      they reach wins — so two catalogues may not share a rank. A catalogue naming no
+      group reaches <b>nobody</b>: the dangerous default is the one where a catalogue
+      somebody is still filling is already open to everybody.</p>
     ${cats.length ? `<table class="table">
       <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
       <tbody>${rows}</tbody></table>`
@@ -128,7 +130,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
         <label class="field">Languages<input name="languages" value="de" autocomplete="off"
           placeholder="de, fr"></label>
         <label class="field">Rank<input name="rank" type="number" value="${cats.length + 1}" required></label>
-        <label class="field">Audience (groups, empty means everybody)<input name="groups"
+        <label class="field">Audience (groups; empty reaches nobody)<input name="groups"
           autocomplete="off" placeholder="kunde-a, kunde-b"></label>
         <button class="primary" type="submit">Create</button>
       </form>
@@ -224,11 +226,16 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
           value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
         <label class="field">Languages<input name="languages" value="${esc(langs.join(", "))}" autocomplete="off"></label>
         <label class="field">Rank<input name="rank" type="number" value="${cat.rank}"></label>
-        <label class="field">Audience (groups, empty means everybody)<input name="groups"
+        <label class="field">Audience (groups; empty reaches nobody)<input name="groups"
           value="${esc((cat.groups || []).join(", "))}" autocomplete="off"></label>
+        <p class="muted" style="margin:0 0 10px">${(cat.groups || []).length
+    ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
+    : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
         <button class="primary" type="submit">Save</button>
       </form>
     </div>
+
+    ${appearanceCard(cat, me, enforced)}
 
     <h3>Products</h3>
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
@@ -267,7 +274,8 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
-  wire({ api, toast, view }, cat, items, byID, langs, procIDs, mayShare(cat, me, enforced));
+  wire({ api, toast, view }, cat, items, byID, langs, procIDs,
+    mayShare(cat, me, enforced), mayTheme(me, enforced));
 }
 
 function productRow(it, iid, langs) {
@@ -323,6 +331,95 @@ function edgeForm(offered, byID, langs) {
 
 // mayShare mirrors the server's rule rather than guessing at it: sharing is the
 // owner's, an editor may change the catalogue and not who else can (ADR-0071).
+// --- How a catalogue looks ---------------------------------------------------
+//
+// A catalogue's appearance is per catalogue and has been since it was built: the
+// portal and the approval page paint themselves from it, and the API has carried
+// it all along. No screen offered it. So the one thing that makes a catalogue
+// somebody *else's* — their colour, their typeface, their mark at the top — was
+// reachable only by whoever was willing to write JSON by hand, which is the exact
+// state this page exists to end.
+//
+// Administration and not catalogue maintenance, like the server has it: an editor
+// may change what a catalogue offers and may not change whose it looks like. The
+// form is drawn for an administrator only, because offering a form that always
+// ends in 403 is its own kind of lie.
+
+// TYPEFACES are the stacks the binary ships, spelled as the server spells them
+// (api/catalog/theme.go). A list and not a URL: a web font would reach a third
+// party on every portal page load, carrying the visitor's address there.
+const TYPEFACES = [
+  { id: "system", name: "System", what: "whatever the reader's device uses" },
+  { id: "humanist", name: "Humanist", what: "Segoe UI, Candara, Optima" },
+  { id: "serif", name: "Serif", what: "Georgia, Cambria, Times" },
+  { id: "mono", name: "Monospace", what: "SF Mono, Cascadia, Menlo" },
+];
+
+// mayTheme mirrors the server's gate, which is stricter than the one on the rest
+// of this page: an editor may change what the catalogue offers, and only an
+// administrator may change what it looks like.
+function mayTheme(me, enforced) {
+  if (!enforced) return true;
+  return !!me && (me.roles || []).includes("admin");
+}
+
+function appearanceCard(cat, me, enforced) {
+  const theme = cat.theme || {};
+  const accent = theme.accent || "";
+  const logoURL = `/api/v1/catalogs/${encodeURIComponent(cat.id)}/logo`;
+
+  if (!mayTheme(me, enforced)) {
+    return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+      <p class="muted" style="max-width:62ch">${accent || theme.typeface
+    ? `Its own appearance: ${esc(accent || "the instance colour")}, ${
+      esc(theme.typeface || "the instance typeface")}.`
+    : "The instance's own appearance."} Changing it is an administrator's.</p>`;
+  }
+
+  return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+    <p class="muted" style="max-width:62ch">The portal and the approval page paint
+      themselves from this, so a customer sees their own brand rather than yours. Leave
+      both empty and the catalogue wears the instance's appearance. Setting it is an
+      administrator's; an editor may change what the catalogue offers and not whose it
+      looks like.</p>
+    <div class="card" style="margin:0 0 18px; max-width:640px">
+      <form class="cat-theme">
+        <label class="field">Accent colour
+          <span class="row" style="gap:8px; align-items:center">
+            <input type="color" name="accentpick" value="${esc(accent || "#0b5cff")}"
+              aria-label="Pick the accent colour" style="width:44px; padding:2px">
+            <input name="accent" value="${esc(accent)}" autocomplete="off" spellcheck="false"
+              placeholder="#rrggbb — empty wears the instance colour" style="flex:1">
+          </span></label>
+        <label class="field">Typeface<select name="typeface">
+          <option value=""${theme.typeface ? "" : " selected"}>The instance's</option>
+          ${TYPEFACES.map((f) => `<option value="${esc(f.id)}"${
+    theme.typeface === f.id ? " selected" : ""}>${esc(f.name)} — ${esc(f.what)}</option>`).join("")}
+        </select></label>
+        <div class="row">
+          <button class="primary" type="submit">Save appearance</button>
+          ${accent || theme.typeface
+    ? `<button type="button" data-act="theme-clear">Wear the instance's</button>` : ""}
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="margin:0 0 18px; max-width:640px">
+      <h4 style="margin:0 0 10px">Brand mark</h4>
+      <p class="muted">Shown at the top of the portal for whoever reaches this catalogue.
+        Without one it falls back to the instance's. PNG or SVG.</p>
+      <p><img class="cat-logo" src="${esc(logoURL)}" alt=""
+        style="max-height:64px; max-width:240px" hidden></p>
+      <p class="muted cat-logo-none" hidden>No mark of its own.</p>
+      <div class="row">
+        <input type="file" class="logo-file" accept="image/png,image/svg+xml"
+          aria-label="Choose a brand mark">
+        <button type="button" data-act="logo-upload">Upload</button>
+        <button type="button" data-act="logo-remove">Remove</button>
+      </div>
+    </div>`;
+}
+
 // With enforcement off there is nobody to be, so everybody is.
 //
 // It decides what to *offer*, never what is allowed — the server refuses either
@@ -432,7 +529,106 @@ function productForm(it, cat, langs, procIDs) {
   </div>`;
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare) {
+// wireAppearance is the appearance card's half of the page.
+//
+// Kept out of wire()'s click handler because the logo does not go through api():
+// that helper JSON-encodes its body, and a brand mark is raw PNG or SVG bytes with
+// the Content-Type carrying the format. Bending the shared helper for one caller
+// would put a third meaning on its fourth argument, which is already a boolean
+// named isXML.
+function wireAppearance({ api, toast, view }, id, reload) {
+  const form = view.querySelector(".cat-theme");
+  if (!form) return;
+  const accent = form.querySelector("input[name=accent]");
+  const picker = form.querySelector("input[name=accentpick]");
+
+  // The picker writes the field, and never the other way round: the field is what
+  // is sent, and it is the only one of the two that can say "empty", which is how
+  // a catalogue goes back to wearing the instance's colour. A picker has no empty.
+  picker.addEventListener("input", () => { accent.value = picker.value; });
+  accent.addEventListener("input", () => {
+    if (/^#[0-9a-fA-F]{6}$/.test(accent.value.trim())) picker.value = accent.value.trim().toLowerCase();
+  });
+
+  const putTheme = async (body) => {
+    try {
+      await api("PUT", `/api/v1/catalogs/${encodeURIComponent(id)}/theme`, body);
+      toast("Saved");
+      reload();
+    } catch (err) { toast(err.message, "err"); }
+  };
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    putTheme({
+      accent: String(f.get("accent") || "").trim().toLowerCase(),
+      typeface: String(f.get("typeface") || ""),
+    });
+  });
+
+  // The mark. Its presence is not a field on the catalogue, so the image itself is
+  // the answer: it loads or it 404s, and the note below it says which.
+  const img = view.querySelector(".cat-logo");
+  const none = view.querySelector(".cat-logo-none");
+  if (img) {
+    const has = () => { img.hidden = false; none.hidden = true; };
+    const hasNot = () => { img.hidden = true; none.hidden = false; };
+    img.addEventListener("load", has);
+    img.addEventListener("error", hasNot);
+    // The request is already in flight by the time this runs, and a cached answer
+    // can land before the listeners do. complete says it finished; naturalWidth
+    // says whether it finished with an image.
+    if (img.complete) (img.naturalWidth ? has : hasNot)();
+  }
+
+  view.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+
+    if (b.dataset.act === "theme-clear") {
+      // Both fields, not a missing body: the server stores what it is given, so
+      // two empty strings are how an appearance is taken away.
+      putTheme({ accent: "", typeface: "" });
+      return;
+    }
+
+    if (b.dataset.act === "logo-upload") {
+      const file = view.querySelector(".logo-file").files[0];
+      if (!file) { toast("Choose a PNG or SVG first", "err"); return; }
+      b.disabled = true;
+      try {
+        // No size check here. The server carries the limit, it is configurable, and
+        // a number copied into this page would be a second copy that goes stale
+        // silently — its refusal names the actual figure.
+        const res = await fetch(`/api/v1/catalogs/${encodeURIComponent(id)}/logo`, {
+          method: "PUT", body: file,
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let data = null;
+          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
+        }
+        toast("Uploaded");
+        reload();
+      } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
+      return;
+    }
+
+    if (b.dataset.act === "logo-remove") {
+      b.disabled = true;
+      try {
+        await api("DELETE", `/api/v1/catalogs/${encodeURIComponent(id)}/logo`);
+        toast("Removed");
+        reload();
+      } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
+    }
+  });
+}
+
+function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare, canTheme) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   const patch = async (body) => {
@@ -457,6 +653,8 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare) 
       reload();
     } catch (err) { toast(err.message, "err"); }
   });
+
+  if (canTheme) wireAppearance({ api, toast, view }, id, reload);
 
   view.addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-act]");
