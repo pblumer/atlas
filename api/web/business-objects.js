@@ -1,5 +1,5 @@
 // The class catalogue, and where one class is used
-// (ADR-draft-where-a-business-object-is-used).
+// (ADR-0338).
 //
 // The Data area has had two views of the vocabulary and both are *per model*: the
 // canvas draws one document, the listing lists the documents. Neither answers the

@@ -8,7 +8,7 @@ import (
 )
 
 // Where a business object is used, and how
-// (ADR-draft-where-a-business-object-is-used).
+// (ADR-0338).
 //
 // ADR-0230 gave `itemSubjectRef` something to resolve against, and every reading
 // since has run from the process outwards: this process's data flow, this

@@ -9,7 +9,7 @@ import (
 )
 
 // The class catalogue and the where-used reading
-// (ADR-draft-where-a-business-object-is-used).
+// (ADR-0338).
 //
 // Both live here rather than in api/infomodel, for the reason the derived model and
 // the difference do: the answer is read from two places at once — the information

@@ -5554,7 +5554,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .md-excluded li { margin: 4px 0; }
 
 /* The class catalogue and the where-used page
-   (ADR-draft-where-a-business-object-is-used).
+   (ADR-0338).
 
    The list is a plain list — the shared table, no layout of its own — because it is
    read the way every other list in the console is read (ADR-0286),

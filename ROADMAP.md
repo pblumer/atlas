@@ -234,7 +234,7 @@ The control-flow basics most real models use.
   named and which would make the pair symmetric. Merging an import into an existing
   model is deliberately not done — reconciling two versions of a class is a modeling
   decision, and it belongs to the person. **The vocabulary now has a reading of its own**
-  (ADR-draft-where-a-business-object-is-used): every reading until here ran from the process
+  (ADR-0338): every reading until here ran from the process
   outwards, so somebody about to rename `Order.total` or retire an enumeration literal could
   see what an Order *is* and nothing about what would break. **Data › Business objects** lists
   every class of every model the caller may view — business objects, value types and

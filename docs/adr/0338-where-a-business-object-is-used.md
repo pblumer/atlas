@@ -1,4 +1,4 @@
-# ADR-DRAFT: Where a business object is used
+# ADR-0338: Where a business object is used
 
 - **Status:** Accepted
 - **Implementation:** Landed

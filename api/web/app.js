@@ -651,7 +651,7 @@ const TOPNAV = {
   // Between the two altitudes sits the vocabulary read as a vocabulary: every class of
   // every model together, and where each is used. Model is per document, Business
   // objects is across them, and only the second can say that two applications model an
-  // Order twice (ADR-draft-where-a-business-object-is-used).
+  // Order twice (ADR-0338).
   data: [
     { name: "Model", route: "#/data", role: "modeler" },
     { name: "Business objects", route: "#/data/objects", role: "modeler" },
@@ -8778,7 +8778,7 @@ async function viewModelDifference(applicationId) {
 
 // viewObjectCatalog lists every class of every model the caller can see, and
 // viewObjectDetail opens one of them with everywhere it is used
-// (ADR-draft-where-a-business-object-is-used). They are the
+// (ADR-0338). They are the
 // vocabulary's own reading: the canvas and the model list are both per document, so
 // neither could answer "what else depends on this Order" or show the estate's classes
 // together. Both are read-only and both live in one module, because the list's rows and

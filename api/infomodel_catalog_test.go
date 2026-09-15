@@ -9,7 +9,7 @@ import (
 )
 
 // The class catalogue and the where-used reading, end to end
-// (ADR-draft-where-a-business-object-is-used).
+// (ADR-0338).
 //
 // api/infomodel holds the reading itself and tests its rules there. What those tests
 // cannot see is the join: whether the models the service owns and the processes only

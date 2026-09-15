@@ -1,5 +1,5 @@
 // The class catalogue, and where one class is used
-// (ADR-draft-where-a-business-object-is-used).
+// (ADR-0338).
 //
 // Two claims are worth holding in a browser rather than in Go. The first is that the
 // list is an ordinary list — the shared sort/filter table (ADR-0286),
