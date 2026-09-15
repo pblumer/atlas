@@ -54,6 +54,14 @@ type Service struct {
 	// for a new hire is the ordinary case, and checking the caller's groups would
 	// refuse exactly that.
 	groupsOf func(string) ([]string, error)
+	// mayOrderForOthers answers whether this caller may place an order naming
+	// somebody else as the recipient (ADR-draft-ordering-for-others).
+	//
+	// A separate question from mayOrderFrom, which asks whether the *shop* is
+	// theirs. This asks whether the *order* may be somebody else's, and the two are
+	// independent: being the audience for a catalogue says nothing about whose name
+	// an order may carry.
+	mayOrderForOthers func(*httpapi.Principal) bool
 	// wake tells the fulfilment process that an order moved. The variables it
 	// carries are the message's start variables, which is how the orchestrator
 	// learns anything beyond the order id it correlates on.
@@ -111,13 +119,15 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 	release func(id string) (catalog.Release, bool, error),
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error),
 	groupsOf func(string) ([]string, error),
+	mayOrderForOthers func(*httpapi.Principal) bool,
 	wake func(message, orderID string, vars map[string]string) error,
 	portalBase func() string,
 	grant func(Grant) error,
 	revoke func(principal, itemID string, at int64, by string) error,
 	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
-		release: release, mayOrderFrom: mayOrderFrom, groupsOf: groupsOf, wake: wake, portalBase: portalBase,
+		release: release, mayOrderFrom: mayOrderFrom, groupsOf: groupsOf,
+		mayOrderForOthers: mayOrderForOthers, wake: wake, portalBase: portalBase,
 		grant: grant, revoke: revoke, held: held}
 }
 
@@ -192,6 +202,21 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 	if !allowed {
 		httpapi.Error(w, http.StatusForbidden, "you cannot order from this catalogue")
+		return
+	}
+
+	// And whose name this order may carry (ADR-draft-ordering-for-others).
+	//
+	// Checked here rather than folded into the recipient's eligibility below,
+	// because the two refuse different things: eligibility asks whether *this
+	// person* may have *this product*, and would happily let somebody place an
+	// order in a colleague's name for something the colleague is perfectly entitled
+	// to. What is wrong there is not the product — it is the name on the order.
+	if recipient != p.UserID && !s.mayOrderForOthers(p) {
+		httpapi.Error(w, http.StatusForbidden,
+			"ordering in somebody else's name needs the operator role. An order placed "+
+				"for another person puts an approval in their manager's inbox and a line "+
+				"in their record, which is why it is not something every account may do")
 		return
 	}
 

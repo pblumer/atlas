@@ -12,6 +12,33 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **An order could be placed in anybody's name.** `HandlePlace` took the recipient straight
+  out of the request body and asked nothing about it, so any account that could reach a
+  catalogue could put an order — and an approval in that person's manager's inbox, a line in
+  their record, and eventually a provisioning run — in a colleague's name.
+
+  It stayed harmless only because nothing exercised it: the portal never sent a recipient, and
+  no shipped model places an order at all — every `recipient` in a BPMN file *reads* the one
+  the order already carries and passes it down. The mockups end that, by making ordering for
+  somebody else a first-class screen. A latent hole with no caller becomes an open path with a
+  button.
+
+  Naming somebody else as recipient now needs the **operator** role. Naming yourself is
+  unchanged, so a self-service portal stays self-service.
+
+  **A role and not a manager relationship, because Atlas cannot evaluate one** — and that is
+  settled rather than open: the escalation path has the *caller* name the superior precisely
+  because a directory lookup belongs to a modelled process and not to the engine. An engine
+  that gated on a hierarchy it had to invent would decide who may act in whose name from a
+  guess.
+
+  The product-eligibility check beside it does not cover this and was never going to: it asks
+  whether *this person* may have *this product*, and would wave through an order placed in a
+  colleague's name for something the colleague is perfectly entitled to. What is wrong there
+  is the name on the order, not the product.
+
 ### Added
 
 - **Products can be marked as favourites.** The smallest measure in the plan, and the one

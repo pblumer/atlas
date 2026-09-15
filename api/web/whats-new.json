@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "an-order-could-be-placed-in-anybody-s-name",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An order could be placed in anybody's name.",
+        "de": "An order could be placed in anybody's name."
+      },
+      "summary": {
+        "en": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name.",
+        "de": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "products-can-be-marked-as-favourites",
       "version": "Unreleased",
       "date": null,
@@ -243,24 +261,6 @@
       "summary": {
         "en": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it.",
         "de": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-inventory-is-taken-before-it-is-enforced",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The inventory is taken before it is enforced.",
-        "de": "The inventory is taken before it is enforced."
-      },
-      "summary": {
-        "en": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted.",
-        "de": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted."
       },
       "link": {
         "label": "Changelog",
