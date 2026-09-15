@@ -5,12 +5,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -237,14 +237,10 @@ func TestADecisionDeploymentIsHeldBackTheSameWay(t *testing.T) {
 	if got := report.Collisions[0]; got.Kind != "decision" || got.Key != mine.Key {
 		t.Errorf("collision = %+v, want a decision clash on key %d", got, mine.Key)
 	}
-	if !contains(report.Note, "does not travel") {
+	if !strings.Contains(report.Note, "does not travel") {
 		t.Errorf("note = %q, want it to say why the records were held back", report.Note)
 	}
 }
-
-func contains(s, sub string) bool { return bytes.Contains([]byte(s), []byte(sub)) }
-
-var _ = fmt.Sprint
 
 // TestTheWholeInstanceSnapshotStillCarriesTheIdentity is the other half of the
 // decision, and it is a guard rather than a fix: the two archives are for different
@@ -313,7 +309,7 @@ func archiveHas(t *testing.T, archive []byte, name, wants string) bool {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		return wants == "" || contains(string(body), wants)
+		return wants == "" || strings.Contains(string(body), wants)
 	}
 }
 
