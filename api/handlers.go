@@ -486,13 +486,6 @@ type statsResp struct {
 	UnresolvedIncidents int `json:"unresolvedIncidents"`
 }
 
-// createInstanceResp answers a start with the definition it started and the engine's
-// live counts, and not with the instance key: that key is minted inside the
-// batch on the single writer and frozen into the activation event, and nothing carries it
-// back out (invariants I3/I6). A caller that needs the identity of what it just started
-// therefore diffs GET /instances?process=<key> around the call — which is correct but a
-// guess when two callers start the same definition at once. Closing that is
-// ADR-draft-starting-an-instance-returns-its-key.
 type createInstanceResp struct {
 	DefinitionKey uint64    `json:"definitionKey"`
 	Stats         statsResp `json:"stats"`

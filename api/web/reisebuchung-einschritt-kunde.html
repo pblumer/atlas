@@ -199,8 +199,7 @@ async function findProcess(){
 // rows per half — and its active half comes back oldest-key-first, so the newest
 // instance is the first row the cap drops: on a server holding more active instances
 // than the cap, the one we just started is never on the page and the diff below comes
-// back empty. ?process= reads this definition's own index instead, newest first. The
-// engine-side fix for the guess this leaves is ADR-draft-starting-an-instance-returns-its-key.
+// back empty. ?process= reads this definition's own index instead, newest first.
 async function instancesOfProcess(defKey){
   return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
 }

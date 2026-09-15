@@ -226,8 +226,7 @@ async function readInstance(key){
 }
 
 // START — the create response carries no instance key, so diff the scoped listing
-// before and after. The engine-side fix for the guess this leaves is
-// ADR-draft-starting-an-instance-returns-its-key.
+// before and after.
 async function startInstance(defKey){
   const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{}});
