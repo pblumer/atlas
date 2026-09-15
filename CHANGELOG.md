@@ -37,7 +37,9 @@ _Changed_ / _Removed_ for each version.
   (`origin: adopted`, the first writer that origin has had), deprovision through the
   product's own process, or revoke the record are three separate calls by a person, and
   none of them is reachable with the worker credential that may run the comparison.
-  `examples/abgleich.bpmn` is the modelled process.
+  `examples/abgleich.bpmn` is the modelled process, and **Operations → Reconciliation**
+  is where somebody reads a finding before acting on it — the three actions are not
+  guarded alike, because adopt and revoke are recoverable and deprovisioning is not.
 
 - **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
   the portal's three models were decided and has had no writer, which meant the inventory

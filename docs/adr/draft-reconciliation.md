@@ -192,9 +192,23 @@ somebody measures this walk hurting, and the wrong one before.
   on it — the action is idempotent enough to survive that, but the finding is not a lock.
   `ReconcileJournal` is a ceiling on a store rather than on a message, which is a new
   shape here and one an operator has to understand rather than infer.
-- **Follow-ups / risks to watch:** Subject-scoped runs (the leaver check). A screen: the
-  findings are reachable only by API, which is the same gap the catalogue had before it got
-  one, and it is named here rather than left to be discovered. The open question above.
+- **Follow-ups / risks to watch:** Subject-scoped runs (the leaver check). The open
+  question above.
+
+The screen this record originally named as a gap is built: **Operations →
+Reconciliation**. It belongs there rather than under Catalogue because maintaining a
+catalogue is authoring and acting on a finding is repair, which is what the routes
+themselves say — all three are the operator's.
+
+Two things about it are decisions rather than styling. The three actions are **not
+guarded alike**: adopt and revoke are recoverable, because the next comparison finds the
+truth again either way, so they are one click; deprovisioning runs a process that takes
+access away in a real system and Atlas cannot undo it, so it asks and is styled as
+destructive. A confirmation on every action is a confirmation nobody reads by the third
+one. And its contextual help points at the examples chapter rather than at Operations:
+the operations chapter is about incidents — a token that is stuck — and telling a reader
+that a finding is a malfunction is the one thing this record takes pains to say it is
+not.
 
 ## Implementation
 
