@@ -305,20 +305,34 @@ test("a model handle another decision holds is asked about, not silently forked"
   await page.goto("/index.html#/modeler/dmn/new/p/app-1");
   await editorReady(page);
 
+  // One handler for both prompts, answering in the order they are asked — the same
+  // shape worker-delete.spec.mjs uses, and here it is load-bearing rather than tidy.
+  // Two `page.once` handlers raced: the mock records the upload *before* it answers
+  // 409, and the 409 is what raises the prompt, so waiting on `uploads.length` let
+  // this test arm the second handler while the first was still waiting for its
+  // dialog. The next prompt then fired both — dismiss, then accept on an already
+  // handled dialog — which failed the accept and left the save declined at
+  // "Saving to the model…". Waiting on the *answer* is what makes each step ordered.
+  const asked = [];
+  const answers = ["dismiss", "accept"];
+  page.on("dialog", async (d) => {
+    asked.push(d.message());
+    await (answers.shift() === "accept" ? d.accept() : d.dismiss());
+  });
+
   // Declining leaves everything as it was: no reference, no second copy.
-  page.once("dialog", (d) => d.dismiss());
   await page.locator("#dmn-save-model").click();
+  await expect.poll(() => asked.length).toBe(1);
   await expect.poll(() => state.uploads.length).toBe(1);
   expect(state.created).toEqual([]);
   await expect(page.locator("#dmn-ref-chip")).toBeHidden();
 
   // Accepting sends the replacement as a deliberate act, which is the only way the
   // model under that handle is overwritten (ADR-0222).
-  const asked = [];
-  page.once("dialog", (d) => { asked.push(d.message()); d.accept(); });
   await page.locator("#dmn-save-model").click();
+  await expect.poll(() => asked.length).toBe(2);
   await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
-  expect(asked[0]).toContain("decision.dmn");
+  expect(asked[1]).toContain("decision.dmn");
   expect(state.uploads[state.uploads.length - 1].query).toBe("?name=Decision&from=&overwrite=true");
   expect(state.created).toHaveLength(1);
 });
