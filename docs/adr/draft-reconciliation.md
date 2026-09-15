@@ -59,26 +59,29 @@ everybody in the other half has lost their access.
 2. **Scope by subject.** "This is everything Alice holds in system X."
 3. **Scope by reference.** "These are the complete memberships of these groups."
 
-**Chosen: three.** A run declares `refs` — the references it read *completely* — and the
-comparison happens only inside that scope. Outside it nothing is concluded: an
-entitlement whose item is not in scope is not missing, it is **unexamined**, and a
-reconciliation that could not tell those apart would report the whole inventory as wrong
-on its first partial read.
+**Chosen: three, and then two beside it.** A run declares what it read *completely* —
+`refs`, the references, or `subjects`, the people — and the comparison happens only inside
+that scope. Outside it nothing is concluded: an entitlement no promise covers is not
+missing, it is **unexamined**, and a reconciliation that could not tell those apart would
+report the whole inventory as wrong on its first partial read.
 
 Option 1 fails on arithmetic. A whole system does not fit in one message, so it pages —
 and a paged run is a run whose parts are each incomplete, which is the problem restated
-rather than solved. Option 2 is genuinely useful and answers a different question (the
-leaver check: is this person out of everything?). It is not built here, and the reason is
-that it needs a different promise from the caller — "I read everything this person has" —
-which no group-oriented export provides. It is the obvious follow-up.
+rather than solved.
 
-Option 3 matches how target systems actually export, and it matches what the catalogue
-already declares: `catalog.TargetRef` is the reference, and a group listing is exactly
-one complete scope.
+Option 3 was built first, because it matches how target systems actually export and what
+the catalogue already declares: `catalog.TargetRef` is the reference, and a group listing
+is exactly one complete scope.
 
-**`refs` is required and has no default.** The only candidates for a default are
-"nothing", which is useless, and "everything", which is a guess that turns a truncated
-read into a report that the estate has lost its access.
+Option 2 is now built beside it, and the two are **not alternatives**. They are the same
+promise about the two axes of the same table, and one run may make both. What separated
+them was never the comparison; it was that they need different readings from the caller.
+See *The other axis* below.
+
+**A scope is required and has no default** — at least one of the two, and a run naming
+neither is refused. The only candidates for a default are "nothing", which is useless, and
+"everything", which is a guess that turns a truncated read into a report that the estate
+has lost its access.
 
 **The promise is unverifiable, and that is stated rather than papered over.** Atlas
 cannot check that a caller read a group whole. There is one place where the temptation to
@@ -89,6 +92,44 @@ comfort blanket that makes the contract less clear. What is special about zero i
 **prior**, not the logic, so the findings stand and the report says out loud that an empty
 answer is far more often a failed read than an emptied estate. Nothing acts on a finding
 without a person, and that sentence is what the person needs.
+
+## The other axis: scope by subject
+
+`refs` cannot answer the question an offboarding asks. *Is this person out of everything?*
+is not a statement about a group, and it cannot be assembled from statements about groups:
+you would have to reconcile every group in the system and observe the person's absence
+from all of them, which is option 1 wearing a disguise — with the same arithmetic against
+it.
+
+So `subjects` names the people whose holdings this run read **whole**, in the target
+system's vocabulary, exactly as an observation's subject is named. It is the same
+unverifiable promise as `refs`, about the other axis.
+
+**A pair is examined when either promise covers it**, and they compose: a run may say
+"these two groups whole, and everything Ada holds". That is one predicate,
+`reconcilePlan.examined(principal, item)`, and everything downstream asks it rather than
+asking about an item — including the closing of findings, which is where getting this
+wrong would be expensive.
+
+Two things about the subject axis are decisions rather than mechanics:
+
+- **A subject-scoped run is confined to the system it names.** Without that, a run that
+  read everything Ada holds in Active Directory would report her Jira rights as missing —
+  true of nothing, and a finding that invites somebody to revoke a correct record. So the
+  scope covers only items a product declares a target reference for in *this* system.
+- **A subject that resolves to no account is never a clean result.** It is reported, and
+  it is deliberately *not* taken into scope, because the alternative is an offboarding
+  reading the absence of an account as the absence of access. A misspelled object id would
+  otherwise come back as "they are out of everything" — the most dangerous true-looking
+  answer this endpoint can produce.
+
+The empty answer that follows a clean leaver gets **its own sentence in the report**, and
+that is not decoration. A verification that returns nothing looks exactly like a run that
+did nothing, and an offboarding file needs the difference in words.
+
+This axis buys no arithmetic. A subject-scoped run still walks the entitlement family
+whole, for the reason in *The population-sized read* below — the question changed, the key
+order did not.
 
 ## Two directions, and they are not symmetrical
 
@@ -192,8 +233,10 @@ somebody measures this walk hurting, and the wrong one before.
   on it — the action is idempotent enough to survive that, but the finding is not a lock.
   `ReconcileJournal` is a ceiling on a store rather than on a message, which is a new
   shape here and one an operator has to understand rather than infer.
-- **Follow-ups / risks to watch:** Subject-scoped runs (the leaver check). The open
-  question above.
+- **Follow-ups / risks to watch:** The open question above. A subject-scoped run does not
+  reduce the walk, so the leaver check makes the same question more pressing rather than
+  less — an offboarding is run per person, which is a great many more runs than a nightly
+  group sweep.
 
 The screen this record originally named as a gap is built: **Operations →
 Reconciliation**. It belongs there rather than under Catalogue because maintaining a
@@ -216,7 +259,11 @@ not.
 journal and renders the report; `api/reconcilestore.go` is the durable journal;
 `api/reconcile_http.go` the two routes and `api/reconcileactions.go` the three acts.
 `state.queries.Entitlements` is the whole-family walk, added here and used only here.
-`examples/abgleich.bpmn` is the modelled process.
+`examples/abgleich.bpmn` is the nightly modelled process and
+`examples/austrittspruefung.bpmn` the leaver check — the second one reads the whole tenant
+and filters to one person, because no operation the Entra worker offers lists one person's
+memberships. That is expensive and it is honest: the promise is "everything this person
+holds", and a full enumeration keeps it.
 
 ## Links
 

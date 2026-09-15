@@ -306,3 +306,242 @@ func TestTheJournalRecordsEpisodesRatherThanRewritingHistory(t *testing.T) {
 		t.Errorf("openedAt = %d, want the new episode's start", back.OpenedAt)
 	}
 }
+
+// The other axis of the same promise: a scope by subject
+// (ADR-draft-reconciliation).
+//
+// `refs` answers "is this group's membership what we think". It structurally
+// cannot answer "is this person out of everything", because absence from a group
+// nobody named says nothing — and that second question is the one an offboarding
+// asks.
+
+// TestASubjectScopeExaminesEverythingThatPersonHoldsInTheSystem.
+//
+// This is the leaver check. Ada's VPN right is recorded and she is not in the
+// group; no run named CN=VPN, so a ref-scoped run would conclude nothing. Naming
+// *her* is a different promise — "everything Ada holds here, read whole" — and it
+// makes the same silence a finding.
+func TestASubjectScopeExaminesEverythingThatPersonHoldsInTheSystem(t *testing.T) {
+	in := reconcileInput{
+		Users: []User{ada()},
+		Items: []catalog.Item{{ID: "vpn", State: catalog.StateActive,
+			Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}}},
+		Held: []model.EntitlementValue{heldBy("usr_ada", "vpn", model.OriginOrdered)},
+	}
+
+	// Named by reference only, and CN=VPN is not among them: nothing is concluded.
+	byRef := decideReconcile(reconcileMessage{System: "ad", Refs: []string{"CN=Other"}}, in)
+	if byRef.Counts.Missing != 0 {
+		t.Errorf("a run that named neither CN=VPN nor Ada concluded %d missing; it read "+
+			"neither", byRef.Counts.Missing)
+	}
+
+	// Named by subject: the same silence is now a finding.
+	bySubject := decideReconcile(reconcileMessage{System: "ad", Subjects: []string{"oid-ada"}}, in)
+	if bySubject.Counts.Missing != 1 {
+		t.Fatalf("a run that read everything Ada holds found %d missing, want the VPN right "+
+			"it records and the system does not have: %+v", bySubject.Counts.Missing, bySubject)
+	}
+	if !bySubject.examined("usr_ada", "vpn") {
+		t.Error("the pair is reported and not marked examined, so the journal would never " +
+			"close the finding when it is repaired")
+	}
+}
+
+// TestASubjectScopeSaysNothingAboutAnotherSystem.
+//
+// "Everything Ada holds in Active Directory" is a promise about Active Directory.
+// Without the system filter a subject-scoped run would report her Jira rights as
+// missing from AD — true of nothing, and the kind of finding that teaches people
+// to ignore findings.
+func TestASubjectScopeSaysNothingAboutAnotherSystem(t *testing.T) {
+	in := reconcileInput{
+		Users: []User{ada()},
+		Items: []catalog.Item{
+			{ID: "vpn", State: catalog.StateActive,
+				Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}},
+			{ID: "jira", State: catalog.StateActive,
+				Targets: []catalog.TargetRef{{System: "jira", Ref: "jira-users"}}},
+			{ID: "laptop", State: catalog.StateActive}, // nothing outside grants it
+		},
+		Held: []model.EntitlementValue{
+			heldBy("usr_ada", "vpn", model.OriginOrdered),
+			heldBy("usr_ada", "jira", model.OriginOrdered),
+			heldBy("usr_ada", "laptop", model.OriginOrdered),
+		},
+	}
+	plan := decideReconcile(reconcileMessage{System: "ad", Subjects: []string{"oid-ada"}}, in)
+
+	if plan.Counts.Missing != 1 {
+		t.Errorf("counts.missing = %d, want only the one right this system could have had: "+
+			"%+v", plan.Counts.Missing, plan.Found)
+	}
+	if plan.examined("usr_ada", "jira") {
+		t.Error("a right that lives in another system was examined by an Active Directory run")
+	}
+	if plan.examined("usr_ada", "laptop") {
+		t.Error("a product no target system grants was examined; nothing out there could " +
+			"ever confirm it, so every run would report it missing forever")
+	}
+}
+
+// TestTheTwoPromisesCompose: a run may say "these groups whole, and everything Ada
+// has". Neither narrows the other.
+func TestTheTwoPromisesCompose(t *testing.T) {
+	bo := User{ID: "usr_bo", Username: "bo", Email: "bo@example.org", DirectoryID: "oid-bo"}
+	in := reconcileInput{
+		Users: []User{ada(), bo},
+		Items: []catalog.Item{
+			{ID: "vpn", State: catalog.StateActive,
+				Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}},
+			{ID: "sap", State: catalog.StateActive,
+				Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=SAP"}}},
+		},
+		Held: []model.EntitlementValue{
+			heldBy("usr_bo", "vpn", model.OriginOrdered),  // in ref scope, not in subject scope
+			heldBy("usr_ada", "sap", model.OriginOrdered), // in subject scope, not in ref scope
+		},
+	}
+	plan := decideReconcile(reconcileMessage{
+		System: "ad", Refs: []string{"CN=VPN"}, Subjects: []string{"oid-ada"},
+	}, in)
+
+	if plan.Counts.Missing != 2 {
+		t.Errorf("counts.missing = %d, want one from each promise: %+v", plan.Counts.Missing, plan.Found)
+	}
+	for _, pair := range []struct{ principal, item string }{{"usr_bo", "vpn"}, {"usr_ada", "sap"}} {
+		if !plan.examined(pair.principal, pair.item) {
+			t.Errorf("%s/%s was not examined; one promise is narrowing the other",
+				pair.principal, pair.item)
+		}
+	}
+}
+
+// TestAnObservationIsInScopeWhenEitherPromiseCoversIt.
+//
+// A run that read everything Ada holds read whatever group it came from. Refusing
+// it as out of scope because no `refs` entry named that group would throw away the
+// finding the run was performed to produce.
+func TestAnObservationIsInScopeWhenEitherPromiseCoversIt(t *testing.T) {
+	in := reconcileInput{
+		Users: []User{ada()},
+		Items: []catalog.Item{{ID: "sap", State: catalog.StateActive,
+			Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=SAP"}}}},
+	}
+	plan := decideReconcile(reconcileMessage{
+		System: "ad", Subjects: []string{"oid-ada"},
+		Observations: []rightObservation{{Subject: "oid-ada", Ref: "CN=SAP"}},
+	}, in)
+
+	if plan.Counts.OutOfScope != 0 {
+		t.Errorf("an observation about a subject the run read whole was refused as out of "+
+			"scope: %+v", plan.Notes)
+	}
+	if plan.Counts.Unmanaged != 1 {
+		t.Errorf("counts.unmanaged = %d, want the right Ada holds and Atlas does not record",
+			plan.Counts.Unmanaged)
+	}
+}
+
+// TestASubjectWithNoAccountIsNeverACleanResult.
+//
+// The failure that would make an offboarding verification worthless: a run names a
+// leaver Atlas has never heard of, resolves them to nobody, compares nothing, and
+// reports no findings. Read as "they are out of everything" that is the absence of
+// an account being mistaken for the absence of access.
+func TestASubjectWithNoAccountIsNeverACleanResult(t *testing.T) {
+	in := reconcileInput{
+		Items: []catalog.Item{{ID: "vpn", State: catalog.StateActive,
+			Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}}},
+	}
+	msg := reconcileMessage{System: "ad", Subjects: []string{"ghost@example.org"}}
+	plan := decideReconcile(msg, in)
+
+	if plan.Counts.NoSubject != 1 {
+		t.Fatalf("counts.noSubject = %d, want the unresolvable subject reported", plan.Counts.NoSubject)
+	}
+	if len(plan.InScopeSubjects) != 0 {
+		t.Error("an unresolvable subject was taken into scope, so the run would claim to have " +
+			"verified somebody it cannot name")
+	}
+	why := plan.Notes[0].Why
+	if !strings.Contains(why, "offboarding") || !strings.Contains(why, "absence of") {
+		t.Errorf("the note reads %q; it has to say that this is not a clean result, or the "+
+			"one reader who needs the warning will not get it", why)
+	}
+	// And the report must not congratulate them: the reason for an empty answer
+	// names the unresolved scope rather than a verified leaver.
+	if r := reconcileReason(plan, msg); !strings.Contains(r, "nothing was compared") {
+		t.Errorf("the reason reads %q, want it to say nothing was compared", r)
+	}
+}
+
+// TestACleanLeaverGetsItsOwnSentence: the answer an offboarding wants is an empty
+// one, and an empty answer that reads like "nothing happened" wastes the run that
+// actually confirmed something.
+func TestACleanLeaverGetsItsOwnSentence(t *testing.T) {
+	in := reconcileInput{
+		Users: []User{ada()},
+		Items: []catalog.Item{{ID: "vpn", State: catalog.StateActive,
+			Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=VPN"}}}},
+	}
+	msg := reconcileMessage{System: "ad", Subjects: []string{"oid-ada"}}
+	plan := decideReconcile(msg, in)
+
+	if len(plan.Found) != 0 {
+		t.Fatalf("a leaver holding nothing produced findings: %+v", plan.Found)
+	}
+	r := reconcileReason(plan, msg)
+	if !strings.Contains(r, "out of it") {
+		t.Errorf("the reason reads %q; the one run that confirms a leaver is clean should "+
+			"say so rather than report an absence of news", r)
+	}
+}
+
+// TestASubjectScopeInheritsTheCatalogueJudgementsRatherThanRepeatingThem.
+//
+// A subject scope has to decide which items belong to the system it names, and the
+// tempting way to do that is to read the catalogue again. It is wrong twice over,
+// and both mistakes produce the same shape of falsehood — a right reported missing
+// because nothing observed it, when nothing *could* have observed it.
+//
+// A draft product is not compared, by the rule the reference scope already keeps: a
+// right held against something that may never be published is not evidence. And a
+// reference two products claim is attributable to neither. Deriving the system's
+// items from the comparison's own index is what makes those two judgements hold on
+// both axes rather than on one.
+func TestASubjectScopeInheritsTheCatalogueJudgementsRatherThanRepeatingThem(t *testing.T) {
+	in := reconcileInput{
+		Users: []User{ada()},
+		Items: []catalog.Item{
+			{ID: "draft", State: catalog.StateDraft,
+				Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=Draft"}}},
+			{ID: "shared-a", State: catalog.StateActive,
+				Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=Shared"}}},
+			{ID: "shared-b", State: catalog.StateActive,
+				Targets: []catalog.TargetRef{{System: "ad", Ref: "CN=Shared"}}},
+		},
+		Held: []model.EntitlementValue{
+			heldBy("usr_ada", "draft", model.OriginLegacy),
+			heldBy("usr_ada", "shared-b", model.OriginLegacy),
+		},
+	}
+
+	// Everything Ada holds in AD was read, and the reading found nothing.
+	plan := decideReconcile(reconcileMessage{System: "ad", Subjects: []string{"oid-ada"}}, in)
+
+	if plan.Counts.Missing != 0 {
+		t.Errorf("a leaver run reported %d right(s) missing: %+v. Neither of these can be "+
+			"observed — one hangs off a draft product, the other off a reference two products "+
+			"claim — so absence says nothing about either",
+			plan.Counts.Missing, kindsOf(plan))
+	}
+	if plan.SystemItems["draft"] {
+		t.Error("a draft product entered a subject scope; the reference scope refuses to " +
+			"compare one, and the two axes must not disagree about the catalogue")
+	}
+	if plan.SystemItems["shared-b"] {
+		t.Error("the loser of a contested reference entered a subject scope; nothing read " +
+			"under that reference can be attributed to either product")
+	}
+}

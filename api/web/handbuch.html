@@ -4362,7 +4362,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <span class="tag" data-l="de">Bereich</span><span class="tag" data-l="en">scope</span>
           <span class="tag" data-l="de">handelt nie selbst</span><span class="tag" data-l="en">never acts</span>
           <span class="tag">R/P1D</span>
+          <span class="tag" data-l="de">Austrittsprüfung</span><span class="tag" data-l="en">leaver check</span>
           <span class="tag">examples/abgleich.bpmn</span>
+          <span class="tag">examples/austrittspruefung.bpmn</span>
         </p>
         <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
         <div class="bsp-cols">
@@ -4377,6 +4379,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               gibt – und beantwortet damit die Frage „wer hatte wann Zugriff“ mit einer selbstsicheren
               Unwahrheit. <b>Gehandelt wird nie automatisch</b>: übernehmen, im Zielsystem entziehen oder
               die Aufzeichnung streichen sind drei einzelne Entscheidungen eines Menschen.</p>
+            <p data-l="de">Beim Austritt lautet die Frage anders: hält diese Person <b>irgendwo</b> noch
+              etwas? Aus Gruppenlesungen lässt sich das nicht zusammensetzen – man müsste jede Gruppe
+              abgleichen und die Abwesenheit der Person in allen feststellen. Deshalb kann ein Lauf
+              wahlweise Referenzen <i>oder</i> Personen nennen, deren Bestand er vollständig gelesen hat.
+              <code>austrittspruefung.bpmn</code> geht diesen zweiten Weg, und das leere Ergebnis ist dort
+              die gesuchte Antwort: der Bericht sagt im Klartext, dass die Person draussen ist – ein
+              Nachweis, der wie „keine Daten“ aussieht, wird als Fehler gelesen und nicht als Beleg.</p>
             <p data-l="en">The inventory asserts something Atlas cannot guarantee: that a right exists in
               another system. Target systems are changed from outside – somebody removes a membership, a
               script tidies up – and the assertion decays silently. <b>An inventory nobody checks is a list
@@ -4385,6 +4394,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               something nobody granted. The other is the dangerous one: Atlas records a right that no longer
               exists – answering "who had access when" with a confident falsehood. <b>Nothing is ever acted
               on automatically</b>: adopt, deprovision or revoke are three separate decisions by a person.</p>
+            <p data-l="en">An offboarding asks a different question: does this person still hold
+              <b>anything</b>? Group readings cannot be assembled into that answer – you would have to
+              reconcile every group and establish the person's absence from all of them. So a run may name
+              references <i>or</i> the people whose holdings it read completely.
+              <code>austrittspruefung.bpmn</code> takes that second route, and there the empty result is the
+              answer being looked for: the report says in plain words that the person is out – a proof that
+              looks like "no data" gets read as a failure rather than as evidence.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
@@ -4399,6 +4415,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               Uneinigkeit ergeben einen Datensatz, und der Lauf, in dem sie verschwindet, schliesst ihn.
               Das Journal zählt zudem Episoden – eine Mitgliedschaft, die jemand immer wieder neu setzt, ist
               selbst der Befund.</p>
+            <p data-l="de">Die zweite Achse, <code>subjects</code>, ist dieselbe Zusicherung um neunzig
+              Grad gedreht, und beide setzen sich zusammen: ein Lauf darf „diese zwei Gruppen vollständig,
+              und alles, was Ada hält“ melden. Geschlossen wird ein Befund nur für Paare, die der Lauf
+              tatsächlich geprüft hat. Ein Subjekt, das sich auf kein Konto auflöst, gilt dabei nie als
+              sauber: <b>die Abwesenheit eines Kontos ist nicht die Abwesenheit von Zugriff.</b></p>
             <p data-l="en">The whole design hangs on one field. A commissioning load reports what it
               <i>found</i> – silence means nothing there. Here silence means something, so every run names in
               <code>refs</code> the references it read <b>completely</b>. Inside that scope both directions are
@@ -4408,6 +4429,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <p data-l="en">It records <b>transitions, not samples</b>: ten runs over one disagreement make one
               record, and the run where it disappears is the one that closes it. The journal also counts
               episodes – a membership somebody keeps re-adding is itself the finding.</p>
+            <p data-l="en">The second axis, <code>subjects</code>, is the same promise turned ninety
+              degrees, and the two compose: a run may say "these two groups whole, and everything Ada
+              holds". A finding is closed only for pairs the run actually examined. A subject that resolves
+              to no account is never a clean result: <b>the absence of an account is not the absence of
+              access.</b></p>
           </div>
         </div>
         <div class="rz-actions"></div>
