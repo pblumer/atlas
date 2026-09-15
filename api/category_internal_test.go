@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// The column that waited for its data (ADR-draft-product-category).
+// The column that waited for its data (ADR-0360).
 //
 // The portal has drawn a Kategorie column since the layout landed, filled with the
 // catalogue's own name and a note saying the data had none. The note is gone

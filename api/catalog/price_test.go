@@ -2,7 +2,7 @@ package catalog
 
 import "testing"
 
-// What a product says it costs (ADR-draft-product-price).
+// What a product says it costs (ADR-0361).
 //
 // Displayed and never computed, so the catalogue has exactly one thing to check:
 // that a product claiming to name a cost names one. Everything else a price could

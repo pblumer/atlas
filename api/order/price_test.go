@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 )
 
-// The figure an order was placed at (ADR-draft-product-price).
+// The figure an order was placed at (ADR-0361).
 //
 // Frozen onto the line for the reason the approval rule and the ceiling are: an
 // approver saw a figure and decided on it, and a catalogue edit afterwards must

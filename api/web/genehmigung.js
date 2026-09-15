@@ -539,7 +539,7 @@ function renderDecision() {
       // The figure the order froze, as the catalogue wrote it. An approver
       // deciding without it is deciding half the question — and a page that
       // reformatted it would be inventing a money model the catalogue does not
-      // have (ADR-draft-product-price).
+      // have (ADR-0361).
       el('dt', {}, t('appr.price')),
       el('dd', a.price ? {} : { class: 'muted' }, a.price || t('appr.price.none'))),
     rest.length ? renderTogether(rest) : null,

@@ -2,7 +2,7 @@ package catalog
 
 import "testing"
 
-// The heading a product sits under (ADR-draft-product-category).
+// The heading a product sits under (ADR-0360).
 //
 // A heading and nothing else: no ordering, no translation, no entity. So the
 // catalogue has exactly one thing to check, the same one a price and a form id

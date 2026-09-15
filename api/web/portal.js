@@ -410,7 +410,7 @@ const state = {
   // not something the server can resolve and an id is not something a person can
   // read (ADR-0356).
   // category narrows the cascade to one heading
-  // (ADR-draft-product-category). Three values, because
+  // (ADR-0360). Three values, because
   // there are three questions: null is every heading, '' is the bucket for
   // products that carry none, and anything else is that heading.
   category: null,
@@ -468,7 +468,7 @@ function partsOf(release, id) {
 
 // levelsOf returns the four columns for where the cascade currently stands.
 // categoriesOf is every heading this release's top-level products carry, plus the
-// bucket for the ones that carry none (ADR-draft-product-category).
+// bucket for the ones that carry none (ADR-0360).
 //
 // Sorted alphabetically, because a heading is a string and there is nothing on it
 // to sort by. An ordering of its own would be the entity the decision refused,
@@ -784,7 +784,7 @@ function infoPanel(item) {
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
     // parsed it into a number would be inventing the money model the catalogue
-    // deliberately does not have (ADR-draft-product-price).
+    // deliberately does not have (ADR-0361).
     el('p', { class: 'muted' },
       `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
     el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
@@ -956,7 +956,7 @@ function renderCatalogue() {
   const name = (id) => textOf((by[id] || {}).texts, id);
 
   // Kategorie. The headings the products themselves carry
-  // (ADR-draft-product-category), with "all" above them so
+  // (ADR-0360), with "all" above them so
   // the column is never a dead end. It was the catalogue's own name and a note
   // saying the data had no category; it has one now.
   const headings = categoriesOf(rel);
