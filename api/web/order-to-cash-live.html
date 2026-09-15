@@ -296,7 +296,8 @@ async function readInstance(key){
 }
 
 // 2) START — hand Atlas the cart as instance variables. The create response does
-// not carry the instance key, so we diff the scoped listing before and after.
+// not carry the instance key, so we diff the scoped listing before and after. The
+// engine-side fix for the guess this leaves is ADR-draft-starting-an-instance-returns-its-key.
 async function startInstance(defKey){
   const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
   await api("POST",`/processes/${defKey}/instances`, {variables:{positions:cart.positions, customerType:cart.customerType}});
