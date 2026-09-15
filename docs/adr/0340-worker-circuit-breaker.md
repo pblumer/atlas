@@ -1,6 +1,6 @@
 # ADR-0340: An outage stops at the worker, not at every token
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-15
 - **Deciders:** Atlas engine team
