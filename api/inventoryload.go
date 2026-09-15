@@ -30,7 +30,7 @@ import (
 // id. Neither side matches without a lookup:
 //
 //   - subject → principal, through the account the directory mirror already wrote
-//     (ADR-draft-entra-directory-provisioning): by directory id, else by mail;
+//     (ADR-0332): by directory id, else by mail;
 //   - right → item, through [catalog.TargetRef], which is the item's own claim about
 //     what it is called out there.
 //

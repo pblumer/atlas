@@ -56,8 +56,9 @@ for years?**
 1. **A script.** Somebody writes a one-off importer against the directory and the API on
    the day, runs it, and deletes it.
 2. **Derive it from what Atlas already mirrors.** The Entra mirror
-   (ADR-draft-entra-directory-provisioning) already holds groups and their members. Walk
-   them, match against the catalogue, write entitlements. No new endpoint at all.
+   ([ADR-0332](0332-entra-directory-provisioning.md)) already holds groups and their
+   members. Walk them, match against the catalogue, write entitlements. No new
+   endpoint at all.
 3. **A generic observation endpoint**, fed by a modelled process, joined inside Atlas
    against a mapping each product declares.
 
@@ -240,6 +241,6 @@ a populated inventory exists for — are still not built.
   and the paragraph this record implements.
 - [ADR-0239](0239-off-loop-queries.md) — why the batch is bounded by a budget rather than
   by the population.
-- ADR-draft-entra-directory-provisioning — the accounts a load resolves its subjects
+- [ADR-0332](0332-entra-directory-provisioning.md) — the accounts a load resolves its subjects
   against, and the two-function split this record reuses.
 - [ADR-0194](0194-api-tokens.md) — the scope that confines the credential a load carries.
