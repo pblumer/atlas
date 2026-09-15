@@ -423,6 +423,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Proposed | Not started |
 | [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted | Landed |
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
+| [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
 
 ## The two states of a record
 

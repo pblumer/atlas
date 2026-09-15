@@ -7292,11 +7292,13 @@ atlas worker --connector mssql</code></pre>
       <p data-l="en">The same path exists in the other direction: a model authored in one application can be moved
         to another, or to another installation, without retyping it.</p>
 
-      <h3 data-l="de">Zwei Höhen: Model und Instances</h3><h3 data-l="en">Two altitudes: Model and Instances</h3>
+      <h3 data-l="de">Zwei Höhen, drei Ansichten</h3><h3 data-l="en">Two altitudes, three views</h3>
       <p data-l="de">Die App teilt sich in genau die zwei Ebenen, die auch UML unterscheidet &ndash; und die Atlas
-        ohnehin schon trennt, nämlich Entwurfszeit und Laufzeit:</p>
+        ohnehin schon trennt, nämlich Entwurfszeit und Laufzeit. Die Typebene wird dabei zweimal gelesen: einmal
+        als Dokument, einmal als Vokabular über alle Dokumente hinweg.</p>
       <p data-l="en">The app splits into exactly the two levels UML distinguishes &ndash; and that Atlas already
-        separates anyway, namely design time and run time:</p>
+        separates anyway, namely design time and run time. The type level is read twice: once as a document, once
+        as a vocabulary across all of them.</p>
       <table>
         <thead><tr>
           <th data-l="de">Ansicht</th><th data-l="en">View</th>
@@ -7307,6 +7309,12 @@ atlas worker --connector mssql</code></pre>
           <tr><td><b>Model</b></td>
             <td data-l="de">Was ein Auftrag <i>ist</i> &ndash; die Typebene, das Klassendiagramm.</td>
             <td data-l="en">What an order <i>is</i> &ndash; the type level, the class diagram.</td>
+            <td><code>modeler</code></td></tr>
+          <tr><td><b>Business objects</b></td>
+            <td data-l="de">Welche Geschäftsobjekte es überhaupt gibt &ndash; jede Klasse jedes Modells, über
+              Applikationen hinweg, und wo jede verwendet wird.</td>
+            <td data-l="en">Which business objects exist at all &ndash; every class of every model, across
+              applications, and where each of them is used.</td>
             <td><code>modeler</code></td></tr>
           <tr><td><b>Instances</b></td>
             <td data-l="de">Welche Aufträge gerade unterwegs sind &ndash; die Instanzebene, gruppiert nach dem Typ,
@@ -7321,6 +7329,60 @@ atlas worker --connector mssql</code></pre>
         ein Link, den man weiterschicken kann.</p>
       <p data-l="en">A data object with no declared type is not hidden in <b>Instances</b> but shown as
         <i>no declared type</i>. The filter lives in the URL, so a datum you found is a link you can send on.</p>
+
+      <h3 data-l="de">Wo ein Business Object verwendet wird</h3>
+      <h3 data-l="en">Where a business object is used</h3>
+      <p data-l="de">Was ein Auftrag <i>ist</i>, zeigt das Klassendiagramm. Was von ihm <i>abhängt</i>, zeigte
+        bisher nichts &ndash; und das ist die Frage, die jede Änderung stellt: Wer schreibt dieses Attribut? Wer
+        setzt diesen Zustand? Wird diese Enumeration überhaupt noch gebraucht? <b>Data → Business objects</b>
+        beantwortet sie.</p>
+      <p data-l="en">What an order <i>is</i>, the class diagram shows. What <i>depends</i> on it, nothing showed
+        &ndash; and that is the question every change asks: who writes this attribute? Who sets this state? Is this
+        enumeration still needed at all? <b>Data → Business objects</b> answers it.</p>
+      <p data-l="de">Die Liste führt jede Klasse jedes Informationsmodells, das man sehen darf &ndash;
+        Geschäftsobjekte, Wertetypen und Enumerationen zusammen, in der gewohnten sortier- und filterbaren Tabelle.
+        Bewusst über Applikationen hinweg: Dass zwei Applikationen denselben Auftrag zweimal modellieren, ist genau
+        der Fehler, den das Informationsmodell verhindern soll &ndash; eine Ebene höher &ndash; und in einer Ansicht
+        pro Modell ist er nicht zu sehen.</p>
+      <p data-l="en">The list carries every class of every information model you may view &ndash; business objects,
+        value types and enumerations together, in the familiar sortable, filterable table. Across applications on
+        purpose: two applications modelling the same order twice is exactly the failure the information model exists
+        to prevent, one level up, and a per-model view cannot show it.</p>
+      <p data-l="de">Ein Klick auf einen Namen öffnet die Detailansicht. Sie zeigt zuerst, was die Klasse ist &ndash;
+        Attribute oder Literale, Business Key, Lebenszyklus &ndash; und dann, <b>wo und wie</b> sie verwendet wird:</p>
+      <p data-l="en">Clicking a name opens the detail page. It shows what the class is first &ndash; attributes or
+        literals, business key, lifecycle &ndash; and then <b>where and how</b> it is used:</p>
+      <ul>
+        <li data-l="de"><b>In Prozessen:</b> jeder deployte Prozess, der ein Datenobjekt dieser Klasse deklariert,
+          und jedes Element, das es liest, schreibt, ein Attribut davon setzt, es in einen Zustand überführt oder den
+          Datenspeicher nennt, in dem es liegt &ndash; mit Element, Attribut und Zustand im Klartext.</li>
+        <li data-l="en"><b>In processes:</b> every deployed process that declares a data object of this class, and
+          every element that reads it, writes it, sets one member of it, moves it into a state or names the data
+          store it is kept in &ndash; with the element, the member and the state named.</li>
+        <li data-l="de"><b>Im Modell selbst:</b> jedes Attribut, das mit dieser Klasse typisiert ist, jede
+          Beziehung, jeder Lebenszyklus, der seine Zustände aus dieser Enumeration bezieht, jeder Datenspeicher, der
+          sie hält. Für eine Enumeration ist das üblicherweise die <i>einzige</i> Art von Verwendung &ndash; deshalb
+          stehen die beiden Listen nebeneinander und werden nicht zu einer verrechnet.</li>
+        <li data-l="en"><b>In the model itself:</b> every attribute typed with this class, every association, every
+          lifecycle taking its states from this enumeration, every data store holding it. For an enumeration that is
+          usually the <i>only</i> kind of use there is &ndash; which is why the two lists sit beside each other
+          rather than being added up into one.</li>
+      </ul>
+      <div class="note">
+        <div class="lbl" data-l="de">Was die Ansicht nicht sieht</div>
+        <div class="lbl" data-l="en">What the view does not see</div>
+        <p data-l="de">Gelesen wird, was diese Installation tatsächlich ausführt: die deployte, aktive, jeweils
+          neueste Version jedes Prozesses. Ein Entwurf im Modeler ist nicht dabei &ndash; er ist nicht kompiliert, und
+          alle Entwürfe für eine Liste zu übersetzen hiesse, die Antwort davon abhängig zu machen, ob die Arbeit
+          anderer Leute gerade parst. «Von nichts verwendet» heisst also: von nichts <i>Deploytem</i>. Und geraten
+          wird nicht: Ein Datenobjekt ohne deklarierten Typ gilt nicht als Verwendung der Klasse, an deren Namen es
+          erinnert.</p>
+        <p data-l="en">What is read is what this installation actually runs: the deployed, active, latest version of
+          each process. A Modeler draft is not in it &ndash; it is not compiled, and compiling every draft to answer a
+          list would make the answer depend on whether somebody else's work in progress parses. So "used by nothing"
+          means by nothing <i>deployed</i>. And nothing is guessed: a data object with no declared type does not count
+          as a use of the class its name resembles.</p>
+      </div>
     </section>
 
     <!-- ==================== ROLE: PROCESS DEVELOPER ==================== -->

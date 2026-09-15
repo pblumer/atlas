@@ -233,7 +233,26 @@ The control-flow basics most real models use.
   XMI keeps the picture in a file of its own. Next here: an XMI *export*, which ADR-0230
   named and which would make the pair symmetric. Merging an import into an existing
   model is deliberately not done — reconciling two versions of a class is a modeling
-  decision, and it belongs to the person.
+  decision, and it belongs to the person. **The vocabulary now has a reading of its own**
+  (ADR-0338): every reading until here ran from the process
+  outwards, so somebody about to rename `Order.total` or retire an enumeration literal could
+  see what an Order *is* and nothing about what would break. **Data › Business objects** lists
+  every class of every model the caller may view — business objects, value types and
+  enumerations together, in the console's shared table — deliberately **across applications**,
+  because two applications modelling the same Order is the failure this area exists to prevent
+  one level up, and a per-model view cannot show it. Opening one says **where it is used and
+  how**: every deployed process that declares a data object of it, and every element that
+  reads it, writes one member of it, moves it into a state or names the store it is kept in,
+  with the element, the member and the state named — beside the model's own uses (an attribute
+  typed with it, an association, a lifecycle taking its states from it, a store holding it),
+  which for an «enumeration» are normally the only uses there are, so a process-only reading
+  would have reported the vocabulary's most shared elements as dead. It **guesses nothing** (an
+  untyped data object whose name resembles a class is not a use) and reads only what the
+  installation runs — the deployed, active, latest version of each process, a Modeler draft
+  being uncompiled — which the page states where it makes the claim. Computed on every call and
+  stored nowhere, for ADR-0310's reason: the names are already the mechanism. Next here: a link
+  from the class canvas into the reading, which waits on what a navigation out of an editor
+  holding unsaved state should do.
 - 🔲 Compiler validation: reachability, gateway coverage, scope consistency
 - 🚧 **Conformance tests against a curated BPMN model set** — the
   [`conformance/`](conformance/) package scaffolds the suite: a register of BPMN

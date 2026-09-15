@@ -5523,7 +5523,10 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 @media (max-width: 900px) { .md-cols { grid-template-columns: 1fr; } }
 .md-col { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
 .md-col h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
-.md-count {
+/* Shared with the class catalogue's section headings: it is the same statement — how
+   many rows are under this heading — so it is the same pill rather than a second one
+   that drifts. */
+.md-count, .bo-count {
   font: 600 11px/1 system-ui, sans-serif; padding: 3px 7px; border-radius: 999px;
   background: var(--bg); color: var(--muted); border: 1px solid var(--border);
 }
@@ -5549,6 +5552,56 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 }
 .md-excluded ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
 .md-excluded li { margin: 4px 0; }
+
+/* The class catalogue and the where-used page
+   (ADR-0338).
+
+   The list is a plain list — the shared table, no layout of its own — because it is
+   read the way every other list in the console is read (ADR-0286),
+   and because the interesting work happens one click in. The detail page is a
+   sequence of statements rather than a dashboard: what this class *is*, then where
+   processes use it, then where the model does. Nothing here is a drawing; the drawing
+   is one link away and says a different thing. */
+.bo-root { padding: 18px 22px 26px; }
+.bo-doc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+/* An absent fact reads as absent, not as an empty cell: the difference between "no
+   member is written" and "this column did not render" is worth one class. */
+.bo-none { color: var(--muted); font-style: italic; }
+/* The three parts of "used by" stack rather than wrap: they are three different
+   statements, and a wrapped one reads as a broken line. */
+.bo-used { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; }
+.bo-used .pill { white-space: nowrap; }
+.bo-kind.businessObject { border-color: var(--accent); color: var(--accent); }
+.bo-kind.enumeration { border-style: dashed; }
+.bo-scope { margin: 10px 2px 0; font-size: 12px; color: var(--muted); max-width: 90ch; line-height: 1.5; }
+
+.bo-crumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.bo-title { display: flex; align-items: center; gap: 10px; margin: 0; }
+.bo-summary { margin-top: 16px; }
+.bo-touched { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.bo-touched-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 0; font-size: 12.5px; }
+.bo-touched-label { min-width: 130px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.bo-sec { margin-top: 22px; }
+.bo-sec h2 { font-size: 15px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.bo-meaning { color: var(--muted); font-size: 12.5px; line-height: 1.5; margin: 0 0 10px; max-width: 90ch; }
+
+/* How something is used. The kinds are not good or bad, so they are not coloured as
+   if they were: a write carries the accent because it is the one that changes the
+   datum, and everything else stays quiet. */
+.bo-how { text-transform: lowercase; }
+.bo-how.write, .bo-how.attribute { border-color: var(--accent); color: var(--accent); }
+.bo-how.declare, .bo-how.association, .bo-how.states { color: var(--muted); }
+.bo-how.store { border-style: dashed; }
+
+.bo-state { background: var(--accent-soft); }
+.bo-state.initial { border-left: 3px solid var(--accent); }
+.bo-state.final { border-right: 3px solid var(--muted); }
+.bo-life { margin-top: 14px; }
+.bo-life h3 { font-size: 13px; margin: 0 0 8px; }
+.bo-states { display: flex; gap: 6px; flex-wrap: wrap; }
+.bo-moves { list-style: none; margin: 10px 0 0; padding: 0; font-size: 12.5px; color: var(--muted); }
+.bo-moves li { padding: 3px 0; }
+.bo-lit td { width: 100%; }
 
 /* The bar above the run-time overlay: which object is drawn, where it has got to,
    and — only when more than one object has a machine — which one to draw. */
