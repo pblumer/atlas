@@ -73,18 +73,40 @@ func unescapeQuotes(s string) string {
 }
 
 // feelPathShape turns a FEEL expression that builds a path into the same shape.
+//
 // `"/api/v1/orders/" + orderId + "/next"` is two literals with something between
 // them, which is exactly what `/api/v1/orders/{id}/next` is.
+//
+// The gaps are what this walks, not the literals. An earlier version joined the
+// literals with "{}" and so could only see a filled-in segment *between* two of
+// them: `"/api/v1/recertification/" + id` came out as `/api/v1/recertification/`,
+// which matches no route and fails for a reason that has nothing to do with the
+// path. A parameter at either end is as ordinary as one in the middle.
 func feelPathShape(expr string) string {
-	lits := feelLiteral.FindAllStringSubmatch(expr, -1)
-	parts := make([]string, 0, len(lits))
-	for _, l := range lits {
-		parts = append(parts, l[1])
+	// The leading "=" is FEEL's own marker that this is an expression at all, not
+	// something being substituted into the path. Counting it as a gap put a "{}" in
+	// front of every shape, and a shape that does not begin with /api/ is passed
+	// over as somebody else's server — a silent skip rather than a failure.
+	expr = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(expr), "="))
+	var (
+		b    strings.Builder
+		at   int
+		lits = feelLiteral.FindAllStringSubmatchIndex(expr, -1)
+	)
+	gap := func(from, to int) {
+		// Anything but the concatenation operator and whitespace is something being
+		// substituted in — a variable, a call, a conditional.
+		if strings.Trim(expr[from:to], " \t+") != "" {
+			b.WriteString("{}")
+		}
 	}
-	joined := strings.Join(parts, "{}")
-	// A concatenation reads "…/orders/" + id + "/next": joining leaves the slashes
-	// that were already in the literals, so collapse the doubled ones.
-	return strings.ReplaceAll(pathShape(joined), "//", "/")
+	for _, m := range lits {
+		gap(at, m[0])
+		b.WriteString(expr[m[2]:m[3]])
+		at = m[1]
+	}
+	gap(at, len(expr))
+	return strings.ReplaceAll(pathShape(b.String()), "//", "/")
 }
 
 func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {

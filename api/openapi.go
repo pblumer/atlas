@@ -1654,6 +1654,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 
+		{"GET", "/api/v1/pending-work", s.handlePendingWork, apiOp{
+			summary: "What is waiting for you across the portal: open approvals addressed to you, and recertification rows you still owe. `?principal=` asks about somebody else and is the **operator's** — a portal where any user can enumerate any other user's pending work has turned an inbox into an organisation chart with workloads attached. Nothing is listed that the person cannot act on right now: not a row in a closed campaign, not one somebody already decided. It counts as well as lists, because the first decision a reminder makes is whether to send at all. Atlas does not send: `examples/erinnerung.bpmn` does, with the mail task that already exists",
+			tag:     "Order", role: RoleUser,
+			resp: jsonBody("The items waiting, oldest first, and the counts", tObject())}},
+
 		{"GET", "/api/v1/entitlements/expiring", s.handleExpiring, apiOp{
 			summary: "What is due to end within `?within=` days (default 30), and everything already past its end. A right past its end is still **held** — the target system still has it and nothing has run — so this reports a debt rather than a state of the world, and the record stays true. It acts on nothing: the deprovisioning is the product's own process, run by a modelled one. `unendable` counts the overdue rights whose product binds no such process, because no amount of running it will reduce them",
 			tag:     "Catalogue", role: RoleOperator,

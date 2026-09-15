@@ -249,6 +249,12 @@ type Limits struct {
 	// number — which is why this one is a truncation where a campaign's rows are a
 	// refusal.
 	ExpiringReport int32
+
+	// PendingWorkItems is how many waiting items one person's answer lists
+	// (ADR-draft-pending-work). Small, because the consumer is a reminder and a
+	// reminder listing two hundred lines is one nobody reads to the end. The counts
+	// are over everything, so a message can say "and 190 more" truthfully.
+	PendingWorkItems int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -305,6 +311,7 @@ func Default() Limits {
 		RecertifyNote:         4 << 10,
 		ExpiringWindow:        365,
 		ExpiringReport:        500,
+		PendingWorkItems:      50,
 	}
 }
 

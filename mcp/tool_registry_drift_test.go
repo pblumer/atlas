@@ -543,6 +543,15 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
 	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
 
+	// Pending work (ADR-draft-pending-work). Omitted, and the second mode is why.
+	//
+	// Asking what is waiting for *you* would be harmless as a tool. Asking what is
+	// waiting for somebody else is an enumeration of another person's obligations,
+	// and an assistant that can make that call can make it about everybody — which
+	// is the organisation chart with workloads attached the record refuses to hand
+	// to a person. One route, two modes, and a tool cannot expose only the safe one.
+	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
+
 	// Expiry (ADR-draft-time-bounded-entitlements). Omitted for the reason GET
 	// /api/v1/inventory is: it is a list of other people's access, with the dates
 	// their access ends attached. That it happens to be read-only does not make it

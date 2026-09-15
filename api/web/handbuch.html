@@ -4440,6 +4440,67 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-erinnerung">
+        <h4><span class="rz-emoji" aria-hidden="true">✉️</span>
+          <span data-l="de">Erinnerung: was auf wen wartet</span><span data-l="en">Reminders: what is waiting for whom</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Mail</span><span class="tag" data-l="en">mail</span>
+          <span class="tag">pending-work</span>
+          <span class="tag" data-l="de">Aufruf-Aktivität</span><span class="tag" data-l="en">call activity</span>
+          <span class="tag">R/P7D</span>
+          <span class="tag">examples/erinnerung/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Das Portal bittet Menschen um dreierlei – eine Bestellzeile genehmigen, eine
+              Rezertifizierungszeile beantworten, eine Aufgabe erledigen. Nichts davon geschieht,
+              solange niemand Atlas öffnet und nachsieht. <b>Eine Kampagne, von der niemand erfährt,
+              ist eine Kampagne, die niemand beantwortet</b> – und jede unbeantwortete Zeile wird
+              korrekt als <i>nicht bescheinigt</i> festgehalten.</p>
+            <p data-l="de"><b>Eine falsche Erinnerung kostet mehr, als zehn richtige einbringen.</b>
+              Wer an Arbeit erinnert wird, die nicht seine ist oder die er längst erledigt hat, lernt,
+              dass diese Nachrichten Rauschen sind – und löscht die nächste, auf die es ankam,
+              ungelesen.</p>
+            <p data-l="en">The portal asks people for three things – decide an order line, answer a
+              recertification row, do a task. None of it happens while nobody opens Atlas and looks.
+              <b>A campaign nobody is told about is a campaign nobody answers</b> – and every
+              unanswered row is correctly recorded as <i>not certified</i>.</p>
+            <p data-l="en"><b>One wrong reminder costs more than ten right ones earn.</b> Somebody
+              reminded about work that is not theirs, or that they already did, learns that these
+              messages are noise – and deletes the next one, the one that mattered, unread.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Die Mailstrecke gab es längst: <code>to=</code> nennt eine Kennung, und der
+              Server löst die Adresse im Moment des Versands auf – so gerät keine Adresse in eine
+              Variable, eine Bestellung oder das Ereignisprotokoll. <b>Was fehlte, war die Frage:</b>
+              jede Route, die „was wartet“ beantwortet, beantwortet es nur für den Aufrufenden, und ein
+              Erinnerungslauf ist nicht die Person, an die er erinnert.</p>
+            <p data-l="de"><code>GET /api/v1/pending-work?principal=…</code> ist diese Frage und ist dem
+              <b>Operator</b> vorbehalten: ein Portal, in dem jeder die offenen Posten jedes anderen
+              aufzählen kann, ist ein Organigramm mit Arbeitslasten daran. Der Scope
+              <code>reminders</code> erreicht genau diese eine Route. Gelistet wird nur, was die Person
+              <i>jetzt</i> tun kann – keine Zeile einer geschlossenen Kampagne, keine bereits
+              entschiedene. <b>Atlas verschickt nichts</b>; das Modell tut es.</p>
+            <p data-l="en">The mail path already existed: <code>to=</code> names a reference and the
+              server resolves the address at the moment of sending, so no address enters a variable, an
+              order or the event log. <b>What was missing was the question:</b> every route that answers
+              "what is waiting" answers only for the caller, and a reminder is not the person it is
+              reminding.</p>
+            <p data-l="en"><code>GET /api/v1/pending-work?principal=…</code> is that question and it is
+              the <b>operator's</b>: a portal where any user can enumerate any other's pending work has
+              turned an inbox into an organisation chart with workloads attached. The
+              <code>reminders</code> scope reaches exactly this one route. Only what the person can act
+              on <i>now</i> is listed – nothing from a closed campaign, nothing already decided.
+              <b>Atlas does not send</b>; the model does.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
       <div class="bsp" id="bsp-befristung">
         <h4><span class="rz-emoji" aria-hidden="true">⏳</span>
           <span data-l="de">Befristung: Zugriff, der von selbst endet</span><span data-l="en">Time-bounded access: rights that end by themselves</span></h4>

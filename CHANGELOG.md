@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A reminder can now ask what is waiting for somebody else.** The portal asks people for
+  three different things — decide an order line, answer a recertification row, do a task —
+  and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows
+  across forty managers, with nobody told, closes with four hundred and eighty undecided:
+  each correctly recorded as *not certified*, and useless.
+
+  The gap was sharper than "there is no notification". Atlas could already send mail — a
+  modelled process carries a mail task, `to=` names a principal or a group, and the address
+  is resolved in the server at the moment of sending, so it never enters a variable, an
+  order or the event log. **What was missing is that every route answering "what is waiting"
+  answers only for the caller**, and a reminder process is not the person it is reminding.
+
+  `GET /api/v1/pending-work` answers the caller's own; `?principal=` answers somebody
+  else's and is the **operator's**, because a portal where any user can enumerate any other
+  user's pending work has turned an inbox into an organisation chart with workloads
+  attached. A reminder's token carries the new `reminders` scope, which reaches exactly that
+  one route — it cannot read an inventory, run a comparison or decide anything.
+
+  **One wrong reminder costs more than ten right ones earn**, so nothing is listed that the
+  person cannot act on right now: not a row in a campaign that has closed, not one somebody
+  already decided, not an approval that has escalated away. It counts as well as lists,
+  because the first decision a reminder makes is whether to send at all. **Atlas does not
+  send** — `examples/erinnerung/` does, one mail per person rather than one per row.
+
 - **A right can now end by itself.** Everything the portal grants, it granted forever — which
   nobody notices on the day it is built, and which is why the commissioning load,
   reconciliation and recertification all exist: three controls that find access which should
