@@ -212,3 +212,4 @@ implementer's to choose:
   a fact in an event, and replay reads it rather than producing it
 - affects the clients of [ADR-0204](0204-hosted-apps-on-an-isolated-origin.md)
 - deliberately does not change [ADR-0029](0029-public-process-start-links.md)
+- tracked as [issue #933](https://github.com/pblumer/atlas/issues/933)
