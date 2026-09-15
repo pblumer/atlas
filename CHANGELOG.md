@@ -217,6 +217,41 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The live diagram counts every parked token, not the ones a bounded scan reached.**
+  One process, two deployed versions, both under the same broken worker: the Operations
+  overview reported 10 910 stuck tokens, the live view of the current version reported
+  none at all, and the previous version's diagram badged "50" on each of two tasks
+  holding some 5 452 each. Only the overview was right, and the current version's
+  diagram — the surface an operator opens *because* the overview flagged the process —
+  drew a process whose every running instance was parked as a healthy one.
+
+  The overlay collected its incidents on the run loop, so it was bounded twice, and it
+  walked the incident family in key order, attributing each entry to its definition only
+  after reading it. Incidents are keyed by element instance and those keys ascend, so
+  the budget was spent oldest-first: a version deployed after a flood sat entirely past
+  it and was never reached. The per-element numbers were then read off what the scan had
+  returned, which is where "50" came from — the page held 100 rows, they fell on two
+  tasks, and each badge reported its share of the page rather than of the process.
+
+  The overlay now reads what
+  [the cause summary](docs/adr/0337-incident-floods.md) reads, the way it reads it: one
+  walk of the incident family off the run loop against a snapshot, through the same
+  attribution every other incident surface uses, held for five seconds so a 1.5-second
+  poll does not pay for one each time and dropped the moment anything is resolved. The
+  count and the detail page are now separate things — `incidentTotal` and
+  `elements[].incidents` are exact, `incidents[]` stays a 100-row page for the resolve
+  panel, and `incidentCountsExact` says which is which. A definition with nothing parked
+  now *states* that it has nothing parked, where before it could not be told apart from
+  one the scan had not got to. Nothing walks the incident family on the run loop any
+  more.
+
+  Two more readings were wrong for the same reason and are fixed with it: isolating a
+  single instance stopped counting its parked tokens once its detail page filled, so an
+  instance holding more than 100 reported exactly 100; and the browser hid the incident
+  pill whenever the detail list was empty, which is what turned an unreached definition
+  into a silent one.
+  ([ADR-draft-the-live-diagram-counts-every-parked-token](docs/adr/draft-the-live-diagram-counts-every-parked-token.md))
+
 - **A deleted definition's key is never issued again, so a new process cannot inherit
   its history.** Every process definition and every decision deployment draws a key
   from one counter, and that key is what the engine files a great deal of durable state

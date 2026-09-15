@@ -259,21 +259,42 @@ type runtimeResp struct {
 	// operator then gives it — "the task is still open" — while the engine has in fact
 	// been holding a failure for hours (ADR-0150).
 	Incidents []runtimeIncident `json:"incidents"`
-	// IncidentsTruncated marks a capped page: more elements are parked than the
-	// overlay lists. The per-element counts are then a floor, not a total.
+	// IncidentTotal is how many of this definition's tokens are parked right now —
+	// the number the diagram's badges and the header pill say, which is not the
+	// length of the list above: that list is a bounded page of *details*, and under a
+	// flood it is a hundred rows out of thousands.
+	//
+	// Keeping the two apart is the whole point. A count read off the page was a
+	// floor presented as a total, and a page the bounded scan never reached made it a
+	// zero presented as a total — a process with thousands of parked tokens rendering
+	// as healthy on its own diagram (ADR-draft-the-live-diagram-counts-every-parked-token).
+	IncidentTotal int `json:"incidentTotal"`
+	// IncidentsTruncated marks a capped page: more tokens are parked than the overlay
+	// details. It says nothing about the counts, which are exact whenever
+	// IncidentCountsExact is set — it is what tells the browser the *panel* is showing
+	// a page, so it can point at the incidents view for the rest.
 	IncidentsTruncated bool `json:"incidentsTruncated"`
+	// IncidentCountsExact reports that IncidentTotal and the per-element counts are
+	// the whole truth rather than what a bounded scan happened to reach. False only
+	// when the exact reading could not be taken at all (the loop is closing, or the
+	// store errored), in which case the counts fall back to the bounded scan's and a
+	// reader must treat them as a floor.
+	IncidentCountsExact bool `json:"incidentCountsExact"`
 }
 
-// Bounds on the incident overlay. maxRuntimeIncidents caps what one response carries;
-// maxRuntimeIncidentScan caps how far the aggregate view reads to find them, so a
-// store full of *other* definitions' incidents cannot turn a 1.5-second poll into an
-// unbounded scan on the run loop (the O(elements) discipline of ADR-0080). The
-// single-instance view needs neither: it point-looks-up the incident of each token it
-// is already walking.
-const (
-	maxRuntimeIncidents    = 100
-	maxRuntimeIncidentScan = 2000
-)
+// maxRuntimeIncidents bounds the overlay's *details* — how many rows the resolve panel
+// is handed for one definition, or for one isolated instance.
+//
+// It no longer bounds a count, and the second bound that used to stand beside it
+// (how far the aggregate view read on the run loop to find its incidents) is gone
+// entirely. Between them those two are what made a flood on one definition read as a
+// healthy diagram on another: the counts came off the page, the page came off a scan in
+// key order, and the scan was spent before it reached the definition being drawn
+// (ADR-draft-the-live-diagram-counts-every-parked-token).
+//
+// Counts now come from the off-loop reading in api/runtimeincidents.go, which walks
+// the whole family and is exact; this is only the size of the page.
+const maxRuntimeIncidents = 100
 
 // collabPool is one pool (participant) of a collaboration, as a deployed
 // definition the collaboration runtime aggregates.
@@ -1397,39 +1418,6 @@ func (s *Server) handleSetProcessActive(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-// collectDefIncidents adds the unresolved incidents of one definition to the overlay.
-// An incident carries its process instance, not its definition (model.IncidentValue),
-// so each candidate costs one point lookup to attribute — and attribute it must: a
-// compiled element index is only meaningful within its own definition, so an incident
-// let through from another one would mark a completely unrelated shape.
-//
-// The work is bounded twice, by how far it reads and by how much it returns, because
-// this runs on the run loop under a 1.5-second poll: a definition whose own tokens are
-// healthy must not pay an unbounded scan because some other definition has thousands
-// parked behind a broken worker. A bound that bites marks the page truncated, which
-// is what tells the browser its per-element counts are a floor rather than a total.
-func (s *Server) collectDefIncidents(defKey uint64, add func(uint64, *model.IncidentValue) bool, resp *runtimeResp) error {
-	scanned := 0
-	return unlessTruncated(s.store.Incidents(func(elKey uint64, v *model.IncidentValue) error {
-		if scanned++; scanned > maxRuntimeIncidentScan {
-			resp.IncidentsTruncated = true
-			return errListTruncated
-		}
-		pi, ok, err := s.store.ProcessInstance(v.ProcessInstanceKey)
-		if err != nil {
-			return err
-		}
-		if !ok || pi.ProcessDefKey != defKey {
-			return nil
-		}
-		if add(elKey, v) {
-			resp.IncidentsTruncated = true
-			return errListTruncated
-		}
-		return nil
-	}))
-}
-
 // handleProcessRuntime returns, for one definition, how many instances are live
 // and how many tokens (element instances) currently sit on each BPMN element —
 // the data the browser overlays onto the diagram. An optional ?instance=<key>
@@ -1453,7 +1441,12 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	var (
 		found   bool
 		scanErr error
-		resp    = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}}
+		// cp is carried out of the loop turn so the exact incident counts can be
+		// mapped back onto BPMN ids off it. A CompiledProcess is immutable once
+		// deployed (I5), which is what makes that safe — readOffLoop hands the same
+		// pointer to its own callers for the same reason.
+		cp   *compiler.CompiledProcess
+		resp = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}}
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -1461,6 +1454,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		cp = d.cp
 
 		byElement := map[string]*runtimeElement{}
 		var order []string
@@ -1485,15 +1479,27 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 		// One resolver for the whole overlay, so the worker store is read once for
 		// the page rather than once per parked token (ADR-0160).
 		connectorFor := s.incidentConnectorLookup()
-		// addIncident records one parked element instance on the overlay: a count on
-		// the element (so the diagram can mark the shape) and the detail behind it (so
-		// the panel can say why and offer the resolve). Full is the response cap.
-		addIncident := func(elKey uint64, v *model.IncidentValue) (full bool) {
+		// addIncident records one parked element instance of the *isolated instance*
+		// on the overlay: a count on the element (so the diagram can mark the shape)
+		// and, while the page has room, the detail behind it (so the panel can say why
+		// and offer the resolve).
+		//
+		// Counting and paging are separate, and that separation is the correction: this
+		// used to stop counting when the page filled, which made a single instance
+		// holding more than a hundred parked tokens report exactly a hundred — on the
+		// one branch whose counts nothing else corrects
+		// (ADR-draft-the-live-diagram-counts-every-parked-token).
+		addIncident := func(elKey uint64, v *model.IncidentValue) {
 			e := get(v.ElementId)
 			if e == nil {
-				return false
+				return
 			}
 			e.Incidents++
+			resp.IncidentTotal++
+			if len(resp.Incidents) >= maxRuntimeIncidents {
+				resp.IncidentsTruncated = true
+				return
+			}
 			inc := runtimeIncident{
 				ElementInstanceKey: elKey,
 				ProcessInstanceKey: v.ProcessInstanceKey,
@@ -1505,7 +1511,6 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			inc.Connector, inc.ConnectorKind, inc.ConnectorID = connectorFor(d.cp, v.ElementId)
 			inc.RepairForm = d.cp.RepairForm(v.ElementId)
 			resp.Incidents = append(resp.Incidents, inc)
-			return len(resp.Incidents) >= maxRuntimeIncidents
 		}
 
 		// The definition's finished-instance total, on both branches: the live view
@@ -1563,7 +1568,11 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 				resp.Instances = n
 				return err
 			})
-			scan(func() error { return s.collectDefIncidents(key, addIncident, &resp) })
+			// No incident scan here. Collecting them on the loop is what bounded them,
+			// and bounding them by a walk of the *whole* family in key order is what let
+			// another definition's flood spend this one's budget
+			// (ADR-draft-the-live-diagram-counts-every-parked-token). They arrive
+			// from the off-loop reading once this turn is over.
 		} else {
 			// Isolating one instance on the diagram (a deliberate single-instance
 			// action, not the default view). The elByProc index lists exactly this
@@ -1571,6 +1580,11 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			// holds rather than every token in the engine — the follow-up ADR-0080
 			// left open. The definition check stays: an instance key from another
 			// definition must draw nothing on this diagram.
+			//
+			// Its counts are exact by construction: the walk enumerates this instance's
+			// own element instances, so it sees every token it holds and every incident
+			// hanging off one. Nothing bounds it but the instance itself.
+			resp.IncidentCountsExact = true
 			scan(func() error {
 				return s.store.ElementInstancesOfProcess(instanceFilter, func(elKey uint64) error {
 					v, ok, err := s.store.GetElementInstance(elKey)
@@ -1587,14 +1601,17 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 					// One point lookup per token this instance holds: an element instance is
 					// where an incident hangs (ADR-0061), so the walk that draws the tokens
 					// also finds every reason one of them is not moving.
-					if len(resp.Incidents) < maxRuntimeIncidents {
-						inc, err := s.store.GetIncident(elKey)
-						if err != nil {
-							return err
-						}
-						if inc != nil && addIncident(elKey, inc) {
-							resp.IncidentsTruncated = true
-						}
+					//
+					// The lookup is paid past the detail cap too, and deliberately: it is
+					// bounded by the tokens of *one* instance, and stopping at a hundred
+					// used to stop the counting with it — the one branch whose counts
+					// nothing else corrects (ADR-draft-the-live-diagram-counts-every-parked-token).
+					inc, err := s.store.GetIncident(elKey)
+					if err != nil {
+						return err
+					}
+					if inc != nil {
+						addIncident(elKey, inc)
 					}
 					return nil
 				})
@@ -1636,6 +1653,17 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			resp.Elements = append(resp.Elements, *byElement[bid])
 		}
 	})
+	// The aggregate branch's incidents — its counts and its detail page both — come
+	// from the off-loop reading. The single-instance branch needs neither: its walk is
+	// bounded by one instance's own tokens, so it counts every one of them and finds
+	// every incident hanging off them.
+	//
+	// After the loop turn, not inside it: the reading takes its snapshot through the
+	// loop itself (ADR-0266), and dispatching onto the loop from a closure the loop is
+	// running would deadlock.
+	if found && scanErr == nil && instanceFilter == 0 {
+		applyIncidentOverlay(s, key, cp, &resp)
+	}
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
@@ -1644,6 +1672,57 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpapi.JSON(w, http.StatusOK, resp)
 	}
+}
+
+// applyIncidentOverlay puts one definition's parked tokens onto the aggregate overlay:
+// the exact total, the exact count on each element, and a bounded page of the details
+// behind them (ADR-draft-the-live-diagram-counts-every-parked-token).
+//
+// A definition with nothing parked gets zeroes, and that is a statement rather than an
+// absence: the reading is a whole snapshot of the incident family, so "not in it" means
+// "none". It is the case this exists for — a healthy definition must be able to say it
+// is healthy, and under the bounded scan it could not be told apart from an unreached
+// one.
+//
+// A reading that could not be taken leaves the response saying so through
+// IncidentCountsExact and carrying no incidents, rather than a zero it has not earned.
+func applyIncidentOverlay(s *Server, key uint64, cp *compiler.CompiledProcess, resp *runtimeResp) {
+	parked, ok := s.incidentOverlay(key)
+	if !ok || cp == nil {
+		return
+	}
+	resp.IncidentCountsExact = true
+	resp.IncidentTotal = parked.total
+	resp.Incidents = append(resp.Incidents, parked.details...)
+	resp.IncidentsTruncated = parked.detailsTruncated
+	at := make(map[string]int, len(resp.Elements))
+	for i := range resp.Elements {
+		at[resp.Elements[i].ElementID] = i
+	}
+	// An element holding a parked token that the live-token counters did not report
+	// would otherwise be counted in the total and drawn nowhere. It should not happen —
+	// an incident hangs on an active element instance — but a diagram that silently
+	// drops one is the failure this whole change is about, so it is added rather than
+	// discarded. Collected first and appended after, because appending while the index
+	// above is in use would invalidate it.
+	var unplaced []runtimeElement
+	for elementID, n := range parked.byElement {
+		bid := cp.ElementBpmnId(elementID)
+		if bid == "" {
+			continue
+		}
+		if i, ok := at[bid]; ok {
+			resp.Elements[i].Incidents = n
+			continue
+		}
+		unplaced = append(unplaced, runtimeElement{
+			ElementID: bid, Type: cp.Node(elementID).Type.String(), Incidents: n,
+		})
+	}
+	// Map iteration is unordered; the overlay is polled, so an order that reshuffles
+	// between two identical readings is a diff where there is no change.
+	sort.Slice(unplaced, func(i, j int) bool { return unplaced[i].ElementID < unplaced[j].ElementID })
+	resp.Elements = append(resp.Elements, unplaced...)
 }
 
 // handleCollaborationRuntime returns the runtime of a whole collaboration for the
@@ -4749,6 +4828,12 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		jobKey = inc.JobKey
 		s.proc.ResolveIncident(key, retries)
 	})
+	if found {
+		// The operator's next move is the diagram they resolved this from, so the
+		// overlay's counts must not spend the TTL still showing it parked
+		// (ADR-draft-the-live-diagram-counts-every-parked-token).
+		s.forgetIncidentCounts()
+	}
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are
 	// where a worker's outbound call happens, and holding the single writer for
 	// its duration is the stall ADR-0157 step 6 removes.

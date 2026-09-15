@@ -9544,7 +9544,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
   let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
-  let incidentsTruncated = false;  // more elements are parked than the overlay lists
+  let incidentsTruncated = false;  // more tokens are parked than the *detail* list holds
+  // incidentTotal is how many tokens are parked, which is not incidents.length: that
+  // list is a bounded page of details and under a flood it is a hundred rows out of
+  // thousands. Reading the count off the page made it a floor presented as a total, and
+  // a page the server's bounded scan never reached made it a zero presented as a total —
+  // a process with every token parked drawing as healthy
+  // (ADR-draft-the-live-diagram-counts-every-parked-token).
+  let incidentTotal = 0;
+  // Whether the server's counts are the whole truth. False only when it could not take
+  // the reading at all, in which case what is on screen is a floor and says so.
+  let incidentCountsExact = true;
   let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
@@ -10100,6 +10110,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   function livePanelHTML() {
     return incidentPanelHTML(incidents, {
       truncated: incidentsTruncated,
+      total: incidentTotal,
       rows: incidents.map((inc) => incidentRowHTML(inc, { label: inc.elementId })).join(""),
     });
   }
@@ -10150,6 +10161,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // "still running" for a process that has been failing for hours (ADR-0150).
     incidents = rt.incidents || [];
     incidentsTruncated = !!rt.incidentsTruncated;
+    incidentCountsExact = rt.incidentCountsExact !== false;
+    // The count comes off the element, never off the rows: rt.elements carries the
+    // server's exact per-element count, and the detail list beside it is a page. An
+    // element can therefore be marked red with no row of its own, which is the point —
+    // the alternative is a stuck task drawn as a healthy one
+    // (ADR-draft-the-live-diagram-counts-every-parked-token).
+    incidentTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : incidents.length;
     const incidentsByElement = new Map();
     for (const inc of incidents) {
       const arr = incidentsByElement.get(inc.elementId) || [];
@@ -10194,8 +10212,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       marked.push([e.elementId, marker]);
       // A parked element is drawn red over its live-token green, and says why: the
       // badge carries the incident message, the panel below carries the resolve.
+      //
+      // How many is e.incidents, the server's count for this element — not the length
+      // of the details it also sent. Under a flood those differ by orders of magnitude,
+      // and they used to be the same number: the badge said "50" on a task holding 5 400
+      // because fifty was how many rows of that task fitted on the page
+      // (ADR-draft-the-live-diagram-counts-every-parked-token).
       const elIncidents = incidentsByElement.get(e.elementId) || [];
-      if (elIncidents.length) {
+      const parked = Number.isFinite(e.incidents) ? e.incidents : elIncidents.length;
+      if (parked > 0) {
         canvas.addMarker(e.elementId, "atlas-incident");
         marked.push([e.elementId, "atlas-incident"]);
         // The word "incident" is not on the badge: the shape is already outlined red,
@@ -10203,12 +10228,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         // pill's job is to point at *which* shape — and a pill wide enough to spell it
         // out is a pill that lands on the name of the thing it is pointing at.
         // The count is grouped like every other count on a diagram (numfmt.js).
-        const many = elIncidents.length > 1 ? ` ${fmtCount(elIncidents.length)}` : "";
-        const what = elIncidents.length === 1 ? "1 incident" : `${fmtCount(elIncidents.length)} incidents`;
+        const many = parked > 1 ? ` ${fmtCount(parked)}` : "";
+        const what = parked === 1 ? "1 incident" : `${fmtCount(parked)}${incidentCountsExact ? "" : "+"} incidents`;
+        // The message is a sample from the details, and there may be none to sample:
+        // an element the detail page did not reach is still counted and still marked.
+        const sample = elIncidents.length && elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : "";
         overlays.add(e.elementId, "incident", {
           position: badgeSpot(shape, "bl"),
-          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
-            elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : ""}">&#9888;${many}</div>`,
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         });
       }
       // An armed branch shows no live count of its own: the tokens on it are the
@@ -10266,8 +10293,26 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     countEl.textContent = fmtCount(rt.instances);
     tokenEl.textContent = fmtCount(rt.tokens);
-    incidentEl.textContent = fmtCount(incidents.length) + (incidentsTruncated ? "+" : "");
-    incidentPill.hidden = incidents.length === 0;
+    // The pill is the diagram's headline number, so it says how many tokens are parked
+    // — and it appears whenever any are. Hiding it on an empty *detail* list is how a
+    // definition standing behind another's flood came to render as healthy: the rows
+    // were none, the incidents were not (ADR-draft-the-live-diagram-counts-every-parked-token).
+    //
+    // A reading the server could not take is the one case where the number is unknown,
+    // and unknown is shown as unknown: a zero here would be this same defect again, one
+    // failure mode along.
+    if (!incidentCountsExact) {
+      incidentEl.textContent = incidentTotal > 0 ? `${fmtCount(incidentTotal)}+` : "?";
+      incidentPill.hidden = false;
+      incidentPill.title = "The engine could not count what is parked right now, so this is a floor. "
+        + "The Incidents view is the authoritative list.";
+    } else {
+      incidentEl.textContent = fmtCount(incidentTotal);
+      incidentPill.hidden = incidentTotal === 0;
+      incidentPill.title = incidentTotal === 1
+        ? "1 token is parked behind an unresolved incident"
+        : `${fmtCount(incidentTotal)} tokens are parked behind unresolved incidents`;
+    }
     runningCount = rt.instances || 0;
     finishedCount = rt.finished || 0;
     renderVariables();
@@ -11321,6 +11366,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
   let incidents = [];    // this instance's unresolved incidents, from the runtime poll (ADR-0061/0151)
+  // How many tokens of this instance are parked, and how many on each element — the
+  // server's counts, which are not the length of the rows above: those are a page, and
+  // an instance can hold more parked tokens than one page holds (a wide fan-out behind
+  // one broken worker). Reading the numbers off the rows capped them at the page
+  // (ADR-draft-the-live-diagram-counts-every-parked-token).
+  let incidentTotal = 0;
+  let incidentsByElement = new Map();
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
@@ -11440,9 +11492,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (visitsChanged) drawBadges();
 
     const nextIncidents = rt.incidents || [];
+    const nextTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : nextIncidents.length;
     const sig = (list) => list.map((i) => `${i.elementInstanceKey}:${i.raisedAt}`).join(",");
-    if (sig(nextIncidents) === sig(incidents)) return;
+    if (sig(nextIncidents) === sig(incidents) && nextTotal === incidentTotal) return;
     incidents = nextIncidents;
+    incidentTotal = nextTotal;
+    incidentsByElement = new Map();
+    for (const e of rt.elements || []) {
+      if (e.incidents > 0) incidentsByElement.set(e.elementId, e.incidents);
+    }
     drawIncidentBadges();
     renderOverlay();   // the stuck element's outline, at whatever frame the playhead is on
     renderHistory();   // its row in the instance history
@@ -11456,7 +11514,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // stuck element is outlined and badged, its history row is flagged, and the Details
   // panel resolves it with the same one-click action the live view uses.
   const incidentByEik = (eik) => incidents.find((i) => String(i.elementInstanceKey) === String(eik)) || null;
-  const incidentElementIds = () => new Set(incidents.map((i) => i.elementId).filter(Boolean));
+  // Every element holding a parked token, counted rather than listed: under a page cap
+  // the rows cover only some of them, and an element left out would be drawn as though
+  // its token were simply waiting.
+  const incidentElementIds = () => new Set([
+    ...incidentsByElement.keys(),
+    ...incidents.map((i) => i.elementId).filter(Boolean),
+  ]);
 
   // drawIncidentBadges puts the live view's ⚠ badge on every element holding one. It
   // keeps its own overlay ids, so a refresh replaces exactly these. Like the live
@@ -11469,13 +11533,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const shape = registry.get(elId);
       if (!shape) continue;
       const list = incidents.filter((i) => i.elementId === elId);
-      const many = list.length > 1 ? ` ${fmtCount(list.length)}` : "";
-      const what = list.length === 1 ? "1 incident" : `${fmtCount(list.length)} incidents`;
+      // The count is the element's, the message a sample from whatever rows this page
+      // carried for it — an element past the page is still counted and still badged.
+      const parked = incidentsByElement.get(elId) || list.length;
+      const many = parked > 1 ? ` ${fmtCount(parked)}` : "";
+      const what = parked === 1 ? "1 incident" : `${fmtCount(parked)} incidents`;
+      const sample = list.length && list[0].message ? ` — ${esc(list[0].message)}` : "";
       try {
         incBadgeIds.push(overlays.add(elId, "atlas-incident", {
           position: badgeSpot(shape, "bl"),
-          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
-            list[0].message ? ` — ${esc(list[0].message)}` : ""}">&#9888;${many}</div>`,
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         }));
       } catch { /* element not in this diagram */ }
     }
@@ -11486,8 +11553,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function updateIncidentMeta() {
     const wrap = root.querySelector("#m-inc-wrap");
     if (!wrap) return;
-    wrap.hidden = incidents.length === 0;
-    root.querySelector("#m-inc-n").textContent = fmtCount(incidents.length);
+    wrap.hidden = incidentTotal === 0;
+    root.querySelector("#m-inc-n").textContent = fmtCount(incidentTotal);
   }
 
   // incidentBlock renders the incidents this panel is responsible for: the selected
@@ -11498,7 +11565,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const list = step
       ? incidents.filter((i) => String(i.elementInstanceKey) === String(step.elementInstanceKey))
       : incidents;
+    // Unfiltered, the block speaks for the whole instance, so it says how many tokens
+    // are parked in it rather than how many rows this page carried. Filtered to one
+    // element instance the two coincide: an element instance holds at most one incident.
     return incidentPanelHTML(list, {
+      total: step ? list.length : incidentTotal,
       rows: list.map((i) => incidentRowHTML(i, { label: elementLabelOf(i.elementId), showInstance: false })).join(""),
     });
   }
