@@ -31,13 +31,6 @@ import (
 // exactly as the listing does (ADR-0266).
 
 const (
-	// maxIncidentSummaryGroups bounds the summary's *response*, not its scan: the walk
-	// is the incident family either way, and `total` counts every incident it sees. A
-	// flood is a handful of causes, so the cap only bites on a store whose incidents
-	// are spread over hundreds of elements — where the tail is not what an operator
-	// acts on first. What the cap left out is reported as `ungrouped`.
-	maxIncidentSummaryGroups = 500
-
 	// bulkResolveBatchDefault / bulkResolveBatchMax bound one filter-mode resolve.
 	// The bound is not about the loop turn — queueing a command per incident is cheap
 	// — but about what follows it: every re-activated job becomes work an in-process
@@ -46,6 +39,16 @@ const (
 	bulkResolveBatchDefault = 500
 	bulkResolveBatchMax     = 5000
 )
+
+// maxIncidentSummaryGroups bounds the summary's *response*, not its scan: the walk is
+// the incident family either way, and `total` counts every incident it sees. A flood is
+// a handful of causes, so the cap only bites on a store whose incidents are spread over
+// hundreds of elements — where the tail is not what an operator acts on first. What the
+// cap left out is reported as `ungrouped`.
+//
+// A var rather than a const so a test can reach the overflow without standing up five
+// hundred causes; nothing outside a test writes it.
+var maxIncidentSummaryGroups = 500
 
 // errResolveBatchFull stops the selection scan once a bulk resolve has collected a
 // full batch. Like errCancelBatchFull it is control flow, not a failure.
@@ -90,14 +93,17 @@ func (sel incidentSelector) empty() bool {
 		sel.elementIndex == nil && sel.incType == "" && sel.message == ""
 }
 
-// match reports whether one incident is in scope. elementID is the BPMN id already
-// resolved by the walk — empty when the instance outlived its deployment, which is
-// why an element-scoped selector cannot match such an incident: there is nothing to
-// compare, and guessing would resolve a token on an unrelated shape.
+// match reports whether one incident is in scope, given the context [walkIncidents]
+// has resolved for it. elementID is the BPMN id — empty when the instance outlived its
+// deployment, which is why an element-scoped selector cannot match such an incident:
+// there is nothing to compare, and guessing would resolve a token on an unrelated
+// shape.
+//
+// The instance scope is not here: the walk answers it before the point read that fills
+// this context in, because an instance-scoped read over a flood must not pay a lookup
+// per foreign incident. One filter, one place.
 func (sel incidentSelector) match(v *model.IncidentValue, ctx incidentCtx, elementID string) bool {
 	switch {
-	case sel.instance != 0 && v.ProcessInstanceKey != sel.instance:
-		return false
 	case sel.process != 0 && ctx.defKey != sel.process:
 		return false
 	case sel.elementID != "" && elementID != sel.elementID:

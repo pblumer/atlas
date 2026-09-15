@@ -351,6 +351,13 @@ func TestResolveIncidentsByFilter(t *testing.T) {
 	if res := resolveIncidents(t, ts, `{"elementId":"nosuchelement"}`); res.Resolved != 0 || res.Remaining {
 		t.Errorf("empty scope = %+v, want nothing resolved", res)
 	}
+	// A limit above the per-call cap is clamped to it rather than refused: an
+	// operator asking for "all of them" has asked for something reasonable, and the
+	// cap is the server's business — the answer says remaining when it bit.
+	parkTaskWithMessage(t, ts, defA, "smtp: connection refused")
+	if res := resolveIncidents(t, ts, fmt.Sprintf(`{"processDefKey":%d,"limit":1000000}`, defA)); res.Resolved != 1 {
+		t.Errorf("limit above the cap = %+v, want it clamped and the one incident resolved", res)
+	}
 }
 
 // TestResolveIncidentsRefusals covers what the bulk endpoint must not do: mix the
