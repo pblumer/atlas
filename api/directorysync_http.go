@@ -13,7 +13,7 @@ import (
 )
 
 // The two routes a directory synchronisation uses
-// (ADR-draft-entra-directory-provisioning): one that says where to resume from, and
+// (ADR-0332): one that says where to resume from, and
 // one that reports what was read.
 //
 // This is the most powerful pair in the API — the second one creates accounts — so it

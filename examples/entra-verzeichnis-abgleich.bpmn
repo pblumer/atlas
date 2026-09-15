@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Entra ID Verzeichnis-Abgleich (ADR-draft-entra-directory-provisioning)
+  Entra ID Verzeichnis-Abgleich (ADR-0332)
   — stündlich lesen, was sich geändert hat, und Atlas-Konten daraus führen.
 
   Das Gegenstück zu entra-delta-sync.bpmn: dort endet der Prozess mit dem Cursor in

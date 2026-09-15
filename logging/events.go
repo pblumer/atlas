@@ -131,7 +131,7 @@ var (
 	// after it: from the moment the mapping is on, whoever administers the provider's
 	// groups administers this instance's roles.
 	AuthOIDCMappingSet = newEvent("auth.oidc_mapping_set")
-	// The directory mirror (ADR-draft-entra-directory-provisioning). AuthDirectorySync
+	// The directory mirror (ADR-0332). AuthDirectorySync
 	// is one line per run, written whether or not the run wrote anything: a report-only
 	// run still read a whole tenant out of a directory, which is an event even though
 	// nothing changed here. Its attributes are counts and the mode; the Graph cursor is

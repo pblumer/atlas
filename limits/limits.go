@@ -138,7 +138,7 @@ type Limits struct {
 
 	// DirectorySync is one directory-synchronisation message: the accounts and
 	// groups a scheduled delta read of Entra reports back for this server to write
-	// (ADR-draft-entra-directory-provisioning). It is its own budget rather than
+	// (ADR-0332). It is its own budget rather than
 	// Payload's because the two bound different risks — Payload bounds one answer a
 	// process received, this bounds the one message that may create accounts.
 	DirectorySync int64

@@ -10,7 +10,7 @@ import (
 )
 
 // What a directory synchronisation must not get wrong
-// (ADR-draft-entra-directory-provisioning).
+// (ADR-0332).
 //
 // These run against [decideDirectorySync] directly, because that is where every
 // decision is made. The HTTP half is tested where HTTP behaviour lives
