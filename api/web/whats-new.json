@@ -186,6 +186,28 @@
       }
     },
     {
+      "id": "the-hosted-example-apps-find-the-instance-they-just-started-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The example apps find the instance they just started, however busy the engine is",
+        "de": "Die Beispiel-Apps finden die soeben gestartete Instanz, egal wie ausgelastet die Engine ist"
+      },
+      "summary": {
+        "en": "The example apps Atlas serves itself — the travel-booking wizard and the two order-to-cash pages — start a process and then have to find that instance again, both to open its first form and to tell when it has finished. They looked for it in the plain instance list, which is a page rather than the whole set: it is capped, and it fills with the oldest running instances first. On a server holding more running instances than the cap, an app's own instance was never on the page it was searching, so pressing Start ended in a script error while the process itself was running perfectly well — and nothing about the app had changed, only the number of instances in front of it. The pages now ask for one process definition's instances, newest first, and read their own instance by its key. Neither question depends on how busy the engine is any more.",
+        "de": "Die Beispiel-Apps, die Atlas selbst ausliefert — der Reisebuchungs-Assistent und die beiden Order-to-Cash-Seiten — starten einen Prozess und müssen diese Instanz danach wiederfinden: einmal, um ihr erstes Formular zu öffnen, und einmal, um zu erkennen, dass sie fertig ist. Gesucht haben sie in der einfachen Instanzliste, und die ist eine Seite und nicht der ganze Bestand: Sie ist gedeckelt und füllt sich zuerst mit den ältesten laufenden Instanzen. Auf einem Server mit mehr laufenden Instanzen als dem Deckel stand die eigene Instanz nie auf der Seite, die durchsucht wurde. Ein Klick auf Start endete dann mit einem Skriptfehler, obwohl der Prozess selbst einwandfrei lief — und an der App hatte sich nichts geändert, nur die Zahl der Instanzen davor. Die Seiten fragen jetzt die Instanzen einer Prozessdefinition ab, neueste zuerst, und lesen die eigene Instanz über ihren Schlüssel. Keine der beiden Fragen hängt noch davon ab, wie ausgelastet die Engine ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Examples",
+        "API"
+      ]
+    },
+    {
       "id": "powershell-runs-under-script-sandbox-strict-and-a-profile-th",
       "version": "Unreleased",
       "date": null,
@@ -335,27 +357,6 @@
           "Als Administrator: Sitzung und Rolle einer Person bleiben unberührt; es ändert sich nur ihre Sicht auf Applikationen und Worker, und nur in Richtung weniger."
         ]
       }
-    },
-    {
-      "id": "switching-drafts-on-the-starmap-while-it-happens-to-be-refre",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The Drafts switch on the Starmap stays where you put it",
-        "de": "Der Drafts-Schalter der Starmap bleibt, wo Sie ihn hinstellen"
-      },
-      "summary": {
-        "en": "The Starmap re-reads the landscape on its own while you have it open. That read and the one the Drafts switch makes could be in flight at the same time, and if the automatic one happened to land second it overwrote the picture and put the switch back — the drafts appeared and then vanished again under the hand that had just asked for them, with nothing said about why. Your answer wins now: an automatic read that arrives after you have asked for a different landscape is dropped rather than applied, and the timer does not start one while the switch's own request is still running.",
-        "de": "Die Starmap liest die Landschaft von selbst nach, solange sie offen ist. Dieses Lesen und das des Drafts-Schalters konnten gleichzeitig unterwegs sein, und traf das automatische zufällig als Zweites ein, überschrieb es das Bild und stellte den Schalter zurück — die Drafts erschienen und verschwanden wieder unter der Hand, die sie gerade angefordert hatte, ohne jeden Hinweis. Jetzt gewinnt Ihre Antwort: Ein automatisches Lesen, das eintrifft, nachdem Sie eine andere Landschaft angefordert haben, wird verworfen statt angewendet, und der Zeitgeber startet keines, solange die Anfrage des Schalters noch läuft."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Panorama"
-      ]
     }
   ]
 }
