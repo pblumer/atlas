@@ -1,4 +1,4 @@
-# ADR-DRAFT: Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete
+# ADR-0334: Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete
 
 - **Status:** Accepted
 - **Implementation:** Landed

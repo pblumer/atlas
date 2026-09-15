@@ -1,5 +1,5 @@
 // What Atlas and the target systems disagree about, and the three things a person
-// may do about it (ADR-draft-reconciliation).
+// may do about it (ADR-0334).
 //
 // The comparison was built before this screen, and for a few days the findings were
 // reachable only by constructing an HTTP POST with an id read out of a JSON array.

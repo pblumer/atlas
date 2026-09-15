@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Austrittsprüfung (ADR-draft-reconciliation)
+  Austrittsprüfung (ADR-0334)
   — nachweisen, dass eine Person wirklich aus allem draussen ist.
 
   Der tägliche Abgleich nebenan (examples/abgleich.bpmn) fragt je Gruppe: stimmt

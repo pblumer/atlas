@@ -10,7 +10,7 @@ import (
 )
 
 // Comparing what Atlas believes against what a target system actually holds
-// (ADR-draft-reconciliation).
+// (ADR-0334).
 //
 // The inventory asserts something Atlas cannot guarantee: that a right exists in
 // another system. Target systems are changed outside Atlas — by an administrator

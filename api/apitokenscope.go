@@ -152,7 +152,7 @@ var apiScopeAllowed = map[string][]string{
 		// and reaches no target system — it records a journal entry. The three
 		// actions are deliberately absent: each of them either changes what Atlas
 		// asserts about somebody's access or takes access away, and neither belongs
-		// behind a credential a model carries (ADR-draft-reconciliation).
+		// behind a credential a model carries (ADR-0334).
 		"POST /api/v1/reconciliation",
 	},
 	// The transport, both the exact path and everything under it, because that is

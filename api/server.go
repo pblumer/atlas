@@ -279,7 +279,7 @@ type Server struct {
 	// loaded" — and those two call for opposite actions.
 	inventoryLoads *inventoryLoadStore
 	// discrepancies is the durable journal of what Atlas and the target systems
-	// disagreed about (ADR-draft-reconciliation). Transitions rather than samples:
+	// disagreed about (ADR-0334). Transitions rather than samples:
 	// a disagreement that persists is one record whose last-seen moment moves, and
 	// one that goes away is that record closed.
 	discrepancies *discrepancyStore

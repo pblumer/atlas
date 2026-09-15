@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// What a reconciliation may and may not conclude (ADR-draft-reconciliation).
+// What a reconciliation may and may not conclude (ADR-0334).
 //
 // Every one of these is a way the comparison could report a falsehood confidently,
 // and confidence is the whole product here: a finding is what somebody acts on.
@@ -308,7 +308,7 @@ func TestTheJournalRecordsEpisodesRatherThanRewritingHistory(t *testing.T) {
 }
 
 // The other axis of the same promise: a scope by subject
-// (ADR-draft-reconciliation).
+// (ADR-0334).
 //
 // `refs` answers "is this group's membership what we think". It structurally
 // cannot answer "is this person out of everything", because absence from a group

@@ -7,7 +7,7 @@ import (
 )
 
 // Folding one run into the journal, and saying what it found
-// (ADR-draft-reconciliation).
+// (ADR-0334).
 
 // applyReconcilePlan records a run's findings as transitions.
 //

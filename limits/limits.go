@@ -183,7 +183,7 @@ type Limits struct {
 	InventoryReport int32
 
 	// Reconcile is one reconciliation message: what a target system was found to
-	// hold within a declared scope (ADR-draft-reconciliation).
+	// hold within a declared scope (ADR-0334).
 	Reconcile int64
 
 	// ReconcileObservations is how many rights one such reading may carry. A count,

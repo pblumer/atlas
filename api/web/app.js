@@ -628,7 +628,7 @@ const TOPNAV = {
     { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
     // Where Atlas and the target systems disagree about who holds what
-    // (ADR-draft-reconciliation). Operations rather than Catalogue: maintaining a
+    // (ADR-0334). Operations rather than Catalogue: maintaining a
     // catalogue is authoring, and acting on a finding is repair — the three acts
     // are the operator's role on the server too.
     { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" },

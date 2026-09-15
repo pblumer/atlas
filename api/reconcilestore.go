@@ -7,7 +7,7 @@ import (
 )
 
 // The durable journal of what Atlas and the target systems disagreed about
-// (ADR-draft-reconciliation).
+// (ADR-0334).
 //
 // # Transitions, not samples
 //

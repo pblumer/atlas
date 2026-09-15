@@ -6,7 +6,7 @@ import (
 )
 
 // The screen where somebody reads a finding before acting on it
-// (ADR-draft-reconciliation).
+// (ADR-0334).
 //
 // The comparison shipped before this page, and for a few days the findings were
 // reachable only by constructing an HTTP POST with an id read out of a JSON array.

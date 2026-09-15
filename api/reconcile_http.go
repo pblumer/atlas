@@ -12,7 +12,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// The reconciliation routes (ADR-draft-reconciliation).
+// The reconciliation routes (ADR-0334).
 //
 // One route reads a target system's answer and compares it; one lists what is
 // still in disagreement; three act on a single finding, each requiring a person to
