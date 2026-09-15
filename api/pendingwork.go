@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// What is waiting for one person (ADR-draft-pending-work).
+// What is waiting for one person (ADR-0343).
 //
 // # Why this route has to exist at all
 //

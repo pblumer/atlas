@@ -9,7 +9,7 @@ import (
 )
 
 // The arithmetic of an end, and what an empty answer means
-// (ADR-draft-time-bounded-entitlements).
+// (ADR-0344).
 
 // TestTheDistanceToAnEndIsOneNumberFromEitherSide.
 //

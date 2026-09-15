@@ -1,4 +1,4 @@
-# ADR-DRAFT: A right may carry an end, and an end that has passed is a debt rather than a fact
+# ADR-0344: A right may carry an end, and an end that has passed is a debt rather than a fact
 
 - **Status:** Accepted
 - **Implementation:** Landed

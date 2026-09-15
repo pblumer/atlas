@@ -1,4 +1,4 @@
-# ADR-DRAFT: A reminder has to be able to ask about somebody else, and a person must not
+# ADR-0343: A reminder has to be able to ask about somebody else, and a person must not
 
 - **Status:** Accepted
 - **Implementation:** Landed

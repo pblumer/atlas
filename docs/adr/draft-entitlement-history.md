@@ -41,9 +41,9 @@ findings is about a *held* right, and every remedy ends the hold:
 
 - Reconciliation ([ADR-0334](0334-reconciliation.md)) finds a right the target
   system does not have, and accepting the finding removes the record.
-- An expiry (ADR-draft-time-bounded-entitlements) reports a right overdue by forty
+- An expiry (ADR-0344) reports a right overdue by forty
   days; returning it deletes the row, and with it the forty days.
-- A conflict (ADR-draft-conflicting-rights) reports that somebody held
+- A conflict (ADR-0342) reports that somebody held
   `create-supplier` and `approve-payment` together for six months. **The moment
   anybody acts on it, the finding ceases to exist.**
 

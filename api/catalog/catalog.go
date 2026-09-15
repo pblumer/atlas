@@ -145,7 +145,7 @@ type Item struct {
 	// invented.
 	Targets []TargetRef `json:"targets,omitempty"`
 	// MaxDays is how long a right this product grants may last, in days, or zero
-	// for one that does not end (ADR-draft-time-bounded-entitlements). It is a
+	// for one that does not end (ADR-0344). It is a
 	// **ceiling declared as policy** — nobody holds this for more than ninety days
 	// — and not a date somebody chose; an order cannot yet name a shorter end
 	// within it.
@@ -210,7 +210,7 @@ const (
 	// direction means "after".
 	EdgeRequires EdgeKind = "requires"
 	// EdgeExcludes is incompatibility: From and To must never be held by the same
-	// person (ADR-draft-conflicting-rights). The clerk who may create a supplier
+	// person (ADR-0342). The clerk who may create a supplier
 	// must not also approve payments to it — neither right is wrong, the
 	// combination is.
 	//

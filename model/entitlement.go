@@ -73,7 +73,7 @@ type EntitlementValue struct {
 
 	// Until is when this right was meant to end, in unix nanoseconds, or zero for
 	// one with no end. Set only for a right the portal granted, from the ceiling
-	// the release's product declared (ADR-draft-time-bounded-entitlements).
+	// the release's product declared (ADR-0344).
 	//
 	// **It is a promise about when access should end, not a statement that it
 	// has.** An entitlement past its Until is still held: the target system still

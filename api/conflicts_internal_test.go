@@ -7,7 +7,7 @@ import (
 )
 
 // What a conflict is, before anything reports it
-// (ADR-draft-conflicting-rights).
+// (ADR-0342).
 
 func aConflictingHold(itemID string, since int64) model.EntitlementValue {
 	return model.EntitlementValue{Principal: "usr_ada", ItemID: itemID, Since: since}

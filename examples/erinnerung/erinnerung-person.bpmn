@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Erinnerung, je Person (ADR-draft-pending-work)
+  Erinnerung, je Person (ADR-0343)
   — eine Person fragen, was auf sie wartet, und höchstens eine Mail schicken.
 
   Gerufen von proc_erinnerung, einmal je prüfender Person. Bekommt genau eine

@@ -36,7 +36,7 @@ shop that person already has, or replaces their shop wholesale if it outranks it
 So a product available to part of a catalogue's audience could not be expressed at
 all. The only way to express it was to duplicate the entire catalogue per audience,
 which multiplies releases, approval rules and process bindings — and splits an
-estate the conflict check (ADR-draft-conflicting-rights) deliberately merges
+estate the conflict check (ADR-0342) deliberately merges
 across catalogues, because a person holds products rather than catalogues.
 
 ### Why an approval rule is not a substitute
@@ -76,7 +76,7 @@ it, which is the same hole from the other side.
 
 The recipient is not the caller and so carries no principal in the request. The
 group ids are resolved with the same synthesis the reminder route needed
-(ADR-draft-pending-work), and nothing else from it.
+(ADR-0343), and nothing else from it.
 
 ### A refusal names the whole when the part was never chosen
 

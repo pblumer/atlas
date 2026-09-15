@@ -82,7 +82,7 @@ type recertifyRow struct {
 	Origin  string `json:"origin,omitempty"`
 	Since   int64  `json:"since,omitempty"`
 	// Until is the right's own end, where it has one
-	// (ADR-draft-time-bounded-entitlements). A right that ends by itself in three
+	// (ADR-0344). A right that ends by itself in three
 	// weeks is not what a quarterly review is for, and a reviewer told so spends
 	// their attention on the rows where it is worth something.
 	//

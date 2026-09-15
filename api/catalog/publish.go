@@ -92,7 +92,7 @@ type Release struct {
 	// what the fulfilment process asks when a line fails.
 	Requires map[string][]string `json:"requires,omitempty"`
 	// Excludes is what must never be held together with what
-	// (ADR-draft-conflicting-rights), sorted, with no entry for an item that
+	// (ADR-0342), sorted, with no entry for an item that
 	// excludes nothing.
 	//
 	// **Every pair appears under both ids.** EdgeExcludes is the only symmetric
@@ -158,7 +158,7 @@ func Publish(in Input) (Release, []Problem) {
 }
 
 // incompatibilities freezes the excluding edges, **both ways round**
-// (ADR-draft-conflicting-rights).
+// (ADR-0342).
 //
 // EdgeExcludes is the only symmetric kind: "A must not be held with B" is exactly
 // "B must not be held with A". Writing one direction would leave every reader
@@ -361,7 +361,7 @@ func checkEdges(in Input, byID map[string]Item, add func(Problem)) {
 		// A self-conflict would make holding the item once a violation, so it is
 		// refused rather than folded away: somebody wrote it meaning something, and
 		// dropping it silently would publish a catalogue that does not say what its
-		// author wrote (ADR-draft-conflicting-rights).
+		// author wrote (ADR-0342).
 		if e.Kind == EdgeExcludes && e.From == e.To {
 			add(Problem{Item: e.From,
 				Message: "excludes itself; holding it once would be a conflict"})
