@@ -1,7 +1,8 @@
 # ADR-0340: An outage stops at the worker, not at every token
 
-- **Status:** Accepted
-- **Implementation:** Not started
+- **Status:** Accepted (amended 2026-09-15 — the job record gains no field; the gate attributes lazily,
+  and only while a breaker is open. See the amendment note below.)
+- **Implementation:** Partial
 - **Date:** 2026-09-15
 - **Deciders:** Atlas engine team
 - **Open question:** Whether a failure the *target system* caused can be told apart from one this
@@ -11,6 +12,40 @@
   is a false trip on a fault that hits every instance alike — which stops an integration that was
   producing nothing but incidents anyway.
 - **Question checked:** 2026-09
+
+> **Amendment (2026-09-15): no field on the job record.** The decision below priced Worker
+> attribution as if the gate had to perform it for **every candidate job on every dispatch**, and
+> concluded that `model.JobValue` must carry an interned Worker index stamped at command time. That
+> premise is wrong, and with it the conclusion.
+>
+> The gate does not need to know a job's Worker. It needs to know whether a breaker that could hold
+> *this* job is open — and breaker state is the engine's own, keyed by `(job type, Worker)`. A map
+> from job type to the open breakers under it answers that in **one lookup per job type per dispatch
+> call**, not one per job. In normal operation nothing is open, the answer is "no" before any job is
+> examined, and attribution never happens at all. Its cost in the steady state is zero, which is the
+> state the hot path is optimised for (I1).
+>
+> Attribution is therefore **lazy**: it happens only for candidates of a job type that currently has
+> an open breaker under it — two point reads per candidate, inside the batch
+> [ADR-0270](0270-bounded-job-polling.md) already bounds, and paid only during an outage, where the
+> alternative it replaces is an outbound call per job. The reporting side attributes once per
+> *failure*, on a path that is already writing to the store.
+>
+> The stamping precedent this record invoked does not reach here. [ADR-0244](0244-searchable-variables.md)
+> stamps the model's answer into the event because `applyToState` cannot ask a compiled process
+> anything, so what the model said must be in the record or it is lost on replay (I6). The breaker
+> gate is not in `applyToState` — it is a live dispatch decision on the run loop, where the compiled
+> process is in hand. `Server.incidentConnectorLookup` already resolves exactly this attribution,
+> derivationally, on the loop, across thousands of incidents, and its own note says why that is
+> right: *"Everything is derived on read from the compiled process and the worker store; nothing
+> about it is durable (I6)."* A durable field would have written a fact the deployed model already
+> holds into every job record in every partition, permanently, to save a read that the normal case
+> never makes.
+>
+> The section that read **"The one thing this needs from the durable record"** is restated below as
+> **"What this needs from the durable record: nothing"**; the field is also struck from the
+> "Consequences" and from option 3's "Bad" line. The decision itself — gate the dispatch, per
+> Worker, in runtime state — is unchanged.
 
 ## Context and problem statement
 
@@ -60,7 +95,8 @@ Waiting is a first-class state. Nothing decides to use it on behalf of a whole i
   is not a fact about the process; it is not replayable, and a recovered engine must not resurrect
   a stale opinion about a host.
 - **On the single writer, bounded (I3).** The decision is taken in the dispatch path, which runs on
-  the run loop. It must cost O(1) per candidate job, not a read.
+  the run loop. It must cost *nothing* when no breaker is open — that is the steady state — and stay
+  bounded when one is.
 - **Visible, or it is worse than the flood.** Work that silently does not happen is the one failure
   mode an operator cannot diagnose. A flood at least says something is wrong.
 
@@ -134,24 +170,30 @@ Two call sites consult it, both already on the loop: `Runner.Claim` for the in-p
 `Allow`, `Failed` and `Succeeded`, injected into the runner as a predicate so the `job` package
 keeps knowing nothing about workers.
 
-### The one thing this needs from the durable record
+### What this needs from the durable record: nothing
 
-A job does not currently know which Worker it belongs to. `model.JobValue` carries
-`ProcessInstanceKey`, `ElementInstanceKey` and `JobType`; the Worker is a property of the *element*
-in the compiled process (`compiler.ConnectorRef` via `NodeConnectorRef`), and reaching it from a job
-takes two point reads — the instance for its definition, the element instance for its index — per
-candidate job, on the single writer, in the path [ADR-0270](0270-bounded-job-polling.md)
-already had to cap for reading one record per job.
+*(Restated by the amendment of 2026-09-15. The original text decided a Worker field on
+`model.JobValue`; it is superseded.)*
 
-So the job record gains the Worker it resolves through, as an interned index, **stamped at command
-time from the compiled process** when the job is created — the pattern ADR-0244 settled for the
-searchable-variable decision, and for the same reason: `applyToState` cannot ask a compiled process
-anything, so what the model said must be written into the event and never recomputed on replay (I6).
-The field is append-compatible (an older record decodes to "no worker", which is exactly what it
-means). This is not a new family, not a counter, and cannot drift: which Worker a task names is
-fixed by the deployed version, and a deployment is immutable.
+A job does not know which Worker it belongs to. `model.JobValue` carries `ProcessInstanceKey`,
+`ElementInstanceKey` and `JobType`; the Worker is a property of the *element* in the compiled
+process (`compiler.ConnectorRef` via `NodeConnectorRef`), and reaching it from a job takes two point
+reads — the instance for its definition, the element instance for its index.
 
-That field is the actual price of this decision, and it is the part to argue about.
+It stays that way. The gate is keyed by `(job type, Worker)`, so the question it asks first is "does
+this job type have an open breaker under it?", and that is one map lookup per job type per dispatch
+call. In the steady state the answer is no, and no job is attributed to anything; the hot path is
+untouched (I1). Only while a breaker under that type is open does the gate resolve each candidate of
+that one type — two point reads each, inside the batch [ADR-0270](0270-bounded-job-polling.md)
+already bounds, during an outage, replacing an outbound call per job. The reporting side resolves
+once per failure, on a path that is already writing.
+
+The resolution itself is not new work: `Server.incidentConnectorLookup` performs it today for the
+incident listing, on the run loop, across thousands of rows, deriving everything from the compiled
+process and the worker store and persisting nothing (I6). The breaker uses the same shape.
+
+The price of this decision is therefore the attribution *during an outage*, and the reader's guard
+against it is the boundedness above. There is no durable cost at all.
 
 ### What an operator sees
 
@@ -178,12 +220,16 @@ the durable record. The queue depth is the honest signal, and it is already on t
   unbounded, and an operator who would rather the process took its error path now has to say so.
   A breaker also delays the discovery of a genuine, permanent misconfiguration: what used to surface
   as an incident within seconds now surfaces as a held queue, which is why the visibility above is
-  part of the decision and not a follow-up. And the job record grows a field.
+  part of the decision and not a follow-up.
 - **Follow-ups / risks to watch:** a breaker tripping is a natural trigger for restarting a
   *supervised* worker process (ADR-0157), and deliberately not wired here — stopping the flood and
   repairing the worker are two decisions, and bundling them would restart a process over a failure
   that was never its fault. The long poll needs care: a worker waiting on a type whose breaker is
-  open must not be woken by every new job of that type, or the held queue becomes a spin.
+  open must not be woken by every new job of that type, or the held queue becomes a spin. And the
+  candidate scan needs care for the same reason the gate is cheap: it collects candidates from the
+  activatable index *until* `want` is reached, and only a filter applied after that would drop the
+  held ones — so ten thousand held jobs of a type can fill the batch and starve the runnable jobs of
+  another Worker sharing it. The filter has to sit inside the scan, not after it.
 
 ## Pros and cons of the options
 
@@ -204,9 +250,10 @@ the durable record. The queue depth is the honest signal, and it is already on t
 ### Option 3 — gate the dispatch (chosen)
 - Good: the only option where the failing target stops being called; costs nothing per held token;
   recovers on its own; and holds work in a state the engine already has.
-- Bad: needs the Worker on the job to be cheap, which means a field on the durable record. Holds
-  back healthy work when it trips wrongly — bounded by the probe, which re-opens the gate within a
-  cooldown.
+- Bad: needs the Worker on the job, which is two point reads — free in the steady state, because a
+  job type with no open breaker is answered before any job is looked at, but a real cost per
+  candidate while one is open. Holds back healthy work when it trips wrongly — bounded by the probe,
+  which re-opens the gate within a cooldown.
 
 ### Option 4 — durable breaker state
 - Good: survives a restart; the log shows when a target was considered down.
@@ -231,8 +278,8 @@ the durable record. The queue depth is the honest signal, and it is already on t
 - speaks the vocabulary of [ADR-0203](0203-worker-execution-model.md) (Worker Type / Worker / Worker
   Instance)
 - respects the lease and fencing of [ADR-0007](0007-job-worker-protocol.md)
-- stamps the model's answer at command time like
-  [ADR-0244](0244-searchable-variables.md) does
+- contrast: [ADR-0244](0244-searchable-variables.md) stamps the model's answer at command time
+  because `applyToState` cannot ask a compiled process; this gate runs outside the fold, so it asks
 - shares the dispatch path bounded by [ADR-0270](0270-bounded-job-polling.md)
 - contrast: [ADR-0272](0272-execution-budget.md) stops a runaway *instance* with an incident,
   because there the token really is the thing at fault
