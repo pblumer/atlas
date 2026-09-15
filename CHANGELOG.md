@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A knowledge model's expression opened unstyled.** dmn-js does not show a business
+  knowledge model in the literal-expression view a decision's expression opens in. A
+  knowledge model is a FEEL *function* — it has an expression language, formal parameters
+  and a body, none of which a decision's literal expression has — so dmn-js opens it in a
+  different component, the boxed-expression view, with its own container class and its own
+  two stylesheets. The decision editor loaded the other views' stylesheets and neither of
+  those.
+
+  The failure was silent in the way that is hardest to catch. The view rendered: every
+  element was in the DOM, editing worked, saving worked, nothing errored, nothing 404'd.
+  It was simply raw — the `F` kind marker and the `()` parameter list as bare text against
+  the page edge, no boxes, no borders, and the edit buttons that are meant to be clipped
+  away until their section is hovered sitting permanently on top of the expression.
+  Neither the Go suite nor the browser suite could see it, because the only thing wrong
+  was what it looked like.
+
+  Both stylesheets are loaded now, and the list is checked against the vendored bundle
+  rather than maintained by hand: the bundle names the view containers it can create, and
+  a test fails when a stylesheet that styles one of them is not loaded — so the next view
+  the pinned fork adds cannot arrive unstyled. The two expression views also gained the
+  gutter and the surface that let them read as one box on the Modeler's grey canvas, and
+  the hint under the canvas now describes the view that is open rather than describing the
+  decision table under all four of them.
+
 - **With authentication off, a catalogue's appearance could not be set at all.** The
   predicate every gate in the catalogue package asks is `!authEnabled || (p != nil &&
   p.HasRole(admin))` — true for everybody when nobody is signed in, which is the rule

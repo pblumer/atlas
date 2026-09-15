@@ -2745,9 +2745,27 @@ tr[hidden] { display: none; }
 .dmn-body { flex: 1; min-height: 0; display: flex; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
-/* dmn-js uses `editor` as a state class inside its own components — the literal
-   expression view is `<div class="literal-expression textarea editor">`, and the
-   DRD's decision-name field carries it too. Atlas's `.editor` is the full-bleed
+/* The two expression views: a decision whose logic is a single FEEL expression, and
+   a business knowledge model, which dmn-js opens in its boxed-expression view. Both
+   draw a bordered box a few hundred pixels tall rather than filling the canvas the
+   way a table does, so they get a gutter — a box flush against the chrome on all
+   four sides does not read as a box — and their sections get a surface to sit on.
+   dmn-js borders those sections but leaves them transparent, which is right on its
+   own white demo page and wrong on the Modeler's grey canvas, where it would leave
+   the expression lying on the backdrop. */
+.dmn-canvas .dmn-literal-expression-container,
+.dmn-canvas .dmn-boxed-expression-container {
+  box-sizing: border-box; padding: 18px; overflow: auto;
+}
+.dmn-canvas .dmn-boxed-expression-container .dmn-boxed-expression-section,
+.dmn-canvas .dmn-literal-expression-container .textarea,
+.dmn-canvas .dmn-literal-expression-container .literal-expression-properties {
+  background: var(--surface);
+}
+/* dmn-js uses `editor` as a state class inside its own components — the decision's
+   literal-expression view and the knowledge model's boxed-expression view both put
+   it on their editable body (`<div class="textarea editor">`), and the DRD's
+   decision-name field carries it too. Atlas's `.editor` is the full-bleed
    page shell (`position: fixed; inset: var(--topbar-h) 0 0 0`), so those elements
    were being pinned over the whole viewport: opening a decision whose logic is a
    literal expression drew its CodeMirror across the bar, and the view tabs, Save,

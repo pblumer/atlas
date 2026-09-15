@@ -45,6 +45,19 @@ const DMN_CSS = [
   "vendor/dmn/assets/dmn-js-decision-table.css",
   "vendor/dmn/assets/dmn-js-decision-table-controls.css",
   "vendor/dmn/assets/dmn-js-literal-expression.css",
+  // A business knowledge model's logic is *not* the literal-expression view above.
+  // dmn-js opens a `dmn:BusinessKnowledgeModel` in its boxed-expression view — a
+  // separate component, with its own container class and its own two stylesheets —
+  // because a knowledge model is a FEEL *function*: it has a kind, formal
+  // parameters and a body, none of which a decision's literal expression has.
+  // Without these two the view still renders every one of those parts, and renders
+  // them raw: no boxes, no borders, the `F` kind marker and the `()` parameter list
+  // as bare text at the page edge, and the edit buttons that should stay hidden
+  // until their section is hovered sitting permanently on top of the content.
+  // TestEveryDmnViewIsStyled keeps this list honest when the vendored fork gains
+  // another view.
+  "vendor/dmn/assets/dmn-js-boxed-expression.css",
+  "vendor/dmn/assets/dmn-js-boxed-expression-controls.css",
   "vendor/dmn/assets/dmn-font/css/dmn.css",
   "vendor/dmn/assets/properties-panel.css",
 ];
@@ -240,6 +253,45 @@ function viewLabel(v) {
   return (v.element && v.element.name) || (v.element && v.element.id) || "Decision";
 }
 
+// HINT_TAIL is the part of the hint that is the same under every view: the three
+// verbs on the bar. They mean what they mean regardless of how the logic on screen
+// is written (ADR-0321, ADR-0322).
+const HINT_TAIL = `<b>Save</b> keeps a draft only you see; <b>Save to model</b> writes the
+  decision every process resolves, and is what the next Publish ships; <b>Deploy</b> ships this
+  decision to the engine on its own, as a new version. <b>Test</b> runs it against sample inputs
+  and shows which rules fired — nothing is saved or deployed by asking.`;
+
+// hintFor says what the view on screen is for. dmn-js opens four, and they are not
+// variations on one editor: the requirements graph, a decision's rule table, a
+// decision written as one FEEL expression, and a business knowledge model — a
+// reusable function with its own parameters — are four different things to author.
+// The hint used to describe the decision table under all of them, which left it
+// wrong on three views out of four, and most wrong on the one whose layout explains
+// itself least: a knowledge model shows `F`, a parameter list and a result variable,
+// and none of that is a table.
+function hintFor(active) {
+  const type = (active && active.type) || "decisionTable";
+  if (type === "drd") {
+    return `Draw the decision requirements graph. An <b>Input Data</b> node is something this
+      model is given, a <b>Decision</b> holds logic, and a <b>Knowledge Model</b> is a reusable
+      function a decision can invoke. Open a decision's own tab to model its logic. ` + HINT_TAIL;
+  }
+  if (type === "literalExpression") {
+    return `This decision's logic is one FEEL expression: what it evaluates to is the decision's
+      result, under the variable named below it. Its inputs are whatever the requirements graph
+      gives it — both are adopted into a business rule task that calls this decision. ` + HINT_TAIL;
+  }
+  if (type === "boxedExpression") {
+    return `A <b>knowledge model</b> is a reusable FEEL function, not a decision: nothing calls it
+      from a process. <b>F</b> is the expression language, the list beside it is the parameters a
+      caller passes, the body is evaluated with them, and <b>Result</b> names the variable a
+      decision binds when it invokes this model. ` + HINT_TAIL;
+  }
+  return `Model the decision table. <b>Input Data</b> nodes become the decision's inputs and the
+    output column becomes its result variable — both are adopted into a business rule task that
+    calls this decision. ` + HINT_TAIL;
+}
+
 // keepCaretOnRewrite works around an upstream dmn-js bug (17.x). The DRD "definition
 // properties" widget (the editable model name/id at the top-left of the DRG view)
 // rewrites its contenteditable's textContent on *every* committed model change —
@@ -388,13 +440,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         <div class="dmn-canvas"></div>
         <div class="dmn-props"></div>
       </div>
-      <div class="dmn-hint muted">Model the decision table. <b>Input Data</b> nodes become the
-        decision's inputs and the output column becomes its result variable — both are adopted
-        into a business rule task that calls this decision. <b>Save</b> keeps a draft only you
-        see; <b>Save to model</b> writes the decision every process resolves, and is what the
-        next Publish ships; <b>Deploy</b> ships this decision to the engine on its own, as a new
-        version. <b>Test</b> runs it against sample inputs and shows which rules fired — nothing is
-        saved or deployed by asking.</div>
+      <div class="dmn-hint muted" id="dmn-hint">${hintFor(null)}</div>
     </div>`;
 
   const canvas = root.querySelector(".dmn-canvas");
@@ -415,6 +461,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const testResult = root.querySelector("#dmn-test-result");
   const testErr = root.querySelector("#dmn-test-err");
   const backEl = root.querySelector("#dmn-back");
+  const hintEl = root.querySelector("#dmn-hint");
 
   // ---- identity ------------------------------------------------------------
   // What this session is editing, across the three layers a decision has
@@ -551,6 +598,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         viewsBar.appendChild(b);
       }
       propsPanel.hidden = !(active && active.type === "drd");
+      hintEl.innerHTML = hintFor(active);
     };
     modeler.on("views.changed", renderViews);
 
