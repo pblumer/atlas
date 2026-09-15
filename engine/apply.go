@@ -257,7 +257,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			return tx.PutEntitlement(&v.entitlement)
 		case model.IntentEntitlementRevoked:
 			// A revocation written before holds left a history behind
-			// (ADR-draft-entitlement-history). The log is append-only and replayed
+			// (ADR-0346). The log is append-only and replayed
 			// whole, so this arm cannot be deleted: an installation upgrading into
 			// that record replays years of them.
 			//

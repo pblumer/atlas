@@ -53,7 +53,7 @@ const (
 	cfElementTerminationAgg  columnFamily = 0x28 // elTermAgg:<procDefKey>:<elementId> → int64 cumulative terminations (merge)
 	cfInstanceByElement      columnFamily = 0x29 // piByEl:<procDefKey>:<elementId>:<piKey>:<elKey> → nil
 	cfEntitlement            columnFamily = 0x2A // ent:<principal>:0x00:<itemId> → EntitlementValue (ADR-0312)
-	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-draft-entitlement-history)
+	cfEntitlementHistory     columnFamily = 0x2B // entHist:<principal>:0x00:<endedAt>:<itemId> → EntitlementHistoryValue (ADR-0346)
 )
 
 // keyDefInstanceCount keys a definition's active-instance counter. A point key

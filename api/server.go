@@ -1468,7 +1468,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
 		// Which groups the recipient is in, for the eligibility check
-		// (ADR-draft-product-eligibility). It reuses the principal synthesis the
+		// (ADR-0347). It reuses the principal synthesis the
 		// reminder route needed — the same question, asked about somebody who is not
 		// calling — and takes its group ids and nothing else.
 		func(recipient string) ([]string, error) {
@@ -1519,7 +1519,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// which is a right that was given back. The correction path — a right
 		// reconciliation found the target system does not have — goes through
 		// handleRevokeDiscrepancy and says so there, because the two rows assert
-		// different things (ADR-draft-entitlement-history).
+		// different things (ADR-0346).
 		func(principal, itemID string, at int64, by string) error {
 			s.do(func() {
 				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Who may receive what, end to end (ADR-draft-product-eligibility).
+// Who may receive what, end to end (ADR-0347).
 //
 // The gap this closes is one of granularity, not of kind. A catalogue has an
 // audience and it is fail-closed — but a person sees exactly **one** catalogue,

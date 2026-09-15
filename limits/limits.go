@@ -259,7 +259,7 @@ type Limits struct {
 	ConflictReport int32
 
 	// HistoryReport is how many ended holds one answer lists
-	// (ADR-draft-entitlement-history).
+	// (ADR-0346).
 	//
 	// Larger than the others in this group, and deliberately: every ceiling beside
 	// it bounds a list of problems, and a problem list that needs a high ceiling

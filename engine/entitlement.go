@@ -41,7 +41,7 @@ func (p *Processor) GrantEntitlement(v model.EntitlementValue) {
 // ending — when it began, what it was ordered under, when it was meant to end —
 // is deliberately *not* carried: it is already in state, and reading it where the
 // event is folded is what makes a double revocation write one history row instead
-// of two (ADR-draft-entitlement-history).
+// of two (ADR-0346).
 //
 // The value is an [model.EntitlementHistoryValue] with those three fields set and
 // the rest left to the fold. A revocation and a hold are different facts, and the

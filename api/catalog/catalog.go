@@ -161,7 +161,7 @@ type Item struct {
 	MaxDays int `json:"maxDays,omitempty"`
 	// Eligible narrows the catalogue's audience for this one product: the group ids
 	// whose members may **receive** it. Empty is the ordinary case and means no
-	// narrowing (ADR-draft-product-eligibility).
+	// narrowing (ADR-0347).
 	//
 	// # Why an item needs this when a catalogue already has an audience
 	//

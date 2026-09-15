@@ -559,7 +559,7 @@ var mcpOmittedRoutes = map[string]string{
 	// to a person. One route, two modes, and a tool cannot expose only the safe one.
 	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
 
-	// Access history (ADR-draft-entitlement-history). Omitted, and the reason is
+	// Access history (ADR-0346). Omitted, and the reason is
 	// not the inventory's.
 	//
 	// The inventory routes are withheld because they are other people's access.

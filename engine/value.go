@@ -28,7 +28,7 @@ type inflightValue struct {
 	// rides token movement, so it costs the hot path the field and nothing else.
 	entitlement model.EntitlementValue
 	// entitlementEnd rides only on the revocation command and the event it emits
-	// (ADR-draft-entitlement-history). Like entitlement it never rides token
+	// (ADR-0346). Like entitlement it never rides token
 	// movement, so it costs the hot path the field and nothing else.
 	entitlementEnd model.EntitlementHistoryValue
 	// migration rides only on the operator-initiated migrate command and the event it

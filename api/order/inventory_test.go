@@ -29,7 +29,7 @@ func (i *recordedInventory) grant(g Grant) error {
 // revocation is what the inventory was told to close: who held what, when it
 // ended, and who asked. The last two are recorded rather than dropped so a test
 // can hold the service to them — they are what the history row is built from
-// (ADR-draft-entitlement-history), and a fixture that discarded them could not
+// (ADR-0346), and a fixture that discarded them could not
 // tell a correct attribution from a missing one.
 type revocation struct {
 	principal, itemID string

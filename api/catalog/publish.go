@@ -257,7 +257,7 @@ func checkItems(in Input, add func(Problem)) {
 		}
 		// A blank eligible group matches nobody, so the product would be orderable
 		// by no one and the catalogue would not say why
-		// (ADR-draft-product-eligibility). It is the only static check this list
+		// (ADR-0347). It is the only static check this list
 		// admits: a list naming groups disjoint from the catalogue's audience is
 		// *not* an error, because one person is in many groups at once and being
 		// reached through one while being eligible through another is the ordinary

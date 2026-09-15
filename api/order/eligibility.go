@@ -6,7 +6,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// Who may receive what (ADR-draft-product-eligibility).
+// Who may receive what (ADR-0347).
 //
 // The catalogue's audience is fail-closed and stays the outer gate. This is the
 // inner one, and it exists because the outer gate cannot be narrowed: a person

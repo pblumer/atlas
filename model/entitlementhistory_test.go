@@ -6,7 +6,7 @@ import (
 )
 
 // What a closed hold says, before anything reads one
-// (ADR-draft-entitlement-history).
+// (ADR-0346).
 
 // TestACorrectedHoldIsNotEvidenceOfAccess.
 //

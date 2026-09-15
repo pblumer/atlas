@@ -12,7 +12,7 @@ import (
 )
 
 // Reading what somebody used to hold
-// (ADR-draft-entitlement-history).
+// (ADR-0346).
 //
 // The inventory answers "what does this person hold today" and deliberately
 // nothing else. This answers the two questions an access review asks that the
