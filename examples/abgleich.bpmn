@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Abgleich (ADR-draft-reconciliation)
+  Abgleich (ADR-0334)
   — täglich fragen, ob noch stimmt, was Atlas über die Zugriffsrechte behauptet.
 
   Das Inventar behauptet etwas, das Atlas nicht garantieren kann: dass ein Recht in

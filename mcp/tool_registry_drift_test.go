@@ -520,7 +520,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/inventory-load":  "the commissioning load is an act with somebody responsible for it, and its state route is only useful beside it",
 	"POST /api/v1/inventory-load": "entering years of evidence must follow a person reading the report, not a tool call made in passing",
 
-	// Reconciliation (ADR-draft-reconciliation). The run is omitted for a reason
+	// Reconciliation (ADR-0334). The run is omitted for a reason
 	// this table already knows: reporting a provisioning outcome is absent because
 	// an agent "must not be able to assert on a target system's behalf", and a
 	// reconciliation run asserts something stronger — that a scope was read

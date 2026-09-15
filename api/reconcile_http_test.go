@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// The reconciliation routes, over HTTP (ADR-draft-reconciliation).
+// The reconciliation routes, over HTTP (ADR-0334).
 //
 // The inventory these run against is filled through the commissioning load rather
 // than by reaching into the store, deliberately: the two slices meet here, and a

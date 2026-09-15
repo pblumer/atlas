@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// What a reconciliation may and may not conclude (ADR-draft-reconciliation).
+// What a reconciliation may and may not conclude (ADR-0334).
 //
 // Every one of these is a way the comparison could report a falsehood confidently,
 // and confidence is the whole product here: a finding is what somebody acts on.

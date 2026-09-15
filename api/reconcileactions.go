@@ -11,7 +11,7 @@ import (
 )
 
 // The three things a person may do about a disagreement
-// (ADR-draft-reconciliation).
+// (ADR-0334).
 //
 // Atlas does not enforce. A system that removed privileges it had not granted
 // would lock a company out on its first bad reading, and the reading is the part
