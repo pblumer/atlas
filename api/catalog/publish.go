@@ -255,6 +255,21 @@ func checkItems(in Input, add func(Problem)) {
 					Message: "approval kind " + string(it.Approval.Kind) + " needs a ref"})
 			}
 		}
+		// A blank eligible group matches nobody, so the product would be orderable
+		// by no one and the catalogue would not say why
+		// (ADR-draft-product-eligibility). It is the only static check this list
+		// admits: a list naming groups disjoint from the catalogue's audience is
+		// *not* an error, because one person is in many groups at once and being
+		// reached through one while being eligible through another is the ordinary
+		// way this is used.
+		for _, g := range it.Eligible {
+			if strings.TrimSpace(g) == "" {
+				add(Problem{Item: it.ID, Message: "names a blank eligible group; it " +
+					"would match nobody, and the product would be orderable by nobody " +
+					"with nothing in the catalogue saying so"})
+				break
+			}
+		}
 		if it.Lifecycle.From != 0 && it.Lifecycle.Until != 0 && it.Lifecycle.Until <= it.Lifecycle.From {
 			add(Problem{Item: it.ID, Message: "orderable window ends before it begins"})
 		}

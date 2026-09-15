@@ -1467,6 +1467,17 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogStore, s.orderStore = catalogStore, orderStore
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
+		// Which groups the recipient is in, for the eligibility check
+		// (ADR-draft-product-eligibility). It reuses the principal synthesis the
+		// reminder route needed — the same question, asked about somebody who is not
+		// calling — and takes its group ids and nothing else.
+		func(recipient string) ([]string, error) {
+			p, err := s.principalOf(recipient)
+			if err != nil {
+				return nil, err
+			}
+			return p.GroupIDs, nil
+		},
 		func(message, orderID string, vars map[string]string) error {
 			start := make([]model.VariableValue, 0, len(vars))
 			for name, value := range vars {

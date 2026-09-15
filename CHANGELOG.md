@@ -14,6 +14,36 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can now say who may receive it.** A catalogue carries an audience and that gate
+  is fail-closed — but it was the *only* gate: whoever was in a catalogue's audience could
+  order anything in it, and the sole thing between a person and domain administration was an
+  approval rule, which says *who decides* rather than *who may ask*.
+
+  "Put it in a stricter catalogue" is the obvious workaround and does not work, for a reason
+  written into the design: **a person sees exactly one catalogue**, the highest-ranked one
+  their groups reach. A second, stricter catalogue does not restrict a product — it hides it
+  behind the shop that person already has. A product offered to part of a catalogue's audience
+  could not be expressed at all, short of duplicating the whole catalogue per audience.
+
+  `eligible` on a product names the groups whose members may receive it, frozen into the
+  release like the ceiling and the approval rule beside it. **It narrows; it never replaces.**
+  An item naming no group inherits the catalogue's restriction rather than removing one, which
+  is why the first test in the file is the one proving an unrestricted product still works.
+
+  **Checked against the recipient, never the orderer.** An order has two people, and the
+  question is who ends up holding the thing. Checking the caller would refuse a manager
+  ordering a workplace for a new hire — the ordinary case — and would equally let an eligible
+  manager order a restricted product *for* somebody who may not have it.
+
+  A refusal over an integral part names the product that carries it: a `composition` part is
+  never deselectable, so "you may not receive a licence" about a licence nobody chose reads as
+  a bug rather than as a rule. 403 and not 409 — a conflict is a state of the estate that
+  giving something back would resolve, this is a statement about who the recipient is.
+
+  Publishing refuses a blank group id and deliberately **not** an eligible list disjoint from
+  the catalogue's audience: one person is in many groups at once, and being reached through one
+  while being eligible through another is the ordinary way this is used.
+
 - **A hold that ends now leaves a record that it existed.** The inventory is present tense by
   construction — a grant writes a row, a revocation deletes it — and the order behind a right
   is deleted by retention long before the right ends, which is why the inventory is engine
