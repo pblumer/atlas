@@ -92,6 +92,24 @@
       }
     },
     {
+      "id": "a-product-can-ask-the-orderer-for-what-its-name-does-not-say",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can ask the orderer for what its name does not say.",
+        "de": "A product can ask the orderer for what its name does not say."
+      },
+      "summary": {
+        "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
+        "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-catalogue-s-appearance-is-set-on-the-screen-that-fills-it",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "Every question it answered ran forwards: a product names what it contains, what it needs, what it excludes.",
         "de": "Every question it answered ran forwards: a product names what it contains, what it needs, what it excludes."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "products-can-be-marked-as-favourites",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Products can be marked as favourites.",
-        "de": "Products can be marked as favourites."
-      },
-      "summary": {
-        "en": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident.",
-        "de": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident."
       },
       "link": {
         "label": "Changelog",

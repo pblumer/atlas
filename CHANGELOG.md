@@ -114,6 +114,47 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can ask the orderer for what its name does not say.** A laptop is not
+  fully described by being a laptop: somebody has to say which cost centre it is booked
+  to and which site it goes to. Nothing could hold that — a product declared no fields
+  and an order line carried no values — so every order needing more than a product name
+  finished as a phone call, and the answer lived in whatever the caller wrote down.
+  Variants do not solve it: a variant is a fixed shape chosen in advance, and a cost
+  centre is not one of a list.
+
+  A product now names **one Atlas form**. The basket renders it — the last screen before
+  an order exists, and the one that already shows what will actually be provisioned —
+  and the answers travel with the order line, beside the id of the form they answered.
+
+  **A form id and not a field list of its own**, because Atlas already has forms: a
+  definition, an editor, a generator, a renderer, and two surfaces rendering them. A
+  second way to declare "these are the fields somebody fills in" would be a second thing
+  to author, a second thing to render, and a second set of types, validation rules and
+  localisation to keep level with the first — behind on the day it shipped. The
+  catalogue names an id and interprets nothing; which questions there are, which are
+  required and what counts as valid stay the form's own statements, checked by the form
+  runtime before anything is sent.
+
+  **The release freezes the id and the line freezes the answers.** A release freezes
+  *rules* — the approval, the ceiling, the bindings — because a rule relaxed next week
+  must not change what somebody was held to this week. A form is not a rule: what has to
+  survive is what was answered, and "cost centre 4711" stays true whatever the form does
+  afterwards. Copying the schema into every release would put a rendering artifact inside
+  a design-time model that has kept rendering out of itself, and send it to every browser
+  that opens the portal.
+
+  Answers are keyed by item, because two laptops in one basket are two cost centres and a
+  flat map would keep one of them. Two things are refused rather than dropped, both
+  because the alternative is an order that silently loses something somebody typed:
+  answers for a product the order does not carry (a stale basket), and answers for a
+  product that asks nothing (nothing would read them). A form left *unanswered* is not
+  refused there — that is the form's own rule, and a second copy of it in the order
+  service would be wrong the first time somebody marks a field optional.
+
+  The product editor offers the forms that exist, never free text — the same rule the
+  process bindings follow, because a product bound to a form nobody wrote is a basket the
+  orderer cannot get past, found by them rather than by whoever bound it.
+
 - **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
   its own colour, typeface and brand mark since it was built — the portal and the approval
   page paint themselves from it — and no screen offered any of it. The one thing that makes

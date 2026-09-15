@@ -183,6 +183,10 @@
   .person:hover, .person:focus { background:var(--accent-soft); }
   .forwhomfield .note { position:absolute; top:100%; left:0; margin:4px 0 0;
                         white-space:nowrap; }
+  /* A product's configuration form, under the basket rather than beside a row:
+     a form is taller than a row, and an integral part asks its own questions. */
+  .cfg { max-width:640px; margin:0 0 12px; }
+  .cfg h3 { margin:0 0 10px; font-size:15px; }
   .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
 
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
