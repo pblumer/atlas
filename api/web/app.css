@@ -208,6 +208,14 @@ b { font-weight: 600; }
 #drawer-apps a:hover { background: var(--bg); text-decoration: none; }
 #drawer-apps a.active { background: var(--accent-soft); color: var(--accent); }
 #drawer-apps a .soon { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 500; }
+/* The two portal surfaces are pages of their own and open in their own window, so
+   the drawer says so before the click rather than after it: an entry that silently
+   opens a second window is the same surprise whichever way it is resolved. It is a
+   ::after on the attribute that already carries the fact, so nothing has to keep a
+   second flag in step and the glyph stays out of the link's accessible name. */
+#drawer-apps a[target="_blank"]::after {
+  content: "\2197"; margin-left: auto; font-size: 12px; color: var(--muted); line-height: 1;
+}
 
 /* ---------- Content ---------- */
 main { padding: 22px; max-width: 1120px; margin: 0 auto; }

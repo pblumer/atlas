@@ -40,7 +40,7 @@ const STRINGS = {
     'appr.done': 'Entschieden. Vielen Dank.',
     'appr.failed': 'Das hat nicht geklappt.',
     'appr.retry': 'Erneut versuchen',
-    'appr.back': 'Alle Genehmigungen',
+    'appr.all': 'Alle Genehmigungen',
     'appr.more': 'Es gibt weitere offene Aufgaben, als diese Seite auf einmal durchsucht.',
     'appr.stale': 'Die verlinkte Genehmigung ist nicht mehr offen oder nicht Ihre.',
   },
@@ -62,7 +62,7 @@ const STRINGS = {
     'appr.done': 'Decided. Thank you.',
     'appr.failed': 'That did not work.',
     'appr.retry': 'Try again',
-    'appr.back': 'All approvals',
+    'appr.all': 'All approvals',
     'appr.more': 'There are more open tasks than this page searches at once.',
     'appr.stale': 'The approval that link named is no longer open, or is not yours.',
   },
@@ -279,7 +279,7 @@ function renderDecision() {
   if (state.decided) {
     return el('div', { class: 'empty' },
       el('p', {}, t('appr.done')),
-      el('p', {}, el('a', { href: location.pathname }, t('appr.back'))));
+      el('p', {}, el('a', { href: location.pathname }, t('appr.all'))));
   }
   return el('div', { class: 'card' },
     el('h3', {}, textOf(a.texts, a.itemId)),
@@ -329,7 +329,7 @@ function render() {
     state.truncated ? el('p', { class: 'muted' }, t('appr.more')) : null,
     a ? renderDecision() : renderList(),
     a && !state.decided && state.approvals.length > 1
-      ? el('p', {}, el('a', { href: location.pathname }, t('appr.back'))) : null);
+      ? el('p', {}, el('a', { href: location.pathname }, t('appr.all'))) : null);
 }
 
 document.addEventListener('DOMContentLoaded', () => {

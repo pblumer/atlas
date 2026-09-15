@@ -897,6 +897,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
 				"approval": tObject(), "provisionProcess": tString(),
 				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
+				"targets": tArray(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
@@ -1590,6 +1591,21 @@ func (s *Server) apiRoutes() []apiRoute {
 				"groups": tArray(), "groupsDeltaLink": tString(),
 			})),
 			resp: jsonBody("What the run decided, whether or not it wrote it", tObject())}},
+
+		{"GET", "/api/v1/inventory-load", s.handleInventoryLoadState, apiOp{
+			summary: "Whether a commissioning load has ever been applied for one target system (?system=), when it last wrote, when it last only reported, and how many rights it has recorded. The inventory itself cannot answer the first question: a system loaded and found empty looks exactly like one nobody ever loaded",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("Load state for one system", schemaObj(map[string]any{
+				"system": tString(), "everApplied": tBool(), "lastAppliedAt": tInteger(),
+				"lastReportedAt": tInteger(), "runs": tInteger(), "granted": tInteger(),
+			}))}},
+		{"POST", "/api/v1/inventory-load", s.handleInventoryLoad, apiOp{
+			summary: "Report the rights one reading of one target system found, and receive what it decided: which would be recorded as pre-existing (origin `legacy`), which are already held by a better authority and left alone, which subjects resolve to no account, and which references no product claims. Writes nothing unless `apply` is true, so an omitted field reports. It only ever adds — a right this batch does not mention is never revoked, because a batch is one system's partial answer and silence is not evidence",
+			tag:     "Catalogue", role: RoleOperator,
+			req: jsonBody("What one target system was found to grant, and whether it may be written", schemaObj(map[string]any{
+				"apply": tBool(), "system": tString(), "observations": tArray(),
+			})),
+			resp: jsonBody("What the load decided, whether or not it wrote it", tObject())}},
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
 			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},

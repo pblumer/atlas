@@ -77,6 +77,34 @@ type Variant struct {
 	Texts map[string]string `json:"texts"`
 }
 
+// TargetRef says what this item looks like in one target system: the group, the
+// licence SKU, the role, named exactly as that system names it.
+//
+// It exists for the commissioning load and for the reconciliation after it
+// (ADR-draft-inventory-commissioning-load). A target system reports rights in its
+// own vocabulary — "CN=VPN-Users", "ENTERPRISEPACK" — and an entitlement holds a
+// catalogue item id. Something has to join the two, and the join has to be *data a
+// person can read*, because the whole value of a load is a report somebody checks
+// before it is applied. A join buried in a script produces a report that says
+// "Alice holds VPN access" and gives the reader nothing to check it against.
+//
+// It is deliberately not the same knowledge as the provisioning process, though the
+// two overlap. The process *acts*: it is what adds the membership. This is a
+// *claim* about the target system, and a claim is the thing reconciliation can
+// test. An installation that leaves this empty simply has an item no load will ever
+// attribute — which is the right default, not a degraded one.
+type TargetRef struct {
+	// System is the target system's name in the installation's own vocabulary —
+	// "entra", "ad", "jira". Atlas never interprets it; it only requires that an
+	// observation and the item it should match agree on the spelling.
+	System string `json:"system"`
+	// Ref is the right as that system reports it. Compared literally, case and all:
+	// a distinguished name differing only in case is two different strings to the
+	// directory that issued them, and normalising here would attribute a right to
+	// an item on a similarity Atlas invented.
+	Ref string `json:"ref"`
+}
+
 // Item is a product or a service. Which of the two it is follows from its position
 // in the graph, not from a field: an item nothing composes is a product, an item
 // with no parts is a service, and an item with both is a bundle inside a bundle.
@@ -105,9 +133,19 @@ type Item struct {
 	// MultipleAllowed says whether a principal may hold this item more than once —
 	// two licences, two mailboxes. Where it is false the basket marks an item the
 	// orderer already holds as held, and skips it.
-	MultipleAllowed bool  `json:"multipleAllowed,omitempty"`
-	CreatedAt       int64 `json:"createdAt"`
-	UpdatedAt       int64 `json:"updatedAt"`
+	MultipleAllowed bool `json:"multipleAllowed,omitempty"`
+	// Targets is what this item is called in the systems that actually hold it, and
+	// it is what lets a commissioning load attribute a right it found to this item
+	// (ADR-draft-inventory-commissioning-load). Empty is the ordinary state for an
+	// item nothing outside Atlas grants, and it means no load will ever name it.
+	//
+	// Several are allowed: one service is legitimately two groups. The same ref
+	// twice is not, and [Publish] refuses it — an observation matching two items
+	// cannot be attributed, and guessing between them would write evidence Atlas
+	// invented.
+	Targets   []TargetRef `json:"targets,omitempty"`
+	CreatedAt int64       `json:"createdAt"`
+	UpdatedAt int64       `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different

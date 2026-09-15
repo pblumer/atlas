@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
+  the portal's three models were decided and has had no writer, which meant the inventory
+  could only ever contain what Atlas itself had granted. On the day an installation goes
+  live that is nothing, while reality is full — so the reconciliation that comes next would
+  report every privilege in the estate as a discrepancy, each carrying an executable
+  "remove it in the target system".
+
+  `POST /api/v1/inventory-load` takes the rights one reading of one target system found
+  and records them as pre-existing. It resolves both halves itself: the subject against the
+  mirrored accounts, the right against the new `targets` on a catalogue product — what that
+  product is called in AD, in Entra, in Jira. That join is data rather than something a
+  worker does, because the load's output is evidence somebody has to be able to disagree
+  with: the report says *Alice is in `CN=VPN-Users`, and the catalogue says that group is
+  VPN access*, not merely that Alice holds VPN access.
+
+  It writes nothing unless `apply` is true, so an omitted field reports. It never writes
+  over a right an order granted, never moves the start date of one it already recorded, and
+  only ever adds — a right a batch does not mention is not revoked, because a batch is one
+  system's partial answer. What it cannot attribute it names: subjects with no account, and
+  `unmapped`, the rights the estate grants that no product claims, most-held first. That
+  last list is the one nothing could produce before. `examples/bestandsaufnahme.bpmn` is the
+  modelled process, deliberately without a timer — a commissioning load is an act somebody
+  performs, not a schedule.
+
 - **Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run
   writes nothing.** An account only ever came into being when somebody signed in through
   OIDC, so a fresh installation starts with an almost empty user store — and the next

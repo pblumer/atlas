@@ -554,6 +554,19 @@ async function deployDemo() {
 // this person holds. The Console itself is "any": its dashboard, workers and AI
 // access are everybody's, and the admin screens inside it say so individually
 // below.
+//
+// `separate: true` marks an entry that is a page of its own rather than a view of
+// this application, and it opens in its own window. The two portal surfaces are
+// the only ones: they carry the catalogue's brand instead of the console's, they
+// are written for people who never open the modeller, and they load their own
+// message catalogue — so routing to one is leaving Atlas's shell, not moving inside
+// it. Replacing the console with them in the same tab put whoever followed the
+// entry on a page whose only way back was one small link, and asked somebody who
+// was in the middle of something to lose it to look at an order.
+//
+// The back link on those pages stays regardless. It is not for this drawer — it is
+// for whoever arrives from the link in an approval notification, who has no console
+// tab behind them at all.
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
@@ -569,7 +582,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user" },
+  { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
   // The approver's half of the same surface, and a separate page for the same
   // reason: it answers to a different person. Until now it was reached only
   // through the link in its notification mail, so an approver who deleted the mail
@@ -580,7 +593,7 @@ const APPS = [
   // approval tomorrow without holding one today. The entry is therefore shown to
   // everybody and is empty for most, which is the honest cost of having no role to
   // ask: a count on it would fix that, and nothing here keeps one yet.
-  { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user" },
+  { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user", separate: true },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
@@ -1050,8 +1063,13 @@ function syncIncidentBadge(appId) {
 function paintApps() {
   const nav = document.getElementById("drawer-apps");
   if (!nav) return;
+  // The "opens elsewhere" mark is a CSS ::after on the target attribute rather than
+  // a span here: it is presentation, it must not join the link's accessible name,
+  // and a glyph inside the text would change what every test reading this menu
+  // sees for a reason that has nothing to do with them.
   nav.innerHTML = APPS.filter((a) => mayUse(a.role)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}">${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
+    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
   ).join("");
 }
 
@@ -2193,7 +2211,8 @@ async function viewConsoleOrg() {
           Every route names the role that reaches it: <span class="chip">admin</span> for this page and the
           rest of the instance's configuration, <span class="chip">modeler</span> to deploy and to author,
           <span class="chip">operator</span> to run what is deployed, <span class="chip">user</span> for a
-          person's own task list.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
+          person's own task list, <span class="chip">productmanager</span> to maintain the portal's
+          catalogues without administering the instance.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
           It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
@@ -2379,7 +2398,14 @@ function wireOrgPresence(showPresence, presencePill) {
 // SSO_ROLES is what a rule may grant. `user` is missing on purpose — everybody who
 // can sign in at all holds it, so offering it as a grant would suggest it could be
 // withheld.
-const SSO_ROLES = ["admin", "modeler", "operator"];
+//
+// `productmanager` belongs here and its absence was a real gap rather than a
+// cosmetic one. Where this mapping is on, it *owns* the roles: a role granted by
+// hand in the form above is replaced at that person's next sign-in. So in an
+// installation whose accounts come from the provider — which is the installation
+// this mapping exists for — a role the form offers and this list does not is a role
+// that cannot be held for longer than one login, however carefully it was granted.
+const SSO_ROLES = ["admin", "modeler", "operator", "productmanager"];
 
 function ssoRuleRow(rule, groups) {
   const roles = new Set(rule.roles || []);
