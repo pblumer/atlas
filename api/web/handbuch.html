@@ -4440,6 +4440,68 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-befristung">
+        <h4><span class="rz-emoji" aria-hidden="true">⏳</span>
+          <span data-l="de">Befristung: Zugriff, der von selbst endet</span><span data-l="en">Time-bounded access: rights that end by themselves</span></h4>
+        <p class="bsp-tags">
+          <span class="tag">maxDays</span>
+          <span class="tag" data-l="de">Ablauf ist nicht Entzug</span><span class="tag" data-l="en">expiry is not removal</span>
+          <span class="tag" data-l="de">Rückgabe der Bestellzeile</span><span class="tag" data-l="en">order return</span>
+          <span class="tag">R/P1D</span>
+          <span class="tag">examples/befristung.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Alles, was das Portal vergibt, vergibt es bisher <b>auf Dauer</b>. Das fällt am Tag
+              des Baus niemandem auf und ist der Grund, weshalb es Bestandsaufnahme, Abgleich und
+              Rezertifizierung gibt: alle drei suchen Zugriff, der nicht da sein sollte — nachdem er da
+              ist.</p>
+            <p data-l="de">Die Rezertifizierung ist dabei der manuelle Ersatz für eine fehlende
+              Befristung, und sie wird in der knappsten Währung des Systems bezahlt: der Aufmerksamkeit
+              einer Führungskraft. <b>Eine Frage, die gar nicht gestellt werden musste, ist mehr wert als
+              eine bessere Art, sie zu stellen.</b> Ein Produkt nennt mit <code>maxDays</code> eine
+              Obergrenze, und wer darunter bestellt, bekommt ein Recht, das von selbst endet.</p>
+            <p data-l="en">Everything the portal grants, it grants <b>forever</b>. Nobody notices on the
+              day it is built, and it is why the commissioning load, reconciliation and recertification
+              exist: all three look for access that should not be there, after it is there.</p>
+            <p data-l="en">Recertification is the manual compensation for a missing expiry, and it is
+              paid for in the scarcest currency in the system: a line manager's attention. <b>A question
+              that did not need to be asked is worth more than a better way of asking it.</b> A product
+              names a ceiling with <code>maxDays</code>, and anything ordered under it gets a right that
+              ends by itself.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de"><b>Ablauf ist nicht Entzug.</b> Am Tag nach dem Ende hat das Zielsystem die
+              Mitgliedschaft immer noch; es ist nichts gelaufen. Wahr ist nur, dass Atlas gesagt hat, der
+              Zugriff hätte enden sollen. Ein abgelaufenes Recht bleibt deshalb <b>geführt</b> und wird
+              als überfällig gemeldet — den Datensatz beim Ticken der Uhr zu löschen hiesse zu behaupten,
+              jemand habe einen Zugriff nicht, den er nachweislich hat.</p>
+            <p data-l="de">Zurückgegeben wird über die <b>Bestellzeile</b>, und das ist stärker als bei
+              den Geschwistern: nur ein bestelltes Recht trägt je ein Ende, also hat ein ablaufendes
+              Recht immer eine Bestellung hinter sich — und deren Rückgabe entzieht nach der
+              eingefrorenen Freigabe. Die Obergrenze gilt nie für ein gefundenes Recht: dessen Startdatum
+              ist der Moment des Findens, und eine Frist darauf liesse einen ganzen Betrieb am Jahrestag
+              seiner Inbetriebnahme ablaufen.</p>
+            <p data-l="en"><b>Expiry is not removal.</b> The day after the end the target system still
+              has the membership; nothing has run. All that is true is that Atlas said the access should
+              have ended. So an expired right stays <b>held</b> and is reported overdue — dropping the
+              record when a clock ticks would assert that somebody does not have access they demonstrably
+              do.</p>
+            <p data-l="en">It is given back through the <b>order line</b>, which is stronger than what
+              its siblings can use: only an ordered right ever carries an end, so an expiring right
+              always has an order behind it, and an order's return revokes by the frozen release. The
+              ceiling never applies to a found right: its start is the moment it was found, and a
+              deadline measured from that would expire a whole estate on the anniversary of its own
+              commissioning.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
       <div class="bsp" id="bsp-rezertifizierung">
         <h4><span class="rz-emoji" aria-hidden="true">🖊️</span>
           <span data-l="de">Rezertifizierung: braucht das noch jemand?</span><span data-l="en">Recertification: does anybody still need this?</span></h4>

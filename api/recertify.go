@@ -217,7 +217,7 @@ func buildCampaign(msg recertifyOpen, in recertifyInput, by string, now, atNanos
 			ID: rowID(id, v.Principal, v.ItemID, v.VariantID), CampaignID: id,
 			Principal: v.Principal, ItemID: v.ItemID, VariantID: v.VariantID,
 			OrderID: v.OrderID, Origin: originName(v.Origin), Since: v.Since,
-			Reviewer: reviewerOf[v.Principal], UpdatedAt: now,
+			Until: v.Until, Reviewer: reviewerOf[v.Principal], UpdatedAt: now,
 		}
 		if d, disputed := in.Disputes[disputeKey(v.Principal, v.ItemID)]; disputed {
 			// Marked, never refused. One open discrepancy must not block a campaign
@@ -280,6 +280,11 @@ type recertifyCounts struct {
 	Undecided  int `json:"undecided"`
 	Unassigned int `json:"unassigned"`
 	Disputed   int `json:"disputed"`
+	// Ending counts the rows whose right ends by itself
+	// (ADR-draft-time-bounded-entitlements). It is the one count here that is good
+	// news: those questions did not need to be asked, and the number says how much
+	// of the campaign a ceiling on the product would have removed.
+	Ending int `json:"ending"`
 }
 
 func countRows(rows []recertifyRow) recertifyCounts {
@@ -298,6 +303,9 @@ func countRows(rows []recertifyRow) recertifyCounts {
 		}
 		if r.Disputed {
 			c.Disputed++
+		}
+		if r.Until != 0 {
+			c.Ending++
 		}
 	}
 	return c

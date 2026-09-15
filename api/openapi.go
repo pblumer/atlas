@@ -1654,6 +1654,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("The finding, now closed", tObject())}},
 
+		{"GET", "/api/v1/entitlements/expiring", s.handleExpiring, apiOp{
+			summary: "What is due to end within `?within=` days (default 30), and everything already past its end. A right past its end is still **held** — the target system still has it and nothing has run — so this reports a debt rather than a state of the world, and the record stays true. It acts on nothing: the deprovisioning is the product's own process, run by a modelled one. `unendable` counts the overdue rights whose product binds no such process, because no amount of running it will reduce them",
+			tag:     "Catalogue", role: RoleOperator,
+			resp: jsonBody("What ends soon, what should have ended, and the counts", tObject())}},
+
 		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
 			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign",
 			tag:     "Catalogue", role: RoleOperator,

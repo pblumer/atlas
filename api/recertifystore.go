@@ -81,6 +81,15 @@ type recertifyRow struct {
 	OrderID string `json:"orderId,omitempty"`
 	Origin  string `json:"origin,omitempty"`
 	Since   int64  `json:"since,omitempty"`
+	// Until is the right's own end, where it has one
+	// (ADR-draft-time-bounded-entitlements). A right that ends by itself in three
+	// weeks is not what a quarterly review is for, and a reviewer told so spends
+	// their attention on the rows where it is worth something.
+	//
+	// Marked rather than dropped from the campaign, for the reason a disputed row
+	// is: skipping hides, and a reviewer who is not shown a row cannot notice that
+	// its end is wrong.
+	Until int64 `json:"until,omitempty"`
 
 	// Disputed marks a right an open finding concerns: the inventory and the target
 	// system currently disagree about it. Certifying one is signing a statement

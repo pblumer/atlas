@@ -206,6 +206,15 @@ func checkItems(in Input, add func(Problem)) {
 		if it.Lifecycle.From != 0 && it.Lifecycle.Until != 0 && it.Lifecycle.Until <= it.Lifecycle.From {
 			add(Problem{Item: it.ID, Message: "orderable window ends before it begins"})
 		}
+		// A negative ceiling would grant a right that ended before it began, and
+		// every reader of the inventory would report it overdue from the first
+		// moment. Zero is the ordinary answer and means no end; it is a different
+		// statement from "ends immediately", and nothing should be able to say the
+		// second by accident.
+		if it.MaxDays < 0 {
+			add(Problem{Item: it.ID,
+				Message: "maxDays is negative; leave it out for a right that does not end"})
+		}
 	}
 	checkTargets(items, add)
 }

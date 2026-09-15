@@ -28,4 +28,12 @@ type Grant struct {
 	OrderID string
 	// At is when it started, read from the server clock by the caller.
 	At int64
+	// Until is when it was meant to end, or zero for a right that does not end.
+	// Computed from the ceiling the release's product declared, frozen into the
+	// line when the order was placed (ADR-draft-time-bounded-entitlements).
+	//
+	// A promise about when the access should end, not a statement that it has: the
+	// record stays held past it, and a modelled process is what actually takes the
+	// access away.
+	Until int64
 }

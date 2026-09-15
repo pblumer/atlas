@@ -143,9 +143,24 @@ type Item struct {
 	// twice is not, and [Publish] refuses it — an observation matching two items
 	// cannot be attributed, and guessing between them would write evidence Atlas
 	// invented.
-	Targets   []TargetRef `json:"targets,omitempty"`
-	CreatedAt int64       `json:"createdAt"`
-	UpdatedAt int64       `json:"updatedAt"`
+	Targets []TargetRef `json:"targets,omitempty"`
+	// MaxDays is how long a right this product grants may last, in days, or zero
+	// for one that does not end (ADR-draft-time-bounded-entitlements). It is a
+	// **ceiling declared as policy** — nobody holds this for more than ninety days
+	// — and not a date somebody chose; an order cannot yet name a shorter end
+	// within it.
+	//
+	// It reaches a grant through the release, like the bindings and the approval
+	// rule beside it: a ceiling relaxed in the catalogue next week must not lengthen
+	// a right granted this week under the stricter one.
+	//
+	// It never applies to an adopted or legacy right. A commissioning load records
+	// a found right's start as the moment it was found, so a ceiling measured from
+	// it would schedule an entire estate to expire on the anniversary of the day
+	// somebody switched the portal on.
+	MaxDays   int   `json:"maxDays,omitempty"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different

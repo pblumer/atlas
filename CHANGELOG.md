@@ -14,6 +14,39 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A right can now end by itself.** Everything the portal grants, it granted forever — which
+  nobody notices on the day it is built, and which is why the commissioning load,
+  reconciliation and recertification all exist: three controls that find access which should
+  not be there, *after* it is there. Recertification in particular is the manual compensation
+  for a missing expiry, paid for in the scarcest resource in the system, a line manager's
+  attention. **A question that did not need to be asked is worth more than a better way of
+  asking it.**
+
+  A product declares a ceiling with `maxDays`, it travels into the order line frozen from the
+  release — like the provisioning process, the deprovisioning process and the approval rule
+  already do — and a grant made under it carries an end. Products without one grant
+  open-ended rights, which is every product until somebody sets a ceiling.
+
+  **An expiry is not a removal.** The day after the end the target system still has the
+  membership and nothing has run; all that is true is that Atlas said the access should have
+  ended. So an expired right stays **held** and is reported overdue — dropping the record
+  when a clock ticks would make Atlas assert that somebody does not have access they
+  demonstrably do, which is the direction of wrongness that corrupts the evidence.
+
+  `GET /api/v1/entitlements/expiring` answers what is due within a window and what is past
+  its end. The removing is done by a modelled process returning the **order line**, which is
+  a stronger mechanism than either sibling can use: only an ordered right ever carries an
+  end, so an expiring right always has an order behind it, and a return revokes by the
+  release it was placed against, frozen when it was placed. A right whose order has since
+  been deleted by retention cannot be returned at all, and those are counted apart as
+  `unendable` — a number that never moves has to say why rather than look like a backlog.
+
+  **The ceiling never reaches an adopted or legacy right.** A commissioning load records a
+  found right's start as the moment it was *found*, so a ceiling measured from it would
+  schedule an entire estate to expire on the anniversary of the day somebody switched the
+  portal on. `examples/befristung.bpmn` is the modelled process, and a recertification row
+  whose right ends by itself now says so — those are questions that did not need asking.
+
 - **A business object says where it is used.** The information model gave a data object's
   `itemSubjectRef` a type to resolve against, and every reading built on it since has run
   from the process outwards. The vocabulary itself had none: somebody about to rename

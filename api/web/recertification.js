@@ -63,6 +63,15 @@ function originPill(origin) {
 // Certifying a right the target system currently denies is signing a statement
 // about something contested, and the reviewer has to see that before they answer,
 // not after.
+// endsPill is the good news on a row: this right ends by itself, so the question
+// did not really need asking. Shown rather than used to hide the row — a reviewer
+// who is not shown a row cannot notice that its end is wrong.
+function endsPill(row) {
+  if (!row.until) return "";
+  const when = fmtWhen(Math.floor(row.until / 1e9));
+  return ` <span class="pill" title="This right ends on its own. Confirming it does not extend it — extending access is ordering it again, with whatever approval it carries.">ends ${esc(when)}</span>`;
+}
+
 function disputePill(row) {
   if (!row.disputed) return "";
   const what = row.disputeKind === "missing"
@@ -157,6 +166,7 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
       `<b>${c.revoked || 0}</b> withdrawn`,
       `<b>${c.undecided || 0}</b> <span title="Nobody answered these. They are not certified, and closing the campaign will not make them so.">unanswered</span>`,
       c.disputed ? `<b>${c.disputed}</b> disputed` : "",
+      c.ending ? `<b>${c.ending}</b> <span title="These end on their own. Questions that did not need asking — which is what a ceiling on the product buys.">ending anyway</span>` : "",
       c.unassigned ? `<b>${c.unassigned}</b> addressed to nobody` : "",
       rep.dueAt ? `due ${esc(fmtWhen(rep.dueAt))}` : "",
       closed ? `<b>closed ${esc(fmtWhen(rep.closedAt))}</b>` : "",
@@ -188,7 +198,7 @@ export async function viewRecertification({ api, toast, view, isSuperseded }) {
       return `<tr>
         <td style="font-family:ui-monospace,monospace">${esc(r.principal)}</td>
         <td style="font-family:ui-monospace,monospace">${esc(r.itemId)}${
-          r.variantId ? ` <span class="muted">${esc(r.variantId)}</span>` : ""}${disputePill(r)}</td>
+          r.variantId ? ` <span class="muted">${esc(r.variantId)}</span>` : ""}${disputePill(r)}${endsPill(r)}</td>
         <td>${originPill(r.origin)}${
           r.orderId ? ` <span class="muted" style="font-size:12px">${esc(r.orderId)}</span>` : ""}</td>
         <td data-sort="${r.since || 0}" title="Held since ${esc(fmtWhen(Math.floor((r.since || 0) / 1e9)))}">${

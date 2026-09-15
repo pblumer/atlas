@@ -236,6 +236,19 @@ type Limits struct {
 	// that invites an essay gets an essay from the first reviewer and "ok" from
 	// every one after.
 	RecertifyNote int64
+
+	// ExpiringWindow is how far ahead one read may look, in days
+	// (ADR-draft-time-bounded-entitlements). A ceiling on a *question* rather than
+	// on a message, and it earns that: a window wide enough to cover every right
+	// with an end turns "what ends soon" into a list of the whole inventory, which
+	// is a different route's job and a different cost.
+	ExpiringWindow int32
+
+	// ExpiringReport is how many rights one answer renders. The counts are over
+	// everything either way, so a cut list costs a second request and never a wrong
+	// number — which is why this one is a truncation where a campaign's rows are a
+	// refusal.
+	ExpiringReport int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -290,6 +303,8 @@ func Default() Limits {
 		RecertifyRows:         5_000,
 		RecertifyReport:       500,
 		RecertifyNote:         4 << 10,
+		ExpiringWindow:        365,
+		ExpiringReport:        500,
 	}
 }
 

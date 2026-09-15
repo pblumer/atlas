@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -281,6 +282,7 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool) []Lin
 		out[i] = Line{ItemID: id, Status: status,
 			ProvisionProcess:   it.ProvisionProcess,
 			DeprovisionProcess: it.DeprovisionProcess,
+			MaxDays:            it.MaxDays,
 			Approval: Approval{
 				Kind: string(it.Approval.Kind),
 				Ref:  it.Approval.Ref,
@@ -516,16 +518,26 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 func (s *Service) recordInventory(o Order, itemID string, status LineStatus) error {
 	switch status {
 	case StatusDone:
-		var variant string
+		var (
+			variant string
+			maxDays int
+		)
 		for _, l := range o.Lines {
 			if l.ItemID == itemID {
-				variant = l.VariantID
+				variant, maxDays = l.VariantID, l.MaxDays
 				break
 			}
 		}
+		// The end, computed here because this is where the release's ceiling and
+		// the moment the right began are both in hand. Zero days is a right that
+		// does not end, and stays the ordinary case.
+		var until int64
+		if maxDays > 0 {
+			until = o.UpdatedAt + int64(maxDays)*int64(24*time.Hour)
+		}
 		return s.grant(Grant{
 			Principal: o.Recipient, ItemID: itemID, VariantID: variant,
-			OrderID: o.ID, At: o.UpdatedAt,
+			OrderID: o.ID, At: o.UpdatedAt, Until: until,
 		})
 	case StatusReturned:
 		return s.revoke(o.Recipient, itemID)

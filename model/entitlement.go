@@ -70,6 +70,31 @@ type EntitlementValue struct {
 	// (invariants I4/I6).
 	Since  int64
 	Origin EntitlementOrigin
+
+	// Until is when this right was meant to end, in unix nanoseconds, or zero for
+	// one with no end. Set only for a right the portal granted, from the ceiling
+	// the release's product declared (ADR-draft-time-bounded-entitlements).
+	//
+	// **It is a promise about when access should end, not a statement that it
+	// has.** An entitlement past its Until is still held: the target system still
+	// has the membership, and nothing has run. Removing the record when a clock
+	// passes would make Atlas assert that somebody does not have access they
+	// demonstrably do — which is the direction of wrongness ADR-0334 calls the one
+	// that corrupts the evidence. Decaying into it is bad; manufacturing it on a
+	// timer would be worse.
+	//
+	// Never set for an adopted or legacy right, whatever its product declares. A
+	// commissioning load records Since as when the right was *found*, so a ceiling
+	// measured from it would schedule the expiry of a whole estate on the
+	// anniversary of the day somebody switched the portal on.
+	Until int64
+}
+
+// Expired reports whether this right's end has passed. A right with no end never
+// expires, which is every right an installation holds until a product declares a
+// ceiling.
+func (v *EntitlementValue) Expired(now int64) bool {
+	return v.Until != 0 && now >= v.Until
 }
 
 func (*EntitlementValue) ValueType() ValueType { return VTEntitlement }
@@ -80,7 +105,11 @@ func (v *EntitlementValue) encode(dst []byte) []byte {
 	dst = appendString(dst, v.Principal)
 	dst = appendString(dst, v.ItemID)
 	dst = appendString(dst, v.VariantID)
-	return appendString(dst, v.OrderID)
+	dst = appendString(dst, v.OrderID)
+	// Appended after the strings rather than beside Since, because that is what
+	// keeps every record written before this field readable: a decoder that reached
+	// the end has a right with no end, which is exactly what those records mean.
+	return binary.LittleEndian.AppendUint64(dst, uint64(v.Until))
 }
 
 func (v *EntitlementValue) decode(src []byte) error {
@@ -120,6 +149,11 @@ func (v *EntitlementValue) decode(src []byte) error {
 			return err
 		}
 		*into, rest = s, next
+	}
+	// And the first non-string field to arrive late. Absent means no end, which is
+	// what every record written before ceilings existed meant and still means.
+	if len(rest) >= 8 {
+		v.Until = int64(binary.LittleEndian.Uint64(rest))
 	}
 	return nil
 }

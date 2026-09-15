@@ -48,7 +48,29 @@ var (
 
 // pathShape reduces a path to what has to match: literal segments, with every
 // filled-in segment written the same way on both sides.
-func pathShape(p string) string { return routeParam.ReplaceAllString(p, "{}") }
+//
+// A query string is cut first. It is not part of the route — the server mounts
+// "/api/v1/entitlements/expiring" and reads `within` off the URL inside the handler
+// — so a model calling it with one is calling the same route. Without this the
+// first model to pass a parameter would fail a guard about paths for a reason that
+// has nothing to do with paths.
+func pathShape(p string) string {
+	if i := strings.IndexByte(p, '?'); i >= 0 {
+		p = p[:i]
+	}
+	return routeParam.ReplaceAllString(p, "{}")
+}
+
+// unescapeQuotes turns either spelling of an escaped quote back into one.
+//
+// XML has two and an author may use either; this guard used to know only the
+// numeric one, and the consequence was not a failure but a **silent skip**: the
+// literals were never found, the shape came out empty, and a path that did not
+// start with /api/ was passed over as somebody else's server. A guard that skips
+// what it cannot parse is worse than no guard, because it reports the same "ok".
+func unescapeQuotes(s string) string {
+	return strings.NewReplacer("&#34;", `"`, "&quot;", `"`).Replace(s)
+}
 
 // feelPathShape turns a FEEL expression that builds a path into the same shape.
 // `"/api/v1/orders/" + orderId + "/next"` is two literals with something between
@@ -90,8 +112,7 @@ func TestEverySystemProcessCallsARouteThatExists(t *testing.T) {
 			var shape string
 			switch {
 			case feelPath.MatchString(block):
-				shape = feelPathShape(strings.ReplaceAll(
-					feelPath.FindStringSubmatch(block)[1], "&#34;", `"`))
+				shape = feelPathShape(unescapeQuotes(feelPath.FindStringSubmatch(block)[1]))
 			case staticHeader.MatchString(block):
 				shape = pathShape(staticHeader.FindStringSubmatch(block)[1])
 			default:

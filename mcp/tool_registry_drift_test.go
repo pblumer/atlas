@@ -543,6 +543,13 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
 	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
 
+	// Expiry (ADR-draft-time-bounded-entitlements). Omitted for the reason GET
+	// /api/v1/inventory is: it is a list of other people's access, with the dates
+	// their access ends attached. That it happens to be read-only does not make it
+	// a smaller disclosure than the inventory itself — it is the inventory filtered
+	// to the part somebody is about to lose.
+	"GET /api/v1/entitlements/expiring": "what ends when is other people's access, read the same way the inventory is",
+
 	// Recertification (ADR-draft-access-recertification). Omitted whole, and this
 	// one is the sharpest case in the table rather than another instance of it.
 	//
