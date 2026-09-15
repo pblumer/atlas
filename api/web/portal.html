@@ -170,6 +170,19 @@
   .forwhom input { font:inherit; font-size:14px; padding:6px 10px; border-radius:6px;
                    border:1px solid var(--border-strong); background:var(--surface);
                    color:var(--text); min-width:240px; }
+  /* The field and its suggestions are one column so the list hangs under the
+     input rather than beside the label. */
+  .forwhomfield { position:relative; display:flex; flex-direction:column; }
+  .people { position:absolute; top:100%; left:0; z-index:5; min-width:240px;
+            max-height:240px; overflow-y:auto; margin-top:2px;
+            border:1px solid var(--border-strong); border-radius:6px;
+            background:var(--surface); box-shadow:0 4px 12px rgba(0,0,0,.12); }
+  .person { display:block; width:100%; text-align:left; font:inherit; font-size:14px;
+            padding:6px 10px; border:0; background:none; color:var(--text);
+            cursor:pointer; }
+  .person:hover, .person:focus { background:var(--accent-soft); }
+  .forwhomfield .note { position:absolute; top:100%; left:0; margin:4px 0 0;
+                        white-space:nowrap; }
   .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
 
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
