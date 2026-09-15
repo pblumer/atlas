@@ -318,6 +318,59 @@ func resolveIncidentBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
+// resolveIncidentsBody builds the bulk-resolve request from the tool arguments:
+// either an explicit key set or a scope, never both, and the API refuses a scope
+// that names nothing (ADR-draft-incident-floods).
+func resolveIncidentsBody(args map[string]any) ([]byte, error) {
+	payload := map[string]any{}
+	if raw, ok := args["keys"]; ok {
+		arr, isArray := raw.([]any)
+		if !isArray {
+			return nil, fmt.Errorf("argument %q must be an array of element instance keys", "keys")
+		}
+		keys := make([]uint64, 0, len(arr))
+		for i, el := range arr {
+			k, err := argUint(map[string]any{"key": el}, "key")
+			if err != nil {
+				return nil, fmt.Errorf("keys[%d] must be a non-negative integer", i)
+			}
+			keys = append(keys, k)
+		}
+		payload["keys"] = keys
+	}
+	for _, name := range []string{"processDefKey", "processInstanceKey", "elementIndex", "retries", "limit"} {
+		if _, ok := args[name]; !ok {
+			continue
+		}
+		n, err := argUint(args, name)
+		if err != nil {
+			return nil, err
+		}
+		payload[name] = n
+	}
+	for _, name := range []string{"elementId", "type", "message"} {
+		if v := optString(args, name); v != "" {
+			payload[name] = v
+		}
+	}
+	_, hasKeys := payload["keys"]
+	scoped := false
+	for _, name := range []string{"processDefKey", "processInstanceKey", "elementId", "elementIndex", "type", "message"} {
+		if _, ok := payload[name]; ok {
+			scoped = true
+		}
+	}
+	if !hasKeys && !scoped {
+		return nil, fmt.Errorf("name what to resolve: %q, or a scope (%q / %q / %q / %q / %q / %q)",
+			"keys", "processDefKey", "processInstanceKey", "elementId", "elementIndex", "type", "message")
+	}
+	if hasKeys && scoped {
+		return nil, fmt.Errorf("provide either %q or a scope, not both", "keys")
+	}
+	body, _ := json.Marshal(payload)
+	return body, nil
+}
+
 // incidentsPage folds the {incidents:[…]} body and the X-Incidents-Truncated
 // header the list endpoint returns into one JSON envelope {incidents, truncated},
 // so the truncation signal survives as data (ADR-0016). The list is capped, not

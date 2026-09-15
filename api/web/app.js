@@ -18,7 +18,7 @@ import { copyText } from "./clipboard.js";
 import { renderMarkdown, markdownToPlain } from "./markdown.js";
 import {
   incidentPill, fmtRaised, resolveIncidentFlow, fixVariablesFlow, fixWorkerFlow, addWorkerFlow,
-  incidentWorkerChip,
+  incidentWorkerChip, resolveCauseFlow, resolveCauseQuick, resolveSelectionFlow,
   repairFormFlow,
 } from "./incidents.js";
 import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWorkerUsage, deleteWorkerFlow } from "./workerdialog.js";
@@ -5330,33 +5330,54 @@ async function viewInstances() {
     })
     : "—";
 
-  // loadIncidents pulls the server's unresolved incidents once per refresh. This
-  // overview is server-wide, so it is the unscoped list — capped like the Incidents
-  // page, and a capped page is said out loud rather than quietly undercounting. It is
-  // deliberately a separate read: the summary endpoint is O(1) per definition by
-  // design (ADR-0083) and must not grow a scan.
+  // loadIncidents counts the server's unresolved incidents per definition, once per
+  // refresh, off the incident *summary* rather than off the list
+  // (ADR-draft-incident-floods). One column of this table needs a number, and the row
+  // list answered it by transferring every incident on the server — megabytes of
+  // near-identical JSON per refresh under the flood this column exists to flag. The
+  // summary is one line per cause whatever the population, and a per-definition count is
+  // its groups summed. It stays a separate read: the instances summary endpoint is O(1)
+  // per definition by design (ADR-0083) and must not grow a scan.
   const loadIncidents = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
-      const rows = (data && data.incidents) || [];
-      incTruncated = headers.get("X-Incidents-Truncated") === "true";
+      const sum = await api("GET", "/api/v1/incidents/summary");
+      const groups = (sum && sum.groups) || [];
+      // A group the cap left out is still counted in `total`, so the column is a lower
+      // bound in exactly that case — said out loud below rather than quietly undercounted.
+      incTruncated = !!(sum && sum.groupsTruncated);
       incByDef = new Map();
-      incByInstance = new Map();
-      for (const r of rows) {
-        if (r.processDefKey) {
-          const d = String(r.processDefKey);
-          incByDef.set(d, (incByDef.get(d) || 0) + 1);
-        }
-        const i = String(r.processInstanceKey);
-        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      for (const g of groups) {
+        if (!g.processDefKey) continue;
+        const d = String(g.processDefKey);
+        incByDef.set(d, (incByDef.get(d) || 0) + (g.count || 0));
       }
     } catch { /* best-effort: the lists still render, just without the flags */ }
     const note = document.getElementById("ops-inc-note");
     if (note) {
       note.innerHTML = incTruncated
-        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More incidents than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">More causes than one page holds — the counts below are a lower bound. Work through them in <a href="#/operations/incidents">Incidents</a>.</p>`
         : "";
     }
+  };
+
+  // loadIncidentsByInstance is the *other* incident read this view needs, and the one
+  // that still walks rows: the variable search shows individual instances, and "which
+  // of these is stuck" is a per-instance question the cause summary cannot answer —
+  // a group counts tokens on an element, not which instance each belongs to.
+  //
+  // So it stays the capped list, and it is paid only when somebody runs a search rather
+  // than on every refresh of the overview. Under a flood its page cap bites and the
+  // flags become a lower bound, exactly as they were before the summary existed; the
+  // Incidents view is where a flood is actually read (ADR-draft-incident-floods).
+  const loadIncidentsByInstance = async () => {
+    try {
+      const { data } = await apiRaw("GET", "/api/v1/incidents");
+      incByInstance = new Map();
+      for (const r of (data && data.incidents) || []) {
+        const i = String(r.processInstanceKey);
+        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
+      }
+    } catch { /* best-effort: the results still render, just without the flags */ }
   };
 
   // incidentCell renders one process row's Incidents cell: the total over every
@@ -5555,7 +5576,7 @@ async function viewInstances() {
       // Refresh the incident buckets with the search: these rows are individual
       // instances, and a stale flag on the surface an operator debugs from is worse
       // than the extra read.
-      await loadIncidents();
+      await loadIncidentsByInstance();
       rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
@@ -5820,17 +5841,32 @@ function overrideCell(r) {
   return sel + note;
 }
 
-// viewIncidents is the Operations "Incidents" view: every unresolved incident on
-// this server — the operator "what's stuck" list (ADR-0061). Two shapes land here:
-// a *job* incident (a service-task job whose retries ran out and parked) and a
-// job-less *timer* incident (a boundary / event-subprocess timer whose FEEL schedule
-// stopped resolving, ADR-0064/0111). Each row links to the stuck element on the live
-// diagram and to that instance's replay (ADR-0151), and resolves in place over POST
-// /incidents/{elementInstanceKey}/resolve: a job incident re-activates its job with a
-// fresh retry budget; a timer incident re-arms the element against the instance's
-// current variables (re-raising if it still fails). The list shares the task list's
-// ceiling and flags a capped page the same way (X-Incidents-Truncated), newest scan
-// order.
+// viewIncidents is the Operations "Incidents" view: what is stuck on this server, and
+// the ways out of it (ADR-0061). Two shapes of incident land here: a *job* incident (a
+// service-task job whose retries ran out and parked) and a job-less *timer* incident (a
+// boundary / event-subprocess timer whose FEEL schedule stopped resolving,
+// ADR-0064/0111).
+//
+// It opens on *causes*, not on rows (ADR-draft-incident-floods). One broken worker parks
+// every instance that reaches its task, so the honest reading of "3 412 incidents" is
+// one line — this element of this process, this failure, 3 412 tokens behind it — and
+// the actions that belong to a whole cause sit on that line: fix the worker it names,
+// then clear everything it parked in one call. The row list below is still there, and
+// still carries every per-incident way out, but it is now a *page* of a chosen cause
+// rather than the whole population rendered into the DOM.
+//
+// Each row links to the stuck element on the live diagram and to that instance's replay
+// (ADR-0151) and resolves in place over POST /incidents/{elementInstanceKey}/resolve: a
+// job incident re-activates its job with a fresh retry budget; a timer incident re-arms
+// the element against the instance's current variables (re-raising if it still fails).
+
+// How many incident rows one page of the table renders. The API's own ceiling is 5000;
+// asking for it put thousands of rows (each with an actions menu) into the DOM, which is
+// what made this view slow to open, slow to filter and slow to refresh. A cause is what
+// an operator acts on, so a page is for reading a sample of one — 200 rows is more than
+// anybody scrolls, and the shared table enhancer stays instant over it.
+const INCIDENT_ROWS_PAGE = 200;
+
 // incidentMenu is the row's non-primary actions, behind the ⋯ menu every other table
 // in the console puts them behind. Resolving is the one action that belongs on the row;
 // correcting the data and reconfiguring the integration are the two ways to make that
@@ -5863,73 +5899,258 @@ function incidentMenu(r, i) {
   return items;
 }
 
+// causeMenu is the same idea one level up: the ways out that apply to every incident of
+// a cause at once. Correcting variables is deliberately absent — that is per-instance
+// data, and there is no honest bulk form for it; what a cause shares is its *worker*.
+function causeMenu(g, i) {
+  const items = [];
+  if (g.connector && g.connectorId) {
+    items.push({ label: "Configure worker…", icon: "⚙", act: "fixconn", data: { cause: i } });
+  } else if (g.connector && g.connectorKind) {
+    items.push({ label: "Create worker…", icon: "⚙", act: "addconn", data: { cause: i } });
+  } else if (g.connector) {
+    items.push({ label: "Configure worker ↗", icon: "⚙", href: "#/console/workers" });
+  }
+  if (g.processDefKey) {
+    items.push({ label: "Open the live diagram ↗", icon: "→", href: `#/operations/p/${g.processDefKey}` });
+  }
+  return items;
+}
+
 async function viewIncidents() {
   view.innerHTML = `
     <div class="between">
       <h1>Incidents</h1>
-      <button class="btn neutral" id="refresh" title="Reload the incident list">Refresh</button>
+      <button class="btn neutral" id="refresh" title="Reload the causes and the incident list">Refresh</button>
     </div>
-    <p class="muted">Every unresolved incident on this server — where a token is
-    stuck waiting for an operator (ADR-0061). A <b>job</b> incident is a service task
-    whose retries ran out and parked; a <b>timer</b> incident is a recurring boundary
-    or event-subprocess timer whose FEEL schedule stopped resolving (ADR-0111).
-    <b>Resolve</b> re-activates the work: a parked job retries with the budget you
-    grant, a timer re-arms against the instance's current variables — re-raising if it
-    still fails.</p>
+    <p class="muted">Where a token is stuck waiting for an operator (ADR-0061). A <b>job</b>
+    incident is a service task whose retries ran out and parked; a <b>timer</b> incident is a
+    recurring boundary or event-subprocess timer whose FEEL schedule stopped resolving
+    (ADR-0111). The table below groups them by <b>cause</b> — the element that parked — because
+    one broken integration parks every instance that reaches it: fix what the cause names, then
+    <b>Resolve all</b> clears everything behind it in one go. <b>Resolve</b> re-activates the work:
+    a parked job retries with the budget you grant, a timer re-arms against the instance's current
+    variables — re-raising if it still fails.</p>
     <div id="inc-note"></div>
     <div class="card" style="padding:0">
+      <table data-dt-key="incident-causes">
+        <thead><tr><th>Process</th><th>Element</th><th>Kind</th><th>Incidents</th><th>Since</th><th>Message</th><th></th></tr></thead>
+        <tbody id="causes"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="between" style="margin-top:18px">
+      <h2 style="font-size:15px;margin:0" id="rows-title">Incidents</h2>
+      <button class="btn ghost" id="scope-clear" hidden title="Show incidents of every cause again">Show all causes</button>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="tasks-bulk" id="inc-bulk" hidden></div>
       <table data-dt-key="incidents">
-        <thead><tr><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
-        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th class="row-pick"></th><th>Instance</th><th>Element</th><th>Cause</th><th>Raised</th><th>Message</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>`;
+  const causesBody = document.getElementById("causes");
   const tbody = document.getElementById("rows");
   const note = document.getElementById("inc-note");
-  let current = []; // the rendered page, so a Resolve click has the whole incident
+  const rowsTitle = document.getElementById("rows-title");
+  const scopeClear = document.getElementById("scope-clear");
 
-  const load = async () => {
+  let causes = [];        // the summary's groups: one per cause, biggest first
+  let current = [];       // the rendered row page, so an action has the whole incident
+  let scope = null;       // the cause the row list is showing, or null for all of them
+  const picked = new Set(); // elementInstanceKey of every ticked row
+
+  // The summary: one walk on the server, one line per cause, whatever the population.
+  // This is also what makes the view usable while a flood is being produced — its size
+  // does not grow with the number of parked tokens.
+  const loadCauses = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents");
-      const rows = (data && data.incidents) || [];
-      current = rows;
-      note.innerHTML = headers.get("X-Incidents-Truncated") === "true"
-        ? `<p class="muted">Showing the first ${rows.length}. Resolve some and refresh to see the rest.</p>`
+      const sum = await api("GET", "/api/v1/incidents/summary");
+      causes = (sum && sum.groups) || [];
+      note.innerHTML = sum && sum.groupsTruncated
+        ? `<p class="muted" style="font-size:12px;margin:0 2px 8px">${sum.total} incidents over more causes than this table holds; ${sum.ungrouped} are not in a row below.</p>`
         : "";
-      if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="empty">No incidents — nothing is stuck.</td></tr>`;
+      if (!causes.length) {
+        causesBody.innerHTML = `<tr><td colspan="7" class="empty">No incidents — nothing is stuck.</td></tr>`;
         return;
       }
-      tbody.innerHTML = rows.map((r, i) => {
-        // The instance opens on the live diagram of its own version, with the token
-        // (and now the incident badge) on the stuck element; ▶ replays it step by step.
-        const inst = r.processDefKey
-          ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
-             <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
-          : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
-        // The element is named by its diagram id — what the modeler and the diagram
-        // call it; the element instance key (the resolve key) and the compiled index
-        // ride along as a title for anyone cross-referencing the graph.
-        const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
-        const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
+      causesBody.innerHTML = causes.map((g, i) => {
+        const proc = g.processDefKey
+          ? `<a href="#/operations/p/${g.processDefKey}" title="Open this version's live diagram, where every stuck token is marked">${esc(g.processId || String(g.processDefKey))}</a>${g.version ? ` <span class="muted">v${g.version}</span>` : ""}`
+          : `<span class="muted" title="These instances' definition is no longer deployed">(undeployed)</span>`;
+        const el = `<span style="font-family:ui-monospace,monospace">${esc(g.elementId || "#" + g.elementIndex)}</span>`;
+        const msg = `${esc(g.message || "—")}${g.messageVaries
+          ? ` <span class="muted" title="The incidents in this group do not all carry the same message; this is the oldest one">· and others</span>`
+          : ""}${incidentWorkerChip(g)}`;
         return `<tr>
-          <td>${inst}</td>
+          <td data-filter="${esc((g.processId || "") + " " + (g.processDefKey || ""))}">${proc}</td>
           <td>${el}</td>
-          <td>${cause}</td>
-          <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
-          <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+          <td>${incidentPill(g)}</td>
+          <td data-sort="${g.count}"><b>${g.count}</b></td>
+          <td data-sort="${g.oldestRaisedAt || 0}" class="muted nowrap" title="The oldest incident of this cause; the newest is ${esc(fmtRaised(g.newestRaisedAt))}">${esc(fmtRaised(g.oldestRaisedAt))}</td>
+          <td>${msg}</td>
           <td class="row-actions">
-            <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
-            ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
+            <button class="btn ghost" data-show="${i}" title="List this cause's incidents below">Show</button>
+            ${g.processDefKey
+              ? `<button class="btn sm" data-resolve-cause="${i}" title="Clear every incident of this cause and retry its work">Resolve all…</button>`
+              // Without a definition there is nothing to scope the resolve by — every
+              // selector left would reach other processes' incidents too. The rows below
+              // still resolve, one or several at a time, by their own keys.
+              : `<span class="muted" title="These instances' definition is gone, so this cause cannot be named as a scope — resolve the rows below instead">no scope</span>`}
+            ${dropdown("⋯", "icon-btn", causeMenu(g, i))}</td>
         </tr>`;
       }).join("");
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty">${esc(e.message)}</td></tr>`;
+      causesBody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
     }
   };
 
-  // One delegated handler for every row's Resolve button (the tbody persists across
-  // reloads; the rows inside it do not, so a per-row listener would leak). The dialog
-  // and the POST are the shared incident flow every surface uses (ADR-0151).
+  // scopeQuery is the row page's scope: the selected cause, written as the same
+  // selector the bulk resolve takes, so the rows shown and the incidents a "Resolve
+  // all" touches are one query asked twice.
+  const scopeQuery = () => {
+    const q = [`limit=${INCIDENT_ROWS_PAGE}`];
+    if (scope) {
+      if (scope.processDefKey) q.push(`process=${scope.processDefKey}`);
+      if (scope.elementId) q.push(`element=${encodeURIComponent(scope.elementId)}`);
+      // The compiled index as well as the id: an instance whose definition is no
+      // longer deployed has no BPMN id to scope by, and a scope with the element left
+      // out is the whole definition — a much larger set than the line clicked.
+      if (Number.isInteger(scope.elementIndex)) q.push(`elementIndex=${scope.elementIndex}`);
+      if (scope.type) q.push(`type=${encodeURIComponent(scope.type)}`);
+    }
+    return "?" + q.join("&");
+  };
+
+  const renderBulk = () => {
+    const bulk = document.getElementById("inc-bulk");
+    if (!bulk) return;
+    const n = picked.size;
+    bulk.hidden = n === 0;
+    if (!n) { bulk.innerHTML = ""; return; }
+    bulk.innerHTML = `
+      <span class="tasks-bulk-count">${n} selected</span>
+      <span class="tasks-bulk-actions">
+        <button class="btn small" id="inc-bulk-resolve" title="Clear the selected incidents and retry their work">Resolve selected…</button>
+        <button class="btn ghost small" id="inc-bulk-clear" title="Clear the current selection">Clear</button>
+      </span>`;
+    bulk.querySelector("#inc-bulk-clear").addEventListener("click", () => { picked.clear(); renderRowsFromCurrent(); });
+    bulk.querySelector("#inc-bulk-resolve").addEventListener("click", async () => {
+      const chosen = current.filter((r) => picked.has(String(r.elementInstanceKey)));
+      if (await resolveSelectionFlow({ api, toast, incidents: chosen })) {
+        picked.clear();
+        await load();
+      }
+    });
+  };
+
+  const renderRowsFromCurrent = () => {
+    if (!current.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${scope
+        ? "No incidents left on this cause — it may have been resolved already."
+        : "No incidents — nothing is stuck."}</td></tr>`;
+      renderBulk();
+      return;
+    }
+    tbody.innerHTML = current.map((r, i) => {
+      // The instance opens on the live diagram of its own version, with the token
+      // (and now the incident badge) on the stuck element; ▶ replays it step by step.
+      const inst = r.processDefKey
+        ? `<a href="#/operations/p/${r.processDefKey}/i/${r.processInstanceKey}" title="Open this instance on its live diagram">${r.processInstanceKey}</a>
+           <a class="replay-link" href="#/operations/i/${r.processInstanceKey}" title="Replay this instance step by step">&#9654;</a>`
+        : `<span title="This instance's definition is no longer deployed">${r.processInstanceKey}</span>`;
+      // The element is named by its diagram id — what the modeler and the diagram
+      // call it; the element instance key (the resolve key) and the compiled index
+      // ride along as a title for anyone cross-referencing the graph.
+      const el = `<span style="font-family:ui-monospace,monospace" title="Element instance ${r.elementInstanceKey} · compiled element index #${r.elementIndex}">${esc(r.elementId || r.elementInstanceKey)}</span>`;
+      const cause = `${incidentPill(r)}${r.jobKey ? ` <span class="muted" style="font-family:ui-monospace,monospace">${r.jobKey}</span>` : ""}`;
+      const key = String(r.elementInstanceKey);
+      return `<tr>
+        <td class="row-pick"><input type="checkbox" data-pick="${esc(key)}"${picked.has(key) ? " checked" : ""} aria-label="Select this incident"/></td>
+        <td>${inst}</td>
+        <td>${el}</td>
+        <td>${cause}</td>
+        <td data-sort="${r.raisedAt || 0}">${esc(fmtRaised(r.raisedAt))}</td>
+        <td>${esc(r.message || "—")}${incidentWorkerChip(r)}</td>
+        <td class="row-actions">
+          <button class="btn sm" data-resolve="${i}" title="Resolve this incident">Resolve…</button>
+          ${dropdown("⋯", "icon-btn", incidentMenu(r, i))}</td>
+      </tr>`;
+    }).join("");
+    renderBulk();
+  };
+
+  // One page of rows, scoped to the selected cause. Capped deliberately: the answer to
+  // a flood is the cause table above, not ten thousand rows in the DOM.
+  const loadRows = async () => {
+    try {
+      const { data, headers } = await apiRaw("GET", "/api/v1/incidents" + scopeQuery());
+      current = (data && data.incidents) || [];
+      // A selection only means anything for rows that are still on the page.
+      const onPage = new Set(current.map((r) => String(r.elementInstanceKey)));
+      for (const key of [...picked]) if (!onPage.has(key)) picked.delete(key);
+      const capped = headers.get("X-Incidents-Truncated") === "true";
+      rowsTitle.textContent = scope
+        ? `${scope.elementId || "Element #" + scope.elementIndex} · ${scope.processId || scope.processDefKey}${capped ? ` — first ${current.length} of ${scope.count}` : ` — ${current.length}`}`
+        : capped ? `Incidents — the first ${current.length}` : `Incidents — ${current.length}`;
+      scopeClear.hidden = !scope;
+      renderRowsFromCurrent();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty">${esc(e.message)}</td></tr>`;
+    }
+  };
+
+  // The causes first, then the rows: a cause that has just been resolved must stop
+  // scoping the list below, or the page sits on an empty selection of something that no
+  // longer exists.
+  const load = async () => {
+    await loadCauses();
+    if (scope) {
+      scope = causes.find((g) => g.processDefKey === scope.processDefKey
+        && g.elementId === scope.elementId && g.type === scope.type) || null;
+    }
+    await loadRows();
+  };
+
+  // One delegated handler per table (each tbody persists across reloads; the rows
+  // inside it do not, so per-row listeners would leak). The dialogs and the POSTs are
+  // the shared incident flows every surface uses (ADR-0151).
+  causesBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-show], button[data-resolve-cause], .dropdown-menu button[data-act]");
+    if (!btn) return;
+    if (btn.dataset.show !== undefined) {
+      scope = causes[Number(btn.dataset.show)] || null;
+      picked.clear();
+      await loadRows();
+      tbody.closest(".card").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const g = causes[Number(btn.dataset.resolveCause ?? btn.dataset.cause)];
+    if (!g) return;
+    // A cause's worker is the fix for every incident behind it; the flows are the
+    // per-incident ones (ADR-0160/0287), which only ever needed one representative.
+    const act = btn.dataset.act;
+    const retry = () => resolveCauseQuick({ api, toast, group: g });
+    const changed = act === "fixconn"
+      ? !!(await fixWorkerFlow({ api, toast, incident: g, retry, extraLabel: `Save & retry ${g.count}` }))
+      : act === "addconn"
+        ? !!(await addWorkerFlow({ api, toast, incident: g, retry, extraLabel: `Add & retry ${g.count}` }))
+        : !!(await resolveCauseFlow({ api, toast, group: g }));
+    if (changed) {
+      picked.clear();
+      await load();
+      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+    }
+  });
+
+  tbody.addEventListener("change", (e) => {
+    const box = e.target.closest("input[type=checkbox][data-pick]");
+    if (!box) return;
+    if (box.checked) picked.add(box.dataset.pick);
+    else picked.delete(box.dataset.pick);
+    renderBulk();
+  });
+
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-resolve], .dropdown-menu button[data-act]");
     if (!btn) return;
@@ -5954,13 +6175,15 @@ async function viewIncidents() {
             : await resolveIncidentFlow({ api, toast, incident });
     if (changed) {
       await load();
-      refreshIncidentBadge(); // don't make the nav wait out its interval to agree
+      refreshIncidentBadge();
     }
   });
 
+  scopeClear.addEventListener("click", async () => { scope = null; picked.clear(); await loadRows(); });
   document.getElementById("refresh").addEventListener("click", load);
   await load();
 }
+
 
 // viewMailOutbox is the Operations "Outbox" view: the messages a mail worker on
 // the *preview* provider delivered in-server instead of sending (ADR-0150).

@@ -1007,6 +1007,18 @@ What it takes to run this for real.
   its predecessors. `GET /api/v1/instances` gained `?element=`, scoped to `?process=`
   and live-only, since a finished instance holds no token. The click it takes over is
   the decision inspection's (ADR-0066), which keeps the ⚖ badge it already had.
+  The same question asked of **incidents** landed next
+  ([ADR-draft-incident-floods](docs/adr/draft-incident-floods.md)): one broken worker
+  parks every instance that reaches its task, and the only reading on offer was rows —
+  a megabyte of near-identical JSON per refresh, thousands of DOM rows, and a resolve
+  dialog per incident. `GET /api/v1/incidents/summary` answers in one line per *cause*
+  (definition, element, kind) with its count, its raised-at window, a representative
+  message and the worker behind it, so the size of the reading is the number of causes;
+  `POST /api/v1/incidents/resolve` clears a ticked set or a whole matching scope in
+  bounded batches, in the shape ADR-0090 settled for bulk termination. The listing's new
+  `?element=` / `?elementIndex=` / `?type=` / `?message=` filters are the *same* selector that action
+  evaluates, so a preview and the act cannot disagree, and Operations → Incidents opens
+  on the causes with the worker fix and a Resolve all beside each.
 
 ## Milestone 5 — Scale-out 🔲
 
