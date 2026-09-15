@@ -271,7 +271,7 @@ func checkItems(in Input, add func(Problem)) {
 			}
 		}
 		// A blank keyword matches every query at once, which is the opposite of a
-		// search term (ADR-draft-catalogue-search).
+		// search term (ADR-0355).
 		for _, k := range it.Keywords {
 			if strings.TrimSpace(k) == "" {
 				add(Problem{Item: it.ID, Message: "names a blank keyword; an empty term " +

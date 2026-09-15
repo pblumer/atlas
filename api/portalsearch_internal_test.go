@@ -9,7 +9,7 @@ import (
 )
 
 // Finding a service when nobody knows what it is called
-// (ADR-draft-catalogue-search).
+// (ADR-0355).
 //
 // The search runs in the browser over the release the page already has, so there
 // is no route to test and nothing on the server decides what matches. What there

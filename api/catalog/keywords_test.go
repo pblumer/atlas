@@ -2,7 +2,7 @@ package catalog
 
 import "testing"
 
-// Words a product can be found by (ADR-draft-catalogue-search).
+// Words a product can be found by (ADR-0355).
 
 // TestABlankKeywordIsRefused.
 //

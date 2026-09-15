@@ -1,4 +1,4 @@
-# ADR-DRAFT: A catalogue is searched over words it carries, in the browser, and a hit says where it lives
+# ADR-0355: A catalogue is searched over words it carries, in the browser, and a hit says where it lives
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -365,7 +365,7 @@ const state = {
   favouritesOnly: false,
   // query is what somebody is looking for. A search is not a fifth column: while
   // it is set the cascade is replaced by a flat list of matches, each showing the
-  // path it sits on (ADR-draft-catalogue-search).
+  // path it sits on (ADR-0355).
   query: '',
 };
 

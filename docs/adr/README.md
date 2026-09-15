@@ -440,6 +440,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
 | [0353](0353-product-usage.md) | The catalogue answers forwards, and the person who maintains a service asks backwards | Accepted | Landed |
 | [0354](0354-approval-list-order.md) | An approval list is a work list, so it starts where nobody has looked | Accepted | Landed |
+| [0355](0355-catalogue-search.md) | A catalogue is searched over words it carries, in the browser, and a hit says where it lives | Accepted | Landed |
 
 ## The two states of a record
 

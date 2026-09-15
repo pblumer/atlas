@@ -191,7 +191,7 @@ type Item struct {
 	Eligible []string `json:"eligible,omitempty"`
 	// Keywords are the words somebody might search for that are not the product's
 	// name: synonyms, the vendor's own term, the abbreviation everybody uses, the
-	// thing it replaced (ADR-draft-catalogue-search).
+	// thing it replaced (ADR-0355).
 	//
 	// # Why this exists rather than searching the name alone
 	//
