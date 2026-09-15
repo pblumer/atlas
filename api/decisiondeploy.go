@@ -90,7 +90,7 @@ func (s *Server) deployDecisions(models []decisionDeployment, appID, deployedBy 
 		return nil, nil
 	}
 	// Spend the keys durably before any record claims one
-	// (ADR-draft-the-definition-key-space-never-goes-backwards): one reservation for
+	// (ADR-0339): one reservation for
 	// the whole batch, so a publish of five decisions costs one write and not five.
 	next, err := s.reserveKeys(len(models))
 	if err != nil {

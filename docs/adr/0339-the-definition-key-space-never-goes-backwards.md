@@ -1,4 +1,4 @@
-# ADR-DRAFT: The definition key space never goes backwards
+# ADR-0339: The definition key space never goes backwards
 
 - **Status:** Accepted
 - **Implementation:** Landed

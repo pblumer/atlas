@@ -7,7 +7,7 @@ import (
 )
 
 // The floor under the definition key space
-// (ADR-draft-the-definition-key-space-never-goes-backwards).
+// (ADR-0339).
 //
 // Every process definition and every decision deployment is issued a key from one
 // monotonic counter, and that key is the identity a great deal of durable state is

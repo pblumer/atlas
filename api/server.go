@@ -218,7 +218,7 @@ type Server struct {
 	// installation has ever issued. Without it the counter is rebuilt from the
 	// surviving records, and deleting the highest-keyed one hands its key — and the
 	// instance history filed under it — to the next deploy
-	// (ADR-draft-the-definition-key-space-never-goes-backwards).
+	// (ADR-0339).
 	keySpace *keySpaceStore
 	// landscapes is what the Starmap last read this server's *structure* as
 	// (ADR-0211 §7). It holds no health and nobody's view of anything — see

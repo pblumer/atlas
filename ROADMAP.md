@@ -444,7 +444,7 @@ The control-flow basics most real models use.
   inherited the instance history filed under it — measured, on a process that had
   never run. The highest key ever issued is now durable, written before the keys it
   covers are used
-  ([ADR-draft-the-definition-key-space-never-goes-backwards](docs/adr/draft-the-definition-key-space-never-goes-backwards.md)).
+  ([ADR-0339](docs/adr/0339-the-definition-key-space-never-goes-backwards.md)).
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):
   a business rule task's `zeebe:calledDecision` now honors `bindingType` — `latest`
   and `deployment` — surfaced as a "Binding" dropdown on the task.

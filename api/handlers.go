@@ -924,7 +924,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		return nil, err, nil
 	}
 	// Spend the keys ParseAll just handed out, durably, before any record claims one
-	// (ADR-draft-the-definition-key-space-never-goes-backwards). ParseAll assigned
+	// (ADR-0339). ParseAll assigned
 	// s.nextKey+i, so this reserves exactly that span and leaves the counter past it.
 	if _, err := s.reserveKeys(len(deployables)); err != nil {
 		return nil, nil, err

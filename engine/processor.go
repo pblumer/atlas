@@ -298,7 +298,7 @@ func (p *Processor) Undeploy(defKey uint64) {
 	// fact: the counter was rebuilt from the surviving records, so deleting the
 	// highest-keyed definition and restarting handed its key straight back. It is a
 	// fact now, because the key space has a durable floor
-	// (ADR-draft-the-definition-key-space-never-goes-backwards). This line stays
+	// (ADR-0339). This line stays
 	// anyway: it costs nothing and it is the right thing to do to a key that is
 	// going away.
 	delete(p.inactive, defKey)

@@ -45,7 +45,7 @@ func removeKeySpaceMark(dir string) error {
 }
 
 // The acceptance suite for
-// ADR-draft-the-definition-key-space-never-goes-backwards.
+// ADR-0339.
 //
 // The defect these pin is not a crash and not a refusal: a deleted definition's
 // key came back, and the next definition to get it inherited the instance history
