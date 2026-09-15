@@ -5001,7 +5001,7 @@ async function referenceStoredModel(handle, suggested, reload) {
 }
 
 // deleteStoredModel removes a model file nothing points at — the end of the road
-// ADR-0330 opened by making it visible (ADR-draft-cleaning-up-the-decision-store).
+// ADR-0330 opened by making it visible (ADR-0336).
 // It is offered only on an unreferenced row, and the server refuses a referenced
 // handle anyway.
 //
@@ -6923,7 +6923,7 @@ async function viewDecisionDetail(id) {
   const miniTable = (tt, n) => renderTraceTable(tt, n);
 
   // The deployed versions of this decision, and what holds each of them
-  // (ADR-draft-cleaning-up-the-decision-store). It is the only place in the product
+  // (ADR-0336). It is the only place in the product
   // that answers "what is using this version", which is a question asked without a
   // deletion in mind — and the place a deletion has to stand.
   const versionRows = document.getElementById("version-rows");

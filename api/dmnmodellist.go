@@ -141,7 +141,7 @@ func storedModelHandles(dir string) ([]string, error) {
 }
 
 // handleDeleteDmnModel removes a stored DMN model file
-// (ADR-draft-cleaning-up-the-decision-store). It is the other half of a store that
+// (ADR-0336). It is the other half of a store that
 // only ever grew: every upload stayed, and ADR-0330 made the unreferenced ones
 // visible without making them removable.
 //

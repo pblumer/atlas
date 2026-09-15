@@ -37,7 +37,7 @@ func asUser(h http.Handler, method, path, body, tok string) *httptest.ResponseRe
 	return rec
 }
 
-// The acceptance suite for ADR-draft-cleaning-up-the-decision-store: a decision
+// The acceptance suite for ADR-0336: a decision
 // deployment can be removed, under the guard ADR-0329 wrote down before the route
 // existed.
 //

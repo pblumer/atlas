@@ -1,4 +1,4 @@
-# ADR-DRAFT: Cleaning up the decision store
+# ADR-0336: Cleaning up the decision store
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -213,7 +213,7 @@ func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions) {
 // UndeployDecision removes a decision deployment from the registry and leaves the
 // two "newest model providing this decision" pointers exactly as a restart would
 // build them — which is the only definition of correct available here
-// (ADR-draft-cleaning-up-the-decision-store).
+// (ADR-0336).
 //
 // Removing the key is the easy half. The hard half is that both pointers are
 // last-write-wins: each holds *the newest* provider and keeps no history, so a

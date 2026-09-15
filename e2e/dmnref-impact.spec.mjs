@@ -94,7 +94,7 @@ test("the count covers what is named and what is only counted", async ({ page })
 });
 
 // Which deployed version of a decision the Console offers to remove
-// (api/web/decision-cleanup.js, ADR-draft-cleaning-up-the-decision-store). The
+// (api/web/decision-cleanup.js, ADR-0336). The
 // server decides; this is the affordance that keeps a reader from clicking into a
 // refusal, and it mirrors the server's two guards rather than approximating them.
 

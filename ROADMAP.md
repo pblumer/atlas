@@ -417,7 +417,7 @@ The control-flow basics most real models use.
   model file can both be removed, under that rule plus one it did not foresee — the
   current version of a decision cannot go while older ones remain, because the
   version counter is derived from what survives
-  ([ADR-draft-cleaning-up-the-decision-store](docs/adr/draft-cleaning-up-the-decision-store.md)).
+  ([ADR-0336](docs/adr/0336-cleaning-up-the-decision-store.md)).
   Operations' decision page is where that happens, and it answers "what is pinned to
   this version" for the first time.
   **Decision binding landed** ([ADR-0063](docs/adr/0063-dmn-decision-binding.md)):

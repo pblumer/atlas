@@ -332,7 +332,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Fetch a deployed decision's DMN XML — the exact source the runtime registry was built from, not the model file as it stands now", tag: "Decisions", role: roleAny,
 			resp: xmlBody("DMN XML")}},
 		{"DELETE", "/api/v1/decision-deployments/{key}", s.handleDeleteDecisionDeployment, apiOp{
-			summary: "Remove a decision deployment. Refused with 409 while a deployed process definition is pinned to it — pins survive an instance ending, so a live count is not the test — and while it is the current version of a decision that has older versions still deployed (ADR-draft-cleaning-up-the-decision-store). Deleting one that is already gone succeeds",
+			summary: "Remove a decision deployment. Refused with 409 while a deployed process definition is pinned to it — pins survive an instance ending, so a live count is not the test — and while it is the current version of a decision that has older versions still deployed (ADR-0336). Deleting one that is already gone succeeds",
 			tag:     "Decisions", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/decisions/evaluate", s.handleTryDecision, apiOp{
 			summary: "Try a DMN model against sample inputs and get the temis trace back — what a decision returns and which rules fired, for the model in the request rather than anything deployed. Nothing is stored, keyed, or registered, and the DMN registry is untouched. With no decisionId it only describes what the model offers and its inputs. A model that does not compile comes back 200 with ok:false (ADR-0326)", tag: "Decisions", role: RoleModeler,
@@ -1338,7 +1338,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List the local DMN model store — one row per stored handle with what the model declares and whether any DMN reference points at it. A model nothing points at is reachable nowhere else, which is what this exists for (ADR-0330)",
 			tag:     "DMN References", role: RoleModeler, resp: jsonBody("Stored DMN models", tArray())}},
 		{"DELETE", "/api/v1/dmn-models/{ref}", s.handleDeleteDmnModel, apiOp{
-			summary: "Remove a stored DMN model file. Refused with 409 while any DMN reference points at the handle, because deleting it would leave them unresolved; a decision deployment's modelRef does not block, since that record carries its own XML and never reads the file (ADR-draft-cleaning-up-the-decision-store)",
+			summary: "Remove a stored DMN model file. Refused with 409 while any DMN reference points at the handle, because deleting it would leave them unresolved; a decision deployment's modelRef does not block, since that record carries its own XML and never reads the file (ADR-0336)",
 			tag:     "DMN References", role: RoleModeler, status: http.StatusNoContent}},
 		{"POST", "/api/v1/dmn-models", s.handleUploadDmnModel, apiOp{
 			summary: "Upload a DMN model file into the local model store and return its reference handle. ?handle= overwrites that model in place. Otherwise the handle is derived from ?name=: with ?from= present (the model handle this editing session opened, empty for a decision that has none) the derived handle must be free, or the upload is refused with 409 rather than silently forking a second copy (ADR-0222); without ?from= a taken handle is suffixed, which is the upsert an import or an agent wants", tag: "DMN References", role: RoleModeler, req: jsonBody("DMN XML", tObject()), resp: jsonBody("Stored model", tObject())}},

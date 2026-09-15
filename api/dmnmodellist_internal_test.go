@@ -199,7 +199,7 @@ func TestAReferenceSomebodyElseHoldsStillCountsAsOne(t *testing.T) {
 	}
 }
 
-// Removing a stored model (ADR-draft-cleaning-up-the-decision-store). ADR-0330 made
+// Removing a stored model (ADR-0336). ADR-0330 made
 // an unreferenced model visible; this is what an author does with it once they have
 // looked and decided it is finished.
 

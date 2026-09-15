@@ -171,7 +171,7 @@ type deployedDecisionResp struct {
 	Current bool `json:"current"`
 	// PinnedBy are the deployed process definitions that resolved a latest-bound
 	// reference to this deployment's key. It is what stops it being deleted
-	// (ADR-draft-cleaning-up-the-decision-store), so it is reported before the act
+	// (ADR-0336), so it is reported before the act
 	// rather than only in the refusal after it. Filled by the listing; absent on the
 	// rows a deploy echoes back, which are new and can be pinned by nothing.
 	PinnedBy []decisionPinRef `json:"pinnedBy,omitempty"`

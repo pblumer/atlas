@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Removing a decision deployment (ADR-draft-cleaning-up-the-decision-store).
+// Removing a decision deployment (ADR-0336).
 //
 // Every Deploy in the decision editor mints a version, and until now nothing could
 // take one back: the store only ever grew. ADR-0329 recorded, before any route

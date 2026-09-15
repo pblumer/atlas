@@ -1,5 +1,5 @@
 // Which deployed version of a decision may be removed, said in the Console
-// (ADR-draft-cleaning-up-the-decision-store).
+// (ADR-0336).
 //
 // The server decides; this only keeps a reader from clicking into a refusal, and
 // says which of the two refusals it would be. It is a pure function of the version

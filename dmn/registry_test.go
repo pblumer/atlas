@@ -26,7 +26,7 @@ func eligibilityModel(verdict string) string {
 }
 
 // TestUndeployDecisionLeavesTheRegistryAsARestartWould is the claim the whole
-// delete rests on (ADR-draft-cleaning-up-the-decision-store): after removing a
+// delete rests on (ADR-0336): after removing a
 // decision deployment, the registry must answer exactly what the surviving records
 // would produce on a fresh boot. Both pointers are last-write-wins with no history,
 // so this is the case that is easy to get wrong.
