@@ -628,6 +628,11 @@ const TOPNAV = {
     { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
     { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
+    // Where Atlas and the target systems disagree about who holds what
+    // (ADR-0334). Operations rather than Catalogue: maintaining a
+    // catalogue is authoring, and acting on a finding is repair — the three acts
+    // are the operator's role on the server too.
+    { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator" },
     { name: "Call activities", route: "#/operations/call-activities", role: "any" },
   ],
   tasks: [
@@ -946,6 +951,13 @@ function handbookHelp(path) {
   if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
+  // Reconciliation sits in Operations and is not an operations topic. A discrepancy
+  // is a disagreement about who holds what, and the operations chapter is about
+  // incidents — a token that is stuck. Pointing there would tell a reader that a
+  // finding is a malfunction, which is the one thing this whole slice takes pains to
+  // say it is not: nothing is broken, two records disagree, and a person decides.
+  // The examples chapter is where that is actually explained.
+  if (path.startsWith("#/operations/reconciliation")) return H("beispiele", "Reconciliation");
   if (path.startsWith("#/operations")) return H("betrieb", "Operations & incidents");
   // Panorama and Data each have a chapter of their own, and both are places a
   // person arrives at without having read anything: the landscape because it is
@@ -9309,6 +9321,10 @@ async function route() {
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/operations/reconciliation") {
+      const { viewReconciliation } = await import("./reconciliation.js");
+      return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/call-activities") return await viewCallActivities();
     if (path === "#/panorama/starmap") return await viewPanoramaStarmap();
     if (path === "#/panorama") return await viewPanoramaModels();
