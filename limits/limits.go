@@ -181,6 +181,32 @@ type Limits struct {
 	// grants themselves — that is what a person is being asked to authorise, and a
 	// report showing only the exceptions would ask them to approve a number.
 	InventoryReport int32
+
+	// Reconcile is one reconciliation message: what a target system was found to
+	// hold within a declared scope (ADR-draft-reconciliation).
+	Reconcile int64
+
+	// ReconcileObservations is how many rights one such reading may carry. A count,
+	// like the load's, and refused whole for a sharper reason than the load's: a
+	// truncated reading is a reading that is *not complete for its scope*, and this
+	// endpoint reads absence as a finding. Half a group's members reported as the
+	// whole group is a report that everybody in the other half has lost their
+	// access.
+	ReconcileObservations int32
+
+	// ReconcileReport is how many individually named findings one run's answer may
+	// carry, notes included. What a person can absorb is a number of lines, not a
+	// number of lines per category, so the two share this one.
+	ReconcileReport int32
+
+	// ReconcileJournal is how many disagreements may stand open at once. It is a
+	// ceiling on a *store* rather than on a message, which no other budget here is,
+	// and it earns that: the journal grows with what the target systems disagree
+	// about, which is external input by a longer road. A run that would open more
+	// than this counts the rest and records none of them — a hundred thousand
+	// findings mean the scope or the catalogue is wrong, and filling a disk with
+	// them helps nobody read the first ten.
+	ReconcileJournal int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -221,6 +247,16 @@ func Default() Limits {
 		InventoryLoad:         8 << 20,
 		InventoryObservations: 2_000,
 		InventoryReport:       2_000,
+		// A reconciliation reads in scopes rather than in whole systems, so its
+		// message is the same size as a load's. The report is shorter than a load's
+		// on purpose: a load's body is what somebody authorises and has to be read
+		// whole, while a reconciliation is read repeatedly and what matters is the
+		// first screen of it. Ten thousand open findings is already a broken
+		// catalogue rather than a governance backlog.
+		Reconcile:             8 << 20,
+		ReconcileObservations: 2_000,
+		ReconcileReport:       500,
+		ReconcileJournal:      10_000,
 	}
 }
 

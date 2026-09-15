@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Abgleich (ADR-draft-reconciliation)
+  — täglich fragen, ob noch stimmt, was Atlas über die Zugriffsrechte behauptet.
+
+  Das Inventar behauptet etwas, das Atlas nicht garantieren kann: dass ein Recht in
+  einem anderen System besteht. Zielsysteme werden ausserhalb von Atlas verändert —
+  jemand entfernt eine Mitgliedschaft im Eiltempo, ein Skript räumt auf, eine Fusion
+  verschiebt Menschen. Die Behauptung verfällt also, und zwar lautlos. Ein Inventar,
+  das niemand prüft, ist eine Liste von Dingen, die einmal wahr waren.
+
+    Timer-Start "täglich"            timeCycle R/P1D (ADR-0051)
+     -> [entra delta-groups]         vollständige Aufzählung -> `gruppen`
+     -> [REST POST /api/v1/reconciliation]  meldet Bereich + Beobachtungen -> `bericht`
+     -> Ende
+
+  ────────────────────────────────────────────────────────────────────────────────
+  DER BEREICH IST DIE ZUSICHERUNG, UND ER IST DER GANZE UNTERSCHIED.
+
+  Die Bestandsaufnahme meldet, was sie *gefunden* hat, und nie, was sie nicht
+  gefunden hat: Schweigen bedeutet dort nichts. Hier bedeutet Schweigen etwas — ein
+  Recht, das Atlas führt und das die Lesung nicht nennt, wird als fehlend gemeldet.
+  Das ist der Zweck des Abgleichs, und es macht dieselbe Stille dort gefährlich, wo
+  sie vorher harmlos war.
+
+  Deshalb nennt jeder Lauf in `refs` die Referenzen, die er **vollständig** gelesen
+  hat. Innerhalb davon wird in beide Richtungen verglichen; ausserhalb wird nichts
+  geschlossen — ein Recht, dessen Produkt nicht im Bereich liegt, ist nicht fehlend,
+  sondern ungeprüft.
+
+  Atlas kann diese Zusicherung nicht nachprüfen. Sie einzuhalten ist Aufgabe dieses
+  Modells: die Variable `bereich` unten und die Filterung der Beobachtungen auf
+  genau diese Gruppen gehören zusammen. Wer `bereich` erweitert, ohne die Lesung zu
+  erweitern, meldet den Verlust von Rechten, die nie gelesen wurden.
+  ────────────────────────────────────────────────────────────────────────────────
+
+  DER ABGLEICH VERÄNDERT NICHTS. Er schreibt kein Recht und greift auf kein
+  Zielsystem zu; er hält fest, worüber die beiden Seiten uneinig sind.
+
+  Gehandelt wird einzeln und von Hand, über die drei Routen:
+    POST /api/v1/reconciliation/{id}/adopt         übernehmen (Ursprung `adopted`)
+    POST /api/v1/reconciliation/{id}/deprovision   im Zielsystem entziehen
+    POST /api/v1/reconciliation/{id}/revoke        die unbelegbare Aufzeichnung streichen
+
+  Ein System, das Rechte still entfernt, die es nicht vergeben hat, sperrt beim
+  ersten schlechten Lauf einen Betrieb aus — und die Lesung ist genau der Teil, bei
+  dem Atlas am wenigsten sicher sein darf: sie ist die Antwort eines Workers über
+  ein fremdes System.
+
+  WAS DER BERICHT WERT IST — ZUERST ZU LESEN:
+    bericht.opened / closed   was sich seit dem letzten Blick geändert hat. Alles
+                              andere im Bericht ist ein Zustand; diese zwei sind
+                              die Änderung.
+    bericht.warning           gesetzt, wenn die Lesung gar nichts enthielt und
+                              deshalb alles als fehlend gilt. Das ist vertragstreu
+                              und sieht genauso aus wie ein kaputter Worker.
+    bericht.findings          die Uneinigkeiten, je mit Begründung.
+
+  Voraussetzungen beim Betreiber:
+    * Ein Entra-Worker (hier "contoso") mit Group.Read.All — lesend genügt.
+    * Ein REST-Worker namens "atlas" mit einem API-Token des Scopes "inventory".
+      Dieser Scope erreicht den Abgleichslauf und die Bestandsaufnahme — und
+      ausdrücklich keine der drei Handlungen: jede von ihnen ändert entweder, was
+      Atlas über den Zugriff eines Menschen behauptet, oder nimmt Zugriff weg.
+      Keines davon gehört hinter einen Zugang, den ein Modell trägt.
+    * Gepflegte Zielverweise am Produkt, wie bei der Bestandsaufnahme.
+
+  NICHT GEPRÜFT: ob Graph bei einer vollständigen Erstaufzählung von /groups/delta
+  die Mitgliedschaften als `members@delta` mitliefert. Dieselbe offene Frage wie bei
+  der Bestandsaufnahme, und hier wiegt sie schwerer: bleiben die Mitglieder aus,
+  meldet der Lauf jedes geführte Recht im Bereich als fehlend. `bericht.warning`
+  sagt in genau diesem Fall, dass eine leere Antwort weit häufiger eine gescheiterte
+  Lesung ist als ein geleerter Betrieb — das ist der Satz, der davor steht, dass
+  jemand auf vierhundert Befunde hin handelt.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_abgleich"
+                  targetNamespace="http://atlas/examples">
+  <bpmn:process id="proc_abgleich" name="Abgleich: Entra-Gruppen gegen das Inventar" isExecutable="true">
+    <bpmn:documentation>Vergleicht täglich, was Atlas über Zugriffsrechte führt, mit dem, was ein Entra-Mandant tatsächlich hält, und hält die Unterschiede fest.
+
+Der Lauf verändert nichts. Er schreibt kein Recht und greift auf kein Zielsystem zu — er meldet, worüber die beiden Seiten uneinig sind. Gehandelt wird einzeln, von einem Menschen, über drei eigene Routen.
+
+Der Bereich ist die Zusicherung: `bereich` nennt die Gruppen, die dieser Lauf vollständig liest, und die Beobachtungen werden auf genau diese gefiltert. Innerhalb davon bedeutet Abwesenheit etwas, ausserhalb wird nichts geschlossen. Wer `bereich` erweitert, ohne die Lesung zu erweitern, meldet den Verlust von Rechten, die nie gelesen wurden.
+
+Anders als der Verzeichnis-Abgleich führt dieser Prozess keinen Cursor: er liest einen Stand, keine Änderungsfolge, und ein Stand muss vollständig sein, um vergleichbar zu sein.
+
+Worker-only (ADR-0172): der Mandanten-Zugang liegt nie in der Engine.</bpmn:documentation>
+
+    <bpmn:startEvent id="start_taeglich" name="täglich">
+      <bpmn:documentation>Wiederholungszyklus R/P1D (ADR-0051). Täglich ist die Häufigkeit, mit der eine stillschweigend entstandene Berechtigung unentdeckt bleibt — wer sie anders braucht, ändert sie hier und nicht im Quelltext.
+
+Anders als bei der Bestandsaufnahme ist ein Timer hier richtig: die Bestandsaufnahme trägt tausende dauerhafte Datensätze ein und braucht einen Menschen davor; der Abgleich stellt nur fest und handelt nicht.</bpmn:documentation>
+      <bpmn:outgoing>f_start_gruppen</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="timer_taeglich">
+        <bpmn:timeCycle>R/P1D</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+
+    <bpmn:serviceTask id="gruppen_lesen" name="Gruppen und Mitglieder lesen">
+      <bpmn:documentation>delta-groups ohne deltaLink: eine vollständige Aufzählung samt Mitgliedschaften. Der leere Cursor ist hier kein Sonderfall, sondern die Bedingung — ein Vergleich braucht einen ganzen Stand, keine Änderungen seit gestern.
+
+maxUsers begrenzt den Lauf am Worker. Ein zu grosser Mandant scheitert dort, statt eine gekürzte Menge zu liefern — und eine gekürzte Menge wäre hier schlimmer als anderswo: sie ist ein Bereich, der nicht vollständig gelesen wurde, und würde jedes ungelesene Recht als verloren melden.
+
+Schreibt: gruppen = { value, deltaLink }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:entraConnector connector="contoso" operation="delta-groups"
+                              select="id,displayName"
+                              maxUsers="2000"
+                              resultVariable="gruppen" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_start_gruppen</bpmn:incoming>
+      <bpmn:outgoing>f_gruppen_melden</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="abgleich_melden" name="Abgleich melden">
+      <bpmn:documentation>POST /api/v1/reconciliation. Meldet den Bereich und die Beobachtungen darin, und bekommt zurück, worüber die beiden Seiten uneinig sind.
+
+`bereich` ist die Liste der Gruppen-Objekt-Ids, die diese Installation abgleicht — hier zwei Platzhalter, die durch die eigenen ersetzt werden. Objekt-Ids und nicht Anzeigenamen: ein Name wird umbenannt, eine Objekt-Id nicht, und der Katalog vergleicht wörtlich.
+
+Dieselbe Liste steht in `refs` und filtert die Beobachtungen. Das ist Absicht und keine Wiederholung: `refs` ist die Zusicherung, der Filter ist ihre Einhaltung, und sie auseinanderlaufen zu lassen ist die eine Art, wie dieses Modell falsche Befunde erzeugen kann.
+
+Verschachtelte Gruppen erscheinen als Mitglied und lösen sich auf kein Konto auf; sie werden als `no-subject` gemeldet und nicht stillschweigend verworfen.
+
+Schreibt: bericht = { system, scope, counts, opened, closed, notRecorded, findings, notes, reason, warning }.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="rest" />
+        <zeebe:taskHeaders>
+          <zeebe:header key="connector" value="atlas" />
+          <zeebe:header key="method" value="POST" />
+          <zeebe:header key="path" value="/api/v1/reconciliation" />
+        </zeebe:taskHeaders>
+        <zeebe:ioMapping>
+          <zeebe:input source="=[&quot;GRUPPEN-OBJEKT-ID-1&quot;, &quot;GRUPPEN-OBJEKT-ID-2&quot;]" target="bereich" />
+          <zeebe:input source="={system: &quot;entra&quot;, refs: bereich, observations: flatten(for g in gruppen.value return (if list contains(bereich, g.id) then (for m in (if get value(g, &quot;members@delta&quot;) = null then [] else get value(g, &quot;members@delta&quot;)) return {subject: m.id, ref: g.id}) else []))}" target="body" />
+          <zeebe:output source="=body" target="bericht" />
+        </zeebe:ioMapping>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f_gruppen_melden</bpmn:incoming>
+      <bpmn:outgoing>f_melden_ende</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:endEvent id="ende" name="Bericht liegt vor">
+      <bpmn:documentation>`bericht` steht in den Instanzvariablen. Zuerst zu lesen sind `opened` und `closed` — was sich seit dem letzten Blick geändert hat. Dann `warning`, falls gesetzt. Erst dann die einzelnen Befunde.
+
+Ein Lauf ohne Uneinigkeit schreibt nichts ins Journal. Das ist Absicht: hundert gleiche Lesungen müssen nichts erzeugen, sonst liest das Journal niemand.</bpmn:documentation>
+      <bpmn:incoming>f_melden_ende</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f_start_gruppen" sourceRef="start_taeglich" targetRef="gruppen_lesen" />
+    <bpmn:sequenceFlow id="f_gruppen_melden" sourceRef="gruppen_lesen" targetRef="abgleich_melden" />
+    <bpmn:sequenceFlow id="f_melden_ende" sourceRef="abgleich_melden" targetRef="ende" />
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="proc_abgleich">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start_taeglich">
+        <dc:Bounds x="152" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="148" y="225" width="45" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_gruppen" bpmnElement="gruppen_lesen">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_melden" bpmnElement="abgleich_melden">
+        <dc:Bounds x="400" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="552" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel><dc:Bounds x="526" y="225" width="89" height="14" /></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f_start_gruppen" bpmnElement="f_start_gruppen">
+        <di:waypoint x="188" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_gruppen_melden" bpmnElement="f_gruppen_melden">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_melden_ende" bpmnElement="f_melden_ende">
+        <di:waypoint x="500" y="200" /><di:waypoint x="552" y="200" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

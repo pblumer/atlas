@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The inventory can now be checked rather than trusted.** An entitlement asserts that a
+  right exists in another system — an assertion Atlas cannot guarantee, because target
+  systems are changed from outside it. So it decays silently, and an inventory nobody
+  checks is a list of things that were once true.
+
+  `POST /api/v1/reconciliation` compares one reading of one target system against the
+  inventory and finds both directions: rights held that nothing here granted, and rights
+  recorded that the target system does not have. The second is the one that corrupts the
+  evidence, because an inventory wrong that way answers "who had access when" with a
+  confident falsehood.
+
+  The whole design hangs on one required field. A commissioning load reports what it
+  *found* and never what it did not; reconciliation reads absence as a finding, which
+  makes the same silence dangerous. So a run names in `refs` the references it read
+  **completely**, and outside that scope nothing is concluded — a right outside it is not
+  missing, it is unexamined. There is no default: "nothing" is useless and "everything" is
+  a guess that turns a truncated read into a report that the estate has lost its access.
+
+  It records **transitions, not samples**: ten runs over one disagreement make one record,
+  and the run where it goes away closes it. Nothing is ever acted on automatically — adopt
+  (`origin: adopted`, the first writer that origin has had), deprovision through the
+  product's own process, or revoke the record are three separate calls by a person, and
+  none of them is reachable with the worker credential that may run the comparison.
+  `examples/abgleich.bpmn` is the modelled process.
+
 - **The inventory is taken before it is enforced.** `model.OriginLegacy` has existed since
   the portal's three models were decided and has had no writer, which meant the inventory
   could only ever contain what Atlas itself had granted. On the day an installation goes

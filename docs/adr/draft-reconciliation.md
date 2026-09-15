@@ -1,0 +1,214 @@
+# ADR-DRAFT: Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete
+
+- **Status:** Accepted
+- **Implementation:** Landed
+- **Date:** 2026-09-15
+- **Deciders:** Atlas maintainers
+- **Open question:** Whether the whole-inventory walk this performs stays workable as the
+  entitlement family grows. It is measured here only in the sense that it is now the one
+  place doing it, off the loop, once per run — nobody has run it against a million rows.
+  The fix if it hurts is a by-item index, named below, and it is the wrong trade until
+  somebody has the number.
+- **Question checked:** 2026-09
+
+## Context and problem statement
+
+The inventory asserts something Atlas cannot guarantee. [ADR-0312](0312-portal-catalogue-order-inventory.md)
+says so in as many words: an entitlement "asserts what *is true in another system* — an
+assertion Atlas cannot guarantee, because target systems are changed outside Atlas."
+
+So it decays. An administrator removes a group membership in a hurry; a script tidies up;
+a merger moves people wholesale. Every one of those makes the inventory wrong, silently,
+and an inventory nobody checks is a list of things that were once true. The
+commissioning load (ADR-draft-inventory-commissioning-load) filled it; nothing since has
+asked whether it is still right.
+
+**The question this record answers: how does Atlas compare what it believes against what
+a target system holds, without the comparison itself becoming the thing that locks people
+out?**
+
+## Decision drivers
+
+- Atlas must not enforce. A system that silently removes privileges it did not grant
+  locks a company out on its first bad reading, and the reading is the part Atlas is
+  least entitled to be confident about — it is one worker's answer about somebody else's
+  system.
+- Nothing reaches a target system except through a modelled process (ADR-0312).
+- A journal of samples is a journal nobody reads. `api/panorama/drift.go` already argues
+  this and stores transitions instead; the same shape applies, durably.
+- The comparison must not hold the single writer (I3, [ADR-0239](0239-off-loop-queries.md)).
+- Every ceiling on external input reads a named budget — including, here, a ceiling on a
+  *store*, which is new.
+
+## The one hard problem: silence
+
+A commissioning load reports what it **found** and never what it did not, and that is
+load-bearing: a batch is one system's partial answer, and treating its silence as
+evidence of removal would revoke rights because a paginated read stopped early.
+
+Reconciliation is the exact opposite by necessity. **Absence is the finding.** A right
+Atlas records and the target system does not report is precisely what this exists to
+surface — and that makes the same silence dangerous in exactly the place the load was
+safe. A worker that returned half a group, reported as the whole group, is a report that
+everybody in the other half has lost their access.
+
+### Considered options
+
+1. **Whole-system runs.** One run covers everything a system holds, so absence inside it
+   is meaningful.
+2. **Scope by subject.** "This is everything Alice holds in system X."
+3. **Scope by reference.** "These are the complete memberships of these groups."
+
+**Chosen: three.** A run declares `refs` — the references it read *completely* — and the
+comparison happens only inside that scope. Outside it nothing is concluded: an
+entitlement whose item is not in scope is not missing, it is **unexamined**, and a
+reconciliation that could not tell those apart would report the whole inventory as wrong
+on its first partial read.
+
+Option 1 fails on arithmetic. A whole system does not fit in one message, so it pages —
+and a paged run is a run whose parts are each incomplete, which is the problem restated
+rather than solved. Option 2 is genuinely useful and answers a different question (the
+leaver check: is this person out of everything?). It is not built here, and the reason is
+that it needs a different promise from the caller — "I read everything this person has" —
+which no group-oriented export provides. It is the obvious follow-up.
+
+Option 3 matches how target systems actually export, and it matches what the catalogue
+already declares: `catalog.TargetRef` is the reference, and a group listing is exactly
+one complete scope.
+
+**`refs` is required and has no default.** The only candidates for a default are
+"nothing", which is useless, and "everything", which is a guess that turns a truncated
+read into a report that the estate has lost its access.
+
+**The promise is unverifiable, and that is stated rather than papered over.** Atlas
+cannot check that a caller read a group whole. There is one place where the temptation to
+add a heuristic is strong — a reading carrying *no observations at all* — and it is
+refused: a special case for zero protects against one shape of a broken reading and not
+against a worker that returned half, and a protection that does not generalise is a
+comfort blanket that makes the contract less clear. What is special about zero is the
+**prior**, not the logic, so the findings stand and the report says out loud that an empty
+answer is far more often a failed read than an emptied estate. Nothing acts on a finding
+without a person, and that sentence is what the person needs.
+
+## Two directions, and they are not symmetrical
+
+- **Unmanaged** — the target system grants it, Atlas has no record. Somebody has access
+  nobody here decided to give them. This is the direction people expect.
+- **Missing** — Atlas records it, the target system does not. Atlas is asserting
+  something untrue and will keep asserting it until somebody looks. **This is the one
+  that corrupts the evidence**, because an inventory wrong in this direction answers "who
+  had access when" with a confident falsehood.
+
+A missing finding carries the entitlement's **origin**, because it decides how alarming it
+is: an `ordered` right that vanished is a provisioning that came undone; a `legacy` one is
+quite possibly a group somebody tidied up years ago.
+
+## Transitions, not samples
+
+A run over an unchanged disagreement writes nothing but a moved last-seen moment. A
+disagreement that goes away **closes**. That is the shape `api/panorama/drift.go` argues
+for, here made durable because it is evidence rather than a reading surface.
+
+Closing is the half that is easy to get wrong: a run closes only findings it was entitled
+to conclude anything about — same system, and an item the scope covered. A run that closed
+every finding it did not happen to see would report a whole estate as repaired the first
+time somebody reconciled one group.
+
+A record keeps `Episodes` and how the previous one ended. A membership somebody keeps
+re-adding is itself a finding, and a journal of one record per identity hides it perfectly
+without that.
+
+### Why a sidecar rather than engine state
+
+The inventory is engine state because a *process* writes it: an order grants a right,
+through the log, and it must survive the retention deletion of the instance that produced
+it. Nothing in a process writes a discrepancy. It is produced by a comparison somebody
+runs, it is never replayed, and `applyToState` has no business with it — so it belongs
+with the other durable records that are not the engine's.
+
+The cost, stated rather than discovered: a discrepancy is not in the event log and cannot
+be reconstructed from it. What it records is a judgement about two states at one moment,
+and neither of those states is the engine's to replay.
+
+## Three actions, and why not four
+
+Nothing is acted on automatically. Each is a separate call, about one finding, by a
+person:
+
+| Action | For | What it does |
+|---|---|---|
+| **adopt** | unmanaged | Writes an entitlement with origin `adopted` — the first writer that origin has had since ADR-0312 named it |
+| **deprovision** | unmanaged | Runs the product's deprovisioning process. Never a direct worker call |
+| **revoke** | missing | Removes the record Atlas could not substantiate |
+
+`adopted` rather than `legacy`: both mean "Atlas did not grant this", and they differ in
+who said so. Legacy is what a commissioning load found before anybody was watching;
+adopted is a right that appeared afterwards and a person accepted. An audit that could not
+tell them apart could not tell a pre-existing estate from privileges that grew under
+Atlas's nose.
+
+**The fourth — re-provisioning a missing right — is deliberately absent.** Granting
+something is ordering it, ordering already exists, and it carries the approval rule the
+catalogue declares. An action here that started a provisioning process would be a second
+granting path with no approval in it: the thing this whole portal is built to not have.
+
+**Deprovisioning uses the catalogue as it stands now**, and that is a weaker guarantee
+than an order's return has. A returned order line revokes by the release it was ordered
+against, frozen when it was placed, so a grant is undone by the rules in force when it was
+made. A right nobody ordered has no such release. There is nothing else to use, and
+refusing to deprovision anything unmanaged would leave the one case this exists for
+unreachable.
+
+### The credential split
+
+The comparison joins `apiScopeInventory`: a scheduled process may run it unattended,
+because it writes no entitlement and reaches no target system. **The three actions are in
+no confined scope at all.** Each either changes what Atlas asserts about somebody's access
+or takes access away, and neither belongs behind a credential a model carries.
+
+## The population-sized read
+
+"What does Alice hold" is a prefix scan. **"Who holds VPN access" is not**, because the
+principal comes first in the entitlement key — and it has to, for the reason
+`entitlementPrefix` gives. So reconciliation walks the whole family, once per run, off the
+loop through a read view.
+
+This is ADR-0312's open question arriving: *"whether reconciliation against the target
+systems can be run over the whole estate without the comparison becoming a
+population-sized job... nothing yet reads the inventory whole, and the one place that will
+is the one nobody has built."* It is built, it is a population-sized job, and it is off the
+loop where population-sized jobs go. A by-item index would remove the walk and cost a
+second column family every write has to keep in step; that is the right trade the day
+somebody measures this walk hurting, and the wrong one before.
+
+### Consequences
+
+- **Positive:** `model.OriginAdopted` has a writer. The inventory can be checked rather
+  than trusted, in both directions. The journal answers "what is wrong now" and "how long
+  has it been wrong", which nothing in the estate could answer before.
+- **Negative / trade-offs accepted:** The soundness of every finding rests on a promise
+  Atlas cannot verify. The comparison reads the whole inventory. A finding is a statement
+  about one moment, and the inventory can move between the snapshot and the action taken
+  on it — the action is idempotent enough to survive that, but the finding is not a lock.
+  `ReconcileJournal` is a ceiling on a store rather than on a message, which is a new
+  shape here and one an operator has to understand rather than infer.
+- **Follow-ups / risks to watch:** Subject-scoped runs (the leaver check). A screen: the
+  findings are reachable only by API, which is the same gap the catalogue had before it got
+  one, and it is named here rather than left to be discovered. The open question above.
+
+## Implementation
+
+`api/reconcile.go` compares and concludes; `api/reconcileapply.go` folds a run into the
+journal and renders the report; `api/reconcilestore.go` is the durable journal;
+`api/reconcile_http.go` the two routes and `api/reconcileactions.go` the three acts.
+`state.queries.Entitlements` is the whole-family walk, added here and used only here.
+`examples/abgleich.bpmn` is the modelled process.
+
+## Links
+
+- [ADR-0312](0312-portal-catalogue-order-inventory.md) — the three models, the origins,
+  the reconciliation section this implements, and the open question it answers.
+- ADR-draft-inventory-commissioning-load — the inventory this compares against, and the
+  opposite treatment of silence.
+- [ADR-0239](0239-off-loop-queries.md) — why the whole-inventory walk runs off the loop.
+- [ADR-0194](0194-api-tokens.md) — the scope the comparison joins and the actions do not.

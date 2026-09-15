@@ -520,6 +520,23 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/inventory-load":  "the commissioning load is an act with somebody responsible for it, and its state route is only useful beside it",
 	"POST /api/v1/inventory-load": "entering years of evidence must follow a person reading the report, not a tool call made in passing",
 
+	// Reconciliation (ADR-draft-reconciliation). The run is omitted for a reason
+	// this table already knows: reporting a provisioning outcome is absent because
+	// an agent "must not be able to assert on a target system's behalf", and a
+	// reconciliation run asserts something stronger — that a scope was read
+	// *completely*. An agent that made that promise without having read anything
+	// would produce findings that are false and that a person then acts on.
+	//
+	// The three actions are the same class as returning an order line: they change
+	// somebody's access, or what Atlas says about it, and each records who decided.
+	// An agent is not who decided. The list is omitted for the reason GET
+	// /api/v1/inventory is — it reads other people's access.
+	"POST /api/v1/reconciliation":                  "a run asserts that a scope was read completely, which an agent cannot truthfully promise on a target system's behalf",
+	"GET /api/v1/reconciliation":                   "open findings are other people's access, read the same way the inventory is",
+	"POST /api/v1/reconciliation/{id}/adopt":       "accepting a right into the evidence store records who decided, and an agent is not who decided",
+	"POST /api/v1/reconciliation/{id}/deprovision": "taking somebody's access away is the act with a blast radius outside Atlas; it is a person's",
+	"POST /api/v1/reconciliation/{id}/revoke":      "removing a record Atlas could not substantiate is a judgement with an author",
+
 	// Workers + inbound subscriptions: infrastructure config, admin-owned.
 	// Where this server runs each Worker Type: the Modeler's picker reads it to
 	// badge a kind it is about to author (ADR-0183).

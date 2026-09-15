@@ -4353,6 +4353,67 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div class="rz-status" role="status" aria-live="polite"></div>
       </div>
 
+      <div class="bsp" id="bsp-abgleich">
+        <h4><span class="rz-emoji" aria-hidden="true">⚖️</span>
+          <span data-l="de">Abgleich: stimmt noch, was wir behaupten?</span><span data-l="en">Reconciliation: is what we claim still true?</span></h4>
+        <p class="bsp-tags">
+          <span class="tag err">Entra ID</span>
+          <span class="tag">delta-groups</span>
+          <span class="tag" data-l="de">Bereich</span><span class="tag" data-l="en">scope</span>
+          <span class="tag" data-l="de">handelt nie selbst</span><span class="tag" data-l="en">never acts</span>
+          <span class="tag">R/P1D</span>
+          <span class="tag">examples/abgleich.bpmn</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Das Inventar behauptet etwas, das Atlas nicht garantieren kann: dass ein Recht in
+              einem anderen System besteht. Zielsysteme werden ausserhalb verändert – jemand entfernt eine
+              Mitgliedschaft, ein Skript räumt auf – und die Behauptung verfällt lautlos. <b>Ein Inventar,
+              das niemand prüft, ist eine Liste von Dingen, die einmal wahr waren.</b></p>
+            <p data-l="de">Der Abgleich findet <b>zwei Richtungen</b>. Die erwartete: jemand hält etwas, das
+              niemand vergeben hat. Die andere ist die gefährliche: Atlas führt ein Recht, das es nicht mehr
+              gibt – und beantwortet damit die Frage „wer hatte wann Zugriff“ mit einer selbstsicheren
+              Unwahrheit. <b>Gehandelt wird nie automatisch</b>: übernehmen, im Zielsystem entziehen oder
+              die Aufzeichnung streichen sind drei einzelne Entscheidungen eines Menschen.</p>
+            <p data-l="en">The inventory asserts something Atlas cannot guarantee: that a right exists in
+              another system. Target systems are changed from outside – somebody removes a membership, a
+              script tidies up – and the assertion decays silently. <b>An inventory nobody checks is a list
+              of things that were once true.</b></p>
+            <p data-l="en">Reconciliation finds <b>two directions</b>. The expected one: somebody holds
+              something nobody granted. The other is the dangerous one: Atlas records a right that no longer
+              exists – answering "who had access when" with a confident falsehood. <b>Nothing is ever acted
+              on automatically</b>: adopt, deprovision or revoke are three separate decisions by a person.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Der ganze Entwurf hängt an einem Feld. Die Bestandsaufnahme meldet, was sie
+              <i>gefunden</i> hat – Schweigen bedeutet dort nichts. Hier bedeutet Schweigen etwas, und deshalb
+              nennt jeder Lauf in <code>refs</code> die Referenzen, die er <b>vollständig</b> gelesen hat.
+              Innerhalb davon wird verglichen, ausserhalb wird nichts geschlossen: ein Recht ausserhalb des
+              Bereichs ist nicht fehlend, sondern <b>ungeprüft</b>. Es gibt keinen Vorgabewert – „nichts“
+              wäre nutzlos, „alles“ eine Vermutung, die eine abgebrochene Lesung in die Meldung verwandelt,
+              der Betrieb habe seine Zugriffe verloren.</p>
+            <p data-l="de">Festgehalten werden <b>Übergänge, keine Messwerte</b>: zehn Läufe über dieselbe
+              Uneinigkeit ergeben einen Datensatz, und der Lauf, in dem sie verschwindet, schliesst ihn.
+              Das Journal zählt zudem Episoden – eine Mitgliedschaft, die jemand immer wieder neu setzt, ist
+              selbst der Befund.</p>
+            <p data-l="en">The whole design hangs on one field. A commissioning load reports what it
+              <i>found</i> – silence means nothing there. Here silence means something, so every run names in
+              <code>refs</code> the references it read <b>completely</b>. Inside that scope both directions are
+              compared; outside it nothing is concluded – a right outside the scope is not missing, it is
+              <b>unexamined</b>. There is no default: "nothing" is useless and "everything" is a guess that
+              turns a truncated read into a report that the estate has lost its access.</p>
+            <p data-l="en">It records <b>transitions, not samples</b>: ten runs over one disagreement make one
+              record, and the run where it disappears is the one that closes it. The journal also counts
+              episodes – a membership somebody keeps re-adding is itself the finding.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+      </div>
+
       <div class="bsp" id="bsp-entra-onboarding-selfservice">
         <h4><span class="rz-emoji" aria-hidden="true">🙋</span>
           <span data-l="de">Onboarding-Self-Service mit Freigabe</span><span data-l="en">Onboarding self-service with an approval</span></h4>
