@@ -68,16 +68,34 @@ jobs:
           fi
 
   check:
-    name: build · vet · fmt · race · cover
+    name: build · vet · fmt · race
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # Same reasoning as the e2e job below: the expensive failure mode is the hang,
     # not the error, and this job had no ceiling at all — a wedged test would have
-    # held a runner for the six-hour default. It takes ~14 minutes today, and the
-    # race step's per-package timeout is raised below, so the cap is what keeps that
-    # from turning one stuck package into hours of runner time.
-    timeout-minutes: 30
+    # held a runner for the six-hour default. The race step's per-package timeout is
+    # raised below, so the cap is what keeps one stuck package from turning into
+    # hours of runner time.
+    #
+    # The number below is a ceiling on a hang, and it stopped being one: the race
+    # step alone measured 24m30s on main, the coverage floor beside it another
+    # 3m59s, and 28m29s of a 30-minute budget is not a ceiling — it is a coin toss
+    # decided by runner variance, which is exactly how it began cancelling healthy
+    # runs (main, run 2160). The coverage floor is a *second full test run* that
+    # shares nothing with the race step but the checkout, so it is its own job now.
+    # Keep that rule: if a step here ever needs a second full pass over the tree, it
+    # wants a job, not a bigger number.
+    #
+    # The split was necessary and was not sufficient, and the arithmetic says why.
+    # It left this job at 24m30s of 30, which is 82% of its cap rather than the
+    # "under half" the split was aiming for — and the run that arrived next died at
+    # the *per-package* limit inside the step (FAIL api 1500.065s, on a runner where
+    # engine, conformance, mcp and state all ran two to six times slower than two
+    # hours earlier). Both limits bound the same run, so the inner one is raised
+    # below and this cap moves above it; raising either alone only changes which of
+    # the two reports the failure, and the job cap reports it with no output at all.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -117,13 +135,24 @@ jobs:
             exit 1
           fi
 
-      # The api package needs 8-10 minutes of Go's default 10-minute *per-package*
-      # timeout on its own, so the default leaves no headroom and the step fails on
-      # runner variance rather than on a defect: it passed at 526s on one run and
-      # timed out at 600s on the next, where the only change between them was a
-      # single line in an unrelated test file. Nothing is skipped or quarantined by
-      # raising it — every test still runs, and a real hang still ends the job well
-      # inside the job's 30-minute cap above.
+      # The api package needs most of this on its own, so a tight limit fails the step
+      # on runner variance rather than on a defect. That has now happened twice, at
+      # two different limits, and the second time is why the number below is 35:
+      #
+      #   - At Go's 10-minute default it passed at 526s on one run and timed out at
+      #     600s on the next, where the only change between them was a single line in
+      #     an unrelated test file.
+      #   - At 25m it timed out at 1500s on a run where the same package had taken
+      #     1254s two hours earlier. That runner was slower across the board, not
+      #     just here: engine 82s → 219s, conformance 8s → 45s, mcp 19s → 48s,
+      #     state 4s → 17s. Nothing in the diff touched any of them.
+      #
+      # Nothing is skipped or quarantined by raising it — every test still runs, and
+      # a real hang still ends the job inside the job's cap above.
+      #
+      # The number buys headroom; it does not fix the cause. The api package is most
+      # of the 24m30s this step measures on main, and a limit raised twice is a
+      # package that wants splitting or parallelising rather than a third raise.
       #
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
@@ -137,10 +166,7 @@ jobs:
           # Deliberately not in `make race`: a contributor's kernel may have no Landlock
           # at all, and there the skip is the correct answer rather than a failure.
           ATLAS_SANDBOX_E2E: required
-        run: go test -race -timeout=25m ./...
-
-      - name: Coverage floor (>= 95%, ADR-0018)
-        run: ./scripts/check-coverage.sh 94
+        run: go test -race -timeout=35m ./...
 
       # Smoke-run the benchmark harness (programme B): one iteration each, just to
       # prove it compiles and executes. No performance threshold is enforced on PR
@@ -148,6 +174,48 @@ jobs:
       # baseline.
       - name: Benchmark harness smoke
         run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
+
+  # The repository-wide statement floor (ADR-0018), in its own job.
+  #
+  # It is here rather than beside the race step because it is a **second full run of
+  # the test suite** — instrumented for coverage instead of for races — and the two
+  # share nothing but the checkout. Sequenced behind the race detector it added four
+  # minutes to a job that already needed twenty-five, and the pair outgrew the cap
+  # that was supposed to catch a hang; run side by side they each finish in a
+  # fraction of their own ceiling, and neither can cancel the other by being slow.
+  #
+  # It buys wall-clock too, which is the smaller reason and worth naming as the
+  # smaller one: the two runs now overlap rather than queue. What it does not change
+  # is what a contributor does — `make check` is still build, vet, fmt, race and
+  # cover in sequence, because one laptop has one set of cores and splitting there
+  # would buy nothing.
+  cover:
+    name: cover · statement floor
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    # Thirty, and not the twenty this job was first given, because twenty was a
+    # guess and the first run measured it: 11m04s — with the api package cut short
+    # at Go's default per-package limit rather than finishing. The real figure is
+    # that plus however long api needs beyond ten minutes, which nothing has
+    # measured yet.
+    #
+    # So this is a hang-catcher with headroom it can be shown to have, rather than a
+    # number sized to a figure nobody has. That is the whole lesson of the split
+    # above: a cap that sits a minute above the real duration is not a ceiling, it
+    # is a coin toss. Tighten it when there are green runs to tighten it against.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Coverage floor (>= 95%, ADR-0018)
+        run: ./scripts/check-coverage.sh 94
 
   # Everything a docs-only change can actually break, and nothing else.
   #

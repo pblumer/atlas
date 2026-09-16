@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "CI plumbing. It changes how this repository's checks are arranged, not anything an Atlas installation runs or a reader of the Console can act on. The rename it carries costs this repository nothing — main has no branch protection, so no check is required by name — and where a fork has added one, that is a note for whoever administers it, which belongs in the CHANGELOG they read and not in a product feed."
+}

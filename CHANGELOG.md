@@ -12,6 +12,54 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A product manager maintains the catalogue over MCP.** The portal's catalogue was
+  the one substantial surface an agent could not reach. The omission was recorded and
+  deliberate — a tool is a public contract, and the catalogue was half-built when the
+  note was written. It is not half-built any more: ordering, approvals, releases, the
+  inventory, reconciliation, search, categories, prices and eligibility all landed
+  since, and the note outlived its own argument.
+
+  Nine tools now cover what a product manager does: list, read, create and change
+  catalogues; list and save products; publish a release and read the releases; and
+  derive drafts from an ArchiMate model. Each is one HTTP operation and nothing more,
+  so an agent reads the same refusal a person reads — a publish that is refused still
+  answers with every problem at once, naming the product each belongs to.
+
+  Two things a screen teaches for free had to be said out loud, because an agent has
+  none. **Saving a product replaces it**, so a field left out is a field cleared —
+  every write tool says to read the record first and send it whole. And **nothing
+  deletes**: a product is withdrawn through the ordinary save, because an order placed
+  years ago and an entitlement still held both resolve through it, so there is no
+  delete tool to look for and not find.
+
+  Authority is the caller's and is not widened anywhere: the routes need the
+  `productmanager` role plus editor on the catalogue, and the adapter carries the
+  credential the tool call arrived with. Over the stdio adapter, which authenticates
+  with an API token, the read tools work and the write tools are refused — no API
+  token can carry `productmanager`, deliberately, so that no account is handed
+  catalogue control by an upgrade.
+
+- **A product can be saved without overwriting somebody else's edit.** The product
+  write stores the record it is given, which is right for a form that renders every
+  field and posts every field back, and dangerous for anything that changes one field
+  of a record it read a minute ago: the other maintainer's change disappears with
+  nothing to say it existed.
+
+  A product now carries a `revision`, and a caller may state the one it read. The
+  write is then refused as a conflict unless the stored product is still on it. It is
+  the same rule, spelled the same way, that the capability map has used since it was
+  built. Stating it is optional and omitting it replaces unconditionally, so the
+  Console — which builds its body from form fields and knows no revision — is
+  untouched.
+
+  It counts revisions rather than comparing the `updatedAt` beside it, and that is not
+  a preference: `updatedAt` is Unix nanoseconds, past the 2^53 where a float64 stops
+  representing integers exactly, so every client that decodes JSON numbers as doubles
+  would hand back a value a few hundred nanoseconds off and be told its own read was
+  stale.
+
 ### Changed
 
 - **A catalogue's people are chosen from a list instead of typed as an id.** The
@@ -78,6 +126,39 @@ _Changed_ / _Removed_ for each version.
   second thing to keep true, and the first place it would go wrong is the level
   nobody clicks.
 
+- **The coverage floor runs as its own CI job, so a healthy run stops being cancelled
+  for being slow.** The main check job carried two full passes over the test suite in
+  sequence: the race detector, and then the statement floor, which is the same suite
+  again with different instrumentation. On `main` those measured 24m30s and 3m59s —
+  28m29s of a 30-minute cap that exists to catch a hang, not to be a deadline.
+
+  A ceiling that close to the real figure is not a ceiling. It is a coin toss decided
+  by runner variance, and it started coming up tails: run 2160 on `main` was cancelled
+  with both test runs green, having been cut mid-way through the trailing benchmark
+  smoke. Nothing was wrong with the commit, and nothing in the log said so — a
+  cancelled job reads like a failure and is not one.
+
+  The floor is now a job beside the race detector rather than behind it. The two share
+  nothing but the checkout, so each finishes well inside its own cap and neither can
+  cancel the other by being slow; they also overlap instead of queueing, which is the
+  smaller benefit and the one worth naming as smaller. The main job is renamed to
+  `build · vet · fmt · race` accordingly, and a second check, `cover · statement
+  floor`, appears beside it. Nothing here requires either by name — `main` carries no
+  branch protection — so the rename costs nothing; a fork that has added required
+  checks is the one place it has to be told the two new names.
+
+  Nothing is skipped, relaxed or reordered: every test still runs, the floor is still
+  94% checked against the same script, and `make check` on a contributor's machine is
+  unchanged — one laptop has one set of cores, so splitting there would buy nothing.
+
+  Moving it also exposed a latent defect in the floor's own script, which the split
+  then had to fix: `check-coverage.sh` ran `go test` with no `-timeout`, so it used
+  Go's ten-minute default per package. `AGENTS.md` says in as many words that the
+  flag is not optional, because the `api` package runs for minutes on its own — and
+  the first run on a cold runner proved it, ending in `FAIL api 600.194s`, the
+  default to the millisecond. It carries `-timeout=25m` now, the same figure
+  `make race` and the documented command use, so `make cover` and CI agree.
+
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
   keeps the web UI buildless. CI regenerates it to check the commit is current — and
@@ -127,6 +208,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **CI failed a change on a slow runner rather than on a defect, for the second time.**
+  The race-detector step carries a per-package timeout because the `api` package needs
+  most of it on its own. At Go's 10-minute default that step once passed at 526s and
+  timed out at 600s on the next run, where the only change between them was a line in an
+  unrelated test file; the limit was raised to 25 minutes. It has now timed out at 1500s
+  on a run where the same package took 1254s two hours earlier — on a runner that was
+  slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
+  `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
+
+  The limit is 35 minutes, and the job's own cap moves with it. That pairing is the part
+  worth writing down: both bound the same run, so raising the inner one alone would have
+  changed nothing — the job is killed first, and the failure turns from "timed out" into
+  "cancelled" with no line saying why.
+
+  Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
+  inside the cap. **The number buys headroom and does not fix the cause** — the `api`
+  package is about twenty-one minutes of a twenty-nine-minute job under the race
+  detector, and a limit raised twice is a package that wants splitting or parallelising
+  rather than a third raise.
+
+  The command is written in six places — the Makefile, the CI workflow, and the three
+  documents that say what "done" means — and a comment asking the next person to change
+  all of them reaches only whoever reads that one file. A test now holds them to one
+  number, because a contributor whose local flag is the older, smaller one reproduces
+  neither failure and is told their change is fine.
 - **With authentication off, the portal could never find a catalogue at all.**
   Atlas's documented development and demo mode is `--auth=false`. Which catalogue
   somebody sees is resolved from the groups they carry — so with no principal there
