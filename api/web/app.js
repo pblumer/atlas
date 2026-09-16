@@ -1143,7 +1143,7 @@ function setChrome(appId, route) {
 
 // ---------- What's New ----------
 // The Console landing page surfaces recent, user-facing features from
-// /whats-new.json, which scripts/whats-new/gen.mjs generates from CHANGELOG.md and a
+// /whats-new.json, which the generator in scripts/whats-new builds from CHANGELOG.md and a
 // curated bilingual overrides file (see scripts/whats-new/README.md). It is DE/EN
 // with a local toggle, and every layer is collapsible so it stays compact: the whole
 // section is a <details>, only the newest few entries show at first, and each entry

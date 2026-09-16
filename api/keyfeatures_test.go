@@ -168,7 +168,8 @@ func TestKeyFeaturesTileIsReviewedAgainstTheChangelog(t *testing.T) {
 // changelogAddedTitles returns the bold headline of every bullet under a
 // "### Added" heading, in document order — which CHANGELOG.md keeps newest-first.
 //
-// It mirrors how scripts/whats-new/gen.mjs reads the same file, including the one
+// It mirrors how the feed generator in scripts/whats-new reads the same file,
+// including the one
 // non-obvious part: a bullet's bold headline may wrap across lines, so the bullet's
 // first paragraph is joined before the headline is cut out of it. Headlines are
 // matched by text rather than by the generator's slug so that this test does not

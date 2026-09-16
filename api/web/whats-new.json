@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The feed generator is Go, so the Go checks stop needing Node.",
+        "de": "The feed generator is Go, so the Go checks stop needing Node."
+      },
+      "summary": {
+        "en": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless.",
+        "de": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless."
+      },
+      "link": {
+        "label": "ADR-0012",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
+      }
+    },
+    {
       "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
       "version": "Unreleased",
       "date": null,
@@ -13,6 +31,24 @@
       "summary": {
         "en": "The corner said \"mich selbst\" to everybody.",
         "de": "The corner said \"mich selbst\" to everybody."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-javascript-script-task-could-not-start-under-the-strict-sa",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A JavaScript script task could not start under the strict sandbox.",
+        "de": "A JavaScript script task could not start under the strict sandbox."
+      },
+      "summary": {
+        "en": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it.",
+        "de": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it."
       },
       "link": {
         "label": "Changelog",
@@ -230,93 +266,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-decision-editor-says-when-a-knowledge-model-is-never-inv",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The decision editor points out a knowledge model nothing calls",
-        "de": "Der Entscheidungseditor meldet ein Knowledge Model, das niemand aufruft"
-      },
-      "summary": {
-        "en": "A knowledge model is a reusable calculation — a fee, a discount, a risk score — that decisions call instead of each repeating it. Two things could go wrong with one and nothing anywhere said so, because both deploy and both run. A knowledge model that nothing calls is simply never evaluated, and on the canvas it looks exactly like one that is called: the only difference is an arrow that is not there. And a decision that calls one without drawing that arrow works, while its diagram quietly omits the dependency — the same diagram that gets reviewed and printed into the decision's documentation. The editor now says both while the model is on screen, as a strip under the canvas and a warning mark on the shape itself; clicking a finding jumps to the element it is about. The second of the two also carries its repair: a Draw the requirement button that draws the missing arrow for you. Only that one — which decision ought to call a knowledge model nothing calls is yours to decide, not a button's. What it draws is left selected and the canvas keeps the keyboard, so either Ctrl+Z or the bin in its context pad takes it straight back. Both are warnings rather than errors, because each describes a model that runs, and both stay quiet when in doubt: a knowledge model counts as called if its name appears as a call anywhere in another element, so an unusual way of writing one costs a missed warning rather than a wrong one.",
-        "de": "Ein Knowledge Model ist eine wiederverwendbare Berechnung — eine Gebühr, ein Rabatt, ein Risikowert —, die Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Zwei Fehler waren dabei möglich, ohne dass irgendetwas darauf hinwies, denn beide lassen sich ausliefern und beide laufen. Ein Knowledge Model, das niemand aufruft, wird schlicht nie ausgewertet — und auf der Zeichenfläche sieht es genauso aus wie ein aufgerufenes: Der einzige Unterschied ist ein Pfeil, der fehlt. Und eine Entscheidung, die eines aufruft, ohne diesen Pfeil zu zeichnen, funktioniert, während ihr Diagramm die Abhängigkeit stillschweigend verschweigt — dasselbe Diagramm, das geprüft und in die Dokumentation der Entscheidung übernommen wird. Der Editor benennt nun beides, solange das Modell auf dem Bildschirm ist: als Streifen unter der Zeichenfläche und als Warnzeichen am Element selbst. Ein Klick auf einen Befund springt zum betroffenen Element. Der zweite der beiden bringt zudem seine Behebung mit: Die Schaltfläche «Draw the requirement» zeichnet den fehlenden Pfeil. Nur dieser Fall hat sie — welche Entscheidung ein bislang ungenutztes Knowledge Model aufrufen soll, entscheiden Sie, nicht eine Schaltfläche. Das Gezeichnete bleibt ausgewählt und die Zeichenfläche behält die Tastatur, sodass es sich mit Ctrl+Z oder dem Papierkorb im Kontextmenü direkt wieder entfernen lässt. Beides sind Warnungen und keine Fehler, denn jeder Fall beschreibt ein lauffähiges Modell. Und beides schweigt im Zweifel: Ein Knowledge Model gilt als aufgerufen, sobald sein Name irgendwo in einem anderen Element als Aufruf vorkommt — eine ungewöhnliche Schreibweise kostet also eine ausbleibende Warnung statt einer falschen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler and stay on the Overview (DRG) tab.",
-          "Draw a Knowledge Model and give it logic. The strip under the canvas appears at once: nothing calls it yet.",
-          "Open a decision's own tab and call the knowledge model from its expression, by name — for example fee(amount).",
-          "Back on Overview (DRG): the first finding is gone and a second has taken its place, because the decision now calls a model it does not require.",
-          "Press Draw the requirement on that finding — or draw the edge by hand from the knowledge model to the decision. Either way the strip disappears."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen und im Reiter «Overview (DRG)» bleiben.",
-          "Ein Knowledge Model zeichnen und ihm Logik geben. Der Streifen unter der Zeichenfläche erscheint sofort: Noch ruft es niemand auf.",
-          "Den eigenen Reiter einer Entscheidung öffnen und das Knowledge Model im Ausdruck beim Namen aufrufen, etwa fee(amount).",
-          "Zurück auf «Overview (DRG)»: Der erste Befund ist verschwunden, ein zweiter hat seinen Platz eingenommen, denn die Entscheidung ruft nun ein Modell auf, das sie nicht anfordert.",
-          "Auf dem Befund «Draw the requirement» drücken — oder die Kante von Hand vom Knowledge Model zur Entscheidung ziehen. So oder so verschwindet der Streifen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-class-diagram-can-say-which-members-anything-actually-us",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See on the class diagram which attributes are actually used",
-        "de": "Im Klassendiagramm sehen, welche Attribute tatsächlich genutzt werden"
-      },
-      "summary": {
-        "en": "You decide the fate of an attribute while looking at the class diagram — and until now the answer to \"does anything use this?\" was on another page. A control beside zoom and undo now shades the drawing: an attribute some deployed process writes by name comes forward, one none of them names recedes, and a class no process and nothing in the model uses is faint as a whole. Faint is deliberately careful: it means nothing names it, not that nothing uses it, because a process that reads the whole object never says which fields it then looks at. A business key is never faint, an enumeration is not faint for having no process use, and anything you have just added or renamed is left exactly as it was drawn.",
-        "de": "Über das Schicksal eines Attributs entscheidet man im Klassendiagramm — die Antwort auf \"wird das überhaupt genutzt?\" stand bisher auf einer anderen Seite. Eine Schaltfläche neben Zoom und Undo blendet die Nutzung jetzt ins Diagramm ein: Ein Attribut, das ein deployter Prozess namentlich schreibt, tritt hervor; eines, das keiner nennt, tritt zurück; eine Klasse, die weder ein Prozess noch das Modell verwendet, wird als Ganzes blass. Blass ist bewusst vorsichtig formuliert: Es heisst, dass niemand das Attribut namentlich nennt — nicht, dass es ungenutzt ist, denn ein Prozess, der das ganze Objekt liest, sagt nie, welche Felder er danach ausliest. Ein Business Key wird nie blass, eine Enumeration wird es nicht schon mangels Prozessverwendung, und was gerade hinzugefügt oder umbenannt wurde, bleibt unverändert dargestellt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model, and press the shading control in the canvas toolbar (below undo and redo).",
-          "The legend appears while the shading is on and says what bright and faint were read from.",
-          "Bright attributes are written by name by at least one deployed process; faint ones are named by none.",
-          "Press the control again to put the drawing back — nothing is marked at all, which is the diagram as it is when nobody has asked."
-        ],
-        "de": [
-          "Data öffnen, ein Informationsmodell wählen und in der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken (unterhalb von Undo und Redo).",
-          "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
-          "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
-          "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]
