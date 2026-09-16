@@ -1,4 +1,4 @@
-# ADR-DRAFT: The feed generator is Go, so the Go checks stop needing Node
+# ADR-0375: The feed generator is Go, so the Go checks stop needing Node
 
 - **Status:** Accepted
 - **Implementation:** Landed

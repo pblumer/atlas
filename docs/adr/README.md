@@ -460,6 +460,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Proposed | Not started |
 | [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Proposed | Not started |
 | [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
+| [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 
 ## The two states of a record
 

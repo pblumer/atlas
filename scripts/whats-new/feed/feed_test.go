@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The feed generator (ADR-draft-whats-new-in-go).
+// The feed generator (ADR-0375).
 //
 // It replaced a script in another language, and the output is a committed file CI
 // regenerates to check the commit is current — so the property that matters most

@@ -3,7 +3,7 @@
 //
 // It is the Go port of scripts/whats-new/gen.mjs, and the port is the point: the
 // feed was the only reason `go build`, `go vet`, the race job and the docs job
-// needed Node at all (ADR-draft-whats-new-in-go). Node stays where it is the
+// needed Node at all (ADR-0375). Node stays where it is the
 // technology — the browser end-to-end suite and the screenshot capture — and
 // leaves the four places where it was incidental.
 //
