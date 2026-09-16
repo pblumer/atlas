@@ -110,6 +110,24 @@
       }
     },
     {
+      "id": "a-person-can-have-a-face",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A person can have a face.",
+        "de": "A person can have a face."
+      },
+      "summary": {
+        "en": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names.",
+        "de": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
         "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-catalogue-s-appearance-is-set-on-the-screen-that-fills-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A catalogue's appearance is set on the screen that fills it.",
-        "de": "A catalogue's appearance is set on the screen that fills it."
-      },
-      "summary": {
-        "en": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it.",
-        "de": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it."
       },
       "link": {
         "label": "Changelog",

@@ -134,6 +134,16 @@ type User struct {
 	// the way in is what lets the lookup be an equality test.
 	DirectoryID string `json:"directoryId,omitempty"`
 
+	// AvatarSource says where this account's picture came from — AvatarUploaded or
+	// AvatarFromDirectory — and is empty when there is none (ADR-draft-user-avatar).
+	//
+	// On the record rather than derived from the bytes, because nothing in a JPEG
+	// says who chose it, and the difference is exactly what somebody looking at a
+	// wrong picture needs: whether to change it here or in the directory. It is
+	// also what stops a directory mirror from overwriting a picture a person put
+	// there themselves.
+	AvatarSource string `json:"avatarSource,omitempty"`
+
 	PasswordHash string `json:"passwordHash,omitempty"`
 	CreatedAt    int64  `json:"createdAt"`
 	UpdatedAt    int64  `json:"updatedAt"`
@@ -173,8 +183,12 @@ type publicUser struct {
 	Roles       []string `json:"roles"`
 	Disabled    bool     `json:"disabled"`
 	Source      string   `json:"source"`
-	CreatedAt   int64    `json:"createdAt"`
-	UpdatedAt   int64    `json:"updatedAt"`
+	// AvatarSource is empty when the account has no picture, which is what lets a
+	// list of people ask for the pictures that exist instead of a request per row
+	// that mostly 404s.
+	AvatarSource string `json:"avatarSource,omitempty"`
+	CreatedAt    int64  `json:"createdAt"`
+	UpdatedAt    int64  `json:"updatedAt"`
 }
 
 // toPublic strips the secret and normalizes Roles to a non-nil slice so the JSON
@@ -185,15 +199,16 @@ func (u User) toPublic() publicUser {
 		roles = []string{}
 	}
 	return publicUser{
-		ID:          u.ID,
-		Username:    u.Username,
-		Email:       u.Email,
-		DisplayName: u.DisplayName,
-		Roles:       roles,
-		Disabled:    u.Disabled,
-		Source:      u.Source,
-		CreatedAt:   u.CreatedAt,
-		UpdatedAt:   u.UpdatedAt,
+		ID:           u.ID,
+		Username:     u.Username,
+		Email:        u.Email,
+		DisplayName:  u.DisplayName,
+		Roles:        roles,
+		Disabled:     u.Disabled,
+		Source:       u.Source,
+		AvatarSource: u.AvatarSource,
+		CreatedAt:    u.CreatedAt,
+		UpdatedAt:    u.UpdatedAt,
 	}
 }
 

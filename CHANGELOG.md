@@ -135,6 +135,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A person can have a face.** Atlas showed people as strings: an approval said
+  `usr_4be5b4ad`, the portal's corner drew an empty circle, and a recipient picked
+  out of the directory was a name in a list of names. That is fine while somebody
+  works with three colleagues, and it stops being fine first exactly where the
+  mistake is expensive — ordering in somebody else's name, deciding somebody else's
+  request.
+
+  An account now carries a **picture**: `PUT /api/v1/users/{id}/avatar` takes the
+  bytes, `GET` serves them to anybody signed in, `DELETE` takes them away. It is
+  shown in the portal's corner beside whoever the order is for, and in the
+  console's user administration, where it is also uploaded and removed.
+
+  **Set by the account itself or by an administrator — not by an operator.** An
+  operator runs what is deployed, and changing the face a colleague wears to
+  everybody else is not running anything. Read by everybody signed in, which is the
+  point of having one: it is read beside a name in a task list, an approval and a
+  recipient picker, by colleagues rather than by administrators, and it discloses
+  less than the principals directory the same caller already reads.
+
+  **Stored beside the account record**, and two things follow without anybody
+  arranging them: a snapshot that carries the accounts carries their pictures, and
+  deleting an account deletes its picture — in the store rather than in a handler,
+  so every deletion path does it. Ids are assigned, so a file left behind is not
+  untidy but wrong: the next account handed that id would inherit a stranger's
+  face.
+
+  **PNG or JPEG, and deliberately not SVG.** A brand mark may be a vector — it is
+  drawn, it is scaled, a designer delivers one — and the serve headers make a
+  hostile one inert. A photograph has no such reason: it comes from a camera or
+  from a directory, and both give raster bytes. Accepting a document format with
+  scripting in it, in the one place where the uploader is *every account* rather
+  than an administrator, would be widening the surface for nothing. So the image
+  package now has a set per surface over one content check: which types a surface
+  takes is a policy and the surfaces differ, while whether bytes really are the
+  type they claim has one answer everywhere.
+
+  The account records **where the picture came from** — uploaded, or from the
+  directory — because nothing in a JPEG says who chose it, and that is exactly what
+  somebody looking at a wrong picture needs: whether to change it here or in the
+  directory. The directory half is not in this change: the photo will arrive the
+  way every other directory fact arrives, read through the Entra worker by a
+  process and reported here, because Atlas holds no tenant credential and must not
+  start holding one for a picture.
+
 - **An approver decides a request once, instead of deciding it twelve times.** An
   approval in Atlas is one user task per order line — the approval process is
   started multi-instance from the order's ready lines, so a workplace ordered as

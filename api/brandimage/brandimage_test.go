@@ -75,21 +75,45 @@ func TestServeNeutralisesTheImage(t *testing.T) {
 	}
 }
 
-// TestTheTwoTablesAgree: an extension that maps back to a different type would
-// serve a PNG as an SVG, which nosniff then pins.
-func TestTheTwoTablesAgree(t *testing.T) {
-	for ct, ext := range brandimage.ExtByType {
-		if back := brandimage.TypeByExt[ext]; back != ct {
-			t.Errorf("%s → %s → %s", ct, ext, back)
+// TestEverySetIsSelfConsistent: an extension that maps back to a different type
+// would serve a PNG as a JPEG, which nosniff then pins. Run over every set, so a
+// third one cannot arrive unchecked.
+func TestEverySetIsSelfConsistent(t *testing.T) {
+	for name, set := range map[string]brandimage.Set{"Mark": brandimage.Mark, "Photo": brandimage.Photo} {
+		if len(set.Exts()) == 0 {
+			t.Errorf("%s accepts nothing", name)
+		}
+		for _, ext := range set.Exts() {
+			ct, ok := set.TypeFor(ext)
+			if !ok {
+				t.Errorf("%s: stored extension %q has no media type", name, ext)
+				continue
+			}
+			if back, ok := set.ExtFor(ct); !ok || back != ext {
+				t.Errorf("%s: %s → %s → %s (%v)", name, ext, ct, back, ok)
+			}
+			// A type a set lists but the content check cannot answer for would be
+			// accepted on its Content-Type alone, which is the whole thing Valid exists
+			// to prevent.
+			if brandimage.Valid(ct, nil) {
+				t.Errorf("%s: %s calls empty bytes valid", name, ct)
+			}
 		}
 	}
-	if len(brandimage.Exts) != len(brandimage.ExtByType) {
-		t.Errorf("Exts has %d entries, ExtByType %d — a format nobody can read back, or one nobody lists",
-			len(brandimage.Exts), len(brandimage.ExtByType))
+}
+
+// TestAPictureOfAPersonIsNeverAVector.
+//
+// The one place the two sets differ in kind. An SVG is a document with scripting
+// in it; a mark has a reason to be one and a photograph does not, and the
+// uploader here is every account rather than an administrator.
+func TestAPictureOfAPersonIsNeverAVector(t *testing.T) {
+	if _, ok := brandimage.Photo.ExtFor("image/svg+xml"); ok {
+		t.Error("a person's picture may be an SVG, so every account may now upload a " +
+			"document with scripting in it")
 	}
-	for _, ext := range brandimage.Exts {
-		if _, ok := brandimage.TypeByExt[ext]; !ok {
-			t.Errorf("stored extension %q has no media type", ext)
-		}
+	// And the directory's own format is taken, or the Entra path is impossible.
+	if _, ok := brandimage.Photo.ExtFor("image/jpeg"); !ok {
+		t.Error("a person's picture may not be a JPEG, which is what Graph answers with")
 	}
 }

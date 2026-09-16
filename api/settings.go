@@ -141,7 +141,7 @@ func (s *Server) handleGetLogo(w http.ResponseWriter, _ *http.Request) {
 // re-validated against the bytes before anything is persisted.
 func (s *Server) handleSetLogo(w http.ResponseWriter, r *http.Request) {
 	ct := brandimage.NormalizeType(r.Header.Get("Content-Type"))
-	if _, ok := brandimage.ExtByType[ct]; !ok {
+	if _, ok := brandimage.Mark.ExtFor(ct); !ok {
 		httpapi.Error(w, http.StatusUnsupportedMediaType, "logo must be uploaded as image/png or image/svg+xml")
 		return
 	}

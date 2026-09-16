@@ -419,6 +419,9 @@ const state = {
   // caller who may order in somebody else's name. It is the list every member and
   // assignee picker in Atlas already reads (ADR-0073).
   people: [],
+  // meID is the account reading, which is what addresses its picture. Separate
+  // from meName because a name is for a person to read and an id is for a URL.
+  meID: '',
   // meName is whoever is reading, as a name rather than an id: the display name
   // the account carries, its username where it has none, and empty where there is
   // nobody to be. It is what the corner says when no recipient has been chosen —
@@ -574,6 +577,7 @@ async function load() {
 async function loadWhoIAm() {
   state.mayOrderForOthers = false;
   state.meName = '';
+  state.meID = '';
   state.people = [];
   let me;
   try {
@@ -591,6 +595,7 @@ async function loadWhoIAm() {
   // display name when one is chosen, so the two halves of one label would
   // otherwise be two different kinds of thing.
   state.meName = String(user.displayName || user.username || '').trim();
+  state.meID = String(user.id || '').trim();
   // With enforcement off there is nobody to be, exactly as the server has it.
   state.mayOrderForOthers = !me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin');
   if (!state.mayOrderForOthers) return;
@@ -1754,7 +1759,11 @@ function renderNav() {
       // saying "myself", which is what it said to everybody before: true, and true
       // of every reader alike, so it identified nobody.
       el('span', {}, whoLabel()),
-      el('span', { class: 'avatar', 'aria-hidden': 'true' }, '\u25cb')),
+      // The picture of whoever the label just named — the recipient when one was
+      // picked out of the directory, else the reader. A recipient typed by hand is
+      // not an id and has no picture; that falls back to the circle like any
+      // account without one, which is the same answer and needs no special case.
+      avatarNode(state.forWhom.trim() || state.meID)),
     // The round "?" goes to the handbook rather than opening a panel of its own:
     // the explaining is written there already, and a second copy would be a second
     // thing to keep true.
@@ -1768,6 +1777,26 @@ function renderNav() {
     el('a', { class: 'help', href: '/handbuch.html', target: '_blank', rel: 'noopener',
       title: t('nav.help'), 'aria-label': t('nav.help'),
       style: 'display:flex;align-items:center;justify-content:center;text-decoration:none' }, '?'));
+}
+
+// avatarNode is the circle in the corner, and the picture once there is one
+// (ADR-draft-user-avatar).
+//
+// The picture replaces the circle only after its bytes have arrived. Rendering an
+// <img> straight away would put a browser's broken-image icon in the corner for
+// every account without one — which is every account on the day this ships — and
+// a 404 here is not a failure but the ordinary answer to "has this person chosen
+// a picture".
+function avatarNode(userID) {
+  const circle = el('span', { class: 'avatar', 'aria-hidden': 'true' }, '\u25cb');
+  const id = String(userID || '').trim();
+  if (!id) return circle;
+  const img = el('img', {
+    class: 'avatar', alt: '',
+    onload: () => { if (circle.isConnected) circle.replaceWith(img); },
+  });
+  img.src = `/api/v1/users/${encodeURIComponent(id)}/avatar`;
+  return circle;
 }
 
 // whoLabel is the name in the corner: the chosen recipient, else the reader, else

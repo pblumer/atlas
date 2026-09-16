@@ -1716,7 +1716,87 @@ function userForm(u) {
       <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
       <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
-    </form></div>`;
+    </form>
+    ${isEdit ? avatarField(u) : ""}</div>`;
+}
+
+// avatarField is the picture, outside the form on purpose.
+//
+// Everything above it is one PATCH of the record; a picture is bytes on a route of
+// its own and lands the moment it is chosen. Inside the form it would sit beside a
+// Save button it does not obey — a person would pick a file, press Save, and be
+// told the user was updated while the picture they chose went nowhere.
+//
+// Offered only when editing. A picture belongs to an account, and there is no
+// account to hang it on until the create has returned an id.
+function avatarField(u) {
+  const src = `/api/v1/users/${encodeURIComponent(u.id)}/avatar`;
+  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--line); margin-top:14px; padding-top:12px">
+    <b>Picture</b>
+    <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
+      them — a task list, an approval, the portal's recipient picker. PNG or JPEG.
+      ${u.avatarSource === "entra"
+    ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
+    : ""}</p>
+    <div class="row" style="align-items:center">
+      <img class="user-avatar-preview" src="${esc(src)}" alt=""
+        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--line)" hidden>
+      <span class="user-avatar-none muted" style="font-size:12px" hidden>No picture.</span>
+      <input type="file" class="avatar-file" accept="image/png,image/jpeg" aria-label="Choose a picture">
+      <button class="btn ghost" type="button" data-avact="upload">Upload</button>
+      <button class="btn ghost" type="button" data-avact="remove">Remove</button>
+    </div>
+  </div>`;
+}
+
+// wireAvatarField hangs the two buttons off whichever edit form is open.
+//
+// The upload does not go through api(): that helper sends JSON, and this route
+// takes the bytes themselves under the Content-Type the file already carries —
+// the same shape the catalogue's brand mark uses, and for the same reason.
+function wireAvatarField(slot, reload) {
+  const box = slot.querySelector(".avatar-field");
+  if (!box) return;
+  const id = box.dataset.uid;
+  const img = box.querySelector(".user-avatar-preview");
+  const none = box.querySelector(".user-avatar-none");
+  // Whether there is a picture is answered by the image itself: it loads or it
+  // 404s. Reading avatarSource instead would believe a record over the bytes.
+  const has = () => { img.hidden = false; none.hidden = true; };
+  const hasNot = () => { img.hidden = true; none.hidden = false; };
+  img.addEventListener("load", has);
+  img.addEventListener("error", hasNot);
+  if (img.complete) (img.naturalWidth ? has : hasNot)();
+
+  box.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-avact]");
+    if (!b) return;
+    b.disabled = true;
+    try {
+      if (b.dataset.avact === "upload") {
+        const file = box.querySelector(".avatar-file").files[0];
+        if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
+        // No size check here. The server carries the limit, it is configurable, and
+        // a number copied into this page would go stale silently — its refusal
+        // names the actual figure.
+        const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
+          method: "PUT", body: file,
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let data = null;
+          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
+        }
+        toast("Picture updated", "ok");
+      } else {
+        await api("DELETE", `/api/v1/users/${encodeURIComponent(id)}/avatar`);
+        toast("Picture removed", "ok");
+      }
+      reload();
+    } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
+  });
 }
 
 // rolesFrom reads the ticked roles back off the form.
@@ -2226,8 +2306,15 @@ async function viewConsoleOrg() {
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
     : `<span class="pill ok"><span class="dot"></span>active</span>`;
+  // A face in the roster, and only for the accounts that have one. The record says
+  // so (avatarSource), which is why it is on the projection at all: a row per
+  // account that mostly 404s would be a request per row for nothing.
+  const userFace = (u) => (u.avatarSource
+    ? `<img src="/api/v1/users/${encodeURIComponent(u.id)}/avatar" alt=""
+         style="width:22px; height:22px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:6px">`
+    : "");
   const userRow = (u) => `<tr data-id="${esc(u.id)}">
-      <td><span class="chip">${esc(u.username)}</span>${
+      <td>${userFace(u)}<span class="chip">${esc(u.username)}</span>${
         me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}</td>
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
@@ -2368,6 +2455,7 @@ async function viewConsoleOrg() {
           ev.preventDefault();
           saveUser(u.id, new FormData(ev.target), reload, u);
         });
+        wireAvatarField(slot, reload);
         slot.scrollIntoView({ block: "nearest" });
         break;
       case "password": resetUserPassword(u, reload); break;

@@ -1620,6 +1620,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("User id", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", "/api/v1/users/{id}/avatar", s.handleGetAvatar, apiOp{
+			summary: "An account's picture; 404 when it has none. Readable by anybody signed in, which is the point of having one — a face beside a name in a task list, an approval or a recipient picker is read by colleagues, not by administrators", tag: "Users", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "The account's picture (PNG or JPEG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/users/{id}/avatar", s.handleSetAvatar, apiOp{
+			summary: "Set an account's picture from the raw body (image/png or image/jpeg; deliberately not SVG). The account itself or an administrator — not an operator: changing how a colleague appears to everybody else is not running what is deployed", tag: "Users", role: RoleUser, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG or JPEG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/users/{id}/avatar", s.handleDeleteAvatar, apiOp{
+			summary: "Remove an account's picture. Same gate as setting one: taking a face away changes how somebody appears as much as putting one there", tag: "Users", role: RoleUser, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/groups", s.handleListGroups, apiOp{
 			summary: "List user groups (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Groups", tArray())}},
