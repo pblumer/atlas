@@ -67,6 +67,96 @@
       }
     },
     {
+      "id": "the-approver-is-picked-and-picked-differently-depending-on-t",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The approver is picked, and picked differently depending on the kind.",
+        "de": "The approver is picked, and picked differently depending on the kind."
+      },
+      "summary": {
+        "en": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits.",
+        "de": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-accounts-and-groups-screen-shows-the-ids-it-asks-you-to-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The accounts and groups screen shows the ids it asks you to type.",
+        "de": "The accounts and groups screen shows the ids it asks you to type."
+      },
+      "summary": {
+        "en": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler.",
+        "de": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-catalogue-s-people-are-chosen-from-a-list-instead-of-typed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A catalogue's people are chosen from a list instead of typed as an id.",
+        "de": "A catalogue's people are chosen from a list instead of typed as an id."
+      },
+      "summary": {
+        "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
+        "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-product-form-is-filled-in-the-order-a-product-is-thought",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The product form is filled in the order a product is thought about.",
+        "de": "The product form is filled in the order a product is thought about."
+      },
+      "summary": {
+        "en": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket.",
+        "de": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-portal-s-catalogue-tab-is-called-the-catalogue",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The portal's catalogue tab is called the catalogue.",
+        "de": "The portal's catalogue tab is called the catalogue."
+      },
+      "summary": {
+        "en": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\".",
+        "de": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\"."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
       "version": "Unreleased",
       "date": null,
@@ -121,17 +211,17 @@
       }
     },
     {
-      "id": "ci-failed-a-change-on-a-slow-runner-rather-than-on-a-defect-",
+      "id": "a-catalogue-could-say-a-part-was-integral-and-optional-at-th",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "CI failed a change on a slow runner rather than on a defect, for the second time.",
-        "de": "CI failed a change on a slow runner rather than on a defect, for the second time."
+        "en": "A catalogue could say a part was integral and optional at the same time.",
+        "de": "A catalogue could say a part was integral and optional at the same time."
       },
       "summary": {
-        "en": "The race-detector step carries a per-package timeout because the api package needs most of it on its own.",
-        "de": "The race-detector step carries a per-package timeout because the api package needs most of it on its own."
+        "en": "The release keeps what a product is made of apart from what is offered alongside it, because they mean opposite things to a basket: an inclusion is ordered as a consequence of ordering the whole, and an option is an offer.",
+        "de": "The release keeps what a product is made of apart from what is offered alongside it, because they mean opposite things to a basket: an inclusion is ordered as a consequence of ordering the whole, and an option is an offer."
       },
       "link": {
         "label": "Changelog",
@@ -139,162 +229,17 @@
       }
     },
     {
-      "id": "with-authentication-off-the-portal-could-never-find-a-catalo",
+      "id": "the-console-showed-three-borders-that-were-never-drawn",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "The portal works with authentication off",
-        "de": "Das Portal funktioniert ohne Anmeldung"
+        "en": "The console showed three borders that were never drawn.",
+        "de": "The console showed three borders that were never drawn."
       },
       "summary": {
-        "en": "Atlas can be started without sign-in, and that mode is documented for development and demos. The service portal was the one screen it did not work on: which catalogue somebody sees is worked out from the groups they belong to, and with nobody signed in there are no groups — so the page found no catalogue and said one had not been assigned to you, to somebody there was no \"you\" to assign one to. The portal now shows the top-ranked catalogue when there is nobody to be. Nothing is loosened for a signed-in server: an administrator still sees their own catalogue rather than the top-ranked one, because being allowed to read every catalogue is not the same as being the audience for one. Ordering stays off in that mode, and the page now says so instead of offering a button that fails at the end: an order belongs to somebody, and without a sign-in there is nobody it belongs to and nobody to notify. The basket control is shown greyed out with that explanation, so the catalogue stays readable as what it is meant to show — how products are put together.",
-        "de": "Atlas lässt sich ohne Anmeldung starten; dieser Modus ist für Entwicklung und Vorführungen dokumentiert. Das Service-Portal war der eine Bildschirm, auf dem er nicht funktionierte: Welchen Katalog jemand sieht, wird aus seinen Gruppen ermittelt, und ohne Anmeldung gibt es keine Gruppen — die Seite fand also keinen Katalog und meldete, es sei einem keiner zugeordnet, an jemanden, den es gar nicht gibt. Das Portal zeigt jetzt den höchstrangigen Katalog, wenn es niemanden zu sein gibt. Für einen Server mit Anmeldung wird nichts gelockert: Eine Administratorin sieht weiterhin ihren eigenen Katalog und nicht den höchstrangigen, denn jeden Katalog lesen zu dürfen ist nicht dasselbe, wie das Publikum eines Katalogs zu sein. Bestellen bleibt in diesem Modus aus, und die Seite sagt das jetzt, statt eine Schaltfläche anzubieten, die am Ende scheitert: Eine Bestellung gehört jemandem, und ohne Anmeldung gibt es niemanden, dem sie gehört, und niemanden, der benachrichtigt wird. Das Bedienelement erscheint gesperrt mit genau dieser Begründung, damit der Katalog lesbar bleibt als das, was er zeigen soll — wie Produkte zusammengesetzt sind."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Portal",
-        "Console"
-      ]
-    },
-    {
-      "id": "editing-a-product-in-the-console-silently-cleared-five-of-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Editing a product no longer clears the fields you cannot see",
-        "de": "Ein Produkt zu bearbeiten löscht nicht mehr die Felder, die man nicht sieht"
-      },
-      "summary": {
-        "en": "Saving a product replaces it, and the product form does not show every field a product has — there is no box for variants, the orderable window, the search keywords, the eligible groups or the ceiling on how long a right may last. So correcting a price cleared all five and moved the creation date to today, and nothing said so: the save succeeded and everything on screen looked right, because the fields it dropped are the ones it never displays. The form now starts from the stored product and changes only what you edited. If you have edited products here before, it is worth checking the ones that carried keywords, eligible groups or a validity ceiling — those may have been lost on an earlier save.",
-        "de": "Ein Produkt zu speichern ersetzt es, und das Produktformular zeigt nicht jedes Feld, das ein Produkt hat — für Varianten, das Bestellfenster, die Suchbegriffe, die berechtigten Gruppen und die Höchstdauer einer Berechtigung gibt es kein Eingabefeld. Eine Preiskorrektur löschte daher alle fünf und setzte das Erstellungsdatum auf heute, ohne jeden Hinweis: Das Speichern gelang, und auf dem Bildschirm sah alles richtig aus, denn die verworfenen Felder sind genau jene, die nie angezeigt werden. Das Formular geht jetzt vom gespeicherten Produkt aus und ändert nur das Bearbeitete. Wer hier bereits Produkte bearbeitet hat, sollte jene prüfen, die Suchbegriffe, berechtigte Gruppen oder eine Höchstdauer trugen — diese können bei einem früheren Speichern verloren gegangen sein."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Console"
-      ],
-      "tutorial": {
-        "en": [
-          "Open the catalogue and a product whose keywords, eligible groups or validity ceiling you set through the API or an import.",
-          "Change something the form does show — the price, say — and save. Everything else stays as it was.",
-          "A product shared with another catalogue keeps its texts in languages this catalogue does not declare; the boxes you do see still clear a text when you empty them.",
-          "If a colleague changed the product while you had it open, the save is refused instead of overwriting them: nothing is saved, the page shows their version, and you reapply your change."
-        ],
-        "de": [
-          "Den Katalog und ein Produkt öffnen, dessen Suchbegriffe, berechtigte Gruppen oder Höchstdauer über die API oder einen Import gesetzt wurden.",
-          "Etwas ändern, das das Formular zeigt — etwa den Preis — und speichern. Alles Übrige bleibt unverändert.",
-          "Ein mit einem anderen Katalog geteiltes Produkt behält seine Texte in Sprachen, die dieser Katalog nicht führt; die sichtbaren Felder löschen einen Text weiterhin, wenn man sie leert.",
-          "Hat eine Kollegin das Produkt geändert, während es offen war, wird das Speichern abgewiesen statt zu überschreiben: Nichts wird gespeichert, die Seite zeigt deren Fassung, und man wendet die eigene Änderung erneut an."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the catalogue",
-          "de": "Katalog öffnen"
-        },
-        "route": "#/catalog"
-      }
-    },
-    {
-      "id": "a-javascript-script-task-could-not-start-under-the-strict-sa",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A JavaScript script task could not start under the strict sandbox.",
-        "de": "A JavaScript script task could not start under the strict sandbox."
-      },
-      "summary": {
-        "en": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it.",
-        "de": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-knowledge-model-s-expression-opened-unstyled",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A knowledge model's logic is readable again",
-        "de": "Die Logik eines Knowledge Models ist wieder lesbar"
-      },
-      "summary": {
-        "en": "A knowledge model is the piece of a decision model that holds a reusable calculation — a fee, a discount, a risk score — that several decisions call rather than each repeating it. Opening one showed its parts, but drawn as bare lines of text against the left edge of the page: no boxes, no separators, and the small edit buttons that belong to a section sitting on top of the expression instead of appearing when you point at it. Nothing was broken underneath — what you typed was saved, and what was saved was correct — but the layout gave no clue which part was the calculation, which were the parameters a caller passes, and which was the result. It now opens as the three-part box it is: the name, the F for FEEL beside the parameter list, the expression itself, and the result variable a decision binds when it calls this model. The line beneath the canvas also says what you are looking at — it used to explain the decision table under every view, including the three that are not one.",
-        "de": "Ein Knowledge Model ist der Teil eines Entscheidungsmodells, der eine wiederverwendbare Berechnung hält — eine Gebühr, einen Rabatt, einen Risikowert —, die mehrere Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Beim Öffnen waren zwar alle Bestandteile da, aber als nackte Textzeilen am linken Seitenrand: keine Kästen, keine Trennlinien, und die kleinen Bearbeiten-Schaltflächen eines Abschnitts lagen auf dem Ausdruck, statt erst beim Zeigen darauf zu erscheinen. Darunter war nichts kaputt — Eingetipptes wurde gespeichert, Gespeichertes war korrekt —, aber die Darstellung liess nicht erkennen, was die Berechnung ist, was die Parameter sind, die ein Aufrufer übergibt, und was das Ergebnis. Nun öffnet sich der dreiteilige Kasten, der es ist: der Name, das F für FEEL neben der Parameterliste, der Ausdruck selbst und die Ergebnisvariable, die eine Entscheidung bindet, wenn sie dieses Modell aufruft. Auch die Zeile unter der Zeichenfläche benennt jetzt die geöffnete Ansicht — sie erklärte zuvor unter jeder Ansicht die Entscheidungstabelle, auch unter den drei, die keine ist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
-          "On the Overview (DRG) tab, draw a Knowledge Model and give it a name — this is the reusable calculation.",
-          "Select it and pick Literal Expression from its wrench menu to give it logic.",
-          "Open its own tab beside Overview (DRG): F names the expression language, the list beside it holds the parameters a caller passes, and Result names the variable a decision binds.",
-          "Draw a knowledge requirement from a decision to the model so something actually invokes it — a model with no decision has nothing to deploy."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
-          "Im Reiter «Overview (DRG)» ein Knowledge Model zeichnen und benennen — das ist die wiederverwendbare Berechnung.",
-          "Es auswählen und im Werkzeugmenü «Literal Expression» wählen, um ihm Logik zu geben.",
-          "Den eigenen Reiter neben «Overview (DRG)» öffnen: «F» benennt die Ausdruckssprache, die Liste daneben hält die Parameter, die ein Aufrufer übergibt, und «Result» benennt die Variable, die eine Entscheidung bindet.",
-          "Von einer Entscheidung eine Knowledge-Requirement-Kante auf das Modell ziehen, damit es auch aufgerufen wird — ein Modell ohne Entscheidung hat nichts, was ausgeliefert werden könnte."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "With authentication off, a catalogue's appearance could not be set at all.",
-        "de": "With authentication off, a catalogue's appearance could not be set at all."
-      },
-      "summary": {
-        "en": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may.",
-        "de": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-catalogue-screen-said-an-empty-audience-means-everybody-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The catalogue screen said an empty audience means everybody. It means nobody.",
-        "de": "The catalogue screen said an empty audience means everybody. It means nobody."
-      },
-      "summary": {
-        "en": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all.",
-        "de": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all."
+        "en": "A style rule reading a colour name that nothing defines is not a rule with a default — the whole declaration is invalid and the browser discards it.",
+        "de": "A style rule reading a colour name that nothing defines is not a rule with a default — the whole declaration is invalid and the browser discards it."
       },
       "link": {
         "label": "Changelog",

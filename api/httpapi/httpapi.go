@@ -61,8 +61,14 @@ type Principal struct {
 	Roles    []string
 	// GroupIDs are the ids of the groups the user belongs to, snapshotted at login
 	// like Roles, so a scope's group grant resolves as a pure check against this
-	// slice without a store read (ADR-0180). A membership change
-	// takes effect on the user's next login.
+	// slice without a store read (ADR-0180).
+	//
+	// The snapshot is kept current rather than left to expire: adding or removing a
+	// member pushes the change into that account's live sessions (ADR-0185), so it
+	// applies from their next request. This comment said "takes effect on the user's
+	// next login" long after that stopped being true, which is the worse kind of
+	// stale documentation — it describes a delay an administrator would then wait
+	// for, and tell a colleague to sign out and in again for no reason.
 	GroupIDs []string
 	// Scope confines a principal authenticated by a machine credential to a named
 	// set of operations, whatever its roles would otherwise permit. Empty for a

@@ -1742,7 +1742,7 @@ function userForm(u) {
 // account to hang it on until the create has returned an id.
 function avatarField(u) {
   const src = `/api/v1/users/${encodeURIComponent(u.id)}/avatar`;
-  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--line); margin-top:14px; padding-top:12px">
+  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
       them — a task list, an approval, the portal's recipient picker. PNG or JPEG.
@@ -1751,7 +1751,7 @@ function avatarField(u) {
     : ""}</p>
     <div class="row" style="align-items:center">
       <img class="user-avatar-preview" src="${esc(src)}" alt=""
-        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--line)" hidden>
+        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--border)" hidden>
       <span class="user-avatar-none muted" style="font-size:12px" hidden>No picture.</span>
       <input type="file" class="avatar-file" accept="image/png,image/jpeg" aria-label="Choose a picture">
       <button class="btn ghost" type="button" data-avact="upload">Upload</button>
@@ -2326,7 +2326,8 @@ async function viewConsoleOrg() {
     : "");
   const userRow = (u) => `<tr data-id="${esc(u.id)}">
       <td>${userFace(u)}<span class="chip">${esc(u.username)}</span>${
-        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}</td>
+        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}
+        <div class="muted" style="font-size:12px; margin-top:4px"><code>${esc(u.id)}</code></div></td>
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
@@ -2388,6 +2389,7 @@ async function viewConsoleOrg() {
       : `<div class="muted" style="font-size:12px; margin-top:8px">Every user is a member.</div>`;
     return `<tr data-id="${esc(g.id)}">
       <td><span class="chip">${esc(g.name)}</span>
+        <div class="muted" style="font-size:12px; margin-top:4px"><code>${esc(g.id)}</code></div>
         <div style="margin-top:6px">${chips}</div>
         ${addCtl}</td>
       <td style="text-align:right; white-space:nowrap; vertical-align:top">
@@ -2402,7 +2404,7 @@ async function viewConsoleOrg() {
       </div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">A named set of users. Share a project
       with a group and every member gets that role (ADR-0180). A membership change
-      takes effect on the member's next sign-in.</p>
+      applies from that member's next request — they do not have to sign out and in.</p>
       <table data-dt-key="groups">
         <thead><tr><th>Group</th><th></th></tr></thead>
         <tbody id="group-rows">${groups.map(groupRow).join("")
