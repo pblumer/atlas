@@ -35,6 +35,42 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **With authentication off, the portal could never find a catalogue at all.**
+  `--auth=false` is Atlas's documented development and demo mode. Which catalogue
+  somebody sees is resolved from the groups they carry — so with no principal there
+  are no groups, `ReachedBy` answers false for every catalogue, and the mode's one
+  screen said *"Ihnen ist kein Katalog zugeordnet"* to somebody there is no "you" to
+  assign one to. The portal was unusable in the mode it is documented to be usable
+  in, and the message misdescribed why.
+
+  Every other gate in the product reads enforcement-off the same way — **there is
+  nobody to be, not nobody who may** — and the portal now does too: with no principal
+  and nobody to be, the audience question is not asked and the highest-ranked
+  catalogue is the answer. Rank, because that is already what decides which of
+  several catalogues a person sees, and publishing refuses a rank tie.
+
+  **The exception is narrow and earns itself.** A catalogue with no audience reaches
+  nobody, fail-closed on purpose, and that is unchanged wherever there *is* somebody:
+  with enforcement on a caller with no session still reaches nothing, and a signed-in
+  administrator still gets the catalogue their groups reach rather than the
+  top-ranked one — being allowed to read every catalogue is not the same as being the
+  audience for one. What makes it safe here is that in this mode the rule protects
+  nothing: every catalogue is already readable through the administration routes by
+  anybody who can reach the port.
+
+  **An order is still refused, and the page now says so instead of discovering it.**
+  An order belongs to somebody; one with no orderer has nobody to notify and nobody
+  to hold responsible. So the mode is read the catalogue, do not order from it: the
+  order button is replaced by the reason and the remedy, the basket control is shown
+  disabled like an integral part, and the favourite mark and the recipient field are
+  not offered. Whether an order is possible is read from the identity the session
+  carries — the server's own rule mirrored, not inferred from the mode.
+
+  And one 400 from a per-account list no longer takes the page down. The inventory
+  and the favourites answer about an account and refuse a caller with none, which is
+  right of them; the portal now treats a missing per-account list as a list missing
+  rather than as a catalogue missing.
+
 - **With authentication off, a catalogue's appearance could not be set at all.** The
   predicate every gate in the catalogue package asks is `!authEnabled || (p != nil &&
   p.HasRole(admin))` — true for everybody when nobody is signed in, which is the rule

@@ -20,6 +20,24 @@
       }
     },
     {
+      "id": "with-authentication-off-the-portal-could-never-find-a-catalo",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "With authentication off, the portal could never find a catalogue at all.",
+        "de": "With authentication off, the portal could never find a catalogue at all."
+      },
+      "summary": {
+        "en": "--auth=false is Atlas's documented development and demo mode.",
+        "de": "--auth=false is Atlas's documented development and demo mode."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
         "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One position can be withdrawn on its own, and its details corrected.",
-        "de": "One position can be withdrawn on its own, and its details corrected."
-      },
-      "summary": {
-        "en": "The story asks to modify or delete positions directly.",
-        "de": "The story asks to modify or delete positions directly."
       },
       "link": {
         "label": "Changelog",
