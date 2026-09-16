@@ -121,6 +121,48 @@
       }
     },
     {
+      "id": "two-maintainers-adding-a-product-to-the-same-catalogue-and-o",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Two people editing one catalogue no longer overwrite each other",
+        "de": "Zwei Personen an einem Katalog überschreiben sich nicht mehr gegenseitig"
+      },
+      "summary": {
+        "en": "A catalogue's product list, its edges and its maintainers are each stored as one whole list, and every button that changes one sends the list the page was rendered with plus your change. So if a colleague added a product while your page was open, your next click sent a list that did not have theirs in it — and theirs was gone, with no error and nothing on screen to notice. The catalogue now carries a version, the page states the one it was rendered at, and a write against a version that has moved on is refused: nothing is saved, the page shows the current state, and you make your change again on top of theirs.",
+        "de": "Die Produktliste eines Katalogs, seine Beziehungen und seine Bearbeitenden werden je als eine ganze Liste gespeichert, und jede Schaltfläche, die eine davon ändert, sendet die Liste, mit der die Seite aufgebaut wurde, plus Ihrer Änderung. Hat eine Kollegin also ein Produkt ergänzt, während Ihre Seite offen war, sendete Ihr nächster Klick eine Liste ohne deren Eintrag — und dieser war verschwunden, ohne Fehlermeldung und ohne etwas Sichtbares. Der Katalog führt jetzt eine Version, die Seite nennt jene, mit der sie aufgebaut wurde, und ein Schreibvorgang gegen eine überholte Version wird abgewiesen: Nichts wird gespeichert, die Seite zeigt den aktuellen Stand, und Sie wenden Ihre Änderung erneut darauf an."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a catalogue in two browser tabs, or have a colleague open the same one.",
+          "Add a product in the first, then add a different one in the second without refreshing it.",
+          "The second is refused instead of silently dropping the first, and the page returns showing what is actually stored.",
+          "It applies to the product list, the edges between products and the maintainers — the three things kept as whole lists. Editing the catalogue's name, rank, languages or audience is unaffected: those are a form showing you what you are about to change."
+        ],
+        "de": [
+          "Einen Katalog in zwei Browser-Tabs öffnen, oder eine Kollegin denselben öffnen lassen.",
+          "Im ersten ein Produkt ergänzen, dann im zweiten ein anderes, ohne es neu zu laden.",
+          "Der zweite Vorgang wird abgewiesen, statt den ersten stillschweigend zu verwerfen, und die Seite zeigt danach den tatsächlich gespeicherten Stand.",
+          "Das gilt für die Produktliste, die Beziehungen zwischen Produkten und die Bearbeitenden — die drei Dinge, die als ganze Listen geführt werden. Name, Rang, Sprachen und Publikum sind nicht betroffen: Das ist ein Formular, das zeigt, was man gerade ändert."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the catalogue",
+          "de": "Katalog öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
       "id": "ci-failed-a-change-on-a-slow-runner-rather-than-on-a-defect-",
       "version": "Unreleased",
       "date": null,
@@ -277,24 +319,6 @@
       "summary": {
         "en": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may.",
         "de": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-catalogue-screen-said-an-empty-audience-means-everybody-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The catalogue screen said an empty audience means everybody. It means nobody.",
-        "de": "The catalogue screen said an empty audience means everybody. It means nobody."
-      },
-      "summary": {
-        "en": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all.",
-        "de": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all."
       },
       "link": {
         "label": "Changelog",

@@ -672,8 +672,38 @@ function wireAppearance({ api, toast, view }, id, reload) {
 function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
+  // patch changes a catalogue with no precondition. That is right for a form whose
+  // every field is on the screen: what it overwrites is what somebody is looking at.
   const patch = async (body) => {
     await api("PATCH", `/api/v1/catalogs/${encodeURIComponent(id)}`, body);
+  };
+
+  // patchList is for the other kind of caller, and the catalogue has six of them.
+  // `items`, `edges` and `members` are replaced whole when sent, and every place
+  // that sends one computes it out of `cat` — the snapshot this page was rendered
+  // from. Adding a product posts every product plus that one, so two maintainers
+  // adding one a second apart means the second write is the first one's
+  // disappearance, with no error and no trace.
+  //
+  // So it states the revision the page was rendered at and the server refuses if
+  // the catalogue has moved past it (ADR-0376). Deliberately `cat.revision` and not
+  // a fresh read: a precondition re-read at write time is no precondition at all.
+  const patchList = async (body) => {
+    await api("PATCH", `/api/v1/catalogs/${encodeURIComponent(id)}`,
+      { ...body, revision: cat.revision });
+  };
+
+  // patchFailed turns the server's refusal into what a person can do. The 409 names
+  // the revision that was read, which is a sentence for an API caller; a person has
+  // a page that is out of date, and reload() brings them the current one.
+  const patchFailed = (err) => {
+    if (err.status === 409) {
+      toast("Somebody else changed this catalogue while this page was open. " +
+        "Nothing was saved — the page now shows their version, so try again.", "err");
+      reload();
+      return;
+    }
+    toast(err.message, "err");
   };
   const editor = view.querySelector(".product-editor");
 
@@ -720,8 +750,8 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
         `Which product should this catalogue also offer?\n\n${free.map((f) => `${f.id} — ${textOf(f.texts, langs, f.id)}`).join("\n")}`);
       if (!pick) return;
       if (!free.some((f) => f.id === pick.trim())) { toast("No product with that id", "err"); return; }
-      try { await patch({ items: [...(cat.items || []), pick.trim()] }); reload(); }
-      catch (err) { toast(err.message, "err"); }
+      try { await patchList({ items: [...(cat.items || []), pick.trim()] }); reload(); }
+      catch (err) { patchFailed(err); }
       return;
     }
 
@@ -731,16 +761,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       // still has to resolve.
       const next = (cat.items || []).filter((x) => x !== b.dataset.id);
       const edges = (cat.edges || []).filter((x) => x.from !== b.dataset.id && x.to !== b.dataset.id);
-      try { await patch({ items: next, edges }); reload(); }
-      catch (err) { toast(err.message, "err"); }
+      try { await patchList({ items: next, edges }); reload(); }
+      catch (err) { patchFailed(err); }
       return;
     }
 
     if (act === "unedge") {
       const [from, kind, to] = b.dataset.edge.split("|");
       const edges = (cat.edges || []).filter((x) => !(x.from === from && x.kind === kind && x.to === to));
-      try { await patch({ edges }); reload(); }
-      catch (err) { toast(err.message, "err"); }
+      try { await patchList({ edges }); reload(); }
+      catch (err) { patchFailed(err); }
       return;
     }
 
@@ -749,8 +779,8 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const [type, refID] = b.dataset.ref.split("|");
       const members = (cat.members || []).filter(
         (m) => !((m.ref || {}).type === type && (m.ref || {}).id === refID));
-      try { await patch({ members }); reload(); }
-      catch (err) { toast(err.message, "err"); }
+      try { await patchList({ members }); reload(); }
+      catch (err) { patchFailed(err); }
       return;
     }
 
@@ -788,8 +818,8 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       if (!refID) { toast("An id is needed", "err"); return; }
       const members = [...(cat.members || []),
         { ref: { type: f.get("type"), id: refID }, role: f.get("role") }];
-      try { await patch({ members }); reload(); }
-      catch (err) { toast(err.message, "err"); }
+      try { await patchList({ members }); reload(); }
+      catch (err) { patchFailed(err); }
     });
   }
 
@@ -801,8 +831,8 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const from = f.get("from"), to = f.get("to"), kind = f.get("kind");
       if (from === to) { toast("A product cannot relate to itself", "err"); return; }
       const edges = [...(cat.edges || []), { from, to, kind }];
-      try { await patch({ edges }); reload(); }
-      catch (err) { toast(err.message, "err"); }
+      try { await patchList({ edges }); reload(); }
+      catch (err) { patchFailed(err); }
     });
   }
 
@@ -852,8 +882,24 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
         await api("POST", "/api/v1/catalog-products", body);
         // A new product is offered by the catalogue it was created in: creating one
         // that nothing offers is the likeliest way to lose work here.
+        //
+        // This is a second write, and it carries the catalogue's revision like every
+        // other list write — so it has its own refusal, reported in its own words.
+        // Letting the outer catch take it would tell somebody their *product* was
+        // changed by a colleague, when the product saved fine and it is the
+        // catalogue that moved; they would go looking for a conflict that is not
+        // there, and never learn the product is stored but unoffered.
         if (!editing && !(cat.items || []).includes(pid)) {
-          await patch({ items: [...(cat.items || []), pid] });
+          try {
+            await patchList({ items: [...(cat.items || []), pid] });
+          } catch (listErr) {
+            if (listErr.status !== 409) throw listErr;
+            toast(`The product was saved, but somebody else changed this catalogue ` +
+              `meanwhile, so "${pid}" was not added to what it offers. Add it from ` +
+              `the product list.`, "err");
+            reload();
+            return;
+          }
         }
         toast("Saved");
         reload();

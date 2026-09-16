@@ -220,6 +220,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Two maintainers adding a product to the same catalogue, and one of them erased
+  the other.** A catalogue's patch is partial, so it cannot clear a field nobody
+  mentioned. What it could still lose is a list: `items`, `edges` and `members` are
+  each replaced whole when sent, and every surface that sends one computes it out of
+  the copy it was rendered from. Adding one product posts every product plus that
+  one.
+
+  So two people adding a product a second apart, and the second write is the first
+  one's disappearance — no error, no trace, and the person who lost the change is the
+  one who did nothing wrong. It is the same shape as the product form's defect one
+  level up, and it survived that fix because a partial patch looks safe.
+
+  A catalogue now carries a `revision`, and a caller may state the one it read. The
+  write is refused as a conflict unless the catalogue is still on it. Stating it stays
+  optional, because a form whose every field is on the screen has no snapshot problem
+  — the caller holding a snapshot is the one that should say so. The Console states it
+  on exactly the six places that rebuild a list and on none of the others, and the MCP
+  tool that changes a catalogue takes it too.
+
+  **Every writer advances it**, which is the part that makes the guard worth having
+  rather than worth believing: a path that changed a catalogue without advancing its
+  revision would be a path whose changes a stale caller overwrites in silence, and it
+  would be found by somebody losing work. The patch, the appearance and the ArchiMate
+  import are each named in a test, so a seventh writer has to be added deliberately.
+
 - **CI failed a change on a slow runner rather than on a defect, for the second time.**
   The race-detector step carries a per-package timeout because the `api` package needs
   most of it on its own. At Go's 10-minute default that step once passed at 526s and

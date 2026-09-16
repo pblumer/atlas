@@ -248,3 +248,60 @@ func TestImportingNeedsTheModel(t *testing.T) {
 		t.Fatalf("import without a model succeeded: %q", text)
 	}
 }
+
+// TestUpdatingACatalogueCanStateItsRevision: the catalogue's lists are replaced
+// whole and an agent's list is always one it read and changed, so the tool has to
+// be able to say which read it changed. A precondition the adapter advertises and
+// never forwards would be worse than none — it would read as protection.
+func TestUpdatingACatalogueCanStateItsRevision(t *testing.T) {
+	ts := newAtlas(t)
+
+	text, isErr := callText(t, ts, "atlas_create_catalog", map[string]any{
+		"texts": map[string]any{"de": "Konflikt"}, "rank": 3, "languages": []any{"de"},
+	})
+	if isErr {
+		t.Fatalf("create catalogue = %q", text)
+	}
+	cat := catalogID(t, text)
+	revision := catalogRevision(t, text)
+
+	// The revision the create answered with is the one a first change states.
+	if text, isErr = callText(t, ts, "atlas_update_catalog", map[string]any{
+		"id": cat, "items": []any{"vpn"}, "revision": revision,
+	}); isErr {
+		t.Fatalf("update stating the revision read = %q", text)
+	}
+	if next := catalogRevision(t, text); next <= revision {
+		t.Fatalf("revision = %v after a change, want it past %v", next, revision)
+	}
+
+	// The same revision again is stale, and is refused rather than erasing the
+	// change that moved it.
+	if text, isErr = callText(t, ts, "atlas_update_catalog", map[string]any{
+		"id": cat, "items": []any{"laptop"}, "revision": revision,
+	}); !isErr {
+		t.Fatalf("a stale update was accepted: %q", text)
+	}
+
+	// And the refused write changed nothing.
+	if text, isErr = callText(t, ts, "atlas_get_catalog", map[string]any{"id": cat}); isErr ||
+		!strings.Contains(text, "vpn") || strings.Contains(text, "laptop") {
+		t.Fatalf("get = (%q, isErr=%v), want only the first change to have landed", text, isErr)
+	}
+}
+
+// catalogRevision reads the revision a catalogue tool answered with, as a float64
+// for the reason productRevision does: that is what a JSON client hands back.
+func catalogRevision(t *testing.T, text string) float64 {
+	t.Helper()
+	var got struct {
+		Revision float64 `json:"revision"`
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("decode catalogue %q: %v", text, err)
+	}
+	if got.Revision == 0 {
+		t.Fatalf("catalogue answer carries no revision: %q", text)
+	}
+	return got.Revision
+}
