@@ -47,18 +47,30 @@ func Resolve(catalogs []Catalog, groups []string) (Catalog, bool) {
 			reached = append(reached, c)
 		}
 	}
-	if len(reached) == 0 {
+	return Highest(reached)
+}
+
+// Highest is the top-ranked catalogue of a set, and whether there was one.
+//
+// It is what "which catalogue" means when there is no audience question to ask —
+// see [Service.HandleMyCatalog] for the one mode where that is the case. Rank is
+// the tie-break the product already uses everywhere else, and publishing refuses a
+// rank tie, which is what makes "highest" an answer rather than a coin toss.
+func Highest(catalogs []Catalog) (Catalog, bool) {
+	if len(catalogs) == 0 {
 		return Catalog{}, false
 	}
-	sort.Slice(reached, func(a, b int) bool {
-		if reached[a].Rank != reached[b].Rank {
-			return reached[a].Rank > reached[b].Rank
+	out := make([]Catalog, len(catalogs))
+	copy(out, catalogs)
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Rank != out[b].Rank {
+			return out[a].Rank > out[b].Rank
 		}
 		// Ranks are unique by the time a catalogue is published; this only keeps
 		// the answer stable for one that is not yet.
-		return reached[a].ID < reached[b].ID
+		return out[a].ID < out[b].ID
 	})
-	return reached[0], true
+	return out[0], true
 }
 
 // mayRead reports whether p may see this catalogue at all.
@@ -110,10 +122,46 @@ func (s *Service) MayOrderFrom(p *httpapi.Principal, catalogID string) (bool, er
 	return cat.ReachedBy(p.GroupIDs) || s.mayEdit(cat, p), nil
 }
 
+// nobodyToBe reports whether this installation has no identities at all: the
+// documented single-user mode, `--auth=false`.
+//
+// It asks the admin predicate with a nil principal rather than carrying a flag of
+// its own, and that is deliberate. The server builds that predicate as
+// `!authEnabled || p.HasRole(admin)`, so a nil principal passing it *is* the
+// statement "enforcement is off" — where with enforcement on it answers false, as
+// every gate in this package relies on. A second copy of one fact is a second copy
+// that eventually disagrees with the first.
+func (s *Service) nobodyToBe() bool { return s.admin(nil) }
+
 // HandleMyCatalog answers the first question of every portal session: which
-// catalogue is mine. Reaching none is 404 rather than an arbitrary catalogue —
-// showing somebody a shop they are not the audience for is worse than showing
-// them nothing.
+// catalogue is mine.
+//
+// With enforcement on, it is the highest-ranked catalogue the caller's groups
+// reach, and reaching none is 404 rather than an arbitrary catalogue — showing
+// somebody a shop they are not the audience for is worse than showing them
+// nothing.
+//
+// # The single-user mode
+//
+// With `--auth=false` there is no principal, so there are no groups, so
+// [Catalog.ReachedBy] answers false for every catalogue and the portal could never
+// resolve one. The documented development and demo mode showed an empty page and
+// said a catalogue had not been assigned — to somebody there is no "you" to assign
+// one to (ADR-draft-portal-without-identity).
+//
+// So when there is nobody to be, the audience question is not asked and the
+// highest-ranked catalogue is the answer. That relaxes a rule this package is
+// otherwise strict about — a catalogue with no audience reaches nobody, fail-closed
+// on purpose — and the reason it is safe to relax *here* and nowhere else is that
+// the guard protects nothing in this mode: with enforcement off every catalogue is
+// already readable through the administration routes by anybody who can reach the
+// port. It withholds a catalogue from a person who does not exist, at the cost of
+// the one screen the mode is for.
+//
+// It is confined to a **nil** principal. A signed-in administrator still gets their
+// own audience's catalogue and not the top-ranked one: being allowed to read every
+// catalogue is not the same as being the audience for one, and the portal answers
+// the second question.
 func (s *Service) HandleMyCatalog(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
 	var groups []string
@@ -132,6 +180,9 @@ func (s *Service) HandleMyCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	got, ok := Resolve(all, groups)
+	if !ok && p == nil && s.nobodyToBe() {
+		got, ok = Highest(all)
+	}
 	if !ok {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue is assigned to you")
 		return

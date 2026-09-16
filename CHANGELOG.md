@@ -159,6 +159,66 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **CI failed a change on a slow runner rather than on a defect, for the second time.**
+  The race-detector step carries a per-package timeout because the `api` package needs
+  most of it on its own. At Go's 10-minute default that step once passed at 526s and
+  timed out at 600s on the next run, where the only change between them was a line in an
+  unrelated test file; the limit was raised to 25 minutes. It has now timed out at 1500s
+  on a run where the same package took 1254s two hours earlier — on a runner that was
+  slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
+  `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
+
+  The limit is 35 minutes, and the job's own cap moves with it. That pairing is the part
+  worth writing down: both bound the same run, so raising the inner one alone would have
+  changed nothing — the job is killed first, and the failure turns from "timed out" into
+  "cancelled" with no line saying why.
+
+  Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
+  inside the cap. **The number buys headroom and does not fix the cause** — the `api`
+  package is about twenty-one minutes of a twenty-nine-minute job under the race
+  detector, and a limit raised twice is a package that wants splitting or parallelising
+  rather than a third raise.
+
+  The command is written in six places — the Makefile, the CI workflow, and the three
+  documents that say what "done" means — and a comment asking the next person to change
+  all of them reaches only whoever reads that one file. A test now holds them to one
+  number, because a contributor whose local flag is the older, smaller one reproduces
+  neither failure and is told their change is fine.
+- **With authentication off, the portal could never find a catalogue at all.**
+  Atlas's documented development and demo mode is `--auth=false`. Which catalogue
+  somebody sees is resolved from the groups they carry — so with no principal there
+  are no groups, `ReachedBy` answers false for every catalogue, and the mode's one
+  screen said *"Ihnen ist kein Katalog zugeordnet"* to somebody there is no "you" to
+  assign one to. The portal was unusable in the mode it is documented to be usable
+  in, and the message misdescribed why.
+
+  Every other gate in the product reads enforcement-off the same way — **there is
+  nobody to be, not nobody who may** — and the portal now does too: with no principal
+  and nobody to be, the audience question is not asked and the highest-ranked
+  catalogue is the answer. Rank, because that is already what decides which of
+  several catalogues a person sees, and publishing refuses a rank tie.
+
+  **The exception is narrow and earns itself.** A catalogue with no audience reaches
+  nobody, fail-closed on purpose, and that is unchanged wherever there *is* somebody:
+  with enforcement on a caller with no session still reaches nothing, and a signed-in
+  administrator still gets the catalogue their groups reach rather than the
+  top-ranked one — being allowed to read every catalogue is not the same as being the
+  audience for one. What makes it safe here is that in this mode the rule protects
+  nothing: every catalogue is already readable through the administration routes by
+  anybody who can reach the port.
+
+  **An order is still refused, and the page now says so instead of discovering it.**
+  An order belongs to somebody; one with no orderer has nobody to notify and nobody
+  to hold responsible. So the mode is read the catalogue, do not order from it: the
+  order button is replaced by the reason and the remedy, the basket control is shown
+  disabled like an integral part, and the favourite mark and the recipient field are
+  not offered. Whether an order is possible is read from the identity the session
+  carries — the server's own rule mirrored, not inferred from the mode.
+
+  And one 400 from a per-account list no longer takes the page down. The inventory
+  and the favourites answer about an account and refuse a caller with none, which is
+  right of them; the portal now treats a missing per-account list as a list missing
+  rather than as a catalogue missing.
 - **A JavaScript script task could not start under the strict sandbox.** Node's bundled
   OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
   profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with

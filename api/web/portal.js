@@ -100,6 +100,10 @@ const STRINGS = {
     'info.price': 'Kosten',
     'price.none': 'Der Katalog nennt keine Kosten.',
     'cat.none': 'Ohne Kategorie',
+    // The single-user mode: the catalogue is readable and an order is not
+    // possible, because an order belongs to somebody.
+    'noid.title': 'Bestellen ist ohne Anmeldung nicht möglich.',
+    'noid.hint': 'Eine Bestellung gehört jemandem. Ohne Anmeldung gibt es niemanden, dem sie gehört, und niemanden, der benachrichtigt wird. Der Katalog steht hier zum Ansehen; für eine Bestellung startet man den Server mit --auth.',
     'cat.all': 'Alle',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
@@ -217,6 +221,8 @@ const STRINGS = {
     'info.price': 'Cost',
     'price.none': 'The catalogue names no cost.',
     'cat.none': 'Without a category',
+    'noid.title': 'Ordering needs somebody to be.',
+    'noid.hint': 'An order belongs to somebody. Without a sign-in there is nobody it belongs to and nobody to notify. The catalogue is here to be looked at; start the server with --auth to order from it.',
     'cat.all': 'All',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
@@ -419,6 +425,13 @@ const state = {
   // caller who may order in somebody else's name. It is the list every member and
   // assignee picker in Atlas already reads (ADR-0073).
   people: [],
+  // canOrder is whether an order can be placed at all, which is not a permission
+  // but an identity: the server refuses an order with no orderer, because one has
+  // nobody to notify and nobody to hold responsible. With enforcement off there is
+  // nobody to be, so the catalogue is readable and an order is not — and the page
+  // says so rather than offering a button that fails at the end
+  // (ADR-draft-portal-without-identity).
+  canOrder: false,
   // meID is the account reading, which is what addresses its picture. Separate
   // from meName because a name is for a person to read and an id is for a URL.
   meID: '',
@@ -558,10 +571,21 @@ async function load() {
     state.release = releases && releases.length ? releases[0] : null;
   }
   state.orders = await api('/api/v1/orders');
-  const inv = await api('/api/v1/inventory');
-  state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
-  const favs = await api('/api/v1/portal/favourites');
-  state.favourites = new Set((favs && favs.itemIds) || []);
+  // What one person holds, and what they have marked. Both are facts about an
+  // account, and with enforcement off there is no account — the server says so
+  // rather than inventing an empty answer, which is right of the server and must
+  // not take the page down with it. An unreadable per-person list is a list
+  // missing, not a catalogue missing (ADR-draft-portal-without-identity).
+  state.held = new Map();
+  state.favourites = new Set();
+  try {
+    const inv = await api('/api/v1/inventory');
+    state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
+  } catch { /* nobody holds anything when there is nobody */ }
+  try {
+    const favs = await api('/api/v1/portal/favourites');
+    state.favourites = new Set((favs && favs.itemIds) || []);
+  } catch { /* and nobody has marked anything */ }
   await loadWhoIAm();
   render();
 }
@@ -576,6 +600,7 @@ async function load() {
 // drift apart.
 async function loadWhoIAm() {
   state.mayOrderForOthers = false;
+  state.canOrder = false;
   state.meName = '';
   state.meID = '';
   state.people = [];
@@ -596,8 +621,15 @@ async function loadWhoIAm() {
   // otherwise be two different kinds of thing.
   state.meName = String(user.displayName || user.username || '').trim();
   state.meID = String(user.id || '').trim();
+  // The server's own rule, mirrored rather than guessed: an order needs an
+  // identity, and what makes one is a principal carrying a user id.
+  state.canOrder = state.meID !== '';
   // With enforcement off there is nobody to be, exactly as the server has it.
-  state.mayOrderForOthers = !me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin');
+  // Ordering in somebody else's name is a question about authority, and it only
+  // arises where an order can be placed at all. Offered without an identity it
+  // would be a field whose every use ends in a refusal.
+  state.mayOrderForOthers = state.canOrder &&
+    (!me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin'));
   if (!state.mayOrderForOthers) return;
   try {
     const all = await api('/api/v1/principals');
@@ -764,6 +796,17 @@ function cell(opts) {
 // choice.
 function toggle(release, id, integral) {
   const inIt = inBasketNow(release, id);
+  // A basket that cannot be submitted is the control-that-fails this mode is
+  // meant to avoid: filling one and finding no way out teaches somebody the page
+  // is broken. Shown disabled rather than hidden, for the reason an integral part
+  // is — the column stays readable as a decomposition, which is what the mode is
+  // for (ADR-draft-portal-without-identity).
+  if (!state.canOrder) {
+    return el('button', {
+      class: 'sq', disabled: 'disabled', title: t('noid.title'),
+      'aria-label': t('noid.title'),
+    }, '+');
+  }
   if (integral) {
     return el('button', {
       class: 'sq', disabled: 'disabled', title: t('note.included'),
@@ -845,6 +888,10 @@ async function star(id) {
 
 // starButton is the affordance the row carries.
 function starButton(id) {
+  // A favourite belongs to an account. With nobody signed in there is nobody to
+  // hold one, and the route says so — so the mark is not offered rather than
+  // offered and refused.
+  if (!state.canOrder) return el('span', {});
   const on = state.favourites.has(id);
   return el('button', {
     class: 'sq',
@@ -1932,17 +1979,23 @@ function renderActions() {
       disabled: !count || state.busy,
       onclick: () => { state.basket.clear(); state.inBasket = false; render(); },
     }, `${t('act.discard')} \u2715`),
-    state.inBasket
-      ? el('button', {
-        class: 'primary',
-        disabled: !count || state.busy,
-        onclick: order,
-      }, state.busy ? t('portal.ordering') : t('act.place'))
-      : el('button', {
-        class: 'primary',
-        disabled: !count,
-        onclick: () => { state.inBasket = true; state.info = ''; render(); },
-      }, `${t('act.toBasket')}${count ? ` (${count})` : ''}`));
+    // No identity, no order — and the row says which, rather than carrying a
+    // button that reaches the server and comes back refused. A control that is
+    // offered and then fails teaches somebody that the page is broken; one that is
+    // absent with a reason beside it teaches them what the mode is.
+    state.canOrder
+      ? (state.inBasket
+        ? el('button', {
+          class: 'primary',
+          disabled: !count || state.busy,
+          onclick: order,
+        }, state.busy ? t('portal.ordering') : t('act.place'))
+        : el('button', {
+          class: 'primary',
+          disabled: !count,
+          onclick: () => { state.inBasket = true; state.info = ''; render(); },
+        }, `${t('act.toBasket')}${count ? ` (${count})` : ''}`))
+      : el('span', { class: 'muted', title: t('noid.hint') }, t('noid.title')));
 }
 
 function currentView() {

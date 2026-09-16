@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Portal",
+    "Console"
+  ],
+  "title": {
+    "en": "The portal works with authentication off",
+    "de": "Das Portal funktioniert ohne Anmeldung"
+  },
+  "summary": {
+    "en": "Atlas can be started without sign-in, and that mode is documented for development and demos. The service portal was the one screen it did not work on: which catalogue somebody sees is worked out from the groups they belong to, and with nobody signed in there are no groups — so the page found no catalogue and said one had not been assigned to you, to somebody there was no \"you\" to assign one to. The portal now shows the top-ranked catalogue when there is nobody to be. Nothing is loosened for a signed-in server: an administrator still sees their own catalogue rather than the top-ranked one, because being allowed to read every catalogue is not the same as being the audience for one. Ordering stays off in that mode, and the page now says so instead of offering a button that fails at the end: an order belongs to somebody, and without a sign-in there is nobody it belongs to and nobody to notify. The basket control is shown greyed out with that explanation, so the catalogue stays readable as what it is meant to show — how products are put together.",
+    "de": "Atlas lässt sich ohne Anmeldung starten; dieser Modus ist für Entwicklung und Vorführungen dokumentiert. Das Service-Portal war der eine Bildschirm, auf dem er nicht funktionierte: Welchen Katalog jemand sieht, wird aus seinen Gruppen ermittelt, und ohne Anmeldung gibt es keine Gruppen — die Seite fand also keinen Katalog und meldete, es sei einem keiner zugeordnet, an jemanden, den es gar nicht gibt. Das Portal zeigt jetzt den höchstrangigen Katalog, wenn es niemanden zu sein gibt. Für einen Server mit Anmeldung wird nichts gelockert: Eine Administratorin sieht weiterhin ihren eigenen Katalog und nicht den höchstrangigen, denn jeden Katalog lesen zu dürfen ist nicht dasselbe, wie das Publikum eines Katalogs zu sein. Bestellen bleibt in diesem Modus aus, und die Seite sagt das jetzt, statt eine Schaltfläche anzubieten, die am Ende scheitert: Eine Bestellung gehört jemandem, und ohne Anmeldung gibt es niemanden, dem sie gehört, und niemanden, der benachrichtigt wird. Das Bedienelement erscheint gesperrt mit genau dieser Begründung, damit der Katalog lesbar bleibt als das, was er zeigen soll — wie Produkte zusammengesetzt sind."
+  }
+}
