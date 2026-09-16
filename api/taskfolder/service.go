@@ -50,7 +50,7 @@ type Options struct {
 // console used to count those itself, off the rows of the newest-first task page it
 // had already loaded, which made every one of them the size of that page: a task
 // assigned to somebody and sitting outside the newest 500 left their "Assigned to me"
-// badge reading 0 (ADR-draft-a-number-is-a-counter-or-a-walk). They are
+// badge reading 0 (ADR-0365). They are
 // counted here for the same reason the saved ones are — because a page is not a
 // population — and they share this response's Truncated.
 type Counts struct {

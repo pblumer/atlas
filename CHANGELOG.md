@@ -1099,7 +1099,7 @@ _Changed_ / _Removed_ for each version.
   they are a tripwire at the places the mistake has been made rather than a proof that
   it cannot be made again.
 
-  ([ADR-draft-a-number-is-a-counter-or-a-walk](docs/adr/draft-a-number-is-a-counter-or-a-walk.md))
+  ([ADR-0365](docs/adr/0365-a-number-is-a-counter-or-a-walk.md))
 
 - **The live diagram counts every parked token, not the ones a bounded scan reached.**
   One process, two deployed versions, both under the same broken worker: the Operations
@@ -1134,7 +1134,7 @@ _Changed_ / _Removed_ for each version.
   instance holding more than 100 reported exactly 100; and the browser hid the incident
   pill whenever the detail list was empty, which is what turned an unreached definition
   into a silent one.
-  ([ADR-draft-the-live-diagram-counts-every-parked-token](docs/adr/draft-the-live-diagram-counts-every-parked-token.md))
+  ([ADR-0366](docs/adr/0366-the-live-diagram-counts-every-parked-token.md))
 - **Restoring a backup from another installation no longer attaches this one's history
   to a foreign process.** The portable design-time backup
   ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carries `deployments/` and

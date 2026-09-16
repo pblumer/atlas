@@ -125,7 +125,7 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
 export function incidentPanelHTML(list, { truncated = false, rows = "", total = null } = {}) {
   // How many are parked, which is not how many rows there are: under a flood the rows
   // are a page
-  // (ADR-draft-the-live-diagram-counts-every-parked-token). Callers that know the real total pass it; the ones whose list
+  // (ADR-0366). Callers that know the real total pass it; the ones whose list
   // *is* everything (the replay's details) leave it out and the two coincide.
   const parked = Number.isFinite(total) ? total : list.length;
   if (!parked) return "";

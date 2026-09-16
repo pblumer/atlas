@@ -1,4 +1,4 @@
-# ADR-DRAFT: A number an operations view states is a counter or a walk, never the length of a page
+# ADR-0365: A number an operations view states is a counter or a walk, never the length of a page
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -7,7 +7,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-the-live-diagram-counts-every-parked-token](draft-the-live-diagram-counts-every-parked-token.md)
+[ADR-0366](0366-the-live-diagram-counts-every-parked-token.md)
 fixed one number. It did not fix the mistake behind it, and the mistake has a shape
 that can be searched for:
 
@@ -223,7 +223,7 @@ the page.
 
 ## Links
 
-- follows [ADR-draft-the-live-diagram-counts-every-parked-token](draft-the-live-diagram-counts-every-parked-token.md)
+- follows [ADR-0366](0366-the-live-diagram-counts-every-parked-token.md)
   — the same mistake, found on one surface and generalized here
 - builds on [ADR-0266](0266-stats-and-incidents-off-the-loop.md) — reads that grow with
   the population leave the run loop

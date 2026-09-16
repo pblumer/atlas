@@ -267,7 +267,7 @@ type runtimeResp struct {
 	// Keeping the two apart is the whole point. A count read off the page was a
 	// floor presented as a total, and a page the bounded scan never reached made it a
 	// zero presented as a total — a process with thousands of parked tokens rendering
-	// as healthy on its own diagram (ADR-draft-the-live-diagram-counts-every-parked-token).
+	// as healthy on its own diagram (ADR-0366).
 	IncidentTotal int `json:"incidentTotal"`
 	// IncidentsTruncated marks a capped page: more tokens are parked than the overlay
 	// details. It says nothing about the counts, which are exact whenever
@@ -290,7 +290,7 @@ type runtimeResp struct {
 // entirely. Between them those two are what made a flood on one definition read as a
 // healthy diagram on another: the counts came off the page, the page came off a scan in
 // key order, and the scan was spent before it reached the definition being drawn
-// (ADR-draft-the-live-diagram-counts-every-parked-token).
+// (ADR-0366).
 //
 // Counts now come from the off-loop reading in api/runtimeincidents.go, which walks
 // the whole family and is exact; this is only the size of the page.
@@ -505,7 +505,7 @@ type instanceResp struct {
 	// incidents", zero included; a row without it says nothing either way. Only the
 	// search fills it: its result set is capped at 200, so the per-row walk is paid on
 	// a bounded set, and the search is where a reader concludes an instance is healthy
-	// from the word "active" beside it (ADR-draft-a-number-is-a-counter-or-a-walk).
+	// from the word "active" beside it (ADR-0365).
 	Incidents *int `json:"incidents,omitempty"`
 }
 
@@ -1499,7 +1499,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 		// used to stop counting when the page filled, which made a single instance
 		// holding more than a hundred parked tokens report exactly a hundred — on the
 		// one branch whose counts nothing else corrects
-		// (ADR-draft-the-live-diagram-counts-every-parked-token).
+		// (ADR-0366).
 		addIncident := func(elKey uint64, v *model.IncidentValue) {
 			e := get(v.ElementId)
 			if e == nil {
@@ -1582,7 +1582,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 			// No incident scan here. Collecting them on the loop is what bounded them,
 			// and bounding them by a walk of the *whole* family in key order is what let
 			// another definition's flood spend this one's budget
-			// (ADR-draft-the-live-diagram-counts-every-parked-token). They arrive
+			// (ADR-0366). They arrive
 			// from the off-loop reading once this turn is over.
 		} else {
 			// Isolating one instance on the diagram (a deliberate single-instance
@@ -1616,7 +1616,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 					// The lookup is paid past the detail cap too, and deliberately: it is
 					// bounded by the tokens of *one* instance, and stopping at a hundred
 					// used to stop the counting with it — the one branch whose counts
-					// nothing else corrects (ADR-draft-the-live-diagram-counts-every-parked-token).
+					// nothing else corrects (ADR-0366).
 					inc, err := s.store.GetIncident(elKey)
 					if err != nil {
 						return err
@@ -1687,7 +1687,7 @@ func (s *Server) handleProcessRuntime(w http.ResponseWriter, r *http.Request) {
 
 // applyIncidentOverlay puts one definition's parked tokens onto the aggregate overlay:
 // the exact total, the exact count on each element, and a bounded page of the details
-// behind them (ADR-draft-the-live-diagram-counts-every-parked-token).
+// behind them (ADR-0366).
 //
 // A definition with nothing parked gets zeroes, and that is a statement rather than an
 // absence: the reading is a whole snapshot of the incident family, so "not in it" means
@@ -4842,7 +4842,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 	if found {
 		// The operator's next move is the diagram they resolved this from, so the
 		// overlay's counts must not spend the TTL still showing it parked
-		// (ADR-draft-the-live-diagram-counts-every-parked-token).
+		// (ADR-0366).
 		s.forgetIncidentCounts()
 	}
 	// Drive the jobs this command unblocked OUTSIDE the run loop: the handlers are

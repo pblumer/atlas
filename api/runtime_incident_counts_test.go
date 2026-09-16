@@ -47,7 +47,7 @@ func deployParallelTaskProcess(t *testing.T, ts *httptest.Server, processID stri
 }
 
 // What the live diagram says about a definition under a flood, and about the
-// definition standing next to one (ADR-draft-the-live-diagram-counts-every-parked-token).
+// definition standing next to one (ADR-0366).
 //
 // The reported reading: an operations overview counting 10 910 parked tokens over two
 // versions of one process, the live view of the current version reporting none at all,

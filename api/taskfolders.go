@@ -150,7 +150,7 @@ func (s *Server) visitOpenTasks(before uint64, needInstance bool,
 // the console instead, off the rows of the newest-first page it had already loaded,
 // so each badge was the size of that page rather than of the inbox: a task assigned
 // to somebody and sitting outside the newest 500 left their "Assigned to me" reading
-// 0 (ADR-draft-a-number-is-a-counter-or-a-walk). One walk, one set of
+// 0 (ADR-0365). One walk, one set of
 // numbers, one truncation flag over all of them.
 func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.User) (taskfolder.Tally, error) {
 	needInstance := false

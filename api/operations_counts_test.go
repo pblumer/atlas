@@ -11,7 +11,7 @@ import (
 )
 
 // The numbers the Operations views state, and where each one comes from
-// (ADR-draft-a-number-is-a-counter-or-a-walk).
+// (ADR-0365).
 //
 // Both cases below share one shape: a list is fetched with a page cap, its rows are
 // counted, and the count is rendered as a fact about the population. That agrees with

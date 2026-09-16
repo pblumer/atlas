@@ -359,7 +359,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 // and rendered as a plain "active": the word an operator reads as healthy, on the
 // surface they debug from. Measured on a store holding 5 200 parked instances, 200 of
 // them came back unflagged, and the truncation header that said so was not read
-// (ADR-draft-a-number-is-a-counter-or-a-walk).
+// (ADR-0365).
 //
 // Here the number is the row's own. A result set is capped at maxInstanceSearchResults,
 // so this is a bounded number of walks, each bounded by one instance's live tokens —

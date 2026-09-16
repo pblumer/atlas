@@ -479,7 +479,7 @@ func (s *Server) handleResolveIncidents(w http.ResponseWriter, r *http.Request) 
 		// Clearing a whole cause is the point of this call, and the live diagram is
 		// where an operator checks that it worked. Holding the previous counts for the
 		// rest of the TTL would show the flood still standing
-		// (ADR-draft-the-live-diagram-counts-every-parked-token).
+		// (ADR-0366).
 		s.forgetIncidentCounts()
 		// Drive what this call unblocked OUTSIDE the run loop: a bulk resolve can hand
 		// hundreds of jobs back to the workers at once, and every one of them is an

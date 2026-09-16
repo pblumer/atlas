@@ -184,7 +184,7 @@
           // Each row carries its own incident count, the way the server counts it:
           // through that instance's element index, so it is right for an instance
           // whichever page of the server's incident list it would have landed on
-          // (ADR-draft-a-number-is-a-counter-or-a-walk).
+          // (ADR-0365).
           return instances
             .filter((r) =>
               String(r.key) === q.trim() ||

@@ -290,7 +290,7 @@ func TestCountsAreOneScan(t *testing.T) {
 // The fixed badges were counted in the console off the newest-first task page it had
 // already loaded, which cost nothing and was wrong the moment the inbox outgrew that
 // page: a task assigned to somebody and sitting past it left their "Assigned to me"
-// reading 0 (ADR-draft-a-number-is-a-counter-or-a-walk).
+// reading 0 (ADR-0365).
 func TestCountsScanEvenWithNoSavedFolders(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {

@@ -454,7 +454,7 @@ type User struct {
 // They live here, beside the rules, because the counting walk has to apply them and
 // the console has to label them, and a predicate written twice is a predicate that
 // drifts — which is exactly how the console's badges came to disagree with what the
-// inbox held (ADR-draft-a-number-is-a-counter-or-a-walk).
+// inbox held (ADR-0365).
 type BuiltinFolder struct {
 	// ID is the console's own folder id, so a returned count lands on the right badge.
 	ID string

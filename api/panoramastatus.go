@@ -32,7 +32,7 @@ import (
 // match it so the Starmap could not report a problem the drilldown would then fail to
 // find. That symmetry is gone, in the direction that is safe: the overlay now walks the
 // whole family off the loop and is exact
-// (ADR-draft-the-live-diagram-counts-every-parked-token), so anything this scan reaches, the
+// (ADR-0366), so anything this scan reaches, the
 // drilldown reaches too. What stays true is the other half — a process this scan did
 // not get to is a floor and not a verdict, which is what panorama.Status.Partial says.
 //

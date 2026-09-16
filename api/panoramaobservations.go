@@ -48,7 +48,7 @@ func (s *Server) collectFacts(r *http.Request) (panorama.Facts, error) {
 	// Taken before the turn and off the loop: it is a walk of the whole incident
 	// family plus a point read per parked token, and it used to run inside the turn
 	// below — so a flooded engine paid tens of thousands of reads on the single writer
-	// every time somebody opened the Starmap (ADR-draft-a-number-is-a-counter-or-a-walk).
+	// every time somebody opened the Starmap (ADR-0365).
 	jobIncidents, err := s.incidentsByJobType()
 	if err != nil {
 		return panorama.Facts{}, err

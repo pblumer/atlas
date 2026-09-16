@@ -5395,7 +5395,7 @@ async function viewInstances() {
   // is the word an operator reads as healthy. Measured at 5 200 parked instances, 200
   // came back unflagged, and the truncation header saying so was never read. The row's
   // own `incidents` is counted through that instance's element index and is exact
-  // (ADR-draft-a-number-is-a-counter-or-a-walk).
+  // (ADR-0365).
   // incidentCell renders one process row's Incidents cell: the total over every
   // version, linking to the version that actually holds them. Linking to the latest
   // version instead would land the operator on an empty diagram whenever the fault
@@ -5611,7 +5611,7 @@ async function viewInstances() {
       // A matched instance that is stuck says so here rather than only once opened —
       // "active" alone reads as healthy (ADR-0151). The count is the row's own, so an
       // absent one means the server did not answer the question rather than answering
-      // it with a no (ADR-draft-a-number-is-a-counter-or-a-walk).
+      // it with a no (ADR-0365).
       const incN = typeof r.incidents === "number" ? r.incidents : 0;
       const incFlag = incN
         ? ` <a class="pill err" href="#/operations/i/${r.key}" title="${esc(`${incN} unresolved incident${incN === 1 ? "" : "s"} — open the replay, where the stuck element is marked and can be resolved`)}">&#9888; ${incN}</a>`
@@ -7362,7 +7362,7 @@ async function viewTasks(preselectKey) {
     // counting its rows is counting the population. Capped, it is a newest-first slice,
     // and counting that made each badge the size of the slice — a task assigned to me
     // and sitting past it left "Assigned to me" reading 0
-    // (ADR-draft-a-number-is-a-counter-or-a-walk).
+    // (ADR-0365).
     builtinCounts: null,
     countsTruncated: false, // the counting scan hit its budget, so the badges are floors
     countsScanned: 0, // how many open tasks that scan looked at
@@ -7517,7 +7517,7 @@ async function viewTasks(preselectKey) {
     // number then has to come from the server's own walk. The predicates live in
     // TASK_FOLDERS because this view filters its rows with them, and the server counts
     // with the same four (taskfolder.BuiltinFolders) so the two readings cannot say
-    // different things (ADR-draft-a-number-is-a-counter-or-a-walk).
+    // different things (ADR-0365).
     const builtinCount = (f) => {
       if (!state.truncated) return state.tasks.filter((t) => f.match(t, state.me)).length;
       return state.builtinCounts && Object.prototype.hasOwnProperty.call(state.builtinCounts, f.id)

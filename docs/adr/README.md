@@ -450,6 +450,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0362](0362-collective-approval.md) | One decision covers a request; the engine still completes one task per line | Accepted | Landed |
 | [0363](0363-the-drawing-says-which-members-are-used.md) | The drawing says which members are used | Accepted | Landed |
 | [0364](0364-the-verdict-is-served-not-duplicated.md) | The verdict is served, not duplicated | Accepted | Landed |
+| [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
+| [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
 
 ## The two states of a record
 

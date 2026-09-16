@@ -228,7 +228,7 @@ type Server struct {
 	landscapes meshCollection
 	// runtimeIncidents is the last exact per-definition incident count the live
 	// diagram's aggregate overlay was answered from
-	// (ADR-draft-the-live-diagram-counts-every-parked-token). Guarded by its own
+	// (ADR-0366). Guarded by its own
 	// mutex and deliberately NOT run-loop owned: the walk behind it must happen off
 	// the loop (ADR-0266), so the result has no reason to travel back onto it — see
 	// api/runtimeincidents.go.

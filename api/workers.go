@@ -230,7 +230,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	// unbounded read this view makes, and the shape ADR-0266 took off the single writer
 	// everywhere else. It was inside the turn below, so opening the Workers view on a
 	// flooded engine dispatched tens of thousands of reads onto the goroutine that
-	// executes process instances (ADR-draft-a-number-is-a-counter-or-a-walk).
+	// executes process instances (ADR-0365).
 	//
 	// Two reads of slightly different moments, then, rather than one of a single
 	// moment: a queue depth from the turn beside an incident count from just before it.

@@ -9,7 +9,7 @@ import (
 )
 
 // The live diagram's aggregate incident overlay
-// (ADR-draft-the-live-diagram-counts-every-parked-token).
+// (ADR-0366).
 //
 // ADR-0337 gave the operations overview and the incidents table a reading whose size
 // is the number of *causes*, and moved both onto it. The live diagram was not moved,

@@ -8,7 +8,7 @@ import (
 )
 
 // A number the console states is a counter or a walk, never the length of a page
-// (ADR-draft-a-number-is-a-counter-or-a-walk).
+// (ADR-0365).
 //
 // The mistake these guards look for is one the codebase made five times before
 // anybody noticed it once:
@@ -250,7 +250,7 @@ func matchCappedListing(fragment string) (listing struct {
 // worse than no guard: it is a passing test that reads as coverage.
 //
 // The cases below are the real ones. The lines marked as defects are what the console
-// actually said before ADR-draft-a-number-is-a-counter-or-a-walk; the lines marked as
+// actually said before ADR-0365; the lines marked as
 // sound are shapes that live in it now and must keep passing, because a rule that
 // fires on them is a rule somebody will delete rather than satisfy.
 func TestThePageCountGuardsStillBite(t *testing.T) {

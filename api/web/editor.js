@@ -2031,7 +2031,7 @@ async function instanceSamples(modeler, api, opts = {}) {
 // MAX_SAMPLE_INSTANCES rows below, and nothing here counts it or reports a total. The
 // listing is newest-first within a definition, so the sample is of recent instances
 // rather than of whichever ones the cap happened to reach
-// (ADR-draft-a-number-is-a-counter-or-a-walk).
+// (ADR-0365).
 async function fetchSamples(api, processId) {
   const procs = await api("GET", "/api/v1/processes");
   const versions = (procs || [])
@@ -9810,7 +9810,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // thousands. Reading the count off the page made it a floor presented as a total, and
   // a page the server's bounded scan never reached made it a zero presented as a total —
   // a process with every token parked drawing as healthy
-  // (ADR-draft-the-live-diagram-counts-every-parked-token).
+  // (ADR-0366).
   let incidentTotal = 0;
   // Whether the server's counts are the whole truth. False only when it could not take
   // the reading at all, in which case what is on screen is a floor and says so.
@@ -10426,7 +10426,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // server's exact per-element count, and the detail list beside it is a page. An
     // element can therefore be marked red with no row of its own, which is the point —
     // the alternative is a stuck task drawn as a healthy one
-    // (ADR-draft-the-live-diagram-counts-every-parked-token).
+    // (ADR-0366).
     incidentTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : incidents.length;
     const incidentsByElement = new Map();
     for (const inc of incidents) {
@@ -10477,7 +10477,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // of the details it also sent. Under a flood those differ by orders of magnitude,
       // and they used to be the same number: the badge said "50" on a task holding 5 400
       // because fifty was how many rows of that task fitted on the page
-      // (ADR-draft-the-live-diagram-counts-every-parked-token).
+      // (ADR-0366).
       const elIncidents = incidentsByElement.get(e.elementId) || [];
       const parked = Number.isFinite(e.incidents) ? e.incidents : elIncidents.length;
       if (parked > 0) {
@@ -10556,7 +10556,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // The pill is the diagram's headline number, so it says how many tokens are parked
     // — and it appears whenever any are. Hiding it on an empty *detail* list is how a
     // definition standing behind another's flood came to render as healthy: the rows
-    // were none, the incidents were not (ADR-draft-the-live-diagram-counts-every-parked-token).
+    // were none, the incidents were not (ADR-0366).
     //
     // A reading the server could not take is the one case where the number is unknown,
     // and unknown is shown as unknown: a zero here would be this same defect again, one
@@ -11630,7 +11630,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // server's counts, which are not the length of the rows above: those are a page, and
   // an instance can hold more parked tokens than one page holds (a wide fan-out behind
   // one broken worker). Reading the numbers off the rows capped them at the page
-  // (ADR-draft-the-live-diagram-counts-every-parked-token).
+  // (ADR-0366).
   let incidentTotal = 0;
   let incidentsByElement = new Map();
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)

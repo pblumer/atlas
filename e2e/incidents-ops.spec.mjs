@@ -399,7 +399,7 @@ const OVERVIEW = {
   // Each search row carries its own incident count, counted by the server through that
   // instance's element index. It used to be inferred in the browser from a page of the
   // server's whole incident list, which made a row past that page render as plainly
-  // "active" (ADR-draft-a-number-is-a-counter-or-a-walk) — so the mock answers the way
+  // "active" (ADR-0365) — so the mock answers the way
   // the server does: 900001 is parked, 900009 is genuinely not, and the zero is as much
   // a statement as the one.
   search: [

@@ -1,4 +1,4 @@
-# ADR-DRAFT: The live diagram counts every parked token, not the ones a bounded scan reached
+# ADR-0366: The live diagram counts every parked token, not the ones a bounded scan reached
 
 - **Status:** Accepted
 - **Implementation:** Landed
