@@ -307,7 +307,7 @@ type Item struct {
 	// Revision is optimistic concurrency, the same field and the same rule the
 	// capability map uses: a write that states a revision is refused when the
 	// stored record has moved past it, rather than silently overwriting somebody
-	// else's edit (ADR-draft-catalogue-maintenance-over-mcp).
+	// else's edit (ADR-0376).
 	//
 	// # Why this and not the timestamp beside it
 	//

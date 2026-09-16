@@ -387,7 +387,7 @@ func (s *Service) HandleListItems(w http.ResponseWriter, r *http.Request) {
 // of a record it read earlier: a concurrent change is overwritten with nothing to
 // say it existed. So a caller may state the [Item.Revision] it read, and the write
 // is refused as a conflict unless the stored record still carries it
-// (ADR-draft-catalogue-maintenance-over-mcp). It is the rule the capability map
+// (ADR-0376). It is the rule the capability map
 // already uses, spelled the same way, so a reader who knows one knows the other.
 //
 // Stating it is optional, and that is deliberate rather than a transition: the

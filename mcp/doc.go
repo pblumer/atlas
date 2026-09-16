@@ -68,7 +68,7 @@
 // control by an upgrade. So over stdio the catalogue tools read and do not write,
 // and a write answers 403. Over the HTTP transport, where the caller's own
 // credential is forwarded, a signed-in product manager reaches exactly their own
-// catalogues. See ADR-draft-catalogue-maintenance-over-mcp.
+// catalogues. See ADR-0376.
 //
 // For stdio, diagnostics go to stderr; stdout carries protocol traffic only.
 package mcp

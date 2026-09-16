@@ -10,7 +10,7 @@ import (
 // offer them, and the release that freezes a version of both so an order has
 // something immutable to name.
 //
-// These are the tools ADR-draft-catalogue-maintenance-over-mcp decided to expose
+// These are the tools ADR-0376 decided to expose
 // after the surface they adapt stopped moving. Each is one HTTP operation and
 // nothing more (ADR-0016): the adapter interprets no catalogue, resolves no edge
 // and decides no publish — [catalog.Publish] does all of that behind the route,

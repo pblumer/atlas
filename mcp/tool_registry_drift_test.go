@@ -33,7 +33,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
 
 	// The portal catalogue an agent maintains as a product manager
-	// (ADR-draft-catalogue-maintenance-over-mcp). No delete among them, and that is
+	// (ADR-0376). No delete among them, and that is
 	// the model and not an omission: a catalogue has none, and a product is
 	// withdrawn through the ordinary save because an order placed years ago still
 	// resolves through it.
@@ -168,7 +168,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 	// The portal catalogue's own maintenance routes are tools now, not omissions —
-	// see mcpToolRoutes and ADR-draft-catalogue-maintenance-over-mcp. What stays
+	// see mcpToolRoutes and ADR-0376. What stays
 	// out of the tool surface is what a product manager does not do: the instance's
 	// appearance, and the ordering side, which is somebody's own.
 	"PUT /api/v1/catalogs/{id}/theme":                "an instance's appearance is an operator's choice, not an agent's",

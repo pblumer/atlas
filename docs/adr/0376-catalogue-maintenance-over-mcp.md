@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product manager maintains the catalogue over MCP
+# ADR-0376: A product manager maintains the catalogue over MCP
 
 - **Status:** Accepted
 - **Implementation:** Landed
