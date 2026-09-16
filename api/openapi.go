@@ -388,8 +388,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Restart a worker process this server supervises (ADR-0157); 409 when it supervises none", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("The worker that is restarting", tObject())}},
 		{"GET", "/api/v1/workers", s.handleWorkers, apiOp{
-			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, and every worker seen this run (ADR-0157)", tag: "Incidents", role: RoleOperator,
+			summary: "The Workers view: every job type with its queue depth, in-flight count and incidents, every worker seen this run (ADR-0157), and every target whose jobs a circuit breaker is holding back (ADR-0340)", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("Workers and job-type queues", tObject())}},
+		{"POST", "/api/v1/workers/breakers/close", s.handleCloseBreaker, apiOp{
+			summary: "End a circuit breaker's hold early, for an operator who has already fixed the target (ADR-0340); 200 with closed:false when nothing was held", tag: "Incidents", role: RoleOperator,
+			req: jsonBody("The target to stop holding back", schemaObj(map[string]any{
+				"jobType": tString(), "connector": tString(),
+			}, "jobType")),
+			resp: jsonBody("Whether a hold was ended", tObject())}},
 		{"GET", "/api/v1/workers/{id}/history", s.handleWorkerHistory, apiOp{
 			summary: "One Worker Instance's job history from the configured clio worker, newest first (admin-only; empty when no job history is configured)", tag: "Incidents", role: RoleAdmin,
 			resp: jsonBody("Worker job history", tObject())}},

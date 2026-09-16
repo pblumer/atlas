@@ -221,6 +221,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 		types    = []jobTypeStat{}
 		list     = []workerStat{}
 		unserved = []unservedConnector{}
+		breakers = []breakerView{}
 		scanErr  error
 		reachErr error
 	)
@@ -255,6 +256,11 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			types = append(types, st)
 		}
 		list = s.workers.list()
+		// What is being *held*, which no other row on this view can say. A queue that
+		// is deep because nobody is serving it and one that is deep because the engine
+		// has stopped serving it look identical from the type row, and only one of them
+		// is something an operator should go and fix (ADR-0340).
+		breakers = s.breakers.openBreakers(s.jobTypes.Name)
 		reachable, err := s.reachableDeployments()
 		if err != nil {
 			reachErr = err
@@ -290,6 +296,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"workers": list, "types": types, "supervised": supervised,
 		"unservedConnectors": unserved, "jobTypeCollisions": collisions,
+		"breakers": breakers,
 	})
 }
 

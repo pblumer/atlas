@@ -1,8 +1,9 @@
 # ADR-0340: An outage stops at the worker, not at every token
 
 - **Status:** Accepted (amended 2026-09-15 — the job record gains no field; the gate attributes lazily,
-  and only while a breaker is open. See the amendment note below.)
-- **Implementation:** Partial
+  and only while a breaker is open. 2026-09-16 — the Prometheus metrics are aggregates, not per-Worker
+  series. See the amendment note and the visibility section below.)
+- **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Deciders:** Atlas engine team
 - **Open question:** Whether a failure the *target system* caused can be told apart from one this
@@ -199,12 +200,28 @@ against it is the boundedness above. There is no durable cost at all.
 
 A breaker is never silent:
 
-- The **Workers view** (ADR-0157) gains the state on the Worker: open since, what tripped it, how
-  many jobs are waiting behind it, when the next probe goes. That view already answers "is anyone
-  serving this?"; this is the same question answered by the server rather than by eye.
+- The **Workers view** (ADR-0157) gains the state on the Worker: open since, what tripped it, when
+  the next probe goes. That view already answers "is anyone serving this?"; this is the same
+  question answered by the server rather than by eye. It sits *above* the queue depths, because a
+  queue that is deep because nobody serves it and one that is deep because the engine has stopped
+  serving it are indistinguishable in the type table, and only one of them is an operator's to fix.
+
+  The row does **not** carry "how many jobs are waiting behind it", which this section originally
+  promised. Counting them exactly means attributing every activatable job of the type to its Worker
+  — a scan the size of the backlog, on a view that is polled — and the honest substitute is already
+  on the same page: the type's own queue depth, which while a breaker is open is the number's upper
+  bound. What the row carries instead is refusals, and it is labelled as refusals rather than as a
+  depth, because the same job is refused again on every round it is scanned in.
 - **Close now** — an operator who has fixed the endpoint does not wait out a cooldown.
-- A Prometheus counter per Worker for trips and probes (ADR-0142), and one log line per state
-  change.
+- A Prometheus **aggregate** for trips, probes, refusals and how many targets are held, and one log
+  line per state change.
+
+  Not a counter *per Worker*, which is what this section originally said. A Worker's name comes from
+  a deployed model, so a label carrying it is a label whose values the data invents — the one thing
+  [ADR-0142](0142-prometheus-metrics.md)'s cardinality rule forbids, and for the reason that rule gives:
+  an estate can hold hundreds of them, and a scrape target can only fall over where an API can
+  paginate. "Which target" is a question for the Workers view above, which is exactly how that rule
+  says a per-thing breakdown should be answered.
 
 No incident is raised. An incident is a fact about a token (ADR-0061), and no token here is faulty;
 manufacturing one on an arbitrary instance to represent a server-wide condition would be a lie in

@@ -2,8 +2,12 @@ package api
 
 import (
 	"log/slog"
+	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
@@ -158,4 +162,60 @@ func (s *Server) scanHeldCandidates(jobType int32, want int, keys *[]uint64) err
 	}
 	s.gateResume[jobType] = last
 	return nil
+}
+
+// closeBreakerReq is the operator's override, and deliberately the only way a person may
+// touch a breaker. There is no matching "open this": judging a target down is a
+// conclusion the engine draws from what workers report, and letting a person assert it
+// by hand would put an opinion where evidence belongs.
+type closeBreakerReq struct {
+	JobType   string `json:"jobType"`
+	Connector string `json:"connector"`
+}
+
+// handleCloseBreaker ends a hold early — for the operator who has already fixed the
+// endpoint and will not wait out a cooldown (ADR-0340).
+//
+// Closing is safe in a way opening would not be: the breaker simply forgets the target,
+// and if it is still down the next three distinct failures judge it down again. That is
+// why a close that found nothing open is a 200 saying so rather than a 404 — an operator
+// clicking a row that recovered a second earlier has done nothing wrong, and the reply
+// says what happened instead of implying an action that did not.
+func (s *Server) handleCloseBreaker(w http.ResponseWriter, r *http.Request) {
+	var req closeBreakerReq
+	if !s.decodeJSONBody(w, r, &req) {
+		return
+	}
+	name := strings.TrimSpace(req.JobType)
+	if name == "" {
+		httpapi.Error(w, http.StatusBadRequest,
+			"jobType is required: a close names one target, and a request naming none would mean every breaker on this server")
+		return
+	}
+	var (
+		unknown bool
+		closed  bool
+	)
+	s.do(func() {
+		idx, ok := s.jobTypes.Index(name)
+		if !ok {
+			unknown = true
+			return
+		}
+		closed = s.breakers.closeNow(breakerKey{jobType: idx, connector: strings.TrimSpace(req.Connector)})
+	})
+	if unknown {
+		httpapi.Error(w, http.StatusNotFound,
+			"no job type "+strconv.Quote(name)+" is known to this engine")
+		return
+	}
+	// Drive off the loop: closing a breaker is what lets a held backlog go, and the
+	// handlers that drain it make the outbound calls a worker exists for.
+	if err := s.drive(); err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "close breaker: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, map[string]any{
+		"jobType": name, "connector": req.Connector, "closed": closed,
+	})
 }

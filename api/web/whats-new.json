@@ -2,6 +2,28 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "an-outage-now-stops-at-the-worker-instead-of-at-every-token",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An outage now stops at the worker, instead of at every single token",
+        "de": "Ein Ausfall stoppt jetzt beim Worker statt bei jedem einzelnen Token"
+      },
+      "summary": {
+        "en": "When a target system stops answering — an SMTP host, a REST endpoint — it used to fail one job per instance that reached the task: every token spent its retries and parked on an incident of its own, so an hour of downtime in a busy process left thousands for somebody to clear. Atlas now notices. Three different instances failing in a row against the same target is enough: its jobs stop being handed out, and one job goes through every ten seconds — then twenty, forty, up to five minutes — to test whether it is back. Held work is waiting, not failed: no retry is spent on it, no incident raised, nothing cancelled, and the whole backlog carries on by itself the moment the target answers. Operations → Workers shows a Held back card naming each target, since when, what it last failed with and when the next attempt is due, with a Close now button for when you have already fixed the endpoint and would rather not wait.",
+        "de": "Antwortet ein Zielsystem nicht mehr — ein SMTP-Host, eine REST-Schnittstelle —, scheiterte bisher ein Job pro Instanz, die die Aufgabe erreichte: jeder Token verbrauchte seine Retries und parkte auf einem eigenen Incident, sodass eine Stunde Ausfall in einem gut laufenden Prozess Tausende davon hinterliess. Atlas erkennt das jetzt. Drei verschiedene Instanzen, die hintereinander gegen dasselbe Ziel scheitern, genügen: dessen Jobs werden nicht mehr ausgegeben, und alle zehn Sekunden — dann zwanzig, vierzig, bis maximal fünf Minuten — geht genau ein Job als Test durch. Zurückgehaltene Arbeit wartet, sie ist nicht gescheitert: kein Retry wird dafür verbraucht, kein Incident erzeugt, nichts abgebrochen, und der ganze Rückstau läuft von selbst weiter, sobald das Ziel wieder antwortet. In Operations → Workers nennt die Karte «Held back» jedes Ziel, seit wann es zurückgehalten wird, woran es zuletzt scheiterte und wann der nächste Versuch läuft — mit einem Knopf «Close now», wenn der Endpunkt schon repariert ist und man nicht warten will."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations",
+        "Workers"
+      ]
+    },
+    {
       "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
       "version": "Unreleased",
       "date": null,
@@ -270,49 +292,6 @@
           "de": "Processes öffnen"
         },
         "route": "#/operations"
-      }
-    },
-    {
-      "id": "deleting-a-dmn-reference-now-says-what-it-would-break",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Deleting a decision reference now tells you what it costs",
-        "de": "Das Löschen einer Entscheidungs-Referenz sagt jetzt, was es kostet"
-      },
-      "summary": {
-        "en": "The question before deleting a DMN reference was \"are you sure?\" with one reassuring sentence about the model file, which is not the thing at stake. What a reference decides is whether anything can still be deployed against the decisions in that model: a business rule task set to Deployment evaluates the copy shipped with its own process, and that copy comes from the reference. Delete the last one and that process can never be deployed again — a refusal that turns up weeks later, without a word about the deletion that caused it. The confirm now runs the same check the deploy runs and lists what it finds: which decisions lose their last model, and which deployed processes and drafts could then not be deployed, each with its binding. It also says what is not at risk, because that is the actual fear: running instances are untouched. Nothing is blocked — the reference stays yours to delete — and a draft in an application you cannot see is counted without being named.",
-        "de": "Vor dem Löschen einer DMN-Referenz stand «Sind Sie sicher?» mit einem beruhigenden Satz über die Modelldatei — also nicht über das, worum es geht. Eine Referenz entscheidet darüber, ob überhaupt noch etwas gegen die Entscheidungen dieses Modells ausgeliefert werden kann: Eine auf «Deployment» gesetzte Geschäftsregelaufgabe wertet die Kopie aus, die mit ihrem eigenen Prozess ausgeliefert wird, und diese Kopie stammt aus der Referenz. Löscht man die letzte, lässt sich dieser Prozess nie wieder ausliefern — eine Ablehnung, die Wochen später auftaucht, ohne ein Wort über die Löschung, die sie verursacht hat. Der Bestätigungsdialog führt jetzt dieselbe Prüfung durch wie das Ausliefern und listet auf, was er findet: welche Entscheidungen ihr letztes Modell verlieren und welche ausgelieferten Prozesse und Entwürfe danach nicht mehr ausgeliefert werden könnten, jeweils mit ihrer Bindung. Er sagt auch, was nicht gefährdet ist — denn das ist die eigentliche Sorge: Laufende Instanzen bleiben unberührt. Blockiert wird nichts; die Referenz bleibt Ihre Entscheidung. Ein Entwurf in einer Anwendung, die Sie nicht sehen können, wird gezählt, aber nicht benannt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open an application in the Modeler and find a DMN reference in its artifact list.",
-          "Choose ⋯ → Delete on it.",
-          "The confirm names the decisions that would lose their last model, and every deployed process or draft that could then not be deployed.",
-          "Cancel, and the reference stays. Nothing about the check changes anything."
-        ],
-        "de": [
-          "Eine Anwendung im Modeler öffnen und in ihrer Artefaktliste eine DMN-Referenz suchen.",
-          "Dort «⋯ → Delete» wählen.",
-          "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
-          "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]

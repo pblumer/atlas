@@ -42,9 +42,28 @@ _Changed_ / _Removed_ for each version.
   token is not cancelled, completed or failed, and no incident is raised for it — an
   incident is a fact about a token, and none of these tokens is at fault.
 
-  While a breaker holds work back the log says so, naming the target, what it last failed
-  with, and how far away the next probe is. The Workers view, a "close now" control for an
-  operator who has already fixed the endpoint, and the counters follow.
+  **Held work is visible, because silence is the one failure mode nothing else surfaces.**
+  A growing queue with no incidents under it used to mean "nobody is serving this"; it can
+  now also mean "Atlas has stopped serving this", and those need telling apart. So
+  Operations → Workers grows a **Held back** card above the queue depths, naming each
+  target, since when it has been held, what it last failed with and when the next attempt
+  is due. **Close now** on the row releases it for an operator who has already fixed the
+  endpoint and will not wait out a cooldown — and if the target is in fact still down, the
+  next three failures simply hold it again, which is why closing is safe to expose and
+  "open this by hand" is not offered at all.
+
+  Every state change is logged as `worker.breaker_open` / `worker.breaker_closed`, and
+  `/metrics` carries `atlas_worker_breakers_open` with the totals
+  `atlas_worker_breaker_trips_total`, `_probes_total` and `_refused_total`. Those are
+  aggregates without labels on purpose: a Worker's name comes from a deployed model, and a
+  metric label carrying one would be a label whose values the data invents — which an
+  estate of a few hundred Workers turns into a few hundred time series. *Which* target is
+  a question for the Workers view, which is how ADR-0142 says a per-thing breakdown should
+  be answered.
+
+  The handbook says all of it under **Operations & incidents**, in both languages,
+  including the warning that matters most: a queue growing without incidents is not
+  evidence that everything is fine.
 
 - **The catalogue can now say what must never be held together.** Everything the portal had
   learned about access was **detective or temporal**: the commissioning load records what was

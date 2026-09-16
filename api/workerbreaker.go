@@ -138,6 +138,11 @@ type breakerEntry struct {
 	refused int64
 }
 
+// breakerCounts are one target's totals for this run of the server: how often it was
+// judged down, how often the engine tried it again, and how many dispatch attempts were
+// turned away meanwhile.
+type breakerCounts struct{ trips, probes, refused int64 }
+
 // workerBreakers is the collection, owned by the run loop.
 type workerBreakers struct {
 	byKey map[breakerKey]*breakerEntry
@@ -145,6 +150,13 @@ type workerBreakers struct {
 	// It is the whole reason the gate is free when nothing is wrong: the dispatch path
 	// asks this once per type and, finding nothing, never resolves a job to a Worker.
 	holding map[int32]int
+	// stats is what a scrape reads, and it is deliberately NOT cleared when a target
+	// recovers. byKey forgets a recovered target entirely — which is what keeps it the
+	// size of the problem rather than of the estate — but a counter that disappears and
+	// comes back at zero is a counter Prometheus reads as a reset, so the totals live
+	// apart from the state and outlive it. Its size is bounded by the Workers the
+	// deployed models name, which is a property of the estate and not of the traffic.
+	stats map[breakerKey]*breakerCounts
 	// tracked counts *every* entry per job type, held or merely mid-streak. The
 	// reporting side needs the wider question: a completion has to be able to break a
 	// streak that is not holding anything yet, and asking this first is what keeps a
@@ -169,6 +181,7 @@ func newWorkerBreakers(now func() int64) *workerBreakers {
 		byKey:   map[breakerKey]*breakerEntry{},
 		holding: map[int32]int{},
 		tracked: map[int32]int{},
+		stats:   map[breakerKey]*breakerCounts{},
 		now:     now,
 	}
 }
@@ -206,6 +219,7 @@ func (b *workerBreakers) allow(k breakerKey, jobKey uint64) bool {
 	case breakerOpen:
 		if now < e.probeAt {
 			e.refused++
+			b.count(k).refused++
 			return false
 		}
 		e.state = breakerHalfOpen
@@ -214,11 +228,13 @@ func (b *workerBreakers) allow(k breakerKey, jobKey uint64) bool {
 		// probe is the same call rather than a second one in flight.
 		if now < e.probeBy {
 			e.refused++
+			b.count(k).refused++
 			return false
 		}
 	}
 	e.probeJob = jobKey
 	e.probeBy = now + int64(breakerProbeTimeout)
+	b.count(k).probes++
 	return true
 }
 
@@ -299,6 +315,7 @@ func (b *workerBreakers) trip(k breakerKey, e *breakerEntry, reason string, now 
 	if e.state == breakerClosed {
 		b.holding[k.jobType]++
 	}
+	b.count(k).trips++
 	e.state = breakerOpen
 	e.trippedAt = now
 	e.reason = reason
@@ -329,6 +346,16 @@ func (b *workerBreakers) forget(k breakerKey, e *breakerEntry) {
 	if b.onChange != nil && held {
 		b.onChange(k, breakerClosed, "", 0)
 	}
+}
+
+// count returns this target's totals, creating them on first sight.
+func (b *workerBreakers) count(k breakerKey) *breakerCounts {
+	c, ok := b.stats[k]
+	if !ok {
+		c = &breakerCounts{}
+		b.stats[k] = c
+	}
+	return c
 }
 
 // breakerView is one held target as an operator sees it. Work that silently does not
