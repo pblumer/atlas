@@ -193,6 +193,48 @@
       }
     },
     {
+      "id": "an-enumeration-s-literals-are-shaded-by-use-too-read-through",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See which states of an enumeration anything ever reaches",
+        "de": "Sehen, welche Zustände einer Enumeration überhaupt je erreicht werden"
+      },
+      "summary": {
+        "en": "The class diagram's usage shading now covers an enumeration's literals as well as a class's attributes. No process ever names a literal — what it names is a state, on a write — so the question is asked of the classes whose lifecycle takes its states from that enumeration: a literal is bright where a deployed process moves such a class into that state, and faint where none does. That is the reading you want from a state machine: the states nothing has ever reached. Where nothing borrows the literals, or where no deployed process uses the classes that do, they are left unshaded rather than faded — a state machine nothing drives is not a state machine nothing reaches.",
+        "de": "Die Nutzungsanzeige im Klassendiagramm umfasst jetzt auch die Literale einer Enumeration, nicht nur die Attribute einer Klasse. Kein Prozess nennt je ein Literal — genannt wird ein Zustand, an einem Schreibzugriff. Die Frage wird deshalb den Klassen gestellt, deren Lebenszyklus seine Zustände von dieser Enumeration bezieht: Ein Literal ist hell, wo ein deployter Prozess eine solche Klasse in diesen Zustand überführt, und blass, wo das keiner tut. Das ist die Auskunft, die man von einem Zustandsmodell will: die Zustände, die nie erreicht werden. Bezieht keine Klasse ihre Zustände von der Enumeration, oder verwendet kein deployter Prozess diese Klassen, bleiben die Literale ungefärbt statt blass — ein Zustandsmodell, das niemand antreibt, ist nicht dasselbe wie eines, dessen Zustände niemand erreicht."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, then an information model that has an enumeration and a class taking its lifecycle states from it.",
+          "Press the shading control in the canvas toolbar.",
+          "Bright literals are states a deployed process moves that class into; faint ones are reached by nothing deployed.",
+          "An enumeration no lifecycle borrows from stays unshaded — the reading has nothing to say about it."
+        ],
+        "de": [
+          "Data öffnen und ein Informationsmodell wählen, in dem eine Klasse ihre Lebenszyklus-Zustände von einer Enumeration bezieht.",
+          "In der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken.",
+          "Helle Literale sind Zustände, in die ein deployter Prozess diese Klasse überführt; blasse werden von nichts Deploytem erreicht.",
+          "Eine Enumeration, von der kein Lebenszyklus borgt, bleibt ungefärbt — dazu kann die Auswertung nichts sagen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the information model",
+          "de": "Informationsmodell öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
       "version": "Unreleased",
       "date": null,
@@ -271,48 +313,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-class-diagram-can-say-which-members-anything-actually-us",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See on the class diagram which attributes are actually used",
-        "de": "Im Klassendiagramm sehen, welche Attribute tatsächlich genutzt werden"
-      },
-      "summary": {
-        "en": "You decide the fate of an attribute while looking at the class diagram — and until now the answer to \"does anything use this?\" was on another page. A control beside zoom and undo now shades the drawing: an attribute some deployed process writes by name comes forward, one none of them names recedes, and a class no process and nothing in the model uses is faint as a whole. Faint is deliberately careful: it means nothing names it, not that nothing uses it, because a process that reads the whole object never says which fields it then looks at. A business key is never faint, an enumeration is not faint for having no process use, and anything you have just added or renamed is left exactly as it was drawn.",
-        "de": "Über das Schicksal eines Attributs entscheidet man im Klassendiagramm — die Antwort auf \"wird das überhaupt genutzt?\" stand bisher auf einer anderen Seite. Eine Schaltfläche neben Zoom und Undo blendet die Nutzung jetzt ins Diagramm ein: Ein Attribut, das ein deployter Prozess namentlich schreibt, tritt hervor; eines, das keiner nennt, tritt zurück; eine Klasse, die weder ein Prozess noch das Modell verwendet, wird als Ganzes blass. Blass ist bewusst vorsichtig formuliert: Es heisst, dass niemand das Attribut namentlich nennt — nicht, dass es ungenutzt ist, denn ein Prozess, der das ganze Objekt liest, sagt nie, welche Felder er danach ausliest. Ein Business Key wird nie blass, eine Enumeration wird es nicht schon mangels Prozessverwendung, und was gerade hinzugefügt oder umbenannt wurde, bleibt unverändert dargestellt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model, and press the shading control in the canvas toolbar (below undo and redo).",
-          "The legend appears while the shading is on and says what bright and faint were read from.",
-          "Bright attributes are written by name by at least one deployed process; faint ones are named by none.",
-          "Press the control again to put the drawing back — nothing is marked at all, which is the diagram as it is when nobody has asked."
-        ],
-        "de": [
-          "Data öffnen, ein Informationsmodell wählen und in der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken (unterhalb von Undo und Redo).",
-          "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
-          "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
-          "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]
