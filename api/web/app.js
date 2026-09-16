@@ -63,7 +63,7 @@ const superseded = (gen) => gen !== navGen;
 // apiRaw is the fetch wrapper that also returns the response headers, for the few
 // endpoints that say something in one. Pagination is no longer among them: a capped
 // listing carries its cap, its total and its cursor in the body
-// (ADR-draft-a-capped-listing-answers-with-a-page), so the
+// (ADR-0378), so the
 // remaining header readers are about other things — X-Archive-State, which says the
 // rows describe instances history retention has deleted. Most callers want just the
 // body — see api().
@@ -1573,7 +1573,7 @@ async function viewConsoleAudit() {
     }
     // The endpoint counts every match and then returns a window of it, so this total is
     // the number of changes rather than the number on screen
-    // (ADR-draft-a-capped-listing-answers-with-a-page).
+    // (ADR-0378).
     const cut = page.truncated
       ? `<p class="muted small">Showing the newest ${events.length} of ${page.total}. Narrow by action, or ask for more with ?limit=.</p>`
       : "";
@@ -5730,7 +5730,7 @@ async function viewInstances() {
     }).join("");
     // The server says whether it cut the result. This used to be inferred from
     // receiving exactly 200 rows, which cannot tell a search that found 200 from one
-    // that found more (ADR-draft-a-capped-listing-answers-with-a-page) — and the
+    // that found more (ADR-0378) — and the
     // difference matters here, because a cut result means the instance being looked for
     // may be among the ones not shown.
     const cut = !!(page && page.truncated);
@@ -6212,7 +6212,7 @@ async function viewIncidents() {
       const onPage = new Set(current.map((r) => String(r.elementInstanceKey)));
       for (const key of [...picked]) if (!onPage.has(key)) picked.delete(key);
       // The cap is on the response now, not in a header a reader had to know about
-      // (ADR-draft-a-capped-listing-answers-with-a-page).
+      // (ADR-0378).
       const capped = !!(page && page.truncated);
       rowsTitle.textContent = scope
         ? `${scope.elementId || "Element #" + scope.elementIndex} · ${scope.processId || scope.processDefKey}${capped ? ` — first ${current.length} of ${scope.count}` : ` — ${current.length}`}`
@@ -8235,7 +8235,7 @@ async function viewTasks(preselectKey) {
       // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
       // off the body rather than a header is the point: a header is a thing a caller
       // has to know to ask for, and this one went unread for years
-      // (ADR-draft-a-capped-listing-answers-with-a-page).
+      // (ADR-0378).
       const page = await api("GET", "/api/v1/tasks");
       state.tasks = (page && page.items) || [];
       state.truncated = !!(page && page.truncated);
@@ -9284,7 +9284,7 @@ async function viewLive(key, instance) {
   // apiRaw rides along for X-Archive-State on the panel's instance search: the rows
   // it marks are answered from the exported log rather than this store, and that is a
   // header. Pagination is not — it is in the body now
-  // (ADR-draft-a-capped-listing-answers-with-a-page).
+  // (ADR-0378).
   await mod.mountLive(view, { api, apiRaw, toast, key, instance });
 }
 

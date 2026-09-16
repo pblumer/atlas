@@ -3,7 +3,7 @@
 //
 // GET /api/v1/tasks returns at most one page of open tasks; whether more exist, and where
 // the next page starts, come back with the rows (truncated, nextCursor — headers before
-// ADR-draft-a-capped-listing-answers-with-a-page). The first load reads them. Completing
+// ADR-0378). The first load reads them. Completing
 // a task then re-read only the rows, so
 // both were left at whatever the first load had seen: the "more exist" banner stayed up
 // after the backlog was gone, and "Load older" went on paging from a cursor that had
@@ -14,7 +14,7 @@
 import { test, expect } from "@playwright/test";
 
 // listing is how every capped list endpoint answers since
-// ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+// ADR-0378: the rows under
 // .items, beside the count of what is really there and whether the cap bit.
 const listing = (items, extra = {}) => ({
   items, total: items.length, totalExact: true, truncated: false, ...extra,

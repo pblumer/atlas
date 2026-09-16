@@ -15,7 +15,7 @@ import (
 
 // A number the console states is a counter or a walk, never the length of a page
 // (ADR-0365) — and a capped listing answers in a shape that says so
-// (ADR-draft-a-capped-listing-answers-with-a-page).
+// (ADR-0378).
 //
 // The mistake these guards look for is one the codebase made five times before
 // anybody noticed it once:
@@ -537,7 +537,7 @@ func matchCappedListing(fragment string) (listing struct {
 //
 // The cases below are the real ones. The lines marked as defects are what the console
 // actually said before
-// ADR-draft-a-capped-listing-answers-with-a-page; the lines marked as sound
+// ADR-0378; the lines marked as sound
 // are shapes that live in it now and must keep passing, because a rule that
 // fires on them is a rule somebody will delete rather than satisfy.
 func TestThePageCountGuardsStillBite(t *testing.T) {

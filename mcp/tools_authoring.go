@@ -245,7 +245,7 @@ func listInstancesPage(c *Client, args map[string]any) (string, error) {
 		return "", err
 	}
 	// Straight through: the server answers {items, total, totalExact, truncated,
-	// nextCursor} itself now (ADR-draft-a-capped-listing-answers-with-a-page).
+	// nextCursor} itself now (ADR-0378).
 	//
 	// This function used to *be* that shape — it read a bare array, read the cap out of
 	// X-Instances-Truncated and the cursor out of X-Instances-Next-Cursor, and stitched
@@ -1010,7 +1010,7 @@ func authoringTools() []Tool {
 				}
 
 				// Straight through, as for instances above: the envelope is the
-				// server's now (ADR-draft-a-capped-listing-answers-with-a-page).
+				// server's now (ADR-0378).
 				return asText(c.get(path))
 			},
 		},

@@ -129,7 +129,7 @@ func PrincipalFrom(ctx context.Context) *Principal {
 
 // Page is what a *capped* listing answers with: the rows it could fit, and the facts
 // about the population those rows came out of
-// (ADR-draft-a-capped-listing-answers-with-a-page).
+// (ADR-0378).
 //
 // A bare `[]T` cannot carry those facts, and that is not a cosmetic problem. Five
 // times in this codebase a caller took such an array, counted its rows, and rendered

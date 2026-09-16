@@ -3,7 +3,7 @@
 //
 // The view had no browser test at all, which is how it was still reading
 // GET /api/v1/audit as a bare array after that endpoint started answering a page
-// (ADR-draft-a-capped-listing-answers-with-a-page). The listing counts every event
+// (ADR-0378). The listing counts every event
 // matching the filters and then returns a window of it, so `total` is the number of
 // changes and `items.length` is the number on screen. Those differ exactly when an
 // administrator is looking at a busy installation — which is the only time this page is

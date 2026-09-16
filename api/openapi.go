@@ -77,7 +77,7 @@ func tArray() map[string]any {
 
 // tPage is the response schema of a *capped* listing: the rows it could fit, beside
 // what the server knows about the population they came out of
-// (ADR-draft-a-capped-listing-answers-with-a-page). It is not `tArray()`, and saying so
+// (ADR-0378). It is not `tArray()`, and saying so
 // here is the difference between a generated client that works and one whose list type
 // is wrong in the way the console's was.
 func tPage() map[string]any {

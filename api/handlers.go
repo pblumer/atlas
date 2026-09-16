@@ -4270,7 +4270,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The page and its cap in one object
-	// (ADR-draft-a-capped-listing-answers-with-a-page). The cap used to ride in
+	// (ADR-0378). The cap used to ride in
 	// X-Tasks-Truncated, which a caller had to know to read: the console's own sidebar
 	// did not, and counted the rows of this page as the size of the inbox.
 	//
@@ -4979,7 +4979,7 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	// One shape for every capped listing, so a client learns it once. This answered
 	// with {"incidents": [...]} — an object, but its own object, with the cap in a
 	// header beside it that the console's instance search never read
-	// (ADR-draft-a-capped-listing-answers-with-a-page).
+	// (ADR-0378).
 	//
 	// The total is a floor on a capped page: counting every match means walking the
 	// whole incident family, which is what GET /api/v1/incidents/summary is for.

@@ -353,7 +353,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	// This listing said nothing about its own cap until now, and the console filled the
 	// gap by guessing: it printed "showing first 200" whenever it received exactly 200
 	// rows, which cannot tell a search that found 200 from one that found more
-	// (ADR-draft-a-capped-listing-answers-with-a-page).
+	// (ADR-0378).
 	// The cap is the server's fact, so the server states it.
 	//
 	// A search that came in under the cap found everything there was, so its total is
@@ -371,7 +371,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 // and rendered as a plain "active": the word an operator reads as healthy, on the
 // surface they debug from. Measured on a store holding 5 200 parked instances, 200 of
 // them came back unflagged, and the truncation header that said so was not read
-// (ADR-draft-a-capped-listing-answers-with-a-page).
+// (ADR-0378).
 //
 // Here the number is the row's own. A result set is capped at maxInstanceSearchResults,
 // so this is a bounded number of walks, each bounded by one instance's live tokens —

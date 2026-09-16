@@ -233,7 +233,7 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		return
 	}
 	// Same shape and same reasoning as the unfiltered listing
-	// (ADR-draft-a-capped-listing-answers-with-a-page). The exact
+	// (ADR-0378). The exact
 	// count for this folder is what GET /api/v1/task-folders/counts answers; here the
 	// total is the page unless the page is everything.
 	capped := full || budgetHit

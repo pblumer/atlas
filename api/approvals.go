@@ -139,7 +139,7 @@ func (s *Server) handleListApprovals(w http.ResponseWriter, r *http.Request) {
 	}
 	// A page whose scan budget did not bite holds every approval addressed to this
 	// caller, so its total is exact; one that hit the budget reports a floor and the
-	// cursor to continue with (ADR-draft-a-capped-listing-answers-with-a-page).
+	// cursor to continue with (ADR-0378).
 	page := httpapi.PageOf(out, budgetHit)
 	if budgetHit {
 		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))

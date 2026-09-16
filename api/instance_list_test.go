@@ -216,7 +216,7 @@ func listPage(t *testing.T, ts *httptest.Server, query string) ([]listRow, listi
 		t.Fatalf("GET instances%s: status=%d", query, res.StatusCode)
 	}
 	// The envelope, not the headers: a capped listing says so in its body now
-	// (ADR-draft-a-capped-listing-answers-with-a-page).
+	// (ADR-0378).
 	var page struct {
 		Items      []listRow `json:"items"`
 		Total      int       `json:"total"`
@@ -673,7 +673,7 @@ type instanceRow struct {
 // TestTheInstanceListingSaysWhereItsTotalCameFrom pins the distinction the envelope
 // exists to carry: `total` is exact where a maintained counter answers the query, and
 // a floor where none does — and the response says which
-// (ADR-draft-a-capped-listing-answers-with-a-page).
+// (ADR-0378).
 //
 // It is here because getting this wrong is silent. A floor reported as exact reads
 // exactly like a truth, and the only way to notice is to hold more instances than the

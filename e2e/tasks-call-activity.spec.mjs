@@ -8,7 +8,7 @@
 import { test, expect } from "@playwright/test";
 
 // listing is how every capped list endpoint answers since
-// ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+// ADR-0378: the rows under
 // .items, beside the count of what is really there and whether the cap bit.
 const listing = (items, extra = {}) => ({
   items, total: items.length, totalExact: true, truncated: false, ...extra,

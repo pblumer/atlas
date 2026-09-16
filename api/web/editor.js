@@ -9887,7 +9887,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
       (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
     // The page, its cap and its cursor all come off the body now
-    // (ADR-draft-a-capped-listing-answers-with-a-page).
+    // (ADR-0378).
     const page = await api("GET", q);
     return {
       rows: ((page && page.items) || []).filter((r) => r.processDefKey === key),
@@ -10060,7 +10060,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // The result is capped, and the response says when the cap bit. Counting the rows
       // instead would put "Search results (200)" on a query that matched thousands —
       // and an operator looking for one instance would read that as "it is not here"
-      // (ADR-draft-a-capped-listing-answers-with-a-page).
+      // (ADR-0378).
       //
       // X-Archive-State is the one signal still in a header, and deliberately: it says
       // the rows describe instances history retention has already deleted, which is

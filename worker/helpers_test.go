@@ -41,7 +41,7 @@ func get(t *testing.T, ts *httptest.Server, path string) []byte {
 }
 
 // listRows unwraps a capped listing's envelope down to its rows
-// (ADR-draft-a-capped-listing-answers-with-a-page). These tests want the rows; the
+// (ADR-0378). These tests want the rows; the
 // tests that are about paging live in api/.
 func listRows(t *testing.T, body []byte) []byte {
 	t.Helper()

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A capped listing answers with a page, not with an array
+# ADR-0378: A capped listing answers with a page, not with an array
 
 - **Status:** Accepted
 - **Implementation:** Landed

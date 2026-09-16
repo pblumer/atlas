@@ -148,7 +148,7 @@ type instancePage struct {
 	truncated  bool
 	nextCursor string
 	// total and totalExact are the population the rows came out of
-	// (ADR-draft-a-capped-listing-answers-with-a-page). Where a maintained counter
+	// (ADR-0378). Where a maintained counter
 	// answers it — a definition's live or finished instances, the engine's live total
 	// (ADR-0080/0083) — it is exact and costs a point read. Where none does, total is
 	// what this request saw and totalExact says so rather than dressing a page up as a
@@ -407,7 +407,7 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The page and what it came out of, in one object
-	// (ADR-draft-a-capped-listing-answers-with-a-page). This used to be a
+	// (ADR-0378). This used to be a
 	// bare array with the cap reported in X-Instances-Truncated, which a caller had to
 	// know to read — and the console's own reader of it did not, for years, on the
 	// surface where being wrong matters most.

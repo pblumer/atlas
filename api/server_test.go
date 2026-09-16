@@ -410,7 +410,7 @@ func TestServesVendoredDmnModeler(t *testing.T) {
 
 // listRows unwraps a capped listing's envelope down to its rows, so a test that only
 // wants the rows decodes them the way it always did
-// (ADR-draft-a-capped-listing-answers-with-a-page).
+// (ADR-0378).
 //
 // The envelope is {items, total, totalExact, truncated, nextCursor} and it exists
 // because a bare array cannot say it is a page. Most tests here do not care: they
@@ -441,7 +441,7 @@ func truncateBody(body []byte) string {
 
 // pageFacts decodes what a capped listing says about itself beside its rows: how many
 // there are, whether that is exact, whether the cap bit, and where to resume
-// (ADR-draft-a-capped-listing-answers-with-a-page).
+// (ADR-0378).
 // The tests that are *about* paging read this; the ones that only want the rows use
 // listRows.
 type pageFacts struct {

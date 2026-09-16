@@ -161,7 +161,7 @@ _Changed_ / _Removed_ for each version.
   The Postman collection and its README walkthrough were updated as well — that `curl`
   line is meant to be copied, and it was teaching `json.load(…)[0]["key"]`. The Golden
   Path now asserts the envelope rather than only the status code.
-  (ADR-draft-a-capped-listing-answers-with-a-page)
+  (ADR-0378)
 
 - **The info panel is reachable from every column of the catalogue, not only from
   services.** This was not a missing feature but an inconsistency inside one page.

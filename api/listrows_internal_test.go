@@ -6,7 +6,7 @@ import (
 )
 
 // listRows unwraps a capped listing's envelope down to its rows
-// (ADR-draft-a-capped-listing-answers-with-a-page), for the
+// (ADR-0378), for the
 // tests inside package api. api_test has its own copy in server_test.go: the two
 // packages cannot share a test helper, and duplicating six lines beats exporting a
 // test-only function from production code.
