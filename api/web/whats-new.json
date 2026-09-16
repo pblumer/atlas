@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
+        "de": "The info panel is reachable from every column of the catalogue, not only from services."
+      },
+      "summary": {
+        "en": "This was not a missing feature but an inconsistency inside one page.",
+        "de": "This was not a missing feature but an inconsistency inside one page."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The feed generator is Go, so the Go checks stop needing Node.",
+        "de": "The feed generator is Go, so the Go checks stop needing Node."
+      },
+      "summary": {
+        "en": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless.",
+        "de": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless."
+      },
+      "link": {
+        "label": "ADR-0012",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
+      }
+    },
+    {
       "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
       "version": "Unreleased",
       "date": null,
@@ -35,6 +71,69 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-javascript-script-task-could-not-start-under-the-strict-sa",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A JavaScript script task could not start under the strict sandbox.",
+        "de": "A JavaScript script task could not start under the strict sandbox."
+      },
+      "summary": {
+        "en": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it.",
+        "de": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-knowledge-model-s-expression-opened-unstyled",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A knowledge model's logic is readable again",
+        "de": "Die Logik eines Knowledge Models ist wieder lesbar"
+      },
+      "summary": {
+        "en": "A knowledge model is the piece of a decision model that holds a reusable calculation — a fee, a discount, a risk score — that several decisions call rather than each repeating it. Opening one showed its parts, but drawn as bare lines of text against the left edge of the page: no boxes, no separators, and the small edit buttons that belong to a section sitting on top of the expression instead of appearing when you point at it. Nothing was broken underneath — what you typed was saved, and what was saved was correct — but the layout gave no clue which part was the calculation, which were the parameters a caller passes, and which was the result. It now opens as the three-part box it is: the name, the F for FEEL beside the parameter list, the expression itself, and the result variable a decision binds when it calls this model. The line beneath the canvas also says what you are looking at — it used to explain the decision table under every view, including the three that are not one.",
+        "de": "Ein Knowledge Model ist der Teil eines Entscheidungsmodells, der eine wiederverwendbare Berechnung hält — eine Gebühr, einen Rabatt, einen Risikowert —, die mehrere Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Beim Öffnen waren zwar alle Bestandteile da, aber als nackte Textzeilen am linken Seitenrand: keine Kästen, keine Trennlinien, und die kleinen Bearbeiten-Schaltflächen eines Abschnitts lagen auf dem Ausdruck, statt erst beim Zeigen darauf zu erscheinen. Darunter war nichts kaputt — Eingetipptes wurde gespeichert, Gespeichertes war korrekt —, aber die Darstellung liess nicht erkennen, was die Berechnung ist, was die Parameter sind, die ein Aufrufer übergibt, und was das Ergebnis. Nun öffnet sich der dreiteilige Kasten, der es ist: der Name, das F für FEEL neben der Parameterliste, der Ausdruck selbst und die Ergebnisvariable, die eine Entscheidung bindet, wenn sie dieses Modell aufruft. Auch die Zeile unter der Zeichenfläche benennt jetzt die geöffnete Ansicht — sie erklärte zuvor unter jeder Ansicht die Entscheidungstabelle, auch unter den drei, die keine ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+          "On the Overview (DRG) tab, draw a Knowledge Model and give it a name — this is the reusable calculation.",
+          "Select it and pick Literal Expression from its wrench menu to give it logic.",
+          "Open its own tab beside Overview (DRG): F names the expression language, the list beside it holds the parameters a caller passes, and Result names the variable a decision binds.",
+          "Draw a knowledge requirement from a decision to the model so something actually invokes it — a model with no decision has nothing to deploy."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "Im Reiter «Overview (DRG)» ein Knowledge Model zeichnen und benennen — das ist die wiederverwendbare Berechnung.",
+          "Es auswählen und im Werkzeugmenü «Literal Expression» wählen, um ihm Logik zu geben.",
+          "Den eigenen Reiter neben «Overview (DRG)» öffnen: «F» benennt die Ausdruckssprache, die Liste daneben hält die Parameter, die ein Aufrufer übergibt, und «Result» benennt die Variable, die eine Entscheidung bindet.",
+          "Von einer Entscheidung eine Knowledge-Requirement-Kante auf das Modell ziehen, damit es auch aufgerufen wird — ein Modell ohne Entscheidung hat nichts, was ausgeliefert werden könnte."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
       }
     },
     {
@@ -128,93 +227,45 @@
       }
     },
     {
-      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
+      "id": "an-enumeration-s-literals-are-shaded-by-use-too-read-through",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
-        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
+        "en": "See which states of an enumeration anything ever reaches",
+        "de": "Sehen, welche Zustände einer Enumeration überhaupt je erreicht werden"
       },
       "summary": {
-        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
-        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
+        "en": "The class diagram's usage shading now covers an enumeration's literals as well as a class's attributes. No process ever names a literal — what it names is a state, on a write — so the question is asked of the classes whose lifecycle takes its states from that enumeration: a literal is bright where a deployed process moves such a class into that state, and faint where none does. That is the reading you want from a state machine: the states nothing has ever reached. Where nothing borrows the literals, or where no deployed process uses the classes that do, they are left unshaded rather than faded — a state machine nothing drives is not a state machine nothing reaches.",
+        "de": "Die Nutzungsanzeige im Klassendiagramm umfasst jetzt auch die Literale einer Enumeration, nicht nur die Attribute einer Klasse. Kein Prozess nennt je ein Literal — genannt wird ein Zustand, an einem Schreibzugriff. Die Frage wird deshalb den Klassen gestellt, deren Lebenszyklus seine Zustände von dieser Enumeration bezieht: Ein Literal ist hell, wo ein deployter Prozess eine solche Klasse in diesen Zustand überführt, und blass, wo das keiner tut. Das ist die Auskunft, die man von einem Zustandsmodell will: die Zustände, die nie erreicht werden. Bezieht keine Klasse ihre Zustände von der Enumeration, oder verwendet kein deployter Prozess diese Klassen, bleiben die Literale ungefärbt statt blass — ein Zustandsmodell, das niemand antreibt, ist nicht dasselbe wie eines, dessen Zustände niemand erreicht."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-person-can-have-a-face",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A person can have a face.",
-        "de": "A person can have a face."
       },
-      "summary": {
-        "en": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names.",
-        "de": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names."
+      "tags": [
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, then an information model that has an enumeration and a class taking its lifecycle states from it.",
+          "Press the shading control in the canvas toolbar.",
+          "Bright literals are states a deployed process moves that class into; faint ones are reached by nothing deployed.",
+          "An enumeration no lifecycle borrows from stays unshaded — the reading has nothing to say about it."
+        ],
+        "de": [
+          "Data öffnen und ein Informationsmodell wählen, in dem eine Klasse ihre Lebenszyklus-Zustände von einer Enumeration bezieht.",
+          "In der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken.",
+          "Helle Literale sind Zustände, in die ein deployter Prozess diese Klasse überführt; blasse werden von nichts Deploytem erreicht.",
+          "Eine Enumeration, von der kein Lebenszyklus borgt, bleibt ungefärbt — dazu kann die Auswertung nichts sagen."
+        ]
       },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An approver decides a request once, instead of deciding it twelve times.",
-        "de": "An approver decides a request once, instead of deciding it twelve times."
-      },
-      "summary": {
-        "en": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks.",
-        "de": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-product-says-what-kind-of-thing-it-is-and-the-portal-s-fir",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product says what kind of thing it is, and the portal's first column finally carries data.",
-        "de": "A product says what kind of thing it is, and the portal's first column finally carries data."
-      },
-      "summary": {
-        "en": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service.",
-        "de": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-product-can-say-what-it-costs-and-the-approver-sees-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product can say what it costs, and the approver sees it.",
-        "de": "A product can say what it costs, and the approver sees it."
-      },
-      "summary": {
-        "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
-        "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      "try": {
+        "label": {
+          "en": "Open the information model",
+          "de": "Informationsmodell öffnen"
+        },
+        "route": "#/data"
       }
     }
   ]

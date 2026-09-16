@@ -135,7 +135,7 @@ type User struct {
 	DirectoryID string `json:"directoryId,omitempty"`
 
 	// AvatarSource says where this account's picture came from — AvatarUploaded or
-	// AvatarFromDirectory — and is empty when there is none (ADR-draft-user-avatar).
+	// AvatarFromDirectory — and is empty when there is none (ADR-0368).
 	//
 	// On the record rather than derived from the bytes, because nothing in a JPEG
 	// says who chose it, and the difference is exactly what somebody looking at a
@@ -145,7 +145,7 @@ type User struct {
 	AvatarSource string `json:"avatarSource,omitempty"`
 
 	// AvatarFingerprint is a digest of the stored picture's bytes, and it exists so
-	// that "unchanged" stays true (ADR-draft-directory-photo).
+	// that "unchanged" stays true (ADR-0367).
 	//
 	// The directory mirror decides an account unchanged by comparing the record
 	// before and after. A photo that changed while the record did not would be

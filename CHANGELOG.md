@@ -14,6 +14,49 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The info panel is reachable from every column of the catalogue, not only from
+  services.** This was not a missing feature but an inconsistency inside one page.
+  The panel already worked for a bundle: picking one out of the search opens it, and
+  the "my services" view has carried the button on all four levels since it was
+  built. So a maintainer could write a price onto a bundle, see it under what they
+  hold, find it through the search — and not reach it from the column the bundle
+  lives in.
+
+  The bundle and offering columns now carry the same round **i** the service column
+  has. The panel itself needed no change, and a test says why: it reads what any
+  product carries — id, texts, price, approval, whether it repeats — and nothing in
+  it asks which level was clicked. A panel that branched on the level would be a
+  second thing to keep true, and the first place it would go wrong is the level
+  nobody clicks.
+
+- **The feed generator is Go, so the Go checks stop needing Node.** The Console's
+  "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
+  keeps the web UI buildless. CI regenerates it to check the commit is current — and
+  because the generator was a Node script, **four Go jobs installed a JavaScript
+  toolchain for that one step**: the main `build · vet · fmt · race · cover` job, the
+  docs job, the ADR-numbering workflow and the feed-sync workflow. ADR-0012's own
+  driver says a front-end toolchain must not become a prerequisite for building or
+  testing Atlas in CI; the feed generator was exactly that, in the job that decides
+  whether a change is good.
+
+  It is now `go run ./scripts/whats-new`, with the rules in a package beside it so the
+  guards call them directly instead of starting a process and reading what it printed.
+  Node remains in the two places where it is the technology rather than an accident:
+  the browser end-to-end suite and the screenshot capture.
+
+  **Byte-for-byte the same output, verified rather than assumed.** Two Go defaults
+  point the wrong way — its encoder escapes `<`, `>` and `&`, and it writes struct
+  fields in declaration order where `JSON.stringify` writes keys in insertion order —
+  so both were turned around and the field order was made the wire contract. Both
+  implementations were then run over the same tree with the entry cap lifted: all
+  **418** entries, every bullet in a 9,310-line changelog, came out identical.
+
+  **One rule is new, and it was earned.** The original ignored keys it did not know,
+  and an override carried `route` at the top level instead of inside `try` — so that
+  entry's "Try it" link did nothing and nothing anywhere said so. Unknown keys are now
+  refused, for the reason the orphan check already exists one level up: a key that
+  does nothing is indistinguishable from a key nobody wrote. The one file that had one
+  is corrected and gains the link it was always meant to have.
 - **The portal's corner names whoever the order is for, and the help moved to the end
   of the row.** The corner said **"mich selbst"** to everybody. That was true, and it
   was true of every reader alike, so it identified nobody — and on a screen where the
@@ -70,6 +113,43 @@ _Changed_ / _Removed_ for each version.
   and the favourites answer about an account and refuse a caller with none, which is
   right of them; the portal now treats a missing per-account list as a list missing
   rather than as a catalogue missing.
+- **A JavaScript script task could not start under the strict sandbox.** Node's bundled
+  OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
+  profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with
+  an OpenSSL configuration error on any host that keeps its interpreter in one of the
+  sandbox's runtime roots, which is where an ordinary install puts it. The file is now
+  allowed for reading; `/etc/ssl` as a whole deliberately is not, because that directory
+  also holds `/etc/ssl/private`.
+
+  It went unnoticed because the proof that starts every installed interpreter under the
+  profile **skips** one it finds outside those roots — the honest answer on a host whose
+  toolchain unpacks runtimes elsewhere, and exactly what CI was while it installed node
+  into a toolchain cache. The JavaScript half of that proof had therefore never run. It
+  runs now, and a second guard reads the allowlist directly, so the rule no longer
+  depends on where a host happens to keep its binaries.
+- **A knowledge model's expression opened unstyled.** dmn-js does not show a business
+  knowledge model in the literal-expression view a decision's expression opens in. A
+  knowledge model is a FEEL *function* — it has an expression language, formal parameters
+  and a body, none of which a decision's literal expression has — so dmn-js opens it in a
+  different component, the boxed-expression view, with its own container class and its own
+  two stylesheets. The decision editor loaded the other views' stylesheets and neither of
+  those.
+
+  The failure was silent in the way that is hardest to catch. The view rendered: every
+  element was in the DOM, editing worked, saving worked, nothing errored, nothing 404'd.
+  It was simply raw — the `F` kind marker and the `()` parameter list as bare text against
+  the page edge, no boxes, no borders, and the edit buttons that are meant to be clipped
+  away until their section is hovered sitting permanently on top of the expression.
+  Neither the Go suite nor the browser suite could see it, because the only thing wrong
+  was what it looked like.
+
+  Both stylesheets are loaded now, and the list is checked against the vendored bundle
+  rather than maintained by hand: the bundle names the view containers it can create, and
+  a test fails when a stylesheet that styles one of them is not loaded — so the next view
+  the pinned fork adds cannot arrive unstyled. The two expression views also gained the
+  gutter and the surface that let them read as one box on the Modeler's grey canvas, and
+  the hint under the canvas now describes the view that is open rather than describing the
+  decision table under all four of them.
 
 - **With authentication off, a catalogue's appearance could not be set at all.** The
   predicate every gate in the catalogue package asks is `!authEnabled || (p != nil &&
@@ -171,6 +251,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An «enumeration»'s literals are shaded by use too, read through the lifecycles that
+  borrow them.** The class diagram can say which members a deployed process names; a literal
+  was left unshaded, because no process ever names one. What a process names is a *state* — a
+  `<dataState>` on a write — and a literal becomes a state only where some class's lifecycle
+  takes its states from that enumeration. A literal's rename is that state's rename, which is
+  what makes the two the same string rather than two that happen to match.
+
+  So the question is asked of the classes that borrow it. A literal is bright where a deployed
+  process moves such a class into that state, and faint where none does — which is the reading
+  people want from a state machine: the states nothing has ever reached.
+
+  It is asked only where it can be answered. An enumeration nothing borrows from, or one whose
+  borrowers no deployed process uses, is left unshaded: "no process reaches this state" and "no
+  process was in a position to" are different claims, and fading a state machine nothing drives
+  would report the second as the first.
+
 - **A face can come from the directory, and it arrives the way every other directory
   fact does.** A tenant that already holds a photo for everybody should not be asked
   to collect them a second time. The constraint that shaped this is not about
@@ -261,6 +357,92 @@ _Changed_ / _Removed_ for each version.
   way every other directory fact arrives, read through the Entra worker by a
   process and reported here, because Atlas holds no tenant credential and must not
   start holding one for a picture.
+
+
+- **The decision editor says when a knowledge model is never invoked, or invoked without
+  being required.** A knowledge model is a reusable FEEL function, and DMN says the
+  decision invoking one declares a knowledge requirement for it — the arrow the
+  requirements graph draws. temis does not enforce that: a decision whose expression calls
+  a knowledge model by name evaluates correctly with no arrow at all. Both of the
+  disagreements that follow deploy, run, and are reported by nothing.
+
+  A knowledge model nothing invokes is dead weight. The model is valid, its decisions
+  deploy, the engine never complains — so there is no later moment at which anybody finds
+  out, and on the canvas it looks exactly like one that is called: the only difference is
+  an arrow that is not there. A decision that calls one without requiring it is worse in a
+  quieter way. It runs, and draws a graph that omits the dependency — and the graph is
+  what gets reviewed, and what goes into the decision's published documentation.
+
+  The editor now says both, while the model is on screen: a strip under the canvas naming
+  what is wrong and what follows from it, and a warning badge on the shape in the
+  requirements graph. Clicking a finding goes to its element, from a decision's own view
+  as well — back to the graph first, since pointing at a shape in a view that does not
+  draw it would point at nothing. Both are warnings and never errors, because each
+  describes a model that deploys and runs, and both are biased towards silence: an
+  invocation is anything that reads as the knowledge model's name followed by an open
+  parenthesis in any other element's expression, so an unusual way of calling one costs a
+  missed warning rather than a false one. A warning an author learns to ignore is worse
+  than no warning.
+
+  The second finding carries its repair: **Draw the requirement** draws the missing edge
+  from the knowledge model to the decision that calls it. It is offered only there, because
+  only there is the fix determinate — which decision ought to call an uninvoked knowledge
+  model is the author's to decide, and a button that guessed would be writing their model
+  for them. dmn-js's own rules are asked whether the connection may be made rather than the
+  element being constructed, so the button cannot force a connection the palette would
+  refuse, and says why when it is refused. What it draws is left selected *and* the canvas
+  is given focus, which is both ways of taking it back within reach: the connection's
+  context pad has one entry, the bin, and Ctrl+Z works. The focus is the part that is not
+  obvious — dmn-js binds its keyboard to the canvas SVG rather than to the document, so a
+  button in the strip below the canvas has to hand focus back, or the author's first
+  Ctrl+Z would go nowhere and they would reasonably conclude the edit could not be undone.
+  Clicking a finding to jump to its element hands focus back for the same reason.
+
+- **The class diagram can say which members anything actually uses.** Where a business object
+  is used has been readable since **Data › Business objects** arrived — one class at a time,
+  on a page of its own. The question is asked on the class diagram, with the member under the
+  cursor and the decision half made, and getting the answer meant leaving the drawing, finding
+  the class in a list and coming back. Most people do not take that trip, so the reading
+  existed and the decision was still taken blind.
+
+  A control beside zoom and undo shades the drawing from that same reading. A member some
+  deployed process names comes forward; one none of them names recedes; a class used by no
+  deployed process and by nothing in the model either is faint as a whole.
+
+  What it will not claim is the more important half. Faint means *nothing names it*, not
+  *nothing uses it*: a read takes the whole object, and what an expression then reads out of
+  it is not a fact of the model — the legend says so in those words, on screen for as long as
+  the shading is. A business key is never faint, because no write ever names one and it is
+  what every store lookup and cross-process correlation resolves against. An «enumeration» is
+  not faint for having no process use, because most of them are declared by no data object at
+  all. And a name the reading has never seen — a class added since, or renamed a moment ago —
+  is left exactly as it was drawn, so a rename is not a scare about a member nothing had said
+  anything about.
+
+  Off until it is asked for: every attribute is unused the moment it is typed, and a canvas
+  that greys out new work is one people turn off.
+
+- **The class canvas judges the model while it is being edited, not when it is saved.** The
+  Problems panel showed the findings of the *last save*. So every edit that broke the model —
+  a store left naming a class that was renamed away, an attribute typed with something that is
+  gone, a lifecycle whose states drifted from the enumeration they came from, a business object
+  switched to a kind that cannot be stored — was silent while it was being made, and the
+  refusal arrived afterwards, naming an edit whoever made it had stopped thinking about.
+
+  The panel is live now. Every change is judged as it is made, and the bar and the marks on the
+  drawing say so at once. That closes the category rather than one edit at a time, which is how
+  the three known cases had been treated.
+
+  The rules are served, not copied into the browser. `POST /api/v1/infomodel/validate` judges a
+  document the caller is holding and stores nothing — no saved revision, no application scope,
+  and an invalid document is an answer carrying findings rather than an error, because a model
+  mid-edit is *expected* to be invalid. Two copies of a rule set are two rule sets, and the copy
+  the author sees is the one that would drift from the one Save enforces. The same route is an
+  MCP tool, `atlas_validate_information_model`, so an agent can check a model it is composing
+  before writing it anywhere.
+
+  When the server cannot answer, the last verdict stands rather than the bar going blank: a
+  stale finding is closer to the truth than a clean bill of health nobody checked.
 
 - **An approver decides a request once, instead of deciding it twelve times.** An
   approval in Atlas is one user task per order line — the approval process is
@@ -458,6 +640,7 @@ _Changed_ / _Removed_ for each version.
   The product editor offers the forms that exist, never free text — the same rule the
   process bindings follow, because a product bound to a form nobody wrote is a basket the
   orderer cannot get past, found by them rather than by whoever bound it.
+
 
 - **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
   its own colour, typeface and brand mark since it was built — the portal and the approval
@@ -1103,6 +1286,90 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An operations number is a counter or a walk, never the length of a page.** The live
+  diagram's wrong incident counts had a shape worth searching for: a list is fetched
+  with a page cap, the console counts its rows, and the count is rendered as a fact
+  about the population. That agrees with the truth until an installation is busy enough
+  to need the number — and because every capped list here is ordered, what falls off is
+  a contiguous slice rather than a sample, so a whole class of subject goes missing
+  together and the count reads zero rather than low. Zero is not a floor.
+
+  Every number the Operations views state was audited against what produced it. Most
+  were already right: the overview's Running and Finished columns (per-definition
+  counters), the Incidents view's cause table (a complete walk), the nav badge, and
+  every floor that says it is one — the Workers view's queue depth with its `+`, the
+  mock directory and mock database printing "showing n of m held", the saved task
+  folders' badges. Three were not:
+
+  - **A search hit that is stuck now says so on its own row.** The flag came from
+    bucketing the server's whole incident list — capped at 5 000 rows, with a
+    truncation header the console never read. Measured on a store holding 5 200 parked
+    instances, 200 running instances that were each parked behind an incident rendered
+    as a plain "active", on the surface an operator opens to debug one. The count is now
+    part of the row, taken through that instance's own element index, and the 5 000-row
+    transfer per search is gone with it.
+  - **The task inbox's fixed folder badges count the inbox.** "All tasks", "Assigned to
+    me", "Unassigned" and "Group tasks" were counted in the browser off the newest-first
+    page it had already loaded. Measured: with 700 open tasks, claiming the oldest one
+    for a user left their "Assigned to me" reading 0 while the task sat in their inbox.
+    The four predicates now live in one place, and the badge comes from the server's own
+    walk once the page stops holding the whole inbox — an uncapped page *is* the inbox,
+    so counting its rows there is both exact and free.
+  - **Nothing walks the incident family on the run loop any more.** `incidentsByJobType`
+    walks it whole and does a point read per parked token, and it ran inside a run-loop
+    turn — once for the Workers view, once for every Starmap page load. On a flooded
+    engine that dispatches tens of thousands of reads onto the goroutine that executes
+    process instances, which is exactly what
+    [ADR-0266](docs/adr/0266-stats-and-incidents-off-the-loop.md) removed from `/stats`.
+    Both callers now take the tally off the loop, before their turn.
+
+  The rule is now checked rather than written down. Five instances of one mistake, none
+  caught by review, is not a case for another paragraph of guidance:
+  `api/pagecount_internal_test.go` fails a build where `fmtCount()` is handed a list
+  length, where a raw read of a capped listing drops the headers that say it is capped,
+  or where such a listing is read with nothing nearby that names its bound. Each rule
+  was verified by putting the original defect back and watching it fail, and the
+  patterns themselves are pinned against known-bad and known-good lines so a guard
+  cannot quietly stop matching and pass as coverage. They do not follow data flow, so
+  they are a tripwire at the places the mistake has been made rather than a proof that
+  it cannot be made again.
+
+  ([ADR-0365](docs/adr/0365-a-number-is-a-counter-or-a-walk.md))
+
+- **The live diagram counts every parked token, not the ones a bounded scan reached.**
+  One process, two deployed versions, both under the same broken worker: the Operations
+  overview reported 10 910 stuck tokens, the live view of the current version reported
+  none at all, and the previous version's diagram badged "50" on each of two tasks
+  holding some 5 452 each. Only the overview was right, and the current version's
+  diagram — the surface an operator opens *because* the overview flagged the process —
+  drew a process whose every running instance was parked as a healthy one.
+
+  The overlay collected its incidents on the run loop, so it was bounded twice, and it
+  walked the incident family in key order, attributing each entry to its definition only
+  after reading it. Incidents are keyed by element instance and those keys ascend, so
+  the budget was spent oldest-first: a version deployed after a flood sat entirely past
+  it and was never reached. The per-element numbers were then read off what the scan had
+  returned, which is where "50" came from — the page held 100 rows, they fell on two
+  tasks, and each badge reported its share of the page rather than of the process.
+
+  The overlay now reads what
+  [the cause summary](docs/adr/0337-incident-floods.md) reads, the way it reads it: one
+  walk of the incident family off the run loop against a snapshot, through the same
+  attribution every other incident surface uses, held for five seconds so a 1.5-second
+  poll does not pay for one each time and dropped the moment anything is resolved. The
+  count and the detail page are now separate things — `incidentTotal` and
+  `elements[].incidents` are exact, `incidents[]` stays a 100-row page for the resolve
+  panel, and `incidentCountsExact` says which is which. A definition with nothing parked
+  now *states* that it has nothing parked, where before it could not be told apart from
+  one the scan had not got to. Nothing walks the incident family on the run loop any
+  more.
+
+  Two more readings were wrong for the same reason and are fixed with it: isolating a
+  single instance stopped counting its parked tokens once its detail page filled, so an
+  instance holding more than 100 reported exactly 100; and the browser hid the incident
+  pill whenever the detail list was empty, which is what turned an unreached definition
+  into a silent one.
+  ([ADR-0366](docs/adr/0366-the-live-diagram-counts-every-parked-token.md))
 - **Restoring a backup from another installation no longer attaches this one's history
   to a foreign process.** The portable design-time backup
   ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carries `deployments/` and
@@ -7462,7 +7729,6 @@ rules run at deploy.
   described. Reading a draft lays out too, for the ones stored before this. A model that
   brings its own layout is stored byte for byte — generating over an author's
   arrangement would throw it away.
-
 
 
 - **A loop's badge counts its rounds, not its activations**: the engine activates a

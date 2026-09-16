@@ -41,10 +41,6 @@ jobs:
 
       # For the What's New generator below. Same version ci.yml pins, so the one
       # generator cannot produce different output in the two places that run it.
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Assign a number to every draft
         id: adrnum
@@ -66,7 +62,7 @@ jobs:
       # message about numbering.
       - name: Regenerate the What's New feed
         if: steps.adrnum.outputs.numbered == 'true'
-        run: node scripts/whats-new/gen.mjs
+        run: go run ./scripts/whats-new
 
       # A push made with GITHUB_TOKEN deliberately does not trigger another
       # workflow run — that is what keeps this job from waking itself, and it also

@@ -198,7 +198,7 @@ type entraOp struct {
 	// does not run.
 	isDelta bool
 	// isBinary marks an operation whose answer is bytes rather than an object — a
-	// photo (ADR-draft-directory-photo). It needs a resultVariable for a listing's
+	// photo (ADR-0367). It needs a resultVariable for a listing's
 	// reason and takes none of the query fields: there is no collection to filter,
 	// project or page.
 	isBinary bool

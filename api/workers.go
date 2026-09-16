@@ -10,6 +10,7 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/model"
+	"github.com/pblumer/atlas/state"
 )
 
 // The Workers view (ADR-0157, step 4): who is doing the engine's out-of-process
@@ -224,8 +225,24 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 		scanErr  error
 		reachErr error
 	)
+	// The incident tally is taken before the loop turn and off the loop, because it is
+	// a walk of the whole incident family plus a point read per parked token — the one
+	// unbounded read this view makes, and the shape ADR-0266 took off the single writer
+	// everywhere else. It was inside the turn below, so opening the Workers view on a
+	// flooded engine dispatched tens of thousands of reads onto the goroutine that
+	// executes process instances (ADR-0365).
+	//
+	// Two reads of slightly different moments, then, rather than one of a single
+	// moment: a queue depth from the turn beside an incident count from just before it.
+	// For a view that is polled and describes a moving engine that is the same trade
+	// the overlay makes, and it is worth strictly more than a consistent answer nobody
+	// can get while the loop is held.
+	incidents, incErr := s.incidentsByJobType()
+	if incErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "count incidents: "+incErr.Error())
+		return
+	}
 	s.do(func() {
-		incidents := s.incidentsByJobType()
 		users := s.jobTypeUsers()
 		for _, e := range s.jobTypes.All() {
 			inProcess := s.jobRunner.Handles(e.Index)
@@ -459,18 +476,23 @@ func (s *Server) unservedConnectors(reachable map[uint64]bool) []unservedConnect
 // which still carries its type; a timer incident has no job and is not counted
 // here — it belongs to the Incidents view, not to a worker's queue. Runs on the
 // run-loop goroutine.
-func (s *Server) incidentsByJobType() map[int32]int64 {
+func (s *Server) incidentsByJobType() (map[int32]int64, error) {
 	out := map[int32]int64{}
-	_ = s.store.Incidents(func(_ uint64, inc *model.IncidentValue) error {
-		if inc.JobKey == 0 {
+	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		return rv.Incidents(func(_ uint64, inc *model.IncidentValue) error {
+			if inc.JobKey == 0 {
+				return nil
+			}
+			if jv, ok, err := rv.GetJob(inc.JobKey); err == nil && ok {
+				out[jv.JobType]++
+			}
 			return nil
-		}
-		if jv, ok, err := s.store.GetJob(inc.JobKey); err == nil && ok {
-			out[jv.JobType]++
-		}
-		return nil
+		})
 	})
-	return out
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // jobTypeUsers maps each job type to the deployed definitions whose service or send

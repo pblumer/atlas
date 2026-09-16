@@ -448,6 +448,19 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted | Landed |
 | [0361](0361-product-price.md) | A price is a sentence the catalogue writes, frozen like a rule and computed by nothing | Accepted | Landed |
 | [0362](0362-collective-approval.md) | One decision covers a request; the engine still completes one task per line | Accepted | Landed |
+| [0363](0363-the-drawing-says-which-members-are-used.md) | The drawing says which members are used | Accepted | Landed |
+| [0364](0364-the-verdict-is-served-not-duplicated.md) | The verdict is served, not duplicated | Accepted | Landed |
+| [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
+| [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
+| [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
+| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
+| [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Proposed | Not started |
+| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Proposed | Not started |
+| [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
+| [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Proposed | Not started |
+| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Proposed | Not started |
+| [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
+| [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 
 ## The two states of a record
 

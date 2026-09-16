@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// A picture of the person behind an account (ADR-draft-user-avatar).
+// A picture of the person behind an account (ADR-0368).
 //
 // Atlas showed people as strings. An approval said `usr_4be5b4ad`, the portal's
 // corner drew an empty circle, and a recipient picked out of the directory was a

@@ -823,7 +823,15 @@ function toggle(release, id, integral) {
   }, inIt ? '\u2212' : '+');
 }
 
-// infoButton is the "i" the mockups put at the right edge of the service column.
+// infoButton is the "i" the mockups put at the right edge of the service column,
+// and which now sits at the right edge of every column that carries a product.
+//
+// It was drawn on services alone, which made the catalogue the only place on this
+// page where a bundle could not be opened. The panel already worked for one:
+// picking a bundle out of the search opens it, and the services view has carried
+// the button on all four levels since it was built. So a maintainer could write a
+// price onto a bundle, see it in "my services", find it through the search — and
+// not reach it from the column the bundle lives in.
 function infoButton(id) {
   return el('button', {
     class: 'sq info',
@@ -1056,7 +1064,7 @@ function renderCatalogue() {
         state.offering = '';
         render();
       },
-      trail: el('span', {}, starButton(b.id), ' ', toggle(rel, b.id, false)),
+      trail: el('span', {}, starButton(b.id), ' ', toggle(rel, b.id, false), ' ', infoButton(b.id)),
     })));
 
   const offeringCol = el('div', { class: 'col' },
@@ -1068,7 +1076,7 @@ function renderCatalogue() {
         state.offering = state.offering === o.id ? '' : o.id;
         render();
       },
-      trail: el('span', {}, starButton(o.id), ' ', toggle(rel, o.id, o.integral)),
+      trail: el('span', {}, starButton(o.id), ' ', toggle(rel, o.id, o.integral), ' ', infoButton(o.id)),
     })));
 
   const serviceCol = el('div', { class: 'col' },
@@ -1827,7 +1835,7 @@ function renderNav() {
 }
 
 // avatarNode is the circle in the corner, and the picture once there is one
-// (ADR-draft-user-avatar).
+// (ADR-0368).
 //
 // The picture replaces the circle only after its bytes have arrived. Rendering an
 // <img> straight away would put a browser's broken-image icon in the corner for

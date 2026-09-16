@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// A picture from the directory (ADR-draft-directory-photo).
+// A picture from the directory (ADR-0367).
 //
 // The mirror's discipline is what these mostly hold, not the bytes: the decider
 // produces a complete plan and the apply writes it without re-deciding anything,

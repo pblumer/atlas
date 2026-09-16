@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// Reading a person's photo (ADR-draft-directory-photo).
+// Reading a person's photo (ADR-0367).
 //
 // Every other operation this worker performs returns JSON. A photo does not, and
 // the three things that follow from that are what these hold: the bytes come back

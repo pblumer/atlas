@@ -226,6 +226,13 @@ type Server struct {
 	// registry above, which is also what makes it single-flight: two readers arriving
 	// together are two loop turns, and the second finds what the first left.
 	landscapes meshCollection
+	// runtimeIncidents is the last exact per-definition incident count the live
+	// diagram's aggregate overlay was answered from
+	// (ADR-0366). Guarded by its own
+	// mutex and deliberately NOT run-loop owned: the walk behind it must happen off
+	// the loop (ADR-0266), so the result has no reason to travel back onto it — see
+	// api/runtimeincidents.go.
+	runtimeIncidents runtimeIncidentCache
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.

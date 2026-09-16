@@ -54,7 +54,7 @@ type Op struct {
 	IsDelta  bool
 	ListPath string
 	// IsBinary marks an operation whose answer is bytes rather than an object: a
-	// photo (ADR-draft-directory-photo). Like a listing it needs a result variable —
+	// photo (ADR-0367). Like a listing it needs a result variable —
 	// a read that discards what it read is one nothing asked for — and unlike every
 	// other operation, a 404 is an answer rather than a failure.
 	IsBinary bool
@@ -330,7 +330,7 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 }
 
 // photoResult turns what a binary read returned into what a process variable can
-// hold (ADR-draft-directory-photo).
+// hold (ADR-0367).
 //
 // Base64, because a process variable is FEEL and FEEL has no bytes. An object with
 // the type beside the data, because nothing downstream can store an image it
