@@ -186,3 +186,35 @@ func TestStagedCommitAbandonsOnFailure(t *testing.T) {
 		t.Errorf("root holds %d entries after a failed commit, want none", len(entries))
 	}
 }
+
+// TestAbandonDoesNotTouchAnAlreadyPublishedCheckpoint: staging at a position that
+// already has one takes no snapshot, so there is no temporary directory to discard —
+// and Abandon must not reach for the published one instead. Deleting a checkpoint
+// because a pass decided not to publish would destroy the only thing standing in for a
+// compacted-away log prefix (ADR-0280).
+func TestAbandonDoesNotTouchAnAlreadyPublishedCheckpoint(t *testing.T) {
+	root := t.TempDir()
+	if _, err := Publish(root, testManifest(21), fakeSnapshot("published")); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	staged, err := Stage(root, testManifest(21), func(string) error {
+		t.Error("Stage took a snapshot at an already-published position")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+	if err := staged.Abandon(); err != nil {
+		t.Fatalf("Abandon: %v", err)
+	}
+	positions, err := List(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(positions) != 1 || positions[0] != 21 {
+		t.Fatalf("List = %v after abandoning a no-op stage, want the published [21] intact", positions)
+	}
+	if _, err := Verify(root, 21); err != nil {
+		t.Errorf("Verify: %v — the published checkpoint must be untouched", err)
+	}
+}
