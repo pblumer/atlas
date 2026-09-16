@@ -2,6 +2,49 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-manager-maintains-the-catalogue-over-mcp",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Maintain the product catalogue from an AI client",
+        "de": "Den Produktkatalog aus einem KI-Client pflegen"
+      },
+      "summary": {
+        "en": "The portal's catalogue was the one substantial surface an AI assistant could not reach. Nine new tools close that: list, read, create and change catalogues, save products, publish a release and read what a release froze, and derive drafts from an ArchiMate model. Filling in two hundred products' search keywords, or finding which ones still have no deprovisioning process before a publish, is now something you can ask for instead of type. The assistant acts as you and no further — it needs the Product manager role and editor rights on the catalogue, exactly as the screen does — and it cannot delete anything, because a product is withdrawn and never removed.",
+        "de": "Der Katalog des Portals war die letzte grössere Fläche, die ein KI-Assistent nicht erreichen konnte. Neun neue Werkzeuge schliessen diese Lücke: Kataloge auflisten, lesen, anlegen und ändern, Produkte speichern, ein Release veröffentlichen und lesen, was es eingefroren hat, sowie Entwürfe aus einem ArchiMate-Modell ableiten. Die Suchbegriffe von zweihundert Produkten zu ergänzen oder vor einer Veröffentlichung zu finden, welchen davon noch der Deprovisionierungsprozess fehlt, lässt sich jetzt beauftragen statt tippen. Der Assistent handelt als Sie und nicht weiter — er braucht die Rolle Produktmanager und Editorrechte am Katalog, genau wie die Oberfläche — und er kann nichts löschen, denn ein Produkt wird zurückgezogen und nie entfernt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "MCP",
+        "AI"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console → AI access and connect your MCP client to this server's own endpoint. A stdio client authenticating with an API token can read a catalogue but not change one: no API token carries the Product manager role, deliberately.",
+          "Ask it to list your catalogues. It answers with the ones you maintain and never with somebody else's — being the audience for a catalogue puts nothing in that list.",
+          "Changing a product means reading it first. The write replaces the whole record, so a field left out is a field cleared — and the product carries a revision the assistant passes back, so a colleague's edit in between is refused rather than silently overwritten.",
+          "Nothing is orderable until you publish. A refused publish names every problem at once: the product still in draft, the missing translation, the process that was never bound."
+        ],
+        "de": [
+          "Console → AI access öffnen und den MCP-Client mit dem Endpunkt dieses Servers verbinden. Ein stdio-Client, der sich mit einem API-Token anmeldet, kann einen Katalog lesen, aber nicht ändern: Kein API-Token trägt die Rolle Produktmanager, und das ist Absicht.",
+          "Den Assistenten nach den eigenen Katalogen fragen. Er antwortet mit denen, die Sie pflegen, und nie mit fremden — zum Publikum eines Katalogs zu gehören bringt keinen Eintrag in diese Liste.",
+          "Ein Produkt zu ändern heisst, es zuerst zu lesen. Der Schreibvorgang ersetzt den ganzen Datensatz, ein weggelassenes Feld ist also ein gelöschtes Feld — und das Produkt trägt eine Revision, die der Assistent zurückgibt, sodass die Änderung einer Kollegin dazwischen abgewiesen statt stillschweigend überschrieben wird.",
+          "Bestellbar ist nichts, bevor Sie veröffentlichen. Eine abgewiesene Veröffentlichung nennt alle Probleme auf einmal: das Produkt im Entwurf, den fehlenden Text, den nie gebundenen Prozess."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open AI access",
+          "de": "AI access öffnen"
+        },
+        "route": "#/console/ai-access"
+      }
+    },
+    {
       "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
       "version": "Unreleased",
       "date": null,
@@ -275,48 +318,6 @@
           "de": "Modeler öffnen"
         },
         "route": "#/modeler"
-      }
-    },
-    {
-      "id": "the-class-diagram-can-say-which-members-anything-actually-us",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See on the class diagram which attributes are actually used",
-        "de": "Im Klassendiagramm sehen, welche Attribute tatsächlich genutzt werden"
-      },
-      "summary": {
-        "en": "You decide the fate of an attribute while looking at the class diagram — and until now the answer to \"does anything use this?\" was on another page. A control beside zoom and undo now shades the drawing: an attribute some deployed process writes by name comes forward, one none of them names recedes, and a class no process and nothing in the model uses is faint as a whole. Faint is deliberately careful: it means nothing names it, not that nothing uses it, because a process that reads the whole object never says which fields it then looks at. A business key is never faint, an enumeration is not faint for having no process use, and anything you have just added or renamed is left exactly as it was drawn.",
-        "de": "Über das Schicksal eines Attributs entscheidet man im Klassendiagramm — die Antwort auf \"wird das überhaupt genutzt?\" stand bisher auf einer anderen Seite. Eine Schaltfläche neben Zoom und Undo blendet die Nutzung jetzt ins Diagramm ein: Ein Attribut, das ein deployter Prozess namentlich schreibt, tritt hervor; eines, das keiner nennt, tritt zurück; eine Klasse, die weder ein Prozess noch das Modell verwendet, wird als Ganzes blass. Blass ist bewusst vorsichtig formuliert: Es heisst, dass niemand das Attribut namentlich nennt — nicht, dass es ungenutzt ist, denn ein Prozess, der das ganze Objekt liest, sagt nie, welche Felder er danach ausliest. Ein Business Key wird nie blass, eine Enumeration wird es nicht schon mangels Prozessverwendung, und was gerade hinzugefügt oder umbenannt wurde, bleibt unverändert dargestellt."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model, and press the shading control in the canvas toolbar (below undo and redo).",
-          "The legend appears while the shading is on and says what bright and faint were read from.",
-          "Bright attributes are written by name by at least one deployed process; faint ones are named by none.",
-          "Press the control again to put the drawing back — nothing is marked at all, which is the diagram as it is when nobody has asked."
-        ],
-        "de": [
-          "Data öffnen, ein Informationsmodell wählen und in der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken (unterhalb von Undo und Redo).",
-          "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
-          "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
-          "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]
