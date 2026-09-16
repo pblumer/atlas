@@ -113,7 +113,7 @@ func TestWhatsNewJSONIsValid(t *testing.T) {
 //
 // It calls the generator's own package rather than a process, which it could not
 // do while the generator was a script in another language
-// (ADR-draft-whats-new-in-go). The guard is the same one; what changed is that it
+// (ADR-0375). The guard is the same one; what changed is that it
 // no longer depends on node being installed to run at all.
 func TestWhatsNewGeneratorRefusesAConflictedChangelog(t *testing.T) {
 	// A throwaway tree with the layout the generator reads, so nothing here can

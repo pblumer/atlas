@@ -26,7 +26,7 @@ overrides/*.json ┘
   the embedded FS (`//go:embed web` in `api/server.go`), so the web UI stays buildless
   (ADR-0012): the generator runs only at authoring time, never at runtime.
 - **The generator is Go** (`scripts/whats-new`, logic in `feed/`), and that is the
-  whole of why (ADR-draft-whats-new-in-go): the feed was the only reason `go build`,
+  whole of why (ADR-0375): the feed was the only reason `go build`,
   `go vet`, the race job and the docs job needed Node. Node stays where it is the
   technology — the browser end-to-end suite and the screenshot capture — and left the
   four places where it was incidental. The output is byte-for-byte what the script
