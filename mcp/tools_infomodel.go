@@ -254,6 +254,38 @@ func infomodelTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_validate_information_model",
+			Description: "Check an information-model document *before* writing it, and store nothing. " +
+				"Send the same shape atlas_save_information_model takes — classes, associations, " +
+				"stores — and get back the verdict a write would be checked against: `valid`, and " +
+				"`findings` naming the class, association or store each one is about. An invalid " +
+				"document is answered, not refused: findings are the answer, not an error. Use it to " +
+				"iterate on a model you are assembling without leaving half-built revisions behind, " +
+				"and to check a change before it costs a revision. It reads nothing stored, so it " +
+				"needs no model id and says nothing about what exists.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"classes":      map[string]any{"type": "array", "description": "The classes to judge, as atlas_save_information_model takes them."},
+					"associations": map[string]any{"type": "array", "description": "The associations between them."},
+					"stores":       map[string]any{"type": "array", "description": "The data stores, each naming the class it holds."},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				body := map[string]any{}
+				for _, key := range []string{"classes", "associations", "stores"} {
+					if v, ok := args[key]; ok {
+						body[key] = v
+					}
+				}
+				payload, err := json.Marshal(body)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/infomodel/validate", "application/json", payload))
+			},
+		},
+		{
 			Name: "atlas_class_catalog",
 			Description: "The class catalogue: every business object, value type and enumeration across " +
 				"the information models you can see, with where each one is used. One list across " +

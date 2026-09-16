@@ -1,0 +1,34 @@
+{
+  "tags": [
+    "Data"
+  ],
+  "title": {
+    "en": "See on the class diagram which attributes are actually used",
+    "de": "Im Klassendiagramm sehen, welche Attribute tatsächlich genutzt werden"
+  },
+  "summary": {
+    "en": "You decide the fate of an attribute while looking at the class diagram — and until now the answer to \"does anything use this?\" was on another page. A control beside zoom and undo now shades the drawing: an attribute some deployed process writes by name comes forward, one none of them names recedes, and a class no process and nothing in the model uses is faint as a whole. Faint is deliberately careful: it means nothing names it, not that nothing uses it, because a process that reads the whole object never says which fields it then looks at. A business key is never faint, an enumeration is not faint for having no process use, and anything you have just added or renamed is left exactly as it was drawn.",
+    "de": "Über das Schicksal eines Attributs entscheidet man im Klassendiagramm — die Antwort auf \"wird das überhaupt genutzt?\" stand bisher auf einer anderen Seite. Eine Schaltfläche neben Zoom und Undo blendet die Nutzung jetzt ins Diagramm ein: Ein Attribut, das ein deployter Prozess namentlich schreibt, tritt hervor; eines, das keiner nennt, tritt zurück; eine Klasse, die weder ein Prozess noch das Modell verwendet, wird als Ganzes blass. Blass ist bewusst vorsichtig formuliert: Es heisst, dass niemand das Attribut namentlich nennt — nicht, dass es ungenutzt ist, denn ein Prozess, der das ganze Objekt liest, sagt nie, welche Felder er danach ausliest. Ein Business Key wird nie blass, eine Enumeration wird es nicht schon mangels Prozessverwendung, und was gerade hinzugefügt oder umbenannt wurde, bleibt unverändert dargestellt."
+  },
+  "tutorial": {
+    "en": [
+      "Open Data, then an information model, and press the shading control in the canvas toolbar (below undo and redo).",
+      "The legend appears while the shading is on and says what bright and faint were read from.",
+      "Bright attributes are written by name by at least one deployed process; faint ones are named by none.",
+      "Press the control again to put the drawing back — nothing is marked at all, which is the diagram as it is when nobody has asked."
+    ],
+    "de": [
+      "Data öffnen, ein Informationsmodell wählen und in der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken (unterhalb von Undo und Redo).",
+      "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
+      "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
+      "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open the information model",
+      "de": "Informationsmodell öffnen"
+    },
+    "route": "#/data"
+  }
+}
