@@ -1,4 +1,4 @@
-# ADR-DRAFT: Addressing and the envelope for a message that leaves the node
+# ADR-0369: Addressing and the envelope for a message that leaves the node
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -67,7 +67,7 @@ Chosen option: **2 — a qualified address plus an explicit envelope.**
 A message crossing a node boundary is addressed by
 `(target node, published interface id, contract version, entry point)` — never by a
 bare message name. The entry point is a **name in the published contract**
-(ADR-draft-published-process-interface), not a foreign element id, so the publisher
+(ADR-0373), not a foreign element id, so the publisher
 may refactor its model freely as long as the contract name stands.
 
 The receiving node maps the entry point to its local message name. **A peer message
@@ -118,7 +118,7 @@ decided here — this record only guarantees that the data it will need exists.
   engine can force it back.
 - **Follow-ups / risks to watch:** a cross-node conversation view over
   `conversationId`, which is the ADR-0038 replay one boundary further out and needs
-  ADR-draft-durable-message-buffer and ADR-draft-peer-message-delivery-worker first.
+  ADR-0370 and ADR-0372 first.
   The same qualified address would serve cross-*partition* correlation inside one
   node (ADR-0006, still `Partial`); designing it twice is the risk worth watching.
 
@@ -148,8 +148,8 @@ decided here — this record only guarantees that the data it will need exists.
 ## Links
 
 - builds on ADR-0020 (message events and correlation) and ADR-0035 (message start events)
-- constrains ADR-draft-durable-message-buffer, ADR-draft-peer-message-delivery-worker,
-  ADR-draft-published-process-interface
+- constrains ADR-0370, ADR-0372,
+  ADR-0373
 - relates to ADR-0006 (partition routing — the same address one level down)
 - relates to ADR-0038 (collaboration replay — what a cross-node view would need)
 - relates to ADR-0129 (deployment targets — peer identity and credentials)

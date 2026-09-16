@@ -1,4 +1,4 @@
-# ADR-DRAFT: The white box is a cached contract, not a live look inside
+# ADR-0374: The white box is a cached contract, not a live look inside
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -14,7 +14,7 @@
 ## Context and problem statement
 
 Once a participant binds a published interface
-(ADR-draft-participant-binds-a-published-interface), the modeller is docking an arrow
+(ADR-0371), the modeller is docking an arrow
 onto a name they have to know in advance. The feature that makes this pleasant — and
 the one this epic was pitched on — is expanding the participant with the `+`
 affordance and seeing what may be docked onto: entry points, the errors that can come
@@ -88,7 +88,7 @@ with the three states `api/panoramaremote.go` already distinguishes:
 
 A stale or unreachable participant still expands, from the cache, clearly marked.
 Modelling continues; only the confidence label changes. A contract version, once
-cached, is immutable (ADR-draft-published-process-interface), so a stale reading is
+cached, is immutable (ADR-0373), so a stale reading is
 wrong only about whether a *newer* version exists — never about the version in hand.
 
 ### The foreign diagram is a second layer, and it is gated twice
@@ -124,7 +124,7 @@ not fresh. Closing the participant loses the detail, not the fact.
   auto-layout (ADR-0124/0127) without colliding with labels, which ADR-0252 had to
   solve once already for runtime badges. Whether the expansion should offer the
   publisher's *documentation* (ADR-0143/0250) alongside the contract. And the
-  observe-grant question from ADR-draft-published-process-interface returns here in
+  observe-grant question from ADR-0373 returns here in
   its most tempting form: showing live instance counts on a foreign participant would
   be the natural next click, and it is the one that leaks another domain's operations.
 
@@ -151,8 +151,8 @@ not fresh. Closing the participant loses the detail, not the fact.
 
 ## Links
 
-- renders ADR-draft-published-process-interface at the version bound by
-  ADR-draft-participant-binds-a-published-interface
+- renders ADR-0373 at the version bound by
+  ADR-0371
 - takes the fresh / stale / unreachable vocabulary from ADR-0189 and ADR-0211
 - relates to ADR-0013 (bpmn-js), ADR-0025 (properties panel), ADR-0237 (canvas bundle)
 - offers boundary events per ADR-0040 for returns declared under ADR-0089 / ADR-0125

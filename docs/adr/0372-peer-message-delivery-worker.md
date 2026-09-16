@@ -1,4 +1,4 @@
-# ADR-DRAFT: Delivering a message to another node is a worker's job
+# ADR-0372: Delivering a message to another node is a worker's job
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -7,7 +7,7 @@
 
 ## Context and problem statement
 
-ADR-draft-cross-instance-message-addressing fixes what a cross-node message *is*.
+ADR-0369 fixes what a cross-node message *is*.
 This record decides what carries it, and the constraint is hard: **the engine may not
 make the call itself.**
 
@@ -55,7 +55,7 @@ Chosen option: **2 — a reserved Worker Type.**
 ### Sending
 
 A message throw event, send task or message end event whose message flow binds to a
-remote participant (ADR-draft-participant-binds-a-published-interface) compiles to a
+remote participant (ADR-0371) compiles to a
 `TypeConnectorTask` carrying a reserved `compiler.*JobTypeIndex`, the way every
 Worker Type task does. The job payload is the envelope plus the resolved target; the
 credential is a vault reference resolved by the worker, not by the engine.
@@ -68,7 +68,7 @@ step in Atlas already behaves.
 ### What "accepted" means, and what it does not
 
 The receiver acknowledges **acceptance of the envelope into its durable buffer**
-(ADR-draft-durable-message-buffer) — that is, the envelope is on disk, past fsync,
+(ADR-0370) — that is, the envelope is on disk, past fsync,
 and will be correlated when a subscriber exists or will expire trying. It is
 explicitly **not** an acknowledgement that a process ran, that a human acted, or that
 the outcome was favourable.
@@ -95,7 +95,7 @@ repair path (ADR-0160) has something to act on.
 A new route `POST /api/v1/peer/messages` takes one envelope. It sits in its own
 access class (ADR-0199), authenticates a scoped API token (ADR-0194) and authorizes
 the caller against the addressed interface's **send** grant
-(ADR-draft-published-process-interface). Validation and authorization happen off the
+(ADR-0373). Validation and authorization happen off the
 run loop (ADR-0239); only the resulting publish command goes onto it. The response is
 returned after the batch's fsync, never before (I2) — the acceptance promise above is
 worth nothing otherwise.
@@ -142,9 +142,9 @@ worth nothing otherwise.
 ## Links
 
 - builds on ADR-0007 (job worker protocol) and ADR-0203 (worker execution model)
-- carries the envelope of ADR-draft-cross-instance-message-addressing
-- requires ADR-draft-durable-message-buffer (at-least-once needs receiver dedup)
-- authorized by ADR-draft-published-process-interface (the send grant)
+- carries the envelope of ADR-0369
+- requires ADR-0370 (at-least-once needs receiver dedup)
+- authorized by ADR-0373 (the send grant)
 - follows ADR-0129 for peer credentials, and ADR-0041 for credentials by reference
 - relates to ADR-0135 (retries), ADR-0340 (circuit breaker), ADR-0291 (budgets),
   ADR-0061 (incidents), ADR-0194/0199 (token scope and route access), ADR-0239 (off-loop)

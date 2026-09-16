@@ -1,4 +1,4 @@
-# ADR-DRAFT: A published message waits for its subscriber
+# ADR-0370: A published message waits for its subscriber
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -68,8 +68,8 @@ Chosen option: **2 — a durable inbound buffer with a TTL.**
   appends `IntentBufferedMessageConsumed`, which removes it.
 - **Idempotency**: a `messageId` already present in the buffer, or already consumed
   within the retention window, is not buffered or delivered twice. This is what makes
-  the at-least-once delivery of ADR-draft-peer-message-delivery-worker safe.
-- **Expiry**: `expiresAt` from the envelope (ADR-draft-cross-instance-message-addressing)
+  the at-least-once delivery of ADR-0372 safe.
+- **Expiry**: `expiresAt` from the envelope (ADR-0369)
   drives removal through a due-date index, the shape ADR-0146 already uses for history
   expiry. Expiry emits an event; it is never a clock read inside `applyToState` (I4).
 
@@ -92,7 +92,7 @@ Expiry is **not** an incident by itself. A buffered broadcast that nobody consum
 an ordinary outcome, and raising an incident for it would flood exactly the way
 ADR-0337 describes. Whether a specific undelivered message deserves an incident is a
 property of how it was *sent*, and is decided in
-ADR-draft-peer-message-delivery-worker, where the sender's delivery mode lives.
+ADR-0372, where the sender's delivery mode lives.
 
 ### Consequences
 
@@ -141,8 +141,8 @@ ADR-draft-peer-message-delivery-worker, where the sender's delivery mode lives.
 
 - closes the buffering follow-up of ADR-0020 (message events and correlation)
 - relates to ADR-0035 (message start events) and ADR-0094 (singleton message start)
-- required by ADR-draft-peer-message-delivery-worker (at-least-once needs dedup)
-- takes its envelope fields from ADR-draft-cross-instance-message-addressing
+- required by ADR-0372 (at-least-once needs dedup)
+- takes its envelope fields from ADR-0369
 - borrows the expiry shape of ADR-0146; shares retention concerns with ADR-0017/0022
 - relates to ADR-0337 (incident floods — why expiry is not an incident)
 - honors the invariants in docs/architecture/invariants.md (I1, I4, I6)

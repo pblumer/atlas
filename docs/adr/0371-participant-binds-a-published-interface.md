@@ -1,4 +1,4 @@
-# ADR-DRAFT: A participant names an interface; the server says which node
+# ADR-0371: A participant names an interface; the server says which node
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -79,7 +79,7 @@ and on the arrow:
 ```
 
 `atlas:entryPoint` names an entry point **in the published contract**
-(ADR-draft-published-process-interface), never a foreign element id — so the
+(ADR-0373), never a foreign element id — so the
 publisher may refactor behind it, which is the whole reason the contract exists.
 
 A participant with no `atlas:interfaceRef` is an ordinary pool and behaves exactly as
@@ -103,7 +103,7 @@ reported — a named, fixable gap in that server's configuration, not a broken m
 
 A send element (message throw, send task, message end) whose outgoing message flow
 carries an `atlas:entryPoint` compiles to the peer-delivery job of
-ADR-draft-peer-message-delivery-worker instead of the local `correlateMessage` path.
+ADR-0372 instead of the local `correlateMessage` path.
 Everything else about the element is unchanged.
 
 Incoming message flows from a remote participant stay **descriptive**: what makes this
@@ -138,7 +138,7 @@ already provides, so a modeller sees them while drawing rather than on deploy.
   to be confused about what production is doing.
 - **Follow-ups / risks to watch:** whether `atlas:binding="latest"` is safe without
   the contract-compatibility check named as a follow-up in
-  ADR-draft-published-process-interface — until that exists, pinning is the honest
+  ADR-0373 — until that exists, pinning is the honest
   default and the modeler should say so. Whether the unit should be the process
   application (ADR-0128) rather than the process. And the layout question ADR-0023
   left open: generated pool layout still draws no message-flow edges.
@@ -170,8 +170,8 @@ already provides, so a modeller sees them while drawing rather than on deploy.
 - narrows ADR-0023 (collaborations and pools) for participants that name an interface
 - applies ADR-0256 (the model is authored, the provider is configured) and the
   per-server resolution pattern of ADR-0105
-- binds ADR-draft-published-process-interface; compiles into
-  ADR-draft-peer-message-delivery-worker; addressed per ADR-draft-cross-instance-message-addressing
+- binds ADR-0373; compiles into
+  ADR-0372; addressed per ADR-0369
 - uses ADR-0129 deployment targets for the peer address and credential
 - validated through ADR-0026 (problems panel and versioned validation)
 - extension disclosure per ADR-0176 and ADR-0269; payload checking via ADR-0230

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A process publishes an interface, not its model
+# ADR-0373: A process publishes an interface, not its model
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -101,7 +101,7 @@ convenience on this one.
 
 Grants are checked on `GET /api/v1/published-interfaces` (which lists only what the
 caller may view) and on `POST /api/v1/peer/messages`
-(ADR-draft-peer-message-delivery-worker). Granting and revoking are auditable events
+(ADR-0372). Granting and revoking are auditable events
 in the sense ADR-0184 already established for rights.
 
 `public` remains available and means "viewable without a grant". It never implies
@@ -160,8 +160,8 @@ unavailable without deleting the contract, so the consumer's binding stays legib
 - describes entry points from ADR-0020, ADR-0035, ADR-0102, ADR-0082, ADR-0226
 - describes returns from ADR-0089 (errors) and ADR-0125 (escalations)
 - payload shapes reference ADR-0230 (process information model)
-- authorizes ADR-draft-peer-message-delivery-worker; bound by
-  ADR-draft-participant-binds-a-published-interface; rendered by ADR-draft-white-box-participant
+- authorizes ADR-0372; bound by
+  ADR-0371; rendered by ADR-0374
 - relates to ADR-0029 (public start links — a form for a human, not a contract)
 - relates to ADR-0071 (sharing scopes), ADR-0278 (object authorization), ADR-0184 (grant audit)
 - relates to ADR-0119 (deactivation) and ADR-0130 (deprecating a version)
