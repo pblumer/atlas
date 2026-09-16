@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The portal's corner names whoever the order is for, and the help moved to the end of the row.",
+        "de": "The portal's corner names whoever the order is for, and the help moved to the end of the row."
+      },
+      "summary": {
+        "en": "The corner said \"mich selbst\" to everybody.",
+        "de": "The corner said \"mich selbst\" to everybody."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it.",
         "de": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-recipient-of-an-order-is-picked-not-typed-and-the-field-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it.",
-        "de": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it."
-      },
-      "summary": {
-        "en": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one.",
-        "de": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one."
       },
       "link": {
         "label": "Changelog",

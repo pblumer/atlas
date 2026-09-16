@@ -419,6 +419,11 @@ const state = {
   // caller who may order in somebody else's name. It is the list every member and
   // assignee picker in Atlas already reads (ADR-0073).
   people: [],
+  // meName is whoever is reading, as a name rather than an id: the display name
+  // the account carries, its username where it has none, and empty where there is
+  // nobody to be. It is what the corner says when no recipient has been chosen —
+  // see renderNav.
+  meName: '',
   // mayOrderForOthers mirrors the gate the server enforces
   // (ADR-0349). The page asks so it can leave the field
   // out, rather than offering something that answers 403 — a field somebody may
@@ -568,6 +573,7 @@ async function load() {
 // drift apart.
 async function loadWhoIAm() {
   state.mayOrderForOthers = false;
+  state.meName = '';
   state.people = [];
   let me;
   try {
@@ -578,7 +584,13 @@ async function loadWhoIAm() {
     // still works, ordering for somebody else simply is not offered.
     return;
   }
-  const roles = (me && me.user && me.user.roles) || [];
+  const user = (me && me.user) || {};
+  const roles = user.roles || [];
+  // The name, not the id. An id in the corner is the account's identifier and not
+  // an answer to "who am I signed in as" — and the same corner shows a recipient's
+  // display name when one is chosen, so the two halves of one label would
+  // otherwise be two different kinds of thing.
+  state.meName = String(user.displayName || user.username || '').trim();
   // With enforcement off there is nobody to be, exactly as the server has it.
   state.mayOrderForOthers = !me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin');
   if (!state.mayOrderForOthers) return;
@@ -1733,18 +1745,40 @@ function renderNav() {
 
   return el('nav', { class: 'nav' },
     link('catalog', 'nav.catalog'),
-    // The round "?" the mockups draw beside the first entry. It goes to the
-    // handbook rather than opening a panel of its own: the explaining is written
-    // there already, and a second copy would be a second thing to keep true.
-    el('a', { class: 'help', href: '/handbuch.html', target: '_blank', rel: 'noopener',
-      title: t('nav.help'), 'aria-label': t('nav.help'),
-      style: 'display:flex;align-items:center;justify-content:center;text-decoration:none' }, '?'),
     link('orders', 'nav.orders'),
     link('services', 'nav.services'),
     el('span', { class: 'spacer' }),
     el('span', { class: 'who' },
-      el('span', {}, state.forWhomLabel.trim() || t('for.self')),
-      el('span', { class: 'avatar', 'aria-hidden': 'true' }, '\u25cb')));
+      // Whoever the order is for, named. A recipient that has been chosen, else
+      // the person reading — and only where neither is known does it fall back to
+      // saying "myself", which is what it said to everybody before: true, and true
+      // of every reader alike, so it identified nobody.
+      el('span', {}, whoLabel()),
+      el('span', { class: 'avatar', 'aria-hidden': 'true' }, '\u25cb')),
+    // The round "?" goes to the handbook rather than opening a panel of its own:
+    // the explaining is written there already, and a second copy would be a second
+    // thing to keep true.
+    //
+    // It is the last thing in the row, past the person, and not beside the first
+    // destination where the mockups drew it. There it read as a fourth
+    // destination: a round button the same height as its neighbours, in the row
+    // where everything else navigates the catalogue. At the far end it reads as
+    // what it is — the corner that is about the reader rather than about what they
+    // are reading.
+    el('a', { class: 'help', href: '/handbuch.html', target: '_blank', rel: 'noopener',
+      title: t('nav.help'), 'aria-label': t('nav.help'),
+      style: 'display:flex;align-items:center;justify-content:center;text-decoration:none' }, '?'));
+}
+
+// whoLabel is the name in the corner: the chosen recipient, else the reader, else
+// the word that names neither.
+//
+// The order matters and is not arbitrary. Once somebody is ordering in another
+// person's name, *that* is the fact the corner has to carry — it is the thing that
+// makes the next click place an order somebody else will hold, and it must not be
+// behind the reader's own name.
+function whoLabel() {
+  return state.forWhomLabel.trim() || state.meName || t('for.self');
 }
 
 // --- Ordering in somebody else's name ---------------------------------------

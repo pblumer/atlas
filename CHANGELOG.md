@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **The portal's corner names whoever the order is for, and the help moved to the end
+  of the row.** The corner said **"mich selbst"** to everybody. That was true, and it
+  was true of every reader alike, so it identified nobody — and on a screen where the
+  next click can place an order in somebody else's name, the one thing the corner is
+  there for is to say whose name that is.
+
+  It now names the chosen recipient, or the person reading where none is chosen, and
+  falls back to "mich selbst" only where neither is known — with enforcement off there
+  is nobody to be, and saying so is the honest answer. The name is the account's
+  display name, its username where it has none: the other half of the same label is a
+  recipient's display name, and two kinds of thing in one place would read as two
+  different questions being answered.
+
+  The round **?** moved from beside the first destination to the far end of the row,
+  past the person. Among the destinations it was a round button the same height as its
+  neighbours in a row where everything else navigates the catalogue, so it read as a
+  fourth place to go. At the end it reads as what it is: part of the corner that is
+  about the reader rather than about what they are reading.
+
 ### Fixed
 
 - **With authentication off, a catalogue's appearance could not be set at all.** The
