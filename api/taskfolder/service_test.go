@@ -478,3 +478,46 @@ func TestVisibleSkipsAFolderThatNoLongerCompiles(t *testing.T) {
 		t.Errorf("Visible returned %d folders, want only the compilable one", len(folders))
 	}
 }
+
+// TestTheMatcherCacheIsKeyedByTheRuleNotTheClock is the defect
+// TestMatcherIsRecompiledAfterAnEdit was failing on, made deterministic.
+//
+// The cache was keyed by the folder's UpdatedAt, a wall clock in milliseconds. Two
+// saves inside one millisecond therefore shared a key, and the second was served the
+// first's matcher — measured at 98 failures in 400 runs of that test, which had been
+// passing on the luck of the clock ticking between two writes.
+//
+// The property is not about time at all: a matcher is a pure function of
+// `Rule.FEEL()`, which is the only thing Compile reads. So the rule is the key, and
+// this pins that by changing the rule while holding UpdatedAt fixed — the state a
+// same-millisecond edit produces, and one no clock can be slow enough to avoid.
+func TestTheMatcherCacheIsKeyedByTheRuleNotTheClock(t *testing.T) {
+	svc, store := newService(t)
+	got := create(t, svc, kundenRule, "usr_me")
+
+	rec, found, err := store.Get(got.ID)
+	if err != nil || !found {
+		t.Fatalf("Get: %v (found %v)", err, found)
+	}
+	if _, m, _, err := svc.MatcherFor(got.ID, User{ID: "usr_me"}); err != nil {
+		t.Fatalf("MatcherFor: %v", err)
+	} else if !m.Match(tasks[0], User{ID: "usr_me", Name: "me"}, time.Now()) {
+		t.Fatal("the original rule does not match the task it names")
+	}
+
+	// A different rule under the *same* UpdatedAt: two saves in one millisecond.
+	rec.Rule = Rule{Match: MatchAll, Conditions: []Condition{
+		{Field: "process", Op: OpIs, Value: "onboarding"},
+	}}
+	if err := store.Save(rec); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	_, m, _, err := svc.MatcherFor(got.ID, User{ID: "usr_me"})
+	if err != nil {
+		t.Fatalf("MatcherFor: %v", err)
+	}
+	if m.Match(tasks[0], User{ID: "usr_me", Name: "me"}, time.Now()) {
+		t.Error("the edited folder is still filtered by its previous rule; the cache was keyed by the clock")
+	}
+}

@@ -20,6 +20,44 @@
       }
     },
     {
+      "id": "a-task-folder-edited-twice-in-quick-succession-no-longer-kee",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A task folder edited twice in a row no longer shows the old filter",
+        "de": "Ein zweimal hintereinander bearbeiteter Aufgabenordner zeigt nicht mehr den alten Filter"
+      },
+      "summary": {
+        "en": "A folder in your task sidebar holds a rule — which processes, which states, whose tasks — and Atlas works out the rule once and remembers the answer rather than redoing it on every refresh. It remembered the answer under the time the folder was last saved, counted in thousandths of a second. Two saves inside the same thousandth therefore looked like the same folder, and the second edit was served the first one's answer: the folder kept filtering by the rule you had just replaced, until something else happened to clear the memory. Nobody clicking can save twice that fast, but anything calling Atlas can — a script, an integration, an assistant. The answer is now remembered under the rule itself rather than under a clock, so a changed rule always means a fresh answer and an unchanged one is never recomputed for nothing.",
+        "de": "Ein Ordner in Ihrer Aufgabenleiste enthält eine Regel — welche Prozesse, welche Zustände, wessen Aufgaben — und Atlas wertet diese Regel einmal aus und merkt sich das Ergebnis, statt es bei jeder Aktualisierung neu zu berechnen. Gemerkt wurde das Ergebnis unter dem Zeitpunkt der letzten Speicherung, gezählt in Tausendstelsekunden. Zwei Speicherungen innerhalb derselben Tausendstelsekunde sahen deshalb wie derselbe Ordner aus, und die zweite Bearbeitung erhielt das Ergebnis der ersten: Der Ordner filterte weiter nach der Regel, die Sie soeben ersetzt hatten — so lange, bis der Speicher zufällig anderweitig geleert wurde. Von Hand lässt sich nicht so schnell zweimal speichern, über eine Schnittstelle aber schon: ein Skript, eine Integration, ein Assistent. Das Ergebnis wird nun unter der Regel selbst gemerkt statt unter einer Uhr. Eine geänderte Regel bedeutet damit immer eine neue Auswertung, eine unveränderte wird nie unnötig neu berechnet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Tasks and edit one of your folders' rules.",
+          "The list re-filters by the rule you just saved, however quickly the edit followed the last one."
+        ],
+        "de": [
+          "«Tasks» öffnen und die Regel eines Ihrer Ordner bearbeiten.",
+          "Die Liste filtert nach der soeben gespeicherten Regel — unabhängig davon, wie schnell die Bearbeitung auf die vorige folgte."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Tasks",
+          "de": "Tasks öffnen"
+        },
+        "route": "#/tasks"
+      }
+    },
+    {
       "id": "a-knowledge-model-s-expression-opened-unstyled",
       "version": "Unreleased",
       "date": null,
@@ -267,48 +305,6 @@
           "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
           "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
           "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "the-class-canvas-judges-the-model-while-it-is-being-edited-n",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The class diagram checks your model while you edit it",
-        "de": "Das Klassendiagramm prüft das Modell schon beim Bearbeiten"
-      },
-      "summary": {
-        "en": "The Problems panel used to show the findings of the last save, so an edit that broke the model — a store left pointing at a class that was renamed away, an attribute typed with something that no longer exists, a lifecycle that drifted from its enumeration — said nothing until you pressed Save, and then complained about an edit you had long since moved on from. The panel is live now: every change is judged as you make it, and the bar and the marks on the diagram say so at once. The rules are the server's own, asked rather than copied, so what the diagram shows and what Save enforces cannot drift apart.",
-        "de": "Bisher zeigte die Problems-Anzeige die Befunde des letzten Speicherns. Eine Änderung, die das Modell beschädigte — ein Speicher, der auf eine umbenannte Klasse zeigt, ein Attribut mit einem Typ, den es nicht mehr gibt, ein Lebenszyklus, der von seiner Enumeration abgewichen ist — blieb bis zum Speichern stumm und wurde dann zu einer Änderung gemeldet, mit der man längst abgeschlossen hatte. Die Anzeige ist jetzt live: Jede Änderung wird sofort beurteilt, Leiste und Markierungen im Diagramm sagen es unmittelbar. Geprüft wird mit den Regeln des Servers, abgefragt statt kopiert — was das Diagramm zeigt und was beim Speichern gilt, kann damit nicht auseinanderlaufen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model, and add a class with a «businessObject» stereotype.",
-          "Keep it in a data store, then rename the class in the panel — the problems bar reacts while you type, without saving.",
-          "Fix what it names and the bar clears itself, again without saving.",
-          "If the server cannot be reached, the last verdict stays on the bar rather than going blank — it never claims a model is clean when it has not checked."
-        ],
-        "de": [
-          "Data öffnen, ein Informationsmodell wählen und eine Klasse mit Stereotyp «businessObject» anlegen.",
-          "Die Klasse in einem Datenspeicher ablegen und danach im Panel umbenennen — die Problems-Leiste reagiert beim Tippen, ohne Speichern.",
-          "Den genannten Fehler beheben: Die Leiste wird wieder leer, ebenfalls ohne Speichern.",
-          "Ist der Server nicht erreichbar, bleibt der letzte Befund stehen, statt zu verschwinden — ein ungeprüftes Modell wird nie als fehlerfrei ausgewiesen."
         ]
       },
       "try": {
