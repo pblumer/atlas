@@ -528,6 +528,36 @@ func TestTheHoldingIndexIsExact(t *testing.T) {
 	}
 }
 
+// TestTrackingIsWiderThanHolding pins the two indices apart. The gate asks the narrow
+// question — is anything held — because it runs per round on the dispatch path. The
+// reporting path asks the wider one, because a completion has to be able to break a
+// streak that is not holding anything yet, and a streak is invisible to holdingFor.
+func TestTrackingIsWiderThanHolding(t *testing.T) {
+	b, _ := breakerAt(0)
+
+	if b.tracking(mailType) {
+		t.Error("tracking a type nothing has ever failed on")
+	}
+	fail(b, mailWorker, 1) // one failure: a streak, holding nothing
+	if b.holdingFor(mailType) {
+		t.Error("holdingFor = true on a single failure")
+	}
+	if !b.tracking(mailType) {
+		t.Error("tracking = false with a streak open — a completion could not break it")
+	}
+
+	fail(b, mailWorker, 2)
+	fail(b, mailWorker, 3)
+	if !b.holdingFor(mailType) || !b.tracking(mailType) {
+		t.Error("a tripped breaker is both held and tracked")
+	}
+	b.succeeded(mailWorker)
+	if b.holdingFor(mailType) || b.tracking(mailType) || len(b.tracked) != 0 {
+		t.Errorf("after recovery: holding=%v tracking=%v tracked=%v, want everything forgotten",
+			b.holdingFor(mailType), b.tracking(mailType), b.tracked)
+	}
+}
+
 // TestATrippedBreakerStartsOverAfterItRecovers: a target that was down an hour and has
 // since been healthy should not be treated as a repeat offender the next time it blips.
 // Forgetting the entry is what makes that true, and this pins it.

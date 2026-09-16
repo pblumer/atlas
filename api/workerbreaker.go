@@ -145,7 +145,18 @@ type workerBreakers struct {
 	// It is the whole reason the gate is free when nothing is wrong: the dispatch path
 	// asks this once per type and, finding nothing, never resolves a job to a Worker.
 	holding map[int32]int
+	// tracked counts *every* entry per job type, held or merely mid-streak. The
+	// reporting side needs the wider question: a completion has to be able to break a
+	// streak that is not holding anything yet, and asking this first is what keeps a
+	// job completing normally from resolving its Worker for no reason.
+	tracked map[int32]int
 	now     func() int64
+	// onChange is told about every transition between held and not held. Work that
+	// silently does not happen is the one failure mode an operator cannot diagnose, so
+	// a breaker is never allowed to trip in silence — and the breaker itself holds only
+	// an interned job-type index, so saying anything legible about it is the caller's
+	// job. nil means nobody is listening, which is only true in a test.
+	onChange func(k breakerKey, state breakerState, reason string, cooldown time.Duration)
 }
 
 // newWorkerBreakers builds an empty collection over a clock, injected so the transitions
@@ -157,6 +168,7 @@ func newWorkerBreakers(now func() int64) *workerBreakers {
 	return &workerBreakers{
 		byKey:   map[breakerKey]*breakerEntry{},
 		holding: map[int32]int{},
+		tracked: map[int32]int{},
 		now:     now,
 	}
 }
@@ -165,6 +177,12 @@ func newWorkerBreakers(now func() int64) *workerBreakers {
 // dispatch path's first question, asked once per type per round: when it is false — the
 // steady state — no candidate needs to be attributed to anything.
 func (b *workerBreakers) holdingFor(jobType int32) bool { return b.holding[jobType] > 0 }
+
+// tracking reports whether this job type has any breaker state at all — a target
+// currently held, or one part-way through a failure streak. It is the reporting
+// path's first question: a completion on a type nothing is wrong with has nothing to
+// tell the breaker, and must not pay a read to discover that.
+func (b *workerBreakers) tracking(jobType int32) bool { return b.tracked[jobType] > 0 }
 
 // allow answers whether this job may be handed out. A refusal changes nothing about the
 // job: it stays activatable, unleased and untouched.
@@ -219,6 +237,7 @@ func (b *workerBreakers) failed(k breakerKey, jobKey, instanceKey uint64, messag
 	if e == nil {
 		e = &breakerEntry{instances: map[uint64]struct{}{}}
 		b.byKey[k] = e
+		b.tracked[k.jobType]++
 	}
 	switch e.state {
 	case breakerHalfOpen:
@@ -286,17 +305,30 @@ func (b *workerBreakers) trip(k breakerKey, e *breakerEntry, reason string, now 
 	e.probeAt = now + int64(e.cooldown)
 	e.probeJob = 0
 	clear(e.instances)
+	if b.onChange != nil {
+		// Every trip, not only the first: a re-opened breaker with a longer cooldown is
+		// how an operator learns the target is still down, and how long the next
+		// attempt is away.
+		b.onChange(k, breakerOpen, reason, e.cooldown)
+	}
 }
 
 // forget closes a breaker and drops it, so a recovered target costs exactly what one that
 // never failed costs — including its map entry.
 func (b *workerBreakers) forget(k breakerKey, e *breakerEntry) {
-	if e.state != breakerClosed {
+	held := e.state != breakerClosed
+	if held {
 		if b.holding[k.jobType]--; b.holding[k.jobType] <= 0 {
 			delete(b.holding, k.jobType)
 		}
 	}
+	if b.tracked[k.jobType]--; b.tracked[k.jobType] <= 0 {
+		delete(b.tracked, k.jobType)
+	}
 	delete(b.byKey, k)
+	if b.onChange != nil && held {
+		b.onChange(k, breakerClosed, "", 0)
+	}
 }
 
 // breakerView is one held target as an operator sees it. Work that silently does not

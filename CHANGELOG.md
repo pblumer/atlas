@@ -14,6 +14,38 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An outage now stops at the worker instead of at every token.** A worker whose target
+  stopped answering did not fail once. It failed once **per instance that reached its
+  task**: each failure spent a retry, each exhausted budget parked a token behind its own
+  incident, and every one of those calls went into a host that was already struggling. An
+  hour of SMTP being down, on a process starting a few thousand instances in that hour, was
+  a few thousand incidents for somebody to clear — and the only thing Atlas could say about
+  a failing integration was a backoff one worker asked for on one job, which cannot express
+  "stop asking, the other end is down".
+
+  A **circuit breaker per Worker** now sits in the dispatch path, on both halves of it: the
+  in-process runner and the external pull. Three consecutive failures from three *distinct*
+  process instances judge a target down, and its jobs stop being handed out. They stay
+  activatable, unleased, with their retry budgets untouched, waiting exactly as they wait
+  for a worker that has not polled yet. One job per cooldown goes out as a probe — ten
+  seconds, doubling to five minutes — and a success closes the breaker, after which the
+  backlog drains by itself with nobody resolving anything.
+
+  The distinctness is the whole trip condition. One instance with a bad record fails its
+  entire retry budget against a perfectly healthy host, and stopping the integration over it
+  would punish every other instance for one bad record; a dead host fails instances that
+  have nothing to do with each other, which no data fault does.
+
+  Nothing about this is durable. Whether a host is reachable right now is not a fact about a
+  process, so a restarted engine starts with no opinion about anybody's target, and no job
+  record grew a field. Holding work back never invents a business outcome either: a held
+  token is not cancelled, completed or failed, and no incident is raised for it — an
+  incident is a fact about a token, and none of these tokens is at fault.
+
+  While a breaker holds work back the log says so, naming the target, what it last failed
+  with, and how far away the next probe is. The Workers view, a "close now" control for an
+  operator who has already fixed the endpoint, and the counters follow.
+
 - **The catalogue can now say what must never be held together.** Everything the portal had
   learned about access was **detective or temporal**: the commissioning load records what was
   there, reconciliation checks whether the record is true, recertification asks whether it is

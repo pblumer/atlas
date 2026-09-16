@@ -224,12 +224,22 @@ the durable record. The queue depth is the honest signal, and it is already on t
 - **Follow-ups / risks to watch:** a breaker tripping is a natural trigger for restarting a
   *supervised* worker process (ADR-0157), and deliberately not wired here — stopping the flood and
   repairing the worker are two decisions, and bundling them would restart a process over a failure
-  that was never its fault. The long poll needs care: a worker waiting on a type whose breaker is
-  open must not be woken by every new job of that type, or the held queue becomes a spin. And the
-  candidate scan needs care for the same reason the gate is cheap: it collects candidates from the
-  activatable index *until* `want` is reached, and only a filter applied after that would drop the
-  held ones — so ten thousand held jobs of a type can fill the batch and starve the runnable jobs of
-  another Worker sharing it. The filter has to sit inside the scan, not after it.
+  that was never its fault.
+
+  Two risks this record named while the gate was unbuilt were settled in building it, and are
+  recorded here because the answers are not obvious. **Starvation:** the scan collects candidates
+  from the activatable index until it has a page, so a filter applied after that would drop nothing
+  but held jobs and hand out none — the filter has to sit *inside* the scan. That alone is not
+  enough, because the index is ordered by key and a held target's backlog sits in front of every job
+  created after it: a bounded scan starting at the oldest would spend its whole budget on the
+  backlog. So a held type is scanned **newest first** and resumes where the last round stopped,
+  rotating down through the backlog — the same inversion the task inbox makes under a flood, and it
+  gives up oldest-first order only while something is held. **The long poll:** a worker waiting on a
+  held type must not be woken by every new job of that type, because nearly every one of them
+  belongs to the target that is down; waking would have the request scan and answer empty at the
+  rate the flood is created. A poll on a held type therefore waits its own wait out and looks once
+  at the end, which costs a healthy Worker sharing that type up to one poll of latency — paid only
+  while a breaker is open.
 
 ## Pros and cons of the options
 

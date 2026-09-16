@@ -233,6 +233,14 @@ type Server struct {
 	// workers is the Workers view's runtime registry (ADR-0157): who pulled what,
 	// this run. Not durable and not engine state — see api/workers.go.
 	workers *workerRegistry
+	// breakers holds back a failing target's jobs instead of translating its outage
+	// into one incident per instance (ADR-0340). Runtime state under the same
+	// single-owner discipline as the registry above — see api/workerbreaker.go.
+	breakers *workerBreakers
+	// gateResume is where the external pull's last *gated* scan of each job type
+	// stopped, the HTTP half of the rotation the in-process runner keeps for itself.
+	// See [Server.scanHeldCandidates].
+	gateResume map[int32]uint64
 	// jobWaiters parks long-polling workers until a job of their type is durable
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
@@ -1335,6 +1343,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		decisionVersions: map[string]int32{},
 		jobTypes:         jobTypes,
 		workers:          newWorkerRegistry(nil),
+		breakers:         newWorkerBreakers(nil),
+		gateResume:       map[int32]uint64{},
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -1680,6 +1690,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// must be bounded and non-blocking — closing channels, never sending on them.
 	proc.SetJobNotifier(func(jobType int32) { s.jobWaiters.notify(jobType) })
 	s.jobRunner = job.NewRunner(store, proc)
+	// The dispatch gate: the in-process runner asks it before handing a job out and
+	// tells it how each one ended, without learning what a Worker is (ADR-0340).
+	s.jobRunner.SetGate(jobGate{s})
+	s.breakers.onChange = s.logBreakerChange
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
 		return dmn.Handler(rd, s.processLookup, s.dmnRegistry, nil)
 	})
