@@ -10,11 +10,11 @@ with a per-visitor toggle.
 
 ```
 CHANGELOG.md ──┐
-               ├─► gen.mjs ──► api/web/whats-new.json ──► app.js renderWhatsNew()
+               ├─► go run ./scripts/whats-new ──► api/web/whats-new.json ──► app.js renderWhatsNew()
 overrides/*.json ┘
 ```
 
-- **`CHANGELOG.md` is the source of truth.** `gen.mjs` reads its version sections and
+- **`CHANGELOG.md` is the source of truth.** The generator reads its version sections and
   `Added` / `Changed` / `Fixed` bullets and derives each entry's structure: a stable
   id (the title slug), the headline, the version/date, and a link to the ADR or PR the
   bullet names. New CHANGELOG entries appear automatically.
@@ -25,13 +25,20 @@ overrides/*.json ┘
 - **`api/web/whats-new.json` is generated and committed.** It is served straight off
   the embedded FS (`//go:embed web` in `api/server.go`), so the web UI stays buildless
   (ADR-0012): the generator runs only at authoring time, never at runtime.
+- **The generator is Go** (`scripts/whats-new`, logic in `feed/`), and that is the
+  whole of why (ADR-draft-whats-new-in-go): the feed was the only reason `go build`,
+  `go vet`, the race job and the docs job needed Node. Node stays where it is the
+  technology — the browser end-to-end suite and the screenshot capture — and left the
+  four places where it was incidental. The output is byte-for-byte what the script
+  produced, which is not a nicety: CI regenerates the feed to check the commit is
+  current, so anything else would fail that check on every run.
 
 ## Adding or polishing an entry
 
 1. Write the change in `CHANGELOG.md` as usual.
 2. Run the generator once to see the derived id:
    ```bash
-   node scripts/whats-new/gen.mjs   # or: make whats-new
+   go run ./scripts/whats-new   # or: make whats-new
    ```
    Look up the entry's `id` in `api/web/whats-new.json`.
 3. (Optional but recommended for anything a user should notice) add an override in
@@ -63,7 +70,7 @@ overrides/*.json ┘
 
 4. Re-run `make whats-new` and **commit** the regenerated `api/web/whats-new.json`.
 
-The only entries shown are the newest `MAX_ENTRIES` (see `gen.mjs`) after hidden ones
+The only entries shown are the newest `MaxEntries` (see `feed/feed.go`) after hidden ones
 are dropped.
 
 ## What keeps it honest
@@ -79,7 +86,7 @@ Nothing regenerates the feed at build or run time, so two checks stand in for th
   nothing — the entry still renders, from the CHANGELOG headline, with German falling
   back to English — and that is indistinguishable from having written no override at
   all. Keys are curated by hand, so an unmatched one is always a typo or a headline
-  that was reworded out from under it; `gen.mjs` exits non-zero and names it.
+  that was reworded out from under it; the generator exits non-zero and names it.
 - **`api/whatsnew_test.go` guards the committed JSON**: valid, non-empty, required
   fields present, newest-first, and no summary that starts with punctuation (the
   signature of a generator parse artifact rather than real prose).

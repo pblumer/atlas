@@ -14,6 +14,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The feed generator is Go, so the Go checks stop needing Node.** The Console's
+  "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
+  keeps the web UI buildless. CI regenerates it to check the commit is current — and
+  because the generator was a Node script, **four Go jobs installed a JavaScript
+  toolchain for that one step**: the main `build · vet · fmt · race · cover` job, the
+  docs job, the ADR-numbering workflow and the feed-sync workflow. ADR-0012's own
+  driver says a front-end toolchain must not become a prerequisite for building or
+  testing Atlas in CI; the feed generator was exactly that, in the job that decides
+  whether a change is good.
+
+  It is now `go run ./scripts/whats-new`, with the rules in a package beside it so the
+  guards call them directly instead of starting a process and reading what it printed.
+  Node remains in the two places where it is the technology rather than an accident:
+  the browser end-to-end suite and the screenshot capture.
+
+  **Byte-for-byte the same output, verified rather than assumed.** Two Go defaults
+  point the wrong way — its encoder escapes `<`, `>` and `&`, and it writes struct
+  fields in declaration order where `JSON.stringify` writes keys in insertion order —
+  so both were turned around and the field order was made the wire contract. Both
+  implementations were then run over the same tree with the entry cap lifted: all
+  **418** entries, every bullet in a 9,310-line changelog, came out identical.
+
+  **One rule is new, and it was earned.** The original ignored keys it did not know,
+  and an override carried `route` at the top level instead of inside `try` — so that
+  entry's "Try it" link did nothing and nothing anywhere said so. Unknown keys are now
+  refused, for the reason the orphan check already exists one level up: a key that
+  does nothing is indistinguishable from a key nobody wrote. The one file that had one
+  is corrected and gains the link it was always meant to have.
 - **The portal's corner names whoever the order is for, and the help moved to the end
   of the row.** The corner said **"mich selbst"** to everybody. That was true, and it
   was true of every reader alike, so it identified nobody — and on a screen where the
