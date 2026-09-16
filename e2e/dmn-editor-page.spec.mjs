@@ -40,7 +40,7 @@ const STORED_XML = `<?xml version="1.0" encoding="UTF-8"?>
 // `taken` makes the model upload answer 409 the way the server does when the handle
 // a decision would land on is already somebody else's (ADR-0222), unless the request
 // says the author chose to replace it.
-function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [] } = {}) {
+function installMock(page, { refs = [], drafts = [], taken = false, deployed = [], trial = null, docs = [], storedXml = STORED_XML } = {}) {
   const uploads = [];
   const created = [];
   const patched = [];
@@ -164,7 +164,7 @@ function installMock(page, { refs = [], drafts = [], taken = false, deployed = [
       return route.fulfill({ json: { key: row.key, decisions: [row] } });
     }
     if (path.endsWith("/xml") && path.startsWith("/api/v1/dmn-models/")) {
-      return route.fulfill({ body: STORED_XML, contentType: "application/xml" });
+      return route.fulfill({ body: storedXml, contentType: "application/xml" });
     }
     if (path === "/api/v1/dmn-models" && request.method() === "POST") {
       uploads.push({ query: url.search, body: request.postData() });
@@ -1003,4 +1003,62 @@ test("the missing requirement can be drawn from the finding, and the drawing is 
   await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
   expect(state.draftSaves).toHaveLength(1);
   expect(state.draftSaves[0].xml).toMatch(/<knowledgeRequirement[\s\S]*?requiredKnowledge[^>]*#bkm_tier/);
+});
+
+// A DMN file names two independent namespaces: MODEL for the logic and DMNDI for the
+// picture. dmn-js binds both from a `dmnVersion` constructor option that defaults to
+// "1.3", so a model in the DMN 1.5 namespace used to be refused outright with
+// `failed to parse document as <dmn:Definitions>` — while the engine underneath
+// (temis, a DMN 1.5 engine) compiled and evaluated the very same bytes, and the
+// read-only DMN view rendered them (#994).
+//
+// These live against the real vendored bundle, which is the only thing that can
+// answer whether the descriptors actually load.
+const STORED_XML_15 = STORED_XML
+  .replaceAll("https://www.omg.org/spec/DMN/20191111/MODEL/", "https://www.omg.org/spec/DMN/20230324/MODEL/")
+  .replaceAll("https://www.omg.org/spec/DMN/20191111/DMNDI/", "https://www.omg.org/spec/DMN/20230324/DMNDI/");
+
+test("a decision model in the DMN 1.5 namespace opens, and is not quietly saved back as 1.3", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "eligibility", modelRef: "decision", projectId: "app-1" }],
+    storedXml: STORED_XML_15,
+  });
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  // The refusal card is what this used to show instead of a canvas.
+  await expect(page.locator(".dmn-editor .card.empty")).toHaveCount(0);
+  await expect(page.getByText("Could not open the decision editor")).toHaveCount(0);
+
+  // The document really parsed: its decision is a view in the tab strip, so
+  // dmn-js built a model rather than an empty canvas.
+  await expect(page.locator("#dmn-views button", { hasText: "eligibility" })).toBeVisible();
+
+  // And writing it back keeps the author's version. A 1.5 model silently returning
+  // as 1.3 would be the same data loss as refusing it, only harder to notice.
+  await page.locator("#dmn-save-model").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  expect(state.uploads).toHaveLength(1);
+  expect(state.uploads[0].body).toContain("https://www.omg.org/spec/DMN/20230324/MODEL/");
+  expect(state.uploads[0].body).not.toContain("https://www.omg.org/spec/DMN/20191111/MODEL/");
+
+  expect(pageErrors).toEqual([]);
+});
+
+test("a decision model in the DMN 1.3 namespace still opens, and still saves as 1.3", async ({ page }) => {
+  const state = installMock(page, {
+    refs: [{ id: "ref-1", name: "eligibility", modelRef: "decision", projectId: "app-1" }],
+  });
+
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+  await expect(page.locator("#dmn-views button", { hasText: "eligibility" })).toBeVisible();
+
+  await page.locator("#dmn-save-model").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  expect(state.uploads[0].body).toContain("https://www.omg.org/spec/DMN/20191111/MODEL/");
+  expect(state.uploads[0].body).not.toContain("https://www.omg.org/spec/DMN/20230324/MODEL/");
 });
