@@ -70,7 +70,49 @@ type Request struct {
 	// sniffing a URL is the kind of coupling that breaks quietly, and a fake client
 	// in a test could then only observe the string rather than the intent.
 	Eventual bool
+
+	// Binary asks for the response *bytes* rather than a decoded object, and it is
+	// how a photo is read (ADR-draft-directory-photo). Graph serves one as
+	// image/jpeg, and every other operation this worker performs returns JSON.
+	//
+	// A field on the request rather than a second method on [Client], because what
+	// differs is a property of this request and not of the client — and a method
+	// would have broken every fake standing in for Graph in every test, for a
+	// distinction none of them make.
+	//
+	// It changes two things beyond the decoding. The result is a [Binary] rather
+	// than a decoded object; and **404 is an answer rather than a failure**: it
+	// returns (nil, nil), meaning there is nothing there. Graph answers 404 both for
+	// a person who has no photo and for an id that is not anybody's, and the error
+	// code distinguishing them is not something to hang a directory run on. The
+	// trade is stated rather than hidden: a mistyped id reads as "no photo", where
+	// the other way round every person without one would fail a job — and in a
+	// tenant where most have none, that is an incident queue nobody can read.
+	Binary bool
+
+	// MaxBytes caps a binary read. Zero means [DefaultMaxBinaryBytes].
+	//
+	// It refuses rather than truncates. An unbounded body into a process variable is
+	// the failure the listing cap exists for, and half a JPEG is not a smaller JPEG:
+	// the magic is at the front, so a truncated one passes every format check there
+	// is and lands as a broken image nobody can explain.
+	MaxBytes int64
 }
+
+// Binary is what a [Request] with Binary set returns: the bytes, and what Graph
+// said they are. It is a type rather than a bare []byte because the content type
+// is half the answer — nothing downstream can store an image it cannot name.
+type Binary struct {
+	ContentType string
+	Data        []byte
+}
+
+// DefaultMaxBinaryBytes bounds a binary read when the request names no cap.
+//
+// A megabyte is far above any photo Graph serves from /photo/$value — those run to
+// tens of kilobytes — so reaching it means something is wrong, and saying so is the
+// useful outcome.
+const DefaultMaxBinaryBytes = 1 << 20
 
 // consistencyLevelHeader is the header Graph reads for advanced query support, and
 // eventualConsistency its only value this worker sends.
@@ -148,11 +190,19 @@ func (c *GraphClient) Call(ctx context.Context, r Request) (any, error) {
 	if r.Eventual {
 		req.Header.Set(consistencyLevelHeader, eventualConsistency)
 	}
+	if r.Binary {
+		// Ask for anything: the JSON Accept above is a lie for a photo, and Graph
+		// answers an error envelope as JSON regardless.
+		req.Header.Set("Accept", "*/*")
+	}
 	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("entra: %s %s: %w", r.Method, r.Path, err)
 	}
 	defer resp.Body.Close()
+	if r.Binary {
+		return c.readBinary(r, resp)
+	}
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("entra: read %s %s response: %w", r.Method, r.Path, err)
@@ -168,6 +218,46 @@ func (c *GraphClient) Call(ctx context.Context, r Request) (any, error) {
 		return nil, fmt.Errorf("entra: %s %s returned a body that is not JSON: %w", r.Method, r.Path, err)
 	}
 	return out, nil
+}
+
+// readBinary finishes a binary request: the bytes, the type Graph named them, and
+// the two answers that are not bytes.
+//
+// 404 is absence, not failure — see [Request.Binary] for why that way round. Every
+// other non-2xx is a failure and carries Graph's own error envelope, which is
+// JSON even here.
+func (c *GraphClient) readBinary(r Request, resp *http.Response) (any, error) {
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	max := r.MaxBytes
+	if max <= 0 {
+		max = DefaultMaxBinaryBytes
+	}
+	// One byte past the cap, so an over-large body is refused rather than truncated
+	// into a smaller one that still passes every format check.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, fmt.Errorf("entra: read %s %s response: %w", r.Method, r.Path, err)
+	}
+	if resp.StatusCode/100 != 2 {
+		return nil, graphFailure(r.Method, r.Path, resp.StatusCode, data)
+	}
+	if int64(len(data)) > max {
+		return nil, fmt.Errorf("entra: %s %s returned more than the %d byte limit; it is refused rather than cut short, because a truncated image passes every format check and is still broken",
+			r.Method, r.Path, max)
+	}
+	if len(data) == 0 {
+		// A 2xx with no body is the same statement as a 404 here: there is nothing to
+		// carry. Reporting it as an empty image would put a zero-byte file on an
+		// account.
+		return nil, nil
+	}
+	ct := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = ct[:i]
+	}
+	return Binary{ContentType: strings.ToLower(strings.TrimSpace(ct)), Data: data}, nil
 }
 
 // resolve turns what a caller asked for into the URL to request: a path is taken

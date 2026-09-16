@@ -197,11 +197,17 @@ type entraOp struct {
 	// resume from and refuses filter/search/advancedQuery, which Graph's delta endpoint
 	// does not run.
 	isDelta bool
+	// isBinary marks an operation whose answer is bytes rather than an object — a
+	// photo (ADR-draft-directory-photo). It needs a resultVariable for a listing's
+	// reason and takes none of the query fields: there is no collection to filter,
+	// project or page.
+	isBinary bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
 	"get-user":            {needsUser: true},
+	"get-user-photo":      {needsUser: true, isBinary: true},
 	"list-users":          {isList: true},
 	"delta-users":         {isDelta: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
@@ -308,7 +314,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
-	if (spec.isList || spec.isDelta) && strings.TrimSpace(cn.ResultVariable) == "" {
+	if (spec.isList || spec.isDelta || spec.isBinary) && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
 	}
 	if err := entraFieldGating(st.Id, op, spec, cn); err != nil {

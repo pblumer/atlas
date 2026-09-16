@@ -287,11 +287,8 @@ func (s *settingsStore) saveOIDCMapping(m oidcMapping) error {
 // The accepted formats and their stored extensions come from [brandimage], which
 // is also what a catalogue's own mark reads: one decision about what an uploaded
 // brand image may be, in one place.
-var (
-	logoExts      = brandimage.Exts
-	logoExtByType = brandimage.ExtByType
-	logoTypeByExt = brandimage.TypeByExt
-)
+// The instance's own mark takes the mark set (brandimage.Mark): a PNG or an SVG.
+var logoExts = brandimage.Mark.Exts()
 
 func (s *settingsStore) logoPath(ext string) string {
 	return filepath.Join(s.dir, "logo."+ext)
@@ -305,7 +302,8 @@ func (s *settingsStore) getLogo() (data []byte, contentType string, ok bool, err
 	for _, ext := range logoExts {
 		b, readErr := os.ReadFile(s.logoPath(ext))
 		if readErr == nil {
-			return b, logoTypeByExt[ext], true, nil
+			ct, _ := brandimage.Mark.TypeFor(ext)
+			return b, ct, true, nil
 		}
 		if !os.IsNotExist(readErr) {
 			return nil, "", false, fmt.Errorf("settingsstore: read logo: %w", readErr)
@@ -316,9 +314,9 @@ func (s *settingsStore) getLogo() (data []byte, contentType string, ok bool, err
 
 // saveLogo writes the logo durably under the extension for contentType, then drops
 // any previously-stored other format so a switch (e.g. PNG → SVG) never leaves a
-// stale file getLogo could serve. contentType must be one of logoExtByType.
+// stale file getLogo could serve. contentType must be one brandimage.Mark accepts.
 func (s *settingsStore) saveLogo(data []byte, contentType string) error {
-	ext, ok := logoExtByType[contentType]
+	ext, ok := brandimage.Mark.ExtFor(contentType)
 	if !ok {
 		return fmt.Errorf("settingsstore: unsupported logo type %q", contentType)
 	}

@@ -1,9 +1,14 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/brandimage"
 )
 
 // Mirroring a Microsoft Entra tenant's accounts and groups into this server
@@ -55,9 +60,20 @@ type directorySyncMessage struct {
 	// changes that were never read.
 	FromRevision int64 `json:"fromRevision"`
 
-	Users          []directoryUser  `json:"users"`
-	UsersDeltaLink string           `json:"usersDeltaLink"`
-	Groups         []directoryGroup `json:"groups"`
+	Users          []directoryUser `json:"users"`
+	UsersDeltaLink string          `json:"usersDeltaLink"`
+	// Photos is what the run read about people's pictures
+	// (ADR-draft-directory-photo). It is a field of its own and not part of
+	// [directoryUser] on purpose: that type is one object from /users/delta, and a
+	// photo is not in that page — it is a second thing the run read, one call per
+	// person. Putting it there would be a small lie in the file where a reader most
+	// needs to know what came from where.
+	//
+	// A list rather than a map, so its order is fixed and the plan is comparable run
+	// to run. An object named twice resolves to the last entry, as two entries for
+	// one thing resolve everywhere else here.
+	Photos []directoryPhoto `json:"photos,omitempty"`
+	Groups []directoryGroup `json:"groups"`
 	// GroupsDeltaLink is the cursor the group read ended at. Both cursors are written
 	// together or not at all: they describe one point in time, and advancing one
 	// without the other would resume half a run.
@@ -85,6 +101,27 @@ type directoryUser struct {
 	Mail              string            `json:"mail"`
 	AccountEnabled    *bool             `json:"accountEnabled"`
 	Removed           *directoryRemoval `json:"@removed"`
+}
+
+// directoryPhoto is what one run learned about one person's picture: the bytes, or
+// that there are none.
+//
+// Removal is explicit, and that is the whole reason this carries a flag rather than
+// only bytes. A process that asked Graph and got 404 knows something a process that
+// did not ask does not — and without a way to say so, the absence of an entry would
+// have to mean both "not fetched" and "no longer there". It means the first, so a
+// photo deleted in the tenant is taken away here only when somebody says it was.
+type directoryPhoto struct {
+	// ID is the directory object id, matched the way every other id here is.
+	ID string `json:"id"`
+	// ContentType and Data are the picture: the media type Graph named and the bytes
+	// base64-encoded, which is the shape the Entra worker's get-user-photo produces
+	// because a process variable is FEEL and FEEL has no bytes.
+	ContentType string `json:"contentType,omitempty"`
+	Data        string `json:"data,omitempty"`
+	// Removed says the directory holds no picture for this person. It is a
+	// statement, not an absence.
+	Removed bool `json:"removed,omitempty"`
 }
 
 // directoryGroup is one object from /groups/delta. Members carries Graph's
@@ -138,6 +175,7 @@ const (
 	noteMemberRemove = "member-removed" // a membership this run takes away
 	noteSkipped      = "skipped"        // an object this run has no rule for
 	noteNameTaken    = "name-taken"     // a mirrored group whose name a local group already uses
+	notePhoto        = "photo"          // a picture this run could not take, and why
 )
 
 // directoryNote is one line of the report.
@@ -164,6 +202,15 @@ type directoryUserDecision struct {
 	// open and the OAuth grant that is already standing have to be taken away too, and
 	// that is the caller's work, after the write.
 	Disabling bool `json:"disabling,omitempty"`
+
+	// Photo is the picture to write beside the record, and PhotoType what it is;
+	// PhotoClear says to take away the one that is there
+	// (ADR-draft-directory-photo). All three are excluded from the JSON for the
+	// reason Record is: a reporting run answers with counts and notes, and never
+	// with a megabyte of base64 per person.
+	Photo      []byte `json:"-"`
+	PhotoType  string `json:"-"`
+	PhotoClear bool   `json:"-"`
 }
 
 // directoryGroupDecision is one group the plan would write, on the same terms.
@@ -190,6 +237,17 @@ type directoryCounts struct {
 	UsersDisabled  int `json:"usersDisabled"`
 	UsersUnchanged int `json:"usersUnchanged"`
 	UsersRefused   int `json:"usersRefused"`
+
+	// The pictures, counted rather than listed. Every one of these is the ordinary
+	// case for somebody, and a report with a line per person is a report nobody
+	// reads. What is surprising — bytes that are not a picture — is a note.
+	PhotosWritten   int `json:"photosWritten"`
+	PhotosCleared   int `json:"photosCleared"`
+	PhotosUnchanged int `json:"photosUnchanged"`
+	// PhotosKept counts the people whose own choice this run left alone. The mirror
+	// may replace what the mirror put there; it may not replace what somebody chose.
+	PhotosKept    int `json:"photosKept"`
+	PhotosRefused int `json:"photosRefused"`
 
 	GroupsRead      int `json:"groupsRead"`
 	GroupsCreated   int `json:"groupsCreated"`
@@ -263,6 +321,12 @@ type directoryDecider struct {
 	// groupByDirectory is the same for groups: the mirrored ones, by object id.
 	groupByDirectory map[string]group
 
+	// photos is what the message said about pictures, decoded once and keyed by
+	// object id. Decoding here rather than at the write keeps the apply free of
+	// anything that could fail on the message's content, which is the whole point of
+	// the split.
+	photos map[string]decodedPhoto
+
 	// userPlan and groupPlan are the decisions so far, in the order they were made.
 	userPlan  []directoryUserDecision
 	groupPlan []directoryGroupDecision
@@ -281,6 +345,102 @@ type directoryDecider struct {
 	// shrinks as the plan disables people, which is what makes the last-administrator
 	// guard hold across a message that disables several.
 	adminsOf map[string]bool
+}
+
+// decodedPhoto is one entry of the message, past base64 and past the format check.
+type decodedPhoto struct {
+	data    []byte
+	kind    string
+	removed bool
+	// bad carries why an entry was unusable, so the refusal is reported against the
+	// account it belongs to rather than at the point it was decoded — where nothing
+	// yet knows whose it is.
+	bad string
+}
+
+// decodePhotos turns the message's picture entries into bytes, once.
+//
+// Both refusals it can make are about the entry itself and not about anybody: data
+// that is not base64, and bytes that are not a picture of a kind this server
+// serves. Neither stops the run — one unreadable entry must not cost an account its
+// name change — and both are carried to be reported beside the person.
+func decodePhotos(entries []directoryPhoto) map[string]decodedPhoto {
+	out := make(map[string]decodedPhoto, len(entries))
+	for _, e := range entries {
+		oid := directoryIDOf(e.ID)
+		if oid == "" {
+			continue
+		}
+		if e.Removed {
+			out[oid] = decodedPhoto{removed: true}
+			continue
+		}
+		ct := brandimage.NormalizeType(e.ContentType)
+		raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(e.Data))
+		switch {
+		case err != nil:
+			out[oid] = decodedPhoto{bad: "the picture the directory sent is not base64: " + err.Error()}
+		case len(raw) == 0:
+			out[oid] = decodedPhoto{bad: "the directory sent an entry with no bytes and did not say the picture was removed; nothing is changed, because an empty picture and no picture are different statements"}
+		default:
+			if _, ok := brandimage.Photo.ExtFor(ct); !ok {
+				out[oid] = decodedPhoto{bad: fmt.Sprintf("the directory sent a picture as %q, which is not a kind this server serves to a browser", ct)}
+				continue
+			}
+			if !brandimage.Valid(ct, raw) {
+				out[oid] = decodedPhoto{bad: fmt.Sprintf("the directory sent bytes that are not a %s, whatever they were labelled", ct)}
+				continue
+			}
+			out[oid] = decodedPhoto{data: raw, kind: ct}
+		}
+	}
+	return out
+}
+
+// photoFingerprint is the digest a record carries so that "unchanged" stays true.
+func photoFingerprint(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// applyPhoto decides one account's picture, mutating the record and returning what
+// the apply must write (ADR-draft-directory-photo).
+//
+// The rule that shapes it: **a mirror does not overwrite a choice.** A picture
+// whose provenance is an upload is left where it is, in both directions — the
+// directory may replace or remove what the directory gave, and neither what
+// somebody picked for themselves.
+func (d *directoryDecider) applyPhoto(rec *User, oid string) (data []byte, kind string, clear bool) {
+	p, ok := d.photos[oid]
+	if !ok {
+		return nil, "", false
+	}
+	if p.bad != "" {
+		d.counts.PhotosRefused++
+		d.note(directoryNote{Kind: notePhoto, ObjectID: oid, Subject: rec.Username, UserID: rec.ID, Detail: p.bad})
+		return nil, "", false
+	}
+	if rec.AvatarSource == AvatarUploaded {
+		d.counts.PhotosKept++
+		return nil, "", false
+	}
+	if p.removed {
+		if rec.AvatarSource == "" {
+			d.counts.PhotosUnchanged++
+			return nil, "", false
+		}
+		rec.AvatarSource, rec.AvatarFingerprint = "", ""
+		d.counts.PhotosCleared++
+		return nil, "", true
+	}
+	fp := photoFingerprint(p.data)
+	if rec.AvatarSource == AvatarFromDirectory && rec.AvatarFingerprint == fp {
+		d.counts.PhotosUnchanged++
+		return nil, "", false
+	}
+	rec.AvatarSource, rec.AvatarFingerprint = AvatarFromDirectory, fp
+	d.counts.PhotosWritten++
+	return p.data, p.kind, false
 }
 
 // decideDirectorySync turns one message into a plan, against the population as it
@@ -305,6 +465,7 @@ func decideDirectorySync(msg directorySyncMessage, state directorySyncState, use
 		groupByDirectory: map[string]group{},
 		groupState:       map[string]*pendingGroup{},
 		adminsOf:         map[string]bool{},
+		photos:           decodePhotos(msg.Photos),
 	}
 	for _, u := range users {
 		if u.DirectoryID != "" {
@@ -429,6 +590,7 @@ func (d *directoryDecider) decideDeparture(mu directoryUser, oid string) error {
 func (d *directoryDecider) decideKnownUser(mu directoryUser, oid string, rec User) error {
 	before := rec
 	d.applyProfile(&rec, mu)
+	photo, kind, clear := d.applyPhoto(&rec, oid)
 	// A refused disable does not discard the rest of the page. The profile change in
 	// the same object is a change a change-tracking read will never send again, and
 	// dropping it to register a refusal would lose it for good.
@@ -456,7 +618,8 @@ func (d *directoryDecider) decideKnownUser(mu directoryUser, oid string, rec Use
 	} else {
 		d.counts.UsersUpdated++
 	}
-	d.commitUser(directoryUserDecision{Action: action, ObjectID: oid, Record: rec, Disabling: disabling})
+	d.commitUser(directoryUserDecision{Action: action, ObjectID: oid, Record: rec, Disabling: disabling,
+		Photo: photo, PhotoType: kind, PhotoClear: clear})
 	return nil
 }
 
@@ -474,6 +637,7 @@ func (d *directoryDecider) decideKnownUser(mu directoryUser, oid string, rec Use
 func (d *directoryDecider) decideMerge(mu directoryUser, oid string, rec User) error {
 	rec.DirectoryID = oid
 	d.applyProfile(&rec, mu)
+	photo, kind, clear := d.applyPhoto(&rec, oid)
 	// Linking the account happens either way: the merge is what stops a second
 	// account existing, and refusing it because the disable was refused would leave
 	// the duplicate this rule exists to avoid — with no later run to try again, since
@@ -492,7 +656,8 @@ func (d *directoryDecider) decideMerge(mu directoryUser, oid string, rec User) e
 			Detail: "the account this merge attaches to holds " + strings.Join(extra, ", ") +
 				"; the merge neither grants nor removes a role, so it keeps them"})
 	}
-	d.commitUser(directoryUserDecision{Action: dirUserMerge, ObjectID: oid, Record: rec, Disabling: disabling})
+	d.commitUser(directoryUserDecision{Action: dirUserMerge, ObjectID: oid, Record: rec, Disabling: disabling,
+		Photo: photo, PhotoType: kind, PhotoClear: clear})
 	return nil
 }
 
@@ -530,8 +695,10 @@ func (d *directoryDecider) decideNewUser(mu directoryUser, oid string) error {
 	if mu.AccountEnabled != nil {
 		rec.Disabled = !*mu.AccountEnabled
 	}
+	photo, kind, _ := d.applyPhoto(&rec, oid)
 	d.counts.UsersCreated++
-	d.commitUser(directoryUserDecision{Action: dirUserCreate, ObjectID: oid, Record: rec})
+	d.commitUser(directoryUserDecision{Action: dirUserCreate, ObjectID: oid, Record: rec,
+		Photo: photo, PhotoType: kind})
 	return nil
 }
 
@@ -652,7 +819,11 @@ func directoryUsername(mu directoryUser) string {
 // as a change.
 func sameUserRecord(a, b User) bool {
 	return a.DisplayName == b.DisplayName && a.Email == b.Email &&
-		a.Disabled == b.Disabled && a.DirectoryID == b.DirectoryID
+		a.Disabled == b.Disabled && a.DirectoryID == b.DirectoryID &&
+		// The picture is part of the record for this comparison's sake: an account
+		// whose photo changed and whose attributes did not would otherwise be decided
+		// unchanged and written anyway, and the plan would stop describing the apply.
+		a.AvatarSource == b.AvatarSource && a.AvatarFingerprint == b.AvatarFingerprint
 }
 
 // nonDefaultRoles lists what an account holds beyond the role this mirror would give

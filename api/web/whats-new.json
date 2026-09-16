@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The portal's corner names whoever the order is for, and the help moved to the end of the row.",
+        "de": "The portal's corner names whoever the order is for, and the help moved to the end of the row."
+      },
+      "summary": {
+        "en": "The corner said \"mich selbst\" to everybody.",
+        "de": "The corner said \"mich selbst\" to everybody."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-knowledge-model-s-expression-opened-unstyled",
       "version": "Unreleased",
       "date": null,
@@ -137,6 +155,42 @@
       }
     },
     {
+      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
+        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
+      },
+      "summary": {
+        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
+        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-person-can-have-a-face",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A person can have a face.",
+        "de": "A person can have a face."
+      },
+      "summary": {
+        "en": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names.",
+        "de": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-decision-editor-says-when-a-knowledge-model-is-never-inv",
       "version": "Unreleased",
       "date": null,
@@ -263,60 +317,6 @@
           "de": "Informationsmodell öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An approver decides a request once, instead of deciding it twelve times.",
-        "de": "An approver decides a request once, instead of deciding it twelve times."
-      },
-      "summary": {
-        "en": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks.",
-        "de": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-product-says-what-kind-of-thing-it-is-and-the-portal-s-fir",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product says what kind of thing it is, and the portal's first column finally carries data.",
-        "de": "A product says what kind of thing it is, and the portal's first column finally carries data."
-      },
-      "summary": {
-        "en": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service.",
-        "de": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-product-can-say-what-it-costs-and-the-approver-sees-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product can say what it costs, and the approver sees it.",
-        "de": "A product can say what it costs, and the approver sees it."
-      },
-      "summary": {
-        "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
-        "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]
