@@ -82,6 +82,11 @@ names deployed processes do. No reading and no rule came into the bundle; where-
 computed on the server and the rule that turns it into marks stays with the host, the
 way the relationship matrix does.
 
+Extending that shading to an «enumeration»'s literals cost 47 more — 178,396 to 178,443
+— because it is the same mark on the same list. Which literals count as used is a
+different question from which members do, and it is answered where the other one is:
+in the host.
+
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
 built against the library, so folding them in would mean building bpmn-js from
@@ -101,4 +106,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-f94e49bc3d324f91b7c96338ddf5e192a697919582feca5ba9087e8d09bafefc
+1de8f6139220e34c62929d85f03aff21d63f78f88c38d209a9e202b5ea3616b5

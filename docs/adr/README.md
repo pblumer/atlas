@@ -452,6 +452,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0364](0364-the-verdict-is-served-not-duplicated.md) | The verdict is served, not duplicated | Accepted | Landed |
 | [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
 | [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
+| [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
+| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
 
 ## The two states of a record
 
