@@ -6319,12 +6319,14 @@ async function viewWorkers() {
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-collisions" hidden></div>
+    <div class="card wk-card" id="wk-breakers" hidden></div>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
 
   const types = document.getElementById("wk-types");
+  const breakers = document.getElementById("wk-breakers");
   const workers = document.getElementById("wk-workers");
   const collisions = document.getElementById("wk-collisions");
   const gaps = document.getElementById("wk-gaps");
@@ -6342,6 +6344,17 @@ async function viewWorkers() {
     if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
     if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
     return new Date(ns / 1e6).toLocaleString();
+  };
+  // When the engine will next try a held target. "Now" rather than a negative age: a
+  // probe that is due goes out on the next round, and a row reading "-3s ago" would make
+  // an operator wonder what went wrong when nothing has.
+  const fmtNext = (ns) => {
+    if (!ns) return "\u2014";
+    const secs = Math.round((ns / 1e6 - Date.now()) / 1000);
+    if (secs <= 0) return "now";
+    if (secs < 60) return `in ${secs}s`;
+    if (secs < 3600) return `in ${Math.round(secs / 60)}m`;
+    return `in ${Math.round(secs / 3600)}h`;
   };
   // Past this a worker has almost certainly stopped rather than paused: the default
   // lease is five minutes, so anything beyond it has let its work go back on offer.
@@ -6662,6 +6675,55 @@ async function viewWorkers() {
     } else {
       collisions.hidden = true;
       collisions.innerHTML = "";
+    }
+
+    // Targets whose jobs are being held back (ADR-0340). This card sits above the queue
+    // depths on purpose: a deep queue with a breaker over it and a deep queue nobody is
+    // serving look identical in the type table, and only one of them means the engine has
+    // decided to stop. Without this row, an outage that used to announce itself as a flood
+    // of incidents announces itself as nothing at all.
+    const held = (data && data.breakers) || [];
+    if (held.length) {
+      breakers.hidden = false;
+      breakers.innerHTML = `
+        <div class="wk-head"><b>Held back</b>
+          <span class="muted small">${held.length} target${held.length === 1 ? "" : "s"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
+            <th>Last failure</th><th></th></tr></thead>
+          <tbody>${held.map((b) => `<tr class="wk-stuck">
+            <td><b>${esc(b.connector || b.jobType)}</b>${b.state === "probing"
+              ? ` <span class="pill-kv" title="One job is out right now, testing whether the target has recovered">probing</span>` : ""}</td>
+            <td><span class="pill-kv">${esc(b.jobType)}</span></td>
+            <td>${esc(fmtSeen(b.trippedAt))}</td>
+            <td>${esc(fmtNext(b.probeAt))}</td>
+            <td class="muted">${esc(b.reason || "\u2014")}</td>
+            <td><button class="btn neutral sm" data-close-breaker="${esc(b.jobType)}"
+              data-close-connector="${esc(b.connector || "")}"
+              title="Stop holding this target's jobs back now, without waiting for the next attempt">Close now</button></td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="wk-note">Atlas judged these targets down &mdash; three instances in a row failed against
+          each &mdash; and stopped handing out their jobs. The held work is <b>waiting, not failed</b>: no
+          retry has been spent on it and no incident raised, and it goes out by itself as soon as a target
+          answers again. One job per attempt is sent through to test that. Fix the endpoint and press
+          <b>Close now</b> if you would rather not wait; if the target is still down, the next three
+          failures simply hold it again.</p>`;
+      for (const b of breakers.querySelectorAll("[data-close-breaker]")) {
+        b.onclick = async () => {
+          b.disabled = true;
+          try {
+            await api("POST", "/api/v1/workers/breakers/close", {
+              jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector,
+            });
+            toast("Released " + (b.dataset.closeConnector || b.dataset.closeBreaker));
+          } catch (e) { toast(e.message, "err"); }
+          setTimeout(load, 400);
+        };
+      }
+    } else {
+      breakers.hidden = true;
+      breakers.innerHTML = "";
     }
 
     // Workers nothing can serve. This is the gap handing a credential to a Worker

@@ -14,6 +14,63 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An outage now stops at the worker instead of at every token.** A worker whose target
+  stopped answering did not fail once. It failed once **per instance that reached its
+  task**: each failure spent a retry, each exhausted budget parked a token behind its own
+  incident, and every one of those calls went into a host that was already struggling. An
+  hour of SMTP being down, on a process starting a few thousand instances in that hour, was
+  a few thousand incidents for somebody to clear — and the only thing Atlas could say about
+  a failing integration was a backoff one worker asked for on one job, which cannot express
+  "stop asking, the other end is down".
+
+  A **circuit breaker per Worker** now sits in the dispatch path, on both halves of it: the
+  in-process runner and the external pull. Three consecutive failures from three *distinct*
+  process instances judge a target down, and its jobs stop being handed out. They stay
+  activatable, unleased, with their retry budgets untouched, waiting exactly as they wait
+  for a worker that has not polled yet. One job per cooldown goes out as a probe — ten
+  seconds, doubling to five minutes — and a success closes the breaker, after which the
+  backlog drains by itself with nobody resolving anything.
+
+  The distinctness is the whole trip condition. One instance with a bad record fails its
+  entire retry budget against a perfectly healthy host, and stopping the integration over it
+  would punish every other instance for one bad record; a dead host fails instances that
+  have nothing to do with each other, which no data fault does.
+
+  Nothing about this is durable. Whether a host is reachable right now is not a fact about a
+  process, so a restarted engine starts with no opinion about anybody's target, and no job
+  record grew a field. Holding work back never invents a business outcome either: a held
+  token is not cancelled, completed or failed, and no incident is raised for it — an
+  incident is a fact about a token, and none of these tokens is at fault.
+
+  **Held work is visible, because silence is the one failure mode nothing else surfaces.**
+  A growing queue with no incidents under it used to mean "nobody is serving this"; it can
+  now also mean "Atlas has stopped serving this", and those need telling apart. So
+  Operations → Workers grows a **Held back** card above the queue depths, naming each
+  target, since when it has been held, what it last failed with and when the next attempt
+  is due. **Close now** on the row releases it for an operator who has already fixed the
+  endpoint and will not wait out a cooldown — and if the target is in fact still down, the
+  next three failures simply hold it again, which is why closing is safe to expose and
+  "open this by hand" is not offered at all.
+
+  Every state change is logged as `worker.breaker_open` / `worker.breaker_closed`, and
+  `/metrics` carries `atlas_worker_breakers_open` with the totals
+  `atlas_worker_breaker_trips_total`, `_probes_total` and `_refused_total`. Those are
+  aggregates without labels on purpose: a Worker's name comes from a deployed model, and a
+  metric label carrying one would be a label whose values the data invents — which an
+  estate of a few hundred Workers turns into a few hundred time series. *Which* target is
+  a question for the Workers view, which is how ADR-0142 says a per-thing breakdown should
+  be answered.
+
+  The handbook says all of it under **Operations & incidents**, in both languages,
+  including the warning that matters most: a queue growing without incidents is not
+  evidence that everything is fine.
+
+  An agent sees it too. `atlas_workers` now carries the held rows, and its description
+  says so where it matters: the diagnosis it used to teach — a deep queue with nothing
+  in flight and nobody pulling — is exactly what a held target looks like, and reading
+  one as the other sends an agent after the wrong thing. `atlas_close_breaker` is the
+  one action, for an agent that has just fixed the configuration it was holding on.
+
 - **A product manager maintains the catalogue over MCP.** The portal's catalogue was
   the one substantial surface an agent could not reach. The omission was recorded and
   deliberate — a tool is a public contract, and the catalogue was half-built when the
@@ -107,8 +164,12 @@ _Changed_ / _Removed_ for each version.
   Go's ten-minute default per package. `AGENTS.md` says in as many words that the
   flag is not optional, because the `api` package runs for minutes on its own — and
   the first run on a cold runner proved it, ending in `FAIL api 600.194s`, the
-  default to the millisecond. It carries `-timeout=25m` now, the same figure
-  `make race` and the documented command use, so `make cover` and CI agree.
+  default to the millisecond. It carries `-timeout=25m` now — not the race
+  command's figure, because this pass is the same tests without the detector and `api`
+  under instrumentation measured 198s and 202s, with the third reading (600s) being the
+  default cutting it short rather than its duration. The job's cap is 40 so that limit
+  is the one that fires: Go names the package and prints a goroutine dump, a cap
+  cancels the job with no line saying why.
 
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
@@ -177,6 +238,98 @@ _Changed_ / _Removed_ for each version.
   from a backup carrying its original timestamp.
 
 
+- **CI failed a change on a slow runner rather than on a defect, for the second time.**
+  The race-detector step carries a per-package timeout because the `api` package needs
+  most of it on its own. At Go's 10-minute default that step once passed at 526s and
+  timed out at 600s on the next run, where the only change between them was a line in an
+  unrelated test file; the limit was raised to 25 minutes. It has now timed out at 1500s
+  on a run where the same package took 1254s two hours earlier — on a runner that was
+  slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
+  `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
+
+  The limit is 45 minutes, and the job's own cap moves with it to 60. That pairing is the
+  part worth writing down: both bound the same run, so raising the inner one alone would
+  have changed nothing — the job is killed first, and the failure turns from "timed out"
+  into "cancelled" with no line saying why. The inner limit has to fire first, because it
+  is the one that names the package.
+
+  Forty-five and not thirty-five because thirty-five was measured too: the widest pair on
+  one tree is 1352s and 2048s, an hour apart on the same day, and 35 minutes clears the
+  second of those by fifty-two seconds. That is the same coin toss one draw further out.
+
+  Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
+  inside the cap. **The number buys headroom and does not fix the cause** — the `api`
+  package is most of what the step measures, and a limit raised three times is a package
+  that wants splitting or parallelising. That is now #1001, with the measurements, rather
+  than a sentence nobody is accountable for.
+
+  The command is written across seven files — the Makefile, the CI workflow, and the
+  documents that say what "done" means, including `CONTRIBUTING.md` and the invariants
+  checklist, which were a number behind. A comment asking the next person to change all
+  of them reaches only whoever reads that one file, so a test now holds them to one
+  number: a contributor whose local flag is the older, smaller one reproduces neither
+  failure and is told their change is fine.
+- **With authentication off, the portal could never find a catalogue at all.**
+  Atlas's documented development and demo mode is `--auth=false`. Which catalogue
+  somebody sees is resolved from the groups they carry — so with no principal there
+  are no groups, `ReachedBy` answers false for every catalogue, and the mode's one
+  screen said *"Ihnen ist kein Katalog zugeordnet"* to somebody there is no "you" to
+  assign one to. The portal was unusable in the mode it is documented to be usable
+  in, and the message misdescribed why.
+
+  Every other gate in the product reads enforcement-off the same way — **there is
+  nobody to be, not nobody who may** — and the portal now does too: with no principal
+  and nobody to be, the audience question is not asked and the highest-ranked
+  catalogue is the answer. Rank, because that is already what decides which of
+  several catalogues a person sees, and publishing refuses a rank tie.
+
+  **The exception is narrow and earns itself.** A catalogue with no audience reaches
+  nobody, fail-closed on purpose, and that is unchanged wherever there *is* somebody:
+  with enforcement on a caller with no session still reaches nothing, and a signed-in
+  administrator still gets the catalogue their groups reach rather than the
+  top-ranked one — being allowed to read every catalogue is not the same as being the
+  audience for one. What makes it safe here is that in this mode the rule protects
+  nothing: every catalogue is already readable through the administration routes by
+  anybody who can reach the port.
+
+  **An order is still refused, and the page now says so instead of discovering it.**
+  An order belongs to somebody; one with no orderer has nobody to notify and nobody
+  to hold responsible. So the mode is read the catalogue, do not order from it: the
+  order button is replaced by the reason and the remedy, the basket control is shown
+  disabled like an integral part, and the favourite mark and the recipient field are
+  not offered. Whether an order is possible is read from the identity the session
+  carries — the server's own rule mirrored, not inferred from the mode.
+
+  And one 400 from a per-account list no longer takes the page down. The inventory
+  and the favourites answer about an account and refuse a caller with none, which is
+  right of them; the portal now treats a missing per-account list as a list missing
+  rather than as a catalogue missing.
+
+- **Editing a product in the Console silently cleared five of its fields.** Saving a
+  product replaces it — the record that arrives is the record that is stored — and the
+  catalogue's product form does not render every field a product has. It has no control
+  for variants, for the orderable window, for the search keywords, for the groups
+  eligible to receive the product, or for the ceiling on how long the right may last.
+  It built its body out of the controls it does have, so correcting a price cleared all
+  five, and moved the creation date to today.
+
+  Nothing said so, which is what made it worth finding rather than merely fixing: the
+  save succeeded, the page reloaded, and everything the form shows looked right. The
+  fields it dropped are exactly the ones it never displays, so the damage was invisible
+  on the screen that caused it and turned up later — in a portal that stopped offering
+  a product to the group that was eligible for it, or a search that stopped finding one
+  by the word everybody uses.
+
+  The form now starts from the stored product and lays its own fields over it. Texts
+  are merged the same way and for the same reason one level down: a product is shared
+  between catalogues, the form renders one box per language *this* catalogue declares,
+  and a text in a language it does not declare belongs to a catalogue that does.
+  Emptying a box that is rendered still clears that text.
+
+  It also carries the product's `revision` now, so a colleague's edit in between is
+  refused rather than overwritten. A person has no revision to state, so the refusal is
+  translated where it is shown: nothing was saved, the page shows the other version,
+  open the product again and reapply the change.
 - **A JavaScript script task could not start under the strict sandbox.** Node's bundled
   OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
   profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with
