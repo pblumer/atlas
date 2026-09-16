@@ -114,6 +114,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An «enumeration»'s literals are shaded by use too, read through the lifecycles that
+  borrow them.** The class diagram can say which members a deployed process names; a literal
+  was left unshaded, because no process ever names one. What a process names is a *state* — a
+  `<dataState>` on a write — and a literal becomes a state only where some class's lifecycle
+  takes its states from that enumeration. A literal's rename is that state's rename, which is
+  what makes the two the same string rather than two that happen to match.
+
+  So the question is asked of the classes that borrow it. A literal is bright where a deployed
+  process moves such a class into that state, and faint where none does — which is the reading
+  people want from a state machine: the states nothing has ever reached.
+
+  It is asked only where it can be answered. An enumeration nothing borrows from, or one whose
+  borrowers no deployed process uses, is left unshaded: "no process reaches this state" and "no
+  process was in a position to" are different claims, and fading a state machine nothing drives
+  would report the second as the first.
+
 - **The class diagram can say which members anything actually uses.** Where a business object
   is used has been readable since **Data › Business objects** arrived — one class at a time,
   on a page of its own. The question is asked on the class diagram, with the member under the

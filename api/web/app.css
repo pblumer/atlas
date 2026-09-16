@@ -5490,6 +5490,8 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
    drawn, what it cannot land on is the more urgent thing to see. */
 .uml-class .uml-attr.used .uml-attr-name { font-weight: 600; }
 .uml-class .uml-attr.unused { opacity: .42; }
+.uml-class .uml-literal.used { font-weight: 600; }
+.uml-class .uml-literal.unused { opacity: .42; }
 .uml-class.unused { opacity: .55; }
 .uml-class .uml-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
 .uml-class .uml-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
