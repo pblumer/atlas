@@ -541,3 +541,37 @@ func TestStrictSandboxStartHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The same lesson as the guard above, learned from the other interpreter: node's
+// bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line and
+// exits 13 when it cannot read it.
+//
+// This guard exists because the startup proof could not hold it. That proof skips
+// an interpreter installed outside the sandbox's runtime roots, which is the
+// honest answer on a host whose toolchain unpacks runtimes elsewhere — and CI was
+// such a host, because it installed node into a toolchain cache for a build step
+// that has since been removed. The JavaScript half of the proof had therefore
+// never run, and the gap surfaced the moment the toolchain went away. A guard that
+// reads the policy directly cannot be skipped by where a host happens to keep its
+// binaries.
+func TestStrictSandboxAllowsTheOpenSSLConfigurationAnInterpreterReads(t *testing.T) {
+	system := newRecordingSandboxSystem()
+	if err := runSandboxWith(system, "/tmp/atlas-script-one", []string{"/usr/bin/node"}, nil); err != nil {
+		t.Fatalf("runSandboxWith: %v", err)
+	}
+	got := system.allowed["/etc/ssl/openssl.cnf"]
+	if got&unix.LANDLOCK_ACCESS_FS_READ_FILE == 0 {
+		t.Errorf("/etc/ssl/openssl.cnf access = %#x, want file read", got)
+	}
+	if got&(unix.LANDLOCK_ACCESS_FS_WRITE_FILE|unix.LANDLOCK_ACCESS_FS_EXECUTE|unix.LANDLOCK_ACCESS_FS_READ_DIR) != 0 {
+		t.Errorf("/etc/ssl/openssl.cnf access = %#x, want read of the file and nothing else", got)
+	}
+	// The directory is not the way to grant it. /etc/ssl also holds private/, which
+	// is where a host keeps its keys — and a script that could read those would
+	// leave the sandbox with more than it came in with.
+	for _, path := range []string{"/etc/ssl", "/etc/ssl/private"} {
+		if _, ok := system.allowed[path]; ok {
+			t.Errorf("%s is allowed", path)
+		}
+	}
+}

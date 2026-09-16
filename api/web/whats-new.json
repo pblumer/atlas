@@ -2,6 +2,85 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-manager-maintains-the-catalogue-over-mcp",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Maintain the product catalogue from an AI client",
+        "de": "Den Produktkatalog aus einem KI-Client pflegen"
+      },
+      "summary": {
+        "en": "The portal's catalogue was the one substantial surface an AI assistant could not reach. Nine new tools close that: list, read, create and change catalogues, save products, publish a release and read what a release froze, and derive drafts from an ArchiMate model. Filling in two hundred products' search keywords, or finding which ones still have no deprovisioning process before a publish, is now something you can ask for instead of type. The assistant acts as you and no further — it needs the Product manager role and editor rights on the catalogue, exactly as the screen does — and it cannot delete anything, because a product is withdrawn and never removed.",
+        "de": "Der Katalog des Portals war die letzte grössere Fläche, die ein KI-Assistent nicht erreichen konnte. Neun neue Werkzeuge schliessen diese Lücke: Kataloge auflisten, lesen, anlegen und ändern, Produkte speichern, ein Release veröffentlichen und lesen, was es eingefroren hat, sowie Entwürfe aus einem ArchiMate-Modell ableiten. Die Suchbegriffe von zweihundert Produkten zu ergänzen oder vor einer Veröffentlichung zu finden, welchen davon noch der Deprovisionierungsprozess fehlt, lässt sich jetzt beauftragen statt tippen. Der Assistent handelt als Sie und nicht weiter — er braucht die Rolle Produktmanager und Editorrechte am Katalog, genau wie die Oberfläche — und er kann nichts löschen, denn ein Produkt wird zurückgezogen und nie entfernt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "MCP",
+        "AI"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console → AI access and connect your MCP client to this server's own endpoint. A stdio client authenticating with an API token can read a catalogue but not change one: no API token carries the Product manager role, deliberately.",
+          "Ask it to list your catalogues. It answers with the ones you maintain and never with somebody else's — being the audience for a catalogue puts nothing in that list.",
+          "Changing a product means reading it first. The write replaces the whole record, so a field left out is a field cleared — and the product carries a revision the assistant passes back, so a colleague's edit in between is refused rather than silently overwritten.",
+          "Nothing is orderable until you publish. A refused publish names every problem at once: the product still in draft, the missing translation, the process that was never bound."
+        ],
+        "de": [
+          "Console → AI access öffnen und den MCP-Client mit dem Endpunkt dieses Servers verbinden. Ein stdio-Client, der sich mit einem API-Token anmeldet, kann einen Katalog lesen, aber nicht ändern: Kein API-Token trägt die Rolle Produktmanager, und das ist Absicht.",
+          "Den Assistenten nach den eigenen Katalogen fragen. Er antwortet mit denen, die Sie pflegen, und nie mit fremden — zum Publikum eines Katalogs zu gehören bringt keinen Eintrag in diese Liste.",
+          "Ein Produkt zu ändern heisst, es zuerst zu lesen. Der Schreibvorgang ersetzt den ganzen Datensatz, ein weggelassenes Feld ist also ein gelöschtes Feld — und das Produkt trägt eine Revision, die der Assistent zurückgibt, sodass die Änderung einer Kollegin dazwischen abgewiesen statt stillschweigend überschrieben wird.",
+          "Bestellbar ist nichts, bevor Sie veröffentlichen. Eine abgewiesene Veröffentlichung nennt alle Probleme auf einmal: das Produkt im Entwurf, den fehlenden Text, den nie gebundenen Prozess."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open AI access",
+          "de": "AI access öffnen"
+        },
+        "route": "#/console/ai-access"
+      }
+    },
+    {
+      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
+        "de": "The info panel is reachable from every column of the catalogue, not only from services."
+      },
+      "summary": {
+        "en": "This was not a missing feature but an inconsistency inside one page.",
+        "de": "This was not a missing feature but an inconsistency inside one page."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The feed generator is Go, so the Go checks stop needing Node.",
+        "de": "The feed generator is Go, so the Go checks stop needing Node."
+      },
+      "summary": {
+        "en": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless.",
+        "de": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless."
+      },
+      "link": {
+        "label": "ADR-0012",
+        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
+      }
+    },
+    {
       "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
       "version": "Unreleased",
       "date": null,
@@ -55,6 +134,24 @@
           "de": "Tasks öffnen"
         },
         "route": "#/tasks"
+      }
+    },
+    {
+      "id": "a-javascript-script-task-could-not-start-under-the-strict-sa",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A JavaScript script task could not start under the strict sandbox.",
+        "de": "A JavaScript script task could not start under the strict sandbox."
+      },
+      "summary": {
+        "en": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it.",
+        "de": "Node's bundled OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line, and the strict profile's allowlist named /etc/ssl/certs but not that file — so node exited 13 with an OpenSSL configuration error on any host that keeps its interpreter in one of the sandbox's runtime roots, which is where an ordinary install puts it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     },
     {
@@ -190,129 +287,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-enumeration-s-literals-are-shaded-by-use-too-read-through",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See which states of an enumeration anything ever reaches",
-        "de": "Sehen, welche Zustände einer Enumeration überhaupt je erreicht werden"
-      },
-      "summary": {
-        "en": "The class diagram's usage shading now covers an enumeration's literals as well as a class's attributes. No process ever names a literal — what it names is a state, on a write — so the question is asked of the classes whose lifecycle takes its states from that enumeration: a literal is bright where a deployed process moves such a class into that state, and faint where none does. That is the reading you want from a state machine: the states nothing has ever reached. Where nothing borrows the literals, or where no deployed process uses the classes that do, they are left unshaded rather than faded — a state machine nothing drives is not a state machine nothing reaches.",
-        "de": "Die Nutzungsanzeige im Klassendiagramm umfasst jetzt auch die Literale einer Enumeration, nicht nur die Attribute einer Klasse. Kein Prozess nennt je ein Literal — genannt wird ein Zustand, an einem Schreibzugriff. Die Frage wird deshalb den Klassen gestellt, deren Lebenszyklus seine Zustände von dieser Enumeration bezieht: Ein Literal ist hell, wo ein deployter Prozess eine solche Klasse in diesen Zustand überführt, und blass, wo das keiner tut. Das ist die Auskunft, die man von einem Zustandsmodell will: die Zustände, die nie erreicht werden. Bezieht keine Klasse ihre Zustände von der Enumeration, oder verwendet kein deployter Prozess diese Klassen, bleiben die Literale ungefärbt statt blass — ein Zustandsmodell, das niemand antreibt, ist nicht dasselbe wie eines, dessen Zustände niemand erreicht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model that has an enumeration and a class taking its lifecycle states from it.",
-          "Press the shading control in the canvas toolbar.",
-          "Bright literals are states a deployed process moves that class into; faint ones are reached by nothing deployed.",
-          "An enumeration no lifecycle borrows from stays unshaded — the reading has nothing to say about it."
-        ],
-        "de": [
-          "Data öffnen und ein Informationsmodell wählen, in dem eine Klasse ihre Lebenszyklus-Zustände von einer Enumeration bezieht.",
-          "In der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken.",
-          "Helle Literale sind Zustände, in die ein deployter Prozess diese Klasse überführt; blasse werden von nichts Deploytem erreicht.",
-          "Eine Enumeration, von der kein Lebenszyklus borgt, bleibt ungefärbt — dazu kann die Auswertung nichts sagen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
-      }
-    },
-    {
-      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
-        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
-      },
-      "summary": {
-        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
-        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-person-can-have-a-face",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A person can have a face.",
-        "de": "A person can have a face."
-      },
-      "summary": {
-        "en": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names.",
-        "de": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-decision-editor-says-when-a-knowledge-model-is-never-inv",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The decision editor points out a knowledge model nothing calls",
-        "de": "Der Entscheidungseditor meldet ein Knowledge Model, das niemand aufruft"
-      },
-      "summary": {
-        "en": "A knowledge model is a reusable calculation — a fee, a discount, a risk score — that decisions call instead of each repeating it. Two things could go wrong with one and nothing anywhere said so, because both deploy and both run. A knowledge model that nothing calls is simply never evaluated, and on the canvas it looks exactly like one that is called: the only difference is an arrow that is not there. And a decision that calls one without drawing that arrow works, while its diagram quietly omits the dependency — the same diagram that gets reviewed and printed into the decision's documentation. The editor now says both while the model is on screen, as a strip under the canvas and a warning mark on the shape itself; clicking a finding jumps to the element it is about. Both are warnings rather than errors, because each describes a model that runs, and both stay quiet when in doubt: a knowledge model counts as called if its name appears as a call anywhere in another element, so an unusual way of writing one costs a missed warning rather than a wrong one.",
-        "de": "Ein Knowledge Model ist eine wiederverwendbare Berechnung — eine Gebühr, ein Rabatt, ein Risikowert —, die Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Zwei Fehler waren dabei möglich, ohne dass irgendetwas darauf hinwies, denn beide lassen sich ausliefern und beide laufen. Ein Knowledge Model, das niemand aufruft, wird schlicht nie ausgewertet — und auf der Zeichenfläche sieht es genauso aus wie ein aufgerufenes: Der einzige Unterschied ist ein Pfeil, der fehlt. Und eine Entscheidung, die eines aufruft, ohne diesen Pfeil zu zeichnen, funktioniert, während ihr Diagramm die Abhängigkeit stillschweigend verschweigt — dasselbe Diagramm, das geprüft und in die Dokumentation der Entscheidung übernommen wird. Der Editor benennt nun beides, solange das Modell auf dem Bildschirm ist: als Streifen unter der Zeichenfläche und als Warnzeichen am Element selbst. Ein Klick auf einen Befund springt zum betroffenen Element. Beides sind Warnungen und keine Fehler, denn jeder Fall beschreibt ein lauffähiges Modell. Und beides schweigt im Zweifel: Ein Knowledge Model gilt als aufgerufen, sobald sein Name irgendwo in einem anderen Element als Aufruf vorkommt — eine ungewöhnliche Schreibweise kostet also eine ausbleibende Warnung statt einer falschen."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler and stay on the Overview (DRG) tab.",
-          "Draw a Knowledge Model and give it logic. The strip under the canvas appears at once: nothing calls it yet.",
-          "Open a decision's own tab and call the knowledge model from its expression, by name — for example fee(amount).",
-          "Back on Overview (DRG): the first finding is gone and a second has taken its place, because the decision now calls a model it does not require.",
-          "Draw a knowledge requirement from the knowledge model to the decision. The strip disappears."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen und im Reiter «Overview (DRG)» bleiben.",
-          "Ein Knowledge Model zeichnen und ihm Logik geben. Der Streifen unter der Zeichenfläche erscheint sofort: Noch ruft es niemand auf.",
-          "Den eigenen Reiter einer Entscheidung öffnen und das Knowledge Model im Ausdruck beim Namen aufrufen, etwa fee(amount).",
-          "Zurück auf «Overview (DRG)»: Der erste Befund ist verschwunden, ein zweiter hat seinen Platz eingenommen, denn die Entscheidung ruft nun ein Modell auf, das sie nicht anfordert.",
-          "Eine Knowledge-Requirement-Kante vom Knowledge Model zur Entscheidung ziehen. Der Streifen verschwindet."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     }
   ]
