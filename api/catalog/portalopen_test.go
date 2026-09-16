@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// The portal in the mode that has no identities (ADR-draft-portal-without-identity).
+// The portal in the mode that has no identities (ADR-0377).
 //
 // With --auth=false there is no principal, so there are no groups, so ReachedBy
 // answers false for every catalogue and the portal could never resolve one: the

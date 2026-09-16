@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The portal page when there is nobody to be (ADR-draft-portal-without-identity).
+// The portal page when there is nobody to be (ADR-0377).
 //
 // The server half is held in api/catalog. What this holds is the half that makes
 // the mode usable rather than merely reachable: the catalogue resolves, and every
