@@ -379,6 +379,22 @@ func (s *Service) HandleListItems(w http.ResponseWriter, r *http.Request) {
 // The id comes from the caller rather than being minted here: a product is
 // referred to by name in a model, an import and a catalogue's item list, so it
 // is a chosen identifier and not an opaque one.
+//
+// # Replacing safely
+//
+// The write is a full replace, which is the right shape for the form that sends
+// every field it rendered and the wrong shape for anything that changes one field
+// of a record it read earlier: a concurrent change is overwritten with nothing to
+// say it existed. So a caller may state the [Item.Revision] it read, and the write
+// is refused as a conflict unless the stored record still carries it
+// (ADR-0376). It is the rule the capability map
+// already uses, spelled the same way, so a reader who knows one knows the other.
+//
+// Stating it is optional, and that is deliberate rather than a transition: the
+// Console builds its body from form fields and knows no revision, so demanding
+// one would be a breaking change to the surface that has no concurrency problem —
+// a person editing a form is looking at what they are about to overwrite. The
+// precondition is for the caller that is not a person.
 func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 	var in Item
 	if err := decodeBody(r, &in); err != nil {
@@ -413,6 +429,7 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		home    Catalog
 		homeOK  bool
 		allowed bool
+		stale   string
 		opErr   error
 	)
 	s.loop.Do(func() {
@@ -461,6 +478,26 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// The precondition, checked last of all: whether this product moved on
+		// since the caller read it is only worth answering once the caller has
+		// been established as somebody who may write it at all. Answering it
+		// earlier would tell a stranger that a product they may not see exists
+		// and which revision it is on, one guess at a time.
+		if in.Revision != 0 && in.Revision != prev.Revision {
+			// The two cases need different action from the caller, so they are not
+			// told the same thing: one re-reads and reapplies, the other stops
+			// claiming to replace a product that is not there.
+			if !prevOK {
+				stale = "product " + in.ID + " does not exist, so there is no revision of it " +
+					"to replace; omit revision to create it"
+			} else {
+				stale = "product " + in.ID + " changed since it was read; " +
+					"read it again, reapply the change and state the revision you read"
+			}
+			return
+		}
+		in.Revision = prev.Revision + 1
+
 		opErr = s.store.SaveItem(in)
 	})
 
@@ -471,6 +508,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no home catalogue "+in.HomeCatalog)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+in.HomeCatalog)
+	case stale != "":
+		httpapi.Error(w, http.StatusConflict, stale)
 	default:
 		httpapi.JSON(w, http.StatusOK, in)
 	}

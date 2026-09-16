@@ -180,9 +180,20 @@ func installFilesystemPolicyWith(system sandboxSystem, scratch string) error {
 	// /etc/passwd. Without them CoreCLR refuses to start with E_OUTOFMEMORY, so
 	// PowerShell was unusable under strict while Python and JavaScript were fine —
 	// the asymmetry that let it land unnoticed.
+	//
+	// Node is the same shape of problem, and it corrects the sentence above: that
+	// JavaScript was fine had never been measured. The proof that starts every
+	// installed interpreter skips one it finds outside the runtime roots, and CI
+	// installed node into a toolchain cache — so the JavaScript half of that proof
+	// had never run once. The first run of it exits 13, because node's bundled
+	// OpenSSL opens /etc/ssl/openssl.cnf before it will execute a line.
+	//
+	// The file is named here and /etc/ssl as a whole is not: that directory also
+	// holds /etc/ssl/private, which is where a host keeps its keys.
 	readOnlyFile := uint64(unix.LANDLOCK_ACCESS_FS_READ_FILE)
 	for _, path := range []string{
 		"/etc/ld.so.cache", "/etc/ld.so.conf", "/etc/localtime", "/etc/passwd",
+		"/etc/ssl/openssl.cnf",
 		"/proc/meminfo", "/proc/mounts",
 	} {
 		if err := addAllowedPath(system, ruleset, path, readOnlyFile); err != nil {

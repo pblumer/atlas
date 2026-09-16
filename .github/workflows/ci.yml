@@ -68,15 +68,24 @@ jobs:
           fi
 
   check:
-    name: build · vet · fmt · race · cover
+    name: build · vet · fmt · race
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # Same reasoning as the e2e job below: the expensive failure mode is the hang,
     # not the error, and this job had no ceiling at all — a wedged test would have
-    # held a runner for the six-hour default. It takes ~14 minutes today, and the
-    # race step's per-package timeout is raised below, so the cap is what keeps that
-    # from turning one stuck package into hours of runner time.
+    # held a runner for the six-hour default. The race step's per-package timeout is
+    # raised below, so the cap is what keeps one stuck package from turning into
+    # hours of runner time.
+    #
+    # The number below is a ceiling on a hang, and it stopped being one: the race
+    # step alone measured 24m30s on main, the coverage floor beside it another
+    # 3m59s, and 28m29s of a 30-minute budget is not a ceiling — it is a coin toss
+    # decided by runner variance, which is exactly how it began cancelling healthy
+    # runs (main, run 2160). The coverage floor is a *second full test run* that
+    # shares nothing with the race step but the checkout, so it is its own job now
+    # and this one is back under half its cap. Keep it that way: if a step here ever
+    # needs a second full pass over the tree, it wants a job, not a bigger number.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -86,12 +95,6 @@ jobs:
         with:
           go-version: '1.26'
           check-latest: true
-
-      # For the What's New generator below; it is plain ESM with no dependencies.
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - name: Build
         run: go build ./...
@@ -115,7 +118,7 @@ jobs:
       # someone remembered. Re-run it here and fail on any diff.
       - name: What's New feed is up to date
         run: |
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
             echo "(Add curated DE/EN prose in scripts/whats-new/overrides/<id>.json — see scripts/whats-new/README.md.)"
@@ -145,9 +148,6 @@ jobs:
           ATLAS_SANDBOX_E2E: required
         run: go test -race -timeout=25m ./...
 
-      - name: Coverage floor (>= 95%, ADR-0018)
-        run: ./scripts/check-coverage.sh 94
-
       # Smoke-run the benchmark harness (programme B): one iteration each, just to
       # prove it compiles and executes. No performance threshold is enforced on PR
       # CI — see benchmarks/README.md for how to produce a real, machine-labelled
@@ -155,13 +155,55 @@ jobs:
       - name: Benchmark harness smoke
         run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
 
+  # The repository-wide statement floor (ADR-0018), in its own job.
+  #
+  # It is here rather than beside the race step because it is a **second full run of
+  # the test suite** — instrumented for coverage instead of for races — and the two
+  # share nothing but the checkout. Sequenced behind the race detector it added four
+  # minutes to a job that already needed twenty-five, and the pair outgrew the cap
+  # that was supposed to catch a hang; run side by side they each finish in a
+  # fraction of their own ceiling, and neither can cancel the other by being slow.
+  #
+  # It buys wall-clock too, which is the smaller reason and worth naming as the
+  # smaller one: the two runs now overlap rather than queue. What it does not change
+  # is what a contributor does — `make check` is still build, vet, fmt, race and
+  # cover in sequence, because one laptop has one set of cores and splitting there
+  # would buy nothing.
+  cover:
+    name: cover · statement floor
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    # Thirty, and not the twenty this job was first given, because twenty was a
+    # guess and the first run measured it: 11m04s — with the api package cut short
+    # at Go's default per-package limit rather than finishing. The real figure is
+    # that plus however long api needs beyond ten minutes, which nothing has
+    # measured yet.
+    #
+    # So this is a hang-catcher with headroom it can be shown to have, rather than a
+    # number sized to a figure nobody has. That is the whole lesson of the split
+    # above: a cap that sits a minute above the real duration is not a ceiling, it
+    # is a coin toss. Tighten it when there are green runs to tighten it against.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
+
+      - name: Coverage floor (>= 95%, ADR-0018)
+        run: ./scripts/check-coverage.sh 94
+
   # Everything a docs-only change can actually break, and nothing else.
   #
   # "Documentation" is not inert here. docs/adr is a Go package whose tests read every
   # record *and* every ADR-NNNN citation in the repository, so a renamed record or a
   # mistyped citation fails here exactly as it would in the full job. The guards that
   # live elsewhere and read this tree are covered too — api/releasedkinds_internal_test.go
-  # parses each record's Status line, and scripts/whats-new/gen.mjs builds the feed's
+  # parses each record's Status line, and the generator in scripts/whats-new builds the feed's
   # links from the file names in docs/adr.
   #
   # So this runs the whole test suite rather than a list of test names: an enumeration
@@ -184,11 +226,6 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       # docs/adr carries Go (number.go and the guards), so the formatting rule reaches
       # into this tree like any other.
       - name: Format check
@@ -205,7 +242,7 @@ jobs:
 
       - name: What's New feed is up to date
         run: |
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
             git --no-pager diff -- api/web/whats-new.json
