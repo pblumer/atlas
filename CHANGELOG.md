@@ -14,6 +14,63 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An outage now stops at the worker instead of at every token.** A worker whose target
+  stopped answering did not fail once. It failed once **per instance that reached its
+  task**: each failure spent a retry, each exhausted budget parked a token behind its own
+  incident, and every one of those calls went into a host that was already struggling. An
+  hour of SMTP being down, on a process starting a few thousand instances in that hour, was
+  a few thousand incidents for somebody to clear — and the only thing Atlas could say about
+  a failing integration was a backoff one worker asked for on one job, which cannot express
+  "stop asking, the other end is down".
+
+  A **circuit breaker per Worker** now sits in the dispatch path, on both halves of it: the
+  in-process runner and the external pull. Three consecutive failures from three *distinct*
+  process instances judge a target down, and its jobs stop being handed out. They stay
+  activatable, unleased, with their retry budgets untouched, waiting exactly as they wait
+  for a worker that has not polled yet. One job per cooldown goes out as a probe — ten
+  seconds, doubling to five minutes — and a success closes the breaker, after which the
+  backlog drains by itself with nobody resolving anything.
+
+  The distinctness is the whole trip condition. One instance with a bad record fails its
+  entire retry budget against a perfectly healthy host, and stopping the integration over it
+  would punish every other instance for one bad record; a dead host fails instances that
+  have nothing to do with each other, which no data fault does.
+
+  Nothing about this is durable. Whether a host is reachable right now is not a fact about a
+  process, so a restarted engine starts with no opinion about anybody's target, and no job
+  record grew a field. Holding work back never invents a business outcome either: a held
+  token is not cancelled, completed or failed, and no incident is raised for it — an
+  incident is a fact about a token, and none of these tokens is at fault.
+
+  **Held work is visible, because silence is the one failure mode nothing else surfaces.**
+  A growing queue with no incidents under it used to mean "nobody is serving this"; it can
+  now also mean "Atlas has stopped serving this", and those need telling apart. So
+  Operations → Workers grows a **Held back** card above the queue depths, naming each
+  target, since when it has been held, what it last failed with and when the next attempt
+  is due. **Close now** on the row releases it for an operator who has already fixed the
+  endpoint and will not wait out a cooldown — and if the target is in fact still down, the
+  next three failures simply hold it again, which is why closing is safe to expose and
+  "open this by hand" is not offered at all.
+
+  Every state change is logged as `worker.breaker_open` / `worker.breaker_closed`, and
+  `/metrics` carries `atlas_worker_breakers_open` with the totals
+  `atlas_worker_breaker_trips_total`, `_probes_total` and `_refused_total`. Those are
+  aggregates without labels on purpose: a Worker's name comes from a deployed model, and a
+  metric label carrying one would be a label whose values the data invents — which an
+  estate of a few hundred Workers turns into a few hundred time series. *Which* target is
+  a question for the Workers view, which is how ADR-0142 says a per-thing breakdown should
+  be answered.
+
+  The handbook says all of it under **Operations & incidents**, in both languages,
+  including the warning that matters most: a queue growing without incidents is not
+  evidence that everything is fine.
+
+  An agent sees it too. `atlas_workers` now carries the held rows, and its description
+  says so where it matters: the diagnosis it used to teach — a deep queue with nothing
+  in flight and nobody pulling — is exactly what a held target looks like, and reading
+  one as the other sends an agent after the wrong thing. `atlas_close_breaker` is the
+  one action, for an agent that has just fixed the configuration it was holding on.
+
 - **A product manager maintains the catalogue over MCP.** The portal's catalogue was
   the one substantial surface an agent could not reach. The omission was recorded and
   deliberate — a tool is a public contract, and the catalogue was half-built when the
@@ -107,8 +164,12 @@ _Changed_ / _Removed_ for each version.
   Go's ten-minute default per package. `AGENTS.md` says in as many words that the
   flag is not optional, because the `api` package runs for minutes on its own — and
   the first run on a cold runner proved it, ending in `FAIL api 600.194s`, the
-  default to the millisecond. It carries `-timeout=25m` now, the same figure
-  `make race` and the documented command use, so `make cover` and CI agree.
+  default to the millisecond. It carries `-timeout=25m` now — not the race
+  command's figure, because this pass is the same tests without the detector and `api`
+  under instrumentation measured 198s and 202s, with the third reading (600s) being the
+  default cutting it short rather than its duration. The job's cap is 40 so that limit
+  is the one that fires: Go names the package and prints a goroutine dump, a cap
+  cancels the job with no line saying why.
 
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
@@ -168,22 +229,28 @@ _Changed_ / _Removed_ for each version.
   slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
   `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
 
-  The limit is 35 minutes, and the job's own cap moves with it. That pairing is the part
-  worth writing down: both bound the same run, so raising the inner one alone would have
-  changed nothing — the job is killed first, and the failure turns from "timed out" into
-  "cancelled" with no line saying why.
+  The limit is 45 minutes, and the job's own cap moves with it to 60. That pairing is the
+  part worth writing down: both bound the same run, so raising the inner one alone would
+  have changed nothing — the job is killed first, and the failure turns from "timed out"
+  into "cancelled" with no line saying why. The inner limit has to fire first, because it
+  is the one that names the package.
+
+  Forty-five and not thirty-five because thirty-five was measured too: the widest pair on
+  one tree is 1352s and 2048s, an hour apart on the same day, and 35 minutes clears the
+  second of those by fifty-two seconds. That is the same coin toss one draw further out.
 
   Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
   inside the cap. **The number buys headroom and does not fix the cause** — the `api`
-  package is about twenty-one minutes of a twenty-nine-minute job under the race
-  detector, and a limit raised twice is a package that wants splitting or parallelising
-  rather than a third raise.
+  package is most of what the step measures, and a limit raised three times is a package
+  that wants splitting or parallelising. That is now #1001, with the measurements, rather
+  than a sentence nobody is accountable for.
 
-  The command is written in six places — the Makefile, the CI workflow, and the three
-  documents that say what "done" means — and a comment asking the next person to change
-  all of them reaches only whoever reads that one file. A test now holds them to one
-  number, because a contributor whose local flag is the older, smaller one reproduces
-  neither failure and is told their change is fine.
+  The command is written across seven files — the Makefile, the CI workflow, and the
+  documents that say what "done" means, including `CONTRIBUTING.md` and the invariants
+  checklist, which were a number behind. A comment asking the next person to change all
+  of them reaches only whoever reads that one file, so a test now holds them to one
+  number: a contributor whose local flag is the older, smaller one reproduces neither
+  failure and is told their change is fine.
 - **With authentication off, the portal could never find a catalogue at all.**
   Atlas's documented development and demo mode is `--auth=false`. Which catalogue
   somebody sees is resolved from the groups they carry — so with no principal there
