@@ -62,6 +62,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The approver is picked, and picked differently depending on the kind.** This was
+  the last typed identifier on the catalogue screen and the one that cost the most,
+  because nothing reports a wrong value: an approval whose approver matches nobody is
+  created, reaches no inbox, and simply waits. The first person to notice is whoever is
+  waiting for the laptop.
+
+  A named person is now chosen from the accounts list and stored as a **username**,
+  because that is what an assignee is matched against. A group is chosen from the
+  directory and stored as its **id**, because candidate groups are matched against ids
+  first — so a group renamed afterwards keeps its approver. Neither is a preference;
+  each is what matches at the other end.
+
+  The two kinds that resolve without an approver — no approval, and the orderer's
+  superior — now show no field at all instead of one labelled "empty otherwise", and
+  switching to them **clears** an approver already there. Left behind, it rode along in
+  a rule with no use for it, indistinguishable to the next reader from a rule that
+  meant it.
+- **The accounts and groups screen shows the ids it asks you to type.** Catalogue
+  sharing used to ask for `usr_…` or a group id, with a hint saying to read it from
+  Console → Organization — a screen that showed names only, because the id lived in a
+  markup attribute meant for a click handler. The hint pointed at a place that did not
+  have the answer. The pickers removed most of the need; the rest is here, because an
+  id is what every scope grant and every audit line is written in.
 - **A catalogue's people are chosen from a list instead of typed as an id.** The
   catalogue screen already refused free text where it mattered — a product binds a
   process from what is deployed, because a product naming a process nobody wrote is an
@@ -208,6 +231,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue could say a part was integral and optional at the same time.** The
+  release keeps *what a product is made of* apart from *what is offered alongside it*,
+  because they mean opposite things to a basket: an inclusion is ordered as a
+  consequence of ordering the whole, and an option is an offer. Nothing stopped one
+  pair of products from carrying both kinds of link, and such a pair landed in both
+  lists — the same part ordered without asking and offered as a choice, on one screen.
+
+  It needed no mistake to produce. Importing an ArchiMate model merges links by
+  **adding** them, deliberately, because an import is not a synchronisation. So
+  redrawing an integral part as an optional one in the model and importing again left
+  the catalogue holding both, with the old link the one nobody remembers. Publishing
+  now refuses it and names the pair rather than picking one: there is no honest rule
+  for which of the two an author meant.
+- **The console showed three borders that were never drawn.** A style rule reading a
+  colour name that nothing defines is not a rule with a default — the whole declaration
+  is invalid and the browser discards it. Three of them read a name defined only in an
+  unrelated demo page, so the token legend lost its divider and the profile-picture
+  field lost both of its borders. Missing hairlines read as a design that never had
+  any, which is why nobody reported it. A test now refuses the whole class.
+- **The console said a group membership takes effect at the next sign-in.** It has
+  applied from the member's next request since that was made live. A stale claim about
+  a delay is worse than no claim: an administrator waits for it, and tells a colleague
+  to sign out and back in for nothing.
 - **CI failed a change on a slow runner rather than on a defect, for the second time.**
   The race-detector step carries a per-package timeout because the `api` package needs
   most of it on its own. At Go's 10-minute default that step once passed at 526s and
