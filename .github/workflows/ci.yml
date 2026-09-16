@@ -105,7 +105,16 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      # For the What's New generator below; it is plain ESM with no dependencies.
+      # Two things need this, and only one of them is obvious. The What's New
+      # generator below is plain ESM with no dependencies — that is the obvious one.
+      # The other is that connector/script's sandbox test starts *whichever* node is
+      # on PATH, and without this step that is the image's /usr/local/bin/node, which
+      # reads /etc/ssl/openssl.cnf on startup and so cannot run inside the strict
+      # sandbox at all (exit 13, "OpenSSL configuration error"). The toolcache node
+      # this installs does not, so the step is load-bearing for the test suite and not
+      # only for the generator. Removing it from a job that runs the suite fails that
+      # test — which is exactly what happened when the coverage pass was first split
+      # out into its own job without it.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -171,8 +180,14 @@ jobs:
 
   # The second pass over the suite: the coverage floor, plus the benchmark harness
   # smoke that used to sit behind it. It runs beside the race job rather than after
-  # it — see the note above that job for why — and needs neither Node nor the sandbox
-  # variable, because it runs no generator and asserts nothing about the sandbox.
+  # it — see the note above that job for why.
+  #
+  # It sets up Node for the reason spelled out at that job's own Node step: this pass
+  # runs the whole suite too, so connector/script's sandbox test runs here as well and
+  # needs the toolcache node rather than the image's. It does *not* carry
+  # ATLAS_SANDBOX_E2E, which is deliberate and matches what the race step did before
+  # the split: that variable turns one skip into a required run, and having it in one
+  # of the two passes is enough.
   cover:
     name: cover · bench
     needs: changes
@@ -191,6 +206,12 @@ jobs:
         with:
           go-version: '1.26'
           check-latest: true
+
+      # See the race job's Node step: this decides which node the sandbox test starts.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 94
