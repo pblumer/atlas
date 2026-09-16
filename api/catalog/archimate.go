@@ -424,6 +424,10 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(items)
 		cat.Items = items
 		cat.Edges = mergeEdges(cat.Edges, imported.Edges)
+		// An import rewrites the item list and the edges wholesale, which is the
+		// largest change any writer here makes — so it is the last one that may
+		// leave the revision where a stale caller would still be accepted.
+		cat.Revision++
 		cat.UpdatedAt = s.now()
 		opErr = s.store.SaveCatalog(cat)
 	})

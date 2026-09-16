@@ -925,10 +925,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The catalogue", tObject())}},
 		{"PATCH", "/api/v1/catalogs/{id}", s.catalogs.HandleUpdateCatalog, apiOp{
-			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience", tag: "Catalogue", role: RoleProductManager,
+			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience. Only the fields you send are changed — but `items`, `edges` and `members` are each replaced **whole**, so send the complete list and not an addition. Because that list is normally computed from one you read, optionally state the `revision` you read it at: the write is then refused with 409 unless the catalogue is still on it, which is what stops two maintainers adding a product a second apart from one erasing the other. Omitting it changes unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Catalogue changes", schemaObj(map[string]any{
 				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
 				"items": tArray(), "groups": tArray(), "edges": tArray(),
+				"members": tArray(), "revision": tInteger(),
 			})),
 			resp: jsonBody("The updated catalogue", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/releases", s.catalogs.HandlePublish, apiOp{

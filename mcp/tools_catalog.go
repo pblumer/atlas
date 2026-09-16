@@ -85,6 +85,12 @@ func catalogRecordProps() map[string]any {
 		"members": arrayProp("Who else maintains this catalogue: [{ref: {type: \"user\"|\"group\", id}, " +
 			"role: \"viewer\"|\"editor\"}]. Only the OWNER may change this; an editor changing the " +
 			"catalogue and its member list would be a grant that amplifies itself. THE COMPLETE LIST."),
+		"revision": integerProp("THE REVISION YOU READ, as a precondition. Because `items`, `edges` " +
+			"and `members` are replaced whole, the list you send is normally one you read and " +
+			"changed — and without this, a change somebody made in between is erased by yours " +
+			"with nothing to say it happened. When set, the write is refused as a conflict " +
+			"unless the catalogue is still on that revision. Omitting it changes unconditionally, " +
+			"which is only right when you are sending values that came from nowhere but you."),
 	}
 }
 
@@ -230,7 +236,8 @@ func catalogTools() []Tool {
 				"languages, rank, audience and maintainers. Only the fields you send are changed, " +
 				"but each one you do send REPLACES that field whole — sending `items` with one id " +
 				"drops every other product the catalogue offered. Read it with atlas_get_catalog " +
-				"first and send the full list back. Changing it changes nothing the portal shows " +
+				"first, send the full list back, and pass the `revision` it answered with — the " +
+				"write is then refused rather than erasing a change somebody made in between. Changing it changes nothing the portal shows " +
 				"until you publish. Requires editor on the catalogue; only its owner may change " +
 				"`members`.",
 			InputSchema: func() map[string]any {
