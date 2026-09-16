@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/job"
+	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -36,13 +37,13 @@ func (s *Server) logBreakerChange(k breakerKey, state breakerState, reason strin
 		target = name // a job type an external worker serves by name alone is its own target
 	}
 	if state == breakerClosed {
-		slog.Info("a worker's target is answering again; its jobs are going out",
-			"event", "worker.breaker_closed", "target", target, "jobType", name)
+		logging.Info(logging.WorkerBreakerClosed, "a worker's target is answering again; its jobs are going out",
+			slog.String("target", target), slog.String("jobType", name))
 		return
 	}
-	slog.Warn("holding a worker's jobs back: its target keeps failing",
-		"event", "worker.breaker_open", "target", target, "jobType", name,
-		"reason", reason, "nextProbeIn", cooldown.String())
+	logging.Warn(logging.WorkerBreakerOpen, "holding a worker's jobs back: its target keeps failing",
+		slog.String("target", target), slog.String("jobType", name),
+		slog.String("reason", reason), slog.String("nextProbeIn", cooldown.String()))
 }
 
 // Holding is the cheap question, asked once per job type per round. In the steady state
