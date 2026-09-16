@@ -100,6 +100,15 @@
         output: "\"Stufe 2\"",
       }];
 
+      // page is how every capped list endpoint answers since
+      // ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+      // .items, beside the count of what is really there. A bare array here would make
+      // the console read undefined rather than a number, so the mock answers in the
+      // shape the server does.
+      const page = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const api = async (method, url) => {
         if (method !== "GET") return {};
         if (url === "/api/v1/processes") {
@@ -114,7 +123,7 @@
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances?process=")) {
           const state = new URL(url, location.origin).searchParams.get("state");
-          return state === "finished" ? [] : instances;
+          return page(state === "finished" ? [] : instances);
         }
         if (/\/instances\/\w+\/decisions$/.test(url)) return decisions;
         if (/\/instances\/\w+\/variables$/.test(url)) return { betrag: 4200 };
@@ -123,7 +132,7 @@
           // ?processInstance= is the instance-scoped list, which the server resolves
           // through that instance's own element index rather than the capped global page.
           const inst = new URL(url, location.origin).searchParams.get("processInstance");
-          return inst ? tasks.filter((t) => String(t.processInstanceKey) === inst) : tasks;
+          return page(inst ? tasks.filter((t) => String(t.processInstanceKey) === inst) : tasks);
         }
         if (url.includes("/runtime")) {
           return {

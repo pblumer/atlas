@@ -316,8 +316,9 @@ async function runCard(idx, btn){
     let key=dep.key;
     if(dep.deployments){ const m=dep.deployments.find(d=>d.processId===s.proc); if(m) key=m.key; }
     await apiCall('POST','/api/v1/processes/'+key+'/instances', {});
-    const list=await apiCall('GET','/api/v1/instances?process='+key);
-    if(!Array.isArray(list)||!list.length) throw new Error('keine Instanz gefunden');
+    const page=await apiCall('GET','/api/v1/instances?process='+key);
+    const list=(page&&page.items)||[];
+    if(!list.length) throw new Error('keine Instanz gefunden');
     const inst=list.reduce((a,b)=> (b.key>a.key?b:a));
     const tl=await apiCall('GET','/api/v1/instances/'+inst.key+'/timeline');
     const steps=(tl&&tl.steps)||[];

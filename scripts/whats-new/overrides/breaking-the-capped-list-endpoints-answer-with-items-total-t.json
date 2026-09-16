@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "The wire shape of six HTTP listings. It matters to whoever reads the API and to nobody opening the Console: the numbers a person sees on screen were fixed by the record before this one, which has its own entry. The CHANGELOG is where an API reader will look, and the derived headline here would be a line of backticked JSON on a landing page."
+}

@@ -21,7 +21,7 @@ type globalAuditEntry struct {
 func decodeGlobalAudit(t *testing.T, b []byte) []globalAuditEntry {
 	t.Helper()
 	var out []globalAuditEntry
-	if err := json.Unmarshal(b, &out); err != nil {
+	if err := json.Unmarshal(listRows(t, b), &out); err != nil {
 		t.Fatalf("decode global audit: %v (%s)", err, b)
 	}
 	return out

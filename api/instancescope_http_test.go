@@ -64,7 +64,7 @@ func startReview(t *testing.T, admin *http.Client, ts *httptest.Server) uint64 {
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(rows) != 1 {
@@ -203,7 +203,7 @@ func TestProjectMemberReadsTheWholeInstance(t *testing.T) {
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil || len(rows) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil || len(rows) != 1 {
 		t.Fatalf("decode instances: %v (%d rows)", err, len(rows))
 	}
 
@@ -268,7 +268,7 @@ func TestAClaimedTaskIsTheHoldersAlone(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("decode tasks: %v (%d)", err, len(tasks))
 	}
 	if code, body := cReq(t, one, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/claim", tasks[0].Key), `{}`); code != http.StatusOK {
@@ -319,7 +319,7 @@ func TestTheTasksAppsOwnScopeKeyIsAuthorizedToo(t *testing.T) {
 	var tasks []struct {
 		ElementInstanceKey uint64 `json:"elementInstanceKey"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("decode tasks: %v (%d)", err, len(tasks))
 	}
 	scope := tasks[0].ElementInstanceKey
@@ -450,7 +450,7 @@ func startMixed(t *testing.T, admin *http.Client, ts *httptest.Server, withForm 
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil || len(rows) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil || len(rows) != 1 {
 		t.Fatalf("decode instances: %v (%d rows)", err, len(rows))
 	}
 	return rows[0].Key
@@ -554,7 +554,7 @@ func TestADeploymentWhoseProjectIsGoneGrantsNothing(t *testing.T) {
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil || len(rows) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil || len(rows) != 1 {
 		t.Fatalf("decode instances: %v (%d)", err, len(rows))
 	}
 

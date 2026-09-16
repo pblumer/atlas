@@ -38,7 +38,7 @@ func searchInVersion(t *testing.T, ts *httptest.Server, def uint64, q string) []
 		t.Fatalf("search %q: status=%d body=%s", q, code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode %q: %v (%s)", q, err, body)
 	}
 	return rows

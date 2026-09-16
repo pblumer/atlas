@@ -109,7 +109,7 @@ func parseInstanceListQuery(q map[string][]string) (instanceListQuery, error) {
 // parseInstanceCursor reads a cursor produced by formatInstanceCursor: a bare
 // instance key for the active half, "<completedAt>.<key>" for the finished half.
 func parseInstanceCursor(state, raw string) (completedAt int64, key uint64, err error) {
-	bad := errors.New("invalid before cursor (use the X-Instances-Next-Cursor value from the previous page)")
+	bad := errors.New("invalid before cursor (use the nextCursor value from the previous page)")
 	if state == "active" {
 		key, perr := strconv.ParseUint(raw, 10, 64)
 		if perr != nil {
@@ -141,12 +141,33 @@ func formatInstanceCursor(state string, r instanceResp) string {
 	return strconv.FormatInt(r.CompletedAt, 10) + "." + strconv.FormatUint(r.Key, 10)
 }
 
-// instancePage is one answer: the rows, whether the page was capped, and where the
-// next page resumes.
+// instancePage is one answer: the rows, how many there are, whether the page was
+// capped, and where the next page resumes.
 type instancePage struct {
 	rows       []instanceResp
 	truncated  bool
 	nextCursor string
+	// total and totalExact are the population the rows came out of
+	// (ADR-draft-a-capped-listing-answers-with-a-page). Where a maintained counter
+	// answers it — a definition's live or finished instances, the engine's live total
+	// (ADR-0080/0083) — it is exact and costs a point read. Where none does, total is
+	// what this request saw and totalExact says so rather than dressing a page up as a
+	// population.
+	total      int
+	totalExact bool
+}
+
+// countedBy sets the page's total from a counter that answers it exactly.
+func (p *instancePage) countedBy(n int) {
+	p.total, p.totalExact = n, true
+}
+
+// floorFromRows leaves the page's total as what it returned. Called last, so it
+// cannot overwrite a counter that already answered.
+func (p *instancePage) floorFromRows() {
+	if !p.totalExact {
+		p.total = len(p.rows)
+	}
 }
 
 // errNoSuchElement reports an ?element= id the named definition does not define.
@@ -226,6 +247,24 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 			return page, err
 		}
 		page.rows = rows
+		// How many there are, where something already knows. The finished half of an
+		// unscoped listing is the one case with no counter behind it: the completed
+		// family has no engine-wide total, so that page reports what it saw.
+		switch {
+		case q.hasDef && q.state == "active":
+			if n, err := rv.DefInstanceCount(q.defKey); err == nil {
+				page.countedBy(n)
+			}
+		case q.hasDef:
+			if n, err := rv.DefCompletedCount(q.defKey); err == nil {
+				page.countedBy(n)
+			}
+		case q.state == "active":
+			if n, err := rv.TotalActiveInstances(); err == nil {
+				page.countedBy(int(n))
+			}
+		}
+		page.floorFromRows()
 		// Only the index-backed halves have a position a cursor can name; the capped
 		// family scan has none, so a truncated page there is flagged without one.
 		if q.hasDef && page.truncated && len(rows) > 0 {
@@ -245,6 +284,13 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 			return page, err
 		}
 		page.rows = append(active, done...)
+		// Both halves of one definition, and both have a counter.
+		live, liveErr := rv.DefInstanceCount(q.defKey)
+		ended, endedErr := rv.DefCompletedCount(q.defKey)
+		if liveErr == nil && endedErr == nil {
+			page.countedBy(live + ended)
+		}
+		page.floorFromRows()
 		return page, nil
 	}
 
@@ -258,6 +304,10 @@ func listInstances(rv *state.ReadView, defs defIndex, q instanceListQuery) (inst
 	}
 	sort.Slice(done, func(i, j int) bool { return done[i].CompletedAt > done[j].CompletedAt })
 	page.rows = append(active, done...)
+	// Half of this has a counter and half does not, so the sum cannot be exact — and a
+	// number that is exact in one term and a floor in the other is a floor. Narrowing
+	// with ?process= or ?state=active is what buys an exact one.
+	page.floorFromRows()
 	return page, nil
 }
 
@@ -280,7 +330,9 @@ func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQue
 	def, ok := defs[q.defKey]
 	if !ok || def.cp == nil {
 		// The definition is not deployed here (deleted, or never was). Nothing is
-		// running on it, which is an empty answer rather than a bad request.
+		// running on it, which is an empty answer rather than a bad request — and an
+		// exact zero, not a floor: there is nothing for a larger page to find.
+		page.countedBy(0)
 		return page, nil
 	}
 	elementId, ok := def.cp.ElementIndexOf(q.element)
@@ -288,6 +340,9 @@ func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQue
 		return page, fmt.Errorf("%w: %q", errNoSuchElement, q.element)
 	}
 	if q.state == "finished" {
+		// A token exists only in a running instance, so this half is empty by
+		// construction rather than by a cap.
+		page.countedBy(0)
 		return page, nil
 	}
 	rows := []instanceResp{}
@@ -307,6 +362,9 @@ func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQue
 		return page, err
 	}
 	page.rows = rows
+	// No counter answers "how many instances hold a token on this element" — the
+	// piByEl index is a position list, not a tally — so this page reports what it saw.
+	page.floorFromRows()
 	// The index is in instance-key order, so a capped page resumes exactly where the
 	// active half's does — and only when a half was named, since that is the only
 	// shape ?before= is accepted in.
@@ -323,7 +381,7 @@ func listInstancesOnElement(rv *state.ReadView, defs defIndex, q instanceListQue
 // Narrowed to one definition with ?process=, it reads that definition's own
 // indexes, so a version's instances cost what the page costs instead of a walk of
 // every instance in the engine. ?state=active|finished then returns a single half
-// and, when the page is capped, hands back X-Instances-Next-Cursor for the next
+// and, when the page is capped, hands back `nextCursor` for the next
 // (older) page — the paging the live view needs to stay usable at a few hundred
 // thousand instances.
 func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
@@ -348,13 +406,23 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
 		return
 	}
-	if page.truncated {
-		// Signal that the page was capped so a client can page with ?before=/?limit=
-		// rather than assume it received every instance.
-		w.Header().Set("X-Instances-Truncated", "true")
-		if page.nextCursor != "" {
-			w.Header().Set("X-Instances-Next-Cursor", page.nextCursor)
-		}
+	// The page and what it came out of, in one object
+	// (ADR-draft-a-capped-listing-answers-with-a-page). This used to be a
+	// bare array with the cap reported in X-Instances-Truncated, which a caller had to
+	// know to read — and the console's own reader of it did not, for years, on the
+	// surface where being wrong matters most.
+	//
+	// Where a maintained counter answers the query (ADR-0080/0083) the total is exact
+	// and costs a point read, so even a capped page says truthfully how many there are.
+	// Where none does — the element filter, and an unscoped listing that spans both
+	// halves — it is what this request saw, and the response says which it is rather
+	// than letting the caller assume the better one.
+	out := httpapi.FloorRows(page.rows, page.total, page.truncated)
+	if page.totalExact {
+		out = httpapi.Rows(page.rows, page.total, page.truncated)
 	}
-	httpapi.JSON(w, http.StatusOK, page.rows)
+	if page.truncated {
+		out = out.WithCursor(page.nextCursor)
+	}
+	httpapi.JSON(w, http.StatusOK, out)
 }

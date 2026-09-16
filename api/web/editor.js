@@ -2042,7 +2042,7 @@ async function fetchSamples(api, processId) {
     let rows;
     try { rows = await api("GET", "/api/v1/instances?process=" + encodeURIComponent(v.key)); }
     catch { return []; }
-    const found = (rows || [])
+    const found = ((rows && rows.items) || [])
       .filter((r) => r.processDefKey === v.key)
       // Running instances first (their values are the live ones), then newest first.
       .sort((a, b) => (a.state === b.state ? b.key - a.key : a.state === "active" ? -1 : 1))
@@ -9345,7 +9345,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       // because a straight-through process has already finished by the time the
       // roundtrip link is built.
       const list = await api("GET", `/api/v1/instances?process=${encodeURIComponent(defKey)}&limit=1`);
-      const mine = (list || []).filter((r) => r.processDefKey === defKey);
+      const mine = ((list && list.items) || []).filter((r) => r.processDefKey === defKey);
       if (mine.length) {
         const inst = mine.reduce((a, b) => (b.key > a.key ? b : a));
         return `#/operations/p/${defKey}/i/${inst.key}`;
@@ -9849,6 +9849,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let searchQuery = "";     // the active instance search; "" means the plain listing
   let searchDraft = "";     // what is currently typed, kept across the 1.5s poll's rebuilds
   let searchError = "";     // what the last search failed with, shown in the panel
+  // searchTruncated is the server's word that the result was cut at its cap, not a
+  // count of what came back. The two differ exactly when it matters: at the cap, an
+  // operator hunting one instance reads "Search results (200)" as "it is not here".
+  let searchTruncated = false;
   // archiveState is what the exported event log had to say about a search this
   // server's own store could not answer: "" when it was not consulted, otherwise
   // available / empty / notConfigured / refused / unreachable. It is kept apart from
@@ -9882,11 +9886,16 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
       (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
       (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
-    const { data, headers } = await apiRaw("GET", q);
+    // The page, its cap and its cursor all come off the body now
+    // (ADR-draft-a-capped-listing-answers-with-a-page).
+    const page = await api("GET", q);
     return {
-      rows: (data || []).filter((r) => r.processDefKey === key),
-      more: headers.get("X-Instances-Truncated") === "true",
-      cursor: headers.get("X-Instances-Next-Cursor") || "",
+      rows: ((page && page.items) || []).filter((r) => r.processDefKey === key),
+      more: !!(page && page.truncated),
+      cursor: (page && page.nextCursor) || "",
+      // page.total is deliberately not read here. The panel's "80 of 150" already comes
+      // from the runtime counters, which the poll beside this fetches anyway; taking it
+      // from the listing as well would give the same number two moments to disagree in.
     };
   }
 
@@ -9910,7 +9919,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // what is listed is the instances on one element — two different populations, and
     // putting them in one label is how a filter reads as a truncated page.
     const label = searchQuery
-      ? `Search results (${instances.length})`
+      ? `Search results (${searchTruncated ? `the first ${instances.length}` : instances.length})`
       : elementFilter
         ? `At ${elementLabel(elementFilter)} (${listedAll() ? instances.length : `${instances.length}+`})`
         : `All instances (${listedAll() ? instances.length : `${instances.length} of ${total}`})`;
@@ -10046,10 +10055,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     let rows;
     archiveState = "";
+    searchTruncated = false;
     try {
+      // The result is capped, and the response says when the cap bit. Counting the rows
+      // instead would put "Search results (200)" on a query that matched thousands —
+      // and an operator looking for one instance would read that as "it is not here"
+      // (ADR-draft-a-capped-listing-answers-with-a-page).
+      //
+      // X-Archive-State is the one signal still in a header, and deliberately: it says
+      // the rows describe instances history retention has already deleted, which is
+      // about what the rows *are*, not about how many of them came back.
       const { data, headers } = await apiRaw("GET",
         `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
-      rows = data || [];
+      rows = (data && data.items) || [];
+      searchTruncated = !!(data && data.truncated);
       archiveState = headers.get("X-Archive-State") || "";
     } catch (e) {
       searchError = e.message;
@@ -10595,7 +10614,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     let all;
     try { all = await api("GET", url); }
     catch { return; }
-    liveTasks = all.filter((t) => t.processDefKey === key);
+    liveTasks = ((all && all.items) || []).filter((t) => t.processDefKey === key);
   }
 
   // refreshDecisions pulls the selected instance's DMN decision evaluations so the

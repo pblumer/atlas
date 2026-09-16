@@ -152,7 +152,7 @@ func TestDeployRunAndStats(t *testing.T) {
 		ElementInstances int    `json:"elementInstances"`
 		State            string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 || insts[0].ProcessID != "order" || insts[0].ElementInstances != 1 || insts[0].State != "active" {
@@ -265,7 +265,7 @@ func TestListInstancesIncludesCompleted(t *testing.T) {
 		CompletedAt      int64  `json:"completedAt"`
 		ElementInstances int    `json:"elementInstances"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 {
@@ -406,4 +406,67 @@ func TestServesVendoredDmnModeler(t *testing.T) {
 	if code, _ := doReq(t, ts, http.MethodGet, "/vendor/dmn/assets/dmn-js-decision-table.css", "", ""); code != http.StatusOK {
 		t.Fatalf("dmn decision-table stylesheet status=%d, want 200", code)
 	}
+}
+
+// listRows unwraps a capped listing's envelope down to its rows, so a test that only
+// wants the rows decodes them the way it always did
+// (ADR-draft-a-capped-listing-answers-with-a-page).
+//
+// The envelope is {items, total, totalExact, truncated, nextCursor} and it exists
+// because a bare array cannot say it is a page. Most tests here do not care: they
+// start two instances and want the two rows back. This keeps that readable, and keeps
+// the tests that *are* about paging — the ones that assert a total or a cursor —
+// decoding the whole object explicitly, where the assertion is visible.
+func listRows(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &page); err != nil {
+		t.Fatalf("decode listing envelope: %v (%s)", err, truncateBody(body))
+	}
+	if page.Items == nil {
+		t.Fatalf("listing carried no items: %s", truncateBody(body))
+	}
+	return page.Items
+}
+
+// truncateBody keeps a failure message readable when the body is a page of rows.
+func truncateBody(body []byte) string {
+	if len(body) > 400 {
+		return string(body[:400]) + "…"
+	}
+	return string(body)
+}
+
+// pageFacts decodes what a capped listing says about itself beside its rows: how many
+// there are, whether that is exact, whether the cap bit, and where to resume
+// (ADR-draft-a-capped-listing-answers-with-a-page).
+// The tests that are *about* paging read this; the ones that only want the rows use
+// listRows.
+type pageFacts struct {
+	Items      json.RawMessage `json:"items"`
+	Total      int             `json:"total"`
+	TotalExact bool            `json:"totalExact"`
+	Truncated  bool            `json:"truncated"`
+	NextCursor string          `json:"nextCursor"`
+}
+
+func decodePage(t *testing.T, body []byte) pageFacts {
+	t.Helper()
+	var p pageFacts
+	if err := json.Unmarshal(body, &p); err != nil {
+		t.Fatalf("decode listing: %v (%s)", err, truncateBody(body))
+	}
+	return p
+}
+
+// readPage is decodePage over an http.Response whose body the caller has not read.
+func readPage(t *testing.T, res *http.Response) pageFacts {
+	t.Helper()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("read listing body: %v", err)
+	}
+	return decodePage(t, body)
 }

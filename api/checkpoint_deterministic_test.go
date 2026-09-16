@@ -168,7 +168,7 @@ func (h *checkpointHarness) instanceKeys() []uint64 {
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(h.t, body), &rows); err != nil {
 		h.t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	keys := make([]uint64, len(rows))

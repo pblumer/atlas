@@ -45,7 +45,7 @@ func TestCancelInstance(t *testing.T) {
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(insts) != 1 || insts[0].State != "active" {

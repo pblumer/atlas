@@ -6,6 +6,15 @@
 // the real editor.js mounts.
 import { test, expect } from "@playwright/test";
 
+// listing is how every capped list endpoint answers since
+// ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+// .items, beside the count of what is really there and whether the cap bit. A stub that
+// hands back a bare array would make the console read undefined, not a wrong number —
+// so it would fail for the wrong reason.
+const listing = (items, extra = {}) => ({
+  items, total: items.length, totalExact: true, truncated: false, ...extra,
+});
+
 const open = async (page) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -502,11 +511,11 @@ const bootOverview = async (page, { truncated = false } = {}) => {
         message: url.searchParams.get("message") || "",
       }));
       return route.fulfill({
-        json: { incidents: scoped },
-        headers: truncated ? { "X-Incidents-Truncated": "true" } : {},
+        json: listing(scoped, { total: incidents.length, totalExact: !truncated, truncated }),
       });
     }
-    if (path === "/api/v1/instances/search") return route.fulfill({ json: OVERVIEW.search });
+    if (path === "/api/v1/instances/search") return route.fulfill({ json: listing(OVERVIEW.search) });
+    if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
     return route.fulfill({ json: [] });
   });
   await page.goto("/index.html");
@@ -694,7 +703,8 @@ test.describe("operations nav", () => {
       if (path === "/api/v1/stats") {
         return route.fulfill({ json: { activeProcessInstances: 2, activeElementInstances: 2, unresolvedIncidents: 0 } });
       }
-      if (path === "/api/v1/incidents") return route.fulfill({ json: { incidents: [] } });
+      if (path === "/api/v1/incidents") return route.fulfill({ json: listing([]) });
+      if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
       return route.fulfill({ json: [] });
     });
     await page.goto("/index.html");

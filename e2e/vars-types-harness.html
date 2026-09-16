@@ -86,12 +86,18 @@
         ],
       };
 
+      // page is how every capped list endpoint answers since
+      // ADR-draft-a-capped-listing-answers-with-a-page: the rows under .items, beside
+      // the count of what is really there. A bare array here would make the console
+      // read undefined rather than a number.
+      const page = (items) => ({ items, total: items.length, totalExact: true, truncated: false });
+
       window.__calls = [];
       let ran = true;
       const api = async (method, url) => {
         window.__calls.push({ method, url });
         if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
-        if (method === "GET" && /\/instances\?process=/.test(url)) return ran ? [INSTANCE] : [];
+        if (method === "GET" && /\/instances\?process=/.test(url)) return page(ran ? [INSTANCE] : []);
         if (method === "GET" && /\/processes$/.test(url)) {
           return ran ? [{ key: 7, processId: "proc-vars", name: "Variablen", version: 1 }] : [];
         }

@@ -317,7 +317,10 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	raw := query.Get("q")
 	pred, ok := parseVarQuery(raw)
 	if !ok {
-		httpapi.JSON(w, http.StatusOK, []instanceResp{})
+		// A query that parses to nothing matches nothing, and says so in the same
+		// shape as a query that did run — a caller reading .items should not have to
+		// know which branch answered it.
+		httpapi.JSON(w, http.StatusOK, httpapi.PageOf([]instanceResp{}, false))
 		return
 	}
 	out := []instanceResp{}
@@ -347,7 +350,16 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Archive-State", archive.State)
 		out = append(out, archiveRows(archive.Instances, defs)...)
 	}
-	httpapi.JSON(w, http.StatusOK, out)
+	// This listing said nothing about its own cap until now, and the console filled the
+	// gap by guessing: it printed "showing first 200" whenever it received exactly 200
+	// rows, which cannot tell a search that found 200 from one that found more
+	// (ADR-draft-a-capped-listing-answers-with-a-page).
+	// The cap is the server's fact, so the server states it.
+	//
+	// A search that came in under the cap found everything there was, so its total is
+	// exact; one that hit the cap reports a floor. Counting past it would mean the scan
+	// the cap exists to avoid.
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(out, len(out) >= maxInstanceSearchResults))
 }
 
 // countParkedTokens fills in each running row's incident count, from the instance's
@@ -359,7 +371,7 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 // and rendered as a plain "active": the word an operator reads as healthy, on the
 // surface they debug from. Measured on a store holding 5 200 parked instances, 200 of
 // them came back unflagged, and the truncation header that said so was not read
-// (ADR-0365).
+// (ADR-draft-a-capped-listing-answers-with-a-page).
 //
 // Here the number is the row's own. A result set is capped at maxInstanceSearchResults,
 // so this is a bounded number of walks, each bounded by one instance's live tokens —

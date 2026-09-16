@@ -3,10 +3,8 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 // optString returns a string argument, or "" when it is absent or not a string —
@@ -240,57 +238,21 @@ func listInstancesPath(args map[string]any) (string, error) {
 	return "/api/v1/instances?" + q.Encode(), nil
 }
 
-// instanceListPage is what atlas_list_instances answers with: the rows, whether the
-// server capped them, and where the next page resumes.
-//
-// It is the shape atlas_list_tasks already returns, for the reason a list tool needs
-// one at all — a bare array cannot say it is a *page*. The instances endpoint caps
-// at 1000 rows by default and flags the cut in a header the body does not carry, so
-// an agent handed the array alone would read the first page of three hundred
-// thousand instances as though it were the whole population, and act on it.
-//
-// NextCursor is a string where the task page's is a number, because the two cursors
-// genuinely differ (see listInstancesPath). An agent's contract is the same either
-// way: hand nextCursor back as before. It is absent when the server offered none —
-// which happens on an unscoped listing, where a capped page has no position a cursor
-// can name. `truncated` without `nextCursor` therefore means "there is more, and
-// ?process= is how you reach it".
-type instanceListPage struct {
-	Items      []json.RawMessage `json:"items"`
-	Truncated  bool              `json:"truncated"`
-	NextCursor string            `json:"nextCursor,omitempty"`
-}
-
-// listInstancesPage runs the listing and wraps the answer with what the response
-// headers said about it.
+// listInstancesPage runs the listing. The envelope comes from the server.
 func listInstancesPage(c *Client, args map[string]any) (string, error) {
 	path, err := listInstancesPath(args)
 	if err != nil {
 		return "", err
 	}
-	body, headers, err := c.getWithHeaders(path)
-	if err != nil {
-		return "", err
-	}
-	var items []json.RawMessage
-	if err := json.Unmarshal(body, &items); err != nil {
-		return "", fmt.Errorf("decode Atlas instance list: %w", err)
-	}
-	if items == nil {
-		// A JSON null would marshal straight back out as `"items": null`, and an agent
-		// that iterates items would break on it. An empty page is an empty list.
-		items = []json.RawMessage{}
-	}
-	page := instanceListPage{
-		Items:      items,
-		Truncated:  strings.EqualFold(strings.TrimSpace(headers.Get("X-Instances-Truncated")), "true"),
-		NextCursor: strings.TrimSpace(headers.Get("X-Instances-Next-Cursor")),
-	}
-	encoded, err := json.Marshal(page)
-	if err != nil {
-		return "", err
-	}
-	return string(encoded), nil
+	// Straight through: the server answers {items, total, totalExact, truncated,
+	// nextCursor} itself now (ADR-draft-a-capped-listing-answers-with-a-page).
+	//
+	// This function used to *be* that shape — it read a bare array, read the cap out of
+	// X-Instances-Truncated and the cursor out of X-Instances-Next-Cursor, and stitched
+	// the three into an object, because an agent handed a bare array has no way to tell
+	// a complete listing from a page of one. A consumer rebuilding the envelope on its
+	// own side is the clearest argument there was for putting it on the server's.
+	return asText(c.get(path))
 }
 
 func searchInstancesPath(q, process string) string {
@@ -371,27 +333,6 @@ func resolveIncidentsBody(args map[string]any) ([]byte, error) {
 	return body, nil
 }
 
-// incidentsPage folds the {incidents:[…]} body and the X-Incidents-Truncated
-// header the list endpoint returns into one JSON envelope {incidents, truncated},
-// so the truncation signal survives as data (ADR-0016). The list is capped, not
-// cursor-paged, so there is no continuation token.
-func incidentsPage(body []byte, headers http.Header) (string, error) {
-	var env struct {
-		Incidents []json.RawMessage `json:"incidents"`
-	}
-	if err := json.Unmarshal(body, &env); err != nil {
-		return "", fmt.Errorf("decode Atlas incident list: %w", err)
-	}
-	out, err := json.Marshal(map[string]any{
-		"incidents": env.Incidents,
-		"truncated": strings.EqualFold(strings.TrimSpace(headers.Get("X-Incidents-Truncated")), "true"),
-	})
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
-}
-
 // messageBody builds the publish-message request body {name, correlationKey?,
 // variables} from the tool arguments. name is placed by the caller (already
 // validated non-empty); the optional variables object is validated here and the
@@ -411,12 +352,6 @@ func messageBody(name string, args map[string]any) ([]byte, error) {
 
 func stringProp(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
-}
-
-type taskListPage struct {
-	Items      []json.RawMessage `json:"items"`
-	Truncated  bool              `json:"truncated"`
-	NextCursor uint64            `json:"nextCursor,omitempty"`
 }
 
 // authoringTools are the design-time and human-task tools that let an agent set a
@@ -1074,33 +1009,9 @@ func authoringTools() []Tool {
 					path += "?" + encoded
 				}
 
-				body, headers, err := c.getWithHeaders(path)
-				if err != nil {
-					return "", err
-				}
-				var items []json.RawMessage
-				if err := json.Unmarshal(body, &items); err != nil {
-					return "", fmt.Errorf("decode Atlas task list: %w", err)
-				}
-				if items == nil {
-					items = []json.RawMessage{} // never `"items": null`, as above
-				}
-				page := taskListPage{
-					Items:     items,
-					Truncated: strings.EqualFold(strings.TrimSpace(headers.Get("X-Tasks-Truncated")), "true"),
-				}
-				if raw := strings.TrimSpace(headers.Get("X-Tasks-Next-Cursor")); raw != "" {
-					cursor, err := parseUint(raw)
-					if err != nil {
-						return "", fmt.Errorf("decode Atlas task cursor %q: %w", raw, err)
-					}
-					page.NextCursor = cursor
-				}
-				encoded, err := json.Marshal(page)
-				if err != nil {
-					return "", err
-				}
-				return string(encoded), nil
+				// Straight through, as for instances above: the envelope is the
+				// server's now (ADR-draft-a-capped-listing-answers-with-a-page).
+				return asText(c.get(path))
 			},
 		},
 		{

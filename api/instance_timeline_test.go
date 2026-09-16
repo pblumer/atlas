@@ -43,7 +43,7 @@ func TestInstanceTimelineCallActivityChildLink(t *testing.T) {
 		Key       uint64 `json:"key"`
 		ProcessID string `json:"processId"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	var callerInst uint64
@@ -226,7 +226,7 @@ func onlyInstanceKey(t *testing.T, ts *httptest.Server) uint64 {
 	var insts []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 {
