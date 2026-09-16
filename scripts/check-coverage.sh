@@ -34,13 +34,13 @@ mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./
 # left the build cache warm; on its own runner it was not. That the flag's absence
 # only mattered under one arrangement is the argument for the flag, not against it.
 #
-# The number matches the race command's for the same reason it was raised there:
-# api under instrumentation was measured at 198s and 202s on two runners and at
-# over 600s on a third, and runners of the same tree have been seen 51% apart. A
-# per-package timeout a passing package reaches by drawing a slow runner is not a
-# guard against hangs; it is a coin toss that reports as a defect. Change one of
-# the three (here, `make race`, AGENTS.md) and change the rest.
-go test -covermode=atomic -timeout=50m -coverprofile="${profile}" "${pkgs[@]}"
+# Twenty-five and not the race command's forty-five: this pass is the same tests
+# without the detector, and api under instrumentation was measured at 198s and 202s
+# on two runners and at over 600s on a third — where 600s was the default cutting it
+# short rather than its real duration. 25m is several times any of those, and it
+# stays below the job's own cap (40) so a hung package is reported by Go, which names
+# it, rather than by the cap, which cancels in silence.
+go test -covermode=atomic -timeout=25m -coverprofile="${profile}" "${pkgs[@]}"
 
 # The total is computed from the profile rather than read off `go tool cover -func`,
 # which prints it rounded to one decimal. That rounding was not cosmetic: it is the

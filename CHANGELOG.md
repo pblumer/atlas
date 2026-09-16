@@ -164,11 +164,12 @@ _Changed_ / _Removed_ for each version.
   Go's ten-minute default per package. `AGENTS.md` says in as many words that the
   flag is not optional, because the `api` package runs for minutes on its own — and
   the first run on a cold runner proved it, ending in `FAIL api 600.194s`, the
-  default to the millisecond. It carries `-timeout=50m` now, the same figure
-  `make race` and the documented command use, so `make cover` and CI agree. Fifty and
-  not twenty-five because two runs of one tree an hour apart drew runners 51% apart —
-  the `api` package took 1352s on one and 2048s on the other — and a per-package limit
-  a passing package reaches by drawing a slow runner reports the clock as a defect.
+  default to the millisecond. It carries `-timeout=25m` now — not the race
+  command's figure, because this pass is the same tests without the detector and `api`
+  under instrumentation measured 198s and 202s, with the third reading (600s) being the
+  default cutting it short rather than its duration. The job's cap is 40 so that limit
+  is the one that fires: Go names the package and prints a goroutine dump, a cap
+  cancels the job with no line saying why.
 
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
@@ -219,6 +220,72 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **CI failed a change on a slow runner rather than on a defect, for the second time.**
+  The race-detector step carries a per-package timeout because the `api` package needs
+  most of it on its own. At Go's 10-minute default that step once passed at 526s and
+  timed out at 600s on the next run, where the only change between them was a line in an
+  unrelated test file; the limit was raised to 25 minutes. It has now timed out at 1500s
+  on a run where the same package took 1254s two hours earlier — on a runner that was
+  slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
+  `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
+
+  The limit is 45 minutes, and the job's own cap moves with it to 60. That pairing is the
+  part worth writing down: both bound the same run, so raising the inner one alone would
+  have changed nothing — the job is killed first, and the failure turns from "timed out"
+  into "cancelled" with no line saying why. The inner limit has to fire first, because it
+  is the one that names the package.
+
+  Forty-five and not thirty-five because thirty-five was measured too: the widest pair on
+  one tree is 1352s and 2048s, an hour apart on the same day, and 35 minutes clears the
+  second of those by fifty-two seconds. That is the same coin toss one draw further out.
+
+  Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
+  inside the cap. **The number buys headroom and does not fix the cause** — the `api`
+  package is most of what the step measures, and a limit raised three times is a package
+  that wants splitting or parallelising. That is now #1001, with the measurements, rather
+  than a sentence nobody is accountable for.
+
+  The command is written across seven files — the Makefile, the CI workflow, and the
+  documents that say what "done" means, including `CONTRIBUTING.md` and the invariants
+  checklist, which were a number behind. A comment asking the next person to change all
+  of them reaches only whoever reads that one file, so a test now holds them to one
+  number: a contributor whose local flag is the older, smaller one reproduces neither
+  failure and is told their change is fine.
+- **With authentication off, the portal could never find a catalogue at all.**
+  Atlas's documented development and demo mode is `--auth=false`. Which catalogue
+  somebody sees is resolved from the groups they carry — so with no principal there
+  are no groups, `ReachedBy` answers false for every catalogue, and the mode's one
+  screen said *"Ihnen ist kein Katalog zugeordnet"* to somebody there is no "you" to
+  assign one to. The portal was unusable in the mode it is documented to be usable
+  in, and the message misdescribed why.
+
+  Every other gate in the product reads enforcement-off the same way — **there is
+  nobody to be, not nobody who may** — and the portal now does too: with no principal
+  and nobody to be, the audience question is not asked and the highest-ranked
+  catalogue is the answer. Rank, because that is already what decides which of
+  several catalogues a person sees, and publishing refuses a rank tie.
+
+  **The exception is narrow and earns itself.** A catalogue with no audience reaches
+  nobody, fail-closed on purpose, and that is unchanged wherever there *is* somebody:
+  with enforcement on a caller with no session still reaches nothing, and a signed-in
+  administrator still gets the catalogue their groups reach rather than the
+  top-ranked one — being allowed to read every catalogue is not the same as being the
+  audience for one. What makes it safe here is that in this mode the rule protects
+  nothing: every catalogue is already readable through the administration routes by
+  anybody who can reach the port.
+
+  **An order is still refused, and the page now says so instead of discovering it.**
+  An order belongs to somebody; one with no orderer has nobody to notify and nobody
+  to hold responsible. So the mode is read the catalogue, do not order from it: the
+  order button is replaced by the reason and the remedy, the basket control is shown
+  disabled like an integral part, and the favourite mark and the recipient field are
+  not offered. Whether an order is possible is read from the identity the session
+  carries — the server's own rule mirrored, not inferred from the mode.
+
+  And one 400 from a per-account list no longer takes the page down. The inventory
+  and the favourites answer about an account and refuse a caller with none, which is
+  right of them; the portal now treats a missing per-account list as a list missing
+  rather than as a catalogue missing.
 - **A JavaScript script task could not start under the strict sandbox.** Node's bundled
   OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
   profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with

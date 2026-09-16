@@ -78,22 +78,29 @@ jobs:
     # raised below, so the cap is what keeps one stuck package from turning into
     # hours of runner time.
     #
-    # The number below is a ceiling on a hang, and it stopped being one twice. First
-    # at 30 with the coverage floor sequenced behind the race step: 24m30s plus
-    # 3m59s of a 30-minute budget is not a ceiling but a coin toss decided by runner
-    # variance, which is how it began cancelling healthy runs (main, run 2160). The
-    # floor is a *second full test run* that shares nothing with this one but the
-    # checkout, so it is its own job — keep it that way: if a step here ever needs a
-    # second full pass over the tree, it wants a job, not a bigger number.
+    # The number below is a ceiling on a hang, and it has stopped being one twice.
     #
-    # Thirty was still too close afterwards. Two runs of the same tree an hour apart
-    # on 2026-09-16 drew runners 51% apart — the api package alone took 1352s
-    # (22m32) on one and 2048s (34m08) on the other — so this job measured ~27m on
-    # the fast draw and ~39m on the slow one. Fifty is above a draw worse than any
-    # observed and still ends a hang inside the hour. A cap sized to the fast draw
-    # cancels the slow one with every check green, which reports as a defect and is
-    # nothing but the clock.
-    timeout-minutes: 50
+    # At 30 it was the race step and the coverage floor in one job: 24m30s plus
+    # 3m59s, 82% of the cap rather than the "under half" the split was aiming for.
+    # The floor is a *second full test run* that shares nothing with this one but the
+    # checkout, so it is its own job now — keep that rule: if a step here ever needs
+    # a second full pass over the tree, it wants a job, not a bigger number.
+    #
+    # The split was necessary and not sufficient. Two runs of the same tree an hour
+    # apart on 2026-09-16 drew runners 51% apart — api alone took 1352s (22m32) on
+    # one and 2048s (34m08) on the other — and the run after that died at the
+    # *per-package* limit inside the step (FAIL api 1500.065s) on a machine where
+    # engine, conformance, mcp and state were all two to six times slower than two
+    # hours earlier. Nothing in those diffs touched any of them.
+    #
+    # Both limits bound the same run, so they are set together, and their *order*
+    # matters more than either number: the per-package limit below must fire first,
+    # because Go names the package and prints a goroutine dump, while this cap
+    # cancels the job with no line saying why. 45m below, 60 here — enough that the
+    # slowest package on the slowest draw still reports itself. This is a hang
+    # ceiling and not a deadline: the job measures ~27m on a fast draw and ~39m on a
+    # slow one.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -118,9 +125,9 @@ jobs:
       #     OpenSSL configuration error: ... Permission denied ... /etc/ssl/openssl.cnf
       #
       # That failure is real and predates this file — removing the step is what exposes
-      # it, not what causes it. It is tracked separately; keeping the step is the
-      # environment CI has always had rather than a way of hiding anything, and the
-      # test's own skip accounting is what keeps that honest.
+      # it, not what causes it (issue #1002). Keeping the step is the environment CI
+      # has always had rather than a way of hiding anything, and the test's own skip
+      # accounting is what keeps that honest.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -156,18 +163,28 @@ jobs:
             exit 1
           fi
 
-      # The api package needs far more than Go's default 10-minute *per-package*
-      # timeout on its own, so the default fails the step on runner variance rather
-      # than on a defect: it passed at 526s on one run and timed out at 600s on the
-      # next, where the only change between them was a single line in an unrelated
-      # test file. Nothing is skipped or quarantined by raising it — every test still
-      # runs, and a real hang still ends the job well inside the job's cap above.
+      # The api package needs most of this on its own, so a tight limit fails the step
+      # on runner variance rather than on a defect. That has now happened at two
+      # limits, and a third was measured close enough to count:
       #
-      # 50m, raised from 25m, for the reason the cap above moved: api took 1352s on
-      # one runner on 2026-09-16 and 2048s on another an hour later with the same
-      # tree, and 25m would have failed the second of those outright. A per-package
-      # timeout a passing package reaches by drawing a slow runner is not a guard
-      # against hangs; it is a coin toss that reports as a defect.
+      #   - At Go's 10-minute default it passed at 526s on one run and timed out at
+      #     600s on the next, where the only change between them was a single line in
+      #     an unrelated test file.
+      #   - At 25m it timed out at 1500s on a run where the same package had taken
+      #     1254s two hours earlier. That runner was slower across the board, not
+      #     just here: engine 82s → 219s, conformance 8s → 45s, mcp 19s → 48s,
+      #     state 4s → 17s. Nothing in the diff touched any of them.
+      #   - The widest pair measured on one tree is 1352s and 2048s, an hour apart on
+      #     2026-09-16. 35m clears the second of those by 52 seconds, which is the
+      #     same coin toss one draw further out; 45m clears it by a third.
+      #
+      # Nothing is skipped or quarantined by raising it — every test still runs, and
+      # a real hang still ends the step below the job's cap above, which is the point
+      # of the pairing: this limit names the package, the cap says nothing.
+      #
+      # The number buys headroom; it does not fix the cause. api is most of what this
+      # step measures, and a limit raised three times is a package that wants
+      # splitting or parallelising — issue #1001.
       #
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
@@ -181,7 +198,7 @@ jobs:
           # Deliberately not in `make race`: a contributor's kernel may have no Landlock
           # at all, and there the skip is the correct answer rather than a failure.
           ATLAS_SANDBOX_E2E: required
-        run: go test -race -timeout=50m ./...
+        run: go test -race -timeout=45m ./...
 
       # Smoke-run the benchmark harness (programme B): one iteration each, just to
       # prove it compiles and executes. No performance threshold is enforced on PR
@@ -215,17 +232,16 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
-    # Thirty, and not the twenty this job was first given, because twenty was a
-    # guess and the first run measured it: 11m04s — with the api package cut short
-    # at Go's default per-package limit rather than finishing. The real figure is
-    # that plus however long api needs beyond ten minutes, which nothing has
-    # measured yet.
+    # Forty, for the pairing the race job above spells out rather than for this
+    # job's duration: `check-coverage.sh` carries `-timeout=25m` per package, the
+    # rest of the run takes four to five minutes around it, and a cap of 30 would
+    # have cancelled a hung package a minute before Go could name it. A cap that
+    # fires first turns a diagnosable timeout into a silent cancellation.
     #
-    # So this is a hang-catcher with headroom it can be shown to have, rather than a
-    # number sized to a figure nobody has. That is the whole lesson of the split
-    # above: a cap that sits a minute above the real duration is not a ceiling, it
-    # is a coin toss. Tighten it when there are green runs to tighten it against.
-    timeout-minutes: 30
+    # The run itself is nowhere near either number — 5m12s measured here, ~9m on a
+    # slow draw — and that is the point: this is a hang-catcher with headroom it can
+    # be shown to have, not a deadline the suite has to beat.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
