@@ -21,7 +21,16 @@ mkdir -p "${outdir}"
 # which some trimmed toolchains omit and which is only needed to instrument
 # main packages.
 mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... | grep .)
-go test -covermode=atomic -coverprofile="${profile}" "${pkgs[@]}"
+
+# -timeout for the same reason the race command in AGENTS.md carries one: Go's default
+# is ten minutes *per package*, and the api package alone needs more than that under
+# the coverage instrumentation on a slow runner. It was measured at 198s and 202s on
+# two runners and at over 600s on a third, where it failed with `panic: test timed out`
+# — reported as a defect in whichever test happened to be running, which is the one
+# thing a timeout must not do. This line was missing while the coverage step still sat
+# behind the race step in one job, because the job's own cap ended the run first and
+# the default never got the chance to fire.
+go test -covermode=atomic -timeout=50m -coverprofile="${profile}" "${pkgs[@]}"
 
 # The total is computed from the profile rather than read off `go tool cover -func`,
 # which prints it rounded to one decimal. That rounding was not cosmetic: it is the
