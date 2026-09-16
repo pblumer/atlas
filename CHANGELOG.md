@@ -160,6 +160,204 @@ _Changed_ / _Removed_ for each version.
   When the server cannot answer, the last verdict stands rather than the bar going blank: a
   stale finding is closer to the truth than a clean bill of health nobody checked.
 
+- **An approver decides a request once, instead of deciding it twelve times.** An
+  approval in Atlas is one user task per order line — the approval process is
+  started multi-instance from the order's ready lines, so a workplace ordered as
+  twelve products is twelve process instances and twelve tasks. That shape is
+  right and is unchanged: a line is what gets provisioned, refused, escalated,
+  reassigned and returned, and each of those needs its own instance.
+
+  What was wrong was the surface. The approver of a twelve-line workplace pressed
+  Genehmigen twelve times, read the same recipient twelve times, and on a refusal
+  typed the same reason twelve times. A person doing the same thing for the fourth
+  time is no longer reading it: a surface producing twelve identical clicks has not
+  obtained twelve judgements, it has obtained one and a habit.
+
+  The decision card for a position that is part of a larger request now names **the
+  rest of the request** — each position with its price, not a count, because the
+  thing being agreed to is "I have seen what is in this request" — and offers one
+  checkbox. Ticked, one call decides all of that order's open approvals the caller
+  holds, with one reason, and **each is still completed as its own task**, because
+  each is still its own process instance and each still has to act on what it was
+  told. The count moves onto the buttons, since the button is the last thing
+  somebody reads before the decision is irreversible. A request with one position
+  gets no checkbox and still takes the single-task route.
+
+  **The record is read as one decision, not counted as twelve.** Twelve completions
+  in the same second by the same person on the same order with the same reason are
+  the legible signature of one collective decision — where twelve clicks a minute
+  apart, from somebody who stopped reading after the third, look like twelve
+  examinations and are indistinguishable from them.
+
+  **There is no atomicity and the page says so.** Nothing spans twelve process
+  instances, and a completion that went through has already handed its answer to
+  its process, which may have started provisioning. So the answer is per line:
+  what was decided, and what was not with the reason for each, named on screen.
+  "Eleven of twelve" is a number nobody can act on; "the laptop is still open
+  because it was decided in another tab" is.
+
+  Refused, on the server and not only in the browser: keys from more than one order
+  (one reason cannot cover two people's requests), a refusal with no reason, and
+  more than a hundred keys — which is not a resource limit but a statement about
+  what one decision can plausibly be. The gate is the approval list's and has no
+  operator bypass: an operator who must step in does it on the task itself, where
+  the record says an operator did.
+
+- **A product says what kind of thing it is, and the portal's first column finally
+  carries data.** The portal's cascade has drawn four columns since the layout
+  landed — Kategorie, Bundle, Angebot, Service. The first one was filled with the
+  catalogue's own name and a note reading *"Atlas has no category level above the
+  bundle today"*: a placeholder telling the truth, because there was nowhere for a
+  product to say what kind of thing it was. A catalogue of eight products does not
+  need headings. A catalogue of two hundred is unusable without them.
+
+  A product now carries a **category**, and it is a **plain string the maintainer
+  types** while they have the product open, offered back through a list of the
+  headings already in the catalogue so the second product is spelled like the
+  first. The column shows **Alle** above the headings, so it is never a dead end;
+  the headings alphabetically, by the locale's own rule; and **Ohne Kategorie**
+  last, appearing only when something is in it — a heading for nothing is a heading
+  nobody can use, and hiding uncategorised products instead would lose them. The
+  services view groups what a person already holds by the same headings, so "where
+  do I find this" has one answer on both sides of the portal. Publishing refuses a
+  category that is present and **blank**, because blank is the bucket's own value
+  and a product that meant to say something and lost it would be invisible against
+  one that never said anything.
+
+  **A heading, not an entity, and the three costs are stated rather than hidden.**
+  Nothing in Atlas branches on a category — no rule, no approval, no eligibility,
+  no process binding reads it; it is a way of *looking* at a release. Every property
+  that would justify an entity is a property something else would need, and no such
+  something exists. So: the headings have **no ordering of their own** (a rank on a
+  category is the entity this refused, arriving through the back door, and a test
+  holds the sort against it); they are **not translated**, unlike every other text
+  on a product, which is a genuine regression against the rest of the surface; and
+  **two spellings are two categories**, recorded as a deliberate non-check so that
+  the day it becomes intolerable, the reason it was tolerable is on file.
+
+- **A product can say what it costs, and the approver sees it.** There was **no price
+  field anywhere in Atlas** — not on a product, not on an order line, not on the
+  approval surface — so an approver was asked to approve a laptop without being told
+  what it cost.
+
+  A product now carries a price, and it is a **string written as the catalogue's
+  maintainer wants it read**: `CHF 1'200.–`, `49.– / Monat`, `ab 10 Stück CHF 39.–`,
+  `im Grundpaket enthalten`. None of those is a number, and every one of them is an
+  answer an approver can act on.
+
+  **Displayed and never computed, on purpose.** A number invites a total; a total
+  invites two products in different currencies; that invites a rate and an effective
+  date. Every one of those belongs to an installation's finance rules, and a catalogue
+  storing a number would have started deciding them by implication before anybody had
+  chosen. The cost is stated rather than hidden: **nothing adds these up.** That is
+  survivable because one approval decides one line, so the one figure it shows is the
+  one figure it needs — and a test asserts that no page parses a price into a number,
+  because a single `Number(price)` somewhere is the whole money model, invented without
+  being chosen.
+
+  **It is frozen like a rule although it is not one.** Nothing branches on a price, and
+  it travels into the release and onto the order line anyway, for the sentence that
+  governs the approval rule and the ceiling beside it: an approver saw a figure and
+  decided on it, and a catalogue edit next week must not make the record show a
+  different one. The approval surface therefore reads it **from the order line** — the
+  line is the order's own record of what was decided on, and reading from the catalogue
+  would give the same answer today and a different one the day somebody edits a price,
+  which is exactly when it matters and nobody is looking.
+
+  Publishing refuses one thing: a price that is present and blank. That is worse than
+  saying nothing, because the portal renders an empty field where a figure belongs and
+  a reader cannot tell "we do not say" from "somebody left it blank" — so the portal
+  says the first out loud instead. It shows on the product's details, on the approval
+  panel, and on the approval **row**, because a list of forty is scanned rather than
+  opened one at a time.
+
+- **One position can be withdrawn on its own, and its details corrected.** The story
+  asks to modify or delete positions directly. Deleting existed only for a **whole
+  order**, so somebody who no longer wanted the second screen had to take the laptop
+  back with it — the per-line transition had been in the package since it was written,
+  with nothing calling it. Modifying did not exist at all.
+
+  **"Modify" is two different acts, and treating them as one is how a record starts
+  lying.**
+
+  Changing *what is held* — another product, another variant — is **not offered**. A
+  line that was provisioned and then quietly became a different product leaves the
+  access record unable to answer what somebody had and when, which is the one question
+  it exists for. The honest path already exists: give it back, order the other thing,
+  and the record carries both with the dates that make it readable.
+
+  Correcting *what was recorded about it* — the answers to the product's configuration
+  form — **is** offered, and what it may do is asked of the status machine that already
+  decides what can still change, rather than decided a second time beside it:
+
+  - A position **not yet attempted** is simply corrected. No amendment is recorded:
+    nothing was delivered under the old answers, and recording one would tell a reader
+    that something had been.
+  - A position the recipient **already holds** is corrected *and the correction is
+    recorded* — what the answers said before, who changed them, when, and why. The
+    laptop is at the wrong site and correcting the record does not move it; an
+    overwrite would leave the order saying something that was never true of the
+    delivery, and a reader could not tell the corrected record from an accurate one.
+    The amendments are a list and not a slot, because details having been wrong twice
+    is a different fact from their having been wrong once.
+  - A position **being provisioned now** is refused, and the refusal says to wait. A
+    process has the line, which is a conversation with a system Atlas does not control.
+  - A **rejected, cancelled or abandoned** position is refused: a closed record of a
+    request that produced nothing.
+
+  Whether a field is required is still the form's own statement, not a second copy of
+  that rule in the order service.
+
+  **A position its whole always carries cannot be withdrawn on its own.** The basket
+  will not let anybody deselect an integral part — a workplace is not a workplace
+  without its account — and a rule enforced when ordering and not afterwards is not a
+  rule. The order could not tell, because it carries the precedence graph and not the
+  composition one, so the line now carries that too, frozen at placement like every
+  other statement about the release. The refusal names what carries the part, because
+  the answer somebody needs is "take back the workplace instead".
+
+- **A product can ask the orderer for what its name does not say.** A laptop is not
+  fully described by being a laptop: somebody has to say which cost centre it is booked
+  to and which site it goes to. Nothing could hold that — a product declared no fields
+  and an order line carried no values — so every order needing more than a product name
+  finished as a phone call, and the answer lived in whatever the caller wrote down.
+  Variants do not solve it: a variant is a fixed shape chosen in advance, and a cost
+  centre is not one of a list.
+
+  A product now names **one Atlas form**. The basket renders it — the last screen before
+  an order exists, and the one that already shows what will actually be provisioned —
+  and the answers travel with the order line, beside the id of the form they answered.
+
+  **A form id and not a field list of its own**, because Atlas already has forms: a
+  definition, an editor, a generator, a renderer, and two surfaces rendering them. A
+  second way to declare "these are the fields somebody fills in" would be a second thing
+  to author, a second thing to render, and a second set of types, validation rules and
+  localisation to keep level with the first — behind on the day it shipped. The
+  catalogue names an id and interprets nothing; which questions there are, which are
+  required and what counts as valid stay the form's own statements, checked by the form
+  runtime before anything is sent.
+
+  **The release freezes the id and the line freezes the answers.** A release freezes
+  *rules* — the approval, the ceiling, the bindings — because a rule relaxed next week
+  must not change what somebody was held to this week. A form is not a rule: what has to
+  survive is what was answered, and "cost centre 4711" stays true whatever the form does
+  afterwards. Copying the schema into every release would put a rendering artifact inside
+  a design-time model that has kept rendering out of itself, and send it to every browser
+  that opens the portal.
+
+  Answers are keyed by item, because two laptops in one basket are two cost centres and a
+  flat map would keep one of them. Two things are refused rather than dropped, both
+  because the alternative is an order that silently loses something somebody typed:
+  answers for a product the order does not carry (a stale basket), and answers for a
+  product that asks nothing (nothing would read them). A form left *unanswered* is not
+  refused there — that is the form's own rule, and a second copy of it in the order
+  service would be wrong the first time somebody marks a field optional.
+
+  The product editor offers the forms that exist, never free text — the same rule the
+  process bindings follow, because a product bound to a form nobody wrote is a basket the
+  orderer cannot get past, found by them rather than by whoever bound it.
+
+
 - **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
   its own colour, typeface and brand mark since it was built — the portal and the approval
   page paint themselves from it — and no screen offered any of it. The one thing that makes

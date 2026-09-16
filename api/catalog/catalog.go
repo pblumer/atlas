@@ -214,9 +214,98 @@ type Item struct {
 	// week does not change what an order placed this week was placed against — which
 	// matters less for a search than for a rule, and is still the property that
 	// makes a release a release.
-	Keywords  []string `json:"keywords,omitempty"`
-	CreatedAt int64    `json:"createdAt"`
-	UpdatedAt int64    `json:"updatedAt"`
+	Keywords []string `json:"keywords,omitempty"`
+	// ConfigForm names the Atlas form somebody fills in when they order this
+	// product: the cost centre, the site, the employee number — whatever this one
+	// product needs that its name does not say
+	// (ADR-0358). Empty is the
+	// ordinary case and means the product is fully described by what it is.
+	//
+	// # Why a form id and not a field list of its own
+	//
+	// Atlas already has forms: a definition with an id, an editor, a renderer, a
+	// generator, and two surfaces rendering them. A second way to declare "these
+	// are the fields somebody fills in" would be a second thing to author, a second
+	// thing to render, and a second set of field types to keep level with the
+	// first. The catalogue names an id and interprets nothing.
+	//
+	// # What the catalogue does *not* do with it
+	//
+	// It never resolves it. The form store is the `api` package's and this package
+	// cannot see it, exactly as it cannot see which processes are deployed — and
+	// for the same reason the two provisioning bindings are stored as plain ids.
+	// The authoring screen offers only forms that exist, which is where that check
+	// belongs: at the moment somebody chooses, not at the moment somebody orders.
+	//
+	// # Why the release freezes the id and not the form
+	//
+	// A release freezes what an order was placed against, and the reason is always
+	// the same: a rule relaxed next week must not change what somebody was held to
+	// this week. That argument is about *rules*. A form is a set of questions, and
+	// what has to survive is the **answers** — which the order line carries, with
+	// their field keys, for as long as the order exists. "Cost centre 4711" stays
+	// true whatever the form does afterwards.
+	//
+	// The honest cost is stated in the record: a form that gains a field next week
+	// leaves every earlier order without a value for it, and a provisioning process
+	// that reads it finds nothing. That is true of every variable a process reads
+	// and is the process's business; copying a form-js document into every release
+	// would put a rendering artifact inside a design-time model that has kept
+	// rendering out of itself on purpose, and would send it to every browser that
+	// opens the portal.
+	ConfigForm string `json:"configForm,omitempty"`
+	// Price is what this product costs, written as the catalogue's maintainer wants
+	// it read — "CHF 1'200.–", "49.– / Monat", "im Grundpaket enthalten"
+	// (ADR-0361). Empty is the ordinary case
+	// and means the catalogue says nothing about cost.
+	//
+	// # Why a string and not a number with a currency
+	//
+	// Because it is **displayed and never computed**. A number invites a total, a
+	// total invites two products in different currencies, and that invites a rate
+	// and a date — a money model, decided by an installation's finance rules and not
+	// by this package. Everything that makes a price *arithmetic* is absent on
+	// purpose, and a string is the honest shape of "this is what it says on the
+	// shelf".
+	//
+	// The cost of that is stated rather than hidden: nothing can add these up. The
+	// surface that needs a figure most is the approval, and an approval decides one
+	// line — so the one number it shows is the one number it needs. A basket total
+	// would need the money model above, and that is a different measure.
+	//
+	// # Why it is frozen into the release like a rule
+	//
+	// It is not a rule, and it travels like one anyway. An approver saw a figure and
+	// decided on it; a catalogue edit next week must not make the record show a
+	// different figure than the one that was approved. That is the same sentence as
+	// the approval rule's and the ceiling's, and it is the reason this is on the
+	// line as well as in the release.
+	Price string `json:"price,omitempty"`
+	// Category is the heading this product sits under in the portal — "Arbeitsplatz",
+	// "Kommunikation", "Fachanwendungen" (ADR-0360).
+	// Empty is the ordinary case and puts the product under the heading the portal
+	// names for products that have none.
+	//
+	// # Why a field and not an entity
+	//
+	// Because it is **a heading and nothing else**. An entity would carry its own
+	// texts, its own ordering, its own visibility and its own lifecycle, and each of
+	// those is a thing to publish, migrate and get wrong. A heading has none of them:
+	// it is the word above a column.
+	//
+	// The costs are real and stated rather than hidden. A category has **no ordering
+	// of its own**, so the portal sorts alphabetically — there is nothing on a string
+	// to sort by, and inventing a rank here would be the entity arriving through the
+	// back door. It has **no translation**: it reads the same in every language the
+	// catalogue offers, unlike every product name beside it. And two spellings are
+	// two categories, with nothing to notice that "Arbeitsplatz" and "Arbeitsplätze"
+	// were meant as one.
+	//
+	// If any of those turns out to matter, the answer is the entity, and this field
+	// is what it would be migrated from.
+	Category  string `json:"category,omitempty"`
+	CreatedAt int64  `json:"createdAt"`
+	UpdatedAt int64  `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different

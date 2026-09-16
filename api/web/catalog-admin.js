@@ -186,13 +186,17 @@ const parseTargets = (raw) => String(raw || "").split("\n")
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
-  let cat, items, releases, processes;
+  let cat, items, releases, processes, forms;
   try {
-    [cat, items, releases, processes] = await Promise.all([
+    [cat, items, releases, processes, forms] = await Promise.all([
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/catalog-products"),
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`),
       api("GET", "/api/v1/processes"),
+      // The forms a product may ask its orderer to fill in. Offered from what
+      // exists, never as free text, for the reason the processes beside it are: a
+      // product naming a form nobody wrote is a basket somebody cannot get past.
+      api("GET", "/api/v1/forms").catch(() => []),
     ]);
   } catch (e) {
     if (isSuperseded()) return;
@@ -211,6 +215,8 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
   // a version: what runs is whatever is deployed when the line is reached, which is
   // the same rule the order's approval process follows.
   const procIDs = [...new Set((processes || []).map((p) => p.processId || p.id).filter(Boolean))].sort();
+  const formList = (forms || []).map((f) => ({ id: f.id, name: f.name || f.id }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   view.innerHTML = `
     <div class="row">
@@ -274,7 +280,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
-  wire({ api, toast, view }, cat, items, byID, langs, procIDs,
+  wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced));
 }
 
@@ -479,7 +485,7 @@ function sharingCard(cat, me, enforced) {
 }
 
 // productForm renders the editor for one product, or for a new one.
-function productForm(it, cat, langs, procIDs) {
+function productForm(it, cat, langs, procIDs, formList, items) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
   const opt = (id, sel, label) =>
@@ -505,6 +511,41 @@ function productForm(it, cat, langs, procIDs) {
       </select></label>
       <label class="field">Approver (a username for a named person, a group for a group; empty otherwise)
         <input name="aref" value="${esc(ap.ref || "")}" autocomplete="off"></label>
+      <label class="field">Category
+        <span class="muted" style="display:block; margin:2px 0 6px">The heading this
+          product sits under in the portal &mdash; <code>Arbeitsplatz</code>,
+          <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
+          its own (the portal sorts alphabetically), no translation, and two spellings
+          are two headings. Leave it empty and the product sits under the portal's
+          heading for those that carry none.</span>
+        <input name="category" value="${esc(v.category || "")}" autocomplete="off"
+          list="known-categories" placeholder="Arbeitsplatz">
+        <datalist id="known-categories">${
+  [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
+    .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
+      <label class="field">Cost
+        <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
+          read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
+          <code>im Grundpaket enthalten</code>. It is <b>shown and never computed</b>:
+          nothing adds these up, because a total would need a currency, a rate and a date
+          that are your finance rules and not the catalogue's. It is frozen into the
+          release, so an approver's figure stays the figure they decided on. Leave it
+          empty to say nothing about cost.</span>
+        <input name="price" value="${esc(v.price || "")}" autocomplete="off"
+          placeholder="CHF 1'200.&ndash;"></label>
+      <label class="field">Details the orderer fills in
+        <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
+          this product needs that its name does not say — a cost centre, a site, an
+          employee number. It is shown in the basket and its answers travel with the
+          order line, so an approver reads them and a provisioning process can act on
+          them. Most products need none.</span>
+        <select name="configForm">
+          <option value="">— none —</option>
+          ${formList.map((f) => opt(f.id, v.configForm || "",
+    f.name === f.id ? f.id : `${f.name} (${f.id})`)).join("")}
+          ${v.configForm && !formList.some((f) => f.id === v.configForm)
+    ? opt(v.configForm, v.configForm, `${v.configForm} (no such form)`) : ""}
+        </select></label>
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
       <label class="field inline"><input type="checkbox" name="multipleAllowed"
@@ -628,7 +669,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   });
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare, canTheme) {
+function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   const patch = async (body) => {
@@ -662,12 +703,12 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs);
+      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items);
       wireProductForm();
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs);
+      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items);
       wireProductForm();
       return;
     }
@@ -780,6 +821,9 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, canShare, 
       const body = {
         id: pid, homeCatalog: id, state: f.get("state"), texts,
         approval: { kind: f.get("akind"), ref: String(f.get("aref") || "").trim() },
+        category: String(f.get("category") || "").trim(),
+        price: String(f.get("price") || "").trim(),
+        configForm: f.get("configForm") || "",
         provisionProcess: f.get("provisionProcess") || "",
         deprovisionProcess: f.get("deprovisionProcess") || "",
         multipleAllowed: !!f.get("multipleAllowed"),

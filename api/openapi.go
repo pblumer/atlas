@@ -938,13 +938,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
 
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the portal groups it under — a heading and nothing else, with no ordering, no translation and no entity behind it", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
 				"approval": tObject(), "provisionProcess": tString(),
 				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
 				"targets": tArray(), "keywords": tArray(), "eligible": tArray(),
+				"configForm": tString(), "price": tString(), "category": tString(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
@@ -973,6 +974,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
 			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
 			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/cancel", s.handleCancelLine, apiOp{
+			summary: "Withdraw one position rather than the whole order. Yours for an order you placed, or an operator's for any. A position already running or finished keeps its outcome, and one its whole always carries cannot be taken back on its own — the basket does not let anybody deselect it either, and the refusal names what to withdraw instead", tag: "Order", role: RoleUser,
+			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The order with that position withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/details", s.handleAmendLine, apiOp{
+			summary: "Correct the details somebody gave when they ordered — the answers to the product's configuration form. What is *held* is never changed in place: another product is a return and a new order. A position not yet attempted is simply corrected; one the recipient already holds records the correction beside the old answers, with who and when, because correcting the record does not move the laptop; one being provisioned now is refused until its process has finished", tag: "Order", role: RoleUser,
+			req: jsonBody("The corrected answers and an optional reason", schemaObj(map[string]any{
+				"config": tObject(), "reason": tString(),
+			})),
+			resp: jsonBody("The order with the corrected position", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
 			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order, and the process now revoking the line", tObject())}},
@@ -994,6 +1005,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
 			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
 			resp: jsonBody("Approvals", tArray())}},
+		{"POST", "/api/v1/approvals/decide", s.handleDecideApprovals, apiOp{
+			summary: "Decide several of one order's approvals as one decision, with one reason. Each is still completed as its own task, because each is still its own process instance; the answer is per line, because there is no transaction spanning them. Refuses keys from more than one order — one reason cannot cover two requests", tag: "Order", role: RoleUser,
+			req: jsonBody("The decision and the approvals it covers", schemaObj(map[string]any{
+				"approved": tBool(),
+				"reason":   tString(),
+				"taskKeys": tArray(),
+			}, "approved", "taskKeys")),
+			resp: jsonBody("What was decided and what was not", tObject())}},
 		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
 			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
 			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},

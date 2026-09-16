@@ -270,6 +270,30 @@ func checkItems(in Input, add func(Problem)) {
 				break
 			}
 		}
+		// A category of nothing but spaces is a heading nobody can read and nobody
+		// can group by: the portal would render an empty column head, and a second
+		// product with a different number of spaces would sit under a different one
+		// (ADR-0360).
+		if it.Category != "" && strings.TrimSpace(it.Category) == "" {
+			add(Problem{Item: it.ID, Message: "names a blank category; leave it out for a " +
+				"product the catalogue groups under nothing"})
+		}
+		// A price of nothing but spaces is a product that claims to say what it costs
+		// and says nothing — worse than saying nothing at all, because the portal
+		// renders an empty field where a figure belongs
+		// (ADR-0361).
+		if it.Price != "" && strings.TrimSpace(it.Price) == "" {
+			add(Problem{Item: it.ID, Message: "names a blank price; leave it out for a " +
+				"product the catalogue says nothing about the cost of"})
+		}
+		// A form id of nothing but spaces is a product that asks a question nobody
+		// can answer: the portal would look for a form under a name no form has, and
+		// the orderer would be stopped by a blank that cannot be filled in
+		// (ADR-0358).
+		if it.ConfigForm != "" && strings.TrimSpace(it.ConfigForm) == "" {
+			add(Problem{Item: it.ID, Message: "names a blank configuration form; " +
+				"leave it out for a product that needs no extra details"})
+		}
 		// A blank keyword matches every query at once, which is the opposite of a
 		// search term (ADR-0355).
 		for _, k := range it.Keywords {

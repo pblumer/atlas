@@ -176,17 +176,17 @@
       }
     },
     {
-      "id": "a-catalogue-s-appearance-is-set-on-the-screen-that-fills-it",
+      "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "A catalogue's appearance is set on the screen that fills it.",
-        "de": "A catalogue's appearance is set on the screen that fills it."
+        "en": "An approver decides a request once, instead of deciding it twelve times.",
+        "de": "An approver decides a request once, instead of deciding it twelve times."
       },
       "summary": {
-        "en": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it.",
-        "de": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it."
+        "en": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks.",
+        "de": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks."
       },
       "link": {
         "label": "Changelog",
@@ -194,17 +194,17 @@
       }
     },
     {
-      "id": "the-recipient-of-an-order-is-picked-not-typed-and-the-field-",
+      "id": "a-product-says-what-kind-of-thing-it-is-and-the-portal-s-fir",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it.",
-        "de": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it."
+        "en": "A product says what kind of thing it is, and the portal's first column finally carries data.",
+        "de": "A product says what kind of thing it is, and the portal's first column finally carries data."
       },
       "summary": {
-        "en": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one.",
-        "de": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one."
+        "en": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service.",
+        "de": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service."
       },
       "link": {
         "label": "Changelog",
@@ -212,17 +212,17 @@
       }
     },
     {
-      "id": "a-catalogue-can-be-searched-and-by-words-it-does-not-display",
+      "id": "a-product-can-say-what-it-costs-and-the-approver-sees-it",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "A catalogue can be searched, and by words it does not display.",
-        "de": "A catalogue can be searched, and by words it does not display."
+        "en": "A product can say what it costs, and the approver sees it.",
+        "de": "A product can say what it costs, and the approver sees it."
       },
       "summary": {
-        "en": "The portal browsed and did not find.",
-        "de": "The portal browsed and did not find."
+        "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
+        "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
       },
       "link": {
         "label": "Changelog",
@@ -230,17 +230,17 @@
       }
     },
     {
-      "id": "the-approval-list-can-be-searched-and-ordered",
+      "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "The approval list can be searched and ordered.",
-        "de": "The approval list can be searched and ordered."
+        "en": "One position can be withdrawn on its own, and its details corrected.",
+        "de": "One position can be withdrawn on its own, and its details corrected."
       },
       "summary": {
-        "en": "It rendered every open approval in whatever order the endpoint returned — newest first — which is fine at three and a wall at forty.",
-        "de": "It rendered every open approval in whatever order the endpoint returned — newest first — which is fine at three and a wall at forty."
+        "en": "The story asks to modify or delete positions directly.",
+        "de": "The story asks to modify or delete positions directly."
       },
       "link": {
         "label": "Changelog",
@@ -248,17 +248,17 @@
       }
     },
     {
-      "id": "two-pages-rendered-the-literal-word-null",
+      "id": "a-product-can-ask-the-orderer-for-what-its-name-does-not-say",
       "version": "Unreleased",
       "date": null,
-      "category": "Fixed",
+      "category": "Added",
       "title": {
-        "en": "Two pages rendered the literal word \"null\".",
-        "de": "Two pages rendered the literal word \"null\"."
+        "en": "A product can ask the orderer for what its name does not say.",
+        "de": "A product can ask the orderer for what its name does not say."
       },
       "summary": {
-        "en": "render() passed cond ?",
-        "de": "render() passed cond ?"
+        "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
+        "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
       },
       "link": {
         "label": "Changelog",
