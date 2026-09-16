@@ -12,6 +12,54 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A product manager maintains the catalogue over MCP.** The portal's catalogue was
+  the one substantial surface an agent could not reach. The omission was recorded and
+  deliberate — a tool is a public contract, and the catalogue was half-built when the
+  note was written. It is not half-built any more: ordering, approvals, releases, the
+  inventory, reconciliation, search, categories, prices and eligibility all landed
+  since, and the note outlived its own argument.
+
+  Nine tools now cover what a product manager does: list, read, create and change
+  catalogues; list and save products; publish a release and read the releases; and
+  derive drafts from an ArchiMate model. Each is one HTTP operation and nothing more,
+  so an agent reads the same refusal a person reads — a publish that is refused still
+  answers with every problem at once, naming the product each belongs to.
+
+  Two things a screen teaches for free had to be said out loud, because an agent has
+  none. **Saving a product replaces it**, so a field left out is a field cleared —
+  every write tool says to read the record first and send it whole. And **nothing
+  deletes**: a product is withdrawn through the ordinary save, because an order placed
+  years ago and an entitlement still held both resolve through it, so there is no
+  delete tool to look for and not find.
+
+  Authority is the caller's and is not widened anywhere: the routes need the
+  `productmanager` role plus editor on the catalogue, and the adapter carries the
+  credential the tool call arrived with. Over the stdio adapter, which authenticates
+  with an API token, the read tools work and the write tools are refused — no API
+  token can carry `productmanager`, deliberately, so that no account is handed
+  catalogue control by an upgrade.
+
+- **A product can be saved without overwriting somebody else's edit.** The product
+  write stores the record it is given, which is right for a form that renders every
+  field and posts every field back, and dangerous for anything that changes one field
+  of a record it read a minute ago: the other maintainer's change disappears with
+  nothing to say it existed.
+
+  A product now carries a `revision`, and a caller may state the one it read. The
+  write is then refused as a conflict unless the stored product is still on it. It is
+  the same rule, spelled the same way, that the capability map has used since it was
+  built. Stating it is optional and omitting it replaces unconditionally, so the
+  Console — which builds its body from form fields and knows no revision — is
+  untouched.
+
+  It counts revisions rather than comparing the `updatedAt` beside it, and that is not
+  a preference: `updatedAt` is Unix nanoseconds, past the 2^53 where a float64 stops
+  representing integers exactly, so every client that decodes JSON numbers as doubles
+  would hand back a value a few hundred nanoseconds off and be told its own read was
+  stale.
+
 ### Changed
 
 - **The portal's corner names whoever the order is for, and the help moved to the end

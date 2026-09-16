@@ -303,9 +303,30 @@ type Item struct {
 	//
 	// If any of those turns out to matter, the answer is the entity, and this field
 	// is what it would be migrated from.
-	Category  string `json:"category,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	Category string `json:"category,omitempty"`
+	// Revision is optimistic concurrency, the same field and the same rule the
+	// capability map uses: a write that states a revision is refused when the
+	// stored record has moved past it, rather than silently overwriting somebody
+	// else's edit (ADR-draft-catalogue-maintenance-over-mcp).
+	//
+	// # Why this and not the timestamp beside it
+	//
+	// Because a caller has to be able to send it back unchanged, and
+	// [Item.UpdatedAt] is Unix nanoseconds — around 1.8e18, past the 2^53 where a
+	// float64 stops representing integers exactly. Every JSON client that decodes
+	// numbers as doubles, which is most of them and every MCP client, would return
+	// a value a few hundred nanoseconds off and be told its write was stale. A
+	// revision counts in ones, so it stays exact for more writes than a catalogue
+	// will ever see.
+	//
+	// Zero means the caller stated no precondition and the write is unconditional,
+	// which is what the Console sends: it renders every field and posts every
+	// field, so the record it overwrites is the record on the screen in front of
+	// somebody. A product stored before this field existed also reads zero, so its
+	// first write is unconditional and every write after it can be guarded.
+	Revision  int64 `json:"revision"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }
 
 // EdgeKind distinguishes the two questions an edge can answer. They are different
