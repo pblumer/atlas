@@ -21,7 +21,19 @@ mkdir -p "${outdir}"
 # which some trimmed toolchains omit and which is only needed to instrument
 # main packages.
 mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... | grep .)
-go test -covermode=atomic -coverprofile="${profile}" "${pkgs[@]}"
+
+# -timeout for the same reason `make race` and AGENTS.md carry it, and it is not
+# optional here either: the api package runs for minutes on its own, coverage
+# counters add to that, and Go's default per-package limit is ten. Without the flag
+# the run ends in `panic: test timed out` naming whichever test happened to be
+# executing — a failure that reads like a defect in unrelated code and is nothing
+# but the clock. It cost one red job to learn that twice: `FAIL api 600.194s`, the
+# default to the millisecond.
+#
+# This was survivable while the floor ran in the same job as the race step, which
+# left the build cache warm; on its own runner it was not. That the flag's absence
+# only mattered under one arrangement is the argument for the flag, not against it.
+go test -covermode=atomic -timeout=25m -coverprofile="${profile}" "${pkgs[@]}"
 
 # The total is computed from the profile rather than read off `go tool cover -func`,
 # which prints it rounded to one decimal. That rounding was not cosmetic: it is the
