@@ -423,7 +423,7 @@ func TestMetricsRuntimeGaugesFallWhenInstancesFinish(t *testing.T) {
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(rows) != 2 {

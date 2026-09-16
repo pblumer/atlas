@@ -81,7 +81,7 @@ func createFolder(t *testing.T, ts *httptest.Server, body string) folderJSON {
 	return f
 }
 
-func listTasks(t *testing.T, ts *httptest.Server, path string) ([]map[string]any, http.Header) {
+func listTasks(t *testing.T, ts *httptest.Server, path string) ([]map[string]any, pageFacts) {
 	t.Helper()
 	res, err := http.Get(ts.URL + path)
 	if err != nil {
@@ -92,11 +92,12 @@ func listTasks(t *testing.T, ts *httptest.Server, path string) ([]map[string]any
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("GET %s = %d (%s)", path, res.StatusCode, data)
 	}
+	facts := decodePage(t, data)
 	var tasks []map[string]any
-	if err := json.Unmarshal(data, &tasks); err != nil {
+	if err := json.Unmarshal(facts.Items, &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, data)
 	}
-	return tasks, res.Header
+	return tasks, facts
 }
 
 // TestFolderFiltersTheTaskList is the feature end to end over HTTP: a folder
@@ -168,18 +169,17 @@ func TestFolderListPagesLikeTheUnfilteredOne(t *testing.T) {
 	f := createFolder(t, ts, `{"name":"Alle Kunden","rule":{"match":"all","conditions":[`+
 		`{"field":"process","op":"is","value":"kunden-anfrage"}]}}`)
 
-	first, hdr := listTasks(t, ts, "/api/v1/tasks?limit=2&folder="+f.ID)
+	first, facts := listTasks(t, ts, "/api/v1/tasks?limit=2&folder="+f.ID)
 	if len(first) != 2 {
 		t.Fatalf("first page = %d tasks, want 2", len(first))
 	}
-	if hdr.Get("X-Tasks-Truncated") != "true" {
+	if !facts.Truncated {
 		t.Fatalf("a capped folder page did not report truncation")
 	}
-	cursor := hdr.Get("X-Tasks-Next-Cursor")
-	if cursor == "" {
+	if facts.NextCursor == "" {
 		t.Fatal("a capped folder page handed back no cursor")
 	}
-	second, _ := listTasks(t, ts, "/api/v1/tasks?limit=2&before="+cursor+"&folder="+f.ID)
+	second, _ := listTasks(t, ts, "/api/v1/tasks?limit=2&before="+facts.NextCursor+"&folder="+f.ID)
 	if len(second) != 1 {
 		t.Fatalf("second page = %d tasks, want the remaining 1", len(second))
 	}
@@ -417,15 +417,11 @@ func TestFolderCountsReportAFloorAtTheScanBudget(t *testing.T) {
 
 	// The filtered listing hits the same bound and says so the same way, so a
 	// client can tell "this is the whole folder" from "this is what we got to".
-	res, err := http.Get(ts.URL + "/api/v1/tasks?folder=" + f.ID)
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	defer res.Body.Close()
-	if res.Header.Get("X-Tasks-Truncated") != "true" {
+	_, page := listTasks(t, ts, "/api/v1/tasks?folder="+f.ID)
+	if !page.Truncated {
 		t.Error("a folder page cut short by the scan budget did not report truncation")
 	}
-	if res.Header.Get("X-Tasks-Next-Cursor") == "" {
+	if page.NextCursor == "" {
 		t.Error("a truncated folder page handed back no cursor to resume from")
 	}
 }

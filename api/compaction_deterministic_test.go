@@ -129,7 +129,7 @@ func (h *compactionHarness) instanceCount() int {
 		h.t.Fatalf("list instances status=%d body=%s", code, body)
 	}
 	var rows []json.RawMessage
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(h.t, body), &rows); err != nil {
 		h.t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	return len(rows)

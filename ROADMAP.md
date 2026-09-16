@@ -998,7 +998,7 @@ What it takes to run this for real.
   backfilled once at open like the ADR-0080/0083 counters — make a version's
   instances a **bounded range scan**, newest first, with history already in
   completion order. `GET /api/v1/instances` gained `?state=active|finished` and a
-  `?before=` cursor (`X-Instances-Next-Cursor`, the task inbox's paging), the search
+  `?before=` cursor (`nextCursor` in the response, the task inbox's paging), the search
   gained `?process=`, and the live view's instance panel stops loading every instance
   of a version: one page per half, an honest "80 of 150", **Load more**, and a search
   box beside the list. The **variable value index** followed

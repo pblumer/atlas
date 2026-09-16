@@ -59,7 +59,7 @@ func TestTaskFormPrefillInheritsProcessVariables(t *testing.T) {
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 		ProcessID          string `json:"processId"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	var eik, pik uint64

@@ -190,6 +190,49 @@ _Changed_ / _Removed_ for each version.
   an activity where its two neighbours name a place — "Meine Aufträge", "Meine
   Leistungen". In a row of three, one verb phrase among two nouns reads as a different
   kind of control, and the tab does not browse anything: it shows the catalogue.
+- **Breaking: the capped list endpoints answer with `{items, total, totalExact,
+  truncated, nextCursor}` instead of a bare array.** Affected:
+  `GET /api/v1/tasks` (global, `?processInstance=` and `?folder=`),
+  `GET /api/v1/instances`, `GET /api/v1/instances/search`, `GET /api/v1/incidents`,
+  `GET /api/v1/approvals` and `GET /api/v1/audit`. The `X-*-Truncated` and
+  `X-*-Next-Cursor` response headers are gone with it, and `GET /api/v1/incidents` no
+  longer wraps its rows in `{"incidents": […]}`. Any client reading these six endpoints
+  has to be changed; there is no compatibility mode and no versioned alias.
+
+  The previous record moved five wrong numbers onto the thing that owns them. It did not
+  take the wrong number out of reach: on a bare array, `response.length` exists, is a
+  number, and is the size of the page rather than of the population — and what the
+  response knew about itself lived in headers, which the cheap call drops. That is not a
+  theory about how the five defects happened; the MCP server held two builders and a
+  client method whose only job was to fold an array and its truncation header back into
+  one object, because an agent cannot use a list that will not say whether it is
+  complete.
+
+  On the envelope, `response.length` is `undefined` and `response.map` throws. Both are
+  loud where a short count is silent. `total` says how many there are and `totalExact`
+  says whether that is a count or a floor, so a caller is never left to assume the
+  flattering one: the instances listing is exact where a maintained counter answers the
+  query (one definition's live or finished half, the engine's live half) and a floor
+  where none does (both halves of the whole engine, or a filter to one element).
+  `items` is never `null`, so an empty listing does not need a guard.
+
+  The uncapped listings — `/api/v1/processes`, `/api/v1/users`, and the per-instance
+  sub-resources such as `…/instances/{key}/jobs` — still answer with arrays, because
+  their length *is* their population. A fourth guard in
+  `api/pagecount_internal_test.go` now asks each capped listing over HTTP and refuses a
+  body that is an array or that cannot say whether the cap bit, so the two sets cannot
+  quietly drift; a fifth reads the published Postman collection, which nothing else here
+  runs and which people copy from. The Console's audit log, which had no browser test at
+  all, gets one — a windowed log now says how many changes there are rather than
+  rendering the window as the whole history.
+
+  Tests in `worker/` and `conformance/` read these listings too, and were converted with
+  everything else. The conformance gallery page is generated from a template in
+  `conformance/gallery_test.go`; run `go test ./conformance -update` after touching it.
+  The Postman collection and its README walkthrough were updated as well — that `curl`
+  line is meant to be copied, and it was teaching `json.load(…)[0]["key"]`. The Golden
+  Path now asserts the envelope rather than only the status code.
+  (ADR-0378)
 
 - **The info panel is reachable from every column of the catalogue, not only from
   services.** This was not a missing feature but an inconsistency inside one page.

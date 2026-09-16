@@ -289,10 +289,11 @@ async function ensureDeployed(){
 // are index-backed instead: ?process= reads one definition's own index, newest first,
 // and /instances/search?q=<key> is a point read of one instance, live or finished.
 async function instancesOfProcess(defKey){
-  return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
+  const page = await api("GET",`/instances?process=${defKey}`);
+  return ((page||{}).items||[]).filter(i=>i.processDefKey===defKey);
 }
 async function readInstance(key){
-  return (await api("GET",`/instances/search?q=${key}`)).find(i=>i.key===key) || null;
+  return (((await api("GET",`/instances/search?q=${key}`))||{}).items||[]).find(i=>i.key===key) || null;
 }
 
 // 2) START — hand Atlas the cart as instance variables. The create response does
@@ -323,7 +324,7 @@ async function refresh(){
     // people's.
     readInstance(instanceKey),
   ]);
-  const open = tasks.filter(t=>t.processInstanceKey===instanceKey);
+  const open = (((tasks)||{}).items||[]).filter(t=>t.processInstanceKey===instanceKey);
   renderLive(vars, open, inst);
   if (inst && inst.state !== "active"){ clearInterval(polling); polling=null; }
 }

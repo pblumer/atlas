@@ -111,7 +111,7 @@ func floodDefinition(t *testing.T, ts *httptest.Server, defKey uint64, n int) in
 		Key           uint64 `json:"key"`
 		ProcessDefKey uint64 `json:"processDefKey"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	parked := 0
@@ -266,7 +266,7 @@ func TestSingleInstanceOverlayCountsPastItsDetailPage(t *testing.T) {
 		Key                uint64 `json:"key"`
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 120 {
