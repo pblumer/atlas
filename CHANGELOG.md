@@ -159,6 +159,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Editing a product in the Console silently cleared five of its fields.** Saving a
+  product replaces it — the record that arrives is the record that is stored — and the
+  catalogue's product form does not render every field a product has. It has no control
+  for variants, for the orderable window, for the search keywords, for the groups
+  eligible to receive the product, or for the ceiling on how long the right may last.
+  It built its body out of the controls it does have, so correcting a price cleared all
+  five, and moved the creation date to today.
+
+  Nothing said so, which is what made it worth finding rather than merely fixing: the
+  save succeeded, the page reloaded, and everything the form shows looked right. The
+  fields it dropped are exactly the ones it never displays, so the damage was invisible
+  on the screen that caused it and turned up later — in a portal that stopped offering
+  a product to the group that was eligible for it, or a search that stopped finding one
+  by the word everybody uses.
+
+  The form now starts from the stored product and lays its own fields over it. Texts
+  are merged the same way and for the same reason one level down: a product is shared
+  between catalogues, the form renders one box per language *this* catalogue declares,
+  and a text in a language it does not declare belongs to a catalogue that does.
+  Emptying a box that is rendered still clears that text.
+
+  It also carries the product's `revision` now, so a colleague's edit in between is
+  refused rather than overwritten. A person has no revision to state, so the refusal is
+  translated where it is shown: nothing was saved, the page shows the other version,
+  open the product again and reapply the change.
+
 - **A JavaScript script task could not start under the strict sandbox.** Node's bundled
   OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
   profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with
