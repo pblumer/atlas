@@ -4,13 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Deciders:** Patrick Blumer
-- **Open question:** whether an «enumeration»'s literals should be shaded the same way.
-  The facts exist — a write moves an object into a state, and a lifecycle may take its
-  states from an enumeration ([ADR-0306](0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
-  — but they are recorded against the *object's* class, so reaching the literal means
-  resolving every lifecycle that borrows from it. This record shades attributes only and
-  leaves literals unmarked rather than guessing.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -74,6 +67,17 @@ What the shading is entitled to say, exactly:
   inventing one would turn every rename into a scare.
 - **Members are shaded only where a process uses the class.** Member-level facts come only
   from process writes; where there are none, there is nothing member-level to say.
+- **A literal is read through the lifecycles that borrow it.** No process ever names a
+  literal; what a process names is a *state* — a `<dataState>` on a write — and a literal
+  becomes a state only where some class's lifecycle takes its states from that enumeration
+  ([ADR-0306](0306-a-lifecycle-may-take-its-states-from-an-enumeration.md)). A literal's
+  rename *is* that state's rename, which is what makes the two the same string rather than
+  two that happen to match. So the question is asked of the classes that borrow it: bright
+  where a deployed process moves such a class into that state, faint where none does.
+  Asked, though, only where it can be answered — an enumeration nothing borrows from, or one
+  whose borrowers no deployed process uses, is left unshaded, because "no process reaches
+  this state" and "no process was in a position to" are different claims and fading a state
+  machine nothing drives would report the second as the first.
 
 The rule lives with the host, not in the drawing: the canvas is handed the class ids to
 fade and the member names to bring forward, the same way it is handed the shapes a
@@ -93,8 +97,7 @@ of its own.
   processes — does not change while somebody is drawing, but a deployment during a long
   editing session is not picked up until the toggle is pressed again.
 - **Follow-ups / risks to watch:** if the reading ever gains member-level facts from reads,
-  "faint" gets stronger and the legend has to stop hedging. Literals are the open question
-  above.
+  "faint" gets stronger and the legend has to stop hedging.
 
 ## Pros and cons of the options
 

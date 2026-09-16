@@ -126,9 +126,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
           <p class="im-usage-legend" id="im-usage-legend" hidden>
             <b>Shaded by use.</b> A member some deployed process names is bright; one none of
             them names is faint. A read takes the whole object, so faint means
-            <i>nothing names it</i> — not that nothing uses it. A faint class is used by no
-            deployed process and nowhere in this model either. Classes and members this
-            reading has never seen — anything renamed or added since — are left as they were.
+            <i>nothing names it</i> — not that nothing uses it. A literal is read through the
+            lifecycles that borrow it: bright where a process moves something into that state.
+            A faint class is used by no deployed process and nowhere in this model either.
+            Anything this reading has never seen — renamed or added since — is left as it was.
           </p>
         </div>
         <div class="im-canvas" id="im-lc-canvas" hidden>
@@ -430,8 +431,9 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   // since, or renamed a moment ago — is left alone rather than faded: the reading made
   // no claim about that name, and inventing one would turn every rename into a scare.
   // Members are shaded only where a process uses the class, since member-level facts
-  // come only from process writes. An «enumeration»'s literals are never shaded: what a
-  // write names is a member, and a literal is not one.
+  // come only from process writes — and an «enumeration»'s literals only where some
+  // class borrows them as its states and a process reaches one, which is the only way a
+  // literal is ever named.
   //
   // Asked once, when it is switched on. What it reads is deployed processes, which do
   // not change while somebody is drawing; what does change is the document, and the
@@ -448,7 +450,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   // usageMarks turns that reading into what the drawing shows. The rule stays here, the
   // way the relationship matrix does: the canvas is told which classes and which member
-  // names are used, and draws that.
+  // names are used, and draws that. A class with no entry is a class the reading has
+  // nothing to say about, and its members are drawn unshaded.
   function usageMarks() {
     if (!state.usage) return undefined;
     const unused = [];
@@ -457,12 +460,45 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       const u = state.usage.get(c.name);
       if (!u) continue;
       if (!u.processes && !u.modelUses) { unused.push(c.id); continue; }
-      if (!u.processes || c.stereotype === "enumeration") continue;
-      const named = new Set(u.attributes || []);
-      for (const k of c.identity || []) named.add(k);
-      members[c.id] = [...named];
+      const named = c.stereotype === "enumeration" ? reachedLiterals(c) : namedMembers(c, u);
+      if (named) members[c.id] = named;
     }
     return { unused, members };
+  }
+
+  // The members of a class that deployed processes name.
+  function namedMembers(c, u) {
+    if (!u.processes) return null;
+    const named = new Set(u.attributes || []);
+    for (const k of c.identity || []) named.add(k);
+    return [...named];
+  }
+
+  // The literals of an «enumeration» that deployed processes reach — the same reading,
+  // one step across.
+  //
+  // No process ever names a literal. What a process names is a *state*: a `<dataState>`
+  // on a write, matched to a lifecycle state by that string. A literal becomes a state
+  // when a class's lifecycle takes its states from this enumeration (ADR-0306), and a
+  // literal's rename *is* that state's rename — which is what makes matching by name
+  // right here rather than merely convenient.
+  //
+  // So the question "is this literal used" is asked of the classes that borrow it, and
+  // it is only worth asking where at least one of them is used by a deployed process.
+  // Where none is — or where nothing borrows from this enumeration at all — the answer
+  // is null and no literal is shaded, because "no process reaches this state" and "no
+  // process was in a position to" are different claims and only one of them is true.
+  function reachedLiterals(e) {
+    const reached = new Set();
+    let asked = false;
+    for (const c of state.model.classes || []) {
+      if (!c.lifecycle || c.lifecycle.statesFrom !== e.name) continue;
+      const u = state.usage.get(c.name);
+      if (!u || !u.processes) continue;
+      asked = true;
+      for (const st of u.states || []) reached.add(st);
+    }
+    return asked ? [...reached] : null;
   }
 
   const usageBtn = root.querySelector('[data-tool="usage"]');

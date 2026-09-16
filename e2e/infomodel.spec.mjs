@@ -388,7 +388,7 @@ test.describe("shaded by where it is used", () => {
   // as this one's.
   const CATALOG = [
     { modelId: "m1", name: "Customer", usage: { processes: 1, modelUses: 1, attributes: [] } },
-    { modelId: "m1", name: "Order", usage: { processes: 2, modelUses: 1, attributes: ["total"] } },
+    { modelId: "m1", name: "Order", usage: { processes: 2, modelUses: 1, attributes: ["total"], states: ["approved"] } },
     { modelId: "m1", name: "Address", usage: { processes: 0, modelUses: 0 } },
     { modelId: "m1", name: "OrderStatus", usage: { processes: 0, modelUses: 2 } },
     { modelId: "m2", name: "Order", usage: { processes: 9, modelUses: 9, attributes: ["placedOn"] } },
@@ -451,6 +451,47 @@ test.describe("shaded by where it is used", () => {
     await expect(page.locator(".uml-attr.used")).toHaveCount(0);
     await expect(page.locator(".uml-attr.unused")).toHaveCount(0);
     await expect(page.locator(".uml-class.unused")).toHaveCount(0);
+  });
+
+  // A literal is the one member no process ever names. What a process names is a
+  // *state* — a `<dataState>` on a write — and a literal becomes a state only where some
+  // class's lifecycle takes its states from this enumeration (ADR-0306). So the question
+  // is asked of the classes that borrow it, and only where one of them is used at all.
+  test("a literal is read through the lifecycles that borrow it, and not before", async ({ page }) => {
+    await shade(page);
+    const status = box(page, "OrderStatus");
+    // Nothing borrows these literals yet. "No process reaches this state" and "no
+    // process was in a position to" are different claims, and only the second is true.
+    await expect(status.locator(".uml-literal.used")).toHaveCount(0);
+    await expect(status.locator(".uml-literal.unused")).toHaveCount(0);
+
+    await box(page, "Order").click();
+    await page.locator("#im-c-lcfrom").selectOption("OrderStatus");
+
+    // Now they are Order's states, and Order is written into `approved` by a deployed
+    // process. `draft` is reached by nothing deployed — which is a claim the reading can
+    // now make, because it could see the borrower.
+    await expect(status.locator(".uml-literal.used")).toHaveText(["approved"]);
+    await expect(status.locator(".uml-literal.unused")).toHaveText(["draft"]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("a borrower no deployed process uses leaves the literals unshaded", async ({ page }) => {
+    await shade(page, [
+      { modelId: "m1", name: "Order", usage: { processes: 0, modelUses: 1 } },
+      { modelId: "m1", name: "OrderStatus", usage: { processes: 0, modelUses: 2 } },
+    ]);
+    await box(page, "Order").click();
+    await page.locator("#im-c-lcfrom").selectOption("OrderStatus");
+
+    // The lifecycle is there and the reading saw the class; what it did not see is any
+    // process moving an Order anywhere. Fading both literals would report a state
+    // machine nothing drives as a state machine nothing reaches.
+    const status = box(page, "OrderStatus");
+    await expect(status.locator(".uml-literal")).toHaveCount(2);
+    await expect(status.locator(".uml-literal.unused")).toHaveCount(0);
+    await expect(status.locator(".uml-literal.used")).toHaveCount(0);
+    expect(page.__errors).toEqual([]);
   });
 
   test("a reading that cannot be had shades nothing and says so", async ({ page }) => {
