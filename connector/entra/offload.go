@@ -3,6 +3,7 @@ package entra
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -52,6 +53,11 @@ type Op struct {
 	// ("/users/delta", "/groups/delta").
 	IsDelta  bool
 	ListPath string
+	// IsBinary marks an operation whose answer is bytes rather than an object: a
+	// photo (ADR-draft-directory-photo). Like a listing it needs a result variable —
+	// a read that discards what it read is one nothing asked for — and unlike every
+	// other operation, a 404 is an answer rather than a failure.
+	IsBinary bool
 	// Describes the operation for an error message.
 	Label string
 }
@@ -62,8 +68,13 @@ type Op struct {
 // delete, and members and owners), and the Team a group backs (create, add members and
 // owners, create a channel, archive) — plus licence and directory-role assignment.
 var Ops = map[string]Op{
-	"create-user":         {Method: "POST", NeedsAttributes: true, Label: "create a user"},
-	"get-user":            {Method: "GET", NeedsUser: true, Label: "read a user"},
+	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
+	"get-user":    {Method: "GET", NeedsUser: true, Label: "read a user"},
+	// The default size rather than one of Graph's fixed ones (/photos/240x240/$value
+	// and the rest): a fixed size a tenant does not hold answers 404, which is
+	// indistinguishable here from "this person has no photo", so asking for one
+	// would trade a bounded cost for a silent wrong answer.
+	"get-user-photo":      {Method: "GET", NeedsUser: true, IsBinary: true, Label: "read a user's photo"},
 	"list-users":          {Method: "GET", IsList: true, ListPath: "/users", Label: "list users"},
 	"delta-users":         {Method: "GET", IsDelta: true, ListPath: "/users/delta", Label: "delta-query users"},
 	"update-user":         {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "update a user"},
@@ -309,10 +320,31 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if spec.IsBinary {
+		return map[string]any{j.ResultVariable: photoResult(res)}, nil
+	}
 	if j.ResultVariable == "" {
 		return nil, nil
 	}
 	return map[string]any{j.ResultVariable: res}, nil
+}
+
+// photoResult turns what a binary read returned into what a process variable can
+// hold (ADR-draft-directory-photo).
+//
+// Base64, because a process variable is FEEL and FEEL has no bytes. An object with
+// the type beside the data, because nothing downstream can store an image it
+// cannot name — and nil where there is no photo, so a model asks `= foto != null`
+// rather than comparing an empty string to decide whether a person has one.
+func photoResult(res any) any {
+	b, ok := res.(Binary)
+	if !ok || len(b.Data) == 0 {
+		return nil
+	}
+	return map[string]any{
+		"contentType": b.ContentType,
+		"data":        base64.StdEncoding.EncodeToString(b.Data),
+	}
 }
 
 // nextLinkKey is the member Graph puts the continuation URL in. It is an OData
@@ -551,7 +583,7 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
 	}
-	if (spec.IsList || spec.IsDelta) && strings.TrimSpace(j.ResultVariable) == "" {
+	if (spec.IsList || spec.IsDelta || spec.IsBinary) && strings.TrimSpace(j.ResultVariable) == "" {
 		return fmt.Errorf("entra: operation %q resolved no resultVariable; a directory read that discards its result is one nothing asked for", j.Operation)
 	}
 	return nil
@@ -578,7 +610,7 @@ func request(j Job, spec Op, baseURL string) Request {
 	user := url.PathEscape(strings.TrimSpace(j.UserID))
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
 	base := strings.TrimRight(baseURL, "/")
-	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced()}
+	r := Request{Method: spec.Method, Eventual: spec.IsList && j.advanced(), Binary: spec.IsBinary}
 	if spec.IsList {
 		r.Path = listPath(j, spec.ListPath)
 		return r
@@ -598,6 +630,8 @@ func request(j Job, spec Op, baseURL string) Request {
 		r.Path, r.Body = "/users", j.Attributes
 	case "get-user", "delete-user":
 		r.Path = "/users/" + user
+	case "get-user-photo":
+		r.Path = "/users/" + user + "/photo/$value"
 	case "update-user":
 		r.Path, r.Body = "/users/"+user, j.Attributes
 	case "reset-password":

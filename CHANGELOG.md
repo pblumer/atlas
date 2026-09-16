@@ -135,6 +135,53 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A face can come from the directory, and it arrives the way every other directory
+  fact does.** A tenant that already holds a photo for everybody should not be asked
+  to collect them a second time. The constraint that shaped this is not about
+  pictures: **Atlas holds no tenant credential** and must not start holding one, so
+  the mirror *pulls* — a process reads Graph through the Entra worker and reports
+  what it read, and nothing in the server calls Graph.
+
+  The worker gained one operation, **`get-user-photo`**, and with it the ability to
+  read bytes at all: every Graph call Atlas had returned JSON, and a photo does not.
+  The change is one field on the request rather than a second method on the client,
+  because what differs is a property of *the request*. The result reaches a process
+  as `{contentType, data}` with the data base64 — a process variable is FEEL, and
+  FEEL has no bytes — and `null` where there is no photo, so a model asks whether
+  there is one instead of comparing an empty string.
+
+  **A 404 is an answer, not a failure**, and that is the one place in this worker
+  where a non-2xx is not an error. Graph answers 404 both for a person with no photo
+  and for an id that is not anybody's, and its error code distinguishing them is not
+  something to hang a directory run on. The trade is stated rather than hidden: a
+  mistyped id reads as "no photo", where the other way round every person without
+  one would fail a job — in a tenant where most have none, an incident queue nobody
+  can read. It is confined to binary requests and held by a test, because the day it
+  leaks into the JSON path is the day a failed directory read looks like an empty
+  one. A body past the limit is **refused rather than cut short**: the magic is at
+  the front, so half a JPEG passes every format check and is still broken.
+
+  The synchronisation message carries the pictures in a field of its own — not on the
+  user object, which is documented as one object from `/users/delta` and would have
+  been a small lie in the file where a reader most needs to know what came from
+  where. **Removal is explicit**, because the absence of an entry has to keep meaning
+  "not fetched": without a way to say "there is none", a photo deleted in the tenant
+  would stay on the account for ever.
+
+  **A mirror does not overwrite a choice.** A picture somebody uploaded is left where
+  it is, in both directions — the directory may replace or remove what the directory
+  gave, and neither what a person picked for themselves. The run counts how often it
+  stood back rather than writing a line per person; what is surprising, bytes that
+  are not a picture, is a note, and it never costs the account the rest of its page.
+
+  The account carries a **fingerprint** of its picture, and that is what keeps
+  "unchanged" true. The mirror decides an account unchanged by comparing the record
+  before and after; a photo that changed while the record did not would be planned as
+  unchanged and written anyway, which breaks the one rule that makes the reporting
+  mode worth reading — the plan says what the apply does. It also makes the write
+  idempotent, so a process that fetches photos every run does not report a change on
+  every account for ever.
+
 - **A person can have a face.** Atlas showed people as strings: an approval said
   `usr_4be5b4ad`, the portal's corner drew an empty circle, and a recipient picked
   out of the directory was a name in a list of names. That is fine while somebody

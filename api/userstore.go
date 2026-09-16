@@ -144,6 +144,17 @@ type User struct {
 	// there themselves.
 	AvatarSource string `json:"avatarSource,omitempty"`
 
+	// AvatarFingerprint is a digest of the stored picture's bytes, and it exists so
+	// that "unchanged" stays true (ADR-draft-directory-photo).
+	//
+	// The directory mirror decides an account unchanged by comparing the record
+	// before and after. A photo that changed while the record did not would be
+	// planned as unchanged and written anyway, which breaks the one rule that makes
+	// the reporting mode worth reading: the plan says what the apply does. With the
+	// digest on the record, a changed photo is a changed record — and the same
+	// photo arriving twice is not a write at all.
+	AvatarFingerprint string `json:"avatarFingerprint,omitempty"`
+
 	PasswordHash string `json:"passwordHash,omitempty"`
 	CreatedAt    int64  `json:"createdAt"`
 	UpdatedAt    int64  `json:"updatedAt"`

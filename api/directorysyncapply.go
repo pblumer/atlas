@@ -27,6 +27,22 @@ func (s *Server) applyDirectoryPlan(plan directoryPlan, msg directorySyncMessage
 		case dirUserUnchanged, dirUserRefuse:
 			continue
 		}
+		// The picture first, then the record, and the order is the whole of what this
+		// loop decides (ADR-draft-directory-photo). A failure between them leaves a
+		// picture no record points at, which the next run repairs through the
+		// fingerprint; the other order would leave a record claiming a picture that is
+		// not there, which nothing repairs because the record already agrees with
+		// itself.
+		switch {
+		case dec.PhotoClear:
+			if err := s.users.clearAvatar(dec.Record.ID); err != nil {
+				return fmt.Errorf("entra sync: remove the picture of %s: %w", dec.Record.ID, err)
+			}
+		case len(dec.Photo) > 0:
+			if err := s.users.saveAvatar(dec.Record.ID, dec.Photo, dec.PhotoType); err != nil {
+				return fmt.Errorf("entra sync: write the picture of %s: %w", dec.Record.ID, err)
+			}
+		}
 		if err := s.users.Save(dec.Record); err != nil {
 			return fmt.Errorf("entra sync: write account %s: %w", dec.Record.ID, err)
 		}

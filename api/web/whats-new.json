@@ -110,6 +110,24 @@
       }
     },
     {
+      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
+        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
+      },
+      "summary": {
+        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
+        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-person-can-have-a-face",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "The story asks to modify or delete positions directly.",
         "de": "The story asks to modify or delete positions directly."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-product-can-ask-the-orderer-for-what-its-name-does-not-say",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product can ask the orderer for what its name does not say.",
-        "de": "A product can ask the orderer for what its name does not say."
-      },
-      "summary": {
-        "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
-        "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
       },
       "link": {
         "label": "Changelog",

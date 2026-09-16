@@ -1,7 +1,7 @@
 # ADR-DRAFT: A picture of a person belongs to the account, in two provenances and one place
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-09-16
 - **Open question:** Whether a picture should ever be **derived** where none was
   given — initials on a coloured disc, the thing most products draw. It is not
@@ -97,8 +97,9 @@ Entra worker and reports it here. The worker gains one operation; the server gai
 nothing it did not already have.
 
 The cost is honest and worth stating: **the directory half is not in this
-change.** What is here is the store, the routes, the provenance and the surfaces.
-What follows is the worker operation and the carriage on the sync message.
+change.** What is here is the store, the routes, the provenance and the surfaces;
+the worker operation and the carriage on the sync message followed immediately
+after, in [ADR-draft-directory-photo].
 
 ### What this route refuses
 
