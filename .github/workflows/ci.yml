@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   # What kind of change is this? A pull request that only touches docs/ takes the
-  # `docs` job below instead of the heavy ones, because the race detector, the
+  # `docs` job below instead of the two heavy ones, because the race detector, the
   # coverage floor, the benchmark harness and a browser cannot be moved by a markdown
   # file — and a change of two lines in an ADR paid twenty-four minutes for them.
   #
@@ -67,34 +67,32 @@ jobs:
             echo "Only docs/ changed: the docs job."
           fi
 
-  # The suite is run twice on every pull request — once under the race detector and
-  # once under the coverage instrumentation — because the two answer different
-  # questions and neither substitutes for the other. They used to run one after the
-  # other in a single job, which made the job's wall clock their *sum*, and that sum
-  # outgrew three successive caps in one afternoon (30, then 45, then 60).
-  #
-  # The measurements that ended the argument, two runs of the same tree an hour apart
-  # on 2026-09-16:
-  #
-  #   fast runner  1m15 setup + 24m24 race + 4m03 cover + ~1m bench ≈ 31m
-  #   slow runner  ~3m   setup + 36m   race + ~9m  cover + ~2m bench ≈ 50m
-  #
-  # The api package alone took 1352s on one and 2048s on the other. A 51% spread on
-  # identical code is not something a ceiling can be tuned against: whatever number
-  # covers the slow draw is dead time on the fast one, and whatever number is honest
-  # about the fast one cancels the slow one with every check green.
-  #
-  # So they are two jobs, and the wall clock is the *larger* of the two rather than
-  # the sum — about 39 minutes instead of 50 on the slow draw, and both caps are
-  # comfortably above what their own step needs. That is what a cap is for: ending a
-  # wedged test, not setting a deadline the suite has to beat.
   check:
     name: build · vet · fmt · race
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
-    # Setup plus the race pass: ~27m on a fast runner, ~39m on a slow one. 50 leaves
-    # room for a draw worse than any observed and still ends a hang inside the hour.
+    # Same reasoning as the e2e job below: the expensive failure mode is the hang,
+    # not the error, and this job had no ceiling at all — a wedged test would have
+    # held a runner for the six-hour default. The race step's per-package timeout is
+    # raised below, so the cap is what keeps one stuck package from turning into
+    # hours of runner time.
+    #
+    # The number below is a ceiling on a hang, and it stopped being one twice. First
+    # at 30 with the coverage floor sequenced behind the race step: 24m30s plus
+    # 3m59s of a 30-minute budget is not a ceiling but a coin toss decided by runner
+    # variance, which is how it began cancelling healthy runs (main, run 2160). The
+    # floor is a *second full test run* that shares nothing with this one but the
+    # checkout, so it is its own job — keep it that way: if a step here ever needs a
+    # second full pass over the tree, it wants a job, not a bigger number.
+    #
+    # Thirty was still too close afterwards. Two runs of the same tree an hour apart
+    # on 2026-09-16 drew runners 51% apart — the api package alone took 1352s
+    # (22m32) on one and 2048s (34m08) on the other — so this job measured ~27m on
+    # the fast draw and ~39m on the slow one. Fifty is above a draw worse than any
+    # observed and still ends a hang inside the hour. A cap sized to the fast draw
+    # cancels the slow one with every check green, which reports as a defect and is
+    # nothing but the clock.
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
@@ -119,9 +117,9 @@ jobs:
       #     node did not start inside the strict sandbox: exit status 13
       #     OpenSSL configuration error: ... Permission denied ... /etc/ssl/openssl.cnf
       #
-      # That failure is real and predates this file's split — removing the step is what
-      # exposes it, not what causes it. It is tracked separately; restoring the step
-      # restores the environment CI has always had rather than hiding anything, and the
+      # That failure is real and predates this file — removing the step is what exposes
+      # it, not what causes it. It is tracked separately; keeping the step is the
+      # environment CI has always had rather than a way of hiding anything, and the
       # test's own skip accounting is what keeps that honest.
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -165,12 +163,11 @@ jobs:
       # test file. Nothing is skipped or quarantined by raising it — every test still
       # runs, and a real hang still ends the job well inside the job's cap above.
       #
-      # 50m, raised from 25m: api took 1352s (22m32) on one runner on 2026-09-16 and
-      # 2048s (34m08) on another an hour later, with the same tree. The old 25m
-      # ceiling would have failed the second of those outright, and 40m left it 15%
-      # of headroom against 51% observed spread. A per-package timeout a passing
-      # package reaches by drawing a slow runner is not a guard against hangs; it is
-      # a coin toss that reports as a defect.
+      # 50m, raised from 25m, for the reason the cap above moved: api took 1352s on
+      # one runner on 2026-09-16 and 2048s on another an hour later with the same
+      # tree, and 25m would have failed the second of those outright. A per-package
+      # timeout a passing package reaches by drawing a slow runner is not a guard
+      # against hangs; it is a coin toss that reports as a defect.
       #
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
@@ -186,25 +183,48 @@ jobs:
           ATLAS_SANDBOX_E2E: required
         run: go test -race -timeout=50m ./...
 
-  # The second pass over the suite: the coverage floor, plus the benchmark harness
-  # smoke that used to sit behind it. It runs beside the race job rather than after
-  # it — see the note above that job for why.
+      # Smoke-run the benchmark harness (programme B): one iteration each, just to
+      # prove it compiles and executes. No performance threshold is enforced on PR
+      # CI — see benchmarks/README.md for how to produce a real, machine-labelled
+      # baseline.
+      - name: Benchmark harness smoke
+        run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
+
+  # The repository-wide statement floor (ADR-0018), in its own job.
   #
-  # It sets up Node for the reason spelled out at that job's own Node step: this pass
-  # runs the whole suite too, so connector/script's sandbox test runs here as well and
-  # needs the toolcache node rather than the image's. It does *not* carry
-  # ATLAS_SANDBOX_E2E, which is deliberate and matches what the race step did before
-  # the split: that variable turns one skip into a required run, and having it in one
-  # of the two passes is enough.
+  # It is here rather than beside the race step because it is a **second full run of
+  # the test suite** — instrumented for coverage instead of for races — and the two
+  # share nothing but the checkout. Sequenced behind the race detector it added four
+  # minutes to a job that already needed twenty-five, and the pair outgrew the cap
+  # that was supposed to catch a hang; run side by side they each finish in a
+  # fraction of their own ceiling, and neither can cancel the other by being slow.
+  #
+  # It buys wall-clock too, which is the smaller reason and worth naming as the
+  # smaller one: the two runs now overlap rather than queue. What it does not change
+  # is what a contributor does — `make check` is still build, vet, fmt, race and
+  # cover in sequence, because one laptop has one set of cores and splitting there
+  # would buy nothing.
+  #
+  # Because it is a full run of the suite it sets up Node for the reason spelled out
+  # at the race job's own Node step: connector/script's sandbox test runs here too
+  # and starts whichever node it finds. It does *not* carry ATLAS_SANDBOX_E2E, which
+  # is deliberate and matches what the single job did before the split — that
+  # variable turns one skip into a required run, and one of the two passes is enough.
   cover:
-    name: cover · bench
+    name: cover · statement floor
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
-    # The coverage pass is the same tests without the race detector: ~4m on a fast
-    # runner, ~9m on a slow one, and the benchmark smoke adds one to two. 30 is
-    # generous on purpose — it is a hang guard, and the whole point of splitting was
-    # to stop these numbers being deadlines.
+    # Thirty, and not the twenty this job was first given, because twenty was a
+    # guess and the first run measured it: 11m04s — with the api package cut short
+    # at Go's default per-package limit rather than finishing. The real figure is
+    # that plus however long api needs beyond ten minutes, which nothing has
+    # measured yet.
+    #
+    # So this is a hang-catcher with headroom it can be shown to have, rather than a
+    # number sized to a figure nobody has. That is the whole lesson of the split
+    # above: a cap that sits a minute above the real duration is not a ceiling, it
+    # is a coin toss. Tighten it when there are green runs to tighten it against.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -223,13 +243,6 @@ jobs:
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 94
-
-      # Smoke-run the benchmark harness (programme B): one iteration each, just to
-      # prove it compiles and executes. No performance threshold is enforced on PR
-      # CI — see benchmarks/README.md for how to produce a real, machine-labelled
-      # baseline.
-      - name: Benchmark harness smoke
-        run: go test -run=^$ -bench=. -benchtime=1x ./benchmarks/
 
   # Everything a docs-only change can actually break, and nothing else.
   #

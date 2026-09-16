@@ -1,7 +1,8 @@
 // Package mcp is Atlas's Model Context Protocol server: it lets an AI agent
 // drive a running Atlas server through tools — deploy a BPMN model, manage
 // design-time projects and artifacts, start an instance, complete human tasks,
-// and inspect live runtime state.
+// inspect live runtime state, and maintain the self-service portal's product
+// catalogue.
 //
 // # Shape: an adapter over the HTTP API, on two transports
 //
@@ -58,6 +59,16 @@
 // --auth, and is needed there: unlike the HTTP transport, which forwards each
 // request's own caller, a stdio adapter is one process with one identity for its
 // whole life. Without it every tool call comes back 401.
+//
+// # What a stdio adapter cannot reach
+//
+// An API token carries roles, and no API token carries productmanager: minting is
+// admin-only and tokenRoles hands an admin minter the legacy set, which ADR-0315
+// deliberately kept the role out of so that no account is granted catalogue
+// control by an upgrade. So over stdio the catalogue tools read and do not write,
+// and a write answers 403. Over the HTTP transport, where the caller's own
+// credential is forwarded, a signed-in product manager reaches exactly their own
+// catalogues. See ADR-0376.
 //
 // For stdio, diagnostics go to stderr; stdout carries protocol traffic only.
 package mcp

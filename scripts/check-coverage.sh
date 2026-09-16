@@ -22,14 +22,24 @@ mkdir -p "${outdir}"
 # main packages.
 mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./... | grep .)
 
-# -timeout for the same reason the race command in AGENTS.md carries one: Go's default
-# is ten minutes *per package*, and the api package alone needs more than that under
-# the coverage instrumentation on a slow runner. It was measured at 198s and 202s on
-# two runners and at over 600s on a third, where it failed with `panic: test timed out`
-# — reported as a defect in whichever test happened to be running, which is the one
-# thing a timeout must not do. This line was missing while the coverage step still sat
-# behind the race step in one job, because the job's own cap ended the run first and
-# the default never got the chance to fire.
+# -timeout for the same reason `make race` and AGENTS.md carry it, and it is not
+# optional here either: the api package runs for minutes on its own, coverage
+# counters add to that, and Go's default per-package limit is ten. Without the flag
+# the run ends in `panic: test timed out` naming whichever test happened to be
+# executing — a failure that reads like a defect in unrelated code and is nothing
+# but the clock. It cost one red job to learn that twice: `FAIL api 600.194s`, the
+# default to the millisecond.
+#
+# This was survivable while the floor ran in the same job as the race step, which
+# left the build cache warm; on its own runner it was not. That the flag's absence
+# only mattered under one arrangement is the argument for the flag, not against it.
+#
+# The number matches the race command's for the same reason it was raised there:
+# api under instrumentation was measured at 198s and 202s on two runners and at
+# over 600s on a third, and runners of the same tree have been seen 51% apart. A
+# per-package timeout a passing package reaches by drawing a slow runner is not a
+# guard against hangs; it is a coin toss that reports as a defect. Change one of
+# the three (here, `make race`, AGENTS.md) and change the rest.
 go test -covermode=atomic -timeout=50m -coverprofile="${profile}" "${pkgs[@]}"
 
 # The total is computed from the profile rather than read off `go tool cover -func`,

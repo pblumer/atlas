@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "An API-only guard. The product write gained an optional revision precondition so a caller that is not a form cannot overwrite a concurrent edit — which is what made the catalogue safe to expose over MCP, and is announced there. The Console builds its body from form fields, sends no revision and behaves exactly as before, so a reader of the Console has nothing to do with the news. It returns here if the screen ever grows the conflict it would report."
+}
