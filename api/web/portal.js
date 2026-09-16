@@ -1780,7 +1780,7 @@ function renderNav() {
 }
 
 // avatarNode is the circle in the corner, and the picture once there is one
-// (ADR-draft-user-avatar).
+// (ADR-0368).
 //
 // The picture replaces the circle only after its bytes have arrived. Rendering an
 // <img> straight away would put a browser's broken-image icon in the corner for

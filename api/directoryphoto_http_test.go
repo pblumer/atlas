@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// A picture from the directory, end to end (ADR-draft-directory-photo).
+// A picture from the directory, end to end (ADR-0367).
 //
 // The decider's own rules are held next door. What this holds is the half that
 // only a real run can show: the bytes reach the account's file, the ordinary

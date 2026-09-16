@@ -396,9 +396,15 @@ const OVERVIEW = {
     { elementInstanceKey: "1002", processInstanceKey: "900002", processDefKey: 6, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5002", raisedAt: 2, message: "boom" },
     { elementInstanceKey: "1003", processInstanceKey: "900003", processDefKey: 7, elementId: "Task_pay", elementIndex: 2, type: "job", jobKey: "5003", raisedAt: 3, message: "boom" },
   ],
+  // Each search row carries its own incident count, counted by the server through that
+  // instance's element index. It used to be inferred in the browser from a page of the
+  // server's whole incident list, which made a row past that page render as plainly
+  // "active" (ADR-0365) — so the mock answers the way
+  // the server does: 900001 is parked, 900009 is genuinely not, and the zero is as much
+  // a statement as the one.
   search: [
-    { key: 900001, processId: "zahlung", processDefKey: 6, version: 1, state: "active", createdAt: 1, variables: [{ name: "betrag", value: "42", kind: "number" }] },
-    { key: 900009, processId: "zahlung", processDefKey: 7, version: 2, state: "active", createdAt: 2, variables: [{ name: "betrag", value: "42", kind: "number" }] },
+    { key: 900001, processId: "zahlung", processDefKey: 6, version: 1, state: "active", createdAt: 1, incidents: 1, variables: [{ name: "betrag", value: "42", kind: "number" }] },
+    { key: 900009, processId: "zahlung", processDefKey: 7, version: 2, state: "active", createdAt: 2, incidents: 0, variables: [{ name: "betrag", value: "42", kind: "number" }] },
   ],
 };
 

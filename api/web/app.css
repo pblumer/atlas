@@ -2805,6 +2805,14 @@ tr[hidden] { display: none; }
   text-decoration-style: dotted;
 }
 .dmn-warn button:hover { text-decoration-style: solid; }
+/* The repair one finding can offer. It is a button, not a link: the finding text next
+   to it navigates, and this one changes the model — two different acts should not look
+   like one. */
+.dmn-warn button.dmn-warn-fix {
+  text-decoration: none; border: 1px solid currentColor; border-radius: 4px;
+  padding: 0 7px; margin-left: 4px; font-size: 11.5px; white-space: nowrap;
+}
+.dmn-warn button.dmn-warn-fix:hover { background: var(--surface); }
 
 /* Collapsible property groups (Camunda-style tidy panel). A generic groupify
    turns each <h3> section in the properties panel into a header that toggles its
@@ -5529,6 +5537,8 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
    drawn, what it cannot land on is the more urgent thing to see. */
 .uml-class .uml-attr.used .uml-attr-name { font-weight: 600; }
 .uml-class .uml-attr.unused { opacity: .42; }
+.uml-class .uml-literal.used { font-weight: 600; }
+.uml-class .uml-literal.unused { opacity: .42; }
 .uml-class.unused { opacity: .55; }
 .uml-class .uml-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
 .uml-class .uml-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }

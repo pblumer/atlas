@@ -122,10 +122,22 @@ export function incidentRowHTML(inc, { label = "", showInstance = true } = {}) {
 // incidentPanelHTML wraps those rows in the block that leads the live view's
 // variables panel and the replay's Details tab: a count, a way to the full list, and
 // every incident in view.
-export function incidentPanelHTML(list, { truncated = false, rows = "" } = {}) {
-  if (!list.length) return "";
+export function incidentPanelHTML(list, { truncated = false, rows = "", total = null } = {}) {
+  // How many are parked, which is not how many rows there are: under a flood the rows
+  // are a page
+  // (ADR-0366). Callers that know the real total pass it; the ones whose list
+  // *is* everything (the replay's details) leave it out and the two coincide.
+  const parked = Number.isFinite(total) ? total : list.length;
+  if (!parked) return "";
+  // Rows past the page are not lost, they are elsewhere — so the header says how many
+  // of them this block is showing, and the link beside it is where the rest live. An
+  // operator reading "5 452 incidents" over a hundred rows must not conclude the other
+  // 5 352 went unrecorded.
+  const shown = list.length < parked
+    ? `<span class="muted" style="font-size:11px">&middot; showing ${list.length}, resolve the rest in <a href="#/operations/incidents">Incidents</a></span>`
+    : "";
   return `<div class="vp-incidents">
-    <div class="vp-head"><span class="vp-title">&#9888; ${list.length}${truncated ? "+" : ""} incident${list.length === 1 ? "" : "s"}</span>
+    <div class="vp-head"><span class="vp-title">&#9888; ${parked}${truncated && list.length >= parked ? "+" : ""} incident${parked === 1 ? "" : "s"}</span> ${shown}
       <span class="vp-actions"><a class="replay-link" href="#/operations/incidents" title="Every unresolved incident on this server">All incidents &#8599;</a></span></div>
     ${rows}</div>`;
 }

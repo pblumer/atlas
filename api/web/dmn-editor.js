@@ -303,7 +303,7 @@ function hintFor(active) {
 // the graph. Clicking a finding goes to its element — back to the graph first when
 // the author is elsewhere, since pointing at a shape in a view that does not draw it
 // would point at nothing.
-function attachDmnWarnings(modeler, strip) {
+function attachDmnWarnings(modeler, strip, toast) {
   let findings = [];
   let badges = []; // overlay ids on the graph, ours to reap
   let bound = null; // the viewer whose changes we are listening to
@@ -356,9 +356,31 @@ function attachDmnWarnings(modeler, strip) {
       strip.innerHTML = "";
       return;
     }
-    strip.innerHTML = `<ul>${findings.map((f) =>
-      `<li><button type="button" data-el="${esc(f.element)}" data-rule="${esc(f.rule)}">${esc(f.message)}</button></li>`
-    ).join("")}</ul>`;
+    strip.innerHTML = `<ul>${findings.map((f) => {
+      const fix = f.fix
+        ? ` <button type="button" class="dmn-warn-fix" data-fix-source="${esc(f.fix.source)}"`
+          + ` data-fix-target="${esc(f.fix.target)}">${esc(f.fix.label)}</button>`
+        : "";
+      return `<li><button type="button" data-el="${esc(f.element)}" data-rule="${esc(f.rule)}">`
+        + `${esc(f.message)}</button>${fix}</li>`;
+    }).join("")}</ul>`;
+  };
+
+  // focusCanvas puts keyboard focus on the drawing. dmn-js binds its keyboard to the
+  // canvas SVG, so anything done from outside the canvas — a button in the strip below
+  // it — has to hand focus back, or the author's next shortcut goes to the body.
+  // canvas.focus() is the supported way and older diagram-js builds lack it, so the SVG
+  // is focused directly when it is not there.
+  const focusCanvas = (viewer) => {
+    try {
+      const canvas = viewer.get("canvas");
+      if (typeof canvas.focus === "function") {
+        canvas.focus();
+        return;
+      }
+      const svg = canvas.getContainer().querySelector("svg");
+      svg && svg.focus && svg.focus();
+    } catch { /* a view without a canvas: nothing to focus */ }
   };
 
   const showInGraph = (id) => {
@@ -369,10 +391,82 @@ function attachDmnWarnings(modeler, strip) {
       if (!el) return;
       viewer.get("selection").select(el);
       try { viewer.get("canvas").scrollToElement(el); } catch { /* older diagram-js */ }
+      focusCanvas(viewer);
     } catch { /* the view changed under the click */ }
   };
 
+  // applyFix draws the missing requirement: the author's edit, made for them. It is
+  // worth offering only because it is as easy to take back as to make, and it leaves
+  // both ways of doing that within reach — the new connection is *selected*, which puts
+  // its context pad (a single entry, the bin) under the author's eyes, and the canvas is
+  // *focused*, which is what makes Ctrl+Z work.
+  //
+  // The focus is the part that is not obvious. dmn-js binds its keyboard to the canvas
+  // SVG, not to the document, so a shortcut reaches the model only while that SVG has
+  // focus. A button in the strip below the canvas does not give it focus — the click
+  // leaves it on the body — so without this the author's first Ctrl+Z would go nowhere
+  // and they would reasonably conclude the edit could not be undone.
+  //
+  // dmn-js's own rules decide whether the connection may be made and what it is; the
+  // answer for a knowledge model reaching a decision is a knowledge requirement. Asking
+  // rather than constructing the element means this cannot force a connection dmn-js
+  // would refuse from the palette — and when it does refuse, the author is told why
+  // instead of watching a button do nothing.
+  const applyFix = (sourceId, targetId) => {
+    const viewer = viewerNow();
+    if (!viewer) return;
+    let registry, modeling, rules;
+    try {
+      registry = viewer.get("elementRegistry");
+      modeling = viewer.get("modeling");
+      rules = viewer.get("rules");
+    } catch {
+      toast && toast("This view cannot draw the requirement.", "err");
+      return;
+    }
+    const source = registry.get(sourceId);
+    const target = registry.get(targetId);
+    if (!source || !target) {
+      toast && toast("One of the two elements is not on the requirements graph, so the "
+        + "requirement cannot be drawn here.", "err");
+      return;
+    }
+    if (!rules.allowed("connection.create", { source, target })) {
+      toast && toast("dmn-js will not connect these two, so this has to be drawn by hand.", "err");
+      return;
+    }
+    let connection;
+    try {
+      connection = modeling.connect(source, target);
+    } catch (err) {
+      toast && toast("Could not draw the requirement: " + err.message, "err");
+      return;
+    }
+    // Selecting it is half the feature: it is both where the author looks to see what
+    // was drawn, and the gesture that offers to remove it again.
+    try { viewer.get("selection").select(connection); } catch { /* drawn either way */ }
+    focusCanvas(viewer);
+    toast && toast("Knowledge requirement drawn — Ctrl+Z takes it back, or the bin in its "
+      + "context pad.", "ok");
+  };
+
   const onClick = (e) => {
+    const fixBtn = e.target.closest("button[data-fix-source]");
+    if (fixBtn) {
+      const source = fixBtn.getAttribute("data-fix-source");
+      const target = fixBtn.getAttribute("data-fix-target");
+      // The repair is a drawing, so it happens on the drawing: from a decision's own
+      // view the graph is opened first, which is also where the author then sees it.
+      const view = modeler.getActiveView();
+      if (view && view.type === "drd") {
+        applyFix(source, target);
+        return;
+      }
+      const graph = modeler.getViews().find((v) => v.type === "drd");
+      if (!graph) return;
+      modeler.open(graph).then(() => applyFix(source, target)).catch(() => { /* nothing to draw on */ });
+      return;
+    }
     const btn = e.target.closest("button[data-el]");
     if (!btn) return;
     const id = btn.getAttribute("data-el");
@@ -769,7 +863,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     await modeler.importXML(xml);
     if (gen !== generation) return;
     renderViews();
-    dropWarnings = attachDmnWarnings(modeler, warnEl);
+    dropWarnings = attachDmnWarnings(modeler, warnEl, toast);
     patchCaretFields();
     // The status line says what a *save* just did, so it starts empty and is cleared
     // by anything else. That a draft is open is a standing fact rather than an event,
