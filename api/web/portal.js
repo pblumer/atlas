@@ -85,6 +85,22 @@ const STRINGS = {
     'for.hits': 'Personen',
     'for.none': 'Niemand mit diesem Namen. Kennung, Benutzername oder Mailadresse geht auch.',
     'for.clear': 'Wieder für mich selbst bestellen',
+    'cfg.title': 'Angaben zu dieser Leistung',
+    'cfg.loading': 'Formular wird geladen …',
+    'cfg.failed': 'Dieses Formular lässt sich nicht laden. Bestellen ist weiterhin möglich; die Angaben fehlen dann.',
+    'cfg.invalid': 'Einige Angaben sind noch nicht vollständig. Bitte korrigieren Sie sie vor dem Bestellen.',
+    'line.withdraw': 'Position zurückziehen',
+    'line.withdrawing': 'Wird zurückgezogen …',
+    'line.details': 'Angaben ändern',
+    'line.save': 'Angaben speichern',
+    'line.saving': 'Wird gespeichert …',
+    'line.close': 'Abbrechen',
+    'line.amended': 'Korrigiert',
+    'line.amendedFrom': 'vorher',
+    'info.price': 'Kosten',
+    'price.none': 'Der Katalog nennt keine Kosten.',
+    'cat.none': 'Ohne Kategorie',
+    'cat.all': 'Alle',
     'tbl.company': 'Unternehmen',
     'tbl.person': 'Person',
     'tbl.placed': 'bestellt',
@@ -96,7 +112,6 @@ const STRINGS = {
     'tbl.searchOrder': 'Auftrag suchen',
     'tbl.searchStatus': 'Status suchen',
     'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
-    'note.noCategories': 'Atlas kennt heute keine Kategorie über dem Bundle. Diese Spalte zeigt deshalb den Katalog selbst; sie wird zur Kategorie, sobald der Katalog eine führt.',
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
     'info.title': 'Angaben zum Service',
@@ -187,6 +202,22 @@ const STRINGS = {
     'for.hits': 'people',
     'for.none': 'Nobody by that name. An id, username or mail address works too.',
     'for.clear': 'Order for myself again',
+    'cfg.title': 'Details for this service',
+    'cfg.loading': 'Loading the form …',
+    'cfg.failed': 'This form cannot be loaded. Ordering still works; the details will be missing.',
+    'cfg.invalid': 'Some details are not complete yet. Please correct them before ordering.',
+    'line.withdraw': 'Withdraw this position',
+    'line.withdrawing': 'Withdrawing …',
+    'line.details': 'Change the details',
+    'line.save': 'Save the details',
+    'line.saving': 'Saving …',
+    'line.close': 'Cancel',
+    'line.amended': 'Corrected',
+    'line.amendedFrom': 'was',
+    'info.price': 'Cost',
+    'price.none': 'The catalogue names no cost.',
+    'cat.none': 'Without a category',
+    'cat.all': 'All',
     'tbl.company': 'Organisation',
     'tbl.person': 'Person',
     'tbl.placed': 'ordered',
@@ -198,7 +229,6 @@ const STRINGS = {
     'tbl.searchOrder': 'Search order',
     'tbl.searchStatus': 'Search status',
     'tbl.noMatch': 'No order matches the search.',
-    'note.noCategories': 'Atlas has no category level above the bundle today. This column therefore shows the catalogue itself; it becomes the category as soon as a catalogue carries one.',
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
     'info.title': 'About this service',
@@ -379,6 +409,11 @@ const state = {
   // Lovelace" and the order carries the principal id, because a display name is
   // not something the server can resolve and an id is not something a person can
   // read (ADR-0356).
+  // category narrows the cascade to one heading
+  // (ADR-0360). Three values, because
+  // there are three questions: null is every heading, '' is the bucket for
+  // products that carry none, and anything else is that heading.
+  category: null,
   forWhomLabel: '',
   // people is the principals directory, users only, loaded once and only for a
   // caller who may order in somebody else's name. It is the list every member and
@@ -390,6 +425,19 @@ const state = {
   // not use is worse than no field, because it looks like a permission that
   // failed rather than one they never had.
   mayOrderForOthers: false,
+  // config holds what somebody filled in per product, keyed by item id and then by
+  // the form's own field key (ADR-0358).
+  //
+  // Kept in state rather than read off the page at the last moment, because the
+  // basket is redrawn whenever anything on it changes and a rendered form does not
+  // survive its container being replaced. What was typed is captured back into here
+  // before each redraw and handed to the form again as its prefill.
+  config: {},
+  // configError names the product whose form is not valid yet, empty for none.
+  configError: '',
+  // editing names the position whose details are open for correction, as
+  // "<orderId>|<itemId>", empty for none (ADR-0359).
+  editing: '',
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -419,8 +467,37 @@ function partsOf(release, id) {
 }
 
 // levelsOf returns the four columns for where the cascade currently stands.
+// categoriesOf is every heading this release's top-level products carry, plus the
+// bucket for the ones that carry none (ADR-0360).
+//
+// Sorted alphabetically, because a heading is a string and there is nothing on it
+// to sort by. An ordering of its own would be the entity the decision refused,
+// arriving through the back door.
+//
+// The bucket is always last and only appears when something is in it: a heading
+// for nothing is a heading nobody can use, and hiding uncategorised products
+// entirely would lose them.
+function categoriesOf(release) {
+  const named = new Set();
+  let uncategorised = false;
+  for (const it of products(release)) {
+    const c = (it.category || '').trim();
+    if (c) named.add(c); else uncategorised = true;
+  }
+  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
+  if (uncategorised) out.push('');
+  return out;
+}
+
+// inCategory reports whether a top-level product belongs under the heading now
+// selected. null is every heading, which is what the portal opens on.
+function inCategory(item) {
+  if (state.category === null) return true;
+  return (item.category || '').trim() === state.category;
+}
+
 function levelsOf(release) {
-  const bundles = products(release).map((i) => ({ id: i.id, integral: false }));
+  const bundles = products(release).filter(inCategory).map((i) => ({ id: i.id, integral: false }));
   const offerings = state.bundle ? partsOf(release, state.bundle) : [];
   const services = state.offering ? partsOf(release, state.offering) : [];
   return { bundles, offerings, services };
@@ -546,10 +623,38 @@ function itemsById(release) {
 // guess at rules the release carries.
 async function order() {
   if (!state.basket.size) return;
+  // Every form is asked whether it is complete before anything is sent. The form
+  // runtime decides that, against the schema's own rules — refusing here rather
+  // than letting the order go keeps what was typed on screen instead of losing it
+  // to a round trip that fails somewhere else.
+  state.configError = '';
+  for (const [itemID, form] of mounted) {
+    let errors;
+    try { ({ errors } = form.submit()); } catch { continue; }
+    if (errors && Object.keys(errors).length) {
+      state.configError = itemID;
+      render();
+      return;
+    }
+  }
+  harvest();
+
   state.busy = true;
   state.error = '';
   render();
   try {
+    const rel = state.release || {};
+    const chosen = [];
+    const seen = new Set();
+    const add = (id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      chosen.push({ id });
+      for (const p of (rel.includes || {})[id] || []) add(p);
+    };
+    for (const id of state.basket) add(id);
+    const config = answersFor(rel, chosen);
+
     await api('/api/v1/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -557,10 +662,13 @@ async function order() {
         releaseId: state.release.id,
         items: [...state.basket],
         ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
+        ...(Object.keys(config).length ? { config } : {}),
       }),
     });
     state.basket.clear();
     state.chosen.clear();
+    state.config = {};
+    state.configError = '';
     state.inBasket = false;
     state.view = 'orders';
     await load();
@@ -673,6 +781,12 @@ function infoPanel(item) {
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
+    // As the catalogue wrote it, never reformatted. A price here is a sentence
+    // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
+    // parsed it into a number would be inventing the money model the catalogue
+    // deliberately does not have (ADR-0361).
+    el('p', { class: 'muted' },
+      `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
     el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
     el('p', { class: 'muted' },
       `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
@@ -841,13 +955,32 @@ function renderCatalogue() {
   const { bundles, offerings, services } = levelsOf(rel);
   const name = (id) => textOf((by[id] || {}).texts, id);
 
-  // Kategorie. One row, the catalogue itself, and a note saying why — see the
-  // comment on levelsOf: there is no category in the data, and filling the
-  // column with a guess would be the one thing worse than leaving it honest.
+  // Kategorie. The headings the products themselves carry
+  // (ADR-0360), with "all" above them so
+  // the column is never a dead end. It was the catalogue's own name and a note
+  // saying the data had no category; it has one now.
+  const headings = categoriesOf(rel);
+  const pick = (value) => () => {
+    state.category = state.category === value ? null : value;
+    // A heading the open bundle does not belong to would leave two columns showing
+    // something the first no longer selects.
+    state.bundle = '';
+    state.offering = '';
+    state.info = '';
+    render();
+  };
   const category = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.category')),
-    cell({ text: textOf(state.catalog.texts, state.catalog.id), open: true }),
-    el('p', { class: 'note' }, t('note.noCategories')));
+    cell({
+      text: t('cat.all'),
+      open: state.category === null,
+      onOpen: () => { state.category = null; state.bundle = ''; state.offering = ''; render(); },
+    }),
+    headings.map((h) => cell({
+      text: h || t('cat.none'),
+      open: state.category === h,
+      onOpen: pick(h),
+    })));
 
   const bundleCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.bundle')),
@@ -952,7 +1085,7 @@ function renderBasket() {
   };
   for (const id of state.basket) add(id, false);
 
-  return el('div', { class: 'cascade' },
+  const cols = el('div', { class: 'cascade' },
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.bundle')),
       shown.filter((x) => !x.integral).map((x) => cell({
@@ -971,6 +1104,129 @@ function renderBasket() {
         trail: infoButton(x.id),
       }))),
     el('div', { class: 'col' }), el('div', { class: 'col' }));
+
+  // The forms below the basket rather than beside each row: a form is taller than a
+  // row and an integral part asks its own questions, so a column that had to hold
+  // both would put the cascade and a text field in the same width.
+  const asking = shown.filter((x) => configFormOf(rel, x.id));
+
+  return el('div', {},
+    cols,
+    asking.length
+      ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },
+        el('h3', {}, `${t('cfg.title')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
+        state.configError === x.id
+          ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+        el('div', {
+          'data-configkey': x.id,
+          'data-formid': configFormOf(rel, x.id),
+        }, el('p', { class: 'note' }, t('cfg.loading'))))))
+      : null);
+}
+
+// --- What a product needs that its name does not say -------------------------
+//
+// A laptop is not fully described by being a laptop: somebody has to say which
+// cost centre it is booked to. A product names an Atlas form, and the basket is
+// where it is filled in — the last screen before an order exists, and the one that
+// already shows what will actually be provisioned
+// (ADR-0358).
+//
+// The form is rendered by Atlas's own form runtime, the one the Tasks app and the
+// incident repair already use. Nothing here interprets a field: which questions
+// there are, which are required and what counts as valid are the form's own
+// statements, and a second copy of those rules would be wrong the first time
+// somebody edits the form.
+
+// amendKey is the bucket a correction's answers live in. It is deliberately not
+// the item id: the same product can be in the basket and in an order at once, and
+// one set of answers for both would put what somebody is correcting into what they
+// are about to buy.
+function amendKey(orderID, itemID) { return `amend:${orderID}:${itemID}`; }
+
+// mounted holds the live form instances by mount key. A render replaces their
+// containers, so each one is read back, destroyed and built again.
+const mounted = new Map();
+// schemas caches a form definition per id, so redrawing the basket does not refetch
+// what has not changed.
+const schemas = new Map();
+
+// harvest reads what is currently typed into every mounted form back into state.
+// Called before the page is redrawn, because a form does not survive its container
+// being replaced and whatever was typed would go with it.
+function harvest() {
+  for (const [itemID, form] of mounted) {
+    try {
+      const { data } = form.submit();
+      state.config[itemID] = { ...(data || {}) };
+    } catch { /* a form that cannot be read keeps the last values we had */ }
+  }
+}
+
+// configFormOf names the form a product asks for, or '' for one that asks nothing.
+function configFormOf(rel, id) {
+  const it = itemsById(rel)[id];
+  return (it && it.configForm) || '';
+}
+
+// answersFor is what will be sent: only the products actually in the basket, and
+// only those that ask something. The server refuses anything else, and it is right
+// to — but a page that sent it anyway would turn a stale basket into a refused
+// order the person cannot explain.
+function answersFor(rel, shown) {
+  const out = {};
+  for (const x of shown) {
+    if (!configFormOf(rel, x.id)) continue;
+    const given = state.config[x.id];
+    if (given && Object.keys(given).length) out[x.id] = given;
+  }
+  return out;
+}
+
+// mountConfigForms builds every form the basket is showing. Asynchronous because
+// the form runtime is a lazy import; the container says so meanwhile.
+async function mountConfigForms() {
+  const hosts = [...document.querySelectorAll('[data-configkey]')];
+  for (const [, form] of mounted) {
+    try { form.destroy(); } catch { /* already gone with its container */ }
+  }
+  mounted.clear();
+  if (!hosts.length) return;
+
+  let Form;
+  try {
+    const mod = await import('./formviewer.js');
+    mod.ensureFormStyles();
+    ({ Form } = await mod.loadFormViewer());
+  } catch {
+    for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
+    return;
+  }
+
+  for (const host of hosts) {
+    const itemID = host.dataset.configkey;
+    const formID = host.dataset.formid;
+    try {
+      if (!schemas.has(formID)) {
+        const def = await api(`/api/v1/forms/${encodeURIComponent(formID)}`);
+        schemas.set(formID, def && def.schema);
+      }
+      const schema = schemas.get(formID);
+      if (!schema) throw new Error('no schema');
+      const form = new Form({ container: host });
+      // Handed back what was typed before the last redraw, which is what makes the
+      // basket survivable: adding a second product must not empty the first's form.
+      await form.importSchema(
+        typeof schema === 'string' ? JSON.parse(schema) : schema,
+        state.config[itemID] || {});
+      mounted.set(itemID, form);
+    } catch {
+      // A form id that no longer resolves is a stale binding in the catalogue, not
+      // a broken basket. Say so and leave the order possible: refusing it here
+      // would let one edited form stop every order for that product.
+      paint(host, el('p', { class: 'note' }, t('cfg.failed')));
+    }
+  }
 }
 
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
@@ -1109,7 +1365,13 @@ let orderRowsNode = null;
 
 function repaintOrderRows() {
   if (!orderRowsNode) return;
+  // The same two steps render() takes, and for the same reason: a correction's
+  // form is inside these rows, it does not survive its container being replaced,
+  // and typing in a column filter must not empty a cost centre somebody is in the
+  // middle of fixing.
+  harvest();
   orderRowsNode.replaceChildren(...orderRowBodies());
+  mountConfigForms();
 }
 
 function orderRowBodies() {
@@ -1143,13 +1405,149 @@ function orderRowBodies() {
         l.blockedBy && l.blockedBy.length
           ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
         l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
+        amendedNote(l),
         returnable(o, l)
           ? el('button', {
             class: 'linkish',
             disabled: state.busy,
             onclick: () => giveBack(o, l),
           }, state.busy ? t('portal.returning') : t('portal.return'))
-          : null))))));
+          : null,
+        withdrawable(l)
+          ? el('button', {
+            class: 'linkish',
+            disabled: state.busy,
+            onclick: () => withdrawLine(o, l),
+          }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
+          : null,
+        correctable(l)
+          ? el('button', {
+            class: 'linkish',
+            disabled: state.busy,
+            onclick: () => {
+              harvest();
+              state.editing = state.editing === `${o.id}|${l.itemId}` ? '' : `${o.id}|${l.itemId}`;
+              state.configError = '';
+              render();
+            },
+          }, t('line.details'))
+          : null,
+        detailsPanel(o, l)))))));
+}
+
+// --- Changing one position ---------------------------------------------------
+//
+// Two acts, and the page keeps them as far apart as the server does
+// (ADR-0359). Withdrawing a
+// position takes it back; correcting the details changes what was recorded about
+// it and never what it is. Ordering something else is neither, and the page does
+// not pretend otherwise: give it back and order the other thing.
+
+// withdrawable mirrors the server's rule so the page does not offer what it will
+// refuse. Two things: the status must be one that has not happened yet, and the
+// position must not be one its whole always carries — the basket does not let
+// anybody deselect such a part, and offering it here would be the same rule
+// holding in one screen and not the other.
+function withdrawable(line) {
+  return !line.integral && (line.status === 'pending' || line.status === 'blocked');
+}
+
+// correctable mirrors the other half. A position that asks for no details has none
+// to correct; one being provisioned now is refused until its process has finished;
+// a closed one delivered nothing under these details.
+function correctable(line) {
+  if (!line.configForm) return false;
+  return ['pending', 'blocked', 'done', 'returning', 'returnFailed'].includes(line.status);
+}
+
+async function withdrawLine(order, line) {
+  state.busy = true;
+  state.error = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/cancel`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await load();
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function saveDetails(order, line) {
+  const key = amendKey(order.id, line.itemId);
+  const form = mounted.get(key);
+  if (form) {
+    const { errors } = form.submit();
+    if (errors && Object.keys(errors).length) {
+      state.configError = key;
+      render();
+      return;
+    }
+  }
+  harvest();
+  state.busy = true;
+  state.error = '';
+  state.configError = '';
+  render();
+  try {
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/details`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: state.config[key] || {} }),
+      });
+    state.editing = '';
+    delete state.config[key];
+    await load();
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+// detailsPanel is the correction, open under the position it belongs to.
+function detailsPanel(order, line) {
+  const key = amendKey(order.id, line.itemId);
+  if (state.editing !== `${order.id}|${line.itemId}`) return null;
+  // Seeded from what the order carries, so the form opens on what was answered
+  // rather than empty — a correction is an edit, not a second filling-in.
+  if (!state.config[key]) state.config[key] = { ...(line.config || {}) };
+  return el('div', { class: 'card cfg', style: 'margin-top:8px' },
+    state.configError === key ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+    el('div', { 'data-configkey': key, 'data-formid': line.configForm },
+      el('p', { class: 'note' }, t('cfg.loading'))),
+    el('div', { class: 'row', style: 'margin-top:10px' },
+      el('button', {
+        class: 'primary', disabled: state.busy,
+        onclick: () => saveDetails(order, line),
+      }, state.busy ? t('line.saving') : t('line.save')),
+      el('button', {
+        disabled: state.busy,
+        onclick: () => {
+          harvest();
+          state.editing = '';
+          state.configError = '';
+          delete state.config[key];
+          render();
+        },
+      }, t('line.close'))));
+}
+
+// amendedNote says a position's details were corrected after it was held, and what
+// they said before. Kept on the page rather than only in the record: somebody
+// reading their own order should not have to ask why the cost centre changed.
+function amendedNote(line) {
+  const list = line.amendments || [];
+  if (!list.length) return null;
+  const was = list.map((a) => Object.entries(a.was || {})
+    .map(([k, v]) => `${k}: ${v}`).join(', ')).filter(Boolean);
+  return el('span', { class: 'muted' },
+    ` (${t('line.amended')}${was.length ? `, ${t('line.amendedFrom')} ${was.join(' / ')}` : ''})`);
 }
 
 function renderOrders() {
@@ -1259,7 +1657,12 @@ function renderServices() {
     el('div', { class: 'cascade' },
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.category')),
-        cell({ text: state.catalog ? textOf(state.catalog.texts, state.catalog.id) : '' })),
+        // The headings of what this person actually holds, not the whole
+        // catalogue's: this screen answers "what do I have", and a heading with
+        // nothing of theirs under it would be a column of other people's shelves.
+        [...new Set(ids.map((id) => ((by[id] || {}).category || '').trim()))]
+          .sort((a, b) => a.localeCompare(b, locale))
+          .map((c) => cell({ text: c || t('cat.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.bundle')),
         at(0).map(row)),
@@ -1494,6 +1897,9 @@ function paint(root, ...children) {
 function render() {
   const root = document.getElementById('app');
   if (!root) return;
+  // Before the page is replaced, not after: a mounted form goes with its container,
+  // and what was typed into it would go too.
+  harvest();
   paint(root,
     el('header', {},
       el('div', { class: 'brand' },
@@ -1518,6 +1924,10 @@ function render() {
         : state.view === 'services' ? 'nav.services' : 'nav.catalog')),
     currentView(),
     renderActions());
+  // After the page exists. Fire and forget: the containers say they are loading
+  // until this finishes, and a failure to load the runtime leaves a sentence rather
+  // than an empty box.
+  mountConfigForms();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

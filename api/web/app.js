@@ -12,6 +12,7 @@ import {
 import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { copyText } from "./clipboard.js";
+import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
 // has to agree on what the markup means — and on the escaping that keeps it inert.
@@ -1657,7 +1658,13 @@ async function viewConsoleBackup() {
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error((data && data.error) || res.statusText);
         status.textContent = onOk(data || {});
-        toast("Restore complete", "ok");
+        // A restore that held records back is not a restore that succeeded quietly:
+        // the records it declined are the operator's next decision, so the toast says
+        // so rather than going green over a partial result
+        // (ADR-0357).
+        const held = (data && data.skipped) || 0;
+        toast(held ? `Restored, but ${held} deployed definition(s) were not taken` : "Restore complete",
+          held ? "warn" : "ok");
       } catch (e) {
         status.textContent = "Restore failed: " + (e && e.message || e);
         toast("Restore failed", "error");
@@ -1667,8 +1674,8 @@ async function viewConsoleBackup() {
 
   wireRestore(
     "restore-file", "restore-btn", "restore-status", "/api/v1/restore",
-    "Restore from this file? Artifacts sharing an id will be overwritten.",
-    (d) => `Restored ${d.restored || 0} file(s).` + (d.restartRequired ? " Restart the server to activate restored deployments." : ""),
+    "Restore from this file? Artifacts sharing an id will be overwritten. Deployed definitions whose key is already in use here are NOT taken — a key belongs to the installation that issued it.",
+    (d) => restoreSummary(d),
   );
   wireRestore(
     "restore-full-file", "restore-full-btn", "restore-full-status", "/api/v1/restore/full",

@@ -14,6 +14,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
 
 // The order API area (ADR-0147).
@@ -68,6 +69,11 @@ type Service struct {
 	// independent: being the audience for a catalogue says nothing about whose name
 	// an order may carry.
 	mayOrderForOthers func(*httpapi.Principal) bool
+	// Limits are the resource budgets this service enforces. Set after
+	// construction, like every other per-area service's, so that the constructor
+	// does not grow a thirteenth positional argument for a value the server hands
+	// to all of them the same way.
+	Limits limits.Limits
 	// wake tells the fulfilment process that an order moved. The variables it
 	// carries are the message's start variables, which is how the orchestrator
 	// learns anything beyond the order id it correlates on.
@@ -137,6 +143,16 @@ func New(loop *runloop.Loop, store *Store, now func() int64,
 		grant: grant, revoke: revoke, held: held}
 }
 
+// budgets is the effective budget set: the server's where it set one, the defaults
+// otherwise, so a service built in a test bounds what a service built by the server
+// bounds.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
+}
+
 func newID(prefix string) (string, error) {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
@@ -153,6 +169,14 @@ type placeReq struct {
 	// Recipient is who the products are for, defaulting to the orderer. They
 	// differ when an integration manager orders for somebody assigned to them.
 	Recipient string `json:"recipient,omitempty"`
+	// Config carries the answers to each product's configuration form, keyed by
+	// item id and then by the form's own field key
+	// (ADR-0358).
+	//
+	// Keyed by item rather than flat because two products in one basket legitimately
+	// ask the same question — two laptops, two cost centres — and a flat map would
+	// silently keep one answer.
+	Config map[string]map[string]string `json:"config,omitempty"`
 }
 
 // HandlePlace places an order against one release.
@@ -263,6 +287,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		empty  bool
 		clash  *conflict
 		barred *ineligible
+		stray  string
 		opErr  error
 	)
 	s.loop.Do(func() {
@@ -290,10 +315,16 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		if barred = ineligibleIn(rel, ordered, recipientGroups); barred != nil {
 			return
 		}
+		// And that the answers belong to this basket. Checked here because it needs
+		// the expanded list: an integral part is ordered without being asked for,
+		// and it may perfectly well carry a form of its own.
+		if stray = s.strayAnswers(rel, ordered, req.Config); stray != "" {
+			return
+		}
 
 		out = Order{
 			ID: id, ReleaseID: rel.ID, Orderer: p.UserID, Recipient: recipient,
-			Lines:     linesFor(rel, ordered, has),
+			Lines:     linesFor(rel, ordered, has, req.Config),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
 			CreatedAt: s.now(),
@@ -309,6 +340,8 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
 	case clash != nil:
 		httpapi.Error(w, http.StatusConflict, clash.reason())
+	case stray != "":
+		httpapi.Error(w, http.StatusBadRequest, stray)
 	case barred != nil:
 		// 403 and not 409: a conflict is a state of the estate that could be
 		// resolved by giving something back, and this is a statement about who the
@@ -353,10 +386,27 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 // from silence, and a reader of the order months later can tell the two apart.
 // Skipped also counts as satisfied, so a line that requires this one is not left
 // waiting for something nobody is going to provision.
-func linesFor(rel catalog.Release, ordered []string, held map[string]bool) []Line {
+func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
+	config map[string]map[string]string) []Line {
 	bound := make(map[string]catalog.Item, len(rel.Items))
 	for _, it := range rel.Items {
 		bound[it.ID] = it
+	}
+	// Which of these arrived because something else in the order always carries it.
+	// Computed from the release rather than from what the caller asked for: the
+	// question is whether *this order* carries it as a part, and an id that was
+	// both chosen and carried is carried — the whole is in the basket either way.
+	inOrder := make(map[string]bool, len(ordered))
+	for _, id := range ordered {
+		inOrder[id] = true
+	}
+	carried := map[string]bool{}
+	for _, id := range ordered {
+		for _, part := range rel.Includes[id] {
+			if inOrder[part] {
+				carried[part] = true
+			}
+		}
 	}
 	out := make([]Line, len(ordered))
 	for i, id := range ordered {
@@ -369,10 +419,103 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool) []Lin
 			ProvisionProcess:   it.ProvisionProcess,
 			DeprovisionProcess: it.DeprovisionProcess,
 			MaxDays:            it.MaxDays,
+			// The form's id travels with the line beside the answers, so a reader of
+			// the order months later knows which set of questions these answers were
+			// given to — the answers alone are a map of keys nobody can interpret.
+			Price:      it.Price,
+			ConfigForm: it.ConfigForm,
+			Config:     copyAnswers(config[id]),
+			Integral:   carried[id],
+			Includes:   partsOf(rel, id, inOrder),
 			Approval: Approval{
 				Kind: string(it.Approval.Kind),
 				Ref:  it.Approval.Ref,
 			}}
+	}
+	return out
+}
+
+// strayAnswers reports why a basket's configuration answers do not belong to it,
+// or "" when they do (ADR-0358).
+//
+// Two refusals, both because the alternative is an order that silently loses
+// something somebody typed:
+//
+//   - answers for a product this order does not carry. Almost always a stale
+//     basket — the product was taken out and its answers were not — and the
+//     honest response is to say so rather than to drop them.
+//   - answers for a product that asks no questions. The catalogue does not know
+//     what to do with them and no process will read them, so storing them would
+//     put data in the record that nothing can interpret.
+//
+// It deliberately does *not* refuse a product whose form went unanswered. Whether
+// a field is required is the form's own statement, rendered by the form runtime,
+// and re-deciding it here would be a second copy of a rule that already exists —
+// wrong the first time somebody marks a field optional.
+func (s *Service) strayAnswers(rel catalog.Release, ordered []string,
+	config map[string]map[string]string) string {
+	if len(config) == 0 {
+		return ""
+	}
+	inBasket := make(map[string]catalog.Item, len(ordered))
+	for _, id := range ordered {
+		for _, it := range rel.Items {
+			if it.ID == id {
+				inBasket[id] = it
+				break
+			}
+		}
+	}
+	// Sorted, so the same bad basket is refused with the same sentence every time.
+	ids := make([]string, 0, len(config))
+	for id := range config {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if len(config[id]) == 0 {
+			continue
+		}
+		it, carried := inBasket[id]
+		switch {
+		case int32(len(config[id])) > s.budgets().OrderLineAnswers:
+			return fmt.Sprintf("%q carries %d details and no more than %d are kept for "+
+				"one line. A form with that many questions is a process wearing a form's "+
+				"clothes", id, len(config[id]), s.budgets().OrderLineAnswers)
+		case !carried:
+			return fmt.Sprintf("the order carries details for %q, which is not in it. "+
+				"Remove them or order the product they belong to", id)
+		case it.ConfigForm == "":
+			return fmt.Sprintf("%q asks for no details and the order carries some. "+
+				"Nothing would read them, so they are refused rather than stored", id)
+		}
+	}
+	return ""
+}
+
+// partsOf names the parts this line always carries that this order also has, so a
+// refusal can say what carries the part it will not take back. Sorted and copied,
+// because the release's slice must not reach into an order.
+func partsOf(rel catalog.Release, id string, inOrder map[string]bool) []string {
+	var out []string
+	for _, part := range rel.Includes[id] {
+		if inOrder[part] {
+			out = append(out, part)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// copyAnswers is the line's own map, so the request body cannot be edited into an
+// order after it has been written.
+func copyAnswers(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
 	}
 	return out
 }

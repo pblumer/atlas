@@ -442,6 +442,12 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0354](0354-approval-list-order.md) | An approval list is a work list, so it starts where nobody has looked | Accepted | Landed |
 | [0355](0355-catalogue-search.md) | A catalogue is searched over words it carries, in the browser, and a hit says where it lives | Accepted | Landed |
 | [0356](0356-person-picker.md) | The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake | Accepted | Landed |
+| [0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) | A portable backup does not overwrite another installation's identity | Accepted | Landed |
+| [0358](0358-order-line-configuration.md) | A product names one Atlas form, and the order line carries the answers | Accepted | Landed |
+| [0359](0359-amending-an-order-line.md) | A position can be withdrawn on its own and its details corrected; what is held is never changed in place | Accepted | Landed |
+| [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted | Landed |
+| [0361](0361-product-price.md) | A price is a sentence the catalogue writes, frozen like a rule and computed by nothing | Accepted | Landed |
+| [0362](0362-collective-approval.md) | One decision covers a request; the engine still completes one task per line | Accepted | Landed |
 
 ## The two states of a record
 

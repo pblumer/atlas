@@ -57,6 +57,12 @@ type approvalResp struct {
 	// approver deciding "vpn-zugang" is reading an id; this is the same product in
 	// words somebody chose.
 	Texts map[string]string `json:"texts,omitempty"`
+	// Price is what the order says this line costs, as the release froze it
+	// (ADR-0361). Read from the **line** and
+	// not from the release: the line is the order's own record of what was decided
+	// on, and it is what a reader sees years later. Empty where the catalogue says
+	// nothing about cost, which is the ordinary case.
+	Price string `json:"price,omitempty"`
 	// CatalogID, CatalogTexts and Languages place the order: which catalogue, called
 	// what, offered in which languages.
 	CatalogID    string            `json:"catalogId,omitempty"`
@@ -197,7 +203,7 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 
 	a := approvalResp{
 		Task: tr, OrderID: ord.ID, ItemID: line.ItemID, VariantID: vars["variantId"],
-		Recipient: vars["recipient"], Orderer: vars["orderer"],
+		Recipient: vars["recipient"], Orderer: vars["orderer"], Price: line.Price,
 	}
 	if as, ok := ord.AssignmentFor(line.ItemID); ok {
 		a.Assignment = &as

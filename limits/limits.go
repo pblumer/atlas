@@ -278,6 +278,16 @@ type Limits struct {
 	// star.
 	Favourites int32
 
+	// OrderLineAnswers is how many configuration answers one order line may carry
+	// (ADR-0358) — the fields of
+	// the form its product declares. Small, because a form somebody fills in while
+	// ordering a laptop is a handful of questions, and one with forty is a process
+	// wearing a form's clothes.
+	//
+	// It bounds a map that arrives whole in a request body, so without it one
+	// request can grow the order store without bound.
+	OrderLineAnswers int32
+
 	// PendingWorkItems is how many waiting items one person's answer lists
 	// (ADR-0343). Small, because the consumer is a reminder and a
 	// reminder listing two hundred lines is one nobody reads to the end. The counts
@@ -343,6 +353,7 @@ func Default() Limits {
 		ConflictReport:        500,
 		HistoryReport:         2000,
 		Favourites:            100,
+		OrderLineAnswers:      50,
 	}
 }
 
