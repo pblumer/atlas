@@ -105,16 +105,24 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      # Two things need this, and only one of them is obvious. The What's New
-      # generator below is plain ESM with no dependencies — that is the obvious one.
-      # The other is that connector/script's sandbox test starts *whichever* node is
-      # on PATH, and without this step that is the image's /usr/local/bin/node, which
-      # reads /etc/ssl/openssl.cnf on startup and so cannot run inside the strict
-      # sandbox at all (exit 13, "OpenSSL configuration error"). The toolcache node
-      # this installs does not, so the step is load-bearing for the test suite and not
-      # only for the generator. Removing it from a job that runs the suite fails that
-      # test — which is exactly what happened when the coverage pass was first split
-      # out into its own job without it.
+      # Not for the What's New generator — that moved to Go in e128d590 and needs no
+      # Node at all. This step stays because it decides *which* node is on PATH, and
+      # connector/script's sandbox test starts whichever one it finds.
+      #
+      # With this step that is the toolcache node, which sits outside the sandbox
+      # runtime roots, so the JavaScript case skips (documented in the test as "does
+      # not count as proof of anything") and Python carries the ATLAS_SANDBOX_E2E
+      # requirement. Without it the test finds the image's /usr/local/bin/node, which
+      # *is* inside those roots, so the case runs — and fails, because that node reads
+      # /etc/ssl/openssl.cnf on startup and the strict policy does not grant it:
+      #
+      #     node did not start inside the strict sandbox: exit status 13
+      #     OpenSSL configuration error: ... Permission denied ... /etc/ssl/openssl.cnf
+      #
+      # That failure is real and predates this file's split — removing the step is what
+      # exposes it, not what causes it. It is tracked separately; restoring the step
+      # restores the environment CI has always had rather than hiding anything, and the
+      # test's own skip accounting is what keeps that honest.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -142,7 +150,7 @@ jobs:
       # someone remembered. Re-run it here and fail on any diff.
       - name: What's New feed is up to date
         run: |
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
             echo "(Add curated DE/EN prose in scripts/whats-new/overrides/<id>.json — see scripts/whats-new/README.md.)"
@@ -229,7 +237,7 @@ jobs:
   # record *and* every ADR-NNNN citation in the repository, so a renamed record or a
   # mistyped citation fails here exactly as it would in the full job. The guards that
   # live elsewhere and read this tree are covered too — api/releasedkinds_internal_test.go
-  # parses each record's Status line, and scripts/whats-new/gen.mjs builds the feed's
+  # parses each record's Status line, and the generator in scripts/whats-new builds the feed's
   # links from the file names in docs/adr.
   #
   # So this runs the whole test suite rather than a list of test names: an enumeration
@@ -252,6 +260,9 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
+      # This job runs `go test ./...` as well, so it needs the same node placement the
+      # race job's own Node step explains — connector/script's sandbox test does not
+      # care which job it is running in.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -273,7 +284,7 @@ jobs:
 
       - name: What's New feed is up to date
         run: |
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
             git --no-pager diff -- api/web/whats-new.json

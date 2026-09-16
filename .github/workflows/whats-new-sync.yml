@@ -49,12 +49,10 @@ jobs:
         with:
           ref: main
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      # Only for the guard below, and only on the rare push that needs correcting —
-      # but the toolchain has to be in place before that is known.
+      # Go runs both halves now: the generator and the guard below. It used to be
+      # here only for the guard, on the rare push that needs correcting, with Node
+      # beside it for the generator — which was the last thing in this workflow that
+      # needed a second toolchain.
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
@@ -63,7 +61,7 @@ jobs:
       - name: Regenerate, verify, push
         run: |
           set -euo pipefail
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if git diff --quiet -- api/web/whats-new.json; then
             echo "The feed matches CHANGELOG.md. Nothing to do."
             exit 0
@@ -85,7 +83,7 @@ jobs:
           # then regenerate once more: the rebase may have brought a newer CHANGELOG.md
           # with it, and the feed has to match *that*.
           git pull --rebase origin main
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             git add api/web/whats-new.json
             git commit --amend --no-edit

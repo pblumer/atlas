@@ -14,6 +14,49 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The info panel is reachable from every column of the catalogue, not only from
+  services.** This was not a missing feature but an inconsistency inside one page.
+  The panel already worked for a bundle: picking one out of the search opens it, and
+  the "my services" view has carried the button on all four levels since it was
+  built. So a maintainer could write a price onto a bundle, see it under what they
+  hold, find it through the search — and not reach it from the column the bundle
+  lives in.
+
+  The bundle and offering columns now carry the same round **i** the service column
+  has. The panel itself needed no change, and a test says why: it reads what any
+  product carries — id, texts, price, approval, whether it repeats — and nothing in
+  it asks which level was clicked. A panel that branched on the level would be a
+  second thing to keep true, and the first place it would go wrong is the level
+  nobody clicks.
+
+- **The feed generator is Go, so the Go checks stop needing Node.** The Console's
+  "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
+  keeps the web UI buildless. CI regenerates it to check the commit is current — and
+  because the generator was a Node script, **four Go jobs installed a JavaScript
+  toolchain for that one step**: the main `build · vet · fmt · race · cover` job, the
+  docs job, the ADR-numbering workflow and the feed-sync workflow. ADR-0012's own
+  driver says a front-end toolchain must not become a prerequisite for building or
+  testing Atlas in CI; the feed generator was exactly that, in the job that decides
+  whether a change is good.
+
+  It is now `go run ./scripts/whats-new`, with the rules in a package beside it so the
+  guards call them directly instead of starting a process and reading what it printed.
+  Node remains in the two places where it is the technology rather than an accident:
+  the browser end-to-end suite and the screenshot capture.
+
+  **Byte-for-byte the same output, verified rather than assumed.** Two Go defaults
+  point the wrong way — its encoder escapes `<`, `>` and `&`, and it writes struct
+  fields in declaration order where `JSON.stringify` writes keys in insertion order —
+  so both were turned around and the field order was made the wire contract. Both
+  implementations were then run over the same tree with the entry cap lifted: all
+  **418** entries, every bullet in a 9,310-line changelog, came out identical.
+
+  **One rule is new, and it was earned.** The original ignored keys it did not know,
+  and an override carried `route` at the top level instead of inside `try` — so that
+  entry's "Try it" link did nothing and nothing anywhere said so. Unknown keys are now
+  refused, for the reason the orphan check already exists one level up: a key that
+  does nothing is indistinguishable from a key nobody wrote. The one file that had one
+  is corrected and gains the link it was always meant to have.
 - **The portal's corner names whoever the order is for, and the help moved to the end
   of the row.** The corner said **"mich selbst"** to everybody. That was true, and it
   was true of every reader alike, so it identified nobody — and on a screen where the
@@ -35,6 +78,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A JavaScript script task could not start under the strict sandbox.** Node's bundled
+  OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
+  profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with
+  an OpenSSL configuration error on any host that keeps its interpreter in one of the
+  sandbox's runtime roots, which is where an ordinary install puts it. The file is now
+  allowed for reading; `/etc/ssl` as a whole deliberately is not, because that directory
+  also holds `/etc/ssl/private`.
+
+  It went unnoticed because the proof that starts every installed interpreter under the
+  profile **skips** one it finds outside those roots — the honest answer on a host whose
+  toolchain unpacks runtimes elsewhere, and exactly what CI was while it installed node
+  into a toolchain cache. The JavaScript half of that proof had therefore never run. It
+  runs now, and a second guard reads the allowlist directly, so the rule no longer
+  depends on where a host happens to keep its binaries.
 - **A knowledge model's expression opened unstyled.** dmn-js does not show a business
   knowledge model in the literal-expression view a decision's expression opens in. A
   knowledge model is a FEEL *function* — it has an expression language, formal parameters
@@ -349,6 +406,19 @@ _Changed_ / _Removed_ for each version.
   missed warning rather than a false one. A warning an author learns to ignore is worse
   than no warning.
 
+  The second finding carries its repair: **Draw the requirement** draws the missing edge
+  from the knowledge model to the decision that calls it. It is offered only there, because
+  only there is the fix determinate — which decision ought to call an uninvoked knowledge
+  model is the author's to decide, and a button that guessed would be writing their model
+  for them. dmn-js's own rules are asked whether the connection may be made rather than the
+  element being constructed, so the button cannot force a connection the palette would
+  refuse, and says why when it is refused. What it draws is left selected *and* the canvas
+  is given focus, which is both ways of taking it back within reach: the connection's
+  context pad has one entry, the bin, and Ctrl+Z works. The focus is the part that is not
+  obvious — dmn-js binds its keyboard to the canvas SVG rather than to the document, so a
+  button in the strip below the canvas has to hand focus back, or the author's first
+  Ctrl+Z would go nowhere and they would reasonably conclude the edit could not be undone.
+  Clicking a finding to jump to its element hands focus back for the same reason.
 
 - **The class diagram can say which members anything actually uses.** Where a business object
   is used has been readable since **Data › Business objects** arrived — one class at a time,
@@ -7681,7 +7751,6 @@ rules run at deploy.
   described. Reading a draft lays out too, for the ones stored before this. A model that
   brings its own layout is stored byte for byte — generating over an author's
   arrangement would throw it away.
-
 
 
 - **A loop's badge counts its rounds, not its activations**: the engine activates a
