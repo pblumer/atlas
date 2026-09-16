@@ -79,7 +79,7 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 
 - **With authentication off, the portal could never find a catalogue at all.**
-  `--auth=false` is Atlas's documented development and demo mode. Which catalogue
+  Atlas's documented development and demo mode is `--auth=false`. Which catalogue
   somebody sees is resolved from the groups they carry — so with no principal there
   are no groups, `ReachedBy` answers false for every catalogue, and the mode's one
   screen said *"Ihnen ist kein Katalog zugeordnet"* to somebody there is no "you" to
