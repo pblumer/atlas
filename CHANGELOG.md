@@ -62,6 +62,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The info panel is reachable from every column of the catalogue, not only from
+  services.** This was not a missing feature but an inconsistency inside one page.
+  The panel already worked for a bundle: picking one out of the search opens it, and
+  the "my services" view has carried the button on all four levels since it was
+  built. So a maintainer could write a price onto a bundle, see it under what they
+  hold, find it through the search — and not reach it from the column the bundle
+  lives in.
+
+  The bundle and offering columns now carry the same round **i** the service column
+  has. The panel itself needed no change, and a test says why: it reads what any
+  product carries — id, texts, price, approval, whether it repeats — and nothing in
+  it asks which level was clicked. A panel that branched on the level would be a
+  second thing to keep true, and the first place it would go wrong is the level
+  nobody clicks.
+
 - **The coverage floor runs as its own CI job, so a healthy run stops being cancelled
   for being slow.** The main check job carried two full passes over the test suite in
   sequence: the race detector, and then the statement floor, which is the same suite
@@ -7759,7 +7774,6 @@ rules run at deploy.
   described. Reading a draft lays out too, for the ones stored before this. A model that
   brings its own layout is stored byte for byte — generating over an author's
   arrangement would throw it away.
-
 
 
 - **A loop's badge counts its rounds, not its activations**: the engine activates a

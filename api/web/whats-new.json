@@ -45,6 +45,24 @@
       }
     },
     {
+      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
+        "de": "The info panel is reachable from every column of the catalogue, not only from services."
+      },
+      "summary": {
+        "en": "This was not a missing feature but an inconsistency inside one page.",
+        "de": "This was not a missing feature but an inconsistency inside one page."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
       "version": "Unreleased",
       "date": null,
@@ -273,24 +291,6 @@
           "de": "Informationsmodell öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
-        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
-      },
-      "summary": {
-        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
-        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]
