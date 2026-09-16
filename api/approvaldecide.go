@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/state"
 )
 
-// Deciding a request rather than a line (ADR-draft-collective-approval).
+// Deciding a request rather than a line (ADR-0362).
 //
 // An approval in Atlas is one user task per order line, each in its own process
 // instance: the approval process is started multi-instance from the order's ready

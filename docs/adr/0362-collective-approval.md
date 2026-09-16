@@ -1,4 +1,4 @@
-# ADR-DRAFT: One decision covers a request; the engine still completes one task per line
+# ADR-0362: One decision covers a request; the engine still completes one task per line
 
 - **Status:** Accepted
 - **Implementation:** Landed

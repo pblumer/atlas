@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The approver's page decides a request, not a line (ADR-draft-collective-approval).
+// The approver's page decides a request, not a line (ADR-0362).
 //
 // The server half is held end to end in approvaldecide_http_test.go. These hold
 // the half that lives in the browser, and they read the region they guard rather

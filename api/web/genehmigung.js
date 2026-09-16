@@ -210,7 +210,7 @@ const state = {
   busy: false,
   decided: false,
   // together is the approver saying "this is one decision about one request"
-  // (ADR-draft-collective-approval). Opt-in and never remembered across a
+  // (ADR-0362). Opt-in and never remembered across a
   // selection: a person who ticked it for a twelve-line workplace has not said
   // anything about the next request they open.
   together: false,
@@ -260,7 +260,7 @@ async function load() {
 }
 
 // siblings is every open approval this caller holds on the same order, the
-// selected one included (ADR-draft-collective-approval).
+// selected one included (ADR-0362).
 //
 // An order is the unit because a request is: the approval process runs per line,
 // so a workplace ordered as twelve products is twelve tasks, and the person
@@ -489,7 +489,7 @@ function renderList() {
 }
 
 // renderTogether is the collective decision's whole surface: what else is in this
-// request, and one checkbox (ADR-draft-collective-approval).
+// request, and one checkbox (ADR-0362).
 //
 // Opt-in, and absent when the request has one position — a checkbox offering to
 // decide "all one of them" is a control that teaches somebody to tick boxes

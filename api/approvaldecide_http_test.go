@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// One decision about one request (ADR-draft-collective-approval).
+// One decision about one request (ADR-0362).
 //
 // The approval process runs per order line, so a workplace ordered as three
 // products is three tasks in three instances. That is not changed here and must
