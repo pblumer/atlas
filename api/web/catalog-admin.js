@@ -90,8 +90,12 @@ function textOf(texts, langs, fallback) {
 
 export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   let cats = [];
+  // null means the directory could not be read, which is different from an empty
+  // one: the first degrades to typed ids, the second says there are no groups yet.
+  let dir = null;
   try {
     cats = (await api("GET", "/api/v1/catalogs")) || [];
+    dir = await api("GET", "/api/v1/principals").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
     throw e;
@@ -104,7 +108,9 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     <td>${c.rank}</td>
     <td>${esc((c.languages || []).join(", ")) || "—"}</td>
     <td>${(c.items || []).length}</td>
-    <td>${esc((c.groups || []).join(", ")) || "<span class='muted'>nobody yet</span>"}</td>
+    <td>${(c.groups || []).length
+    ? esc((c.groups || []).map((g) => nameOfPrincipal(dir, g)).join(", "))
+    : "<span class='muted'>nobody yet</span>"}</td>
     <td>${fmtTime(c.updatedAt)}</td>
   </tr>`).join("");
 
@@ -130,8 +136,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
         <label class="field">Languages<input name="languages" value="de" autocomplete="off"
           placeholder="de, fr"></label>
         <label class="field">Rank<input name="rank" type="number" value="${cats.length + 1}" required></label>
-        <label class="field">Audience (groups; empty reaches nobody)<input name="groups"
-          autocomplete="off" placeholder="kunde-a, kunde-b"></label>
+        ${audienceField(dir, [])}
         <button class="primary" type="submit">Create</button>
       </form>
     </div>`;
@@ -148,7 +153,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     try {
       const c = await api("POST", "/api/v1/catalogs", {
         texts, languages: langs, rank: Number(f.get("rank")),
-        groups: list(f.get("groups")), items: [],
+        groups: audienceFrom(f), items: [],
       });
       location.hash = `#/catalog/c/${encodeURIComponent(c.id)}`;
     } catch (err) {
@@ -158,6 +163,121 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
 }
 
 const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+// ---------- Who, picked rather than typed ----------
+//
+// The header above says this page binds processes from what is deployed and never
+// from free text, because a product naming a process nobody wrote is an order that
+// fails while somebody waits for a laptop. The same rule had an exception: every
+// field about *people* asked for an opaque id, typed from memory.
+//
+// It was worse than inconvenient. The audience field's placeholder read
+// "kunde-a, kunde-b" — names — while Catalog.ReachedBy compares its entries against
+// the group ids a session carries (`grp_…`). Following the placeholder produced a
+// catalogue that reaches nobody, with no error anywhere, and the hint beside the
+// sharing form sent the reader to Console → Organization, which shows group names
+// and not their ids.
+//
+// The directory (ADR-0073) is what makes the picker possible at all: it is readable
+// by any authenticated caller, where GET /api/v1/groups is admin-only and the people
+// who fill catalogues are product managers.
+
+// nameOfPrincipal resolves an id through the directory and answers with the id
+// itself when it cannot. The id is the truth; the name is the courtesy.
+function nameOfPrincipal(dir, id) {
+  const hit = (dir || []).find((p) => p.id === id);
+  return hit ? hit.name : id;
+}
+
+// groupChoices is what an audience may be: groups, and nothing else. ReachedBy
+// compares a catalogue's audience against group ids, so a user named there would
+// match nothing — and a picker offering one would manufacture the very mistake it
+// exists to prevent. The sharing picker below offers both, because membership is a
+// different question with a different answer.
+function groupChoices(dir) {
+  return (dir || []).filter((p) => p.type === "group")
+    .slice().sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// audienceField is a picker over the directory, and the old id field when there is
+// no directory to pick from. Degrading is not a nicety: a picker with no options
+// and no explanation is worse than the input it replaced, because it looks like an
+// answer ("there are no groups") to a question it never asked.
+function audienceField(dir, chosen) {
+  const have = new Set(chosen || []);
+  if (dir === null) {
+    return `<label class="field">Audience (group ids, comma separated; empty reaches nobody)
+      <input name="groups-raw" value="${esc((chosen || []).join(", "))}" autocomplete="off"></label>
+      <p class="muted" style="margin:0 0 10px">The directory could not be read, so groups are
+        named by id here for now.</p>`;
+  }
+  const choices = groupChoices(dir);
+  // A group named here but gone from the directory keeps its box, checked. Dropping
+  // it would let saving the form remove an audience silently, and leaving it out
+  // unchecked would do the same on the next save.
+  const orphans = (chosen || []).filter((id) => !choices.some((g) => g.id === id))
+    .map((id) => ({ id, name: `${id} — no longer in the directory` }));
+  const boxes = [...choices, ...orphans];
+  if (!boxes.length) {
+    return `<div class="field">Audience
+      <p class="muted" style="margin:6px 0 0">No group exists yet, so this catalogue can reach
+        nobody. An administrator creates groups under Console → Organization.</p></div>`;
+  }
+  return `<div class="field">Audience (none chosen reaches nobody)
+    <div class="audience-boxes" style="display:grid; gap:4px; margin-top:6px">
+      ${boxes.map((g) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
+        <input type="checkbox" name="groups" value="${esc(g.id)}"${have.has(g.id) ? " checked" : ""}>
+        <span>${esc(g.name)}</span></label>`).join("")}
+    </div></div>`;
+}
+
+// shareWhoField offers the directory, or asks for an id when there is none to
+// offer. Both halves of a grant come from one choice here — the type and the id —
+// because they are one fact about one person, and asking for them separately is
+// how "user" ends up in front of a group id.
+function shareWhoField(dir, cat) {
+  if (dir === null) {
+    return `<label class="field">Kind<select name="type">
+        <option value="user">One account</option>
+        <option value="group">A group — everybody in it</option>
+      </select></label>
+      <label class="field">Id
+        <input name="id" required autocomplete="off" placeholder="usr_… or grp_…">
+        <span class="muted">The directory could not be read, so the account or group is
+          named by id here for now.</span></label>`;
+  }
+  // Whoever already holds a grant, and the owner, are not offered again: adding
+  // somebody twice is not a second grant, it is a list that disagrees with itself.
+  const taken = new Set([cat.ownerId, ...(cat.members || []).map((m) => (m.ref || {}).id)]);
+  const choices = dir.filter((p) => !taken.has(p.id))
+    .slice().sort((a, b) => a.name.localeCompare(b.name));
+  if (!choices.length) {
+    return `<p class="muted" style="margin:0 0 10px">Everybody in the directory already
+      maintains this catalogue.</p>`;
+  }
+  return `<label class="field">Who<select name="who" required>
+      ${choices.map((p) => `<option value="${esc(p.type)}|${esc(p.id)}">${esc(p.name)}${
+    p.type === "group" ? " (group)" : ""}</option>`).join("")}
+    </select></label>`;
+}
+
+// approvalFrom reads the approver the chosen kind asks for, and nothing else.
+//
+// Reading only the field in play is what clears a ref when somebody switches from
+// "a named person" to "the orderer's superior": the old username would otherwise
+// ride along in a rule that has no use for it, and sit in the catalogue looking
+// like an answer to a question nobody asked.
+function approvalFrom(f) {
+  const kind = String(f.get("akind") || "none");
+  const field = { fixed: "aref-fixed", role: "aref-role" }[kind];
+  return { kind, ref: field ? String(f.get(field) || "").trim() : "" };
+}
+
+// audienceFrom reads whichever of the two controls was rendered. The picker names
+// its boxes "groups"; the degraded input is "groups-raw", and its absence is what
+// says a picker was drawn.
+const audienceFrom = (f) =>
+  f.get("groups-raw") === null ? f.getAll("groups").map(String) : list(f.get("groups-raw"));
 
 // The target references, as one line of `system:reference` each.
 //
@@ -186,9 +306,9 @@ const parseTargets = (raw) => String(raw || "").split("\n")
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
-  let cat, items, releases, processes, forms;
+  let cat, items, releases, processes, forms, dir, people;
   try {
-    [cat, items, releases, processes, forms] = await Promise.all([
+    [cat, items, releases, processes, forms, dir, people] = await Promise.all([
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/catalog-products"),
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`),
@@ -197,6 +317,14 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
       // exists, never as free text, for the reason the processes beside it are: a
       // product naming a form nobody wrote is a basket somebody cannot get past.
       api("GET", "/api/v1/forms").catch(() => []),
+      // The principals directory (ADR-0073), for every place this page used to ask
+      // somebody to type an id. null is "could not read it", which the pickers
+      // degrade on; it is deliberately not [] , which would read as "nobody exists".
+      api("GET", "/api/v1/principals").catch(() => null),
+      // The accounts a task can be assigned to (ADR-0045), which is the one list
+      // that carries a *username* — the principals directory carries display names
+      // and ids, and an approval for a named person is matched by username.
+      api("GET", "/api/v1/users/assignable").catch(() => null),
     ]);
   } catch (e) {
     if (isSuperseded()) return;
@@ -232,8 +360,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
           value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
         <label class="field">Languages<input name="languages" value="${esc(langs.join(", "))}" autocomplete="off"></label>
         <label class="field">Rank<input name="rank" type="number" value="${cat.rank}"></label>
-        <label class="field">Audience (groups; empty reaches nobody)<input name="groups"
-          value="${esc((cat.groups || []).join(", "))}" autocomplete="off"></label>
+        ${audienceField(dir, cat.groups)}
         <p class="muted" style="margin:0 0 10px">${(cat.groups || []).length
     ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
     : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
@@ -266,7 +393,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     ${edgeTable(cat.edges || [], byID, langs)}
     ${offered.length > 1 ? edgeForm(offered, byID, langs) : `<p class="muted">Two products are needed before one can relate to another.</p>`}
 
-    ${sharingCard(cat, me, enforced)}
+    ${sharingCard(cat, me, enforced, dir)}
 
     <h3 style="margin-top:26px">Releases</h3>
     <p class="muted" style="max-width:62ch">Publishing freezes everything above into a release.
@@ -281,7 +408,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
   wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
-    mayShare(cat, me, enforced), mayTheme(me, enforced));
+    mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
 }
 
 function productRow(it, iid, langs) {
@@ -442,14 +569,15 @@ const MEMBER_ROLES = [
   { id: "editor", name: "Editor", what: "may change it and publish it — but not change this list" },
 ];
 
-function sharingCard(cat, me, enforced) {
+function sharingCard(cat, me, enforced, dir) {
   const can = mayShare(cat, me, enforced);
   const members = cat.members || [];
   const rows = members.map((m) => {
     const r = MEMBER_ROLES.find((x) => x.id === m.role);
     const ref = m.ref || {};
     return `<tr><td>${esc(ref.type === "group" ? "Group" : "User")}</td>
-      <td><code>${esc(ref.id || "")}</code></td>
+      <td>${esc(nameOfPrincipal(dir, ref.id || ""))}
+        <div class="muted"><code>${esc(ref.id || "")}</code></div></td>
       <td>${esc(r ? r.name : m.role)}</td>
       <td>${can ? `<button class="linkish" data-act="unshare"
         data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
@@ -459,7 +587,9 @@ function sharingCard(cat, me, enforced) {
     <p class="muted" style="max-width:62ch">The role says somebody may maintain catalogues at
       all; this says which ones. Sharing is the owner's: an editor may change this catalogue
       and publish it, and may not change this list.</p>
-    <p class="muted">Owner: <code>${esc(cat.ownerId || "—")}</code>${
+    <p class="muted">Owner: ${cat.ownerId
+    ? `${esc(nameOfPrincipal(dir, cat.ownerId))} <code>${esc(cat.ownerId)}</code>`
+    : "<code>—</code>"}${
       cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>
     ${members.length ? `<table class="table">
       <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
@@ -467,14 +597,7 @@ function sharingCard(cat, me, enforced) {
     : `<p class="muted">Nobody else. Only the owner and administrators maintain it.</p>`}
     ${can ? `<form class="share-new card" style="margin-top:12px; max-width:640px">
       <h4 style="margin:0 0 10px">Let somebody else maintain it</h4>
-      <label class="field">Kind<select name="type">
-        <option value="user">One account</option>
-        <option value="group">A group — everybody in it</option>
-      </select></label>
-      <label class="field">Id
-        <input name="id" required autocomplete="off" placeholder="usr_… or the group id">
-        <span class="muted">The account or group id, not the name. An administrator reads it
-          from Console → Organization.</span></label>
+      ${shareWhoField(dir, cat)}
       <label class="field">May<select name="role">
         ${MEMBER_ROLES.map((r) => `<option value="${r.id}">${esc(r.name)} — ${esc(r.what)}</option>`).join("")}
       </select></label>
@@ -485,7 +608,23 @@ function sharingCard(cat, me, enforced) {
 }
 
 // productForm renders the editor for one product, or for a new one.
-function productForm(it, cat, langs, procIDs, formList, items) {
+//
+// It is read in two passes, because it answers two questions to two different
+// readers, and used to interleave them. A product manager writing a laptop into
+// the catalogue asks "what will people see?" — a name, a heading, a price. Only
+// then does anybody ask "and what happens when somebody orders it?" — who
+// approves, which process runs, what the target systems call it. The old form
+// alternated between the two four times down a single column, so answering either
+// question meant reading past the other.
+//
+// Two columns, over the grid the console already has (.grid2's breakpoint, reused
+// rather than re-chosen). Short fields pair up; anything carrying an explanation
+// keeps the full width, because prose in a half column is a column of syllables.
+//
+// The palette is the console's own tokens throughout. Nothing here introduces a
+// colour: the sections are separated by --border, their hints are --muted, and a
+// theme change reaches this form because it never spelled a colour out.
+function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
   const opt = (id, sel, label) =>
@@ -495,23 +634,19 @@ function productForm(it, cat, langs, procIDs, formList, items) {
       ${procIDs.map((p) => opt(p, sel || "", p)).join("")}
       ${sel && !procIDs.includes(sel) ? opt(sel, sel, `${sel} (not deployed)`) : ""}
     </select>`;
-  return `<div class="card" style="margin:14px 0; max-width:720px">
+  const section = (title, hint) => `<h4 class="form-sec">${esc(title)}</h4>
+    <p class="form-sec-hint">${hint}</p>`;
+  return `<div class="card" style="margin:14px 0; max-width:960px">
     <h3 style="margin:0 0 10px">${it ? "Edit product" : "New product"}</h3>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
+      ${section("What the catalogue shows",
+    "The product as somebody browsing it meets it. Everything here is read by whoever orders.")}
       <label class="field">Id${it ? "" : " (short, stable, never renamed)"}
         <input name="id" value="${esc(v.id || "")}" ${it ? "readonly" : "required"} autocomplete="off"
           placeholder="laptop"></label>
       ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
         value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
-      <label class="field">State<select name="state">
-        ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
-      </select></label>
-      <label class="field">Approval<select name="akind">
-        ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
-      </select></label>
-      <label class="field">Approver (a username for a named person, a group for a group; empty otherwise)
-        <input name="aref" value="${esc(ap.ref || "")}" autocomplete="off"></label>
-      <label class="field">Category
+      <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading this
           product sits under in the portal &mdash; <code>Arbeitsplatz</code>,
           <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
@@ -523,7 +658,7 @@ function productForm(it, cat, langs, procIDs, formList, items) {
         <datalist id="known-categories">${
   [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
     .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
-      <label class="field">Cost
+      <label class="field wide">Cost
         <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
           read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
           <code>im Grundpaket enthalten</code>. It is <b>shown and never computed</b>:
@@ -533,7 +668,21 @@ function productForm(it, cat, langs, procIDs, formList, items) {
           empty to say nothing about cost.</span>
         <input name="price" value="${esc(v.price || "")}" autocomplete="off"
           placeholder="CHF 1'200.&ndash;"></label>
-      <label class="field">Details the orderer fills in
+      <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
+        ${v.multipleAllowed ? "checked" : ""}> May be held more than once
+        <span class="muted">— two licences, two mailboxes</span></label>
+
+      ${section("How an order is handled",
+    "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
+    "except that an approval is needed at all.")}
+      <label class="field">State<select name="state">
+        ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
+      </select></label>
+      <label class="field">Approval<select name="akind">
+        ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
+      </select></label>
+      ${approverField(ap, dir, people)}
+      <label class="field wide">Details the orderer fills in
         <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
           employee number. It is shown in the basket and its answers travel with the
@@ -548,10 +697,7 @@ function productForm(it, cat, langs, procIDs, formList, items) {
         </select></label>
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
-      <label class="field inline"><input type="checkbox" name="multipleAllowed"
-        ${v.multipleAllowed ? "checked" : ""}> May be held more than once
-        <span class="muted">— two licences, two mailboxes</span></label>
-      <label class="field">Known in the target systems as
+      <label class="field wide">Known in the target systems as
         <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
           <code>system:reference</code> — <code>ad:CN=VPN-Users</code>,
           <code>entra:ENTERPRISEPACK</code>. This is what a commissioning load joins a right
@@ -562,12 +708,98 @@ function productForm(it, cat, langs, procIDs, formList, items) {
           is attributed to neither.</span>
         <textarea name="targets" rows="3" spellcheck="false"
           placeholder="ad:CN=VPN-Users">${esc(targetLines(v.targets))}</textarea></label>
+      ${maintainersNote(cat, dir)}
       <div class="row">
         <button class="primary" type="submit">Save</button>
         <button type="button" data-act="cancel-product">Cancel</button>
       </div>
     </form>
   </div>`;
+}
+
+// approverField is the approver control, and there are three of them because the
+// question has three answers: a username for a named person, a group for a group,
+// and nothing at all for the two kinds that resolve without one. Only the one the
+// chosen kind asks for is shown.
+//
+// **The value differs per kind, and that is not a preference.** genehmigung-fix.bpmn
+// puts the ref in `assignee`, and holdsTask compares an assignee against the
+// caller's *username*; genehmigung-rolle.bpmn puts it in `candidateGroups`, matched
+// against group *ids* first and names only after. So a named person is a username
+// and a group is an id — an id in the first or a name in the second matches nobody,
+// and the order waits for an approval that reaches no inbox. That is the most
+// expensive typo left in this screen, because nothing reports it: the approval is
+// created, it simply sits there.
+//
+// APPROVAL_KINDS already carries which sort each kind wants, in its `ref` field, so
+// the table above is the one place that says it.
+function approverField(ap, dir, people) {
+  const kind = ap.kind || "none";
+  const ref = ap.ref || "";
+  const box = (forKind, body) => `<label class="field wide aref-for" data-kind="${forKind}"${
+    kind === forKind ? "" : " hidden"}>Approver${body}</label>`;
+
+  // A username, from the list a task assignee is picked from (ADR-0045) — not from
+  // the principals directory, which carries display names and ids and cannot answer
+  // "what is this person's username".
+  const person = people === null
+    ? `<input name="aref-fixed" value="${esc(kind === "fixed" ? ref : "")}" autocomplete="off"
+         placeholder="username">
+       <span class="muted" style="display:block; margin:4px 0 0">The account list could not be
+         read, so the approver is named by username here for now.</span>`
+    : `<select name="aref-fixed">
+         <option value="">— nobody yet —</option>
+         ${people.map((u) => `<option value="${esc(u.username)}"${
+      kind === "fixed" && u.username === ref ? " selected" : ""}>${
+      esc(u.displayName ? `${u.displayName} (${u.username})` : u.username)}</option>`).join("")}
+         ${kind === "fixed" && ref && !people.some((u) => u.username === ref)
+      ? `<option value="${esc(ref)}" selected>${esc(ref)} — no such account</option>` : ""}
+       </select>
+       <span class="muted" style="display:block; margin:4px 0 0">Always this person. The
+         approval lands in their inbox by username.</span>`;
+
+  const groups = dir === null
+    ? `<input name="aref-role" value="${esc(kind === "role" ? ref : "")}" autocomplete="off"
+         placeholder="grp_…">
+       <span class="muted" style="display:block; margin:4px 0 0">The directory could not be
+         read, so the group is named by id here for now.</span>`
+    : `<select name="aref-role">
+         <option value="">— no group yet —</option>
+         ${groupChoices(dir).map((g) => `<option value="${esc(g.id)}"${
+      kind === "role" && g.id === ref ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
+         ${kind === "role" && ref && !groupChoices(dir).some((g) => g.id === ref)
+      ? `<option value="${esc(ref)}" selected>${esc(ref)} — no such group</option>` : ""}
+       </select>
+       <span class="muted" style="display:block; margin:4px 0 0">Whoever in the group picks it
+         up. Stored as the group's id, so renaming the group does not lose the approver.</span>`;
+
+  return box("fixed", person) + box("role", groups);
+}
+
+// maintainersNote answers, where it is asked, a question this form has no field
+// for: who besides me may look after this product.
+//
+// There is no deputy on a product, and that is a decision rather than a gap.
+// Item.HomeCatalog records it: an item is referenced by catalogues rather than
+// owned by one, so access cannot be inherited from "the catalogue it is in", and a
+// per-item member list is the per-artifact ACL ADR-0071 weighed and refused — a
+// grant per product makes sharing a bundle N actions and the management surface
+// explodes. Maintenance is the home catalogue's, and a deputy is an editor there.
+//
+// So the form does not offer a control. It names the people the answer already has,
+// and says where it is changed — which is what somebody looking for a missing field
+// actually needs.
+function maintainersNote(cat, dir) {
+  const editors = (cat.members || []).filter((m) => m.role === "editor")
+    .map((m) => nameOfPrincipal(dir, (m.ref || {}).id || ""));
+  const who = [cat.ownerId ? nameOfPrincipal(dir, cat.ownerId) : null, ...editors].filter(Boolean);
+  return `<p class="form-sec-hint wide">Maintained by ${who.length
+    ? `<b>${who.map(esc).join("</b>, <b>")}</b>`
+    : "whoever administers this installation"} — everybody who may maintain
+    <b>${esc(textOf(cat.texts, cat.languages, cat.id))}</b>. A product has no deputy of
+    its own: it is referenced by several catalogues and maintained through its home one,
+    so a stand-in is an editor of the catalogue, added under <i>Who maintains this
+    catalogue</i> below.</p>`;
 }
 
 // wireAppearance is the appearance card's half of the page.
@@ -623,6 +855,19 @@ function wireAppearance({ api, toast, view }, id, reload) {
     if (img.complete) (img.naturalWidth ? has : hasNot)();
   }
 
+  // Which approver control is in play follows from the kind, and the form is
+  // re-rendered from scratch each time a product is opened — so the listener sits on
+  // the view rather than on the select, and survives every re-render.
+  view.addEventListener("change", (e) => {
+    const sel = e.target.closest('select[name="akind"]');
+    if (!sel) return;
+    const form = sel.closest("form");
+    if (!form) return;
+    for (const box of form.querySelectorAll(".aref-for")) {
+      box.hidden = box.dataset.kind !== sel.value;
+    }
+  });
+
   view.addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-act]");
     if (!b) return;
@@ -669,7 +914,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   });
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme) {
+function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   const patch = async (body) => {
@@ -688,7 +933,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     try {
       await patch({
         texts, languages: list(f.get("languages")), rank: Number(f.get("rank")),
-        groups: list(f.get("groups")),
+        groups: audienceFrom(f),
       });
       toast("Saved");
       reload();
@@ -703,12 +948,12 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items);
+      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir, people);
       wireProductForm();
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items);
+      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people);
       wireProductForm();
       return;
     }
@@ -784,10 +1029,16 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     shareNew.addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
-      const refID = String(f.get("id") || "").trim();
-      if (!refID) { toast("An id is needed", "err"); return; }
+      // One control or two, depending on whether the directory could be read.
+      const who = f.get("who");
+      const cut = who === null ? -1 : String(who).indexOf("|");
+      const refType = who === null ? String(f.get("type") || "user") : String(who).slice(0, cut);
+      const refID = who === null
+        ? String(f.get("id") || "").trim()
+        : String(who).slice(cut + 1);
+      if (!refID) { toast("Somebody has to be chosen", "err"); return; }
       const members = [...(cat.members || []),
-        { ref: { type: f.get("type"), id: refID }, role: f.get("role") }];
+        { ref: { type: refType, id: refID }, role: f.get("role") }];
       try { await patch({ members }); reload(); }
       catch (err) { toast(err.message, "err"); }
     });
@@ -839,7 +1090,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const body = {
         ...stored,
         id: pid, homeCatalog: id, state: f.get("state"), texts,
-        approval: { kind: f.get("akind"), ref: String(f.get("aref") || "").trim() },
+        approval: approvalFrom(f),
         category: String(f.get("category") || "").trim(),
         price: String(f.get("price") || "").trim(),
         configForm: f.get("configForm") || "",

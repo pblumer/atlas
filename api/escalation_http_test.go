@@ -68,7 +68,7 @@ func assigneeOfTheOnlyTask(t *testing.T, ts *httptest.Server, c *http.Client) st
 	var tasks []struct {
 		Assignee string `json:"assignee"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 {

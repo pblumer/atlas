@@ -180,7 +180,7 @@ func runAndReadVerdict(t *testing.T, x deployTestHarness, key uint64, processID 
 		ProcessID string `json:"processId"`
 		State     string `json:"state"`
 	}
-	if err := json.Unmarshal(ib, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, ib), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, ib)
 	}
 	var instKey uint64

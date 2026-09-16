@@ -147,3 +147,91 @@ func TestInGroupAnswersMembership(t *testing.T) {
 		t.Error("a principal with no groups passed a group check; the gate must fail closed")
 	}
 }
+
+// TestAPageSaysWhetherItsTotalIsACount pins the one thing the three constructors
+// disagree about, which is also the only thing a caller can get wrong without
+// noticing: whether `total` is the population or a floor.
+//
+// PageOf is the interesting one. Its exactness is conditional, and the condition is
+// the step the defects behind this type all skipped: a page that was not truncated
+// *is* the population, so counting its rows is counting the thing. A constructor that
+// always claimed a floor would be as wrong as one that always claimed a count — it
+// would report "at least 3 tasks" about an inbox holding exactly three.
+func TestAPageSaysWhetherItsTotalIsACount(t *testing.T) {
+	rows := []int{1, 2, 3}
+
+	for _, tc := range []struct {
+		name  string
+		page  Page[int]
+		total int
+		exact bool
+		why   string
+	}{
+		{"PageOf, uncapped", PageOf(rows, false), 3, true,
+			"the cap did not bite, so these rows are the whole population"},
+		{"PageOf, capped", PageOf(rows, true), 3, false,
+			"the cap bit, so three is what fitted and not what there is"},
+		{"Rows, capped", Rows(rows, 9001, true), 9001, true,
+			"a counter answered it, so the page being short changes nothing"},
+		{"Rows, uncapped", Rows(rows, 3, false), 3, true,
+			"same counter, and it happens to agree with the page"},
+		{"FloorRows, uncapped", FloorRows(rows, 3, false), 3, false,
+			"this listing filtered rows out after reading them, so even an uncapped " +
+				"page cannot say what it did not keep"},
+		{"FloorRows, capped", FloorRows(rows, 3, true), 3, false,
+			"a floor either way"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.page.Total != tc.total || tc.page.TotalExact != tc.exact {
+				t.Errorf("total = %d (exact=%v), want %d (exact=%v) — %s",
+					tc.page.Total, tc.page.TotalExact, tc.total, tc.exact, tc.why)
+			}
+		})
+	}
+}
+
+// TestAnEmptyPageSerializesItsRowsAsAnArray covers the shape a client iterating
+// `items` must never meet. A nil slice marshals to `null` in Go, and an engine holding
+// nothing is precisely when every listing returns one — so the empty case is both the
+// most common and the one nobody develops against.
+func TestAnEmptyPageSerializesItsRowsAsAnArray(t *testing.T) {
+	for name, page := range map[string]Page[int]{
+		"PageOf":    PageOf[int](nil, false),
+		"Rows":      Rows[int](nil, 0, false),
+		"FloorRows": FloorRows[int](nil, 0, false),
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, err := json.Marshal(page)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var got map[string]json.RawMessage
+			if err := json.Unmarshal(body, &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if string(got["items"]) != "[]" {
+				t.Errorf("items = %s, want []", got["items"])
+			}
+			// nextCursor is omitted rather than empty: a client that treats its presence
+			// as "there is more" would otherwise page forever.
+			if _, ok := got["nextCursor"]; ok {
+				t.Errorf("a page with no cursor still carried the field: %s", body)
+			}
+		})
+	}
+}
+
+// TestWithCursorDoesNotMutateThePageItCameFrom keeps the builder a builder. Page is a
+// value type and WithCursor takes it by value, which is what makes
+// `page = page.WithCursor(c)` at the call sites safe — and what would silently break
+// if somebody gave it a pointer receiver to "avoid the copy".
+func TestWithCursorDoesNotMutateThePageItCameFrom(t *testing.T) {
+	base := PageOf([]int{1}, true)
+	withCursor := base.WithCursor("77")
+	if base.NextCursor != "" {
+		t.Errorf("WithCursor wrote back into its receiver: %q", base.NextCursor)
+	}
+	if withCursor.NextCursor != "77" {
+		t.Errorf("nextCursor = %q, want 77", withCursor.NextCursor)
+	}
+}

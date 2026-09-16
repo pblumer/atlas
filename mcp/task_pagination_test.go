@@ -34,10 +34,9 @@ func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
 	var gotQuery url.Values
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.Query()
-		w.Header().Set("X-Tasks-Truncated", "true")
-		w.Header().Set("X-Tasks-Next-Cursor", "77")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"key":88}]`))
+		_, _ = w.Write([]byte(`{"items":[{"key":88}],"total":1,"totalExact":false,` +
+			`"truncated":true,"nextCursor":"77"}`))
 	}))
 	defer backend.Close()
 
@@ -64,12 +63,14 @@ func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
 		t.Fatalf("processInstance query = %q, want 123", got)
 	}
 
+	// The tool forwards the arguments and hands back the server's own envelope; it
+	// does not build one, and it does not reinterpret the cursor, which is opaque.
 	var page struct {
 		Items []struct {
 			Key uint64 `json:"key"`
 		} `json:"items"`
 		Truncated  bool   `json:"truncated"`
-		NextCursor uint64 `json:"nextCursor"`
+		NextCursor string `json:"nextCursor"`
 	}
 	if err := json.Unmarshal([]byte(text), &page); err != nil {
 		t.Fatalf("decode paginated result %q: %v", text, err)
@@ -77,15 +78,15 @@ func TestListTasksForwardsPaginationAndReturnsMetadata(t *testing.T) {
 	if len(page.Items) != 1 || page.Items[0].Key != 88 {
 		t.Fatalf("items = %+v, want task key 88", page.Items)
 	}
-	if !page.Truncated || page.NextCursor != 77 {
-		t.Fatalf("pagination = truncated:%v nextCursor:%d, want true/77", page.Truncated, page.NextCursor)
+	if !page.Truncated || page.NextCursor != "77" {
+		t.Fatalf("pagination = truncated:%v nextCursor:%q, want true/77", page.Truncated, page.NextCursor)
 	}
 }
 
 func TestListTasksOmitsCursorWhenAPIHasNone(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`{"items":[],"total":0,"totalExact":true,"truncated":false}`))
 	}))
 	defer backend.Close()
 

@@ -133,7 +133,7 @@ func TestSystemIntakeProvisionsUser(t *testing.T) {
 		Key       uint64 `json:"key"`
 		ProcessID string `json:"processId"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, rec.Body.Bytes()), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, rec.Body.String())
 	}
 	var taskKey uint64

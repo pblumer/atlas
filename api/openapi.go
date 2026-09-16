@@ -75,6 +75,21 @@ func tArray() map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "object"}}
 }
 
+// tPage is the response schema of a *capped* listing: the rows it could fit, beside
+// what the server knows about the population they came out of
+// (ADR-0378). It is not `tArray()`, and saying so
+// here is the difference between a generated client that works and one whose list type
+// is wrong in the way the console's was.
+func tPage() map[string]any {
+	return schemaObj(map[string]any{
+		"items":      tArray(),
+		"total":      tInteger(),
+		"totalExact": tBool(),
+		"truncated":  tBool(),
+		"nextCursor": tString(),
+	}, "items", "total", "totalExact", "truncated")
+}
+
 func jsonBody(desc string, schema map[string]any) *bodySpec {
 	return &bodySpec{mediaType: "application/json", schema: schema, desc: desc}
 }
@@ -271,12 +286,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "file", "config")},
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token); X-Instances-Truncated: true marks a capped page and X-Instances-Next-Cursor carries the next one", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tArray())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token). Answers {items, total, totalExact, truncated, nextCursor}: total is exact wherever a maintained counter knows it (one definition's halves, the engine's live total) and a floor otherwise", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tPage())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
 			summary: "Find instances by key or variable content — ?q= a bare instance key (point read, live or finished), or name=value (name exact), or a term matched over variable names and values; a term is matched whole, with * for any run of characters and ? for exactly one, and \\* or \\? for those characters literally; ?process=<key> narrows the search to one definition and reads its index instead of every instance — and for a variable that definition declares atlas:searchable, the value index answers it", tag: "Instances", role: RoleOperator,
-			resp: jsonBody("Matching instances", tArray())}},
+			resp: jsonBody("Matching instances", tPage())}},
 		// Every signed-in identity, not the operator role the rest of this group carries:
 		// a task form is prefilled from the variables of the instance the task belongs to,
 		// so a role narrower than "signed in" would hand a task worker an empty form. The
@@ -430,7 +445,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Job key and stats", tObject())}},
 		{"GET", "/api/v1/incidents", s.handleListIncidents, apiOp{
-			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget) or message fragment (?message=) — capped per call (?limit=, max 5000); X-Incidents-Truncated: true marks a capped page", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tArray())}},
+			summary: "List unresolved incidents, optionally scoped to one instance (?instance=), definition (?process=), BPMN element (?element=, or ?elementIndex= for an instance whose definition is no longer deployed), kind (?type=job|timer|budget) or message fragment (?message=) — capped per call (?limit=, max 5000). Answers {items, total, totalExact, truncated}: on a capped page total is a floor, and GET /api/v1/incidents/summary is the reading that counts them all", tag: "Incidents", role: RoleOperator, resp: jsonBody("Incidents", tPage())}},
 		{"GET", "/api/v1/incidents/summary", s.handleIncidentSummary, apiOp{
 			summary: "What is stuck, by cause: one group per (definition, element, kind) with its count, its raised-at window, a representative message and the worker behind it — the constant-size reading of a flood, scoped like the list (?process=, ?instance=)", tag: "Incidents", role: RoleOperator,
 			resp: jsonBody("Incident causes", tObject())}},
@@ -448,7 +463,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Element instance key and stats", tObject())}},
 
 		{"GET", "/api/v1/tasks", s.handleListTasks, apiOp{
-			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). A capped page sets X-Tasks-Truncated: true and X-Tasks-Next-Cursor: <jobKey>; pass it as ?before= to page to older tasks. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients). ?folder=<id> scopes it to a saved folder's rule, paged the same way", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tArray())}},
+			summary: "List active user tasks, newest first — capped per call (?limit=, default 500, max 5000). Answers {items, total, totalExact, truncated, nextCursor}; pass nextCursor as ?before= to page to older tasks. On a capped page total is a floor — counting every open task is a walk, and GET /api/v1/task-folders/counts is what pays for it. ?processInstance=<key> scopes the list to one instance (flood-proof, for embedded clients). ?folder=<id> scopes it to a saved folder's rule, paged the same way", tag: "Tasks", role: RoleUser, resp: jsonBody("Tasks", tPage())}},
 		{"GET", "/api/v1/tasks/{key}", s.handleGetTask, apiOp{
 			summary: "Fetch one open user task by key — the deep-link primitive so a task stays reachable outside a capped list page", tag: "Tasks", role: RoleUser, resp: jsonBody("Task", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/complete", s.handleCompleteTask, apiOp{
@@ -1010,8 +1025,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Every approval that can escalate no further — the chain ran out or the directory looped. A stall records a fact, and this is where somebody who can act reads it; an approval nobody can escalate and nobody is looking at is how an order waits forever", tag: "Order", role: RoleOperator,
 			resp: jsonBody("Stalled approvals", tArray())}},
 		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
-			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
-			resp: jsonBody("Approvals", tArray())}},
+			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, and the same {items, total, totalExact, truncated, nextCursor} shape)", tag: "Order", role: RoleUser,
+			resp: jsonBody("Approvals", tPage())}},
 		{"POST", "/api/v1/approvals/decide", s.handleDecideApprovals, apiOp{
 			summary: "Decide several of one order's approvals as one decision, with one reason. Each is still completed as its own task, because each is still its own process instance; the answer is per line, because there is no transaction spanning them. Refuses keys from more than one order — one reason cannot cover two requests", tag: "Order", role: RoleUser,
 			req: jsonBody("The decision and the approvals it covers", schemaObj(map[string]any{
@@ -1767,7 +1782,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The row, now decided", tObject())}},
 
 		{"GET", "/api/v1/audit", s.handleListAudit, apiOp{
-			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000)", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tArray())}},
+			summary: "The access-control history across every application, newest first — the global admin audit view (ADR-0184). Admin-only. Optional filters: applicationId, action (share|unshare|visibility|transfer); limit caps the window (default 200, max 1000). Answers {items, total, totalExact, truncated}: total is how many events matched the filters, which this read counts in full, so a capped page still says how many there are", tag: "Audit", role: RoleAdmin, resp: jsonBody("Grant audit events", tPage())}},
 	}
 }
 

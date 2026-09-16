@@ -149,7 +149,7 @@ func startLifecycleInstance(t *testing.T, ts *httptest.Server, appID string) uin
 		Key   uint64 `json:"key"`
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	for _, in := range instances {

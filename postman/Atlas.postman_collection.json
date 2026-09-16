@@ -282,7 +282,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('tasks listed (200)', () => pm.response.to.have.status(200));",
-                  "const tasks = pm.response.json();",
+                  "// A capped listing answers {items, total, totalExact, truncated, nextCursor}.",
+                  "// total is what there is; items is what this page could carry.",
+                  "const page = pm.response.json();",
+                  "const tasks = (page && page.items) || [];",
                   "pm.test('at least one open task', () => pm.expect(tasks.length).to.be.above(0));",
                   "if (tasks.length) {",
                   "  pm.collectionVariables.set('taskKey', tasks[0].key);",
@@ -356,7 +359,7 @@
                 "instances"
               ]
             },
-            "description": "Live instances (with their current token count) followed by finished ones, most-recently-completed first. Each row carries its variables \u2014 you'll see the `approved`/`score`/`note` values from step 5 plus the start variables from step 3."
+            "description": "Live instances (with their current token count) followed by finished ones, most-recently-completed first. Answers `{items, total, totalExact, truncated, nextCursor}`: the rows are in `items`, and `total` is how many there are \u2014 exact where a counter knows it, a floor (`totalExact: false`) otherwise. Each row carries its variables \u2014 you'll see the `approved`/`score`/`note` values from step 5 plus the start variables from step 3."
           },
           "response": [],
           "event": [
@@ -365,7 +368,16 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('instances listed (200)', () => pm.response.to.have.status(200));"
+                  "pm.test('instances listed (200)', () => pm.response.to.have.status(200));",
+                  "// A capped listing is a page, and says so: the rows are in items, total is",
+                  "// how many there are, and totalExact says whether that is a count or a floor.",
+                  "const page = pm.response.json();",
+                  "pm.test('answers a page, not a bare array', () => {",
+                  "  pm.expect(page).to.be.an('object');",
+                  "  pm.expect(page.items).to.be.an('array');",
+                  "});",
+                  "console.log('instances on this page =', page.items.length, 'of', page.total,",
+                  "  page.totalExact ? '(exact)' : '(at least)');"
                 ]
               }
             }
@@ -767,7 +779,7 @@
                 "instances"
               ]
             },
-            "description": "Live instances (with token counts) then finished ones (most-recently-completed first). Each row carries its variables."
+            "description": "Live instances (with token counts) then finished ones (most-recently-completed first). Answers `{items, total, totalExact, truncated, nextCursor}`; each row in `items` carries its variables."
           },
           "response": [],
           "event": [
@@ -776,8 +788,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const arr = pm.response.json();",
-                  "const active = (arr || []).find(i => i.state === 'active');",
+                  "const page = pm.response.json();",
+                  "const active = ((page && page.items) || []).find(i => i.state === 'active');",
                   "if (active) pm.collectionVariables.set('instanceKey', active.key);"
                 ]
               }
@@ -836,8 +848,9 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const t = pm.response.json();",
-                  "if (t && t.length) pm.collectionVariables.set('taskKey', t[0].key);"
+                  "const page = pm.response.json();",
+                  "const t = (page && page.items) || [];",
+                  "if (t.length) pm.collectionVariables.set('taskKey', t[0].key);"
                 ]
               }
             }
