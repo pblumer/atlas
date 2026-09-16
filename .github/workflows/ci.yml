@@ -77,14 +77,23 @@ jobs:
     # held a runner for the six-hour default. The cap is what keeps one stuck package
     # from turning into hours of runner time.
     #
-    # It is 45 rather than the 30 it was, because 30 stopped being a ceiling and
-    # became a deadline: measured on this runner on 2026-09-16, the steps take
-    # 1m15 (build/vet/fmt/feed) + 24m24 (race) + 4m03 (coverage) + ~1m (benchmarks)
-    # ≈ 30m45, and the two main runs before that finished at 29m43 and 29m47. The
-    # job was being cancelled mid-benchmark with every check before it green, which
-    # reads as a failure and is not one. Raising it buys nothing an author can abuse:
-    # a genuinely wedged test still ends the job, just fifteen minutes later.
-    timeout-minutes: 45
+    # It is 60 rather than the 30 it was, because 30 stopped being a ceiling and
+    # became a deadline. Two runs of the same tree on 2026-09-16 measured:
+    #
+    #   fast runner  1m15 setup + 24m24 race + 4m03 cover + ~1m bench ≈ 31m
+    #   slow runner  ~3m   setup + 36m   race + ~9m  cover + ~2m bench ≈ 50m
+    #
+    # The same code, an hour apart: the api package alone took 1352s on one and
+    # 2048s on the other. That 51% spread is the number this cap has to survive, and
+    # 30 — or 45 — does not. Both runs were cancelled with every check before the
+    # last one green, which reads as a failure and is not one.
+    #
+    # Raising it buys nothing an author can abuse: a genuinely wedged test still ends
+    # the job, an hour in rather than half an hour. What it does not do is fix the
+    # reason the number keeps moving — the job runs the whole suite twice, once under
+    # the race detector and once under the coverage instrumentation, one after the
+    # other. That is the thing worth changing, and it is not a cap.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -137,10 +146,12 @@ jobs:
       # test file. Nothing is skipped or quarantined by raising it — every test still
       # runs, and a real hang still ends the job well inside the job's cap above.
       #
-      # 40m, raised from 25m: api took 1352s (22m32) on this runner on 2026-09-16,
-      # which left 10% of the old ceiling against the 14% run-to-run variance the
-      # paragraph above measured. A per-package timeout that a passing package can
-      # reach by having a slow day is not a guard against hangs, it is a coin toss.
+      # 50m, raised from 25m: api took 1352s (22m32) on one runner on 2026-09-16 and
+      # 2048s (34m08) on another an hour later, with the same tree. The old 25m
+      # ceiling would have failed the second of those outright, and 40m left it 15%
+      # of headroom against 51% observed spread. A per-package timeout a passing
+      # package reaches by drawing a slow runner is not a guard against hangs; it is
+      # a coin toss that reports as a defect.
       #
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
@@ -154,7 +165,7 @@ jobs:
           # Deliberately not in `make race`: a contributor's kernel may have no Landlock
           # at all, and there the skip is the correct answer rather than a failure.
           ATLAS_SANDBOX_E2E: required
-        run: go test -race -timeout=40m ./...
+        run: go test -race -timeout=50m ./...
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 94
