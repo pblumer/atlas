@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The info panel is reachable from every column of the catalogue, not only from
+  services.** This was not a missing feature but an inconsistency inside one page.
+  The panel already worked for a bundle: picking one out of the search opens it, and
+  the "my services" view has carried the button on all four levels since it was
+  built. So a maintainer could write a price onto a bundle, see it under what they
+  hold, find it through the search — and not reach it from the column the bundle
+  lives in.
+
+  The bundle and offering columns now carry the same round **i** the service column
+  has. The panel itself needed no change, and a test says why: it reads what any
+  product carries — id, texts, price, approval, whether it repeats — and nothing in
+  it asks which level was clicked. A panel that branched on the level would be a
+  second thing to keep true, and the first place it would go wrong is the level
+  nobody clicks.
+
+
 - **The portal's corner names whoever the order is for, and the help moved to the end
   of the row.** The corner said **"mich selbst"** to everybody. That was true, and it
   was true of every reader alike, so it identified nobody — and on a screen where the

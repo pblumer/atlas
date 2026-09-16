@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
+        "de": "The info panel is reachable from every column of the catalogue, not only from services."
+      },
+      "summary": {
+        "en": "This was not a missing feature but an inconsistency inside one page.",
+        "de": "This was not a missing feature but an inconsistency inside one page."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +211,6 @@
       "summary": {
         "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
         "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One position can be withdrawn on its own, and its details corrected.",
-        "de": "One position can be withdrawn on its own, and its details corrected."
-      },
-      "summary": {
-        "en": "The story asks to modify or delete positions directly.",
-        "de": "The story asks to modify or delete positions directly."
       },
       "link": {
         "label": "Changelog",
