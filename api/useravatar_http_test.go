@@ -3,6 +3,7 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -401,5 +402,65 @@ func TestWithEnforcementOffThereIsNobodyToBe(t *testing.T) {
 	}
 	if code, b := doReq(t, ts, "DELETE", path, "", ""); code != http.StatusNoContent {
 		t.Errorf("with enforcement off a picture could not be removed: %d (%s)", code, b)
+	}
+}
+
+// putRaw is cReqTyped for a body that may be empty. cReqTyped omits the
+// Content-Type header when there is nothing to send, which is right for it and
+// wrong here: an empty body under a declared type is precisely one of the cases
+// this route has to answer for.
+func putRaw(t *testing.T, c *http.Client, ts *httptest.Server, path, contentType, body string) (int, []byte) {
+	t.Helper()
+	req, err := http.NewRequest("PUT", ts.URL+path, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("PUT %s: %v", path, err)
+	}
+	defer res.Body.Close()
+	out, _ := io.ReadAll(res.Body)
+	return res.StatusCode, out
+}
+
+// TestAPictureIsNeitherNothingNorEverything.
+//
+// The two bounds on the body, and both are refusals rather than corrections. An
+// empty body under a declared type is not a picture and must not be stored as one;
+// an over-large body is refused whole rather than truncated, because half a JPEG
+// is not a smaller JPEG — it would pass the format check, since the magic is at
+// the front, and land as a broken image nobody could explain.
+func TestAPictureIsNeitherNothingNorEverything(t *testing.T) {
+	ts, dir := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	alice := twoUsers(t, ts, admin, "alice")[0]
+	path := "/api/v1/users/" + meID(t, alice, ts) + "/avatar"
+
+	// The empty body is checked by its *answer*, not by its status. The content
+	// check would refuse it too — empty bytes are not a PNG — so a 400 proves
+	// nothing about the case that exists for it. What the separate case buys is the
+	// sentence: somebody who uploaded nothing is told they uploaded nothing, rather
+	// than being told the bytes they did not send are the wrong shape.
+	code, b := putRaw(t, alice, ts, path, "image/png", "")
+	if code != http.StatusBadRequest {
+		t.Errorf("an empty body: %d (%s), want 400", code, b)
+	}
+	if !strings.Contains(string(b), "empty") {
+		t.Errorf("an empty upload is answered %q, which describes the bytes rather than "+
+			"the fact that there are none", b)
+	}
+	// One byte past the budget. The refusal names the figure rather than repeating
+	// it here, so this asks only that the body was not accepted.
+	big := aPNG + strings.Repeat("x", (512<<10)+1-len(aPNG))
+	if code, over := putRaw(t, alice, ts, path, "image/png", big); code != http.StatusRequestEntityTooLarge {
+		t.Errorf("a body past the budget: %d (%s), want 413", code, over)
+	}
+	if got := avatarFiles(t, dir); len(got) != 0 {
+		t.Errorf("a refused body was stored: %v", got)
 	}
 }
