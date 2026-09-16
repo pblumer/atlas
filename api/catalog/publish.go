@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -385,6 +386,8 @@ func checkEdges(in Input, byID map[string]Item, add func(Problem)) {
 		}
 		return edges[a].To < edges[b].To
 	})
+	// The structural kinds seen for each ordered pair, in the order met.
+	structural := map[[2]string][]EdgeKind{}
 	for _, e := range edges {
 		if _, ok := byID[e.From]; !ok {
 			add(Problem{Message: "edge from unknown item " + e.From})
@@ -400,6 +403,48 @@ func checkEdges(in Input, byID map[string]Item, add func(Problem)) {
 			add(Problem{Item: e.From,
 				Message: "excludes itself; holding it once would be a conflict"})
 		}
+		if e.Kind.Structural() {
+			pair := [2]string{e.From, e.To}
+			if !slices.Contains(structural[pair], e.Kind) {
+				structural[pair] = append(structural[pair], e.Kind)
+			}
+		}
+	}
+
+	// One pair, both structural kinds, is a contradiction the basket cannot act on.
+	// [Release.Includes] and [Release.Options] are kept apart precisely because they
+	// mean opposite things to it: an inclusion is a consequence of ordering the whole
+	// — integral, never deselectable — and an option is an offer. A pair carrying both
+	// lands in both lists, so the same part is ordered without asking *and* offered
+	// as a choice, on one screen.
+	//
+	// It is reachable without anybody writing a contradiction on purpose. The
+	// ArchiMate import merges edges by adding, deliberately: "an edge the model no
+	// longer has is kept: somebody may have drawn it here, and an import is not a
+	// synchronisation". So redrawing a composition as an aggregation in the model and
+	// importing again leaves the catalogue holding both, and the old edge is the one
+	// nobody remembers.
+	//
+	// Refused rather than resolved, and refused *here* rather than in the basket,
+	// because this is provable at publish and so belongs at publish (I5). Picking one
+	// kind would publish a catalogue that does not say what its author drew, and
+	// there is no honest rule for which of the two they meant.
+	contradictory := make([][2]string, 0, len(structural))
+	for pair, kinds := range structural {
+		if len(kinds) > 1 {
+			contradictory = append(contradictory, pair)
+		}
+	}
+	sort.Slice(contradictory, func(a, b int) bool {
+		if contradictory[a][0] != contradictory[b][0] {
+			return contradictory[a][0] < contradictory[b][0]
+		}
+		return contradictory[a][1] < contradictory[b][1]
+	})
+	for _, pair := range contradictory {
+		add(Problem{Item: pair[0],
+			Message: "contains " + pair[1] + " both as composition and as aggregation; " +
+				"one is integral and the other optional, and the basket cannot be both"})
 	}
 }
 
