@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -31,8 +33,8 @@ import (
 // whole class of subject goes missing together and the count reads zero. A floor an
 // operator can work with. A zero is a claim that nothing is there.
 //
-// What these guards are, honestly: one structural check and three narrow rules over
-// the text of the console.
+// What these guards are, honestly: one structural check, three narrow rules over the
+// text of the console, and one over the published Postman collection.
 //
 // The structural one is [TestACappedListingAnswersWithAPage], and it is the only one
 // here that proves anything: a capped listing answers with an object that states its
@@ -41,8 +43,10 @@ import (
 // `page.items` — but it moves the wrong number out of arm's reach, which is a
 // different and better kind of guard than noticing it afterwards.
 //
-// The three text rules are the afterwards. Each would have caught a real defect and
-// none of them proves anything. They do not follow data flow, so a count taken from a
+// The text rules are the afterwards. Each would have caught a real defect and none of
+// them proves anything. The Postman one ([TestThePostmanCollectionReadsItems]) is there
+// because that collection is published for people to copy from and nothing else in this
+// repository runs it: a wrong shape in it teaches the wrong shape, silently, outside. They do not follow data flow, so a count taken from a
 // page two assignments away from the fetch still gets through — that is how the task
 // inbox's folder badges came to be wrong, and no regular expression over this file set
 // would have found it. They are a tripwire at the places the mistake has actually been
@@ -382,6 +386,124 @@ func goesThroughItems(fragment string, useAt int) bool {
 	return at >= 0 && at < useAt
 }
 
+// TestThePostmanCollectionReadsItems is the same rule as the console's, over the one
+// consumer nothing else in this repository runs.
+//
+// postman/Atlas.postman_collection.json is published for people to import and copy
+// from: its test scripts are what somebody pastes into their own script when they
+// write against Atlas for the first time. Before the envelope they read
+// `pm.response.json()` straight as an array, which is the shape this record removed —
+// and unlike every other caller here, no test would have said so. This is that test.
+//
+// It reads the same cappedListings table the rules above do, because a guard with its
+// own copy of the list it guards drifts from it, and the drift is silent in exactly the
+// direction that matters.
+func TestThePostmanCollectionReadsItems(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "postman", "Atlas.postman_collection.json"))
+	if err != nil {
+		t.Fatalf("read the published collection: %v", err)
+	}
+	var doc struct {
+		Item []json.RawMessage `json:"item"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode the collection: %v", err)
+	}
+	checked := 0
+	var walk func(items []json.RawMessage, path string)
+	walk = func(items []json.RawMessage, path string) {
+		for _, it := range items {
+			var node struct {
+				Name  string            `json:"name"`
+				Item  []json.RawMessage `json:"item"`
+				Event []struct {
+					Script struct {
+						Exec []string `json:"exec"`
+					} `json:"script"`
+				} `json:"event"`
+				Request struct {
+					Method string `json:"method"`
+					URL    struct {
+						Raw string `json:"raw"`
+					} `json:"url"`
+				} `json:"request"`
+			}
+			if err := json.Unmarshal(it, &node); err != nil {
+				t.Fatalf("decode collection item under %q: %v", path, err)
+			}
+			here := path + "/" + node.Name
+			if len(node.Item) > 0 {
+				walk(node.Item, here)
+				continue
+			}
+			if node.Request.Method != http.MethodGet {
+				continue
+			}
+			// The collection writes {{baseUrl}} before the path, so the quote the console
+			// rules key on is not there; match on the path itself.
+			listing, ok := matchCappedListing(node.Request.URL.Raw + `"`)
+			if !ok {
+				continue
+			}
+			var script []string
+			for _, e := range node.Event {
+				script = append(script, e.Script.Exec...)
+			}
+			// A script that never reads the body cannot read it wrongly. Only the ones
+			// that call pm.response.json() are making a claim about the shape.
+			body := strings.Join(script, "\n")
+			if !strings.Contains(body, "pm.response.json()") {
+				continue
+			}
+			checked++
+			if why, bad := usesTheBodyAsRows(body); bad {
+				t.Errorf("%s reads %s and %s:\n  %s\n"+
+					"That listing is capped at %d rows and answers {items, total, totalExact, "+
+					"truncated, nextCursor}. This script is what somebody copies into their own; "+
+					"reading the response as an array teaches the shape this collection is "+
+					"supposed to demonstrate the end of.",
+					here, listing.path, why, strings.Join(script, "\n  "), listing.cap)
+			}
+		}
+	}
+	walk(doc.Item, "")
+	if checked == 0 {
+		t.Fatal("no capped-listing request in the collection carries a test script; this guard " +
+			"is watching nothing, which is either a gutted collection or a broken walk")
+	}
+}
+
+// usesTheBodyAsRows reports that a Postman test script treats the whole response as its
+// rows, and says how.
+//
+// The first version of this rule asked only that the script mention "items" somewhere,
+// and a comment naming the envelope satisfied it — so the check passed on a script that
+// then did `const tasks = pm.response.json();`. Looking for the word was looking at the
+// wrong thing: what matters is whether the *value* is subscripted or iterated, which is
+// what this reads.
+func usesTheBodyAsRows(script string) (why string, bad bool) {
+	const arrayUse = `(?:\[|\.\s*(?:length|map|filter|forEach|find|some|every|reduce|slice|sort|at)\b)`
+	if regexp.MustCompile(`pm\.response\.json\(\)\s*` + arrayUse).MatchString(script) {
+		return "subscripts or iterates the response itself", true
+	}
+	for _, m := range regexp.MustCompile(
+		`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*pm\.response\.json\(\)`,
+	).FindAllStringSubmatch(script, -1) {
+		name := regexp.QuoteMeta(m[1])
+		// Unwrapped first is the correct shape, however it is spelled — `page.items`,
+		// `(page && page.items) || []`.
+		if regexp.MustCompile(`\b` + name + `\s*(?:&&\s*` + name + `\s*)?\.\s*items\b`).MatchString(script) {
+			continue
+		}
+		// The optional `(name || [])` is the defensive spelling this codebase writes; it
+		// puts a paren between the name and the method, which a naive pattern misses.
+		if regexp.MustCompile(`\(?\s*\b` + name + `\b(?:\s*\|\|\s*\[\s*\])?\s*\)?\s*` + arrayUse).MatchString(script) {
+			return "binds the response to " + m[1] + " and then uses it as an array", true
+		}
+	}
+	return "", false
+}
+
 // matchCappedListing reports which capped listing a fragment of console source reads,
 // if any. A path with a key segment after the collection (…/instances/${key}/…) is a
 // point read, not a listing, and is not one of these.
@@ -520,6 +642,33 @@ func TestThePageCountGuardsStillBite(t *testing.T) {
 		} {
 			if got := pageShapeComplaints([]byte(c.body)); (len(got) > 0) != c.caught {
 				t.Errorf("caught=%v (%v), want %v for %s:\n  %s", len(got) > 0, got, c.caught, c.what, c.body)
+			}
+		}
+	})
+
+	t.Run("a Postman script that reads the body as rows", func(t *testing.T) {
+		for _, c := range []struct {
+			script string
+			caught bool
+			what   string
+		}{
+			{"const tasks = pm.response.json();\npm.expect(tasks.length).to.be.above(0);", true,
+				"the collection's own Golden Path before this record"},
+			{"const arr = pm.response.json();\nconst a = (arr || []).find(i => i.state === 'active');", true,
+				"the same, one step further along"},
+			{"pm.expect(pm.response.json().map(p => String(p.key))).to.include(k);", true,
+				"iterating the response without binding it first"},
+			{"// answers {items, total, totalExact, truncated}\nconst t = pm.response.json();\nt[0].key;", true,
+				"a comment naming the envelope, which is what defeated the first version of this rule"},
+			{"const page = pm.response.json();\nconst t = (page && page.items) || [];\nt[0].key;", false,
+				"the shape the collection uses now"},
+			{"const page = pm.response.json();\npm.expect(page.items).to.be.an('array');", false,
+				"asserting the envelope itself"},
+			{"const j = pm.response.json();\npm.collectionVariables.set('key', j.key);", false,
+				"a single object, which is not a listing and has no rows to miscount"},
+		} {
+			if _, bad := usesTheBodyAsRows(c.script); bad != c.caught {
+				t.Errorf("caught=%v, want %v for %s:\n  %s", bad, c.caught, c.what, c.script)
 			}
 		}
 	})

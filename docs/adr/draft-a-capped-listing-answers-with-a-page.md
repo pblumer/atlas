@@ -120,11 +120,19 @@ with a changelog entry is cheaper than a permanent fork.
   and the client method that existed only to feed them (`getWithHeaders`) are all gone.
   The tools return `asText(c.get(path))`.
 - **Hosted pages** (`api/web/*.html`) — five unwrap `.items`.
+- **`postman/`** — the published collection's four listing requests and the README's
+  `curl` walkthrough. Worth naming because it is the one consumer here that is *meant*
+  to be copied: somebody pastes that `curl` line into their own script, and it was
+  teaching `json.load(…)[0]["key"]`.
+- **`worker/`, `conformance/`, `scripts/nuggets/`** — three more Go and Node consumers
+  that read these listings and that no rule in this file looks at. The full `go test
+  ./...` sweep is what caught the first two; the third is a screenshot script nothing
+  asserts against, and it was logging the page size as the number of open tasks.
 - **Cost of the totals themselves**: 2.2 ms for the instances listing's `total` against
   21.7 ms for the page it accompanies — about +10%, and it is point reads of maintained
   counters, not a walk. Nothing exact was bought with the run loop.
 
-### The fourth guard
+### The fourth and fifth guards
 
 `api/pagecount_internal_test.go` gains `TestACappedListingAnswersWithAPage`, and it is
 the first rule in that file that proves something. It starts a server, asks each capped
@@ -148,10 +156,33 @@ failing, not by a guard. They are the callers furthest from this change and the 
 outside customer opens, which is the worst combination for a rule that does not look at
 them.
 
+It also gains `TestThePostmanCollectionReadsItems`, over
+`postman/Atlas.postman_collection.json` — the one consumer in this repository that
+nothing runs. Its test scripts are what somebody pastes into their own script when they
+write against Atlas for the first time, and they read `pm.response.json()` straight as
+an array. The first version of that rule asked only that a script mention `items`, and
+a comment naming the envelope satisfied it, so it passed over a script that then bound
+the body straight to a variable and counted it — gameable in one step, and it was gamed
+by the very comment the conversion had added. It now reads whether the *value* is
+subscripted or iterated, and `TestThePageCountGuardsStillBite` pins both readings.
+
+The guards do not see everything, and it is worth being exact about what they missed.
+The `worker` and `conformance` packages both read these listings from Go, and no rule
+here looks at Go outside `api/`: their tests failed on the full run, after the console,
+the hosted pages, the MCP tools and `api/`'s own suite were all green. The conformance
+gallery is worse than that — it is *generated* from a template in
+`conformance/gallery_test.go`, so the page the guards read is an artifact, and the
+source they would need to read is a Go string. What holds those together is not a guard
+in this file but `TestGalleryUpToDate`, which fails when the artifact and its template
+disagree.
+
 The third rule's path pattern is now built from the same table as the other two, rather
 than written out beside it, and that alone found two more. `/api/v1/audit` had been in
 the table while the pattern still named three endpoints, so the console's audit view
-read a capped listing with no rule watching it — and read it as a bare array.
+read a capped listing with no rule watching it — and read it as a bare array. That view
+also had no browser test of any kind, which is the other half of how it stayed wrong;
+`e2e/console-audit.spec.mjs` is new here and asserts the thing that matters, that a
+windowed log says how many changes there are rather than how many are on screen.
 `/api/v1/instances/search` was newly in the table, and the rule's first run reported the
 live panel's search box: it labelled its picker `Search results (200)` off the row
 count, which is the original defect in its purest form, on the control an operator uses

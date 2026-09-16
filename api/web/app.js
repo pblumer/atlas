@@ -1523,7 +1523,7 @@ async function viewConsoleAudit() {
           <button class="btn neutral" id="audit-refresh" title="Reload the audit log">Refresh</button>
         </div>
       </div>
-      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first. The 200 most recent are shown.</p>
+      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first.</p>
       <div id="audit-out">loading…</div>
     </div>`;
 

@@ -45,7 +45,17 @@ _Changed_ / _Removed_ for each version.
   their length *is* their population. A fourth guard in
   `api/pagecount_internal_test.go` now asks each capped listing over HTTP and refuses a
   body that is an array or that cannot say whether the cap bit, so the two sets cannot
-  quietly drift.
+  quietly drift; a fifth reads the published Postman collection, which nothing else here
+  runs and which people copy from. The Console's audit log, which had no browser test at
+  all, gets one — a windowed log now says how many changes there are rather than
+  rendering the window as the whole history.
+
+  Tests in `worker/` and `conformance/` read these listings too, and were converted with
+  everything else. The conformance gallery page is generated from a template in
+  `conformance/gallery_test.go`; run `go test ./conformance -update` after touching it.
+  The Postman collection and its README walkthrough were updated as well — that `curl`
+  line is meant to be copied, and it was teaching `json.load(…)[0]["key"]`. The Golden
+  Path now asserts the envelope rather than only the status code.
   (ADR-draft-a-capped-listing-answers-with-a-page)
 
 - **The portal's corner names whoever the order is for, and the help moved to the end
