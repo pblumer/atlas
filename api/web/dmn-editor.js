@@ -175,26 +175,6 @@ function stashAdoption(forTask, name, modelRef) {
   } catch { /* a browser refusing session storage just costs the auto-adopt */ }
 }
 
-// dmnVersionOf answers which DMN version dmn-js must be built for to read this
-// document — the one decision that has to be made *before* the modeler exists,
-// because moddle descriptors are chosen in the constructor and never afterwards.
-//
-// Without it dmn-js defaults to "1.3", binds the `dmn` prefix to the 20191111 MODEL
-// namespace, and a DMN 1.5 model becomes unopenable with a message that names the
-// symptom and not the cause: `failed to parse document as <dmn:Definitions>`. The
-// engine underneath has no such limit — temis compiles both — so the refusal was
-// the editor's alone (#994).
-//
-// It reads the raw text rather than parsing: the answer is needed to decide how to
-// parse, so parsing first would be circular. Anything it does not recognise stays
-// "1.3", which is what every stored model was written under and what seedDmnXml
-// below still emits — deliberately, see
-// ADR-draft-dmn-version-follows-the-document.
-const DMN_15_MODEL_NS = "https://www.omg.org/spec/DMN/20230324/MODEL/";
-function dmnVersionOf(xml) {
-  return typeof xml === "string" && xml.includes(DMN_15_MODEL_NS) ? "1.5" : "1.3";
-}
-
 // seedDmnXml is the starter model for a brand-new decision: one input data node
 // feeding one decision with a decision table (one input column reading that input,
 // one output column, one empty rule). Atlas derives a decision's inputs from the
@@ -731,24 +711,6 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   try {
     const AtlasDmn = await loadDmn();
     if (gen !== generation) return; // superseded while the 1.3 MB bundle loaded
-    // What opens: the author's draft if there is one — it is the newer work and the
-    // only copy of it — else the stored model, else the seed for a decision that
-    // does not exist yet. It is read *before* the modeler is built, because which
-    // DMN version dmn-js is built for is a constructor option and the document is
-    // the only thing that knows the answer.
-    let xml;
-    if (draft) {
-      xml = await api("GET", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id) + "/xml");
-      if (gen !== generation) return;
-      if (typeof xml !== "string") throw new Error("could not load the draft XML");
-    } else if (modelRef) {
-      xml = await api("GET", "/api/v1/dmn-models/" + encodeURIComponent(modelRef) + "/xml");
-      if (gen !== generation) return;
-      if (typeof xml !== "string") throw new Error("could not load the model XML");
-    } else {
-      xml = seedDmnXml();
-    }
-
     // The properties panel is a DRG-view feature (it edits the decision/input-data
     // elements of the requirements graph): Name, ID, Version tag, Documentation and
     // the output Variable — the same panel Camunda's Modeler shows. It lives on the
@@ -757,12 +719,6 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     // ignores that namespace, so a saved model still compiles.
     modeler = new AtlasDmn.DmnJS({
       container: canvas,
-      // Which DMN version's moddle descriptors to build, decided from the document
-      // itself (see dmnVersionOf). It is a constructor option, which is why the XML
-      // is fetched above rather than after the modeler exists — and why a model
-      // opened as 1.5 also *saves* as 1.5: dmn-js's writer emits whatever the
-      // moddle was built with, so the author's version is not quietly downgraded.
-      dmnVersion: dmnVersionOf(xml),
       drd: {
         propertiesPanel: { parent: propsPanel },
         additionalModules: [
@@ -795,6 +751,21 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     };
     modeler.on("views.changed", renderViews);
 
+    // What opens: the author's draft if there is one — it is the newer work and the
+    // only copy of it — else the stored model, else the seed for a decision that
+    // does not exist yet.
+    let xml;
+    if (draft) {
+      xml = await api("GET", "/api/v1/dmn-drafts/" + encodeURIComponent(draft.id) + "/xml");
+      if (gen !== generation) return;
+      if (typeof xml !== "string") throw new Error("could not load the draft XML");
+    } else if (modelRef) {
+      xml = await api("GET", "/api/v1/dmn-models/" + encodeURIComponent(modelRef) + "/xml");
+      if (gen !== generation) return;
+      if (typeof xml !== "string") throw new Error("could not load the model XML");
+    } else {
+      xml = seedDmnXml();
+    }
     await modeler.importXML(xml);
     if (gen !== generation) return;
     renderViews();
