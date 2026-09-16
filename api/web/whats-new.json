@@ -300,24 +300,6 @@
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
-    },
-    {
-      "id": "a-refused-publish-said-not-published-and-withheld-every-reas",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A refused publish said \"not published\" and withheld every reason.",
-        "de": "A refused publish said \"not published\" and withheld every reason."
-      },
-      "summary": {
-        "en": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to.",
-        "de": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
     }
   ]
 }
