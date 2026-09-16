@@ -329,3 +329,77 @@ func TestTheRosterSaysWhichAccountsHaveAFace(t *testing.T) {
 		t.Error("the roster carries a password hash")
 	}
 }
+
+// TestThePictureRoutesSayWhichThingIsMissing.
+//
+// Three refusals that are easy to collapse into one and must not be. "Not yours"
+// and "no such account" are different sentences: a caller who may not act on
+// somebody else's account learns nothing from being told which ids exist, so the
+// gate is asked first and answers without touching the store. And an id nothing
+// answers to is a 404 rather than a silent success on a file beside no record.
+func TestThePictureRoutesSayWhichThingIsMissing(t *testing.T) {
+	ts, dir := newAuthServer(t, "root", "rootpassword")
+	admin := newClient(t)
+	if login(t, admin, ts, "root", "rootpassword") != http.StatusOK {
+		t.Fatal("admin login failed")
+	}
+	ghost := "/api/v1/users/usr_nobodyhasthisid/avatar"
+
+	// An administrator may act on any account, so what stops this is that there is
+	// no account — which is the answer the store gives and the gate cannot.
+	if code, b := cReqTyped(t, admin, ts, "PUT", ghost, "image/png", aPNG); code != http.StatusNotFound {
+		t.Errorf("setting a picture on an id nothing answers to: %d (%s), want 404", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "DELETE", ghost, ""); code != http.StatusNotFound {
+		t.Errorf("removing a picture from an id nothing answers to: %d (%s), want 404", code, b)
+	}
+	if code, _ := cReq(t, admin, ts, "GET", ghost, ""); code != http.StatusNotFound {
+		t.Error("an id nothing answers to has a picture")
+	}
+	// And nothing was written beside a record that does not exist.
+	if got := avatarFiles(t, dir); len(got) != 0 {
+		t.Errorf("a refused write left %v", got)
+	}
+
+	// A caller with no session at all. The gate answers before the store is read,
+	// so this is a refusal and not a 404 that would enumerate ids.
+	anon := newClient(t)
+	alice := twoUsers(t, ts, admin, "alice")[0]
+	path := "/api/v1/users/" + meID(t, alice, ts) + "/avatar"
+	if code, b := cReqTyped(t, anon, ts, "PUT", path, "image/png", aPNG); code != http.StatusUnauthorized &&
+		code != http.StatusForbidden {
+		t.Errorf("a caller with no session set a picture: %d (%s)", code, b)
+	}
+}
+
+// TestWithEnforcementOffThereIsNobodyToBe.
+//
+// The rule every other gate in the product states: enforcement off means there is
+// nobody to be, not nobody who may. It is worth a test of its own because the
+// opposite reading is the one that gets written by accident — a nil principal
+// looks like "not allowed" to anybody reading the gate in isolation — and it has
+// already cost this product one round, on the catalogue's appearance.
+func TestWithEnforcementOffThereIsNobodyToBe(t *testing.T) {
+	ts := newTestServer(t)
+	code, body := doReq(t, ts, "POST", "/api/v1/users",
+		`{"username":"arno","password":"password1"}`, "application/json")
+	if code != http.StatusCreated {
+		t.Fatalf("create user: %d (%s)", code, body)
+	}
+	var made struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &made); err != nil {
+		t.Fatalf("decode: %v (%s)", err, body)
+	}
+	path := "/api/v1/users/" + made.ID + "/avatar"
+	if code, b := doReq(t, ts, "PUT", path, aPNG, "image/png"); code != http.StatusNoContent {
+		t.Fatalf("with enforcement off a picture could not be set: %d (%s)", code, b)
+	}
+	if code, _ := doReq(t, ts, "GET", path, "", ""); code != http.StatusOK {
+		t.Error("the picture that was just set cannot be read")
+	}
+	if code, b := doReq(t, ts, "DELETE", path, "", ""); code != http.StatusNoContent {
+		t.Errorf("with enforcement off a picture could not be removed: %d (%s)", code, b)
+	}
+}
