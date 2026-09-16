@@ -883,8 +883,10 @@ test("the editor says when a knowledge model is never invoked, or invoked withou
 
   const strip = page.locator("#dmn-warn");
   await expect(strip).toBeVisible();
-  const rows = strip.locator("li button");
-  await expect(rows).toHaveCount(2);
+  // One <li> per finding. The message is a button (it navigates), and a finding may
+  // carry a second one offering its repair, so the rows are counted by the item.
+  await expect(strip.locator("li")).toHaveCount(2);
+  const rows = strip.locator("li button[data-el]");
   // Both findings name the model they are about, and say what actually follows —
   // one is never evaluated, the other runs and draws a graph that omits it.
   await expect(rows.nth(0)).toContainText("Nothing invokes the knowledge model “unused rate”");
@@ -906,7 +908,7 @@ test("the editor says when a knowledge model is never invoked, or invoked withou
   await page.locator(".editor-bar .etabs#dmn-views button", { hasText: "total" }).click();
   await expect(page.locator(".dmn-canvas .dmn-literal-expression-container")).toBeVisible();
   await expect(strip).toBeVisible(); // the findings are about the model, not the view
-  await strip.locator("li button").first().click();
+  await strip.locator("li button[data-el]").first().click();
   await expect(page.locator(".editor-bar .etabs#dmn-views button").first()).toHaveClass(/active/);
   await expect.poll(() => page.evaluate(() =>
     document.querySelectorAll(".dmn-canvas .djs-element.selected").length)).toBeGreaterThan(0);
@@ -937,7 +939,9 @@ test("the findings follow the model as it is edited, from whichever view is doin
   // the model changed.
   await expect(strip).toContainText("Nothing invokes the knowledge model “tier”");
   await expect(strip).not.toContainText("does not require it");
-  await expect(strip.locator("li button")).toHaveCount(2);
+  await expect(strip.locator("li")).toHaveCount(2);
+  // Both findings are now the kind with no determinate repair, so neither offers one.
+  await expect(strip.locator(".dmn-warn-fix")).toHaveCount(0);
 });
 
 test("a decision model with nothing to say says nothing", async ({ page }) => {
@@ -947,4 +951,47 @@ test("a decision model with nothing to say says nothing", async ({ page }) => {
   // The stored fixture is a plain decision table: no knowledge model, no finding, and
   // a strip that is present in the DOM but never shown.
   await expect(page.locator("#dmn-warn")).toBeHidden();
+});
+
+test("the missing requirement can be drawn from the finding, and the drawing is the author's own edit", async ({ page }) => {
+  const state = installMock(page, { refs: [{ id: "ref-1", name: "Fee", modelRef: "fee", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: WARN_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const strip = page.locator("#dmn-warn");
+  await expect(strip.locator("li")).toHaveCount(2);
+  // Only the finding with a determinate repair offers one. Which decision ought to call
+  // an uninvoked knowledge model is the author's to decide, so that one has no button.
+  const fix = strip.locator(".dmn-warn-fix");
+  await expect(fix).toHaveCount(1);
+  await expect(fix).toHaveText("Draw the requirement");
+
+  await fix.click();
+
+  // The finding is gone because the model changed, not because the strip was told to
+  // hide it: the findings are recomputed from the model after every command.
+  await expect(strip.locator("li")).toHaveCount(1);
+  await expect(strip).not.toContainText("does not require it");
+  await expect(strip).toContainText("Nothing invokes the knowledge model “unused rate”");
+  await expect(page.locator(".dmn-canvas .djs-overlay .unsup-badge")).toHaveCount(1);
+
+  // What was drawn is in the model, not only on the canvas — the save carries it.
+  await page.locator("#dmn-save").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  expect(state.draftSaves).toHaveLength(1);
+  expect(state.draftSaves[0].xml).toMatch(/<knowledgeRequirement[\s\S]*?requiredKnowledge[^>]*#bkm_tier/);
+
+  // And it is as easy to take back as it was to make, which is what makes offering the
+  // button safe at all. The new connection is left selected, so its context pad is
+  // already open on the one entry it has — the bin — and using it brings the finding
+  // back. (Not Ctrl+Z: dmn-js's keyboard is bound to nothing reachable in this editor,
+  // so no shortcut works here, for this edit or any other.)
+  await expect(page.locator(".dmn-canvas .djs-element.selected")).toHaveCount(1);
+  const bin = page.locator('.dmn-canvas .djs-context-pad .entry[data-action="delete"]');
+  await expect(bin).toHaveCount(1);
+  await bin.click();
+  await expect(strip.locator("li")).toHaveCount(2);
+  await expect(strip).toContainText("does not require it");
 });

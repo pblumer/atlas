@@ -163,6 +163,20 @@ _Changed_ / _Removed_ for each version.
   missed warning rather than a false one. A warning an author learns to ignore is worse
   than no warning.
 
+  The second finding carries its repair: **Draw the requirement** draws the missing edge
+  from the knowledge model to the decision that calls it. It is offered only there, because
+  only there is the fix determinate — which decision ought to call an uninvoked knowledge
+  model is the author's to decide, and a button that guessed would be writing their model
+  for them. dmn-js's own rules are asked whether the connection may be made rather than the
+  element being constructed, so the button cannot force a connection the palette would
+  refuse, and says why when it is refused. What it draws is left selected, which is both
+  where the author looks to see what happened and the gesture that takes it back: the
+  connection's context pad has one entry, the bin. Deliberately not "press Ctrl+Z" —
+  dmn-js's keyboard module is bound to nothing reachable in this editor, so no shortcut
+  works here, for this edit or any other. Binding it is worth doing and is not this change:
+  it touches every edit, and it has to be done without taking Ctrl+Z away from the
+  CodeMirror in the expression views or from the fields in the bar.
+
 - **The class diagram can say which members anything actually uses.** Where a business object
   is used has been readable since **Data › Business objects** arrived — one class at a time,
   on a page of its own. The question is asked on the class diagram, with the member under the
