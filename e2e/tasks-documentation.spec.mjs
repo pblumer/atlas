@@ -13,6 +13,13 @@
 // still reads the way its author left it.
 import { test, expect } from "@playwright/test";
 
+// listing is how every capped list endpoint answers since
+// ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+// .items, beside the count of what is really there and whether the cap bit.
+const listing = (items, extra = {}) => ({
+  items, total: items.length, totalExact: true, truncated: false, ...extra,
+});
+
 // Plain prose, exactly as it was written before the field understood Markdown: two
 // paragraphs, no markers anywhere.
 const DOC = "Vergleiche die Angaben mit den Anlagen.\n\nFehlen Unterlagen, lehne ab und informiere den Antragsteller.";
@@ -52,7 +59,7 @@ function installMock(page) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
-    if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: TASKS });
+    if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: listing(TASKS) });
     return route.fulfill({ json: [] });
   });
 }

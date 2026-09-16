@@ -203,7 +203,8 @@ async function findProcess(){
 // diff is then correct on any population, though still a guess when two callers start
 // this definition at once: https://github.com/pblumer/atlas/issues/933
 async function instancesOfProcess(defKey){
-  return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
+  const page = await api("GET",`/instances?process=${defKey}`);
+  return ((page||{}).items||[]).filter(i=>i.processDefKey===defKey);
 }
 async function startInstance(defKey){
   const before = new Set((await instancesOfProcess(defKey)).map(i=>i.key));
@@ -214,8 +215,8 @@ async function startInstance(defKey){
   return fresh.key;
 }
 async function firstTask(){
-  const raw = await api("GET",`/tasks?processInstance=${instanceKey}`);
-  const list = (Array.isArray(raw) ? raw : (raw.items||[])).filter(t=>t.processInstanceKey===instanceKey);
+  const page = await api("GET",`/tasks?processInstance=${instanceKey}`);
+  const list = ((page||{}).items||[]).filter(t=>t.processInstanceKey===instanceKey);
   return list[0];
 }
 

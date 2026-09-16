@@ -146,16 +146,6 @@ func (c *Client) get(path string) ([]byte, error) {
 	return c.do(http.MethodGet, path, "", nil)
 }
 
-// getWithHeaders issues a GET and also returns a copy of the response headers.
-// Listing tools use it to preserve API pagination metadata in their MCP result.
-func (c *Client) getWithHeaders(path string) ([]byte, http.Header, error) {
-	resp, err := c.doResponse(http.MethodGet, path, "", nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	return resp.body, resp.header, nil
-}
-
 // post issues a POST with the given content type and body.
 func (c *Client) post(path, contentType string, body []byte) ([]byte, error) {
 	return c.do(http.MethodPost, path, contentType, body)

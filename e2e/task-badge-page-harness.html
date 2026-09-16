@@ -13,7 +13,7 @@
          was reporting the size of its own page and could not have said anything else.
 
          So this mock answers /api/v1/tasks the way the server does under a flood: a full
-         page of 500 rows and X-Tasks-Truncated, in which one element is over-represented,
+         page of 500 rows marked truncated, in which one element is over-represented,
          a second element's tasks do not appear at all (they are older than the page), and
          a third element's single task does. The live view must read its counts from the
          runtime element counters instead, which are exact whatever the page holds. -->
@@ -115,6 +115,15 @@
         task(7001, "ut_single", DEF),
       ];
 
+      // page is how every capped list endpoint answers since
+      // ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+      // .items, beside the count of what is really there. A bare array here would make
+      // the console read undefined rather than a number, so the mock answers in the
+      // shape the server does.
+      const page = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const seen = [];  // every URL the view asked for, so a test can name the call
       const api = async (method, url) => {
         seen.push(url);
@@ -122,11 +131,18 @@
           return [{ key: DEF, processId: "service-desk-ticket", name: "Service-Desk-Ticket", version: 2 }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
-        if (url === "/api/v1/tasks") return PAGE;
+        if (url === "/api/v1/tasks") return page(PAGE, { total: PAGE.length, totalExact: false, truncated: true });
         if (url.startsWith("/api/v1/tasks?processInstance=")) {
           // The instance-scoped list resolves through the instance's own element index,
           // so it is not subject to the page cap — the flood cannot hide these.
-          return [task(7001, "ut_single", DEF), task(6001, "ut_flood", DEF)];
+          return page([task(7001, "ut_single", DEF), task(6001, "ut_flood", DEF)]);
+        }
+        if (url.startsWith("/api/v1/instances?process=")) {
+          // The panel asks for one half at a time; only the live half has anything.
+          const rows = url.includes("state=active")
+            ? [{ key: INST, processDefKey: DEF, state: "active", createdAt: 1e18, variables: [] }]
+            : [];
+          return page(rows);
         }
         if (url.includes("/decisions")) return [];
         if (url.includes("/runtime")) {
@@ -140,16 +156,8 @@
         return {};
       };
 
-      const apiRaw = async (method, url, body) => {
-        if (url.startsWith("/api/v1/instances?process=")) {
-          seen.push(url);
-          const rows = url.includes("state=active")
-            ? [{ key: INST, processDefKey: DEF, state: "active", createdAt: 1e18, variables: [] }]
-            : [];
-          return { data: rows, headers: new Headers() };
-        }
-        return { data: await api(method, url, body), headers: new Headers() };
-      };
+      const apiRaw = async (method, url, body) =>
+        ({ data: await api(method, url, body), headers: new Headers() });
 
       window.__seen = seen;
       window.__setErsatzTokens = (n) => { state.ersatz = n; };

@@ -61,8 +61,12 @@ const superseded = (gen) => gen !== navGen;
 
 // ---------- API ----------
 // apiRaw is the fetch wrapper that also returns the response headers, for the few
-// endpoints whose headers carry pagination signals (X-Tasks-Truncated /
-// X-Tasks-Next-Cursor). Most callers want just the body — see api().
+// endpoints that say something in one. Pagination is no longer among them: a capped
+// listing carries its cap, its total and its cursor in the body
+// (ADR-draft-a-capped-listing-answers-with-a-page), so the
+// remaining header readers are about other things — X-Archive-State, which says the
+// rows describe instances history retention has deleted. Most callers want just the
+// body — see api().
 export async function apiRaw(method, path, body, isXML) {
   const opts = { method };
   if (body !== undefined) {
@@ -1549,9 +1553,9 @@ async function viewConsoleAudit() {
 
   const out = document.getElementById("audit-out");
   const load = async (action) => {
-    let events;
+    let page;
     try {
-      events = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
+      page = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
     } catch (e) {
       if (superseded(gen)) return;
       if (/admin/i.test(e.message)) {
@@ -1562,10 +1566,17 @@ async function viewConsoleAudit() {
       return;
     }
     if (superseded(gen)) return;
-    if (!events || !events.length) {
+    const events = (page && page.items) || [];
+    if (!events.length) {
       out.innerHTML = `<p class="muted">No access-control changes recorded yet.</p>`;
       return;
     }
+    // The endpoint counts every match and then returns a window of it, so this total is
+    // the number of changes rather than the number on screen
+    // (ADR-draft-a-capped-listing-answers-with-a-page).
+    const cut = page.truncated
+      ? `<p class="muted small">Showing the newest ${events.length} of ${page.total}. Narrow by action, or ask for more with ?limit=.</p>`
+      : "";
     const rows = events.map((e) => `
       <tr>
         <td class="muted small" style="white-space:nowrap">${esc(fmtTime(e.at))}</td>
@@ -1574,7 +1585,7 @@ async function viewConsoleAudit() {
         <td>${detail(e)}</td>
         <td>${esc(e.actorName || e.actorId || "—")}</td>
       </tr>`).join("");
-    out.innerHTML = `
+    out.innerHTML = `${cut}
       <table class="table" data-dt-key="audit">
         <thead><tr><th>When</th><th>Action</th><th>Application</th><th>Change</th><th>By</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -5675,9 +5686,10 @@ async function viewInstances() {
     varClear.hidden = false;
     varPanel.hidden = false;
     varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
-    let rows;
+    let rows, page;
     try {
-      rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+      page = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+      rows = (page && page.items) || [];
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
       return;
@@ -5716,14 +5728,22 @@ async function viewInstances() {
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
       </tr>`;
     }).join("");
-    const capped = rows.length >= 200 ? ' <span class="muted">(showing first 200)</span>' : "";
+    // The server says whether it cut the result. This used to be inferred from
+    // receiving exactly 200 rows, which cannot tell a search that found 200 from one
+    // that found more (ADR-draft-a-capped-listing-answers-with-a-page) — and the
+    // difference matters here, because a cut result means the instance being looked for
+    // may be among the ones not shown.
+    const cut = !!(page && page.truncated);
+    const matched = cut
+      ? `the first ${rows.length} of more`
+      : `${rows.length} instance${rows.length === 1 ? "" : "s"}`;
     // The server answers a bare instance key as a point read; everything else is
     // still a content scan. Say which, so the cost of what was just run is visible
     // rather than implied.
     const byKey = /^\d+$/.test(q) && rows.length === 1 && String(rows[0].key) === q;
     const how = byKey ? "exact instance key" : "full scan";
     varPanel.innerHTML = `
-      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · ${how}</p>
+      <p class="muted" style="font-size:12px;margin:0 2px 8px">${matched} matched${cut ? " — narrow the query to see the rest" : ""} · ${how}</p>
       <div class="card" style="padding:0">
         <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
@@ -6186,12 +6206,14 @@ async function viewIncidents() {
   // a flood is the cause table above, not ten thousand rows in the DOM.
   const loadRows = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents" + scopeQuery());
-      current = (data && data.incidents) || [];
+      const page = await api("GET", "/api/v1/incidents" + scopeQuery());
+      current = (page && page.items) || [];
       // A selection only means anything for rows that are still on the page.
       const onPage = new Set(current.map((r) => String(r.elementInstanceKey)));
       for (const key of [...picked]) if (!onPage.has(key)) picked.delete(key);
-      const capped = headers.get("X-Incidents-Truncated") === "true";
+      // The cap is on the response now, not in a header a reader had to know about
+      // (ADR-draft-a-capped-listing-answers-with-a-page).
+      const capped = !!(page && page.truncated);
       rowsTitle.textContent = scope
         ? `${scope.elementId || "Element #" + scope.elementIndex} · ${scope.processId || scope.processDefKey}${capped ? ` — first ${current.length} of ${scope.count}` : ` — ${current.length}`}`
         : capped ? `Incidents — the first ${current.length}` : `Incidents — ${current.length}`;
@@ -8147,12 +8169,15 @@ async function viewTasks(preselectKey) {
 
   async function load() {
     try {
-      // The list is capped and newest-first; a capped page flags X-Tasks-Truncated and
-      // hands back X-Tasks-Next-Cursor for paging to older tasks (see loadOlder).
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks");
-      state.tasks = data;
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      // The list is capped and newest-first; the response says so in `truncated` and
+      // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
+      // off the body rather than a header is the point: a header is a thing a caller
+      // has to know to ask for, and this one went unread for years
+      // (ADR-draft-a-capped-listing-answers-with-a-page).
+      const page = await api("GET", "/api/v1/tasks");
+      state.tasks = (page && page.items) || [];
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       // A deep-linked task (…/tasks/t/{key}, e.g. from the Operations live view) can
       // sit outside the capped task-list page during a flood. Rather than silently
       // dropping the selection — which left the form unreachable — fetch that one task
@@ -8197,11 +8222,11 @@ async function viewTasks(preselectKey) {
     const q = "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor) +
       (saved ? "&folder=" + encodeURIComponent(saved.id) : "");
     try {
-      const { data, headers } = await apiRaw("GET", q);
+      const page = await api("GET", q);
       const seen = new Set(into.map((t) => t.key));
-      for (const t of data) if (!seen.has(t.key)) into.push(t);
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      for (const t of (page && page.items) || []) if (!seen.has(t.key)) into.push(t);
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       into.sort(taskOrder);
       renderAll();
     } catch (e) {
@@ -8276,11 +8301,11 @@ async function viewTasks(preselectKey) {
     const saved = savedFolder();
     if (!saved) { state.filtered = null; renderAll(); return; }
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
+      const page = await api("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
         (authOn || !state.me ? "" : "&me=" + encodeURIComponent(state.me)));
-      state.filtered = data;
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      state.filtered = (page && page.items) || [];
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       renderAll();
     } catch (e) {
       state.filtered = [];
@@ -9194,8 +9219,10 @@ async function viewFormEditor(formId, projectId, generateFor) {
 
 async function viewLive(key, instance) {
   const mod = await import("./editor.js");
-  // apiRaw rides along because the live view pages its instance list through the
-  // X-Instances-Next-Cursor header, which the body-only helper cannot see.
+  // apiRaw rides along for X-Archive-State on the panel's instance search: the rows
+  // it marks are answered from the exported log rather than this store, and that is a
+  // header. Pagination is not — it is in the body now
+  // (ADR-draft-a-capped-listing-answers-with-a-page).
   await mod.mountLive(view, { api, apiRaw, toast, key, instance });
 }
 

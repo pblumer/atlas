@@ -62,13 +62,22 @@
         { elementId: "end", type: "bpmn:EndEvent", tokens: 0, visits: 999, terminated: 0, incidents: 0 },
       ];
 
+      // page is how every capped list endpoint answers since
+      // ADR-draft-a-capped-listing-answers-with-a-page: the rows under
+      // .items, beside the count of what is really there. A bare array here would make
+      // the console read undefined rather than a number, so the mock answers in the
+      // shape the server does.
+      const page = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const api = async (method, url) => {
         if (url === "/api/v1/processes") {
           return [{ key: DEF, processId: "busy", name: "Service-Ereignis", version: 1 }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
-        if (url.startsWith("/api/v1/instances?process=")) return [];
-        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
+        if (url.startsWith("/api/v1/instances?process=")) return page([]);
+        if (url.startsWith("/api/v1/tasks")) return page([]);  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: 50002, finished: 28292, tokens: 78294,

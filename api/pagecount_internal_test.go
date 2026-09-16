@@ -1,14 +1,19 @@
 package api
 
 import (
+	"encoding/json"
 	"io/fs"
+	"net/http"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 // A number the console states is a counter or a walk, never the length of a page
-// (ADR-0365).
+// (ADR-0365) — and a capped listing answers in a shape that says so
+// (ADR-draft-a-capped-listing-answers-with-a-page).
 //
 // The mistake these guards look for is one the codebase made five times before
 // anybody noticed it once:
@@ -26,14 +31,23 @@ import (
 // whole class of subject goes missing together and the count reads zero. A floor an
 // operator can work with. A zero is a claim that nothing is there.
 //
-// What these guards are, honestly: three narrow rules over the text of the console,
-// each of which would have caught a real defect, and none of which proves anything.
-// They do not follow data flow, so a count taken from a page two assignments away
-// from the fetch still gets through — that is how the task inbox's folder badges came
-// to be wrong, and no regular expression over this file set would have found it. They
-// are a tripwire at the three places the mistake has actually been made, not a proof
-// that it cannot be made again. The proof, where one is wanted, is a test against a
-// population larger than the page — see api/operations_counts_test.go.
+// What these guards are, honestly: one structural check and three narrow rules over
+// the text of the console.
+//
+// The structural one is [TestACappedListingAnswersWithAPage], and it is the only one
+// here that proves anything: a capped listing answers with an object that states its
+// own total and whether the cap bit, so `response.length` is `undefined` rather than
+// the page size. That does not make the mistake impossible — a caller can still count
+// `page.items` — but it moves the wrong number out of arm's reach, which is a
+// different and better kind of guard than noticing it afterwards.
+//
+// The three text rules are the afterwards. Each would have caught a real defect and
+// none of them proves anything. They do not follow data flow, so a count taken from a
+// page two assignments away from the fetch still gets through — that is how the task
+// inbox's folder badges came to be wrong, and no regular expression over this file set
+// would have found it. They are a tripwire at the places the mistake has actually been
+// made. The proof, where one is wanted, is a test against a population larger than the
+// page — see api/operations_counts_test.go.
 
 // cappedListings are the list endpoints whose response is a page rather than a
 // population, with the cap that makes it one. The console may read any of them; what
@@ -43,13 +57,34 @@ import (
 // guards can see. Sub-resources under a key (…/instances/{key}/variables) are not
 // listings and are excluded by the matcher below.
 var cappedListings = []struct {
-	path   string
-	cap    int
-	signal string // the truncation signal the response carries beside its rows
+	path string
+	cap  int
 }{
-	{"/api/v1/incidents", maxTaskListMax, "X-Incidents-Truncated"},
-	{"/api/v1/tasks", maxTaskListDefault, "X-Tasks-Truncated"},
-	{"/api/v1/instances", maxInstanceListDefault, "X-Instances-Truncated"},
+	{"/api/v1/incidents", maxTaskListMax},
+	{"/api/v1/tasks", maxTaskListDefault},
+	{"/api/v1/instances", maxInstanceListDefault},
+	{"/api/v1/approvals", maxFolderScan},
+	{"/api/v1/audit", defaultAuditLimit},
+	// Listed after the collection it sits under, because matchCappedListing takes the
+	// first entry whose path is a prefix and treats anything under a key as a point read.
+	{"/api/v1/instances/search", maxInstanceSearchResults},
+}
+
+// truncatedField is the field every one of them states its bound in. It is a constant
+// rather than a column in the table above, because the table would then be a place to
+// record a listing that says it differently — and one shape for all of them is the
+// whole point of the record this file guards.
+const truncatedField = "truncated"
+
+// listingPaths is the capped listings' paths as a regexp alternation, longest first so
+// /api/v1/instances/search is tried before /api/v1/instances.
+func listingPaths() string {
+	paths := make([]string, 0, len(cappedListings))
+	for _, l := range cappedListings {
+		paths = append(paths, regexp.QuoteMeta(l.path))
+	}
+	sort.Slice(paths, func(i, j int) bool { return len(paths[i]) > len(paths[j]) })
+	return strings.Join(paths, "|")
 }
 
 // completeLists are the names a console variable may carry while holding a list whose
@@ -72,36 +107,44 @@ var (
 	// size of it — which is the whole defect when the list is a page.
 	fmtCountOfLength = regexp.MustCompile(`fmtCount\s*\(\s*([A-Za-z_$][\w$.]*)\.length\s*\)`)
 
-	// rawGetOfListing: apiRaw exists to hand back the response headers; api() is there
-	// for callers that only want the body. Taking the raw form on a capped listing and
-	// then not binding `headers` means the caller asked for the one thing that says the
-	// page is a page, and dropped it. That is exactly how the instance search came to
-	// flag which instances were stuck from a bucket that stopped at 5 000 rows.
-	rawGetOfListing = regexp.MustCompile(`(\{[^}]*\})\s*=\s*await\s+apiRaw\s*\(\s*"GET"\s*,\s*([^;]*)`)
+	// getOfListing / rowUse: a capped listing's response used as if it were its rows.
+	//
+	// It used to be one: the body *was* a JSON array, so `.length` on it was the page
+	// length and read as a population, and `.map` on it iterated a page while looking
+	// like it iterated the set. The body is an object now, so both of those are loud —
+	// `undefined` and a TypeError — rather than quietly short. This rule is what stops
+	// the shape being written back in the next time somebody ports a caller from memory.
+	getOfListing = regexp.MustCompile(`await\s+api(?:Raw|Call)?\s*\(\s*['"` + "`" + `]?GET['"` + "`" + `]?\s*,\s*([^;]*)`)
+	rowUse       = regexp.MustCompile(`(?:\)|\.data)\s*\.\s*(length|map|filter|forEach|find|some|every|reduce|slice|sort|at)\b`)
 
 	// listingRead: any read of a capped listing, however it is spelled. Excludes the
 	// per-key sub-resources (…/instances/${key}/timeline), which are point reads.
-	listingRead = regexp.MustCompile(`["` + "`" + `]/api/v1/(incidents|tasks|instances)(?:["` + "`" + `?]|\s*\+)`)
+	//
+	// Built from cappedListings rather than written out, because a hand-written copy is
+	// a second place to remember: /api/v1/audit sat in the table while this pattern
+	// still named three endpoints, so the console's audit view read a capped listing
+	// with no rule looking at it — and did read it as a bare array.
+	listingRead = regexp.MustCompile(`["` + "`" + `](` + listingPaths() + `)(?:["` + "`" + `?]|\s*\+)`)
 
 	// mutations never read a page.
 	mutation = regexp.MustCompile(`"(POST|DELETE|PUT|PATCH)"`)
 
 	// capAware is the vocabulary a reader uses when they have thought about the bound:
-	// they read the truncation signal, they page with a cursor, they set a limit, or
-	// they say in prose that what they hold is a page. Any of those is enough — this
+	// they read the response's `truncated`, they page with its cursor, they set a limit,
+	// or they say in prose that what they hold is a page. Any of those is enough — this
 	// rule asks for evidence of the thought, and cannot check the thought itself.
 	capAware = regexp.MustCompile(`(?i)truncated|\bcapped?\b|\bpage\b|\bcursor\b|before=|\blimit\b|\bsample`)
 )
 
 // consoleModules returns the embedded browser modules, as lines.
 //
-// The console's own ES modules, and not the hosted pages under web/*.html. Those reach
-// the API through bare fetch rather than through api()/apiRaw(), so two of the three
-// rules below cannot see them by construction — and the shape that matters there is
-// already refused outright by
-// [TestHostedAppsNeverLookForOneInstanceInTheCappedListing], which does not ask a
-// hosted page to explain its cap but forbids the read that has one. Checked when this
-// file was written: no hosted page matches any of these patterns today.
+// The console's own ES modules. The hosted pages under web/*.html are read separately,
+// by [hostedPages], because they are a different kind of caller: each drives one process
+// instance, none of them uses [fmtCount], and their fetch wrapper is spelled differently
+// per page. Two of the three text rules therefore do not apply to them — but
+// [TestReadsOfACappedListingGoThroughItems] does, and has to, because four hosted pages
+// were still reading a listing as a bare array after the envelope landed and no rule
+// here looked at them.
 func consoleModules(t *testing.T) map[string][]string {
 	t.Helper()
 	files, err := fs.Glob(webFS, "web/*.js")
@@ -110,6 +153,34 @@ func consoleModules(t *testing.T) map[string][]string {
 	}
 	if len(files) == 0 {
 		t.Fatal("no embedded console modules found; these guards would pass vacuously")
+	}
+	out := make(map[string][]string, len(files))
+	for _, f := range files {
+		body, err := fs.ReadFile(webFS, f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		out[f] = strings.Split(string(body), "\n")
+	}
+	return out
+}
+
+// hostedPages returns the embedded single-purpose apps under web/*.html, as lines.
+//
+// They are not the console: each drives one process instance, none of them formats a
+// count for a person, and each carries its own small fetch wrapper. What they share
+// with the console is that they read these listings, and after the envelope landed four
+// of them were still filtering the response as if it were an array —
+// `(await api("GET", "/instances?process=" + k)).filter(…)` — which throws rather than
+// lying, on a page an outside customer opens.
+func hostedPages(t *testing.T) map[string][]string {
+	t.Helper()
+	files, err := fs.Glob(webFS, "web/*.html")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no embedded hosted pages found; the rule below would pass vacuously")
 	}
 	out := make(map[string][]string, len(files))
 	for _, f := range files {
@@ -157,35 +228,42 @@ func TestDisplayedCountsAreNotListLengths(t *testing.T) {
 	}
 }
 
-// TestRawReadsOfACappedListingKeepTheirHeaders is the rule at the point of fetch:
-// taking the raw response of a capped listing and dropping its headers.
+// TestReadsOfACappedListingGoThroughItems is the rule at the point of fetch: the
+// response of a capped listing is a page, so it is not iterated or measured directly.
 //
-// The instance search did exactly this. It read the whole incident list through
-// apiRaw, bound only `data`, bucketed the rows by instance, and flagged a search hit
-// whose key turned up in the bucket. Past 5 000 incidents the bucket is a page: two
-// hundred running instances that were each parked behind an incident rendered as a
-// plain "active", on the surface an operator opens to debug one. The response had
-// been saying X-Incidents-Truncated: true the whole time.
-func TestRawReadsOfACappedListingKeepTheirHeaders(t *testing.T) {
-	for file, lines := range consoleModules(t) {
+// The instance search did the old form of this. It read the whole incident list, which
+// was then a bare array, bucketed the rows by instance, and flagged a search hit whose
+// key turned up in the bucket. Past 5 000 incidents the bucket is a page: two hundred
+// running instances that were each parked behind an incident rendered as a plain
+// "active", on the surface an operator opens to debug one.
+//
+// That exact line would now throw instead of lying, which is the point of the envelope.
+// This rule keeps it from being written at all, because "it throws in production" is a
+// worse place to find out than here.
+func TestReadsOfACappedListingGoThroughItems(t *testing.T) {
+	sources := consoleModules(t)
+	for file, lines := range hostedPages(t) {
+		sources[file] = lines
+	}
+	for file, lines := range sources {
 		for i, line := range lines {
-			m := rawGetOfListing.FindStringSubmatch(line)
+			m := getOfListing.FindStringSubmatch(line)
 			if m == nil {
 				continue
 			}
-			target := m[2]
-			listing, ok := matchCappedListing(target)
+			listing, ok := matchCappedListing(m[1])
 			if !ok {
 				continue
 			}
-			if strings.Contains(m[1], "headers") {
+			use := rowUse.FindStringSubmatchIndex(m[1])
+			if use == nil || goesThroughItems(m[1], use[0]) {
 				continue
 			}
-			t.Errorf("%s:%d takes the raw response of a capped listing and drops its headers:\n  %s\n"+
-				"%s is capped at %d rows and says so in %s. apiRaw is the form that hands that "+
-				"back; a caller that does not want it should use api() and say why the cap does "+
-				"not matter here.",
-				file, i+1, strings.TrimSpace(line), listing.path, listing.cap, listing.signal)
+			t.Errorf("%s:%d uses a capped listing's response as if it were its rows (.%s):\n  %s\n"+
+				"%s is capped at %d rows and answers {items, total, totalExact, truncated, "+
+				"nextCursor}. The rows are in .items, and how many there really are is in .total "+
+				"— reach for the one the number is about.",
+				file, i+1, m[1][use[2]:use[3]], strings.TrimSpace(line), listing.path, listing.cap)
 		}
 	}
 }
@@ -194,6 +272,11 @@ func TestRawReadsOfACappedListingKeepTheirHeaders(t *testing.T) {
 // as a prompt rather than as a proof: a read of a capped listing should have something
 // near it that shows the bound was considered — the truncation signal, a cursor, an
 // explicit limit, or prose saying what the page is.
+//
+// Loose is not the same as idle. The first run after its path pattern was derived from
+// cappedListings instead of written out beside it reported the live panel's search box,
+// which had been labelling its picker "Search results (200)" off the row count — the
+// original defect, on the control an operator uses to find one instance among many.
 //
 // It is gameable, and that is understood: writing the word "page" nearby satisfies it.
 // What it is for is the moment somebody adds the next reader of one of these
@@ -216,32 +299,113 @@ func TestReadsOfACappedListingNameTheCap(t *testing.T) {
 			}
 			t.Errorf("%s:%d reads a capped listing without anything nearby that names the cap:\n  %s\n"+
 				"Say what this page is and what is done about what it cannot hold — read the "+
-				"truncation header, page with the cursor, set an explicit limit, or write down "+
-				"that a sample is all this needs. Any of those satisfies this rule; the point is "+
-				"that the next reader can tell which one was meant.",
+				"response's `truncated`, page with its `nextCursor`, set an explicit limit, or "+
+				"write down that a sample is all this needs. Any of those satisfies this rule; "+
+				"the point is that the next reader can tell which one was meant.",
 				file, i+1, strings.TrimSpace(line))
 		}
 	}
+}
+
+// TestACappedListingAnswersWithAPage is the structural rule, and the only one in this
+// file that holds regardless of how the caller is written: a capped listing's response
+// is an object that states what it is, not a bare array that cannot.
+//
+// The three text rules above look for the mistake after it has been made. This one
+// takes the wrong number out of reach: on `[…]`, `response.length` is the page size and
+// reads exactly like a population, which is how five call sites came to be wrong in the
+// same way. On `{items, total, totalExact, truncated}` it is `undefined`, and the
+// number a caller actually wants is a field away and correct.
+//
+// Checked against a live server rather than against the source: it asks the endpoint
+// what it actually answers, so no handler can satisfy it by being written to look
+// right. What it cannot do is notice a capped listing nobody added to cappedListings —
+// that table is still maintained by hand, and it is the one place a new listing has to
+// be registered for any of these four rules to see it.
+func TestACappedListingAnswersWithAPage(t *testing.T) {
+	srv, _ := newValidateServer(t)
+	x := deployTestHarness{t, srv.Handler()}
+
+	for _, l := range cappedListings {
+		t.Run(l.path, func(t *testing.T) {
+			code, body := x.do(http.MethodGet, l.path, "")
+			if code != http.StatusOK {
+				t.Fatalf("GET %s = %d (%s)", l.path, code, body)
+			}
+			for _, complaint := range pageShapeComplaints(body) {
+				t.Errorf("GET %s %s\n  %s\n"+
+					"It is capped at %d rows, so what came back is a page. Answer with httpapi.Page: "+
+					"httpapi.Rows when a counter or a walk knows the real total, httpapi.PageOf when "+
+					"the page is all there is to go on.",
+					l.path, complaint, strings.TrimSpace(string(body)), l.cap)
+			}
+		})
+	}
+}
+
+// pageShapeComplaints says what is wrong with a capped listing's body, or nothing. It
+// is separate from the test above so that [TestThePageCountGuardsStillBite] can hand it
+// the shapes this rule exists to refuse — a guard nobody has watched fail is a guard
+// nobody knows still works.
+func pageShapeComplaints(body []byte) []string {
+	if strings.HasPrefix(strings.TrimSpace(string(body)), "[") {
+		return []string{"answers with a bare array, which cannot say it is a page and whose .length reads as the population:"}
+	}
+	var page map[string]json.RawMessage
+	if err := json.Unmarshal(body, &page); err != nil {
+		return []string{"did not answer with a JSON object:"}
+	}
+	var out []string
+	for _, field := range []string{"items", "total", "totalExact", truncatedField} {
+		if _, ok := page[field]; !ok {
+			out = append(out, "answers without "+strconv.Quote(field)+
+				", so a caller cannot tell a full set from a page:")
+		}
+	}
+	var items []json.RawMessage
+	switch err := json.Unmarshal(page["items"], &items); {
+	case err != nil:
+		out = append(out, "has an items that is not an array:")
+	case items == nil:
+		out = append(out, "has items null rather than [], so a caller that iterates it breaks on an empty engine:")
+	}
+	return out
+}
+
+// goesThroughItems reports that the rows were unwrapped before being used. The shape
+// the hosted pages write — `(((await api(…))||{}).items||[]).find(…)` — puts a closing
+// paren immediately before the array method, which is the same two characters the
+// mistake makes, so the rule has to look at what came between rather than at what is
+// adjacent.
+func goesThroughItems(fragment string, useAt int) bool {
+	at := strings.Index(fragment, ".items")
+	return at >= 0 && at < useAt
 }
 
 // matchCappedListing reports which capped listing a fragment of console source reads,
 // if any. A path with a key segment after the collection (…/instances/${key}/…) is a
 // point read, not a listing, and is not one of these.
 func matchCappedListing(fragment string) (listing struct {
-	path   string
-	cap    int
-	signal string
+	path string
+	cap  int
 }, ok bool) {
 	for _, l := range cappedListings {
-		idx := strings.Index(fragment, l.path)
-		if idx < 0 {
-			continue
+		for _, spelling := range []string{l.path, strings.TrimPrefix(l.path, "/api/v1")} {
+			idx := strings.Index(fragment, spelling)
+			if idx < 0 {
+				continue
+			}
+			// The hosted pages prepend their own base, so they write "/instances?…".
+			// That bare form is only a listing where it begins a string literal —
+			// otherwise "#/data/instances?class=…", a client-side route, would match it.
+			if spelling != l.path && (idx == 0 || !strings.ContainsAny(fragment[idx-1:idx], "\"'"+"`")) {
+				continue
+			}
+			if strings.HasPrefix(fragment[idx+len(spelling):], "/") {
+				continue // a sub-resource under one key
+			}
+			return l, true
 		}
-		rest := fragment[idx+len(l.path):]
-		if strings.HasPrefix(rest, "/") {
-			continue // a sub-resource under one key
-		}
-		return l, true
 	}
 	return listing, false
 }
@@ -250,8 +414,9 @@ func matchCappedListing(fragment string) (listing struct {
 // worse than no guard: it is a passing test that reads as coverage.
 //
 // The cases below are the real ones. The lines marked as defects are what the console
-// actually said before ADR-0365; the lines marked as
-// sound are shapes that live in it now and must keep passing, because a rule that
+// actually said before
+// ADR-draft-a-capped-listing-answers-with-a-page; the lines marked as sound
+// are shapes that live in it now and must keep passing, because a rule that
 // fires on them is a rule somebody will delete rather than satisfy.
 func TestThePageCountGuardsStillBite(t *testing.T) {
 	t.Run("a displayed count off a list length", func(t *testing.T) {
@@ -280,26 +445,35 @@ func TestThePageCountGuardsStillBite(t *testing.T) {
 		}
 	})
 
-	t.Run("a raw read that drops its headers", func(t *testing.T) {
+	t.Run("a listing response used as its own rows", func(t *testing.T) {
 		for _, c := range []struct {
 			line   string
 			caught bool
 			what   string
 		}{
-			{`const { data } = await apiRaw("GET", "/api/v1/incidents");`, true,
-				"the instance search's incident bucket, which never read the truncation header"},
-			{`const { data } = await apiRaw("GET", "/api/v1/tasks");`, true,
-				"the same mistake on the task listing"},
-			{`const { data, headers } = await apiRaw("GET", "/api/v1/tasks");`, false,
-				"the shape the inbox uses: the header comes back with the rows"},
-			{`const { data, headers } = await apiRaw("GET", "/api/v1/incidents" + scopeQuery());`, false,
-				"a scoped read that still keeps its header"},
+			{`const keys = (await api("GET", "/api/v1/incidents")).map(r => r.processInstanceKey);`, true,
+				"the instance search's incident bucket, built straight off the page"},
+			{`const n = (await api("GET", "/api/v1/tasks?folder=" + id)).length;`, true,
+				"a folder badge counted from the page it could fit"},
+			{`const stuck = (await apiRaw("GET", "/api/v1/incidents")).data.filter(isStuck);`, true,
+				"the same read through apiRaw, which is no safer"},
+			{`const page = await api("GET", "/api/v1/tasks?limit=" + PAGE);`, false,
+				"the shape the inbox uses: the envelope is bound, then .items is read from it"},
+			{`const { items, total } = await api("GET", "/api/v1/incidents" + scopeQuery());`, false,
+				"a scoped read that destructures the envelope by name"},
+			{`const rows = (await api("GET", "/api/v1/instances?process=" + k)).items.map(toRow);`, false,
+				"mapping the rows, which is what .items is for"},
+			{"return (((await api(\"GET\",`/instances/search?q=${key}`))||{}).items||[]).find(i=>i.key===key);", false,
+				"a hosted page's defensive unwrap: a paren sits next to .find, but .items came first"},
+			{`const t = (await api("GET", ` + "`" + `/api/v1/instances/${key}/timeline` + "`" + `)).map(toEvent);`, false,
+				"a point read under one key, which is not a page"},
 		} {
-			m := rawGetOfListing.FindStringSubmatch(c.line)
 			caught := false
-			if m != nil {
-				if _, ok := matchCappedListing(m[2]); ok && !strings.Contains(m[1], "headers") {
-					caught = true
+			if m := getOfListing.FindStringSubmatch(c.line); m != nil {
+				if _, ok := matchCappedListing(m[1]); ok {
+					if use := rowUse.FindStringIndex(m[1]); use != nil && !goesThroughItems(m[1], use[0]) {
+						caught = true
+					}
 				}
 			}
 			if caught != c.caught {
@@ -325,6 +499,27 @@ func TestThePageCountGuardsStillBite(t *testing.T) {
 		} {
 			if _, ok := matchCappedListing(c.fragment); ok != c.listing {
 				t.Errorf("matchCappedListing(%q) = %v, want %v", c.fragment, ok, c.listing)
+			}
+		}
+	})
+
+	t.Run("a listing body that is not a page", func(t *testing.T) {
+		for _, c := range []struct {
+			body   string
+			caught bool
+			what   string
+		}{
+			{`[{"key":1},{"key":2}]`, true, "the shape every one of these endpoints used to have"},
+			{`[]`, true, "an empty page, still unable to say it is one"},
+			{`{"incidents":[]}`, true, "the incidents listing's old wrapper, which named the rows but not the bound"},
+			{`{"items":[],"total":0,"totalExact":true}`, true, "an envelope that forgot to say whether the cap bit"},
+			{`{"items":null,"total":0,"totalExact":true,"truncated":false}`, true, "a nil slice marshalled straight through"},
+			{`{"items":[],"total":0,"totalExact":true,"truncated":false}`, false, "an empty page that states its own bound"},
+			{`{"items":[{"key":1}],"total":9001,"totalExact":true,"truncated":true,"nextCursor":"7"}`, false,
+				"one row of a large population, with the total from a counter"},
+		} {
+			if got := pageShapeComplaints([]byte(c.body)); (len(got) > 0) != c.caught {
+				t.Errorf("caught=%v (%v), want %v for %s:\n  %s", len(got) > 0, got, c.caught, c.what, c.body)
 			}
 		}
 	})

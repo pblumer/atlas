@@ -47,7 +47,7 @@ func TestListTasksByProcessInstance(t *testing.T) {
 	// The full list has all three tasks; capture their instance keys.
 	_, body := doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var all []taskRow
-	if err := json.Unmarshal(body, &all); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &all); err != nil {
 		t.Fatalf("decode tasks: %v", err)
 	}
 	if len(all) != 3 {
@@ -67,12 +67,14 @@ func TestListTasksByProcessInstance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET tasks?limit=1: %v", err)
 	}
-	var page []taskRow
-	_ = json.NewDecoder(res.Body).Decode(&page)
-	trunc := res.Header.Get("X-Tasks-Truncated")
+	facts := readPage(t, res)
 	res.Body.Close()
-	if len(page) != 1 || trunc != "true" {
-		t.Fatalf("capped page = %d rows, truncated=%q; want 1 + true", len(page), trunc)
+	var page []taskRow
+	if err := json.Unmarshal(facts.Items, &page); err != nil {
+		t.Fatalf("decode capped page: %v", err)
+	}
+	if len(page) != 1 || !facts.Truncated {
+		t.Fatalf("capped page = %d rows, truncated=%v; want 1 + true", len(page), facts.Truncated)
 	}
 	if page[0].ProcessInstanceKey == oldest.ProcessInstanceKey {
 		t.Fatalf("newest-first cap returned the oldest instance's task; ordering is wrong")
@@ -81,7 +83,7 @@ func TestListTasksByProcessInstance(t *testing.T) {
 	// ...but scoping to that instance still finds it, regardless of the cap.
 	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", oldest.ProcessInstanceKey), "", "")
 	var scoped []taskRow
-	if err := json.Unmarshal(body, &scoped); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &scoped); err != nil {
 		t.Fatalf("decode scoped: %v", err)
 	}
 	if len(scoped) != 1 {
@@ -94,7 +96,7 @@ func TestListTasksByProcessInstance(t *testing.T) {
 	// An unknown instance is an empty list, not an error; a bad key is a 400.
 	code, b := doReq(t, ts, http.MethodGet, "/api/v1/tasks?processInstance=999999", "", "")
 	var empty []taskRow
-	if code != http.StatusOK || json.Unmarshal(b, &empty) != nil || len(empty) != 0 {
+	if code != http.StatusOK || json.Unmarshal(listRows(t, b), &empty) != nil || len(empty) != 0 {
 		t.Fatalf("unknown instance: status=%d body=%s, want 200 empty list", code, b)
 	}
 	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/tasks?processInstance=nope", "", ""); code != http.StatusBadRequest {
@@ -122,7 +124,7 @@ func TestListTasksByProcessInstanceExcludesIncident(t *testing.T) {
 
 	_, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var tasks []taskRow
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("want 1 open task, got %d (err=%v)", len(tasks), err)
 	}
 	inst := tasks[0].ProcessInstanceKey
@@ -130,7 +132,7 @@ func TestListTasksByProcessInstanceExcludesIncident(t *testing.T) {
 	// Scoped to the instance while the task is open: one row.
 	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", inst), "", "")
 	var scoped []taskRow
-	if err := json.Unmarshal(body, &scoped); err != nil || len(scoped) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &scoped); err != nil || len(scoped) != 1 {
 		t.Fatalf("open scoped list = %d, want 1 (err=%v)", len(scoped), err)
 	}
 
@@ -140,7 +142,7 @@ func TestListTasksByProcessInstanceExcludesIncident(t *testing.T) {
 	}
 	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", inst), "", "")
 	scoped = scoped[:0]
-	if err := json.Unmarshal(body, &scoped); err != nil || len(scoped) != 0 {
+	if err := json.Unmarshal(listRows(t, body), &scoped); err != nil || len(scoped) != 0 {
 		t.Fatalf("incident-blocked scoped list = %d, want 0 (err=%v)", len(scoped), err)
 	}
 }
@@ -196,7 +198,7 @@ func TestListTasksForInstanceSkipsJoblessElement(t *testing.T) {
 
 	_, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var all []taskRow
-	if err := json.Unmarshal(body, &all); err != nil || len(all) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &all); err != nil || len(all) != 1 {
 		t.Fatalf("want 1 user task (timer carries no job), got %d (err=%v)", len(all), err)
 	}
 	inst := all[0].ProcessInstanceKey
@@ -204,14 +206,14 @@ func TestListTasksForInstanceSkipsJoblessElement(t *testing.T) {
 	// Scoped to the instance: the job-less timer element is skipped; only the task.
 	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", inst), "", "")
 	var scoped []taskRow
-	if err := json.Unmarshal(body, &scoped); err != nil || len(scoped) != 1 || scoped[0].Key != all[0].Key {
+	if err := json.Unmarshal(listRows(t, body), &scoped); err != nil || len(scoped) != 1 || scoped[0].Key != all[0].Key {
 		t.Fatalf("scoped list = %+v, want the single user task %d (err=%v)", scoped, all[0].Key, err)
 	}
 }
 
 // TestListTasksForInstanceCap proves the per-instance list is itself bounded: an
-// instance parked on two user tasks, queried with ?limit=1, returns one row and flags
-// X-Tasks-Truncated — so even a scoped query can't return an unbounded page.
+// instance parked on two user tasks, queried with ?limit=1, returns one row and says
+// truncated — so even a scoped query can't return an unbounded page.
 func TestListTasksForInstanceCap(t *testing.T) {
 	ts := newTestServer(t)
 
@@ -230,7 +232,7 @@ func TestListTasksForInstanceCap(t *testing.T) {
 	// Both user tasks are parked on the one instance.
 	_, body = doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var all []taskRow
-	if err := json.Unmarshal(body, &all); err != nil || len(all) != 2 {
+	if err := json.Unmarshal(listRows(t, body), &all); err != nil || len(all) != 2 {
 		t.Fatalf("want 2 parked tasks, got %d (err=%v)", len(all), err)
 	}
 	inst := all[0].ProcessInstanceKey
@@ -240,25 +242,23 @@ func TestListTasksForInstanceCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET scoped?limit=1: %v", err)
 	}
-	var page []taskRow
-	_ = json.NewDecoder(res.Body).Decode(&page)
-	trunc := res.Header.Get("X-Tasks-Truncated")
+	page := readPage(t, res)
 	res.Body.Close()
-	if len(page) != 1 || trunc != "true" {
-		t.Fatalf("scoped capped page = %d rows, truncated=%q; want 1 + true", len(page), trunc)
+	if page.Total != 1 || !page.Truncated {
+		t.Fatalf("scoped capped page = %d rows, truncated=%v; want 1 + true", page.Total, page.Truncated)
 	}
 
 	// Uncapped, the scoped list returns both tasks of the instance.
 	_, body = doReq(t, ts, http.MethodGet, fmt.Sprintf("/api/v1/tasks?processInstance=%d", inst), "", "")
 	var full []taskRow
-	if err := json.Unmarshal(body, &full); err != nil || len(full) != 2 {
+	if err := json.Unmarshal(listRows(t, body), &full); err != nil || len(full) != 2 {
 		t.Fatalf("scoped full list = %d, want 2 (err=%v)", len(full), err)
 	}
 }
 
 // TestListTasksNewestFirstPaging proves the list is newest-first and that the
-// X-Tasks-Next-Cursor / ?before= cursor pages through every task exactly once, in
-// strictly descending key order — the pagination the inbox's "Load older" uses.
+// nextCursor / ?before= cursor pages through every task exactly once, in strictly
+// descending key order — the pagination the inbox's "Load older" uses.
 func TestListTasksNewestFirstPaging(t *testing.T) {
 	ts := newTestServer(t)
 	deployUserTaskDefWithN(t, ts, 3)
@@ -274,26 +274,27 @@ func TestListTasksNewestFirstPaging(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET %s: %v", url, err)
 		}
-		var page []taskRow
-		_ = json.NewDecoder(res.Body).Decode(&page)
-		trunc := res.Header.Get("X-Tasks-Truncated")
-		cursor := res.Header.Get("X-Tasks-Next-Cursor")
+		facts := readPage(t, res)
 		res.Body.Close()
+		var page []taskRow
+		if err := json.Unmarshal(facts.Items, &page); err != nil {
+			t.Fatalf("decode page: %v", err)
+		}
 		if len(page) != 1 {
 			t.Fatalf("page = %d rows, want 1", len(page))
 		}
 		got = append(got, page[0].Key)
-		if trunc != "true" {
-			// Terminal page: no truncation flag and no cursor.
-			if cursor != "" {
-				t.Fatalf("terminal page carried a cursor %q", cursor)
+		if !facts.Truncated {
+			// Terminal page: not truncated and no cursor.
+			if facts.NextCursor != "" {
+				t.Fatalf("terminal page carried a cursor %q", facts.NextCursor)
 			}
 			break
 		}
-		if cursor == "" {
-			t.Fatal("truncated page missing X-Tasks-Next-Cursor")
+		if facts.NextCursor == "" {
+			t.Fatal("truncated page carried no nextCursor")
 		}
-		before = cursor
+		before = facts.NextCursor
 	}
 
 	if len(got) != 3 {

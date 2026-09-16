@@ -72,7 +72,7 @@ func approvalsOf(t *testing.T, ts *httptest.Server, c *http.Client) []approvalVi
 		t.Fatalf("list approvals: %d (%s)", code, body)
 	}
 	var out []approvalView
-	if err := json.Unmarshal(body, &out); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &out); err != nil {
 		t.Fatalf("decode approvals: %v (%s)", err, body)
 	}
 	return out
@@ -372,7 +372,7 @@ func TestTheShippedApprovalModelReachesItsApprover(t *testing.T) {
 		ProcessID string `json:"processId"`
 		Assignee  string `json:"assignee"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 {
@@ -413,7 +413,7 @@ func TestTheShippedGroupApprovalNamesTheGroupTheProductChose(t *testing.T) {
 	var tasks []struct {
 		CandidateGroups string `json:"candidateGroups"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 || tasks[0].CandidateGroups != "einkauf" {
@@ -501,7 +501,7 @@ func TestTheApproverIsToldWithALinkToTheirOwnPage(t *testing.T) {
 	var tasks []struct {
 		Assignee string `json:"assignee"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 || tasks[0].Assignee != "alice" {

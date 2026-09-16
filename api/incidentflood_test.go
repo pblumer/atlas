@@ -92,7 +92,7 @@ func parkTaskWithMessage(t *testing.T, ts *httptest.Server, defKey uint64, messa
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 		ProcessDefKey      uint64 `json:"processDefKey"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	for _, task := range tasks {
@@ -295,7 +295,7 @@ func TestResolveIncidentsByKeys(t *testing.T) {
 	// The resolved tasks are back in the inbox: resolving really re-activated them.
 	code, body2 := doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var tasks []json.RawMessage
-	_ = json.Unmarshal(body2, &tasks)
+	_ = json.Unmarshal(listRows(t, body2), &tasks)
 	if code != http.StatusOK || len(tasks) != 2 {
 		t.Errorf("tasks after bulk resolve: status=%d count=%d, want 2", code, len(tasks))
 	}
@@ -414,7 +414,7 @@ func TestResolveIncidentsGrantsTheRetryBudget(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("tasks after resolve = %v (%s)", err, body)
 	}
 	// One failure with 2 left: still no incident, because the budget was granted.
@@ -538,7 +538,7 @@ func TestIncidentScopeByCompiledElementIndex(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 2 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 2 {
 		t.Fatalf("tasks = %v (%s), want the two parallel branches", err, body)
 	}
 	for _, task := range tasks {

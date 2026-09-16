@@ -246,8 +246,11 @@ func runtimeTools() []Tool {
 				"whose token is sitting on that BPMN element id right now — the \"who is stuck on this task?\" " +
 				"question, answered from the element's own index rather than by reading through the version; it needs " +
 				"'process' (an element id is only meaningful within the version defining it) and lists live instances " +
-				"only, since a finished instance holds no token. Returns {items, truncated, nextCursor} like " +
-				"atlas_list_tasks: hand nextCursor back as 'before' for the next, older page. A truncated page with " +
+				"only, since a finished instance holds no token. Returns {items, total, totalExact, truncated, " +
+				"nextCursor} like atlas_list_tasks: hand nextCursor back as 'before' for the next, older page. " +
+				"'total' is how many there are and 'totalExact' whether that is the population or merely what this " +
+				"page saw — exact wherever a maintained counter knows it, which is one definition's halves and the " +
+				"engine's live total. A truncated page with " +
 				"no nextCursor means there is more but this listing has no position to resume from — narrow it with " +
 				"'process' and a single 'state' to get one. To reach one particular instance use " +
 				"atlas_search_instances, which answers a bare instance key with a point read.",
@@ -742,11 +745,7 @@ func runtimeTools() []Tool {
 						sep = "&"
 					}
 				}
-				body, headers, err := c.getWithHeaders(path)
-				if err != nil {
-					return "", err
-				}
-				return incidentsPage(body, headers)
+				return asText(c.get(path))
 			},
 		},
 		{

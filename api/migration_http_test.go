@@ -90,7 +90,7 @@ func instanceKeysOf(t *testing.T, ts *httptest.Server, defKey uint64) map[uint64
 	var rows []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	keys := map[uint64]bool{}
