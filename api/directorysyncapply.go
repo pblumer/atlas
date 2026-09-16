@@ -28,7 +28,7 @@ func (s *Server) applyDirectoryPlan(plan directoryPlan, msg directorySyncMessage
 			continue
 		}
 		// The picture first, then the record, and the order is the whole of what this
-		// loop decides (ADR-draft-directory-photo). A failure between them leaves a
+		// loop decides (ADR-0367). A failure between them leaves a
 		// picture no record points at, which the next run repairs through the
 		// fingerprint; the other order would leave a record claiming a picture that is
 		// not there, which nothing repairs because the record already agrees with
