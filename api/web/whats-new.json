@@ -2,6 +2,60 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-catalogue-s-people-are-chosen-from-a-list-instead-of-typed",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "A catalogue's people are chosen from a list instead of typed as an id.",
+        "de": "A catalogue's people are chosen from a list instead of typed as an id."
+      },
+      "summary": {
+        "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
+        "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-product-form-is-filled-in-the-order-a-product-is-thought",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The product form is filled in the order a product is thought about.",
+        "de": "The product form is filled in the order a product is thought about."
+      },
+      "summary": {
+        "en": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket.",
+        "de": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-portal-s-catalogue-tab-is-called-the-catalogue",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The portal's catalogue tab is called the catalogue.",
+        "de": "The portal's catalogue tab is called the catalogue."
+      },
+      "summary": {
+        "en": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\".",
+        "de": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\"."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
       "version": "Unreleased",
       "date": null,
@@ -192,84 +246,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "who-is-this-failing-for-two-different-reasons-was-answered-a",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "\"Who is this?\" failing for two different reasons was answered as though it were one.",
-        "de": "\"Who is this?\" failing for two different reasons was answered as though it were one."
-      },
-      "summary": {
-        "en": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault.",
-        "de": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-order-could-be-placed-in-anybody-s-name",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "An order could be placed in anybody's name.",
-        "de": "An order could be placed in anybody's name."
-      },
-      "summary": {
-        "en": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name.",
-        "de": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-enumeration-s-literals-are-shaded-by-use-too-read-through",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See which states of an enumeration anything ever reaches",
-        "de": "Sehen, welche Zustände einer Enumeration überhaupt je erreicht werden"
-      },
-      "summary": {
-        "en": "The class diagram's usage shading now covers an enumeration's literals as well as a class's attributes. No process ever names a literal — what it names is a state, on a write — so the question is asked of the classes whose lifecycle takes its states from that enumeration: a literal is bright where a deployed process moves such a class into that state, and faint where none does. That is the reading you want from a state machine: the states nothing has ever reached. Where nothing borrows the literals, or where no deployed process uses the classes that do, they are left unshaded rather than faded — a state machine nothing drives is not a state machine nothing reaches.",
-        "de": "Die Nutzungsanzeige im Klassendiagramm umfasst jetzt auch die Literale einer Enumeration, nicht nur die Attribute einer Klasse. Kein Prozess nennt je ein Literal — genannt wird ein Zustand, an einem Schreibzugriff. Die Frage wird deshalb den Klassen gestellt, deren Lebenszyklus seine Zustände von dieser Enumeration bezieht: Ein Literal ist hell, wo ein deployter Prozess eine solche Klasse in diesen Zustand überführt, und blass, wo das keiner tut. Das ist die Auskunft, die man von einem Zustandsmodell will: die Zustände, die nie erreicht werden. Bezieht keine Klasse ihre Zustände von der Enumeration, oder verwendet kein deployter Prozess diese Klassen, bleiben die Literale ungefärbt statt blass — ein Zustandsmodell, das niemand antreibt, ist nicht dasselbe wie eines, dessen Zustände niemand erreicht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model that has an enumeration and a class taking its lifecycle states from it.",
-          "Press the shading control in the canvas toolbar.",
-          "Bright literals are states a deployed process moves that class into; faint ones are reached by nothing deployed.",
-          "An enumeration no lifecycle borrows from stays unshaded — the reading has nothing to say about it."
-        ],
-        "de": [
-          "Data öffnen und ein Informationsmodell wählen, in dem eine Klasse ihre Lebenszyklus-Zustände von einer Enumeration bezieht.",
-          "In der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken.",
-          "Helle Literale sind Zustände, in die ein deployter Prozess diese Klasse überführt; blasse werden von nichts Deploytem erreicht.",
-          "Eine Enumeration, von der kein Lebenszyklus borgt, bleibt ungefärbt — dazu kann die Auswertung nichts sagen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

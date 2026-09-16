@@ -14,6 +14,55 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **A catalogue's people are chosen from a list instead of typed as an id.** The
+  catalogue screen already refused free text where it mattered — a product binds a
+  process from what is deployed, because a product naming a process nobody wrote is an
+  order that fails while somebody waits for a laptop. Every field about *people* was
+  the exception, and each asked for an opaque id from memory.
+
+  It was not only inconvenient. The audience field's placeholder read `kunde-a, kunde-b`
+  — names — while the server compares those entries against **group ids**. Following the
+  placeholder produced a catalogue that reaches nobody, and nothing said so: an
+  unreachable catalogue looks exactly like one nobody has filled in yet. The sharing
+  form's hint, meanwhile, said to read the id from Console → Organization — a screen that
+  shows group names and not their ids.
+
+  The audience is now a list of groups to tick, and sharing is one choice carrying both
+  halves of a grant, so "one account" can no longer stand in front of a group id. The
+  audience offers **groups only**, because that is what the server compares; the sharing
+  list offers both. Two lists on one page showing different sets is not an
+  inconsistency — it is the truth about two different questions.
+
+  A group the directory has lost keeps its place, ticked. A list of boxes has a property
+  a text field does not: not drawing a value and unticking it save the same thing, so
+  without this, deleting a group would make the next save of an unrelated field quietly
+  drop an audience. And where the directory cannot be read, both controls come back as
+  the old id field and say why — a picker with no options and no explanation is worse
+  than the input it replaced, because it looks like an answer to a question it never
+  asked.
+- **The product form is filled in the order a product is thought about.** It answers two
+  questions to two different readers and used to interleave them: a name, a heading and a
+  price are what somebody browsing the catalogue meets, while the approval, the processes
+  and the target-system references are what happens after the basket. The fields
+  alternated between the two four times down a single column, so answering either
+  question meant reading past the other.
+
+  Two sections now — *what the catalogue shows*, then *how an order is handled* — in two
+  columns, reflowing to one at the same width as the console's other two-column layout.
+  Fields that carry an explanation keep the full width; prose in a half column is a
+  column of syllables. No colour is spelled out, so the form follows a theme change like
+  everything else on the page.
+
+  The administrative half also answers a question the form has no field for: **who else
+  may maintain this product**. A product carries no deputy of its own — it is referenced
+  by several catalogues and maintained through its home one, so a stand-in is an editor
+  of that catalogue. The form names the people who already may, and says where that is
+  changed, rather than leaving a considered absence to read as an oversight.
+- **The portal's catalogue tab is called the catalogue.** "Katalog durchsuchen" described
+  an activity where its two neighbours name a place — "Meine Aufträge", "Meine
+  Leistungen". In a row of three, one verb phrase among two nouns reads as a different
+  kind of control, and the tab does not browse anything: it shows the catalogue.
+
 - **The info panel is reachable from every column of the catalogue, not only from
   services.** This was not a missing feature but an inconsistency inside one page.
   The panel already worked for a bundle: picking one out of the search opens it, and

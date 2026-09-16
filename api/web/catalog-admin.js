@@ -392,7 +392,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
   wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
-    mayShare(cat, me, enforced), mayTheme(me, enforced));
+    mayShare(cat, me, enforced), mayTheme(me, enforced), dir);
 }
 
 function productRow(it, iid, langs) {
@@ -592,7 +592,23 @@ function sharingCard(cat, me, enforced, dir) {
 }
 
 // productForm renders the editor for one product, or for a new one.
-function productForm(it, cat, langs, procIDs, formList, items) {
+//
+// It is read in two passes, because it answers two questions to two different
+// readers, and used to interleave them. A product manager writing a laptop into
+// the catalogue asks "what will people see?" — a name, a heading, a price. Only
+// then does anybody ask "and what happens when somebody orders it?" — who
+// approves, which process runs, what the target systems call it. The old form
+// alternated between the two four times down a single column, so answering either
+// question meant reading past the other.
+//
+// Two columns, over the grid the console already has (.grid2's breakpoint, reused
+// rather than re-chosen). Short fields pair up; anything carrying an explanation
+// keeps the full width, because prose in a half column is a column of syllables.
+//
+// The palette is the console's own tokens throughout. Nothing here introduces a
+// colour: the sections are separated by --border, their hints are --muted, and a
+// theme change reaches this form because it never spelled a colour out.
+function productForm(it, cat, langs, procIDs, formList, items, dir) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
   const opt = (id, sel, label) =>
@@ -602,23 +618,19 @@ function productForm(it, cat, langs, procIDs, formList, items) {
       ${procIDs.map((p) => opt(p, sel || "", p)).join("")}
       ${sel && !procIDs.includes(sel) ? opt(sel, sel, `${sel} (not deployed)`) : ""}
     </select>`;
-  return `<div class="card" style="margin:14px 0; max-width:720px">
+  const section = (title, hint) => `<h4 class="form-sec">${esc(title)}</h4>
+    <p class="form-sec-hint">${hint}</p>`;
+  return `<div class="card" style="margin:14px 0; max-width:960px">
     <h3 style="margin:0 0 10px">${it ? "Edit product" : "New product"}</h3>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
+      ${section("What the catalogue shows",
+    "The product as somebody browsing it meets it. Everything here is read by whoever orders.")}
       <label class="field">Id${it ? "" : " (short, stable, never renamed)"}
         <input name="id" value="${esc(v.id || "")}" ${it ? "readonly" : "required"} autocomplete="off"
           placeholder="laptop"></label>
       ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
         value="${esc((v.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
-      <label class="field">State<select name="state">
-        ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
-      </select></label>
-      <label class="field">Approval<select name="akind">
-        ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
-      </select></label>
-      <label class="field">Approver (a username for a named person, a group for a group; empty otherwise)
-        <input name="aref" value="${esc(ap.ref || "")}" autocomplete="off"></label>
-      <label class="field">Category
+      <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading this
           product sits under in the portal &mdash; <code>Arbeitsplatz</code>,
           <code>Kommunikation</code>. A heading and nothing else: it has no ordering of
@@ -630,7 +642,7 @@ function productForm(it, cat, langs, procIDs, formList, items) {
         <datalist id="known-categories">${
   [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
     .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
-      <label class="field">Cost
+      <label class="field wide">Cost
         <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
           read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
           <code>im Grundpaket enthalten</code>. It is <b>shown and never computed</b>:
@@ -640,7 +652,22 @@ function productForm(it, cat, langs, procIDs, formList, items) {
           empty to say nothing about cost.</span>
         <input name="price" value="${esc(v.price || "")}" autocomplete="off"
           placeholder="CHF 1'200.&ndash;"></label>
-      <label class="field">Details the orderer fills in
+      <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
+        ${v.multipleAllowed ? "checked" : ""}> May be held more than once
+        <span class="muted">— two licences, two mailboxes</span></label>
+
+      ${section("How an order is handled",
+    "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
+    "except that an approval is needed at all.")}
+      <label class="field">State<select name="state">
+        ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
+      </select></label>
+      <label class="field">Approval<select name="akind">
+        ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
+      </select></label>
+      <label class="field wide">Approver (a username for a named person, a group for a group; empty otherwise)
+        <input name="aref" value="${esc(ap.ref || "")}" autocomplete="off"></label>
+      <label class="field wide">Details the orderer fills in
         <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
           employee number. It is shown in the basket and its answers travel with the
@@ -655,10 +682,7 @@ function productForm(it, cat, langs, procIDs, formList, items) {
         </select></label>
       <label class="field">Provisioned by${procSelect("provisionProcess", v.provisionProcess)}</label>
       <label class="field">Revoked by${procSelect("deprovisionProcess", v.deprovisionProcess)}</label>
-      <label class="field inline"><input type="checkbox" name="multipleAllowed"
-        ${v.multipleAllowed ? "checked" : ""}> May be held more than once
-        <span class="muted">— two licences, two mailboxes</span></label>
-      <label class="field">Known in the target systems as
+      <label class="field wide">Known in the target systems as
         <span class="muted" style="display:block; margin:2px 0 6px">One per line, as
           <code>system:reference</code> — <code>ad:CN=VPN-Users</code>,
           <code>entra:ENTERPRISEPACK</code>. This is what a commissioning load joins a right
@@ -669,12 +693,39 @@ function productForm(it, cat, langs, procIDs, formList, items) {
           is attributed to neither.</span>
         <textarea name="targets" rows="3" spellcheck="false"
           placeholder="ad:CN=VPN-Users">${esc(targetLines(v.targets))}</textarea></label>
+      ${maintainersNote(cat, dir)}
       <div class="row">
         <button class="primary" type="submit">Save</button>
         <button type="button" data-act="cancel-product">Cancel</button>
       </div>
     </form>
   </div>`;
+}
+
+// maintainersNote answers, where it is asked, a question this form has no field
+// for: who besides me may look after this product.
+//
+// There is no deputy on a product, and that is a decision rather than a gap.
+// Item.HomeCatalog records it: an item is referenced by catalogues rather than
+// owned by one, so access cannot be inherited from "the catalogue it is in", and a
+// per-item member list is the per-artifact ACL ADR-0071 weighed and refused — a
+// grant per product makes sharing a bundle N actions and the management surface
+// explodes. Maintenance is the home catalogue's, and a deputy is an editor there.
+//
+// So the form does not offer a control. It names the people the answer already has,
+// and says where it is changed — which is what somebody looking for a missing field
+// actually needs.
+function maintainersNote(cat, dir) {
+  const editors = (cat.members || []).filter((m) => m.role === "editor")
+    .map((m) => nameOfPrincipal(dir, (m.ref || {}).id || ""));
+  const who = [cat.ownerId ? nameOfPrincipal(dir, cat.ownerId) : null, ...editors].filter(Boolean);
+  return `<p class="form-sec-hint wide">Maintained by ${who.length
+    ? `<b>${who.map(esc).join("</b>, <b>")}</b>`
+    : "whoever administers this installation"} — everybody who may maintain
+    <b>${esc(textOf(cat.texts, cat.languages, cat.id))}</b>. A product has no deputy of
+    its own: it is referenced by several catalogues and maintained through its home one,
+    so a stand-in is an editor of the catalogue, added under <i>Who maintains this
+    catalogue</i> below.</p>`;
 }
 
 // wireAppearance is the appearance card's half of the page.
@@ -776,7 +827,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   });
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme) {
+function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   const patch = async (body) => {
@@ -810,12 +861,12 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items);
+      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir);
       wireProductForm();
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items);
+      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir);
       wireProductForm();
       return;
     }
