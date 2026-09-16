@@ -92,6 +92,90 @@
       }
     },
     {
+      "id": "the-class-diagram-can-say-which-members-anything-actually-us",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See on the class diagram which attributes are actually used",
+        "de": "Im Klassendiagramm sehen, welche Attribute tatsächlich genutzt werden"
+      },
+      "summary": {
+        "en": "You decide the fate of an attribute while looking at the class diagram — and until now the answer to \"does anything use this?\" was on another page. A control beside zoom and undo now shades the drawing: an attribute some deployed process writes by name comes forward, one none of them names recedes, and a class no process and nothing in the model uses is faint as a whole. Faint is deliberately careful: it means nothing names it, not that nothing uses it, because a process that reads the whole object never says which fields it then looks at. A business key is never faint, an enumeration is not faint for having no process use, and anything you have just added or renamed is left exactly as it was drawn.",
+        "de": "Über das Schicksal eines Attributs entscheidet man im Klassendiagramm — die Antwort auf \"wird das überhaupt genutzt?\" stand bisher auf einer anderen Seite. Eine Schaltfläche neben Zoom und Undo blendet die Nutzung jetzt ins Diagramm ein: Ein Attribut, das ein deployter Prozess namentlich schreibt, tritt hervor; eines, das keiner nennt, tritt zurück; eine Klasse, die weder ein Prozess noch das Modell verwendet, wird als Ganzes blass. Blass ist bewusst vorsichtig formuliert: Es heisst, dass niemand das Attribut namentlich nennt — nicht, dass es ungenutzt ist, denn ein Prozess, der das ganze Objekt liest, sagt nie, welche Felder er danach ausliest. Ein Business Key wird nie blass, eine Enumeration wird es nicht schon mangels Prozessverwendung, und was gerade hinzugefügt oder umbenannt wurde, bleibt unverändert dargestellt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, then an information model, and press the shading control in the canvas toolbar (below undo and redo).",
+          "The legend appears while the shading is on and says what bright and faint were read from.",
+          "Bright attributes are written by name by at least one deployed process; faint ones are named by none.",
+          "Press the control again to put the drawing back — nothing is marked at all, which is the diagram as it is when nobody has asked."
+        ],
+        "de": [
+          "Data öffnen, ein Informationsmodell wählen und in der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken (unterhalb von Undo und Redo).",
+          "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
+          "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
+          "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the information model",
+          "de": "Informationsmodell öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
+      "id": "the-class-canvas-judges-the-model-while-it-is-being-edited-n",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The class diagram checks your model while you edit it",
+        "de": "Das Klassendiagramm prüft das Modell schon beim Bearbeiten"
+      },
+      "summary": {
+        "en": "The Problems panel used to show the findings of the last save, so an edit that broke the model — a store left pointing at a class that was renamed away, an attribute typed with something that no longer exists, a lifecycle that drifted from its enumeration — said nothing until you pressed Save, and then complained about an edit you had long since moved on from. The panel is live now: every change is judged as you make it, and the bar and the marks on the diagram say so at once. The rules are the server's own, asked rather than copied, so what the diagram shows and what Save enforces cannot drift apart.",
+        "de": "Bisher zeigte die Problems-Anzeige die Befunde des letzten Speicherns. Eine Änderung, die das Modell beschädigte — ein Speicher, der auf eine umbenannte Klasse zeigt, ein Attribut mit einem Typ, den es nicht mehr gibt, ein Lebenszyklus, der von seiner Enumeration abgewichen ist — blieb bis zum Speichern stumm und wurde dann zu einer Änderung gemeldet, mit der man längst abgeschlossen hatte. Die Anzeige ist jetzt live: Jede Änderung wird sofort beurteilt, Leiste und Markierungen im Diagramm sagen es unmittelbar. Geprüft wird mit den Regeln des Servers, abgefragt statt kopiert — was das Diagramm zeigt und was beim Speichern gilt, kann damit nicht auseinanderlaufen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Data"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Data, then an information model, and add a class with a «businessObject» stereotype.",
+          "Keep it in a data store, then rename the class in the panel — the problems bar reacts while you type, without saving.",
+          "Fix what it names and the bar clears itself, again without saving.",
+          "If the server cannot be reached, the last verdict stays on the bar rather than going blank — it never claims a model is clean when it has not checked."
+        ],
+        "de": [
+          "Data öffnen, ein Informationsmodell wählen und eine Klasse mit Stereotyp «businessObject» anlegen.",
+          "Die Klasse in einem Datenspeicher ablegen und danach im Panel umbenennen — die Problems-Leiste reagiert beim Tippen, ohne Speichern.",
+          "Den genannten Fehler beheben: Die Leiste wird wieder leer, ebenfalls ohne Speichern.",
+          "Ist der Server nicht erreichbar, bleibt der letzte Befund stehen, statt zu verschwinden — ein ungeprüftes Modell wird nie als fehlerfrei ausgewiesen."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the information model",
+          "de": "Informationsmodell öffnen"
+        },
+        "route": "#/data"
+      }
+    },
+    {
       "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
       "version": "Unreleased",
       "date": null,
@@ -175,42 +259,6 @@
       "summary": {
         "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
         "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-catalogue-s-appearance-is-set-on-the-screen-that-fills-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A catalogue's appearance is set on the screen that fills it.",
-        "de": "A catalogue's appearance is set on the screen that fills it."
-      },
-      "summary": {
-        "en": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it.",
-        "de": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-recipient-of-an-order-is-picked-not-typed-and-the-field-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it.",
-        "de": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it."
-      },
-      "summary": {
-        "en": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one.",
-        "de": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one."
       },
       "link": {
         "label": "Changelog",

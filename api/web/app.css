@@ -5451,6 +5451,17 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
    sentence drawn on the sheet would be zoomed to fill the window. */
 .im-empty-hint { position: absolute; z-index: 1; inset: 40px 40px auto 40px; margin: 0;
   max-width: 44ch; color: var(--muted); font-size: 13px; line-height: 1.5; pointer-events: none; }
+/* The legend for the shading, over the drawing for the same reason the hint is: a
+   sentence on the sheet would be zoomed with it. It is on screen only while the
+   shading is, because faint and bright mean nothing without the sentence that says
+   what they were read from and what that reading cannot see. */
+.im-usage-legend { position: absolute; z-index: 1; inset: auto 12px 12px 12px; margin: 0;
+  padding: 8px 10px; max-width: 78ch; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1.5;
+  /* Over the drawing, so it must not take the drawing's clicks: a class under the
+     sentence has to stay selectable. */
+  pointer-events: none; }
+.im-usage-legend b { color: var(--text); font-weight: 600; }
 .im-canvas.connecting { cursor: crosshair; }
 .im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
 
@@ -5471,6 +5482,15 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-class .uml-attr-type { fill: var(--muted); }
 .uml-class .uml-attr-mult { fill: var(--muted); }
 .uml-class .uml-attr.key .uml-attr-name { font-weight: 700; }
+/* Shaded by use (ADR-0338, read onto the drawing). What a deployed process names comes
+   forward; what nothing names recedes but stays readable — a member somebody is about to
+   decide the fate of has to be legible while they decide it. Both classes are absent
+   unless the host has a reading to hand, so an unshaded diagram is drawn as it always
+   was. `unreachable` follows below and therefore wins: while a relationship is being
+   drawn, what it cannot land on is the more urgent thing to see. */
+.uml-class .uml-attr.used .uml-attr-name { font-weight: 600; }
+.uml-class .uml-attr.unused { opacity: .42; }
+.uml-class.unused { opacity: .55; }
 .uml-class .uml-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
 .uml-class .uml-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
 .uml-class.invalid .uml-box { stroke: #d93025; stroke-dasharray: 4 3; }
