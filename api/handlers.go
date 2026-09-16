@@ -4468,6 +4468,12 @@ func (s *Server) handleFailJob(w http.ResponseWriter, r *http.Request) {
 			notHolder = true
 			return
 		}
+		if worker != "" {
+			// The breaker hears it before the command that records it, while the job
+			// is still readable, and only for a *worker's* report: an operator failing
+			// a job by hand is not evidence about a target (ADR-0340).
+			s.breakers.failed(s.breakerTargetOfJob(jv), key, jv.ProcessInstanceKey, req.Message)
+		}
 		s.proc.FailJob(key, req.Retries, req.Message, req.RetryBackoff*int64(time.Millisecond))
 		if worker != "" {
 			if name, ok := s.jobTypes.Name(jv.JobType); ok {
@@ -4769,6 +4775,16 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			case callErr != nil:
 				badReport = callErr
 				return
+			}
+			// A worker's call reached its target, so the target is answering: close
+			// any breaker on it, or break the failure streak it was building. Asked
+			// before the command, while the job is still readable, and short-circuited
+			// on a job type nothing has failed on — which is almost every completion
+			// (ADR-0340).
+			if s.breakers.tracking(jv.JobType) {
+				s.breakers.succeeded(s.breakerTargetOfJob(jv))
+			}
+			switch {
 			case decision != nil:
 				s.proc.CompleteJobWithDecision(key, decision, vars...)
 			case len(calls) > 0:
@@ -5676,6 +5692,9 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		runErr   error
 		reserved bool
 		jobType  int32
+		// held is read off the loop by the long poll below, and written only inside
+		// s.do — which is synchronous, so the write happens-before the read.
+		held bool
 	)
 	attempt := func() {
 		s.do(func() {
@@ -5700,13 +5719,26 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// worker's heartbeat grew with the backlog it was there to drain
 			// (ADR-0270).
 			var keys []uint64
-			scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
-				keys = append(keys, k)
-				if len(keys) >= want {
-					return errListTruncated
-				}
-				return nil
-			}))
+			held = s.breakers.holdingFor(jobType)
+			if held {
+				// A target under this type is down, so the candidates have to be
+				// filtered as they are scanned rather than after: collecting first
+				// would fill the page with jobs that may not go out and hand back
+				// nothing (ADR-0340).
+				scanErr = s.scanHeldCandidates(jobType, want, &keys)
+			} else {
+				// Nothing held: forget where a gated scan of this type once stopped,
+				// so the next outage starts at the newest jobs rather than part-way
+				// down a rotation that ended when the last one recovered.
+				delete(s.gateResume, jobType)
+				scanErr = unlessTruncated(s.store.ActivatableJobs(jobType, func(k uint64) error {
+					keys = append(keys, k)
+					if len(keys) >= want {
+						return errListTruncated
+					}
+					return nil
+				}))
+			}
 			if scanErr != nil {
 				return
 			}
@@ -5749,18 +5781,40 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 	// single writer for the whole poll, which is the stall this entire sequence
 	// exists to remove.
 	if wait > 0 && len(jobs) == 0 && !unknown && !inProc && !reserved && scanErr == nil && runErr == nil {
-		woken, cancel := s.jobWaiters.wait(jobType)
-		defer cancel()
-		attempt()
-		if len(jobs) == 0 {
+		if held {
+			// A breaker is holding this type back (ADR-0340), and that changes what a
+			// wake-up means. Nearly every job arriving under a held type belongs to the
+			// target that is down, so waking on each one would have this request scan
+			// and answer empty at the rate the flood is being created — a held queue
+			// turned into a spin, which is the failure the record warns about.
+			//
+			// So the poll simply sleeps out its own wait and looks once more at the end.
+			// It costs a job of a *healthy* Worker sharing this type up to one poll of
+			// latency, which is the price of not spinning; it is paid only while a
+			// breaker is open, and a second worker polling on its own schedule shortens
+			// it in practice.
 			timer := time.NewTimer(wait)
 			defer timer.Stop()
 			select {
-			case <-woken:
-				attempt()
 			case <-timer.C:
+				attempt()
 			case <-r.Context().Done():
 			case <-s.quit:
+			}
+		} else {
+			woken, cancel := s.jobWaiters.wait(jobType)
+			defer cancel()
+			attempt()
+			if len(jobs) == 0 {
+				timer := time.NewTimer(wait)
+				defer timer.Stop()
+				select {
+				case <-woken:
+					attempt()
+				case <-timer.C:
+				case <-r.Context().Done():
+				case <-s.quit:
+				}
 			}
 		}
 	}

@@ -48,6 +48,10 @@ type durabilityCollector struct {
 	subscriptions    *prometheus.Desc
 	exporterPosition *prometheus.Desc
 	exporterLag      *prometheus.Desc
+	breakersOpen     *prometheus.Desc
+	breakerTrips     *prometheus.Desc
+	breakerProbes    *prometheus.Desc
+	breakerRefused   *prometheus.Desc
 }
 
 func newDurabilityCollector(s *Server) *durabilityCollector {
@@ -83,6 +87,20 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 			"Highest log position the OpenSearch exporter has provably indexed (ADR-0114)."),
 		exporterLag: d("exporter_lag_positions",
 			"Log positions the exporter still trails the durable applied position by."),
+		// The circuit breaker (ADR-0340), as aggregates. A breakdown by Worker is what an
+		// operator actually wants when one of these fires — and it is deliberately not
+		// here: a Worker's name comes from a deployed model, so a label carrying it would
+		// be a label whose values the data invents, which is the one thing ADR-0142's
+		// cardinality rule forbids. GET /api/v1/workers answers "which target", bounded,
+		// the way that rule says a per-thing breakdown should be answered.
+		breakersOpen: d("worker_breakers_open",
+			"Targets whose jobs a circuit breaker is currently holding back (ADR-0340)."),
+		breakerTrips: d("worker_breaker_trips_total",
+			"Times a target has been judged down and its jobs held back, since this server started."),
+		breakerProbes: d("worker_breaker_probes_total",
+			"Jobs admitted as a probe to test whether a held target has recovered."),
+		breakerRefused: d("worker_breaker_refused_total",
+			"Dispatch attempts turned away because their target was being held back."),
 	}
 }
 
@@ -104,6 +122,10 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.openIncidents
 	ch <- c.pendingTimers
 	ch <- c.subscriptions
+	ch <- c.breakersOpen
+	ch <- c.breakerTrips
+	ch <- c.breakerProbes
+	ch <- c.breakerRefused
 	// The exporter descriptors are deliberately absent: they are only collected when an
 	// exporter exists, and an unchecked collector is how Prometheus permits that.
 }
@@ -205,6 +227,30 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	if n, err := s.store.MessageSubscriptions(); err == nil {
 		gauge(c.subscriptions, float64(n))
 	}
+
+	// The breaker's aggregates. Read on the loop, because that is where its state lives
+	// (I3), and cheap: the collection is the size of what is currently wrong, and the
+	// totals are one map of small structs.
+	var open, trips, probes, refused float64
+	s.do(func() {
+		for _, e := range s.breakers.byKey {
+			if e.state != breakerClosed {
+				open++
+			}
+		}
+		for _, n := range s.breakers.stats {
+			trips += float64(n.trips)
+			probes += float64(n.probes)
+			refused += float64(n.refused)
+		}
+	})
+	gauge(c.breakersOpen, open)
+	counter := func(desc *prometheus.Desc, v float64) {
+		ch <- prometheus.MustNewConstMetric(desc, prometheus.CounterValue, v)
+	}
+	counter(c.breakerTrips, trips)
+	counter(c.breakerProbes, probes)
+	counter(c.breakerRefused, refused)
 
 	// Lag is only meaningful with an exporter. A zero on a server that exports nothing
 	// would read exactly like a caught-up one.

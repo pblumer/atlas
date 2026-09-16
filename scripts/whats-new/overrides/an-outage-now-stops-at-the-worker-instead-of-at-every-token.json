@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Operations",
+    "Workers"
+  ],
+  "title": {
+    "en": "An outage now stops at the worker, instead of at every single token",
+    "de": "Ein Ausfall stoppt jetzt beim Worker statt bei jedem einzelnen Token"
+  },
+  "summary": {
+    "en": "When a target system stops answering — an SMTP host, a REST endpoint — it used to fail one job per instance that reached the task: every token spent its retries and parked on an incident of its own, so an hour of downtime in a busy process left thousands for somebody to clear. Atlas now notices. Three different instances failing in a row against the same target is enough: its jobs stop being handed out, and one job goes through every ten seconds — then twenty, forty, up to five minutes — to test whether it is back. Held work is waiting, not failed: no retry is spent on it, no incident raised, nothing cancelled, and the whole backlog carries on by itself the moment the target answers. Operations → Workers shows a Held back card naming each target, since when, what it last failed with and when the next attempt is due, with a Close now button for when you have already fixed the endpoint and would rather not wait.",
+    "de": "Antwortet ein Zielsystem nicht mehr — ein SMTP-Host, eine REST-Schnittstelle —, scheiterte bisher ein Job pro Instanz, die die Aufgabe erreichte: jeder Token verbrauchte seine Retries und parkte auf einem eigenen Incident, sodass eine Stunde Ausfall in einem gut laufenden Prozess Tausende davon hinterliess. Atlas erkennt das jetzt. Drei verschiedene Instanzen, die hintereinander gegen dasselbe Ziel scheitern, genügen: dessen Jobs werden nicht mehr ausgegeben, und alle zehn Sekunden — dann zwanzig, vierzig, bis maximal fünf Minuten — geht genau ein Job als Test durch. Zurückgehaltene Arbeit wartet, sie ist nicht gescheitert: kein Retry wird dafür verbraucht, kein Incident erzeugt, nichts abgebrochen, und der ganze Rückstau läuft von selbst weiter, sobald das Ziel wieder antwortet. In Operations → Workers nennt die Karte «Held back» jedes Ziel, seit wann es zurückgehalten wird, woran es zuletzt scheiterte und wann der nächste Versuch läuft — mit einem Knopf «Close now», wenn der Endpunkt schon repariert ist und man nicht warten will."
+  }
+}

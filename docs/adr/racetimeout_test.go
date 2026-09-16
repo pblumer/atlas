@@ -39,6 +39,13 @@ func TestTheRaceTimeoutIsOneNumberEverywhereItIsWrittenDown(t *testing.T) {
 		"AGENTS.md",
 		"CLAUDE.md",
 		"DEVELOPMENT.md",
+		// The same command, stated as the thing to run, in the two places a
+		// contributor is most likely to read it first — CONTRIBUTING.md calls it
+		// mandatory before pushing, and the invariants checklist is what a review
+		// walks. They were a number behind when this list was five files long,
+		// which is the drift this guard exists to catch.
+		"CONTRIBUTING.md",
+		filepath.Join("docs", "architecture", "invariants.md"),
 	}
 	flag := regexp.MustCompile(`go test -race -timeout=(\d+)m`)
 
