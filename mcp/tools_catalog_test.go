@@ -177,3 +177,74 @@ func TestSavingAProductNeedsAnIDAndAHome(t *testing.T) {
 		})
 	}
 }
+
+// The ArchiMate import, driven end to end.
+//
+// The contract test calls every advertised tool with empty arguments, which
+// reaches each handler's first refusal and stops there — so without this the
+// import tool's only exercised line is the one that rejects a missing id, and the
+// request it exists to make is never made. A tool whose only proof is that it
+// refuses to run is not covered.
+const archiMateModel = `<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       identifier="id-model">
+  <name xml:lang="de">Leistungskatalog</name>
+  <elements>
+    <element identifier="id-wp" xsi:type="Product">
+      <name xml:lang="de">Arbeitsplatz</name>
+    </element>
+    <element identifier="id-acc" xsi:type="BusinessService">
+      <name xml:lang="de">Benutzerkonto</name>
+    </element>
+  </elements>
+  <relationships>
+    <relationship identifier="r1" source="id-wp" target="id-acc" xsi:type="Composition"/>
+  </relationships>
+</model>`
+
+func TestImportingAnArchiMateModelFilesDrafts(t *testing.T) {
+	ts := newAtlas(t)
+
+	text, isErr := callText(t, ts, "atlas_create_catalog", map[string]any{
+		"texts": map[string]any{"de": "Aus dem Modell"}, "rank": 2, "languages": []any{"de"},
+	})
+	if isErr {
+		t.Fatalf("create catalogue = %q", text)
+	}
+	cat := catalogID(t, text)
+
+	if text, isErr = callText(t, ts, "atlas_import_catalog_archimate", map[string]any{
+		"id": cat, "xml": archiMateModel,
+	}); isErr {
+		t.Fatalf("import = %q", text)
+	}
+	if !strings.Contains(text, "arbeitsplatz") || !strings.Contains(text, "benutzerkonto") {
+		t.Fatalf("the import reports neither product: %q", text)
+	}
+
+	// Nothing the import files is orderable: everything arrives as a draft, and
+	// the bindings it cannot know are still empty.
+	products, isErr := callText(t, ts, "atlas_list_catalog_products", map[string]any{})
+	if isErr || !strings.Contains(products, "arbeitsplatz") {
+		t.Fatalf("list products = (%q, isErr=%v)", products, isErr)
+	}
+	if !strings.Contains(products, `"state":"draft"`) {
+		t.Errorf("an imported product is not a draft: %q", products)
+	}
+
+	// So publishing refuses it, which is the state the import is meant to leave.
+	if text, isErr = callText(t, ts, "atlas_publish_catalog", map[string]any{"id": cat}); !isErr {
+		t.Fatalf("publishing a freshly imported catalogue succeeded: %q", text)
+	}
+}
+
+// TestImportingNeedsTheModel: the second argument, refused by the adapter before
+// a request is made.
+func TestImportingNeedsTheModel(t *testing.T) {
+	ts := newAtlas(t)
+	if text, isErr := callText(t, ts, "atlas_import_catalog_archimate",
+		map[string]any{"id": "cat_x"}); !isErr {
+		t.Fatalf("import without a model succeeded: %q", text)
+	}
+}
