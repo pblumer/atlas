@@ -104,9 +104,18 @@ correct in a header nobody is obliged to read, beside an array whose length is w
 and free.
 
 **Option 4** was rejected as the expensive version of option 1: two shapes to maintain,
-two sets of tests, and the wrong one still reachable and still the shorter URL. Atlas
-has one console, one MCP server and a small number of API consumers; a single break
-with a changelog entry is cheaper than a permanent fork.
+two sets of tests, and the wrong one still reachable and still the shorter URL.
+
+That rejection rests on a fact with an expiry date, and it is worth writing the fact
+down rather than the inference: **Atlas has no production deployments yet**, so no
+installation outside this repository reads these endpoints, and the cost of the break is
+the cost of the consumers listed below and nothing more. Confirmed by the maintainer
+when this record landed.
+
+Once that stops being true, so does this reasoning. A future break of the same kind
+cannot be argued from this record; it has to be argued from whoever is then reading the
+API. The pre-1.0 notice at the top of `CHANGELOG.md` is the standing version of the same
+statement, and it is what an outside reader is entitled to rely on.
 
 ### What the break cost, measured
 
