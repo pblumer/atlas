@@ -322,3 +322,445 @@ func TestAConflictedSourceIsRefusedByThePackageThatReadsIt(t *testing.T) {
 		t.Errorf("the override's refusal does not say why: %v", err)
 	}
 }
+
+// TestATutorialIsCarriedInBothShapesItIsWrittenIn.
+//
+// The tutorial is the one override field the port never ran. No override in the
+// repository carries one, so the comparison that checked every other rule against
+// the original — 418 entries, byte for byte — walked past this one without
+// executing a line of it. What follows is therefore not a regression test but the
+// first execution, and one of the shapes below drops the tutorial in silence.
+func TestATutorialIsCarriedInBothShapesItIsWrittenIn(t *testing.T) {
+	for _, c := range []struct {
+		name           string
+		tutorial       string
+		wantEN, wantDE []string
+	}{
+		{"one list serves both languages", `["Open it.","Press it."]`,
+			[]string{"Open it.", "Press it."}, []string{"Open it.", "Press it."}},
+		{"a list per language", `{"en":["Open it."],"de":["Oeffnen."]}`,
+			[]string{"Open it."}, []string{"Oeffnen."}},
+		{"German falls back to English", `{"en":["Open it."]}`,
+			[]string{"Open it."}, []string{"Open it."}},
+		// Neither of these renders half a tutorial, and the second is the trap: a
+		// tutorial written only in German is shown to nobody, in either language,
+		// and nothing anywhere says so. The fallback runs one way only.
+		{"an empty list is no tutorial", `[]`, nil, nil},
+		{"German alone is no tutorial", `{"de":["Oeffnen."]}`, nil, nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := tree(t, oneBullet, map[string]string{
+				"a-thing-happened.json": `{"tutorial":` + c.tutorial + `}`,
+			})
+			doc, err := Build(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := doc.Entries[0].Tutorial
+			if c.wantEN == nil {
+				if got != nil {
+					t.Fatalf("%s: got tutorial %v, want none at all", c.tutorial, got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("%s: the tutorial was dropped; want %v", c.tutorial, c.wantEN)
+			}
+			if strings.Join(got.EN, "|") != strings.Join(c.wantEN, "|") {
+				t.Errorf("EN steps: got %v, want %v", got.EN, c.wantEN)
+			}
+			if strings.Join(got.DE, "|") != strings.Join(c.wantDE, "|") {
+				t.Errorf("DE steps: got %v, want %v", got.DE, c.wantDE)
+			}
+		})
+	}
+}
+
+// TestATutorialThatIsNeitherShapeIsRefusedRatherThanDropped.
+//
+// A deliberate divergence from the original, recorded here because it is one: the
+// JavaScript read anything that was not an array as an object, found no `en` in
+// it, and produced an empty tutorial — which the length check then dropped. A
+// tutorial written as a bare string therefore disappeared without a word.
+//
+// This refuses instead, which is the rule the rest of the file already keeps: a
+// key that does nothing is indistinguishable from a key nobody wrote. No override
+// carries a tutorial at all, so nothing in the repository changes either way.
+func TestATutorialThatIsNeitherShapeIsRefusedRatherThanDropped(t *testing.T) {
+	p := tree(t, oneBullet, map[string]string{
+		"a-thing-happened.json": `{"tutorial":"Open it, then press it."}`,
+	})
+	if _, err := Build(p); err == nil {
+		t.Fatal("a tutorial that is neither a list nor a pair of lists was accepted and silently dropped")
+	} else if !strings.Contains(err.Error(), "a-thing-happened.json") {
+		t.Errorf("the refusal does not name the file to fix: %v", err)
+	}
+}
+
+// TestWriteLeavesExactlyWhatTheEncoderProduced.
+//
+// Everything else here builds a document in memory. The file on disk is what the
+// Console fetches and what CI regenerates to decide whether a commit is current,
+// and the write was the one step nothing executed — a correct Build behind a
+// write that truncated, or that wrote to the wrong path, would look identical
+// from inside this package.
+func TestWriteLeavesExactlyWhatTheEncoderProduced(t *testing.T) {
+	p := tree(t, oneBullet, nil)
+	n, err := Write(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("Write reported %d entries, want 1", n)
+	}
+	onDisk, err := os.ReadFile(p.Out)
+	if err != nil {
+		t.Fatalf("nothing was written where the feed is served from: %v", err)
+	}
+	doc, err := Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Encode(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(onDisk) != string(want) {
+		t.Errorf("the file on disk is not what the encoder produced:\ngot:\n%s\nwant:\n%s", onDisk, want)
+	}
+}
+
+// TestAFailedRunLeavesTheLastGoodFeedInPlace.
+//
+// os.WriteFile truncates the moment it opens, so "a failed run writes nothing" is
+// true only while every refusal is raised before that call. A run that refused
+// *after* opening would leave an empty feed behind — which the Console would
+// serve, and which CI would then compare the next commit against.
+func TestAFailedRunLeavesTheLastGoodFeedInPlace(t *testing.T) {
+	const conflicted = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n" +
+		"<<<<<<< HEAD\n- **One side.** A.\n=======\n- **The other side.** B.\n>>>>>>> origin/main\n"
+	p := tree(t, conflicted, nil)
+	const previous = "the feed from the last good run\n"
+	if err := os.WriteFile(p.Out, []byte(previous), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	n, err := Write(p)
+	if err == nil {
+		t.Fatal("a conflicted CHANGELOG was written out rather than refused")
+	}
+	if n != 0 {
+		t.Errorf("Write reported %d entries for a run that failed, want 0", n)
+	}
+	after, err := os.ReadFile(p.Out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != previous {
+		t.Errorf("a failed run overwrote the feed it could not rebuild:\n%s", after)
+	}
+}
+
+// TestABareRecordPointsAtTheRecordAndNotAtTheIndex.
+//
+// A bullet that names "(ADR-0058)" without a path used to resolve only when some
+// *other* bullet happened to spell that record out — and when none did, the entry
+// linked the directory listing: a link that opens the whole index and answers
+// nothing. docs/adr is read for exactly this, and the three cases below are the
+// three ways the lookup can end.
+func TestABareRecordPointsAtTheRecordAndNotAtTheIndex(t *testing.T) {
+	const bare = "# Changelog\n\n## [0.9.0] — 2026-03-04\n\n### Added\n\n" +
+		"- **A thing happened.** It is explained in ADR-0058.\n"
+
+	t.Run("the record is on disk", func(t *testing.T) {
+		p := tree(t, bare, nil)
+		if err := os.WriteFile(filepath.Join(p.ADRDir, "0058-the-record.md"), []byte("# ADR-0058\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		doc, err := Build(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := doc.Entries[0].Link
+		if got.Label != "ADR-0058" {
+			t.Errorf("label: got %q, want ADR-0058", got.Label)
+		}
+		if !strings.HasSuffix(got.URL, "/docs/adr/0058-the-record.md") {
+			t.Errorf("a bare reference did not resolve to the record on disk: %s", got.URL)
+		}
+	})
+
+	t.Run("no record answers to that number", func(t *testing.T) {
+		p := tree(t, bare, nil)
+		doc, err := Build(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The index, because there is nothing better to point at — but still labelled
+		// with the number the bullet named, so the reader knows what to look for.
+		if got := doc.Entries[0].Link; !strings.HasSuffix(got.URL, "/docs/adr") {
+			t.Errorf("got %s, want the directory listing as the last resort", got.URL)
+		}
+	})
+
+	t.Run("a path spelled out anywhere outranks the directory", func(t *testing.T) {
+		const spelled = "# Changelog\n\n## [0.9.0] — 2026-03-04\n\n### Added\n\n" +
+			"- **A thing happened.** It is explained in ADR-0058.\n" +
+			"- **Another thing happened.** See [ADR-0058](docs/adr/0058-as-the-author-wrote-it.md).\n"
+		p := tree(t, spelled, nil)
+		if err := os.WriteFile(filepath.Join(p.ADRDir, "0058-as-the-scan-found-it.md"), []byte("# ADR-0058\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		doc, err := Build(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// An author who wrote the path has said which file they mean, and the scan is
+		// a guess from a file name. Where they disagree the author wins.
+		if got := doc.Entries[0].Link; !strings.HasSuffix(got.URL, "/docs/adr/0058-as-the-author-wrote-it.md") {
+			t.Errorf("the directory scan outranked a path an author spelled out: %s", got.URL)
+		}
+	})
+}
+
+// TestAnOverrideCarriesTheLinkTheTagsAndTheDeepLink.
+//
+// The three curated fields that are not prose. Each replaces or adds to what the
+// CHANGELOG said on its own, and a field that quietly failed to apply would leave
+// an entry that still renders — pointing where the bullet happened to point,
+// untagged, with no way in.
+func TestAnOverrideCarriesTheLinkTheTagsAndTheDeepLink(t *testing.T) {
+	p := tree(t, oneBullet, map[string]string{
+		"a-thing-happened.json": `{
+			"link": {"label":"The handbook","url":"https://example.invalid/handbook"},
+			"tags": ["portal","catalogue"],
+			"try": {"label":{"en":"Open it","de":"Oeffnen"},"route":"#/portal"}
+		}`,
+	})
+	doc, err := Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := doc.Entries[0]
+	if e.Link.Label != "The handbook" || e.Link.URL != "https://example.invalid/handbook" {
+		t.Errorf("the curated link did not replace the derived one: %+v", e.Link)
+	}
+	if strings.Join(e.Tags, "|") != "portal|catalogue" {
+		t.Errorf("tags: got %v", e.Tags)
+	}
+	if e.Try == nil {
+		t.Fatal("the deep link was dropped")
+	}
+	if e.Try.Route != "#/portal" || e.Try.Label.EN != "Open it" || e.Try.Label.DE != "Oeffnen" {
+		t.Errorf("try: got %+v", *e.Try)
+	}
+}
+
+// TestADeepLinkWithNoRouteIsNotADeepLink.
+//
+// The half-written case, and it is the one that was found in the repository: an
+// override carried `route` where it did not belong, so `try` held a label and
+// nowhere to go. A button that goes nowhere is worse than no button, so there is
+// no button.
+func TestADeepLinkWithNoRouteIsNotADeepLink(t *testing.T) {
+	p := tree(t, oneBullet, map[string]string{
+		"a-thing-happened.json": `{"try":{"label":"Open it"}}`,
+	})
+	doc, err := Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if try := doc.Entries[0].Try; try != nil {
+		t.Errorf("a try with no route was rendered as a button that goes nowhere: %+v", *try)
+	}
+}
+
+// TestTheDefaultLabelIsUsedWhereTheOverrideNamesNone.
+//
+// A route with no label still needs a word on the button, in both languages.
+func TestTheDefaultLabelIsUsedWhereTheOverrideNamesNone(t *testing.T) {
+	p := tree(t, oneBullet, map[string]string{
+		"a-thing-happened.json": `{"try":{"route":"#/portal"}}`,
+	})
+	doc, err := Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	try := doc.Entries[0].Try
+	if try == nil {
+		t.Fatal("the deep link was dropped for having no label")
+	}
+	if try.Label.EN != "Try it" || try.Label.DE != "Try it" {
+		t.Errorf("label: got %+v, want the default in both languages", try.Label)
+	}
+}
+
+// TestAMissingSourceDirectoryDegradesRatherThanStops.
+//
+// Two of the three sources are optional, and for the same reason: the generator
+// has to run in a tree that carries neither — a checkout of the scripts alone, or
+// a guard's own throwaway tree. Without curated prose the feed renders from the
+// CHANGELOG in English; without docs/adr a bare record reference falls back to the
+// index. Neither is worth stopping a run over, and both say so on stderr or in the
+// link rather than silently.
+func TestAMissingSourceDirectoryDegradesRatherThanStops(t *testing.T) {
+	t.Run("no curated prose", func(t *testing.T) {
+		p := tree(t, oneBullet, nil)
+		p.Overrides = filepath.Join(t.TempDir(), "not-a-directory")
+		doc, err := Build(p)
+		if err != nil {
+			t.Fatalf("a missing overrides directory stopped the run: %v", err)
+		}
+		if len(doc.Entries) != 1 {
+			t.Fatalf("got %d entries, want the CHANGELOG's one", len(doc.Entries))
+		}
+		if e := doc.Entries[0]; e.Title.EN != "A thing happened." || e.Title.DE != e.Title.EN {
+			t.Errorf("the uncurated entry did not fall back to the CHANGELOG's own wording: %+v", e.Title)
+		}
+	})
+
+	t.Run("no records", func(t *testing.T) {
+		const bare = "# Changelog\n\n## [0.9.0] — 2026-03-04\n\n### Added\n\n" +
+			"- **A thing happened.** It is explained in ADR-0058.\n"
+		p := tree(t, bare, nil)
+		p.ADRDir = filepath.Join(t.TempDir(), "not-a-directory")
+		doc, err := Build(p)
+		if err != nil {
+			t.Fatalf("a missing docs/adr stopped the run: %v", err)
+		}
+		if got := doc.Entries[0].Link; got.Label != "ADR-0058" || !strings.HasSuffix(got.URL, "/docs/adr") {
+			t.Errorf("got %+v, want the number it names and the index it can still reach", got)
+		}
+	})
+}
+
+// TestACHANGELOGThatIsNotThereIsAFailure.
+//
+// The one source that is not optional. An unreadable CHANGELOG produces no
+// entries, and a feed with no entries is a well-formed file that renders an empty
+// list — which is what a reader would be shown, and what the staleness check would
+// then hold the next commit to.
+func TestACHANGELOGThatIsNotThereIsAFailure(t *testing.T) {
+	p := tree(t, oneBullet, nil)
+	if err := os.Remove(p.Changelog); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(p); err == nil {
+		t.Fatal("a missing CHANGELOG produced a feed rather than an error")
+	}
+}
+
+// TestABulletIsReadToTheEndOfItsParagraph.
+//
+// A bullet is rarely one line. The headline itself wraps, and the prose beneath it
+// runs on until a blank line or the next bullet — so a reader that stopped at the
+// first newline would cut a headline in half, and with it the slug that names the
+// override file. The last case is the silent one: a headline whose bold is never
+// closed yields no entry at all.
+func TestABulletIsReadToTheEndOfItsParagraph(t *testing.T) {
+	const wrapped = "# Changelog\n\n## [Unreleased]\n\n### Added\n\n" +
+		"- **A headline that wraps\n  across two lines.** And prose that\n  wraps as well. A second sentence.\n" +
+		"- **Never closed. And prose after it.\n"
+	p := tree(t, wrapped, nil)
+	doc, err := Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Entries) != 1 {
+		t.Fatalf("got %d entries, want the one well-formed bullet", len(doc.Entries))
+	}
+	e := doc.Entries[0]
+	if e.Title.EN != "A headline that wraps across two lines." {
+		t.Errorf("the headline was not read whole: %q", e.Title.EN)
+	}
+	if e.ID != "a-headline-that-wraps-across-two-lines" {
+		t.Errorf("the id is derived from half a headline: %q", e.ID)
+	}
+	if e.Summary.EN != "And prose that wraps as well." {
+		t.Errorf("the summary was not read whole: %q", e.Summary.EN)
+	}
+	// The unreleased section has no version number to anchor to, so it anchors to
+	// the word instead. What this does *not* hold is worth writing down:
+	// parseChangelog special-cases "Unreleased" to "unreleased" before slugging, and
+	// that branch is a no-op — slugify lowercases first, so both spellings already
+	// produce the same anchor and deleting the branch would change nothing here or
+	// anywhere else. It is carried because the original carried it. What is held
+	// below is the anchor itself, which a link pointing at the file or at a version
+	// number would break.
+	if !strings.HasSuffix(e.Link.URL, "/CHANGELOG.md#unreleased") {
+		t.Errorf("the unreleased section's own anchor: got %s", e.Link.URL)
+	}
+}
+
+// TestAFailureToWriteIsReportedRatherThanCounted.
+//
+// Write returns a count and an error, and the count is what the command line
+// prints. A write that failed while the count still read "12 entries" would report
+// a successful run to a reader and to CI, on a tree where nothing was written.
+func TestAFailureToWriteIsReportedRatherThanCounted(t *testing.T) {
+	p := tree(t, oneBullet, nil)
+	// A directory where the file goes: os.WriteFile cannot open it, and the failure
+	// arrives at the last step rather than at the first.
+	if err := os.Remove(p.Out); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(p.Out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	n, err := Write(p)
+	if err == nil {
+		t.Fatal("a feed that could not be written reported success")
+	}
+	if n != 0 {
+		t.Errorf("Write reported %d entries for a run that wrote none", n)
+	}
+}
+
+// TestAnOverrideValueOfTheWrongKindIsRefusedNamingTheFile.
+//
+// The prose fields accept two shapes — a bare string, or a pair of them. Anything
+// else is a mistake in a hand-written file, and the whole point of failing the run
+// is that the alternative is an entry that renders in English twice while looking
+// exactly like one nobody has curated yet. The message has to name the file,
+// because there are hundreds of them.
+func TestAnOverrideValueOfTheWrongKindIsRefusedNamingTheFile(t *testing.T) {
+	p := tree(t, oneBullet, map[string]string{
+		"a-thing-happened.json": `{"title": 42}`,
+	})
+	if _, err := Build(p); err == nil {
+		t.Fatal("a title that is not text was accepted")
+	} else if !strings.Contains(err.Error(), "a-thing-happened.json") {
+		t.Errorf("the refusal does not name the file to fix: %v", err)
+	}
+}
+
+// TestOnlyNumberedRecordsAreRecords.
+//
+// docs/adr holds more than records: unnumbered drafts awaiting a number, the Go
+// that reads them, and a README. The scan that resolves a bare "(ADR-0058)" reads
+// that whole directory, so its file-name rule is the only thing standing between a
+// reader and a link to something that is not the record they asked for. Neither of
+// the two near misses below is a record — one carries the number in a draft's
+// name, the other carries it in a file that is not markdown.
+func TestOnlyNumberedRecordsAreRecords(t *testing.T) {
+	const bare = "# Changelog\n\n## [0.9.0] — 2026-03-04\n\n### Added\n\n" +
+		"- **A thing happened.** It is explained in ADR-0058.\n"
+	p := tree(t, bare, nil)
+	for _, name := range []string{
+		"draft-0058-awaiting-its-number.md",
+		"0058-the-record.txt",
+		"number.go",
+		"README.md",
+	} {
+		if err := os.WriteFile(filepath.Join(p.ADRDir, name), []byte("x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc, err := Build(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Nothing in that directory is ADR-0058, so the index is the honest answer.
+	if got := doc.Entries[0].Link; !strings.HasSuffix(got.URL, "/docs/adr") {
+		t.Errorf("something that is not a record was offered as one: %s", got.URL)
+	}
+}
