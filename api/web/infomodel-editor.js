@@ -400,7 +400,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
   // ---- shading by use ------------------------------------------------------
   // The where-used reading (ADR-0338) brought onto the drawing, where the question is
-  // actually asked (ADR-draft-the-drawing-says-which-members-are-used).
+  // actually asked (ADR-0363).
   // actually asked. That reading answers "what would this change break" one class at a
   // time, on a page of its own; somebody about to retire a member is looking at the
   // class diagram, and walking off it to find out whether anything writes `placedOn`
@@ -504,7 +504,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   }
 
   // The verdict on the model being edited, asked of the server whenever it changes
-  // (ADR-draft-the-verdict-is-served-not-duplicated).
+  // (ADR-0364).
   //
   // Until this existed the panel showed the findings of the *last save*, so every edit
   // that broke the model was silent until Save — and the refusal then named an edit the

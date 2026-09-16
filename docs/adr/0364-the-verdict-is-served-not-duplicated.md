@@ -1,4 +1,4 @@
-# ADR-DRAFT: The verdict is served, not duplicated
+# ADR-0364: The verdict is served, not duplicated
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -8,7 +8,7 @@ import (
 )
 
 // Serving the verdict on a document nobody has saved
-// (ADR-draft-the-verdict-is-served-not-duplicated).
+// (ADR-0364).
 //
 // The canvas could only ever show the findings of the *last save*, so every edit that
 // broke the model was silent until somebody pressed Save — and the refusal then named

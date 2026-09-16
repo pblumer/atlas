@@ -313,7 +313,7 @@ test("a refused save shows the server's findings rather than one sentence", asyn
 // broke the model was silent until somebody pressed Save — and the refusal then named
 // an edit they had stopped thinking about. It now asks the server as the model changes,
 // which is what closes that whole category rather than one case of it
-// (ADR-draft-the-verdict-is-served-not-duplicated).
+// (ADR-0364).
 test.describe("the verdict is live", () => {
   test("an edit is judged without saving, and the bar says so", async ({ page }) => {
     await expect(page.locator(".im-ok")).toBeVisible();
@@ -376,7 +376,7 @@ test.describe("the verdict is live", () => {
 });
 
 // Where a class is used, read onto the drawing itself
-// (ADR-draft-the-drawing-says-which-members-are-used).
+// (ADR-0363).
 //
 // The reading is the Business objects page's, asked once for this model's application,
 // so the drawing cannot say anything that page does not. What these pin is the *rule*

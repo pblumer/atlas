@@ -82,7 +82,7 @@ type createRequest struct {
 }
 
 // HandleValidate judges a document the caller is holding and has not saved
-// (ADR-draft-the-verdict-is-served-not-duplicated).
+// (ADR-0364).
 //
 // It exists for the same reason HandleSubset does, one step further on. The subset is
 // served so the canvas refuses mid-drag exactly what the server refuses on write; the
