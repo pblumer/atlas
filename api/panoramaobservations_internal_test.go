@@ -112,7 +112,7 @@ func TestCollectLocalFactsReportsStoreFailures(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := whole(t)
 			breakOne(t, s)
-			if _, _, err := s.collectLocalFacts(req); err == nil {
+			if _, _, err := s.collectLocalFacts(req, nil); err == nil {
 				t.Fatal("a broken source produced a full set of facts")
 			}
 		})
@@ -122,7 +122,7 @@ func TestCollectLocalFactsReportsStoreFailures(t *testing.T) {
 	// failing for the reason they claim rather than because the fixture is wrong.
 	s := whole(t)
 	seeded(t, s)
-	facts, peers, err := s.collectLocalFacts(req)
+	facts, peers, err := s.collectLocalFacts(req, nil)
 	if err != nil {
 		t.Fatalf("collectLocalFacts on a healthy server: %v", err)
 	}

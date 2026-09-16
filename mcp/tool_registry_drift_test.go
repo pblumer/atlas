@@ -30,6 +30,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_stats":                      "GET /api/v1/stats",
 	"atlas_deploy":                     "POST /api/v1/deployments",
 	"atlas_list_processes":             "GET /api/v1/processes",
+	"atlas_product_usage":              "GET /api/v1/catalog-products/{id}/usage",
 	"atlas_get_process_xml":            "GET /api/v1/processes/{key}/xml",
 	"atlas_save_process_diagram":       "PUT /api/v1/processes/{key}/diagram",
 	"atlas_delete_process":             "DELETE /api/v1/processes/{key}",
@@ -139,6 +140,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_instance_lifecycle":           "GET /api/v1/instances/{key}/lifecycle",
 	"atlas_derived_information_model":    "GET /api/v1/infomodel/derived",
 	"atlas_model_difference":             "GET /api/v1/infomodel/difference",
+	"atlas_validate_information_model":   "POST /api/v1/infomodel/validate",
 	"atlas_class_catalog":                "GET /api/v1/infomodel/classes",
 	"atlas_class_usage":                  "GET /api/v1/infomodel/models/{id}/usage",
 }
@@ -168,11 +170,17 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/instances":                         "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
 	"GET /api/v1/approvals/stalled":                  "an operations list still settling with the portal around it; a tool is a public contract",
 	"POST /api/v1/orders/{id}/cancel":                "withdrawing an order records the person who did it, and an agent is not one; it is also the one order act whose author a reader will care about years later",
+	"POST /api/v1/orders/{id}/lines/{item}/cancel":   "the same act as withdrawing the whole order, aimed at one position: it records the person who did it, and an agent is not one",
+	"POST /api/v1/orders/{id}/lines/{item}/details":  "correcting what somebody said when they ordered is theirs to correct; on a position already held it is kept as an amendment naming who made it, and an agent is not a who",
 	"POST /api/v1/orders/{id}/lines/{item}/return":   "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/{id}/lines/{item}/escalate": "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
 	"POST /api/v1/orders/{id}/lines/{item}/reassign": "same: an intervention records the person who made it, and an agent is not one",
+	"POST /api/v1/approvals/decide":                  "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
 	"GET /api/v1/approvals":                          "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
 	"GET /api/v1/approvals/{key}/logo":               "a brand mark is bytes for a browser; an agent has no use for the image",
+	"GET /api/v1/users/{id}/avatar":                  "a picture of a person is bytes for a browser; an agent has no use for the image",
+	"PUT /api/v1/users/{id}/avatar":                  "how a colleague appears to everybody else is a person's to choose, and an agent is not one; the bytes it would upload came from somewhere no record would name",
+	"DELETE /api/v1/users/{id}/avatar":               "same: taking a face away changes how somebody appears as much as putting one there",
 	"GET /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
 	"PUT /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
 	"DELETE /api/v1/catalogs/{id}/logo":              "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
@@ -559,6 +567,33 @@ var mcpOmittedRoutes = map[string]string{
 	// is the organisation chart with workloads attached the record refuses to hand
 	// to a person. One route, two modes, and a tool cannot expose only the safe one.
 	"GET /api/v1/pending-work": "asking what is waiting for another person enumerates their obligations, and the route that answers for you is the same route",
+
+	// Favourites (ADR-0348). Omitted, and not for a disclosure reason:
+	// the routes only ever touch the caller's own list, so there is nothing here to
+	// read about anybody else.
+	//
+	// A favourite is a **navigation aid for a person in front of a screen**. It
+	// exists so somebody can find a product again among hundreds. An assistant does
+	// not navigate a screen — it can list the catalogue and name a product directly
+	// — so a tool here would buy nothing on the read side, and on the write side it
+	// would let a robot set a preference into somebody's portal that they did not
+	// choose and have no obvious way to attribute.
+	"GET /api/v1/portal/favourites":             "a bookmark list is a navigation aid for a person at a screen, which an assistant does not need",
+	"PUT /api/v1/portal/favourites/{itemId}":    "marking somebody's portal on their behalf sets a preference they did not choose and cannot easily attribute",
+	"DELETE /api/v1/portal/favourites/{itemId}": "as above, and unmarking is the half somebody would notice only by missing it",
+
+	// Access history (ADR-0346). Omitted, and the reason is
+	// not the inventory's.
+	//
+	// The inventory routes are withheld because they are other people's access.
+	// This one is withheld because of what it is *for*: it is the record an access
+	// review reads, and the one structure in the portal built to outlive every
+	// retention rule around it. A tool that could read it lets an assistant
+	// assemble a person's whole access biography — every right, every period, every
+	// decider — in one call, which is a dossier rather than an answer. The `?at=`
+	// mode is sharper still: it reconstructs a past day, which is precisely the
+	// evidence somebody would want before disputing it.
+	"GET /api/v1/entitlements/history": "a person's access history is a biography, and the route reconstructs past days on request",
 
 	// Expiry (ADR-0344). Omitted for the reason GET
 	// /api/v1/inventory is: it is a list of other people's access, with the dates

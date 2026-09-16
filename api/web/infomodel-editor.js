@@ -29,6 +29,12 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
 // fixed 200 would drop the next one on top of the last.
 const BOX_STEP = 400;
 
+// How long the canvas waits after an edit before asking the server what it thinks of
+// the model. Long enough that typing a class name is one question rather than nine,
+// short enough that the answer arrives while the edit is still the thing being looked
+// at — which is the whole point of not waiting for Save.
+const VALIDATE_DEBOUNCE_MS = 250;
+
 // The bundle carries both canvases; this view wants the UML half of it.
 function loadCanvas() {
   return loadCanvasBundle().then((bundle) => bundle.uml);
@@ -71,6 +77,10 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // survives leaving the class it was typed for.
     memberFilter: "",
     search: "",
+    // The where-used reading, once somebody has asked for it, as a Map from class name
+    // to that class's usage summary. Null means nobody asked, which is what leaves the
+    // drawing exactly as it has always been drawn.
+    usage: null,
   };
 
   const stereotypeOf = (name) => subset.stereotypes.find((s) => s.stereotype === name) || subset.stereotypes[0];
@@ -108,7 +118,18 @@ export async function mountClassDiagram(root, { api, toast, id }) {
             <span class="im-tool-sep" aria-hidden="true"></span>
             <button type="button" class="icon-btn" data-tool="undo" title="Undo the last move on the canvas (Ctrl/⌘ + Z)" aria-label="Undo" disabled>↺</button>
             <button type="button" class="icon-btn" data-tool="redo" title="Redo (Ctrl/⌘ + Shift + Z)" aria-label="Redo" disabled>↻</button>
+            <span class="im-tool-sep" aria-hidden="true"></span>
+            <button type="button" class="icon-btn" data-tool="usage" aria-pressed="false"
+              title="Shade by use: bring out the members deployed processes name, fade the ones none of them does"
+              aria-label="Shade by use">◧</button>
           </div>
+          <p class="im-usage-legend" id="im-usage-legend" hidden>
+            <b>Shaded by use.</b> A member some deployed process names is bright; one none of
+            them names is faint. A read takes the whole object, so faint means
+            <i>nothing names it</i> — not that nothing uses it. A faint class is used by no
+            deployed process and nowhere in this model either. Classes and members this
+            reading has never seen — anything renamed or added since — are left as they were.
+          </p>
         </div>
         <div class="im-canvas" id="im-lc-canvas" hidden>
           <p class="im-empty-hint" id="im-lc-empty" hidden>No states yet. Add the state an instance
@@ -151,6 +172,18 @@ export async function mountClassDiagram(root, { api, toast, id }) {
   const canvas = new uml.ClassCanvas(canvasEl, {
     subset,
     paletteEntries,
+    contextPadEntries,
+    // A drag out of the pad reports where it landed; nothing is created on the canvas.
+    // The document is the host's, and reconcile rebuilds every line from it — a
+    // connection diagram-js added to its own model would live until the next sync.
+    onConnect: (kind, from, to) => { if (!drawRelationship(kind, from.id, to.id)) render(); },
+    // Dropped where the subset refuses. The drag already refused it, so nothing is
+    // created — this only says why, in the server's own words.
+    onConnectRefused: (kind, from, to) => {
+      const a = classById(from.id);
+      const b = classById(to.id);
+      if (a && b) toast(refusalFor(kind, a, b), "err");
+    },
     onSelection: (bo, all) => onCanvasSelection(bo, all),
     onChange: () => { absorbMoves(); syncHistoryButtons(); },
     onTool: (tool) => showMarquee(tool === "marquee"),
@@ -333,7 +366,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     // that heard, typing in a relationship's name would deselect it on the first key.
     applyingSelection = true;
     try {
-      canvas.sync(state.model, state.validation.findings || [], { unreachable: unreachableNow() });
+      canvas.sync(state.model, state.validation.findings || [],
+        { unreachable: unreachableNow(), usage: usageMarks() });
       // An empty canvas says what to do with it. It is HTML over the drawing rather
       // than text in it: diagram-js fits the viewport to the content, so a sentence
       // drawn on the sheet would be zoomed to fill it.
@@ -364,10 +398,149 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return out;
   }
 
+  // ---- shading by use ------------------------------------------------------
+  // The where-used reading (ADR-0338) brought onto the drawing, where the question is
+  // actually asked (ADR-0363).
+  // actually asked. That reading answers "what would this change break" one class at a
+  // time, on a page of its own; somebody about to retire a member is looking at the
+  // class diagram, and walking off it to find out whether anything writes `placedOn`
+  // is a walk most people do not take.
+  //
+  // It is the same reading, not a second one — /api/v1/infomodel/classes, asked once
+  // for this model's application. So the drawing cannot say anything the Business
+  // objects page does not, and there is one computation to keep true.
+  //
+  // What it can say, exactly:
+  //
+  //   - **A member is used** when a deployed process names it: a write targeting that
+  //     member (ADR-0060). A business key counts too, whenever any deployed process
+  //     uses the class at all — no write ever names it, and it is what every store
+  //     lookup and cross-process correlation resolves against, so it is used by every
+  //     use there is. Fading it would point at the one member that must not go.
+  //   - **A member is not named** when nothing deployed writes it by name. That is not
+  //     the same as unused: a read takes the whole object into a variable and what a
+  //     FEEL expression then reads out of it is not a fact of the model (ADR-0301's
+  //     whole-object gap). The legend says so rather than letting faint read as dead.
+  //   - **A class is used by nothing** when no deployed process uses it and the
+  //     vocabulary does not either. Both halves, because an «enumeration» is normally
+  //     declared by no data object at all — a class-level fade counting only processes
+  //     would grey out the most shared elements in the model.
+  //
+  // And what it will not say. A class whose name the reading has never seen — added
+  // since, or renamed a moment ago — is left alone rather than faded: the reading made
+  // no claim about that name, and inventing one would turn every rename into a scare.
+  // Members are shaded only where a process uses the class, since member-level facts
+  // come only from process writes. An «enumeration»'s literals are never shaded: what a
+  // write names is a member, and a literal is not one.
+  //
+  // Asked once, when it is switched on. What it reads is deployed processes, which do
+  // not change while somebody is drawing; what does change is the document, and the
+  // marks follow it on every sync because they are matched by name.
+  async function loadUsage() {
+    const rows = await api("GET", "/api/v1/infomodel/classes?applicationId=" +
+      encodeURIComponent(state.model.applicationId || ""));
+    const byName = new Map();
+    for (const row of rows || []) {
+      if (row.modelId === state.model.id) byName.set(row.name, row.usage || {});
+    }
+    return byName;
+  }
+
+  // usageMarks turns that reading into what the drawing shows. The rule stays here, the
+  // way the relationship matrix does: the canvas is told which classes and which member
+  // names are used, and draws that.
+  function usageMarks() {
+    if (!state.usage) return undefined;
+    const unused = [];
+    const members = {};
+    for (const c of state.model.classes || []) {
+      const u = state.usage.get(c.name);
+      if (!u) continue;
+      if (!u.processes && !u.modelUses) { unused.push(c.id); continue; }
+      if (!u.processes || c.stereotype === "enumeration") continue;
+      const named = new Set(u.attributes || []);
+      for (const k of c.identity || []) named.add(k);
+      members[c.id] = [...named];
+    }
+    return { unused, members };
+  }
+
+  const usageBtn = root.querySelector('[data-tool="usage"]');
+  const usageLegendEl = root.querySelector("#im-usage-legend");
+
+  function reflectUsage() {
+    usageBtn.setAttribute("aria-pressed", String(Boolean(state.usage)));
+    usageBtn.classList.toggle("active", Boolean(state.usage));
+    usageLegendEl.hidden = !state.usage;
+  }
+
+  usageBtn.addEventListener("click", async () => {
+    if (state.usage) {
+      state.usage = null;
+      reflectUsage();
+      syncCanvas();
+      return;
+    }
+    usageBtn.disabled = true;
+    try {
+      state.usage = await loadUsage();
+    } catch (e) {
+      // Nothing shaded, rather than shaded from nothing: a diagram that fades members
+      // on a reading that failed is a diagram saying something nobody checked.
+      toast(`Could not read where these classes are used: ${e.message}`, "err");
+      return;
+    } finally {
+      usageBtn.disabled = false;
+    }
+    reflectUsage();
+    syncCanvas();
+  });
+
   function markDirty() {
     state.dirty = true;
     dirtyEl.hidden = false;
     saveBtn.disabled = false;
+    revalidate();
+  }
+
+  // The verdict on the model being edited, asked of the server whenever it changes
+  // (ADR-0364).
+  //
+  // Until this existed the panel showed the findings of the *last save*, so every edit
+  // that broke the model was silent until Save — and the refusal then named an edit the
+  // author had stopped thinking about. Checking it here rather than in the browser is
+  // the same choice ADR-0230 made for the relationship matrix: the rules are served,
+  // never duplicated, because two copies of them are two rule sets and the one the
+  // author sees would drift from the one the server enforces.
+  //
+  // Debounced, because markDirty runs on every keystroke in the panel and a verdict per
+  // character is not read anyway. The last request wins: an answer about a model that
+  // has already changed again is not the verdict, so a late one is dropped rather than
+  // painted over a newer one.
+  let validateTimer = null;
+  let validateSeq = 0;
+  function revalidate() {
+    clearTimeout(validateTimer);
+    validateTimer = setTimeout(async () => {
+      const seq = ++validateSeq;
+      let verdict;
+      try {
+        verdict = await api("POST", "/api/v1/infomodel/validate", {
+          classes: state.model.classes,
+          associations: state.model.associations,
+          stores: state.model.stores,
+        });
+      } catch {
+        return; // unreachable or refused: the last verdict stands rather than blanking
+      }
+      if (seq !== validateSeq || !root.isConnected) return;
+      state.validation = verdict && verdict.findings ? verdict : { valid: true, findings: [] };
+      // The problems bar and the marks on the drawing, and deliberately not the side
+      // panel: a row being typed in is not repainted, which is what keeps the caret
+      // where it is.
+      renderProblems();
+      syncCanvas();
+    }, VALIDATE_DEBOUNCE_MS);
   }
 
   // ---- rendering -----------------------------------------------------------
@@ -1283,12 +1456,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     const act = btn.dataset.act;
     if (act === "close-schema") { state.schemaFor = ""; renderSide(); return; }
 
-    const store = selectedStore();
-    if (store && act === "del-store") {
-      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
-      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
-      selectOne(null);
-      markDirty(); render();
+    if (act === "del-store" || act === "del-class" || act === "del-assoc") {
+      deleteSelected();
       return;
     }
 
@@ -1315,22 +1484,6 @@ export async function mountClassDiagram(root, { api, toast, id }) {
         // an arrow to a state that is not there is what the validator refuses.
         resyncClassesSourcedFrom(c.name);
         markDirty(); render();
-      } else if (act === "del-class") {
-        // A delete says what it would break before it is confirmed (ADR-0331). A store
-        // keeps naming its class by name, and nothing can follow that for a class that
-        // is going away — so the cost is stated here rather than met as a refusal on
-        // the next save.
-        const held = (state.model.stores || []).filter((st) => st.class === c.name).map((st) => st.name);
-        const alsoKept = held.length
-          ? ` ${held.length === 1 ? "The store" : "The stores"} ${held.map((n) => `"${n}"`).join(", ")} ` +
-            `${held.length === 1 ? "holds" : "hold"} it, and the model will not save until that is settled.`
-          : "";
-        if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.${alsoKept}`)) return;
-        state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
-        state.model.associations = state.model.associations.filter(
-          (x) => x.from.classId !== c.id && x.to.classId !== c.id);
-        selectOne(null);
-        markDirty(); render();
       } else if (act === "schema") {
         state.schemaFor = c.name;
         renderSide();
@@ -1340,11 +1493,7 @@ export async function mountClassDiagram(root, { api, toast, id }) {
 
     const a = selectedAssoc();
     if (!a) return;
-    if (act === "del-assoc") {
-      state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
-      selectOne(null);
-      markDirty(); render();
-    } else if (act === "flip") {
+    if (act === "flip") {
       const tmp = a.from; a.from = a.to; a.to = tmp;
       markDirty(); render();
     }
@@ -1734,6 +1883,45 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     markDirty(); render();
   }
 
+  // deleteSelected removes whatever is selected, and is the only place that answers
+  // "delete what?". The panel's ✕ and the context pad's bin both come here, so the two
+  // cannot drift into meaning different things — and a class still takes its
+  // relationships with it however it was deleted.
+  function deleteSelected() {
+    const store = selectedStore();
+    if (store) {
+      if (!window.confirm(`Delete the data store ${store.name}? The processes that name it will say so.`)) return;
+      state.model.stores = state.model.stores.filter((s) => s.id !== store.id);
+      selectOne(null);
+      markDirty(); render();
+      return;
+    }
+    const c = selectedClass();
+    if (c) {
+      // A delete says what it would break before it is confirmed (ADR-0331). A store
+      // keeps naming its class by name, and nothing can follow that for a class that
+      // is going away — so the cost is stated here rather than met as a refusal on
+      // the next save.
+      const held = (state.model.stores || []).filter((st) => st.class === c.name).map((st) => st.name);
+      const alsoKept = held.length
+        ? ` ${held.length === 1 ? "The store" : "The stores"} ${held.map((n) => `"${n}"`).join(", ")} ` +
+          `${held.length === 1 ? "holds" : "hold"} it, and the model will not save until that is settled.`
+        : "";
+      if (!window.confirm(`Delete ${c.name}? Relationships touching it go with it.${alsoKept}`)) return;
+      state.model.classes = state.model.classes.filter((x) => x.id !== c.id);
+      state.model.associations = state.model.associations.filter(
+        (x) => x.from.classId !== c.id && x.to.classId !== c.id);
+      selectOne(null);
+      markDirty(); render();
+      return;
+    }
+    const a = selectedAssoc();
+    if (!a) return;
+    state.model.associations = state.model.associations.filter((x) => x.id !== a.id);
+    selectOne(null);
+    markDirty(); render();
+  }
+
   // Arming a relationship is a mode: the next two classes clicked become its ends.
   // Pressing the armed one again puts it away, which is the only way out that does
   // not require drawing something first.
@@ -1778,6 +1966,36 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     return out;
   }
 
+  // What the context pad offers beside the selected element. It is the palette's
+  // relations group, moved to where the thing it acts on is: a relationship is drawn by
+  // dragging out of the class it starts at, the way a sequence flow is drawn in the BPMN
+  // modeler, instead of arming a kind and then remembering which class to click first.
+  //
+  // Only the kinds this class could actually reach something with. Offering a
+  // generalization on an enumeration would be a button whose only possible outcome is
+  // the refusal toast — the matrix is served, so the pad can ask it rather than offer
+  // and apologise.
+  function contextPadEntries(bo) {
+    if (!bo || !bo.element) return [];
+    const bin = {
+      id: "trash", group: "edit", title: "Delete", onClick: () => deleteSelected(),
+    };
+    // A store's line to its class, and a class's lines to an enumeration, exist because
+    // something names something. There is nothing to do to one, so the pad stays shut.
+    if (bo.element !== "class") return bo.element === "store" || bo.element === "association" ? [bin] : [];
+    const out = [];
+    for (const k of subset.associationKinds) {
+      const reaches = subset.stereotypes.some((st) => allowed(bo.stereotype, st.stereotype).includes(k.kind));
+      if (!reaches) continue;
+      out.push({
+        id: k.kind, group: "connect", connect: k.kind,
+        title: `${k.label} — ${k.rule} Drag onto the class at the other end.`,
+      });
+    }
+    out.push(bin);
+    return out;
+  }
+
   // Selecting on the canvas and selecting in the panel are the same selection, so
   // the round trip is guarded: telling the panel what the canvas selected must not
   // tell the canvas back and start again.
@@ -1816,17 +2034,29 @@ export async function mountClassDiagram(root, { api, toast, id }) {
       render();
       return;
     }
-    const from = classById(state.connecting.fromId);
-    const to = classById(bo.id);
-    const kind = state.connecting.kind;
-    if (!from || !to || from.id === to.id) { state.connecting = null; render(); return; }
+    const { kind, fromId } = state.connecting;
+    state.connecting = null;
+    // Read before the mode is cleared, and re-rendered when nothing was drawn: a
+    // refusal still has to take the armed entry's light off the palette.
+    if (!drawRelationship(kind, fromId, bo.id)) render();
+  }
+
+  // drawRelationship is the one place a relationship comes into being — the armed
+  // two-click draw and a drag out of the context pad both end here, so the matrix that
+  // refuses, the sentence it refuses with and the shape of what is created cannot
+  // differ between the two ways of drawing the same line.
+  //
+  // It answers whether it drew, because the two callers differ in one thing only: a
+  // refusal has to re-render either way, and only one of them has a mode to clear.
+  function drawRelationship(kind, fromId, toId) {
+    const from = classById(fromId);
+    const to = classById(toId);
+    if (!from || !to || from.id === to.id) return false;
     if (!allowed(from.stereotype, to.stereotype).includes(kind)) {
       // The matrix the server enforces is the matrix that refuses here, and it
       // refuses in the server's own words.
       toast(refusalFor(kind, from, to), "err");
-      state.connecting = null;
-      render();
-      return;
+      return false;
     }
     const a = {
       id: `new-${Math.random().toString(36).slice(2, 10)}`, kind, name: "",
@@ -1835,8 +2065,8 @@ export async function mountClassDiagram(root, { api, toast, id }) {
     };
     state.model.associations.push(a);
     selectOne({ kind: "association", id: a.id });
-    state.connecting = null;
     markDirty(); render();
+    return true;
   }
 
   // refusalFor turns a matrix miss into the sentence the server would have sent. It

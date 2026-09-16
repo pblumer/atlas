@@ -2185,8 +2185,11 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   transition: stroke 0.2s ease;
 }
 
-/* "Can't run yet" badge on a drawable-but-unsupported element (top-right corner),
-   so the author sees the gap while modeling, not only at Deploy/Validate. */
+/* Warning badge in a shape's top-right corner, so the author sees the finding while
+   modeling rather than only at Deploy/Validate. Two editors mark two different things
+   with it — a BPMN element that cannot run yet, and a decision model whose graph and
+   logic disagree about a knowledge model — and one badge is the point: a warning on a
+   shape means the same thing wherever it is drawn. */
 .unsup-badge {
   display: grid; place-items: center; width: 18px; height: 18px;
   background: var(--warn); color: #fff; border-radius: 50%;
@@ -2745,9 +2748,27 @@ tr[hidden] { display: none; }
 .dmn-body { flex: 1; min-height: 0; display: flex; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
-/* dmn-js uses `editor` as a state class inside its own components — the literal
-   expression view is `<div class="literal-expression textarea editor">`, and the
-   DRD's decision-name field carries it too. Atlas's `.editor` is the full-bleed
+/* The two expression views: a decision whose logic is a single FEEL expression, and
+   a business knowledge model, which dmn-js opens in its boxed-expression view. Both
+   draw a bordered box a few hundred pixels tall rather than filling the canvas the
+   way a table does, so they get a gutter — a box flush against the chrome on all
+   four sides does not read as a box — and their sections get a surface to sit on.
+   dmn-js borders those sections but leaves them transparent, which is right on its
+   own white demo page and wrong on the Modeler's grey canvas, where it would leave
+   the expression lying on the backdrop. */
+.dmn-canvas .dmn-literal-expression-container,
+.dmn-canvas .dmn-boxed-expression-container {
+  box-sizing: border-box; padding: 18px; overflow: auto;
+}
+.dmn-canvas .dmn-boxed-expression-container .dmn-boxed-expression-section,
+.dmn-canvas .dmn-literal-expression-container .textarea,
+.dmn-canvas .dmn-literal-expression-container .literal-expression-properties {
+  background: var(--surface);
+}
+/* dmn-js uses `editor` as a state class inside its own components — the decision's
+   literal-expression view and the knowledge model's boxed-expression view both put
+   it on their editable body (`<div class="textarea editor">`), and the DRD's
+   decision-name field carries it too. Atlas's `.editor` is the full-bleed
    page shell (`position: fixed; inset: var(--topbar-h) 0 0 0`), so those elements
    were being pinned over the whole viewport: opening a decision whose logic is a
    literal expression drew its CodeMirror across the bar, and the view tabs, Save,
@@ -2766,6 +2787,24 @@ tr[hidden] { display: none; }
 .dmn-props { width: 320px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--bg); }
 .dmn-props[hidden] { display: none; }
 .dmn-hint { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12px; }
+/* Author-time findings about the model on screen (dmn-warnings.js). It sits between
+   the canvas and the hint because it is about what is on the canvas, and it is hidden
+   whenever there is nothing to say — a strip that is always there is a strip nobody
+   reads. Each row is a button: the finding names a shape, and clicking it goes to it. */
+.dmn-warn {
+  flex: 0 0 auto; max-height: 124px; overflow: auto;
+  padding: 7px 14px; border-top: 1px solid var(--border);
+  background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.5;
+}
+.dmn-warn[hidden] { display: none; }
+.dmn-warn ul { margin: 0; padding-left: 17px; }
+.dmn-warn li + li { margin-top: 3px; }
+.dmn-warn button {
+  font: inherit; color: inherit; background: none; border: none; padding: 0;
+  text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  text-decoration-style: dotted;
+}
+.dmn-warn button:hover { text-decoration-style: solid; }
 
 /* Collapsible property groups (Camunda-style tidy panel). A generic groupify
    turns each <h3> section in the properties panel into a header that toggles its
@@ -5413,6 +5452,23 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-pi-enumeration::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.5%22%20y%3D%222.5%22%20width%3D%2213%22%20height%3D%2211%22%20rx%3D%221%22%20fill%3D%22none%22%20stroke%3D%22%234a8c3f%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.1%203.1h11.8v3.1H2.1z%22%20fill%3D%22%234a8c3f%22%2F%3E%3Ccircle%20cx%3D%224.3%22%20cy%3D%229%22%20r%3D%221.05%22%20fill%3D%22%234a8c3f%22%2F%3E%3Cpath%20d%3D%22M6.5%209h5.8%22%20stroke%3D%22%234a8c3f9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3Ccircle%20cx%3D%224.3%22%20cy%3D%2211.7%22%20r%3D%221.05%22%20fill%3D%22%234a8c3f%22%2F%3E%3Cpath%20d%3D%22M6.5%2011.7h3.9%22%20stroke%3D%22%234a8c3f9c%22%20stroke-width%3D%221.1%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
 .uml-pi-store::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2.5%204.2c0-1%202.4-1.8%205.5-1.8s5.5.8%205.5%201.8v7.6c0%201-2.4%201.8-5.5%201.8s-5.5-.8-5.5-1.8z%22%20fill%3D%22none%22%20stroke%3D%22%23a36a2c%22%20stroke-width%3D%221.2%22%2F%3E%3Cpath%20d%3D%22M2.5%204.2c0%201%202.4%201.8%205.5%201.8s5.5-.8%205.5-1.8%22%20fill%3D%22none%22%20stroke%3D%22%23a36a2c%22%20stroke-width%3D%221.2%22%2F%3E%3C%2Fsvg%3E"); }
 .uml-pi-state::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Crect%20x%3D%221.8%22%20y%3D%224%22%20width%3D%2212.4%22%20height%3D%228%22%20rx%3D%223.2%22%20fill%3D%22none%22%20stroke%3D%22%232d7d9a%22%20stroke-width%3D%221.3%22%2F%3E%3C%2Fsvg%3E"); }
+/* The context pad's bin. A stencil like the relationship marks, so it follows the
+   entry's colour — and turns red on hover, which is the one place in either canvas
+   where a click destroys something and the only warning it gets. */
+.uml-pi-trash::before {
+  background-color: var(--text);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center; mask-position: center;
+  -webkit-mask-size: 19px 19px; mask-size: 19px 19px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M6%202.6h4M2.6%204.6h10.8M4.5%204.6l.5%208.2a1%201%200%200%200%201%20.95h4a1%201%200%200%200%201-.95l.5-8.2M6.6%207v4.2M9.4%207v4.2%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M6%202.6h4M2.6%204.6h10.8M4.5%204.6l.5%208.2a1%201%200%200%200%201%20.95h4a1%201%200%200%200%201-.95l.5-8.2M6.6%207v4.2M9.4%207v4.2%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.2%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E");
+}
+.djs-context-pad .entry.uml-pi-trash:hover::before { background-color: #c0392b; }
+
+/* The pad's entries are the palette's marks, at the pad's size. The palette paints a
+   frame around each entry and the pad paints its own, so only the mark is shared. */
+.djs-context-pad .entry.uml-pi { display: inline-block; }
+.djs-context-pad .entry.uml-pi::before { background-size: 17px 17px; -webkit-mask-size: 17px 17px; mask-size: 17px 17px; }
+
 /* The four relationships and the two tools, as stencils. */
 .uml-pi-association::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h12%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M2%208h12%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
 .uml-pi-aggregation::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cpath%20d%3D%22M9.2%208H14.3%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.3%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M1.6%208l3.9-3%203.9%203-3.9%203z%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%221.25%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E"); }
@@ -5434,6 +5490,17 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
    sentence drawn on the sheet would be zoomed to fill the window. */
 .im-empty-hint { position: absolute; z-index: 1; inset: 40px 40px auto 40px; margin: 0;
   max-width: 44ch; color: var(--muted); font-size: 13px; line-height: 1.5; pointer-events: none; }
+/* The legend for the shading, over the drawing for the same reason the hint is: a
+   sentence on the sheet would be zoomed with it. It is on screen only while the
+   shading is, because faint and bright mean nothing without the sentence that says
+   what they were read from and what that reading cannot see. */
+.im-usage-legend { position: absolute; z-index: 1; inset: auto 12px 12px 12px; margin: 0;
+  padding: 8px 10px; max-width: 78ch; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1.5;
+  /* Over the drawing, so it must not take the drawing's clicks: a class under the
+     sentence has to stay selectable. */
+  pointer-events: none; }
+.im-usage-legend b { color: var(--text); font-weight: 600; }
 .im-canvas.connecting { cursor: crosshair; }
 .im-side { width: 340px; flex: none; border-left: 1px solid var(--border); overflow: auto; background: var(--bg); }
 
@@ -5454,6 +5521,15 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 .uml-class .uml-attr-type { fill: var(--muted); }
 .uml-class .uml-attr-mult { fill: var(--muted); }
 .uml-class .uml-attr.key .uml-attr-name { font-weight: 700; }
+/* Shaded by use (ADR-0338, read onto the drawing). What a deployed process names comes
+   forward; what nothing names recedes but stays readable — a member somebody is about to
+   decide the fate of has to be legible while they decide it. Both classes are absent
+   unless the host has a reading to hand, so an unshaded diagram is drawn as it always
+   was. `unreachable` follows below and therefore wins: while a relationship is being
+   drawn, what it cannot land on is the more urgent thing to see. */
+.uml-class .uml-attr.used .uml-attr-name { font-weight: 600; }
+.uml-class .uml-attr.unused { opacity: .42; }
+.uml-class.unused { opacity: .55; }
 .uml-class .uml-literal { fill: var(--text); font: 12px/1.4 ui-monospace, monospace; }
 .uml-class .uml-empty { fill: var(--muted); font: italic 11.5px/1.4 system-ui, sans-serif; }
 .uml-class.invalid .uml-box { stroke: #d93025; stroke-dasharray: 4 3; }
@@ -5653,8 +5729,10 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
    from* one (ADR-0306). Dashed
    for the same reason; the «lifecycle» keyword on it is what says which dependency
    this is, since UML allows many and draws them all the same way. */
-.uml-lifecycle-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
-.uml-lifecycle-link .uml-edge-label { fill: var(--muted); font-size: 10.5px; }
+.uml-lifecycle-link .uml-edge-line,
+.uml-type-link .uml-edge-line { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 4 3; }
+.uml-lifecycle-link .uml-edge-label,
+.uml-type-link .uml-edge-label { fill: var(--muted); font-size: 10.5px; }
 
 /* diagram-js draws the selection, so the box does not have to. A line gets no
    outline from the library, so which relationship is being edited is said here. */

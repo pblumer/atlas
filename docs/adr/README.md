@@ -430,6 +430,30 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0342](0342-conflicting-rights.md) | A conflict is a fact about a pair, and no rule can say which half is wrong | Accepted | Landed |
 | [0343](0343-pending-work.md) | A reminder has to be able to ask about somebody else, and a person must not | Accepted | Landed |
 | [0344](0344-time-bounded-entitlements.md) | A right may carry an end, and an end that has passed is a debt rather than a fact | Accepted | Landed |
+| [0345](0345-the-job-type-index-space-never-goes-backwards.md) | The job-type index space never goes backwards | Accepted | Landed |
+| [0346](0346-entitlement-history.md) | The remedy must not destroy the evidence, so a hold that ends leaves a row | Accepted | Landed |
+| [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
+| [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
+| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted | Landed |
+| [0350](0350-a-write-arrow-may-set-several-members.md) | A write arrow may set several members at once | Accepted | Landed |
+| [0351](0351-an-enumeration-says-which-values-a-member-may-take.md) | An «enumeration» says which values a member may take | Accepted | Landed |
+| [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
+| [0353](0353-product-usage.md) | The catalogue answers forwards, and the person who maintains a service asks backwards | Accepted | Landed |
+| [0354](0354-approval-list-order.md) | An approval list is a work list, so it starts where nobody has looked | Accepted | Landed |
+| [0355](0355-catalogue-search.md) | A catalogue is searched over words it carries, in the browser, and a hit says where it lives | Accepted | Landed |
+| [0356](0356-person-picker.md) | The recipient is picked from the directory Atlas already publishes, and a name nobody holds is the caller's mistake | Accepted | Landed |
+| [0357](0357-a-portable-backup-does-not-overwrite-another-installations-identity.md) | A portable backup does not overwrite another installation's identity | Accepted | Landed |
+| [0358](0358-order-line-configuration.md) | A product names one Atlas form, and the order line carries the answers | Accepted | Landed |
+| [0359](0359-amending-an-order-line.md) | A position can be withdrawn on its own and its details corrected; what is held is never changed in place | Accepted | Landed |
+| [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted | Landed |
+| [0361](0361-product-price.md) | A price is a sentence the catalogue writes, frozen like a rule and computed by nothing | Accepted | Landed |
+| [0362](0362-collective-approval.md) | One decision covers a request; the engine still completes one task per line | Accepted | Landed |
+| [0363](0363-the-drawing-says-which-members-are-used.md) | The drawing says which members are used | Accepted | Landed |
+| [0364](0364-the-verdict-is-served-not-duplicated.md) | The verdict is served, not duplicated | Accepted | Landed |
+| [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
+| [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
+| [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
+| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
 
 ## The two states of a record
 

@@ -31,6 +31,8 @@ const STRINGS = {
     'appr.by': 'Bestellt von',
     'appr.order': 'Auftrag',
     'appr.catalog': 'Katalog',
+    'appr.price': 'Kosten',
+    'appr.price.none': 'Der Katalog nennt keine Kosten.',
     'appr.approve': 'Genehmigen',
     'appr.reject': 'Ablehnen',
     'appr.reason': 'Begründung',
@@ -43,6 +45,24 @@ const STRINGS = {
     'appr.all': 'Alle Genehmigungen',
     'appr.more': 'Es gibt weitere offene Aufgaben, als diese Seite auf einmal durchsucht.',
     'appr.stale': 'Die verlinkte Genehmigung ist nicht mehr offen oder nicht Ihre.',
+    'appr.search': 'Suchen',
+    'appr.search.hint': 'Produkt, Person, Auftrag oder Katalog',
+    'appr.sort': 'Sortierung',
+    'appr.sort.oldest': 'Älteste zuerst',
+    'appr.sort.newest': 'Neueste zuerst',
+    'appr.sort.product': 'Nach Produkt',
+    'appr.sort.recipient': 'Nach Person',
+    'appr.sort.due': 'Frist zuerst',
+    'appr.noMatch': 'Keine Genehmigung entspricht der Suche.',
+    'appr.clear': 'Suche zurücksetzen',
+    'appr.count': 'von',
+    'appr.escalated': 'weitergereicht',
+    'appr.due': 'Frist',
+    'appr.together': 'Alle Positionen dieser Anfrage gemeinsam entscheiden',
+    'appr.together.hint': 'Die Begründung gilt dann für alle. Jede Position wird weiterhin einzeln abgeschlossen, weil jede ihren eigenen Prozess hat.',
+    'appr.together.also': 'Diese Anfrage umfasst',
+    'appr.together.positions': 'Positionen, die Sie entscheiden können.',
+    'appr.partial': 'Nicht alle Positionen konnten entschieden werden. Die übrigen bleiben offen:',
   },
   en: {
     'appr.title': 'Approvals',
@@ -53,6 +73,8 @@ const STRINGS = {
     'appr.by': 'Ordered by',
     'appr.order': 'Order',
     'appr.catalog': 'Catalogue',
+    'appr.price': 'Cost',
+    'appr.price.none': 'The catalogue names no cost.',
     'appr.approve': 'Approve',
     'appr.reject': 'Refuse',
     'appr.reason': 'Reason',
@@ -65,6 +87,24 @@ const STRINGS = {
     'appr.all': 'All approvals',
     'appr.more': 'There are more open tasks than this page searches at once.',
     'appr.stale': 'The approval that link named is no longer open, or is not yours.',
+    'appr.search': 'Search',
+    'appr.search.hint': 'Product, person, order or catalogue',
+    'appr.sort': 'Order',
+    'appr.sort.oldest': 'Oldest first',
+    'appr.sort.newest': 'Newest first',
+    'appr.sort.product': 'By product',
+    'appr.sort.recipient': 'By person',
+    'appr.sort.due': 'Due first',
+    'appr.noMatch': 'No approval matches the search.',
+    'appr.clear': 'Clear search',
+    'appr.count': 'of',
+    'appr.escalated': 'passed on',
+    'appr.due': 'Due',
+    'appr.together': 'Decide every position of this request together',
+    'appr.together.hint': 'The reason then covers all of them. Each position is still completed on its own, because each has its own process.',
+    'appr.together.also': 'This request has',
+    'appr.together.positions': 'positions you can decide.',
+    'appr.partial': 'Not every position could be decided. The rest are still open:',
   },
 };
 
@@ -158,11 +198,27 @@ function renderMark(approval) {
 
 const state = {
   approvals: [],
+  // query and sort are how an approver finds one decision among forty
+  // (ADR-0354). They live here and not in the URL: this page
+  // is reached from a mail link that already carries ?order=, and a second set of
+  // parameters on the same link would be two ways to say where somebody is.
+  query: '',
+  sort: 'oldest',
   selected: null,
   stale: false,
   reason: '',
   busy: false,
   decided: false,
+  // together is the approver saying "this is one decision about one request"
+  // (ADR-0362). Opt-in and never remembered across a
+  // selection: a person who ticked it for a twelve-line workplace has not said
+  // anything about the next request they open.
+  together: false,
+  // partial names the positions a collective decision did not get through, which
+  // is the one outcome the page must not round off. There is no transaction
+  // across twelve process instances, so "eleven of twelve" is a thing that can
+  // happen and the approver has to be told which one.
+  partial: [],
   truncated: false,
   error: '',
 };
@@ -203,10 +259,28 @@ async function load() {
   render();
 }
 
+// siblings is every open approval this caller holds on the same order, the
+// selected one included (ADR-0362).
+//
+// An order is the unit because a request is: the approval process runs per line,
+// so a workplace ordered as twelve products is twelve tasks, and the person
+// deciding them is deciding one request. Lines of a *different* order are not
+// here, and the server refuses them too — one reason cannot cover two requests.
+function siblings(a) {
+  if (!a) return [];
+  return state.approvals.filter((o) => o.orderId === a.orderId);
+}
+
 // decide completes the task, which is what hands the answer back to the process.
 // The page does not write the order: what a decision *means* — start provisioning,
 // or record a refusal and tell the orderer — is modelled in the approval process,
 // and a page that did it itself would be a second implementation of it.
+//
+// Two shapes, one decision. Alone it completes the one task, which is the path
+// every other task surface uses. Together it posts the order's approvals to the
+// collective route, which completes each of them as its own task with the same
+// answer — because each is still its own process instance and each still has to
+// act on what it was told.
 async function decide(approved) {
   const a = state.selected;
   if (!a || state.busy) return;
@@ -216,15 +290,32 @@ async function decide(approved) {
     render();
     return;
   }
+  const batch = state.together ? siblings(a) : [a];
   state.busy = true;
   state.error = '';
+  state.partial = [];
   render();
   try {
-    await api(`/api/v1/tasks/${encodeURIComponent(String(a.task.key))}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ variables: { genehmigt: approved, begruendung: reason } }),
-    });
+    if (batch.length > 1) {
+      const { body } = await api('/api/v1/approvals/decide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved, reason, taskKeys: batch.map((o) => o.task.key),
+        }),
+      });
+      // A partial result is reported rather than rounded off. The server cannot
+      // promise twelve completions or none — a completion that went through has
+      // already handed its answer to its process — so the page says which ones
+      // did not, and those stay in the list.
+      state.partial = (body && body.skipped) || [];
+    } else {
+      await api(`/api/v1/tasks/${encodeURIComponent(String(a.task.key))}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ variables: { genehmigt: approved, begruendung: reason } }),
+      });
+    }
     state.decided = true;
     state.busy = false;
     render();
@@ -258,8 +349,129 @@ function select(a) {
   state.selected = a;
   state.reason = '';
   state.error = '';
+  state.together = false;
+  state.partial = [];
   applyTheme(a);
   render();
+}
+
+// --- Finding one decision among forty ----------------------------------------
+//
+// The page shows one thing well (ADR-0311) and that is deliberate: the common
+// approver decides perhaps four times a year, and a tool with Deployments and
+// Incidents in it is one they ask a colleague to use. So this is a search field
+// and a sort control rather than a five-column table — the list has one row per
+// approval carrying two facts, and a table would be heavier than the page's
+// purpose.
+
+// ageKey is how old an approval is, as the server itself measures it.
+//
+// The job key is monotonic and the approvals endpoint already pages by it, so a
+// higher key is a newer task. That is the only age this page can read: a task
+// carries no created-at, and inventing one from a clock here would be a number
+// nobody can check.
+function ageKey(a) {
+  return (a.task && a.task.key) || 0;
+}
+
+// matches reports whether one approval survives the search.
+//
+// One field across every column rather than a field per column, because an
+// approver looking for "the laptop for Ada" does not know which column they are
+// searching — and a five-field row would ask them to.
+function matches(a) {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    textOf(a.texts, a.itemId), a.itemId, a.recipient, a.orderer, a.orderId,
+    textOf(a.catalogTexts, a.catalogId),
+  ].some((v) => String(v || '').toLowerCase().includes(q));
+}
+
+const SORTS = {
+  // Oldest first is the default, and it is a change from the endpoint's own
+  // order. What has waited longest is what nobody has looked at — the argument
+  // the recertification and conflict reports both make about their own lists —
+  // and a work list read from the top should start there.
+  oldest: (a, b) => ageKey(a) - ageKey(b),
+  newest: (a, b) => ageKey(b) - ageKey(a),
+  product: (a, b) => textOf(a.texts, a.itemId).localeCompare(textOf(b.texts, b.itemId), locale),
+  recipient: (a, b) => String(a.recipient || '').localeCompare(String(b.recipient || ''), locale),
+  // A due date first, and everything without one after it in age order: a task
+  // somebody put a deadline on is a different thing from one nobody did, and
+  // sorting the undated in among them would bury the deadlines.
+  due: (a, b) => {
+    const da = (a.task && a.task.dueDate) || 0;
+    const db = (b.task && b.task.dueDate) || 0;
+    if (!da !== !db) return da ? -1 : 1;
+    if (da !== db) return da - db;
+    return ageKey(a) - ageKey(b);
+  },
+};
+
+function visibleApprovals() {
+  return state.approvals.filter(matches).sort(SORTS[state.sort] || SORTS.oldest);
+}
+
+// rowNote is what the row says beyond the product and the person.
+//
+// Only what the approval actually carries. An assignment record exists once a
+// deadline or a person has moved the approval, and its absence is the answer
+// "nobody has had to chase this" — so a row without one says nothing rather than
+// showing an invented age.
+function rowNote(a) {
+  const bits = [];
+  const due = a.task && a.task.dueDate;
+  if (due) bits.push(`${t('appr.due')} ${new Date(due).toLocaleDateString(locale)}`);
+  if (a.assignment && (a.assignment.escalations || []).length) {
+    bits.push(t('appr.escalated'));
+  }
+  return bits.join(' · ');
+}
+
+function renderControls(shown) {
+  return el('div', { class: 'controls' },
+    el('input', {
+      type: 'search', id: 'appr-search', value: state.query,
+      placeholder: t('appr.search.hint'), 'aria-label': t('appr.search'),
+      oninput: (e) => {
+        state.query = e.target.value;
+        // Repaint the list alone, or the caret jumps to the end of the field
+        // somebody is typing in the middle of.
+        repaintList();
+      },
+    }),
+    el('label', { class: 'sortwrap' },
+      el('span', { class: 'muted' }, t('appr.sort')),
+      el('select', {
+        id: 'appr-sort',
+        onchange: (e) => { state.sort = e.target.value; repaintList(); },
+      }, Object.keys(SORTS).map((k) => el('option', {
+        value: k, ...(state.sort === k ? { selected: 'selected' } : {}),
+      }, t(`appr.sort.${k}`))))),
+    el('span', { class: 'muted count' }, `${shown} ${t('appr.count')} ${state.approvals.length}`));
+}
+
+let listNode = null;
+
+function repaintList() {
+  if (!listNode) return;
+  const shown = visibleApprovals();
+  listNode.replaceChildren(...listBodies(shown));
+  const count = document.querySelector('.controls .count');
+  if (count) count.textContent = `${shown.length} ${t('appr.count')} ${state.approvals.length}`;
+}
+
+function listBodies(shown) {
+  if (!shown.length) {
+    return [el('li', { class: 'muted' }, t('appr.noMatch'))];
+  }
+  return shown.map((a) => el('li', {},
+    el('button', { class: 'pick', onclick: () => select(a) },
+      el('strong', {}, textOf(a.texts, a.itemId)),
+      el('span', { class: 'muted' }, ` — ${t('appr.for')} ${a.recipient || '\u2014'}`),
+      a.price ? el('span', { class: 'muted' }, ` — ${a.price}`) : null,
+      rowNote(a) ? el('span', { class: 'muted note' }, rowNote(a)) : null)));
 }
 
 function renderList() {
@@ -268,10 +480,36 @@ function renderList() {
       el('p', {}, t('appr.none')),
       el('p', { class: 'muted' }, t('appr.none.hint')));
   }
-  return el('ul', { class: 'list' }, state.approvals.map((a) => el('li', {},
-    el('button', { class: 'pick', onclick: () => select(a) },
-      el('strong', {}, textOf(a.texts, a.itemId)),
-      el('span', { class: 'muted' }, ` — ${t('appr.for')} ${a.recipient || '—'}`)))));
+  const shown = visibleApprovals();
+  listNode = el('ul', { class: 'list' }, listBodies(shown));
+  // The controls are shown from the first row rather than past a threshold: a
+  // list that grew a search box at the eleventh approval would be a different
+  // page each time somebody arrived.
+  return el('div', {}, renderControls(shown.length), listNode);
+}
+
+// renderTogether is the collective decision's whole surface: what else is in this
+// request, and one checkbox (ADR-0362).
+//
+// Opt-in, and absent when the request has one position — a checkbox offering to
+// decide "all one of them" is a control that teaches somebody to tick boxes
+// without reading. The other positions are listed with their prices rather than
+// counted, because the thing being ticked is "I have seen what is in this
+// request", and a number is not something anybody can have seen.
+function renderTogether(rest) {
+  return el('div', { class: 'together' },
+    el('p', { class: 'muted' },
+      `${t('appr.together.also')} ${rest.length + 1} ${t('appr.together.positions')}`),
+    el('ul', { class: 'siblings' }, rest.map((o) => el('li', { class: 'muted' },
+      textOf(o.texts, o.itemId),
+      o.price ? ` — ${o.price}` : ''))),
+    el('label', { class: 'togglewrap' },
+      el('input', {
+        type: 'checkbox', ...(state.together ? { checked: 'checked' } : {}),
+        onchange: (e) => { state.together = e.target.checked; render(); },
+      }),
+      el('span', {}, t('appr.together'))),
+    el('p', { class: 'muted' }, t('appr.together.hint')));
 }
 
 function renderDecision() {
@@ -279,15 +517,32 @@ function renderDecision() {
   if (state.decided) {
     return el('div', { class: 'empty' },
       el('p', {}, t('appr.done')),
+      // What did not go through, named. An approver told "decided" while three
+      // positions are still open would find out from the orderer.
+      state.partial.length
+        ? el('div', {},
+          el('p', {}, t('appr.partial')),
+          el('ul', { class: 'siblings' }, state.partial.map((o) => el('li', { class: 'muted' },
+            `${o.itemId || o.taskKey} — ${o.error || ''}`))))
+        : null,
       el('p', {}, el('a', { href: location.pathname }, t('appr.all'))));
   }
+  const rest = siblings(a).filter((o) => o.task.key !== a.task.key);
+  const count = state.together && rest.length ? ` (${rest.length + 1})` : '';
   return el('div', { class: 'card' },
     el('h3', {}, textOf(a.texts, a.itemId)),
     el('dl', {},
       el('dt', {}, t('appr.for')), el('dd', {}, a.recipient || '—'),
       el('dt', {}, t('appr.by')), el('dd', {}, a.orderer || '—'),
       el('dt', {}, t('appr.order')), el('dd', {}, a.orderId),
-      el('dt', {}, t('appr.catalog')), el('dd', {}, textOf(a.catalogTexts, a.catalogId || '—'))),
+      el('dt', {}, t('appr.catalog')), el('dd', {}, textOf(a.catalogTexts, a.catalogId || '—')),
+      // The figure the order froze, as the catalogue wrote it. An approver
+      // deciding without it is deciding half the question — and a page that
+      // reformatted it would be inventing a money model the catalogue does not
+      // have (ADR-0361).
+      el('dt', {}, t('appr.price')),
+      el('dd', a.price ? {} : { class: 'muted' }, a.price || t('appr.price.none'))),
+    rest.length ? renderTogether(rest) : null,
     el('label', { class: 'reason' },
       el('span', {}, t('appr.reason')),
       el('textarea', {
@@ -296,21 +551,39 @@ function renderDecision() {
       }, state.reason),
       el('span', { class: 'muted' }, t('appr.reason.hint'))),
     el('div', { class: 'actions' },
+      // The count is on the buttons and not only beside the checkbox: the button
+      // is what somebody presses, and it is the last thing they read before the
+      // decision is irreversible.
       el('button', {
         class: 'primary', disabled: state.busy ? 'disabled' : null,
         onclick: () => decide(true),
-      }, state.busy ? t('appr.working') : t('appr.approve')),
+      }, state.busy ? t('appr.working') : `${t('appr.approve')}${count}`),
       el('button', {
         class: 'secondary', disabled: state.busy ? 'disabled' : null,
         onclick: () => decide(false),
-      }, t('appr.reject'))));
+      }, `${t('appr.reject')}${count}`)));
+}
+
+// paint replaces the page's children, dropping the ones that are not there.
+//
+// replaceChildren is not el(): it turns a non-node argument into a *text node*,
+// so a `cond ? node : null` argument renders the word "null" on screen whenever
+// the condition is false. This page has three such slots — an error, a stale
+// link, a truncation notice — and none of them is usually filled, so an ordinary
+// load has always shown "nullnullnull" above the list and "null" below it.
+//
+// Filtering here rather than at each call site, because the next conditional
+// child written the obvious way would reintroduce it. The portal carried the same
+// defect and is fixed the same way.
+function paint(root, ...children) {
+  root.replaceChildren(...children.flat().filter((c) => c != null && c !== false));
 }
 
 function render() {
   const root = document.getElementById('app');
   if (!root) return;
   const a = state.selected;
-  root.replaceChildren(
+  paint(root,
     el('header', {},
       el('div', { class: 'brand' },
         renderMark(a),

@@ -50,10 +50,11 @@ func (s *Store) logoPath(catalogID, ext string) string {
 // Logo reads a catalogue's mark and the type to serve it as. A catalogue without
 // one is not an error — it is the ordinary case, and the caller falls back.
 func (s *Store) Logo(catalogID string) (data []byte, contentType string, ok bool, err error) {
-	for _, ext := range brandimage.Exts {
+	for _, ext := range brandimage.Mark.Exts() {
 		b, readErr := os.ReadFile(s.logoPath(catalogID, ext))
 		if readErr == nil {
-			return b, brandimage.TypeByExt[ext], true, nil
+			ct, _ := brandimage.Mark.TypeFor(ext)
+			return b, ct, true, nil
 		}
 		if !os.IsNotExist(readErr) {
 			return nil, "", false, fmt.Errorf("catalogstore: read logo: %w", readErr)
@@ -66,14 +67,14 @@ func (s *Store) Logo(catalogID string) (data []byte, contentType string, ok bool
 // catalogue had, so switching from PNG to SVG cannot leave a stale file that
 // [Logo] would serve instead.
 func (s *Store) SaveLogo(catalogID string, data []byte, contentType string) error {
-	ext, ok := brandimage.ExtByType[contentType]
+	ext, ok := brandimage.Mark.ExtFor(contentType)
 	if !ok {
 		return fmt.Errorf("catalogstore: unsupported logo type %q", contentType)
 	}
 	if err := sidecar.WriteFile(s.logos, s.logoPath(catalogID, ext), data); err != nil {
 		return err
 	}
-	for _, other := range brandimage.Exts {
+	for _, other := range brandimage.Mark.Exts() {
 		if other == ext {
 			continue
 		}
@@ -87,7 +88,7 @@ func (s *Store) SaveLogo(catalogID string, data []byte, contentType string) erro
 // ClearLogo removes a catalogue's mark, whatever format it was in. A catalogue
 // that had none is not an error: the caller asked for a state, and it holds.
 func (s *Store) ClearLogo(catalogID string) error {
-	for _, ext := range brandimage.Exts {
+	for _, ext := range brandimage.Mark.Exts() {
 		if err := os.Remove(s.logoPath(catalogID, ext)); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("catalogstore: remove logo: %w", err)
 		}
@@ -155,7 +156,7 @@ func (s *Service) HandleSetLogo(w http.ResponseWriter, r *http.Request) {
 	p := httpapi.PrincipalFrom(r.Context())
 
 	ct := brandimage.NormalizeType(r.Header.Get("Content-Type"))
-	if _, ok := brandimage.ExtByType[ct]; !ok {
+	if _, ok := brandimage.Mark.ExtFor(ct); !ok {
 		httpapi.Error(w, http.StatusUnsupportedMediaType, "a logo is uploaded as image/png or image/svg+xml")
 		return
 	}
@@ -192,7 +193,7 @@ func (s *Service) HandleSetLogo(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(got, p); !found {
 			return
 		}
-		if allowed = p != nil && s.admin(p); !allowed {
+		if allowed = s.admin(p); !allowed {
 			return
 		}
 		opErr = s.store.SaveLogo(id, data, ct)
@@ -230,7 +231,7 @@ func (s *Service) HandleDeleteLogo(w http.ResponseWriter, r *http.Request) {
 		if found = s.mayRead(got, p); !found {
 			return
 		}
-		if allowed = p != nil && s.admin(p); !allowed {
+		if allowed = s.admin(p); !allowed {
 			return
 		}
 		opErr = s.store.ClearLogo(id)

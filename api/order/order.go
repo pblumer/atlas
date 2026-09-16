@@ -178,6 +178,49 @@ type Line struct {
 	// stricter one — which is the same sentence as the one about the approval rule,
 	// and true for the same reason.
 	MaxDays int `json:"maxDays,omitempty"`
+	// ConfigForm and Config are what somebody filled in when they ordered this
+	// product, and the form they filled it in on
+	// (ADR-0358).
+	//
+	// Both or neither: a set of answers with no form is a map of keys nobody can
+	// interpret, and a form with no answers on a line that was placed means the
+	// question was never asked.
+	//
+	// The **answers** are what is frozen here, and deliberately not the questions.
+	// A release freezes rules — the approval, the ceiling, the bindings — because a
+	// rule relaxed next week must not change what somebody was held to this week.
+	// A form is not a rule; what has to survive is what was answered, and "cost
+	// centre 4711" stays true whatever the form does afterwards. The id says which
+	// set of questions it answered.
+	// Price is what the release said this product cost when the order was placed
+	// (ADR-0361). Frozen here for the reason
+	// the approval rule and the ceiling are: an approver saw a figure and decided on
+	// it, and a catalogue edit afterwards must not make the record show a different
+	// one than the one that was approved.
+	//
+	// Displayed and never computed — see [catalog.Item.Price].
+	Price      string            `json:"price,omitempty"`
+	ConfigForm string            `json:"configForm,omitempty"`
+	Config     map[string]string `json:"config,omitempty"`
+	// Amendments are the corrections made to Config after the recipient already
+	// held this line, oldest first
+	// (ADR-0359). Empty is the
+	// ordinary case, and it is empty too for a line corrected before anything was
+	// attempted — there is no delivery for the old answers to have been true of.
+	Amendments []AmendedAnswers `json:"amendments,omitempty"`
+	// Integral says this line arrived because something else in the order always
+	// carries it, rather than because anybody chose it.
+	//
+	// It is what lets a position be withdrawn on its own without letting somebody
+	// take back a part its whole cannot exist without: the basket refuses to
+	// deselect one, and a rule enforced when ordering and not afterwards is not a
+	// rule. Frozen at placement like everything else on this line, because it is a
+	// statement about the release the order was placed against.
+	Integral bool `json:"integral,omitempty"`
+	// Includes names the parts this line always carries, copied from the release.
+	// It is what a per-line withdrawal reads to say *what* carries the part it is
+	// refusing to take back, rather than only refusing.
+	Includes []string `json:"includes,omitempty"`
 	// Approval is the rule this line is approved under, copied from the release
 	// like the bindings are. It travels for the same reason: the rule belongs to
 	// the catalogue, and reading it when the line is reached would let a product's
@@ -220,8 +263,21 @@ type Line struct {
 	// cancellation needs no reason, because the person reading it is the person who
 	// made it. DecidedBy is a principal id.
 	DecidedBy string `json:"decidedBy,omitempty"`
-	DecidedAt int64  `json:"decidedAt,omitempty"`
-	Reason    string `json:"reason,omitempty"`
+
+	// ReturnedBy is who asked for this line to be given back, as a principal id.
+	//
+	// A third actor field beside AbandonedBy and DecidedBy, for the reason those
+	// two are apart: they are different decisions. It is recorded when the return
+	// is *asked for* rather than when it completes, because that is the only moment
+	// a person is present — what finishes a return is a deprovisioning process, and
+	// attributing the decision to it would name a robot where a decision was made.
+	//
+	// It is what the history row carries into the years after this order is deleted
+	// (ADR-0346): without it the record can say a right ended
+	// and not who ended it, which is half of what an access review asks.
+	ReturnedBy string `json:"returnedBy,omitempty"`
+	DecidedAt  int64  `json:"decidedAt,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 // Terminal reports whether this line has finished moving.

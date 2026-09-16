@@ -94,6 +94,34 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_product_usage",
+			Description: "Where one catalogue product is used, read out of the release backwards: " +
+				"which catalogues offer it, which wholes carry it and whether integrally " +
+				"(composition) or optionally (aggregation), what it needs, what needs it, what " +
+				"it may never be held together with, and how many people hold it broken down by " +
+				"origin. The reverse question — what breaks if this service is retired, rebound " +
+				"or moved — cannot be answered from any forward view of the catalogue. Holders " +
+				"are counted and never named.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"itemId": map[string]any{
+						"type": "string",
+						"description": "The catalogue product id, as a published release names it " +
+							"(not its display text).",
+					},
+				},
+				"required": []any{"itemId"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "itemId")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/catalog-products/" + url.PathEscape(id) + "/usage"))
+			},
+		},
+		{
 			Name:        "atlas_get_process_xml",
 			Description: "Get the original BPMN XML of a deployed process definition by its key.",
 			InputSchema: keyArg("The process definition key returned by atlas_deploy or atlas_list_processes."),

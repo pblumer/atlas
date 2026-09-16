@@ -2025,6 +2025,13 @@ async function instanceSamples(modeler, api, opts = {}) {
 // The newest version is preferred, but a version deployed a minute ago has no
 // instances yet — then its predecessor's values still describe the same variables,
 // so the walk continues rather than reporting nothing.
+//
+// What comes back is a page of that version's instances, and a page is all this wants:
+// the result is a *sample* of what the variables look like, cut to
+// MAX_SAMPLE_INSTANCES rows below, and nothing here counts it or reports a total. The
+// listing is newest-first within a definition, so the sample is of recent instances
+// rather than of whichever ones the cap happened to reach
+// (ADR-0365).
 async function fetchSamples(api, processId) {
   const procs = await api("GET", "/api/v1/processes");
   const versions = (procs || [])
@@ -4633,6 +4640,13 @@ function ioMapTitle(kind, target) {
   return t || (kind === "in" ? "Input mapping" : "Output mapping");
 }
 
+// dataWriteTitle is the collapsed-card label for one write of a data output
+// association: the member it targets, or what an empty target actually means — the
+// whole object, which is a different write and not a missing one.
+function dataWriteTitle(target) {
+  return (target || "").trim() || "the whole object";
+}
+
 // ioTrashIcon is the small trash glyph used to delete a mapping card (styled red by
 // .io-map-del). currentColor lets the CSS own the colour.
 const ioTrashIcon = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 2.2h4M2.6 4.2h10.8M4.4 4.2l.5 8.4a1 1 0 0 0 1 .95h4.2a1 1 0 0 0 1-.95l.5-8.4M6.6 6.8v4.4M9.4 6.8v4.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -5877,26 +5891,38 @@ function dataObjectNames(procBo) {
 // target variable). Empty bodies clear the assignment, so a stateless association
 // carries no dangling element (ADR-0058/0059/0060).
 function setAssignment(modeler, element, bo, fromBody, toBody) {
+  setAssignments(modeler, element, bo, [{ from: fromBody, to: toBody }]);
+}
+
+// setAssignments rebuilds a data association's <assignment> list from panel rows.
+// BPMN declares `assignment [0..*]` on a data association, and a write arrow uses all
+// of it: one arrow may set several members of one object
+// (ADR-0350). A read uses one, and reaches here
+// through setAssignment with a single row.
+//
+// A row with neither a value nor a target is dropped rather than written as an empty
+// assignment — an association with no assignments at all is ADR-0058's state-only
+// transition, and an empty one would say the same thing less clearly.
+function setAssignments(modeler, element, bo, rows) {
   const modeling = modeler.get("modeling");
   const moddle = modeler.get("moddle");
   try {
-    if (!fromBody && !toBody) {
-      modeling.updateModdleProperties(element, bo, { assignment: [] });
-      return;
-    }
-    const asg = moddle.create("bpmn:Assignment", {});
-    asg.$parent = bo;
-    if (fromBody) {
-      const f = moddle.create("bpmn:FormalExpression", { body: fromBody });
-      f.$parent = asg;
-      asg.from = f;
-    }
-    if (toBody) {
-      const t = moddle.create("bpmn:FormalExpression", { body: toBody });
-      t.$parent = asg;
-      asg.to = t;
-    }
-    modeling.updateModdleProperties(element, bo, { assignment: [asg] });
+    const asgs = rows.filter((r) => r.from || r.to).map((r) => {
+      const asg = moddle.create("bpmn:Assignment", {});
+      asg.$parent = bo;
+      if (r.from) {
+        const f = moddle.create("bpmn:FormalExpression", { body: r.from });
+        f.$parent = asg;
+        asg.from = f;
+      }
+      if (r.to) {
+        const t = moddle.create("bpmn:FormalExpression", { body: r.to });
+        t.$parent = asg;
+        asg.to = t;
+      }
+      return asg;
+    });
+    modeling.updateModdleProperties(element, bo, { assignment: asgs });
   } catch { /* stale */ }
 }
 
@@ -6116,19 +6142,150 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     return { html: out, lists: (path) => seen.includes(path) };
   }
 
-  function memberSelectHTML(cls, current) {
+  // attrs is what identifies the control to its handlers. A write arrow carries a row
+  // per member now, so the id that was enough for one field is not enough for a list.
+  function memberSelectHTML(cls, current, attrs = `id="f-assoc-to"`) {
     const { html, lists } = memberOptionsHTML(cls, current);
     if (!html) return "";
-    return `<select id="f-assoc-to" title="The members ${esc(cls.name)} declares">
+    return `<select ${attrs} title="The members ${esc(cls.name)} declares">
       <option value=""${current ? "" : " selected"}>— the whole object —</option>
       ${html}${strayOptionHTML(current, lists(current), `not a member of ${cls.name}`)}
       <option ${OTHER}>Another member, not modelled yet…</option>
     </select>`;
   }
 
+  // enumTypingMember resolves the member a write path targets and answers with the
+  // «enumeration» that types it, or null. One level of nesting, exactly as the member
+  // picker walks it and for the same reason.
+  function enumTypingMember(cls, path) {
+    if (!cls || !path) return null;
+    let current = cls;
+    const segments = path.split(".");
+    for (let i = 0; i < segments.length; i++) {
+      const attr = (current.attributes || []).find((a) => a.name === segments[i]);
+      if (!attr) return null;
+      const next = attr.type && classNamed(attr.type);
+      if (i < segments.length - 1) {
+        if (!next) return null;
+        current = next;
+        continue;
+      }
+      return next && next.stereotype === "enumeration" && (next.literals || []).length ? next : null;
+    }
+    return null;
+  }
+
+  // literalOf reads a stored FEEL value back as the literal it names, or "" when it
+  // names none. A picker that could not recognise its own output would reset to the
+  // first option every time the panel re-rendered, quietly rewriting the model.
+  function literalOf(fromBody, enumeration) {
+    const raw = String(fromBody || "").trim().replace(/^=\s*/, "").trim();
+    const m = /^"([^"\\]*)"$/.exec(raw) || /^'([^'\\]*)'$/.exec(raw);
+    if (!m) return "";
+    return (enumeration.literals || []).includes(m[1]) ? m[1] : "";
+  }
+
+  // The values a member typed by an «enumeration» may take, offered rather than
+  // remembered (ADR-0351). It is the
+  // fourth of the four questions the model can answer — after which class, which state
+  // and which member — and the only one that was still free text, so `= "aktive"`
+  // deployed, ran, and wrote a string nothing would ever match.
+  //
+  // The escape is not optional here the way it is on the other pickers. A value is a
+  // FEEL expression and a computed one is a real thing to want, so the list always ends
+  // in a way out; a picker that cannot be left would be lying about what this field is.
+  // `stored` is what the model holds, so a value that is not one of the literals — an
+  // expression, or a literal the enumeration has not caught up with — opens on the
+  // escape rather than on "not set". A picker that showed "not set" over a value the
+  // model *does* hold would erase it on the next save.
+  function literalSelectHTML(enumeration, current, stored, attrs) {
+    const lit = (enumeration.literals || []).map((l) =>
+      `<option value="${esc(l)}"${l === current ? " selected" : ""}>${esc(l)}</option>`).join("");
+    const other = !current && String(stored || "").trim() !== "";
+    return `<select ${attrs} title="The values ${esc(enumeration.name)} declares">
+      <option value=""${current || other ? "" : " selected"}>— not set —</option>
+      ${lit}
+      <option ${OTHER}${other ? " selected" : ""}>A FEEL expression instead…</option>
+    </select>`;
+  }
+
+  // One write of a data output association: what goes in, and which member it lands in.
+  // BPMN gives a data association `assignment [0..*]`, so a step that captures a form's
+  // worth of fields is one arrow with a row per field rather than one arrow per field
+  // (ADR-0350). Before that the only one-arrow
+  // option was a FEEL context literal, which draws well and tells the model nothing —
+  // the members inside it cannot be read at deploy time, so the write is unchecked and
+  // the class derives as memberless.
+  //
+  // The card is the I/O mapping editor's, reused rather than restyled: the same
+  // question deserves the same control, and an author who has met one knows this one.
+  function dataWriteCardHTML(i, cls, fromBody, toBody) {
+    const picker = cls ? memberSelectHTML(cls, toBody, `class="dw-to"`) : "";
+    // Where the member is typed by an «enumeration», the value is a closed set and is
+    // offered as one. A value the list does not contain — a FEEL expression, or a
+    // literal the model has not caught up with — keeps the free field, revealed.
+    const enumeration = enumTypingMember(cls, toBody);
+    const chosen = enumeration ? literalOf(fromBody, enumeration) : "";
+    const freeValue = `<label class="field"${enumeration && chosen ? " hidden" : ""} id="f-dw-expr-${i}-field">
+        <span>${enumeration ? "FEEL expression" : "FEEL value"} <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+        <input type="text" class="dw-from" id="f-dw-expr-${i}" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>`;
+    const valueField = enumeration
+      ? `<label class="field"><span>Value <span class="muted">(${esc(enumeration.name)})</span></span>
+          ${literalSelectHTML(enumeration, chosen, fromBody, `class="dw-lit"`)}</label>
+         ${freeValue}`
+      : freeValue;
+    return `<div class="io-map" data-write="1" data-i="${i}">
+      <div class="io-map-head">
+        <span class="io-map-chevron" aria-hidden="true">▾</span>
+        <span class="io-map-title">${esc(dataWriteTitle(toBody))}</span>
+        <button type="button" class="io-map-del" title="Delete write" aria-label="Delete write">${ioTrashIcon}</button>
+      </div>
+      <div class="io-map-body">
+        <label class="field"><span>Target member <span class="muted">(optional)</span></span>
+          ${picker || `<input type="text" class="dw-to" value="${esc(toBody || "")}" placeholder="name"/>`}</label>
+        ${picker ? otherFieldHTML(`f-dw-other-${i}`, "Member path", "customer.name") : ""}
+        ${valueField}
+      </div>
+    </div>`;
+  }
+
+  // dataWritesGroupHTML renders an arrow's writes as one collapsible group, the shape
+  // the I/O mapping and agent-parameter groups already use — so the add button, the
+  // count badge and the collapse memory behave the way an author knows.
+  //
+  // The badge earns its place here more than it does there. Five writes on one arrow
+  // are five rows behind a panel where five arrows were five things on the canvas, and
+  // the count is what the arrow can still say about itself without being opened.
+  // It is the whole panel, not a section of one: the group carries the heading the
+  // write arrow used to have, so there is no <h3> above it left holding nothing. A
+  // heading whose section is empty renders as a chevron that toggles nothing, which
+  // reads as broken — the same trap stKindHeadingHTML names.
+  function dataWritesGroupHTML(cls, assignments, objectName, hints) {
+    const cards = assignments.map((a, i) => dataWriteCardHTML(i, cls,
+      (a.from && a.from.body) || "", (a.to && a.to.body) || "")).join("");
+    return `<div class="io-group" data-write-group="1" data-group="Writes" data-standalone-group="1">
+      <div class="io-group-head">
+        <span class="io-group-title">Writes ${esc(objectName)}</span>
+        <button type="button" class="io-group-add" title="Add a write" aria-label="Add a write">＋</button>
+        <span class="io-group-count" title="Writes">${assignments.length}</span>
+        <span class="io-group-chevron" aria-hidden="true">▾</span>
+      </div>
+      <div class="io-group-body">
+        <div class="io-map-list" id="data-writes">${cards}</div>
+        ${hints}
+      </div>
+    </div>`;
+  }
+
   function classSelectHTML(current) {
     const byModel = new Map();
     for (const c of vocab.classes) {
+      // An «enumeration» is machinery of the model — an attribute's type, or the states
+      // a lifecycle takes (ADR-0306) — and no process carries one as a data object. The
+      // difference reading already says so where it excludes them from the backlog for
+      // exactly that reason; offering one here contradicted it, and a data object typed
+      // as a closed set of strings is not a thing the engine can carry.
+      if (c.stereotype === "enumeration") continue;
       if (!byModel.has(c.modelId)) byModel.set(c.modelId, { name: c.modelName, classes: [] });
       byModel.get(c.modelId).classes.push(c);
     }
@@ -6615,19 +6772,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (!vocab.loaded && vocabReady) {
           vocabReady.then(() => { try { show(element); } catch { /* the panel moved on */ } });
         }
-        const memberPicker = writes ? memberSelectHTML(writes, toBody) : "";
-        html += `<h3>Writes data object</h3>
-          <label class="field"><span>FEEL value</span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=amount * 1.19"/></label>
-          <label class="field"><span>Target member <span class="muted">(optional)</span></span>
-            ${memberPicker || `<input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="name"/>`}</label>
-          ${memberPicker ? otherFieldHTML("f-assoc-to-other", "Member path", "customer.name") : ""}
-          <p class="muted" style="font-size:12px">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: the <b>FEEL value</b> (over the instance's variables) becomes the object's value, and its data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field of a structured object and keep the rest.</p>
-          ${memberPicker ? `<p class="muted" style="font-size:12px">The members offered are the ones
+        // One row per <assignment>, and one empty row for an arrow that has none yet,
+        // so the arrow that writes one member looks and edits as it always did.
+        const rows = (bo.assignment && bo.assignment.length) ? bo.assignment : [{}];
+        const hints = `<p class="muted io-group-hint">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: each write's <b>FEEL value</b> (over the instance's variables) goes into its <b>Target member</b>, and the object's data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field and keep the rest. Several writes are applied <b>in order</b> and recorded as <b>one</b> change to the object, so one activity that fills in a whole record is one arrow and not one arrow per field.</p>
+          ${writes ? `<p class="muted io-group-hint">The members offered are the ones
             <b>${esc(writes.name)}</b> declares — <a href="#/data/m/${encodeURIComponent(writes.modelId)}"
             target="_blank" rel="noopener">open it ↗</a> to add one. They say what this object is
-            <i>shaped</i> like, which is a different thing from what the <b>FEEL value</b> above can
+            <i>shaped</i> like, which is a different thing from what a <b>FEEL value</b> above can
             read: that expression sees the instance's <b>variables</b>, and a data object is not one
             of them.</p>` : ""}`;
+        html += dataWritesGroupHTML(writes, rows, dataRefName(bo.targetRef), hints);
       } else {
         html += `<h3>Reads data object</h3>
           <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
@@ -7331,6 +7486,111 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           show(element);
         });
       }
+    }
+
+    // The writes of a data output association: one row per <assignment>, which BPMN
+    // allows any number of (ADR-0350). The group
+    // behaves like an I/O mapping group — add, delete, collapse — because it is the
+    // same shape, and an author has already learned it.
+    const dwGroup = body.querySelector("[data-write-group]");
+    if (dwGroup) {
+      const dwList = dwGroup.querySelector("#data-writes");
+      const cards = () => [...dwList.querySelectorAll("[data-write]")];
+      const targetRef = Array.isArray(bo.targetRef) ? bo.targetRef[0] : bo.targetRef;
+      const writesClass = classNamed(itemTypeOf(targetRef && targetRef.dataObjectRef));
+      // A row sitting on "another member…" means the text field beside it, not the
+      // empty value that option carries — which is the value that means the whole
+      // object. Reading the select would silently turn a member write into one.
+      const rowTo = (card) => {
+        const to = card.querySelector(".dw-to");
+        if (to.tagName === "SELECT" && choseOther(to)) {
+          const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
+          return other ? other.value.trim() : "";
+        }
+        return (to.value || "").trim();
+      };
+      // The value is the literal picker's when the member is typed by an «enumeration»
+      // and a literal is chosen; the free expression field otherwise, which is also
+      // where the picker's escape sends the author
+      // (ADR-0351).
+      const rowFrom = (card) => {
+        const free = () => (card.querySelector(".dw-from").value || "").trim();
+        const lit = card.querySelector(".dw-lit");
+        if (!lit || choseOther(lit)) return free();
+        return lit.value ? `="${lit.value}"` : "";
+      };
+      const readRows = () => cards().map((card) => ({ from: rowFrom(card), to: rowTo(card) }));
+      const saveWrites = () => savePreservingPanel(() => setAssignments(modeler, element, bo, readRows()));
+      const count = () => {
+        const c = dwGroup.querySelector(".io-group-count");
+        if (c) c.textContent = String(cards().length);
+      };
+      const wireRow = (card) => {
+        const to = card.querySelector(".dw-to");
+        const title = card.querySelector(".io-map-title");
+        card.querySelector(".io-map-head").addEventListener("click", (e) => {
+          if (e.target.closest(".io-map-del")) return;
+          card.classList.toggle("collapsed");
+        });
+        to.addEventListener("change", (e) => {
+          if (e.target.tagName === "SELECT" && choseOther(e.target)) return reveal(`f-dw-other-${card.dataset.i}`);
+          title.textContent = dataWriteTitle(rowTo(card));
+          saveWrites();
+          // Re-rendered, because which control the *value* is depends on what the member
+          // is: an «enumeration»-typed member is picked from a list and anything else is
+          // typed. saveWrites has already read every field, so nothing half-typed is lost.
+          show(element);
+        });
+        const lit = card.querySelector(".dw-lit");
+        if (lit) {
+          lit.addEventListener("change", (e) => {
+            if (choseOther(e.target)) return reveal(`f-dw-expr-${card.dataset.i}`);
+            saveWrites();
+            show(element);
+          });
+        }
+        const other = card.querySelector(`#f-dw-other-${card.dataset.i}`);
+        if (other) {
+          other.addEventListener("change", () => {
+            saveWrites();
+            show(element);
+          });
+        }
+        card.querySelector(".dw-from").addEventListener("change", saveWrites);
+        card.querySelector(".io-map-del").addEventListener("click", (e) => {
+          e.stopPropagation();
+          card.remove();
+          count();
+          saveWrites();
+        });
+      };
+      cards().forEach(wireRow);
+      // Open by default, unlike the mapping groups it borrows its shape from. Those sit
+      // among a dozen sections on a task; this is the whole content of a write arrow's
+      // panel, and starting it folded would answer "what does this arrow write" with a
+      // chevron. An author's own toggle still wins.
+      groupCtl.setDefault("Writes", true);
+      dwGroup.classList.toggle("collapsed", groupCtl.isCollapsed(dwGroup.dataset.group || ""));
+      dwGroup.querySelector(".io-group-head").addEventListener("click", (e) => {
+        if (e.target.closest(".io-group-add")) return;
+        groupCtl.onToggle((dwGroup.dataset.group || "").trim(), dwGroup.classList.toggle("collapsed"));
+      });
+      dwGroup.querySelector(".io-group-add").addEventListener("click", (e) => {
+        e.stopPropagation();
+        dwGroup.classList.remove("collapsed");
+        groupCtl.onToggle((dwGroup.dataset.group || "").trim(), false);
+        // One past the highest index in the list, not the list's length: deleting a row
+        // and adding one would otherwise reuse an index still on screen, and two rows
+        // sharing an id is an escape field that opens the wrong row.
+        const next = cards().reduce((m, c) => Math.max(m, Number(c.dataset.i)), -1) + 1;
+        const tmp = document.createElement("div");
+        tmp.innerHTML = dataWriteCardHTML(next, writesClass, "", "");
+        const card = tmp.firstElementChild;
+        dwList.appendChild(card);
+        wireRow(card);
+        count();
+        card.querySelector(".dw-from").focus();
+      });
     }
 
     // The badges describe THIS server, which only the server knows, and the panel is
@@ -9544,7 +9804,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
   let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
-  let incidentsTruncated = false;  // more elements are parked than the overlay lists
+  let incidentsTruncated = false;  // more tokens are parked than the *detail* list holds
+  // incidentTotal is how many tokens are parked, which is not incidents.length: that
+  // list is a bounded page of details and under a flood it is a hundred rows out of
+  // thousands. Reading the count off the page made it a floor presented as a total, and
+  // a page the server's bounded scan never reached made it a zero presented as a total —
+  // a process with every token parked drawing as healthy
+  // (ADR-0366).
+  let incidentTotal = 0;
+  // Whether the server's counts are the whole truth. False only when it could not take
+  // the reading at all, in which case what is on screen is a floor and says so.
+  let incidentCountsExact = true;
   let curDecs = [];                // the evaluations the decision panel is showing (backs the hover popover)
   let focusEl = null;              // a business rule task the operator is inspecting, or null
   // "all" or an instance key (as a string). A deep-linked instance (Deploy & run's
@@ -10100,6 +10370,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   function livePanelHTML() {
     return incidentPanelHTML(incidents, {
       truncated: incidentsTruncated,
+      total: incidentTotal,
       rows: incidents.map((inc) => incidentRowHTML(inc, { label: inc.elementId })).join(""),
     });
   }
@@ -10150,6 +10421,13 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // "still running" for a process that has been failing for hours (ADR-0150).
     incidents = rt.incidents || [];
     incidentsTruncated = !!rt.incidentsTruncated;
+    incidentCountsExact = rt.incidentCountsExact !== false;
+    // The count comes off the element, never off the rows: rt.elements carries the
+    // server's exact per-element count, and the detail list beside it is a page. An
+    // element can therefore be marked red with no row of its own, which is the point —
+    // the alternative is a stuck task drawn as a healthy one
+    // (ADR-0366).
+    incidentTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : incidents.length;
     const incidentsByElement = new Map();
     for (const inc of incidents) {
       const arr = incidentsByElement.get(inc.elementId) || [];
@@ -10194,8 +10472,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       marked.push([e.elementId, marker]);
       // A parked element is drawn red over its live-token green, and says why: the
       // badge carries the incident message, the panel below carries the resolve.
+      //
+      // How many is e.incidents, the server's count for this element — not the length
+      // of the details it also sent. Under a flood those differ by orders of magnitude,
+      // and they used to be the same number: the badge said "50" on a task holding 5 400
+      // because fifty was how many rows of that task fitted on the page
+      // (ADR-0366).
       const elIncidents = incidentsByElement.get(e.elementId) || [];
-      if (elIncidents.length) {
+      const parked = Number.isFinite(e.incidents) ? e.incidents : elIncidents.length;
+      if (parked > 0) {
         canvas.addMarker(e.elementId, "atlas-incident");
         marked.push([e.elementId, "atlas-incident"]);
         // The word "incident" is not on the badge: the shape is already outlined red,
@@ -10203,12 +10488,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         // pill's job is to point at *which* shape — and a pill wide enough to spell it
         // out is a pill that lands on the name of the thing it is pointing at.
         // The count is grouped like every other count on a diagram (numfmt.js).
-        const many = elIncidents.length > 1 ? ` ${fmtCount(elIncidents.length)}` : "";
-        const what = elIncidents.length === 1 ? "1 incident" : `${fmtCount(elIncidents.length)} incidents`;
+        const many = parked > 1 ? ` ${fmtCount(parked)}` : "";
+        const what = parked === 1 ? "1 incident" : `${fmtCount(parked)}${incidentCountsExact ? "" : "+"} incidents`;
+        // The message is a sample from the details, and there may be none to sample:
+        // an element the detail page did not reach is still counted and still marked.
+        const sample = elIncidents.length && elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : "";
         overlays.add(e.elementId, "incident", {
           position: badgeSpot(shape, "bl"),
-          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
-            elIncidents[0].message ? ` — ${esc(elIncidents[0].message)}` : ""}">&#9888;${many}</div>`,
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         });
       }
       // An armed branch shows no live count of its own: the tokens on it are the
@@ -10266,8 +10553,26 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     }
     countEl.textContent = fmtCount(rt.instances);
     tokenEl.textContent = fmtCount(rt.tokens);
-    incidentEl.textContent = fmtCount(incidents.length) + (incidentsTruncated ? "+" : "");
-    incidentPill.hidden = incidents.length === 0;
+    // The pill is the diagram's headline number, so it says how many tokens are parked
+    // — and it appears whenever any are. Hiding it on an empty *detail* list is how a
+    // definition standing behind another's flood came to render as healthy: the rows
+    // were none, the incidents were not (ADR-0366).
+    //
+    // A reading the server could not take is the one case where the number is unknown,
+    // and unknown is shown as unknown: a zero here would be this same defect again, one
+    // failure mode along.
+    if (!incidentCountsExact) {
+      incidentEl.textContent = incidentTotal > 0 ? `${fmtCount(incidentTotal)}+` : "?";
+      incidentPill.hidden = false;
+      incidentPill.title = "The engine could not count what is parked right now, so this is a floor. "
+        + "The Incidents view is the authoritative list.";
+    } else {
+      incidentEl.textContent = fmtCount(incidentTotal);
+      incidentPill.hidden = incidentTotal === 0;
+      incidentPill.title = incidentTotal === 1
+        ? "1 token is parked behind an unresolved incident"
+        : `${fmtCount(incidentTotal)} tokens are parked behind unresolved incidents`;
+    }
     runningCount = rt.instances || 0;
     finishedCount = rt.finished || 0;
     renderVariables();
@@ -11321,6 +11626,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   let playhead = 0;  // number of frames walked so far (0..frames.length)
   let animToken = 0; // bumped to supersede an in-flight animation
   let incidents = [];    // this instance's unresolved incidents, from the runtime poll (ADR-0061/0151)
+  // How many tokens of this instance are parked, and how many on each element — the
+  // server's counts, which are not the length of the rows above: those are a page, and
+  // an instance can hold more parked tokens than one page holds (a wide fan-out behind
+  // one broken worker). Reading the numbers off the rows capped them at the page
+  // (ADR-0366).
+  let incidentTotal = 0;
+  let incidentsByElement = new Map();
   let decisions = [];    // this instance's DMN decision evaluations (ADR-0066)
   let curDecs = [];      // the evaluations the Decisions tab is currently showing (backs the hover popover)
   let dataObjects = [];  // this instance's BPMN data objects, with their state trail (ADR-0053)
@@ -11440,9 +11752,15 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (visitsChanged) drawBadges();
 
     const nextIncidents = rt.incidents || [];
+    const nextTotal = Number.isFinite(rt.incidentTotal) ? rt.incidentTotal : nextIncidents.length;
     const sig = (list) => list.map((i) => `${i.elementInstanceKey}:${i.raisedAt}`).join(",");
-    if (sig(nextIncidents) === sig(incidents)) return;
+    if (sig(nextIncidents) === sig(incidents) && nextTotal === incidentTotal) return;
     incidents = nextIncidents;
+    incidentTotal = nextTotal;
+    incidentsByElement = new Map();
+    for (const e of rt.elements || []) {
+      if (e.incidents > 0) incidentsByElement.set(e.elementId, e.incidents);
+    }
     drawIncidentBadges();
     renderOverlay();   // the stuck element's outline, at whatever frame the playhead is on
     renderHistory();   // its row in the instance history
@@ -11456,7 +11774,13 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // stuck element is outlined and badged, its history row is flagged, and the Details
   // panel resolves it with the same one-click action the live view uses.
   const incidentByEik = (eik) => incidents.find((i) => String(i.elementInstanceKey) === String(eik)) || null;
-  const incidentElementIds = () => new Set(incidents.map((i) => i.elementId).filter(Boolean));
+  // Every element holding a parked token, counted rather than listed: under a page cap
+  // the rows cover only some of them, and an element left out would be drawn as though
+  // its token were simply waiting.
+  const incidentElementIds = () => new Set([
+    ...incidentsByElement.keys(),
+    ...incidents.map((i) => i.elementId).filter(Boolean),
+  ]);
 
   // drawIncidentBadges puts the live view's ⚠ badge on every element holding one. It
   // keeps its own overlay ids, so a refresh replaces exactly these. Like the live
@@ -11469,13 +11793,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       const shape = registry.get(elId);
       if (!shape) continue;
       const list = incidents.filter((i) => i.elementId === elId);
-      const many = list.length > 1 ? ` ${fmtCount(list.length)}` : "";
-      const what = list.length === 1 ? "1 incident" : `${fmtCount(list.length)} incidents`;
+      // The count is the element's, the message a sample from whatever rows this page
+      // carried for it — an element past the page is still counted and still badged.
+      const parked = incidentsByElement.get(elId) || list.length;
+      const many = parked > 1 ? ` ${fmtCount(parked)}` : "";
+      const what = parked === 1 ? "1 incident" : `${fmtCount(parked)} incidents`;
+      const sample = list.length && list[0].message ? ` — ${esc(list[0].message)}` : "";
       try {
         incBadgeIds.push(overlays.add(elId, "atlas-incident", {
           position: badgeSpot(shape, "bl"),
-          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${
-            list[0].message ? ` — ${esc(list[0].message)}` : ""}">&#9888;${many}</div>`,
+          html: `<div class="incident-badge" role="img" aria-label="${esc(what)}" title="${esc(what)}${sample}">&#9888;${many}</div>`,
         }));
       } catch { /* element not in this diagram */ }
     }
@@ -11486,8 +11813,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   function updateIncidentMeta() {
     const wrap = root.querySelector("#m-inc-wrap");
     if (!wrap) return;
-    wrap.hidden = incidents.length === 0;
-    root.querySelector("#m-inc-n").textContent = fmtCount(incidents.length);
+    wrap.hidden = incidentTotal === 0;
+    root.querySelector("#m-inc-n").textContent = fmtCount(incidentTotal);
   }
 
   // incidentBlock renders the incidents this panel is responsible for: the selected
@@ -11498,7 +11825,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     const list = step
       ? incidents.filter((i) => String(i.elementInstanceKey) === String(step.elementInstanceKey))
       : incidents;
+    // Unfiltered, the block speaks for the whole instance, so it says how many tokens
+    // are parked in it rather than how many rows this page carried. Filtered to one
+    // element instance the two coincide: an element instance holds at most one incident.
     return incidentPanelHTML(list, {
+      total: step ? list.length : incidentTotal,
       rows: list.map((i) => incidentRowHTML(i, { label: elementLabelOf(i.elementId), showInstance: false })).join(""),
     });
   }

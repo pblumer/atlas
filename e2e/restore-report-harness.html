@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas restore report e2e harness</title>
+    <!-- Drives the real api/web/restore-report.js: the line an operator reads after
+         uploading a portable backup. A restore that holds deployed definitions back is
+         only useful if it says which ones and why, so that sentence is the deliverable
+         and is asserted as itself. -->
+  </head>
+  <body>
+    <script type="module">
+      import { restoreSummary, restoreSkipNote } from "/restore-report.js";
+      window.__summary = restoreSummary;
+      window.__skipNote = restoreSkipNote;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

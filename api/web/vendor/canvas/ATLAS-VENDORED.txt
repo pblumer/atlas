@@ -62,6 +62,26 @@ The line from a class to the enumeration its states come from cost 367 more —
 construction pointed at a different pair, so what it took was an open arrowhead, a
 keyword, and one more derived edge in the reconcile.
 
+The typed-attribute line to an enumeration cost 587 more — 161,654 to 162,241 — and is
+the same construction a third time: one more derived edge, a label, and a marker that
+already existed.
+
+The context pad is the second exception, and the larger one: 162,241 to 178,197, which
+is 15,956 bytes. Like the palette it is library rather than renderer, and it arrives
+with company — connect and its preview, overlays, interaction-events, scheduler and
+dragging. What it replaces is a *mode*. Drawing a relationship meant arming a kind in
+the palette and then remembering which class to click first, which is a state the
+author has to hold and the canvas has to light; the pad puts the kinds beside the class
+they start at and the gesture carries its own meaning. Writing that by hand would have
+meant a floating toolbar, a drag with live rule feedback and a preview line — three
+things bpmn-js users already know how to use, and three things to maintain.
+
+Shading a class box by where it is used cost 199 bytes — 178,197 to 178,396. It is two
+marks the host hands over and the renderer paints: a class nothing uses, and the member
+names deployed processes do. No reading and no rule came into the bundle; where-used is
+computed on the server and the rule that turns it into marks stays with the host, the
+way the relationship matrix does.
+
 There is still a separate copy of diagram-js inside the vendored bpmn-js and dmn-js
 bundles. Those are third-party bundles vendored whole rather than Atlas sources
 built against the library, so folding them in would mean building bpmn-js from
@@ -81,4 +101,4 @@ Do not edit atlas-canvas.js by hand. To rebuild:
     api/web/vendor/canvas/diagram-js.css
 
 SHA-256 atlas-canvas.js:
-929ccd06a7188f0c9b725b6bb5fa0682bb484d62752e7b90d83ba24d12981233
+f94e49bc3d324f91b7c96338ddf5e192a697919582feca5ba9087e8d09bafefc

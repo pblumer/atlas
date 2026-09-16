@@ -181,9 +181,18 @@
         }
         if (url.startsWith("/api/v1/instances/search")) {
           const q = new URL(url, location.origin).searchParams.get("q") || "";
-          return instances.filter((r) =>
-            String(r.key) === q.trim() ||
-            (r.variables || []).some((v) => `${v.name}=${v.value}`.toLowerCase().includes(q.toLowerCase())));
+          // Each row carries its own incident count, the way the server counts it:
+          // through that instance's element index, so it is right for an instance
+          // whichever page of the server's incident list it would have landed on
+          // (ADR-0365).
+          return instances
+            .filter((r) =>
+              String(r.key) === q.trim() ||
+              (r.variables || []).some((v) => `${v.name}=${v.value}`.toLowerCase().includes(q.toLowerCase())))
+            .map((r) => ({
+              ...r,
+              incidents: incidents.filter((i) => i.processInstanceKey === String(r.key)).length,
+            }));
         }
         if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
         if (url.includes("/runtime")) {

@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Data",
+    "Modeler"
+  ],
+  "title": {
+    "en": "Drag a relationship out of the class it starts at",
+    "de": "Beziehungen aus der Klasse ziehen, bei der sie beginnen"
+  },
+  "summary": {
+    "en": "Select a class on the information model's canvas and the small menu you know from the BPMN modeler opens beside it, offering the relationship kinds that class can actually reach something with. Drag one onto the class at the other end and the line is drawn. Until now this was a mode: arm a kind in the toolbox, then click two classes and hope you clicked them in the right order — which is what decided where a composition's diamond went. A target that cannot take this kind of relationship no longer lights up, so the answer arrives while you are still deciding rather than afterwards, and dropping on one anyway still tells you why. The toolbox still works the old way if you prefer it.",
+    "de": "Wählen Sie im Informationsmodell eine Klasse aus, öffnet sich daneben das kleine Menü, das Sie aus dem BPMN-Modeler kennen — mit den Beziehungsarten, mit denen diese Klasse überhaupt etwas erreichen kann. Ziehen Sie eine davon auf die Klasse am anderen Ende, und die Linie ist gezeichnet. Bisher war das ein Modus: Art in der Werkzeugleiste scharfschalten, dann zwei Klassen anklicken und hoffen, dass die Reihenfolge stimmte — sie entschied, an welchem Ende die Raute einer Komposition landet. Ein Ziel, das diese Art von Beziehung nicht annehmen kann, leuchtet nicht mehr auf: Die Antwort kommt, während Sie noch entscheiden, statt danach. Wer trotzdem darauf loslässt, erfährt weiterhin den Grund. Die Werkzeugleiste funktioniert unverändert, wenn Sie den alten Weg bevorzugen."
+  },
+  "try": {
+    "label": {
+      "en": "Open Data",
+      "de": "Daten öffnen"
+    },
+    "route": "#/data"
+  }
+}

@@ -2,6 +2,159 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The portal's corner names whoever the order is for, and the help moved to the end of the row.",
+        "de": "The portal's corner names whoever the order is for, and the help moved to the end of the row."
+      },
+      "summary": {
+        "en": "The corner said \"mich selbst\" to everybody.",
+        "de": "The corner said \"mich selbst\" to everybody."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-knowledge-model-s-expression-opened-unstyled",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A knowledge model's logic is readable again",
+        "de": "Die Logik eines Knowledge Models ist wieder lesbar"
+      },
+      "summary": {
+        "en": "A knowledge model is the piece of a decision model that holds a reusable calculation — a fee, a discount, a risk score — that several decisions call rather than each repeating it. Opening one showed its parts, but drawn as bare lines of text against the left edge of the page: no boxes, no separators, and the small edit buttons that belong to a section sitting on top of the expression instead of appearing when you point at it. Nothing was broken underneath — what you typed was saved, and what was saved was correct — but the layout gave no clue which part was the calculation, which were the parameters a caller passes, and which was the result. It now opens as the three-part box it is: the name, the F for FEEL beside the parameter list, the expression itself, and the result variable a decision binds when it calls this model. The line beneath the canvas also says what you are looking at — it used to explain the decision table under every view, including the three that are not one.",
+        "de": "Ein Knowledge Model ist der Teil eines Entscheidungsmodells, der eine wiederverwendbare Berechnung hält — eine Gebühr, einen Rabatt, einen Risikowert —, die mehrere Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Beim Öffnen waren zwar alle Bestandteile da, aber als nackte Textzeilen am linken Seitenrand: keine Kästen, keine Trennlinien, und die kleinen Bearbeiten-Schaltflächen eines Abschnitts lagen auf dem Ausdruck, statt erst beim Zeigen darauf zu erscheinen. Darunter war nichts kaputt — Eingetipptes wurde gespeichert, Gespeichertes war korrekt —, aber die Darstellung liess nicht erkennen, was die Berechnung ist, was die Parameter sind, die ein Aufrufer übergibt, und was das Ergebnis. Nun öffnet sich der dreiteilige Kasten, der es ist: der Name, das F für FEEL neben der Parameterliste, der Ausdruck selbst und die Ergebnisvariable, die eine Entscheidung bindet, wenn sie dieses Modell aufruft. Auch die Zeile unter der Zeichenfläche benennt jetzt die geöffnete Ansicht — sie erklärte zuvor unter jeder Ansicht die Entscheidungstabelle, auch unter den drei, die keine ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+          "On the Overview (DRG) tab, draw a Knowledge Model and give it a name — this is the reusable calculation.",
+          "Select it and pick Literal Expression from its wrench menu to give it logic.",
+          "Open its own tab beside Overview (DRG): F names the expression language, the list beside it holds the parameters a caller passes, and Result names the variable a decision binds.",
+          "Draw a knowledge requirement from a decision to the model so something actually invokes it — a model with no decision has nothing to deploy."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "Im Reiter «Overview (DRG)» ein Knowledge Model zeichnen und benennen — das ist die wiederverwendbare Berechnung.",
+          "Es auswählen und im Werkzeugmenü «Literal Expression» wählen, um ihm Logik zu geben.",
+          "Den eigenen Reiter neben «Overview (DRG)» öffnen: «F» benennt die Ausdruckssprache, die Liste daneben hält die Parameter, die ein Aufrufer übergibt, und «Result» benennt die Variable, die eine Entscheidung bindet.",
+          "Von einer Entscheidung eine Knowledge-Requirement-Kante auf das Modell ziehen, damit es auch aufgerufen wird — ein Modell ohne Entscheidung hat nichts, was ausgeliefert werden könnte."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
+      "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "With authentication off, a catalogue's appearance could not be set at all.",
+        "de": "With authentication off, a catalogue's appearance could not be set at all."
+      },
+      "summary": {
+        "en": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may.",
+        "de": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-catalogue-screen-said-an-empty-audience-means-everybody-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "The catalogue screen said an empty audience means everybody. It means nobody.",
+        "de": "The catalogue screen said an empty audience means everybody. It means nobody."
+      },
+      "summary": {
+        "en": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all.",
+        "de": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-refused-publish-said-not-published-and-withheld-every-reas",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A refused publish said \"not published\" and withheld every reason.",
+        "de": "A refused publish said \"not published\" and withheld every reason."
+      },
+      "summary": {
+        "en": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to.",
+        "de": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "who-is-this-failing-for-two-different-reasons-was-answered-a",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "\"Who is this?\" failing for two different reasons was answered as though it were one.",
+        "de": "\"Who is this?\" failing for two different reasons was answered as though it were one."
+      },
+      "summary": {
+        "en": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault.",
+        "de": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "an-order-could-be-placed-in-anybody-s-name",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An order could be placed in anybody's name.",
+        "de": "An order could be placed in anybody's name."
+      },
+      "summary": {
+        "en": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name.",
+        "de": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "an-outage-now-stops-at-the-worker-instead-of-at-every-token",
       "version": "Unreleased",
       "date": null,
@@ -24,17 +177,17 @@
       ]
     },
     {
-      "id": "the-catalogue-can-now-say-what-must-never-be-held-together",
+      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "The catalogue can now say what must never be held together.",
-        "de": "The catalogue can now say what must never be held together."
+        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
+        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
       },
       "summary": {
-        "en": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself.",
-        "de": "Everything the portal had learned about access was detective or temporal: the commissioning load records what was there, reconciliation checks whether the record is true, recertification asks whether it is justified, an expiry ends it by itself."
+        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
+        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
       },
       "link": {
         "label": "Changelog",
@@ -42,17 +195,17 @@
       }
     },
     {
-      "id": "a-reminder-can-now-ask-what-is-waiting-for-somebody-else",
+      "id": "a-person-can-have-a-face",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "A reminder can now ask what is waiting for somebody else.",
-        "de": "A reminder can now ask what is waiting for somebody else."
+        "en": "A person can have a face.",
+        "de": "A person can have a face."
       },
       "summary": {
-        "en": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks.",
-        "de": "The portal asks people for three different things — decide an order line, answer a recertification row, do a task — and none of it happens while nobody opens Atlas and looks."
+        "en": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names.",
+        "de": "Atlas showed people as strings: an approval said usr4be5b4ad, the portal's corner drew an empty circle, and a recipient picked out of the directory was a name in a list of names."
       },
       "link": {
         "label": "Changelog",
@@ -60,35 +213,62 @@
       }
     },
     {
-      "id": "a-right-can-now-end-by-itself",
+      "id": "the-decision-editor-says-when-a-knowledge-model-is-never-inv",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "A right can now end by itself.",
-        "de": "A right can now end by itself."
+        "en": "The decision editor points out a knowledge model nothing calls",
+        "de": "Der Entscheidungseditor meldet ein Knowledge Model, das niemand aufruft"
       },
       "summary": {
-        "en": "Everything the portal grants, it granted forever — which nobody notices on the day it is built, and which is why the commissioning load, reconciliation and recertification all exist: three controls that find access which should not be there, after it is there.",
-        "de": "Everything the portal grants, it granted forever — which nobody notices on the day it is built, and which is why the commissioning load, reconciliation and recertification all exist: three controls that find access which should not be there, after it is there."
+        "en": "A knowledge model is a reusable calculation — a fee, a discount, a risk score — that decisions call instead of each repeating it. Two things could go wrong with one and nothing anywhere said so, because both deploy and both run. A knowledge model that nothing calls is simply never evaluated, and on the canvas it looks exactly like one that is called: the only difference is an arrow that is not there. And a decision that calls one without drawing that arrow works, while its diagram quietly omits the dependency — the same diagram that gets reviewed and printed into the decision's documentation. The editor now says both while the model is on screen, as a strip under the canvas and a warning mark on the shape itself; clicking a finding jumps to the element it is about. Both are warnings rather than errors, because each describes a model that runs, and both stay quiet when in doubt: a knowledge model counts as called if its name appears as a call anywhere in another element, so an unusual way of writing one costs a missed warning rather than a wrong one.",
+        "de": "Ein Knowledge Model ist eine wiederverwendbare Berechnung — eine Gebühr, ein Rabatt, ein Risikowert —, die Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Zwei Fehler waren dabei möglich, ohne dass irgendetwas darauf hinwies, denn beide lassen sich ausliefern und beide laufen. Ein Knowledge Model, das niemand aufruft, wird schlicht nie ausgewertet — und auf der Zeichenfläche sieht es genauso aus wie ein aufgerufenes: Der einzige Unterschied ist ein Pfeil, der fehlt. Und eine Entscheidung, die eines aufruft, ohne diesen Pfeil zu zeichnen, funktioniert, während ihr Diagramm die Abhängigkeit stillschweigend verschweigt — dasselbe Diagramm, das geprüft und in die Dokumentation der Entscheidung übernommen wird. Der Editor benennt nun beides, solange das Modell auf dem Bildschirm ist: als Streifen unter der Zeichenfläche und als Warnzeichen am Element selbst. Ein Klick auf einen Befund springt zum betroffenen Element. Beides sind Warnungen und keine Fehler, denn jeder Fall beschreibt ein lauffähiges Modell. Und beides schweigt im Zweifel: Ein Knowledge Model gilt als aufgerufen, sobald sein Name irgendwo in einem anderen Element als Aufruf vorkommt — eine ungewöhnliche Schreibweise kostet also eine ausbleibende Warnung statt einer falschen."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and stay on the Overview (DRG) tab.",
+          "Draw a Knowledge Model and give it logic. The strip under the canvas appears at once: nothing calls it yet.",
+          "Open a decision's own tab and call the knowledge model from its expression, by name — for example fee(amount).",
+          "Back on Overview (DRG): the first finding is gone and a second has taken its place, because the decision now calls a model it does not require.",
+          "Draw a knowledge requirement from the knowledge model to the decision. The strip disappears."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und im Reiter «Overview (DRG)» bleiben.",
+          "Ein Knowledge Model zeichnen und ihm Logik geben. Der Streifen unter der Zeichenfläche erscheint sofort: Noch ruft es niemand auf.",
+          "Den eigenen Reiter einer Entscheidung öffnen und das Knowledge Model im Ausdruck beim Namen aufrufen, etwa fee(amount).",
+          "Zurück auf «Overview (DRG)»: Der erste Befund ist verschwunden, ein zweiter hat seinen Platz eingenommen, denn die Entscheidung ruft nun ein Modell auf, das sie nicht anfordert.",
+          "Eine Knowledge-Requirement-Kante vom Knowledge Model zur Entscheidung ziehen. Der Streifen verschwindet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
       }
     },
     {
-      "id": "a-business-object-says-where-it-is-used",
+      "id": "the-class-diagram-can-say-which-members-anything-actually-us",
       "version": "Unreleased",
       "date": null,
       "category": "Added",
       "title": {
-        "en": "Every business object now says where it is used",
-        "de": "Jedes Business Object zeigt jetzt, wo es verwendet wird"
+        "en": "See on the class diagram which attributes are actually used",
+        "de": "Im Klassendiagramm sehen, welche Attribute tatsächlich genutzt werden"
       },
       "summary": {
-        "en": "You could always see what an Order is. What you could not see was what depends on it — so renaming a member, retiring an enumeration literal or dropping a state meant guessing. Data now has a Business objects list: every class of every information model you can see, in one sortable, filterable table across all applications. Open one and it says where it is used and how — every deployed process that declares it, and every element that reads it, writes one member of it, moves it into a state or names the store it is kept in, plus everything in the model itself that refers to it.",
-        "de": "Was ein Auftrag ist, war immer sichtbar. Was von ihm abhängt, nicht — ein Attribut umbenennen, ein Literal streichen oder einen Zustand entfernen hiess raten. Data hat jetzt die Liste Business objects: jede Klasse jedes Informationsmodells, das Sie sehen dürfen, in einer sortier- und filterbaren Tabelle über alle Applikationen hinweg. Ein Klick darauf zeigt, wo und wie sie verwendet wird — jeder deployte Prozess, der sie deklariert, und jedes Element, das sie liest, ein Attribut davon schreibt, sie in einen Zustand überführt oder den Speicher nennt, in dem sie liegt, dazu alles im Modell selbst, was auf sie verweist."
+        "en": "You decide the fate of an attribute while looking at the class diagram — and until now the answer to \"does anything use this?\" was on another page. A control beside zoom and undo now shades the drawing: an attribute some deployed process writes by name comes forward, one none of them names recedes, and a class no process and nothing in the model uses is faint as a whole. Faint is deliberately careful: it means nothing names it, not that nothing uses it, because a process that reads the whole object never says which fields it then looks at. A business key is never faint, an enumeration is not faint for having no process use, and anything you have just added or renamed is left exactly as it was drawn.",
+        "de": "Über das Schicksal eines Attributs entscheidet man im Klassendiagramm — die Antwort auf \"wird das überhaupt genutzt?\" stand bisher auf einer anderen Seite. Eine Schaltfläche neben Zoom und Undo blendet die Nutzung jetzt ins Diagramm ein: Ein Attribut, das ein deployter Prozess namentlich schreibt, tritt hervor; eines, das keiner nennt, tritt zurück; eine Klasse, die weder ein Prozess noch das Modell verwendet, wird als Ganzes blass. Blass ist bewusst vorsichtig formuliert: Es heisst, dass niemand das Attribut namentlich nennt — nicht, dass es ungenutzt ist, denn ein Prozess, der das ganze Objekt liest, sagt nie, welche Felder er danach ausliest. Ein Business Key wird nie blass, eine Enumeration wird es nicht schon mangels Prozessverwendung, und was gerade hinzugefügt oder umbenannt wurde, bleibt unverändert dargestellt."
       },
       "link": {
         "label": "Changelog",
@@ -99,199 +279,24 @@
       ],
       "tutorial": {
         "en": [
-          "Open Data and switch to the Business objects tab.",
-          "Filter the list by name, kind or application — the Used by column says how many processes depend on each class.",
-          "Click a name to open it: its members and lifecycle first, then every process use with the element, the member and the state named.",
-          "An enumeration used by no process is not unused — its uses are listed under \"Used in the model\"."
+          "Open Data, then an information model, and press the shading control in the canvas toolbar (below undo and redo).",
+          "The legend appears while the shading is on and says what bright and faint were read from.",
+          "Bright attributes are written by name by at least one deployed process; faint ones are named by none.",
+          "Press the control again to put the drawing back — nothing is marked at all, which is the diagram as it is when nobody has asked."
         ],
         "de": [
-          "Data öffnen und auf den Reiter Business objects wechseln.",
-          "Die Liste nach Name, Art oder Applikation filtern — die Spalte Used by sagt, wie viele Prozesse von einer Klasse abhängen.",
-          "Auf einen Namen klicken: zuerst Attribute und Lebenszyklus, dann jede Verwendung im Prozess mit Element, Attribut und Zustand.",
-          "Eine Enumeration ohne Prozessverwendung ist nicht ungenutzt — ihre Verwendungen stehen unter «Used in the model»."
+          "Data öffnen, ein Informationsmodell wählen und in der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken (unterhalb von Undo und Redo).",
+          "Die Legende erscheint, solange die Anzeige aktiv ist, und erklärt, worauf hell und blass beruhen.",
+          "Hell dargestellte Attribute werden von mindestens einem deployten Prozess namentlich geschrieben, blasse von keinem.",
+          "Erneutes Drücken stellt das Diagramm wieder her — dann ist nichts markiert, so wie ohne gestellte Frage."
         ]
       },
       "try": {
         "label": {
-          "en": "Open Business objects",
-          "de": "Business objects öffnen"
+          "en": "Open the information model",
+          "de": "Informationsmodell öffnen"
         },
-        "route": "#/data/objects"
-      }
-    },
-    {
-      "id": "an-incident-flood-is-read-by-cause-and-cleared-in-one-action",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An incident flood is read by cause, and cleared in one action.",
-        "de": "An incident flood is read by cause, and cleared in one action."
-      },
-      "summary": {
-        "en": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems.",
-        "de": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-third-question-about-somebody-s-access-can-now-be-asked",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The third question about somebody's access can now be asked.",
-        "de": "The third question about somebody's access can now be asked."
-      },
-      "summary": {
-        "en": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it.",
-        "de": "Ordering answers may they have it; reconciliation answers do they actually have it; nothing asked do they still need it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Old decision versions can finally be cleared away",
-        "de": "Alte Entscheidungsversionen lassen sich endlich aufräumen"
-      },
-      "summary": {
-        "en": "Every press of Deploy in the decision editor minted a version and kept the whole model with it, and every uploaded model file stayed where it was put. Nothing could take either back, so iterating on a decision — which is what that button is for — cost permanent disk. Both can now be removed, under a rule that protects what is actually running. A deployed version is refused while a deployed process is pinned to it: that process resolved its decision to exactly that version when it was deployed and keeps no copy of it, and the pin outlives the instances that used it — so having nothing running is not enough. It is also refused while it is the newest version of a decision that still has older ones behind it, because removing it would send the next deployment quietly back a version. Clearing a history therefore works oldest first, and the refusal says which of the two reasons applies. Operations' page for a decision now lists every deployed version with the processes holding each one — the first place in Atlas that answers what is using this version — and offers Delete where nothing does. A model file that no reference points at can be deleted from Not assigned; decisions already deployed from it keep running, because they carry their own copy.",
-        "de": "Jeder Druck auf «Deploy» im Entscheidungseditor erzeugte eine Version und behielt das ganze Modell dazu, und jede hochgeladene Modelldatei blieb liegen. Zurücknehmen liess sich beides nicht — das Iterieren an einer Entscheidung, wofür diese Schaltfläche da ist, kostete also dauerhaft Speicher. Beides lässt sich nun entfernen, nach einer Regel, die schützt, was tatsächlich läuft. Eine ausgelieferte Version wird abgelehnt, solange ein ausgelieferter Prozess darauf festgelegt ist: Dieser Prozess hat seine Entscheidung beim Ausliefern auf genau diese Version aufgelöst und hält keine eigene Kopie davon, und die Festlegung überdauert die Instanzen, die sie genutzt haben — dass nichts mehr läuft, genügt also nicht. Abgelehnt wird auch die neueste Version einer Entscheidung, hinter der noch ältere stehen, denn ihr Entfernen würde die nächste Auslieferung stillschweigend eine Version zurückwerfen. Eine Historie räumt man daher von der ältesten Version her ab, und die Ablehnung sagt, welcher der beiden Gründe greift. Die Entscheidungsseite in Operations führt jetzt jede ausgelieferte Version mit den Prozessen auf, die sie halten — die erste Stelle in Atlas, die beantwortet, was eine Version verwendet — und bietet «Delete» dort an, wo nichts sie hält. Eine Modelldatei, auf die keine Referenz zeigt, lässt sich unter «Nicht zugeordnet» löschen; bereits daraus ausgelieferte Entscheidungen laufen weiter, weil sie ihre eigene Kopie tragen."
-      },
-      "link": {
-        "label": "ADR-0329",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0329-a-decision-deployment-is-not-deletable.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Decisions and choose a decision.",
-          "Deployed versions lists every version with its key, when it was deployed, and what is holding it.",
-          "A version nothing holds carries a Delete button; one that is held says held, and the tooltip says why.",
-          "For model files, open the Modeler's Not assigned and use ⋯ → Delete model on a row marked No reference."
-        ],
-        "de": [
-          "«Operations → Decisions» öffnen und eine Entscheidung auswählen.",
-          "«Deployed versions» führt jede Version auf, mit Schlüssel, Auslieferungszeitpunkt und dem, was sie hält.",
-          "Eine Version, die nichts hält, trägt eine Schaltfläche «Delete»; eine gehaltene zeigt «held», und der Tooltip nennt den Grund.",
-          "Für Modelldateien im Modeler «Nicht zugeordnet» öffnen und bei einer mit «No reference» markierten Zeile «⋯ → Delete model» wählen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Decisions",
-          "de": "Decisions öffnen"
-        },
-        "route": "#/operations/decisions"
-      }
-    },
-    {
-      "id": "the-inventory-can-now-be-checked-rather-than-trusted",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The inventory can now be checked rather than trusted.",
-        "de": "The inventory can now be checked rather than trusted."
-      },
-      "summary": {
-        "en": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it.",
-        "de": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-inventory-is-taken-before-it-is-enforced",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The inventory is taken before it is enforced.",
-        "de": "The inventory is taken before it is enforced."
-      },
-      "summary": {
-        "en": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted.",
-        "de": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "atlas-keeps-its-accounts-and-groups-from-a-microsoft-entra-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing.",
-        "de": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing."
-      },
-      "summary": {
-        "en": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there.",
-        "de": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-deleted-definition-s-key-is-never-issued-again-so-a-new-pr",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A new process no longer inherits a deleted one's history",
-        "de": "Ein neuer Prozess erbt nicht mehr die Historie eines gelöschten"
-      },
-      "summary": {
-        "en": "Every deployed process and every deployed decision gets a number, and that number is what the engine files its history under: which instances finished, how often each step was reached, when it last did anything. The number was worked out at startup from the deployments still on disk — which is right only as long as none is ever deleted. Delete the newest one, restart, and the next deployment got the same number back, together with everything filed under it: a process deployed a minute ago would report a finished instance and a step it had never reached. Nothing was lost and nothing crashed; the figures simply belonged to something else. The numbers are now written down as they are handed out, so one that has been used is never used again — even after the deployment that held it is gone. A restart in the middle of a deployment can now leave a gap in the numbering, which costs nothing. An installation that upgrades starts keeping the record from its next deployment onward.",
-        "de": "Jeder ausgelieferte Prozess und jede ausgelieferte Entscheidung erhält eine Nummer, und unter dieser Nummer legt die Engine ihre Historie ab: welche Instanzen abgeschlossen wurden, wie oft jeder Schritt erreicht wurde, wann zuletzt etwas geschah. Die Nummer wurde beim Start aus den noch vorhandenen Auslieferungen ermittelt — was nur stimmt, solange keine je gelöscht wird. Löscht man die neueste und startet neu, bekam die nächste Auslieferung dieselbe Nummer zurück, mitsamt allem, was darunter abgelegt war: Ein vor einer Minute ausgelieferter Prozess meldete eine abgeschlossene Instanz und einen Schritt, den er nie erreicht hatte. Verloren ging nichts und abgestürzt ist nichts; die Zahlen gehörten schlicht zu etwas anderem. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird — auch nicht, wenn die Auslieferung, die sie hielt, verschwunden ist. Ein Neustart mitten in einer Auslieferung kann jetzt eine Lücke in der Nummerierung hinterlassen, was nichts kostet. Eine aktualisierte Installation beginnt mit ihrer nächsten Auslieferung, die Nummern festzuhalten."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Processes and note a deployment's key.",
-          "Delete that deployment, restart the server, and deploy something else.",
-          "The new deployment gets a fresh key, and its runtime view starts at zero instances and zero visits."
-        ],
-        "de": [
-          "«Operations → Processes» öffnen und den Schlüssel einer Auslieferung notieren.",
-          "Diese Auslieferung löschen, den Server neu starten und etwas anderes ausliefern.",
-          "Die neue Auslieferung erhält einen neuen Schlüssel, und ihre Laufzeitansicht beginnt bei null Instanzen und null Besuchen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Processes",
-          "de": "Processes öffnen"
-        },
-        "route": "#/operations"
+        "route": "#/data"
       }
     }
   ]

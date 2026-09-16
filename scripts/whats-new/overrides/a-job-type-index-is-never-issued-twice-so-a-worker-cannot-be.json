@@ -1,0 +1,30 @@
+{
+  "tags": ["Operations", "Engine"],
+  "title": {
+    "en": "A task type's number is never given to another task type",
+    "de": "Die Nummer eines Aufgabentyps wird nie einem anderen Aufgabentyp gegeben"
+  },
+  "summary": {
+    "en": "A service task in a diagram names the kind of work it needs — \"send-email\", \"charge-card\" — and Atlas gives each kind a number. Waiting work is stored under that number, and a worker asking for a kind of work is answered by it, so a number handed to a second kind would hand that worker somebody else's work. Atlas worked the numbers out at startup from the list of kinds it could still read, which is right only as long as that list never loses an entry. It can: a file removed by hand or missing from a partial restore, and — with no editing at all — a kind whose name a later Atlas version turns into a built-in, which is then dropped from the list on purpose and took its number with it. The numbers are now written down as they are handed out, so one that has been used is never used again, whatever becomes of the entry that held it. An installation that upgrades gets its record written on the first start after the upgrade.",
+    "de": "Eine Service-Task im Diagramm benennt die Art von Arbeit, die sie braucht — «send-email», «charge-card» — und Atlas gibt jeder Art eine Nummer. Wartende Arbeit wird unter dieser Nummer abgelegt, und ein Worker, der nach einer Art Arbeit fragt, wird darüber bedient. Eine Nummer, die an eine zweite Art vergeben wird, würde diesem Worker also fremde Arbeit zuteilen. Atlas ermittelte die Nummern beim Start aus der Liste der Arten, die es noch lesen konnte — was nur stimmt, solange diese Liste keinen Eintrag verliert. Das kann sie: eine von Hand entfernte Datei oder eine, die bei einer unvollständigen Wiederherstellung fehlt, und — ganz ohne Eingriff — eine Art, deren Name in einer späteren Atlas-Version zu einem eingebauten wird und die deshalb bewusst aus der Liste fällt, wobei sie ihre Nummer mitnahm. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird, was auch immer aus dem Eintrag wird, der sie hielt. Eine aktualisierte Installation hält ihren Stand beim ersten Start nach dem Update fest."
+  },
+  "tutorial": {
+    "en": [
+      "Open Operations → Workers and look at the job types the engine knows.",
+      "Each model-authored type keeps the number it was first given, for the life of the installation.",
+      "`atlas check-job-types --data-dir …` answers the same question about a backup, without starting a server."
+    ],
+    "de": [
+      "«Operations → Workers» öffnen und die der Engine bekannten Job-Typen ansehen.",
+      "Jeder im Modell definierte Typ behält die Nummer, die er zuerst erhalten hat, über die gesamte Lebensdauer der Installation.",
+      "«atlas check-job-types --data-dir …» beantwortet dieselbe Frage zu einer Sicherung, ohne einen Server zu starten."
+    ]
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Workers öffnen"
+    },
+    "route": "#/operations/workers"
+  }
+}

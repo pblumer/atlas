@@ -191,6 +191,45 @@ func TestWhatDerivationCannotSeeIsNeverAFinding(t *testing.T) {
 	}
 }
 
+// The defect a real model exposed, and the reason this rule exists at all.
+//
+// A process that writes `= {id: …, nachname: …, …}` writes every field at once. The
+// derived class then has no members, and a naive comparison reports every member the
+// model declares as "planned, not built" — five rows of work the process demonstrably
+// already does. Three inventions are enough for somebody to stop reading the list.
+func TestAWholeObjectWriteWithholdsTheMemberComparisonRatherThanInventingWork(t *testing.T) {
+	b := compiler.NewBuilder(1, "sales", 1)
+	start := b.AddStartEvent()
+	task := b.AddTask()
+	end := b.AddEndEvent()
+	b.Connect(start, task)
+	b.Connect(task, end)
+	b.AddDataObject("order", "Order", "received", false)
+	b.AddDataOutputAssociation(task, "order", mustExpr(t, "amount"), "approved", "")
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	d := Difference([]*compiler.CompiledProcess{cp}, authored(orderClass()))
+	for _, f := range d.Planned {
+		if f.Kind == KindDiffMember {
+			t.Errorf("a member was reported as unbuilt against a whole-object write: %+v", f)
+		}
+	}
+	// The states are still compared: a data state is written on the object, not inside
+	// its value, so a whole-object write hides nothing about them.
+	if !has(sideNames(d.Planned), "Order: cancelled") {
+		t.Errorf("the unreached state went missing with the members: %v", sideNames(d.Planned))
+	}
+	// And the silence is stated. A reader who does not know the members were skipped
+	// reads their absence as agreement.
+	joined := strings.Join(d.Excluded, " ")
+	if !strings.Contains(joined, "Order") || !strings.Contains(joined, "whole") {
+		t.Errorf("the exclusions do not say the members of Order were not compared: %v", d.Excluded)
+	}
+}
+
 func TestAnEnumerationIsNeverMissingFromTheProcesses(t *testing.T) {
 	// An enumeration is machinery of the model — an attribute's type, or the states a
 	// lifecycle takes (ADR-0306). No process ever carries one as a data object, so

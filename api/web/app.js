@@ -12,6 +12,7 @@ import {
 import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { copyText } from "./clipboard.js";
+import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
 // has to agree on what the markup means — and on the escaping that keeps it inert.
@@ -76,7 +77,12 @@ export async function apiRaw(method, path, body, isXML) {
     // The message is the readable half; the status and the decoded body ride along for
     // the few callers that need to *act* on the failure rather than report it — a 409
     // that names what is in the way, say (ADR-0163).
-    const err = new Error((data && data.error) || res.statusText);
+    // statusText is empty over HTTP/2, which carries no reason phrase — so a body
+    // with no "error" key produced `new Error("")`, and every caller that reports
+    // err.message showed a blank box where the reason belonged. The status number
+    // is not a good message; it is a great deal better than nothing, and it says
+    // out loud that the caller is reading the wrong half of the body.
+    const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
@@ -1652,7 +1658,13 @@ async function viewConsoleBackup() {
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error((data && data.error) || res.statusText);
         status.textContent = onOk(data || {});
-        toast("Restore complete", "ok");
+        // A restore that held records back is not a restore that succeeded quietly:
+        // the records it declined are the operator's next decision, so the toast says
+        // so rather than going green over a partial result
+        // (ADR-0357).
+        const held = (data && data.skipped) || 0;
+        toast(held ? `Restored, but ${held} deployed definition(s) were not taken` : "Restore complete",
+          held ? "warn" : "ok");
       } catch (e) {
         status.textContent = "Restore failed: " + (e && e.message || e);
         toast("Restore failed", "error");
@@ -1662,8 +1674,8 @@ async function viewConsoleBackup() {
 
   wireRestore(
     "restore-file", "restore-btn", "restore-status", "/api/v1/restore",
-    "Restore from this file? Artifacts sharing an id will be overwritten.",
-    (d) => `Restored ${d.restored || 0} file(s).` + (d.restartRequired ? " Restart the server to activate restored deployments." : ""),
+    "Restore from this file? Artifacts sharing an id will be overwritten. Deployed definitions whose key is already in use here are NOT taken — a key belongs to the installation that issued it.",
+    (d) => restoreSummary(d),
   );
   wireRestore(
     "restore-full-file", "restore-full-btn", "restore-full-status", "/api/v1/restore/full",
@@ -1704,7 +1716,87 @@ function userForm(u) {
       <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
       <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
-    </form></div>`;
+    </form>
+    ${isEdit ? avatarField(u) : ""}</div>`;
+}
+
+// avatarField is the picture, outside the form on purpose.
+//
+// Everything above it is one PATCH of the record; a picture is bytes on a route of
+// its own and lands the moment it is chosen. Inside the form it would sit beside a
+// Save button it does not obey — a person would pick a file, press Save, and be
+// told the user was updated while the picture they chose went nowhere.
+//
+// Offered only when editing. A picture belongs to an account, and there is no
+// account to hang it on until the create has returned an id.
+function avatarField(u) {
+  const src = `/api/v1/users/${encodeURIComponent(u.id)}/avatar`;
+  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--line); margin-top:14px; padding-top:12px">
+    <b>Picture</b>
+    <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
+      them — a task list, an approval, the portal's recipient picker. PNG or JPEG.
+      ${u.avatarSource === "entra"
+    ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
+    : ""}</p>
+    <div class="row" style="align-items:center">
+      <img class="user-avatar-preview" src="${esc(src)}" alt=""
+        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--line)" hidden>
+      <span class="user-avatar-none muted" style="font-size:12px" hidden>No picture.</span>
+      <input type="file" class="avatar-file" accept="image/png,image/jpeg" aria-label="Choose a picture">
+      <button class="btn ghost" type="button" data-avact="upload">Upload</button>
+      <button class="btn ghost" type="button" data-avact="remove">Remove</button>
+    </div>
+  </div>`;
+}
+
+// wireAvatarField hangs the two buttons off whichever edit form is open.
+//
+// The upload does not go through api(): that helper sends JSON, and this route
+// takes the bytes themselves under the Content-Type the file already carries —
+// the same shape the catalogue's brand mark uses, and for the same reason.
+function wireAvatarField(slot, reload) {
+  const box = slot.querySelector(".avatar-field");
+  if (!box) return;
+  const id = box.dataset.uid;
+  const img = box.querySelector(".user-avatar-preview");
+  const none = box.querySelector(".user-avatar-none");
+  // Whether there is a picture is answered by the image itself: it loads or it
+  // 404s. Reading avatarSource instead would believe a record over the bytes.
+  const has = () => { img.hidden = false; none.hidden = true; };
+  const hasNot = () => { img.hidden = true; none.hidden = false; };
+  img.addEventListener("load", has);
+  img.addEventListener("error", hasNot);
+  if (img.complete) (img.naturalWidth ? has : hasNot)();
+
+  box.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-avact]");
+    if (!b) return;
+    b.disabled = true;
+    try {
+      if (b.dataset.avact === "upload") {
+        const file = box.querySelector(".avatar-file").files[0];
+        if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
+        // No size check here. The server carries the limit, it is configurable, and
+        // a number copied into this page would go stale silently — its refusal
+        // names the actual figure.
+        const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
+          method: "PUT", body: file,
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let data = null;
+          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
+        }
+        toast("Picture updated", "ok");
+      } else {
+        await api("DELETE", `/api/v1/users/${encodeURIComponent(id)}/avatar`);
+        toast("Picture removed", "ok");
+      }
+      reload();
+    } catch (err) { toast(err.message, "err"); } finally { b.disabled = false; }
+  });
 }
 
 // rolesFrom reads the ticked roles back off the form.
@@ -2214,8 +2306,15 @@ async function viewConsoleOrg() {
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
     : `<span class="pill ok"><span class="dot"></span>active</span>`;
+  // A face in the roster, and only for the accounts that have one. The record says
+  // so (avatarSource), which is why it is on the projection at all: a row per
+  // account that mostly 404s would be a request per row for nothing.
+  const userFace = (u) => (u.avatarSource
+    ? `<img src="/api/v1/users/${encodeURIComponent(u.id)}/avatar" alt=""
+         style="width:22px; height:22px; border-radius:50%; object-fit:cover; vertical-align:middle; margin-right:6px">`
+    : "");
   const userRow = (u) => `<tr data-id="${esc(u.id)}">
-      <td><span class="chip">${esc(u.username)}</span>${
+      <td>${userFace(u)}<span class="chip">${esc(u.username)}</span>${
         me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}</td>
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
@@ -2356,6 +2455,7 @@ async function viewConsoleOrg() {
           ev.preventDefault();
           saveUser(u.id, new FormData(ev.target), reload, u);
         });
+        wireAvatarField(slot, reload);
         slot.scrollIntoView({ block: "nearest" });
         break;
       case "password": resetUserPassword(u, reload); break;
@@ -5332,11 +5432,11 @@ async function viewInstances() {
   let allGroups = [];
   let summary = new Map();
   let runningByDef = new Map();
-  // Unresolved incidents, bucketed for the two tables below: by definition (the
-  // per-process rows) and by instance (the variable-search results). Keys are
+  // Unresolved incidents per definition, for the per-process rows. Keys are
   // stringified so a JSON number and a string key can't miss each other (ADR-0151).
+  // The per-instance bucket that used to sit beside this is gone: a search row now
+  // carries its own count (see runVarSearch).
   let incByDef = new Map();
-  let incByInstance = new Map();
   let incTruncated = false;
   // Short and fixed-width-ish (dd.mm.yyyy hh:mm): an overview column wants the day and
   // the time, not seconds, and it must not wrap onto a second line. completedAt is ns.
@@ -5376,26 +5476,14 @@ async function viewInstances() {
     }
   };
 
-  // loadIncidentsByInstance is the *other* incident read this view needs, and the one
-  // that still walks rows: the variable search shows individual instances, and "which
-  // of these is stuck" is a per-instance question the cause summary cannot answer —
-  // a group counts tokens on an element, not which instance each belongs to.
-  //
-  // So it stays the capped list, and it is paid only when somebody runs a search rather
-  // than on every refresh of the overview. Under a flood its page cap bites and the
-  // flags become a lower bound, exactly as they were before the summary existed; the
-  // Incidents view is where a flood is actually read (ADR-0337).
-  const loadIncidentsByInstance = async () => {
-    try {
-      const { data } = await apiRaw("GET", "/api/v1/incidents");
-      incByInstance = new Map();
-      for (const r of (data && data.incidents) || []) {
-        const i = String(r.processInstanceKey);
-        incByInstance.set(i, (incByInstance.get(i) || 0) + 1);
-      }
-    } catch { /* best-effort: the results still render, just without the flags */ }
-  };
-
+  // Which search hits are stuck is answered by the server, on the row, and used to be
+  // answered here by bucketing GET /api/v1/incidents — the whole list, capped at 5 000
+  // — and flagging a key that turned up in the bucket. Past that cap the bucket is a
+  // page: an instance beyond it carried no flag and rendered as a plain "active", which
+  // is the word an operator reads as healthy. Measured at 5 200 parked instances, 200
+  // came back unflagged, and the truncation header saying so was never read. The row's
+  // own `incidents` is counted through that instance's element index and is exact
+  // (ADR-0365).
   // incidentCell renders one process row's Incidents cell: the total over every
   // version, linking to the version that actually holds them. Linking to the latest
   // version instead would land the operator on an empty diagram whenever the fault
@@ -5589,10 +5677,6 @@ async function viewInstances() {
     varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
     let rows;
     try {
-      // Refresh the incident buckets with the search: these rows are individual
-      // instances, and a stale flag on the surface an operator debugs from is worse
-      // than the extra read.
-      await loadIncidentsByInstance();
       rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
@@ -5613,8 +5697,10 @@ async function viewInstances() {
         ? '<span class="pill ok"><span class="dot"></span>active</span>'
         : `<span class="pill">${esc(r.state)}</span>`;
       // A matched instance that is stuck says so here rather than only once opened —
-      // "active" alone reads as healthy (ADR-0151).
-      const incN = incByInstance.get(String(r.key)) || 0;
+      // "active" alone reads as healthy (ADR-0151). The count is the row's own, so an
+      // absent one means the server did not answer the question rather than answering
+      // it with a no (ADR-0365).
+      const incN = typeof r.incidents === "number" ? r.incidents : 0;
       const incFlag = incN
         ? ` <a class="pill err" href="#/operations/i/${r.key}" title="${esc(`${incN} unresolved incident${incN === 1 ? "" : "s"} — open the replay, where the stuck element is marked and can be resolved`)}">&#9888; ${incN}</a>`
         : "";
@@ -7413,11 +7499,21 @@ async function viewTasks(preselectKey) {
   const state = {
     tasks: [],
     // filtered holds the page of a saved folder, kept apart from tasks above rather
-    // than replacing it: the built-in folders count from the unfiltered page, and
-    // overwriting it with a folder's three rows would make "All tasks" read 3.
+    // than replacing it: "All tasks" is the unfiltered page, and overwriting it with a
+    // folder's three rows would make the list read 3 wherever the operator went next.
     filtered: null,
     folders: [], // the saved folders this identity can see
     folderCounts: {}, // folder id -> open tasks, from the server's single scan
+    // The fixed folders' badges as the server counted them, over the whole open-task
+    // population. Null until that scan answers, and an em dash on screen while it is
+    // null, because a zero is a claim and "not counted yet" is not that claim.
+    //
+    // Only needed while the page below is capped: an uncapped page *is* the inbox, so
+    // counting its rows is counting the population. Capped, it is a newest-first slice,
+    // and counting that made each badge the size of the slice — a task assigned to me
+    // and sitting past it left "Assigned to me" reading 0
+    // (ADR-0365).
+    builtinCounts: null,
     countsTruncated: false, // the counting scan hit its budget, so the badges are floors
     countsScanned: 0, // how many open tasks that scan looked at
     // A deep link (…/tasks/t/{jobKey}, e.g. from the Operations live view) lands on
@@ -7566,8 +7662,20 @@ async function viewTasks(preselectKey) {
   }
 
   function renderFolders() {
+    // Where the badge comes from follows what is loaded. An uncapped page holds every
+    // open task, so counting its rows is exact and free; a capped one does not, and the
+    // number then has to come from the server's own walk. The predicates live in
+    // TASK_FOLDERS because this view filters its rows with them, and the server counts
+    // with the same four (taskfolder.BuiltinFolders) so the two readings cannot say
+    // different things (ADR-0365).
+    const builtinCount = (f) => {
+      if (!state.truncated) return state.tasks.filter((t) => f.match(t, state.me)).length;
+      return state.builtinCounts && Object.prototype.hasOwnProperty.call(state.builtinCounts, f.id)
+        ? state.builtinCounts[f.id]
+        : null;
+    };
     const builtin = TASK_FOLDERS.map((f) =>
-      folderButton(f.id, f.label, state.tasks.filter((t) => f.match(t, state.me)).length, false)).join("");
+      folderButton(f.id, f.label, builtinCount(f), false)).join("");
     // A folder is "mine" when I may edit it, which is exactly when I own it. One
     // shared with me sits under Geteilt: I work from it, I do not rewrite it.
     const mine = state.folders.filter((f) => f.editable);
@@ -8127,7 +8235,12 @@ async function viewTasks(preselectKey) {
       // it was completed from, because the unfiltered page above is not the list on
       // screen.
       if (savedFolder()) await loadFolderPage();
-      if (state.folders.length) await refreshCounts();
+      // The scan is paid when something on screen needs it: a saved folder's badge
+      // always, a fixed folder's badge only once the page it would otherwise be
+      // counted from stops holding the whole inbox. Measured at ~6 000 open tasks it is
+      // ~100ms against the ~2ms the page itself costs, which is not a price to put on
+      // every inbox load for a number the page can already answer exactly.
+      if (state.folders.length || state.truncated) await refreshCounts();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
     }
@@ -8196,7 +8309,8 @@ async function viewTasks(preselectKey) {
       state.folders = [];
       toast(tr("tasks.folders.loadFailed", { error: e.message }), "err");
     }
-    await refreshCounts();
+    // Same rule as in load(): the walk is paid for a badge that needs it.
+    if (state.folders.length || state.truncated) await refreshCounts();
   }
 
   // refreshCounts re-reads every folder's badge. It is its own function because a
@@ -8206,12 +8320,14 @@ async function viewTasks(preselectKey) {
     try {
       const counts = await loadCounts(api, authOn ? "" : state.me);
       state.folderCounts = (counts && counts.folders) || {};
+      state.builtinCounts = (counts && counts.builtin) || null;
       state.countsTruncated = !!(counts && counts.truncated);
       state.countsScanned = (counts && counts.total) || 0;
     } catch {
       // A failed count leaves the badges as em dashes rather than as zeros: the
       // folders themselves still work, and a wrong number is worse than none.
       state.folderCounts = {};
+      state.builtinCounts = null;
     }
     renderFolders();
   }

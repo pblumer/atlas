@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Modeler",
+    "Data"
+  ],
+  "title": {
+    "en": "A status you pick instead of spell",
+    "de": "Einen Status auswählen statt schreiben"
+  },
+  "summary": {
+    "en": "When a write targets a field whose type is an «enumeration», the value is now chosen from the values that enumeration declares, rather than typed. A computed value is still possible and is one item down the same list. When you deploy, a fixed value that is none of the declared ones is reported: the string is what matching is done by, and nothing else, so a status spelled slightly wrong runs for months and matches nothing. Only fixed values are judged, never one your process works out while it runs. The class diagram also joins the two boxes now: an enumeration that types an attribute used to sit unconnected beside the class that used it, with only the class body naming it.",
+    "de": "Zielt ein Schreibvorgang auf ein Feld, dessen Typ eine «enumeration» ist, wird der Wert jetzt aus den Werten ausgewählt, die diese Enumeration deklariert, statt getippt. Ein berechneter Wert bleibt möglich und steht einen Eintrag weiter unten in derselben Liste. Beim Deployen wird ein fester Wert gemeldet, der keiner der deklarierten ist: Verglichen wird über die Zeichenkette und über nichts sonst, ein leicht falsch geschriebener Status läuft also monatelang und trifft nie. Beurteilt werden nur feste Werte, nie einer, den Ihr Prozess zur Laufzeit ermittelt. Auch im Klassendiagramm sind die beiden Kästen jetzt verbunden: Eine Enumeration, die ein Attribut typisiert, stand bisher unverbunden neben der Klasse, die sie nutzt, und nur der Klassenrumpf nannte sie."
+  },
+  "try": {
+    "label": {
+      "en": "Open Data",
+      "de": "Daten öffnen"
+    },
+    "route": "#/data"
+  }
+}

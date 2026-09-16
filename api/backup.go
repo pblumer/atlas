@@ -75,7 +75,9 @@ func streamBackup(w io.Writer, fsys fs.FS) error {
 // per-directory walk is shared with the full snapshot (walkDirInto, ADR-0109).
 func writeBackup(tw *tar.Writer, fsys fs.FS) error {
 	for _, name := range backupDirs() {
-		if err := walkDirInto(tw, fsys, name); err != nil {
+		// portable is what keeps this installation's node identity at home; see
+		// backupportability.go for why the snapshot does not apply it.
+		if err := walkDirInto(tw, fsys, name, portable); err != nil {
 			return err
 		}
 	}
@@ -104,6 +106,7 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 
 	tr := tar.NewReader(io.LimitReader(gz, s.budgets().Archive))
 	restored, entries := 0, 0
+	collisions := []restoreCollision{}
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -129,7 +132,20 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue // outside the allowlist — silently ignored
 		}
-		if err := writeRestoredFile(dest, tr); err != nil {
+		body, err := io.ReadAll(tr)
+		if err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "corrupt tar archive")
+			return
+		}
+		// A definition key belongs to the installation that issued it, and this archive
+		// does not carry the counter that issued it. Writing a record onto a key that
+		// already names a different definition here would hand that definition this
+		// installation's instance history, so it is held back and reported instead.
+		if c, clash := foreignDeployment(s.dataDir, dest, body); clash {
+			collisions = append(collisions, c)
+			continue
+		}
+		if err := writeRestoredBytes(dest, body); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "restore failed: "+err.Error())
 			return
 		}
@@ -137,8 +153,10 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{
 		"restored":        restored,
+		"skipped":         len(collisions),
+		"collisions":      collisions,
 		"restartRequired": true,
-		"note":            "Design-time artifacts (drafts, projects, forms, …) are live immediately; deployed processes take effect after a server restart.",
+		"note":            restoreNote(collisions),
 	})
 }
 
@@ -159,6 +177,12 @@ func (s *Server) restoreDest(name string) (dest string, ok bool, err error) {
 		top, clean = current, current+rest
 	}
 	if !allowedBackupDir(top) {
+		return "", false, nil
+	}
+	if !portable(clean) {
+		// This installation's own identity, in an archive from another one. Applied on
+		// the way in as well as on the way out, because every archive taken before this
+		// still carries a node.json.
 		return "", false, nil
 	}
 	return filepath.Join(s.dataDir, clean), true, nil
@@ -198,6 +222,15 @@ func writeRestoredFile(path string, r io.Reader) error {
 	}
 	data, err := io.ReadAll(r)
 	if err != nil {
+		return err
+	}
+	return writeRestoredBytes(path, data)
+}
+
+// writeRestoredBytes is the same write for a member already in memory, which is what
+// the design-time restore has once it has looked at the record (ADR-0357).
+func writeRestoredBytes(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"

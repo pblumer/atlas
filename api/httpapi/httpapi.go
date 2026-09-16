@@ -17,6 +17,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 )
@@ -69,6 +70,21 @@ type Principal struct {
 	// in one place; handlers never read it.
 	Scope string
 }
+
+// ErrNoSuchPrincipal says a name did not resolve to anybody.
+//
+// It exists because "who is this" fails for two reasons that a caller must be
+// able to tell apart, and an error string cannot say which: the name is not
+// anybody's (the caller's input is wrong) or the store could not be read (the
+// server is). Both were being answered the same way — the approval inbox turned
+// an unreadable user store into "no such person", and an order for a misspelled
+// recipient came back as an internal error — and each is the wrong half of the
+// truth.
+//
+// It lives here rather than beside a resolver because both halves of that
+// mistake are in different packages, and this is the one both already import.
+// Wrap it with %w; compare with errors.Is.
+var ErrNoSuchPrincipal = errors.New("no such principal")
 
 // InGroup reports whether the principal belongs to the group with the given id.
 func (p *Principal) InGroup(groupID string) bool {

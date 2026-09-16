@@ -141,10 +141,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Download a backup of all design-time data (projects, drafts, deployments, forms, decisions, workers) as a gzip tar; excludes user accounts, the vault key, and runtime state (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip-compressed tar archive of the design-time data directory"}}},
 		{"POST", "/api/v1/restore", s.handleRestore, apiOp{
-			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect (admin-only when auth is on) (ADR-0107)", tag: "System", role: RoleAdmin,
+			summary: "Restore design-time data from an uploaded backup archive; overwrites matching artifacts, skips anything outside the design-time allowlist, and needs a restart for deployed processes to take effect. A deployed definition whose key already names a different definition here is NOT taken, and neither is the archive's node identity — a key and an identity belong to the installation that issued them (admin-only when auth is on) (ADR-0107/ADR-0357)", tag: "System", role: RoleAdmin,
 			req: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar archive produced by GET /api/v1/backup"},
 			resp: jsonBody("Restore summary", schemaObj(map[string]any{
-				"restored": tInteger(), "restartRequired": tBool(), "note": tString(),
+				"restored": tInteger(), "skipped": tInteger(), "restartRequired": tBool(), "note": tString(),
+				"collisions": map[string]any{"type": "array", "items": schemaObj(map[string]any{
+					"kind": tString(), "key": tInteger(), "here": tString(), "incoming": tString(),
+				})},
 			}))}},
 		{"GET", "/api/v1/backup/full", s.handleBackupFull, apiOp{
 			summary: "Download a whole-instance snapshot (design-time data plus the WAL — running instances — the user accounts and the vault key) as a gzip tar; excludes only the derivable state store (admin-only when auth is on) (ADR-0109)", tag: "System", role: RoleAdmin,
@@ -739,6 +742,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/infomodel/subset", s.infomodel.HandleSubset, apiOp{
 			summary: "Read the information model's authoring subset — the class kinds, association kinds, primitive types and multiplicities this build authors, the matrix of what may be drawn between what, and what it deliberately does not author (ADR-0230)", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Authoring subset", tObject())}},
+		{"POST", "/api/v1/infomodel/validate", s.infomodel.HandleValidate, apiOp{
+			summary: "Judge an information-model document that has not been saved, and store nothing: the same verdict a write is checked against, asked of a document you are still holding. An invalid document is a 200 carrying findings rather than an error, because a model mid-edit is expected to be invalid. It reads no stored model, so it discloses nothing about what exists", tag: "Information model", role: RoleModeler,
+			req: jsonBody("Information model content", schemaObj(map[string]any{
+				"classes": tArray(), "associations": tArray(), "stores": tArray(),
+			})),
+			resp: jsonBody("The verdict, and what it is based on", tObject())}},
 		{"GET", "/api/v1/infomodel/models", s.infomodel.HandleList, apiOp{
 			summary: "List information models — the UML class-diagram documents that give a BPMN data object's itemSubjectRef a type to resolve against; filter with ?applicationId=", tag: "Information model", role: RoleModeler,
 			resp: jsonBody("Information models", tArray())}},
@@ -913,17 +922,36 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
 			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
+		{"GET", "/api/v1/portal/favourites", s.handleListFavourites, apiOp{
+			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"PUT", "/api/v1/portal/favourites/{itemId}", s.handleSetFavourite, apiOp{
+			summary: "Mark one product. Marking what is already marked writes nothing and answers the list, so a star pressed twice does not churn the store",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+		{"DELETE", "/api/v1/portal/favourites/{itemId}", s.handleClearFavourite, apiOp{
+			summary: "Unmark one product. Clearing what is not marked is the state the caller asked for rather than an error",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your marked products", tObject())}},
+
 		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
 			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Products", tArray())}},
+		{"GET", "/api/v1/catalog-products/{id}/usage", s.handleProductUsage, apiOp{
+			summary: "Where one product is used, read backwards out of the same edges the release froze: which catalogues offer it, which wholes carry it and whether integrally or optionally, what it needs, **what needs it**, what it may never be held with, and how many people hold it by origin. The reverse question is the one a maintainer cannot ask anywhere else — a product manager about to retire a service, rebind its provisioning or move it between catalogues has no other way to find out what they are about to break. Merged across catalogues, because a service does not belong to one: the same product carried by two catalogues is one thing somebody is about to change. Holders are counted and never listed — a list of the people holding one service is the inventory filtered to the interesting part",
+			tag:     "Catalogue", role: RoleProductManager,
+			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
+
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule and the processes that provision and deprovision it", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the portal groups it under — a heading and nothing else, with no ordering, no translation and no entity behind it", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
 				"approval": tObject(), "provisionProcess": tString(),
 				"deprovisionProcess": tString(), "multipleAllowed": tBool(),
-				"targets": tArray(),
+				"targets": tArray(), "keywords": tArray(), "eligible": tArray(),
+				"configForm": tString(), "price": tString(), "category": tString(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
@@ -952,6 +980,16 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Withdraw everything in an order that has not happened yet, and say what could not be withdrawn. Yours to call for an order you placed, or an operator's for any; a line already running or finished keeps its outcome, and undoing a provisioned one is deprovisioning rather than this", tag: "Order", role: RoleUser,
 			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
 			resp: jsonBody("The order, and which lines were withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/cancel", s.handleCancelLine, apiOp{
+			summary: "Withdraw one position rather than the whole order. Yours for an order you placed, or an operator's for any. A position already running or finished keeps its outcome, and one its whole always carries cannot be taken back on its own — the basket does not let anybody deselect it either, and the refusal names what to withdraw instead", tag: "Order", role: RoleUser,
+			req:  jsonBody("An optional reason", schemaObj(map[string]any{"reason": tString()})),
+			resp: jsonBody("The order with that position withdrawn", tObject())}},
+		{"POST", "/api/v1/orders/{id}/lines/{item}/details", s.handleAmendLine, apiOp{
+			summary: "Correct the details somebody gave when they ordered — the answers to the product's configuration form. What is *held* is never changed in place: another product is a return and a new order. A position not yet attempted is simply corrected; one the recipient already holds records the correction beside the old answers, with who and when, because correcting the record does not move the laptop; one being provisioned now is refused until its process has finished", tag: "Order", role: RoleUser,
+			req: jsonBody("The corrected answers and an optional reason", schemaObj(map[string]any{
+				"config": tObject(), "reason": tString(),
+			})),
+			resp: jsonBody("The order with the corrected position", tObject())}},
 		{"POST", "/api/v1/orders/{id}/lines/{item}/return", s.handleReturnLine, apiOp{
 			summary: "Give back one provisioned line: start the deprovisioning the order froze when it was placed, so a grant is revoked by the rules that were in force when it was made. Refused while something still held requires it — the precedence graph read backwards", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order, and the process now revoking the line", tObject())}},
@@ -973,6 +1011,14 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/approvals", s.handleListApprovals, apiOp{
 			summary: "Every open approval addressed to you: the task, the order line it decides, the product as the release froze it, and the brand of the catalogue the order came from. Paged like the task list (?before=, X-Tasks-Truncated)", tag: "Order", role: RoleUser,
 			resp: jsonBody("Approvals", tArray())}},
+		{"POST", "/api/v1/approvals/decide", s.handleDecideApprovals, apiOp{
+			summary: "Decide several of one order's approvals as one decision, with one reason. Each is still completed as its own task, because each is still its own process instance; the answer is per line, because there is no transaction spanning them. Refuses keys from more than one order — one reason cannot cover two requests", tag: "Order", role: RoleUser,
+			req: jsonBody("The decision and the approvals it covers", schemaObj(map[string]any{
+				"approved": tBool(),
+				"reason":   tString(),
+				"taskKeys": tArray(),
+			}, "approved", "taskKeys")),
+			resp: jsonBody("What was decided and what was not", tObject())}},
 		{"GET", "/api/v1/approvals/{key}/logo", s.handleApprovalLogo, apiOp{
 			summary: "The brand mark of the catalogue an approval's order came from; 404 when it has none. Gated by the task, not by the catalogue — an approver is not the catalogue's audience", tag: "Order", role: RoleUser,
 			resp: &bodySpec{mediaType: "image/png", desc: "Brand mark (PNG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
@@ -1586,6 +1632,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("User id", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},
+		{"GET", "/api/v1/users/{id}/avatar", s.handleGetAvatar, apiOp{
+			summary: "An account's picture; 404 when it has none. Readable by anybody signed in, which is the point of having one — a face beside a name in a task list, an approval or a recipient picker is read by colleagues, not by administrators", tag: "Users", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "The account's picture (PNG or JPEG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/users/{id}/avatar", s.handleSetAvatar, apiOp{
+			summary: "Set an account's picture from the raw body (image/png or image/jpeg; deliberately not SVG). The account itself or an administrator — not an operator: changing how a colleague appears to everybody else is not running what is deployed", tag: "Users", role: RoleUser, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG or JPEG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/users/{id}/avatar", s.handleDeleteAvatar, apiOp{
+			summary: "Remove an account's picture. Same gate as setting one: taking a face away changes how somebody appears as much as putting one there", tag: "Users", role: RoleUser, status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/groups", s.handleListGroups, apiOp{
 			summary: "List user groups (admin)", tag: "Groups", role: RoleAdmin, resp: jsonBody("Groups", tArray())}},
@@ -1674,6 +1728,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "What is due to end within `?within=` days (default 30), and everything already past its end. A right past its end is still **held** — the target system still has it and nothing has run — so this reports a debt rather than a state of the world, and the record stays true. It acts on nothing: the deprovisioning is the product's own process, run by a modelled one. `unendable` counts the overdue rights whose product binds no such process, because no amount of running it will reduce them",
 			tag:     "Catalogue", role: RoleOperator,
 			resp: jsonBody("What ends soon, what should have ended, and the counts", tObject())}},
+
+		{"GET", "/api/v1/entitlements/history", s.handleEntitlementHistory, apiOp{
+			summary: "What this principal **used to** hold: every hold that has ended, most recently ended first. `?principal=` asks about somebody else and needs the **admin** role, exactly as the inventory does. `?at=` (RFC 3339 or unix nanoseconds) answers the access review's real question instead — what the record said they held at that moment, drawn from the ended holds *and* from what is still held. Every row says whether it is evidence of access or only of a claim: a hold closed as `corrected` is one reconciliation found the target system did not have, and reporting it as a period of access would assert what ADR-0334 declined to decide. The row survives the order that produced it, which retention deletes long before the access ends, and `overdueDays` is the only surviving trace that a right outstayed the end it was granted with",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The ended holds, or what the record said at a moment", tObject())}},
 
 		{"POST", "/api/v1/recertification", s.handleOpenRecertification, apiOp{
 			summary: "Open a recertification campaign: turn what the inventory records into questions somebody has to answer. Narrow it with `items` and `principals`, or leave both out for the whole inventory — this route concludes nothing from absence, so a campaign over everything is a big campaign rather than a wrong one. `reviewers` maps each holder to the person who answers for them; Atlas does not derive it, because a line-manager lookup is a directory question and belongs to a modelled process. A holder nobody names gives an unassigned row, which lands with the campaign's owner rather than stopping the campaign",
