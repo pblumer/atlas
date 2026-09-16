@@ -86,6 +86,14 @@ _Changed_ / _Removed_ for each version.
   94% checked against the same script, and `make check` on a contributor's machine is
   unchanged — one laptop has one set of cores, so splitting there would buy nothing.
 
+  Moving it also exposed a latent defect in the floor's own script, which the split
+  then had to fix: `check-coverage.sh` ran `go test` with no `-timeout`, so it used
+  Go's ten-minute default per package. `AGENTS.md` says in as many words that the
+  flag is not optional, because the `api` package runs for minutes on its own — and
+  the first run on a cold runner proved it, ending in `FAIL api 600.194s`, the
+  default to the millisecond. It carries `-timeout=25m` now, the same figure
+  `make race` and the documented command use, so `make cover` and CI agree.
+
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
   keeps the web UI buildless. CI regenerates it to check the commit is current — and

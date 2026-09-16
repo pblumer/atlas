@@ -174,10 +174,17 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
-    # Generous against a hang and nowhere near the real figure: the whole suite runs
-    # here without the race detector, which is the instrumentation that made the
-    # other job long. Same cap as the docs job, which runs the same suite.
-    timeout-minutes: 20
+    # Thirty, and not the twenty this job was first given, because twenty was a
+    # guess and the first run measured it: 11m04s — with the api package cut short
+    # at Go's default per-package limit rather than finishing. The real figure is
+    # that plus however long api needs beyond ten minutes, which nothing has
+    # measured yet.
+    #
+    # So this is a hang-catcher with headroom it can be shown to have, rather than a
+    # number sized to a figure nobody has. That is the whole lesson of the split
+    # above: a cap that sits a minute above the real duration is not a ceiling, it
+    # is a coin toss. Tighten it when there are green runs to tighten it against.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
