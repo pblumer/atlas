@@ -2185,8 +2185,11 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   transition: stroke 0.2s ease;
 }
 
-/* "Can't run yet" badge on a drawable-but-unsupported element (top-right corner),
-   so the author sees the gap while modeling, not only at Deploy/Validate. */
+/* Warning badge in a shape's top-right corner, so the author sees the finding while
+   modeling rather than only at Deploy/Validate. Two editors mark two different things
+   with it — a BPMN element that cannot run yet, and a decision model whose graph and
+   logic disagree about a knowledge model — and one badge is the point: a warning on a
+   shape means the same thing wherever it is drawn. */
 .unsup-badge {
   display: grid; place-items: center; width: 18px; height: 18px;
   background: var(--warn); color: #fff; border-radius: 50%;
@@ -2745,9 +2748,27 @@ tr[hidden] { display: none; }
 .dmn-body { flex: 1; min-height: 0; display: flex; }
 .dmn-canvas { flex: 1; min-height: 0; position: relative; overflow: hidden; background: var(--diagram-bg); }
 .dmn-canvas .dmn-decision-table-container { height: 100%; overflow: auto; }
-/* dmn-js uses `editor` as a state class inside its own components — the literal
-   expression view is `<div class="literal-expression textarea editor">`, and the
-   DRD's decision-name field carries it too. Atlas's `.editor` is the full-bleed
+/* The two expression views: a decision whose logic is a single FEEL expression, and
+   a business knowledge model, which dmn-js opens in its boxed-expression view. Both
+   draw a bordered box a few hundred pixels tall rather than filling the canvas the
+   way a table does, so they get a gutter — a box flush against the chrome on all
+   four sides does not read as a box — and their sections get a surface to sit on.
+   dmn-js borders those sections but leaves them transparent, which is right on its
+   own white demo page and wrong on the Modeler's grey canvas, where it would leave
+   the expression lying on the backdrop. */
+.dmn-canvas .dmn-literal-expression-container,
+.dmn-canvas .dmn-boxed-expression-container {
+  box-sizing: border-box; padding: 18px; overflow: auto;
+}
+.dmn-canvas .dmn-boxed-expression-container .dmn-boxed-expression-section,
+.dmn-canvas .dmn-literal-expression-container .textarea,
+.dmn-canvas .dmn-literal-expression-container .literal-expression-properties {
+  background: var(--surface);
+}
+/* dmn-js uses `editor` as a state class inside its own components — the decision's
+   literal-expression view and the knowledge model's boxed-expression view both put
+   it on their editable body (`<div class="textarea editor">`), and the DRD's
+   decision-name field carries it too. Atlas's `.editor` is the full-bleed
    page shell (`position: fixed; inset: var(--topbar-h) 0 0 0`), so those elements
    were being pinned over the whole viewport: opening a decision whose logic is a
    literal expression drew its CodeMirror across the bar, and the view tabs, Save,
@@ -2766,6 +2787,24 @@ tr[hidden] { display: none; }
 .dmn-props { width: 320px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--bg); }
 .dmn-props[hidden] { display: none; }
 .dmn-hint { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12px; }
+/* Author-time findings about the model on screen (dmn-warnings.js). It sits between
+   the canvas and the hint because it is about what is on the canvas, and it is hidden
+   whenever there is nothing to say — a strip that is always there is a strip nobody
+   reads. Each row is a button: the finding names a shape, and clicking it goes to it. */
+.dmn-warn {
+  flex: 0 0 auto; max-height: 124px; overflow: auto;
+  padding: 7px 14px; border-top: 1px solid var(--border);
+  background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.5;
+}
+.dmn-warn[hidden] { display: none; }
+.dmn-warn ul { margin: 0; padding-left: 17px; }
+.dmn-warn li + li { margin-top: 3px; }
+.dmn-warn button {
+  font: inherit; color: inherit; background: none; border: none; padding: 0;
+  text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  text-decoration-style: dotted;
+}
+.dmn-warn button:hover { text-decoration-style: solid; }
 
 /* Collapsible property groups (Camunda-style tidy panel). A generic groupify
    turns each <h3> section in the properties panel into a header that toggles its

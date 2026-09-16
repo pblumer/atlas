@@ -2,6 +2,51 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-knowledge-model-s-expression-opened-unstyled",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A knowledge model's logic is readable again",
+        "de": "Die Logik eines Knowledge Models ist wieder lesbar"
+      },
+      "summary": {
+        "en": "A knowledge model is the piece of a decision model that holds a reusable calculation — a fee, a discount, a risk score — that several decisions call rather than each repeating it. Opening one showed its parts, but drawn as bare lines of text against the left edge of the page: no boxes, no separators, and the small edit buttons that belong to a section sitting on top of the expression instead of appearing when you point at it. Nothing was broken underneath — what you typed was saved, and what was saved was correct — but the layout gave no clue which part was the calculation, which were the parameters a caller passes, and which was the result. It now opens as the three-part box it is: the name, the F for FEEL beside the parameter list, the expression itself, and the result variable a decision binds when it calls this model. The line beneath the canvas also says what you are looking at — it used to explain the decision table under every view, including the three that are not one.",
+        "de": "Ein Knowledge Model ist der Teil eines Entscheidungsmodells, der eine wiederverwendbare Berechnung hält — eine Gebühr, einen Rabatt, einen Risikowert —, die mehrere Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Beim Öffnen waren zwar alle Bestandteile da, aber als nackte Textzeilen am linken Seitenrand: keine Kästen, keine Trennlinien, und die kleinen Bearbeiten-Schaltflächen eines Abschnitts lagen auf dem Ausdruck, statt erst beim Zeigen darauf zu erscheinen. Darunter war nichts kaputt — Eingetipptes wurde gespeichert, Gespeichertes war korrekt —, aber die Darstellung liess nicht erkennen, was die Berechnung ist, was die Parameter sind, die ein Aufrufer übergibt, und was das Ergebnis. Nun öffnet sich der dreiteilige Kasten, der es ist: der Name, das F für FEEL neben der Parameterliste, der Ausdruck selbst und die Ergebnisvariable, die eine Entscheidung bindet, wenn sie dieses Modell aufruft. Auch die Zeile unter der Zeichenfläche benennt jetzt die geöffnete Ansicht — sie erklärte zuvor unter jeder Ansicht die Entscheidungstabelle, auch unter den drei, die keine ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+          "On the Overview (DRG) tab, draw a Knowledge Model and give it a name — this is the reusable calculation.",
+          "Select it and pick Literal Expression from its wrench menu to give it logic.",
+          "Open its own tab beside Overview (DRG): F names the expression language, the list beside it holds the parameters a caller passes, and Result names the variable a decision binds.",
+          "Draw a knowledge requirement from a decision to the model so something actually invokes it — a model with no decision has nothing to deploy."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "Im Reiter «Overview (DRG)» ein Knowledge Model zeichnen und benennen — das ist die wiederverwendbare Berechnung.",
+          "Es auswählen und im Werkzeugmenü «Literal Expression» wählen, um ihm Logik zu geben.",
+          "Den eigenen Reiter neben «Overview (DRG)» öffnen: «F» benennt die Ausdruckssprache, die Liste daneben hält die Parameter, die ein Aufrufer übergibt, und «Result» benennt die Variable, die eine Entscheidung bindet.",
+          "Von einer Entscheidung eine Knowledge-Requirement-Kante auf das Modell ziehen, damit es auch aufgerufen wird — ein Modell ohne Entscheidung hat nichts, was ausgeliefert werden könnte."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
       "version": "Unreleased",
       "date": null,
@@ -134,6 +179,51 @@
       }
     },
     {
+      "id": "the-decision-editor-says-when-a-knowledge-model-is-never-inv",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The decision editor points out a knowledge model nothing calls",
+        "de": "Der Entscheidungseditor meldet ein Knowledge Model, das niemand aufruft"
+      },
+      "summary": {
+        "en": "A knowledge model is a reusable calculation — a fee, a discount, a risk score — that decisions call instead of each repeating it. Two things could go wrong with one and nothing anywhere said so, because both deploy and both run. A knowledge model that nothing calls is simply never evaluated, and on the canvas it looks exactly like one that is called: the only difference is an arrow that is not there. And a decision that calls one without drawing that arrow works, while its diagram quietly omits the dependency — the same diagram that gets reviewed and printed into the decision's documentation. The editor now says both while the model is on screen, as a strip under the canvas and a warning mark on the shape itself; clicking a finding jumps to the element it is about. Both are warnings rather than errors, because each describes a model that runs, and both stay quiet when in doubt: a knowledge model counts as called if its name appears as a call anywhere in another element, so an unusual way of writing one costs a missed warning rather than a wrong one.",
+        "de": "Ein Knowledge Model ist eine wiederverwendbare Berechnung — eine Gebühr, ein Rabatt, ein Risikowert —, die Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Zwei Fehler waren dabei möglich, ohne dass irgendetwas darauf hinwies, denn beide lassen sich ausliefern und beide laufen. Ein Knowledge Model, das niemand aufruft, wird schlicht nie ausgewertet — und auf der Zeichenfläche sieht es genauso aus wie ein aufgerufenes: Der einzige Unterschied ist ein Pfeil, der fehlt. Und eine Entscheidung, die eines aufruft, ohne diesen Pfeil zu zeichnen, funktioniert, während ihr Diagramm die Abhängigkeit stillschweigend verschweigt — dasselbe Diagramm, das geprüft und in die Dokumentation der Entscheidung übernommen wird. Der Editor benennt nun beides, solange das Modell auf dem Bildschirm ist: als Streifen unter der Zeichenfläche und als Warnzeichen am Element selbst. Ein Klick auf einen Befund springt zum betroffenen Element. Beides sind Warnungen und keine Fehler, denn jeder Fall beschreibt ein lauffähiges Modell. Und beides schweigt im Zweifel: Ein Knowledge Model gilt als aufgerufen, sobald sein Name irgendwo in einem anderen Element als Aufruf vorkommt — eine ungewöhnliche Schreibweise kostet also eine ausbleibende Warnung statt einer falschen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and stay on the Overview (DRG) tab.",
+          "Draw a Knowledge Model and give it logic. The strip under the canvas appears at once: nothing calls it yet.",
+          "Open a decision's own tab and call the knowledge model from its expression, by name — for example fee(amount).",
+          "Back on Overview (DRG): the first finding is gone and a second has taken its place, because the decision now calls a model it does not require.",
+          "Draw a knowledge requirement from the knowledge model to the decision. The strip disappears."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und im Reiter «Overview (DRG)» bleiben.",
+          "Ein Knowledge Model zeichnen und ihm Logik geben. Der Streifen unter der Zeichenfläche erscheint sofort: Noch ruft es niemand auf.",
+          "Den eigenen Reiter einer Entscheidung öffnen und das Knowledge Model im Ausdruck beim Namen aufrufen, etwa fee(amount).",
+          "Zurück auf «Overview (DRG)»: Der erste Befund ist verschwunden, ein zweiter hat seinen Platz eingenommen, denn die Entscheidung ruft nun ein Modell auf, das sie nicht anfordert.",
+          "Eine Knowledge-Requirement-Kante vom Knowledge Model zur Entscheidung ziehen. Der Streifen verschwindet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "the-class-diagram-can-say-which-members-anything-actually-us",
       "version": "Unreleased",
       "date": null,
@@ -247,42 +337,6 @@
       "summary": {
         "en": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service.",
         "de": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-product-can-say-what-it-costs-and-the-approver-sees-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A product can say what it costs, and the approver sees it.",
-        "de": "A product can say what it costs, and the approver sees it."
-      },
-      "summary": {
-        "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
-        "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "One position can be withdrawn on its own, and its details corrected.",
-        "de": "One position can be withdrawn on its own, and its details corrected."
-      },
-      "summary": {
-        "en": "The story asks to modify or delete positions directly.",
-        "de": "The story asks to modify or delete positions directly."
       },
       "link": {
         "label": "Changelog",

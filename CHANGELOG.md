@@ -14,6 +14,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A knowledge model's expression opened unstyled.** dmn-js does not show a business
+  knowledge model in the literal-expression view a decision's expression opens in. A
+  knowledge model is a FEEL *function* — it has an expression language, formal parameters
+  and a body, none of which a decision's literal expression has — so dmn-js opens it in a
+  different component, the boxed-expression view, with its own container class and its own
+  two stylesheets. The decision editor loaded the other views' stylesheets and neither of
+  those.
+
+  The failure was silent in the way that is hardest to catch. The view rendered: every
+  element was in the DOM, editing worked, saving worked, nothing errored, nothing 404'd.
+  It was simply raw — the `F` kind marker and the `()` parameter list as bare text against
+  the page edge, no boxes, no borders, and the edit buttons that are meant to be clipped
+  away until their section is hovered sitting permanently on top of the expression.
+  Neither the Go suite nor the browser suite could see it, because the only thing wrong
+  was what it looked like.
+
+  Both stylesheets are loaded now, and the list is checked against the vendored bundle
+  rather than maintained by hand: the bundle names the view containers it can create, and
+  a test fails when a stylesheet that styles one of them is not loaded — so the next view
+  the pinned fork adds cannot arrive unstyled. The two expression views also gained the
+  gutter and the surface that let them read as one box on the Modeler's grey canvas, and
+  the hint under the canvas now describes the view that is open rather than describing the
+  decision table under all four of them.
+
 - **With authentication off, a catalogue's appearance could not be set at all.** The
   predicate every gate in the catalogue package asks is `!authEnabled || (p != nil &&
   p.HasRole(admin))` — true for everybody when nobody is signed in, which is the rule
@@ -129,6 +153,32 @@ _Changed_ / _Removed_ for each version.
   borrowers no deployed process uses, is left unshaded: "no process reaches this state" and "no
   process was in a position to" are different claims, and fading a state machine nothing drives
   would report the second as the first.
+
+- **The decision editor says when a knowledge model is never invoked, or invoked without
+  being required.** A knowledge model is a reusable FEEL function, and DMN says the
+  decision invoking one declares a knowledge requirement for it — the arrow the
+  requirements graph draws. temis does not enforce that: a decision whose expression calls
+  a knowledge model by name evaluates correctly with no arrow at all. Both of the
+  disagreements that follow deploy, run, and are reported by nothing.
+
+  A knowledge model nothing invokes is dead weight. The model is valid, its decisions
+  deploy, the engine never complains — so there is no later moment at which anybody finds
+  out, and on the canvas it looks exactly like one that is called: the only difference is
+  an arrow that is not there. A decision that calls one without requiring it is worse in a
+  quieter way. It runs, and draws a graph that omits the dependency — and the graph is
+  what gets reviewed, and what goes into the decision's published documentation.
+
+  The editor now says both, while the model is on screen: a strip under the canvas naming
+  what is wrong and what follows from it, and a warning badge on the shape in the
+  requirements graph. Clicking a finding goes to its element, from a decision's own view
+  as well — back to the graph first, since pointing at a shape in a view that does not
+  draw it would point at nothing. Both are warnings and never errors, because each
+  describes a model that deploys and runs, and both are biased towards silence: an
+  invocation is anything that reads as the knowledge model's name followed by an open
+  parenthesis in any other element's expression, so an unusual way of calling one costs a
+  missed warning rather than a false one. A warning an author learns to ignore is worse
+  than no warning.
+
 
 - **The class diagram can say which members anything actually uses.** Where a business object
   is used has been readable since **Data › Business objects** arrived — one class at a time,
