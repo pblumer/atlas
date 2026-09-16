@@ -26,11 +26,26 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":                       "GET /api/v1/info",
-	"atlas_stats":                      "GET /api/v1/stats",
-	"atlas_deploy":                     "POST /api/v1/deployments",
-	"atlas_list_processes":             "GET /api/v1/processes",
-	"atlas_product_usage":              "GET /api/v1/catalog-products/{id}/usage",
+	"atlas_info":           "GET /api/v1/info",
+	"atlas_stats":          "GET /api/v1/stats",
+	"atlas_deploy":         "POST /api/v1/deployments",
+	"atlas_list_processes": "GET /api/v1/processes",
+	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
+
+	// The portal catalogue an agent maintains as a product manager
+	// (ADR-draft-catalogue-maintenance-over-mcp). No delete among them, and that is
+	// the model and not an omission: a catalogue has none, and a product is
+	// withdrawn through the ordinary save because an order placed years ago still
+	// resolves through it.
+	"atlas_list_catalogs":              "GET /api/v1/catalogs",
+	"atlas_get_catalog":                "GET /api/v1/catalogs/{id}",
+	"atlas_create_catalog":             "POST /api/v1/catalogs",
+	"atlas_update_catalog":             "PATCH /api/v1/catalogs/{id}",
+	"atlas_list_catalog_products":      "GET /api/v1/catalog-products",
+	"atlas_save_catalog_product":       "POST /api/v1/catalog-products",
+	"atlas_publish_catalog":            "POST /api/v1/catalogs/{id}/releases",
+	"atlas_catalog_releases":           "GET /api/v1/catalogs/{id}/releases",
+	"atlas_import_catalog_archimate":   "POST /api/v1/catalogs/{id}/import",
 	"atlas_get_process_xml":            "GET /api/v1/processes/{key}/xml",
 	"atlas_save_process_diagram":       "PUT /api/v1/processes/{key}/diagram",
 	"atlas_delete_process":             "DELETE /api/v1/processes/{key}",
@@ -152,19 +167,10 @@ var mcpToolRoutes = map[string]string{
 var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
-	// The portal catalogue (ADR-0312). Authoring
-	// one is a plausible agent task — building a catalogue out of an ArchiMate
-	// model is close to what an agent is good at — and these will very likely
-	// become tools. They are not yet, for one reason: an MCP tool is a public
-	// contract, and this surface is half-built. There is no ordering side, no
-	// portal, and the shapes here are still moving with every slice. Exposing them
-	// now would pin a contract to a design that is still settling, which is the
-	// same argument the panorama entries below make.
-	"GET /api/v1/catalogs":                           "portal catalogue surface still being built; a tool is a public contract",
-	"POST /api/v1/catalogs":                          "portal catalogue surface still being built; a tool is a public contract",
-	"GET /api/v1/catalogs/{id}":                      "portal catalogue surface still being built; a tool is a public contract",
-	"PATCH /api/v1/catalogs/{id}":                    "portal catalogue surface still being built; a tool is a public contract",
-	"POST /api/v1/catalogs/{id}/import":              "portal catalogue surface still being built; a tool is a public contract",
+	// The portal catalogue's own maintenance routes are tools now, not omissions —
+	// see mcpToolRoutes and ADR-draft-catalogue-maintenance-over-mcp. What stays
+	// out of the tool surface is what a product manager does not do: the instance's
+	// appearance, and the ordering side, which is somebody's own.
 	"PUT /api/v1/catalogs/{id}/theme":                "an instance's appearance is an operator's choice, not an agent's",
 	"POST /api/v1/instances":                         "atlas_create_instance starts one by definition key, which is what an agent holding a process listing has; the by-id route exists for a model that knows an id and must not pin a version",
 	"GET /api/v1/approvals/stalled":                  "an operations list still settling with the portal around it; a tool is a public contract",
@@ -183,10 +189,6 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
 	"PUT /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
 	"DELETE /api/v1/catalogs/{id}/logo":              "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
-	"POST /api/v1/catalogs/{id}/releases":            "portal catalogue surface still being built; a tool is a public contract",
-	"GET /api/v1/catalogs/{id}/releases":             "portal catalogue surface still being built; a tool is a public contract",
-	"GET /api/v1/catalog-products":                   "portal catalogue surface still being built; a tool is a public contract",
-	"POST /api/v1/catalog-products":                  "portal catalogue surface still being built; a tool is a public contract",
 	// Ordering, for the same reason. An order is also somebody's own: the handler
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.

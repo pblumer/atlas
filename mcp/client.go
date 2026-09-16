@@ -167,6 +167,13 @@ func (c *Client) put(path, contentType string, body []byte) ([]byte, error) {
 	return c.do(http.MethodPut, path, contentType, body)
 }
 
+// patch issues a PATCH with the given content type and body — a partial change,
+// which is how a catalogue is edited: the fields present are replaced and the
+// fields absent are left alone.
+func (c *Client) patch(path, contentType string, body []byte) ([]byte, error) {
+	return c.do(http.MethodPatch, path, contentType, body)
+}
+
 // del issues a DELETE and returns the raw response body on 2xx, or an *apiError.
 // A 204 No Content yields an empty body, which handlers turn into a confirmation.
 func (c *Client) del(path string) ([]byte, error) {

@@ -2,6 +2,49 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-manager-maintains-the-catalogue-over-mcp",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Maintain the product catalogue from an AI client",
+        "de": "Den Produktkatalog aus einem KI-Client pflegen"
+      },
+      "summary": {
+        "en": "The portal's catalogue was the one substantial surface an AI assistant could not reach. Nine new tools close that: list, read, create and change catalogues, save products, publish a release and read what a release froze, and derive drafts from an ArchiMate model. Filling in two hundred products' search keywords, or finding which ones still have no deprovisioning process before a publish, is now something you can ask for instead of type. The assistant acts as you and no further — it needs the Product manager role and editor rights on the catalogue, exactly as the screen does — and it cannot delete anything, because a product is withdrawn and never removed.",
+        "de": "Der Katalog des Portals war die letzte grössere Fläche, die ein KI-Assistent nicht erreichen konnte. Neun neue Werkzeuge schliessen diese Lücke: Kataloge auflisten, lesen, anlegen und ändern, Produkte speichern, ein Release veröffentlichen und lesen, was es eingefroren hat, sowie Entwürfe aus einem ArchiMate-Modell ableiten. Die Suchbegriffe von zweihundert Produkten zu ergänzen oder vor einer Veröffentlichung zu finden, welchen davon noch der Deprovisionierungsprozess fehlt, lässt sich jetzt beauftragen statt tippen. Der Assistent handelt als Sie und nicht weiter — er braucht die Rolle Produktmanager und Editorrechte am Katalog, genau wie die Oberfläche — und er kann nichts löschen, denn ein Produkt wird zurückgezogen und nie entfernt."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "MCP",
+        "AI"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Console → AI access and connect your MCP client to this server's own endpoint. A stdio client authenticating with an API token can read a catalogue but not change one: no API token carries the Product manager role, deliberately.",
+          "Ask it to list your catalogues. It answers with the ones you maintain and never with somebody else's — being the audience for a catalogue puts nothing in that list.",
+          "Changing a product means reading it first. The write replaces the whole record, so a field left out is a field cleared — and the product carries a revision the assistant passes back, so a colleague's edit in between is refused rather than silently overwritten.",
+          "Nothing is orderable until you publish. A refused publish names every problem at once: the product still in draft, the missing translation, the process that was never bound."
+        ],
+        "de": [
+          "Console → AI access öffnen und den MCP-Client mit dem Endpunkt dieses Servers verbinden. Ein stdio-Client, der sich mit einem API-Token anmeldet, kann einen Katalog lesen, aber nicht ändern: Kein API-Token trägt die Rolle Produktmanager, und das ist Absicht.",
+          "Den Assistenten nach den eigenen Katalogen fragen. Er antwortet mit denen, die Sie pflegen, und nie mit fremden — zum Publikum eines Katalogs zu gehören bringt keinen Eintrag in diese Liste.",
+          "Ein Produkt zu ändern heisst, es zuerst zu lesen. Der Schreibvorgang ersetzt den ganzen Datensatz, ein weggelassenes Feld ist also ein gelöschtes Feld — und das Produkt trägt eine Revision, die der Assistent zurückgibt, sodass die Änderung einer Kollegin dazwischen abgewiesen statt stillschweigend überschrieben wird.",
+          "Bestellbar ist nichts, bevor Sie veröffentlichen. Eine abgewiesene Veröffentlichung nennt alle Probleme auf einmal: das Produkt im Entwurf, den fehlenden Text, den nie gebundenen Prozess."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open AI access",
+          "de": "AI access öffnen"
+        },
+        "route": "#/console/ai-access"
+      }
+    },
+    {
       "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
       "version": "Unreleased",
       "date": null,
@@ -248,24 +291,6 @@
           "de": "Informationsmodell öffnen"
         },
         "route": "#/data"
-      }
-    },
-    {
-      "id": "a-face-can-come-from-the-directory-and-it-arrives-the-way-ev",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A face can come from the directory, and it arrives the way every other directory fact does.",
-        "de": "A face can come from the directory, and it arrives the way every other directory fact does."
-      },
-      "summary": {
-        "en": "A tenant that already holds a photo for everybody should not be asked to collect them a second time.",
-        "de": "A tenant that already holds a photo for everybody should not be asked to collect them a second time."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]

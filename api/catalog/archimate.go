@@ -402,6 +402,12 @@ func (s *Service) HandleImport(w http.ResponseWriter, r *http.Request) {
 				offered[it.ID] = true
 				continue
 			}
+			// Revision 1, like any other first write. An imported product that
+			// started at zero would read as "no revision to state", and the first
+			// read-modify-write against it — filling in the bindings the import
+			// deliberately leaves empty, which is the very next thing anybody does —
+			// would silently be unguarded.
+			it.Revision = 1
 			it.CreatedAt, it.UpdatedAt = s.now(), s.now()
 			if opErr = s.store.SaveItem(it); opErr != nil {
 				return
