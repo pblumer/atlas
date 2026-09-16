@@ -56,6 +56,24 @@
       }
     },
     {
+      "id": "ci-failed-a-change-on-a-slow-runner-rather-than-on-a-defect-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "CI failed a change on a slow runner rather than on a defect, for the second time.",
+        "de": "CI failed a change on a slow runner rather than on a defect, for the second time."
+      },
+      "summary": {
+        "en": "The race-detector step carries a per-package timeout because the api package needs most of it on its own.",
+        "de": "The race-detector step carries a per-package timeout because the api package needs most of it on its own."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "with-authentication-off-the-portal-could-never-find-a-catalo",
       "version": "Unreleased",
       "date": null,
@@ -228,48 +246,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-enumeration-s-literals-are-shaded-by-use-too-read-through",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "See which states of an enumeration anything ever reaches",
-        "de": "Sehen, welche Zustände einer Enumeration überhaupt je erreicht werden"
-      },
-      "summary": {
-        "en": "The class diagram's usage shading now covers an enumeration's literals as well as a class's attributes. No process ever names a literal — what it names is a state, on a write — so the question is asked of the classes whose lifecycle takes its states from that enumeration: a literal is bright where a deployed process moves such a class into that state, and faint where none does. That is the reading you want from a state machine: the states nothing has ever reached. Where nothing borrows the literals, or where no deployed process uses the classes that do, they are left unshaded rather than faded — a state machine nothing drives is not a state machine nothing reaches.",
-        "de": "Die Nutzungsanzeige im Klassendiagramm umfasst jetzt auch die Literale einer Enumeration, nicht nur die Attribute einer Klasse. Kein Prozess nennt je ein Literal — genannt wird ein Zustand, an einem Schreibzugriff. Die Frage wird deshalb den Klassen gestellt, deren Lebenszyklus seine Zustände von dieser Enumeration bezieht: Ein Literal ist hell, wo ein deployter Prozess eine solche Klasse in diesen Zustand überführt, und blass, wo das keiner tut. Das ist die Auskunft, die man von einem Zustandsmodell will: die Zustände, die nie erreicht werden. Bezieht keine Klasse ihre Zustände von der Enumeration, oder verwendet kein deployter Prozess diese Klassen, bleiben die Literale ungefärbt statt blass — ein Zustandsmodell, das niemand antreibt, ist nicht dasselbe wie eines, dessen Zustände niemand erreicht."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data, then an information model that has an enumeration and a class taking its lifecycle states from it.",
-          "Press the shading control in the canvas toolbar.",
-          "Bright literals are states a deployed process moves that class into; faint ones are reached by nothing deployed.",
-          "An enumeration no lifecycle borrows from stays unshaded — the reading has nothing to say about it."
-        ],
-        "de": [
-          "Data öffnen und ein Informationsmodell wählen, in dem eine Klasse ihre Lebenszyklus-Zustände von einer Enumeration bezieht.",
-          "In der Canvas-Leiste die Schaltfläche für die Nutzungsanzeige drücken.",
-          "Helle Literale sind Zustände, in die ein deployter Prozess diese Klasse überführt; blasse werden von nichts Deploytem erreicht.",
-          "Eine Enumeration, von der kein Lebenszyklus borgt, bleibt ungefärbt — dazu kann die Auswertung nichts sagen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open the information model",
-          "de": "Informationsmodell öffnen"
-        },
-        "route": "#/data"
       }
     }
   ]

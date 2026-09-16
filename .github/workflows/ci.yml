@@ -74,10 +74,15 @@ jobs:
     runs-on: ubuntu-latest
     # Same reasoning as the e2e job below: the expensive failure mode is the hang,
     # not the error, and this job had no ceiling at all — a wedged test would have
-    # held a runner for the six-hour default. It takes ~14 minutes today, and the
-    # race step's per-package timeout is raised below, so the cap is what keeps that
-    # from turning one stuck package into hours of runner time.
-    timeout-minutes: 30
+    # held a runner for the six-hour default. The race step's per-package timeout is
+    # raised below, so this cap is what keeps that from turning one stuck package
+    # into hours of runner time.
+    #
+    # Raised from 30 with the step's own timeout, and it had to be: the cap and the
+    # per-package limit bound the same run, so raising the inner one alone changes
+    # nothing — the job is killed first, and the failure moves from "timed out" to
+    # "cancelled" without a line of output saying why.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -117,13 +122,24 @@ jobs:
             exit 1
           fi
 
-      # The api package needs 8-10 minutes of Go's default 10-minute *per-package*
-      # timeout on its own, so the default leaves no headroom and the step fails on
-      # runner variance rather than on a defect: it passed at 526s on one run and
-      # timed out at 600s on the next, where the only change between them was a
-      # single line in an unrelated test file. Nothing is skipped or quarantined by
-      # raising it — every test still runs, and a real hang still ends the job well
-      # inside the job's 30-minute cap above.
+      # The api package needs most of this on its own, so a tight limit fails the step
+      # on runner variance rather than on a defect. That has now happened twice, at
+      # two different limits, and the second time is why the number below is 35:
+      #
+      #   - At Go's 10-minute default it passed at 526s on one run and timed out at
+      #     600s on the next, where the only change between them was a single line in
+      #     an unrelated test file.
+      #   - At 25m it timed out at 1500s on a run where the same package had taken
+      #     1254s two hours earlier. That runner was slower across the board, not
+      #     just here: engine 82s → 219s, conformance 8s → 45s, mcp 19s → 48s,
+      #     state 4s → 17s. Nothing in the diff touched any of them.
+      #
+      # Nothing is skipped or quarantined by raising it — every test still runs, and
+      # a real hang still ends the job inside the job's cap above.
+      #
+      # The number buys headroom; it does not fix the cause. The api package is ~21
+      # minutes of a ~29-minute job under the race detector, and a limit raised twice
+      # is a package that wants splitting or parallelising rather than a third raise.
       #
       # `make race` and the documented command in AGENTS.md carry the same flag, so
       # a contributor's local run matches this one. Change one and change the rest.
@@ -137,7 +153,7 @@ jobs:
           # Deliberately not in `make race`: a contributor's kernel may have no Landlock
           # at all, and there the skip is the correct answer rather than a failure.
           ATLAS_SANDBOX_E2E: required
-        run: go test -race -timeout=25m ./...
+        run: go test -race -timeout=35m ./...
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 94

@@ -78,6 +78,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **CI failed a change on a slow runner rather than on a defect, for the second time.**
+  The race-detector step carries a per-package timeout because the `api` package needs
+  most of it on its own. At Go's 10-minute default that step once passed at 526s and
+  timed out at 600s on the next run, where the only change between them was a line in an
+  unrelated test file; the limit was raised to 25 minutes. It has now timed out at 1500s
+  on a run where the same package took 1254s two hours earlier — on a runner that was
+  slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
+  `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
+
+  The limit is 35 minutes, and the job's own cap moves with it. That pairing is the part
+  worth writing down: both bound the same run, so raising the inner one alone would have
+  changed nothing — the job is killed first, and the failure turns from "timed out" into
+  "cancelled" with no line saying why.
+
+  Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
+  inside the cap. **The number buys headroom and does not fix the cause** — the `api`
+  package is about twenty-one minutes of a twenty-nine-minute job under the race
+  detector, and a limit raised twice is a package that wants splitting or parallelising
+  rather than a third raise.
+
+  The command is written in six places — the Makefile, the CI workflow, and the three
+  documents that say what "done" means — and a comment asking the next person to change
+  all of them reaches only whoever reads that one file. A test now holds them to one
+  number, because a contributor whose local flag is the older, smaller one reproduces
+  neither failure and is told their change is fine.
 - **With authentication off, the portal could never find a catalogue at all.**
   Atlas's documented development and demo mode is `--auth=false`. Which catalogue
   somebody sees is resolved from the groups they carry — so with no principal there
