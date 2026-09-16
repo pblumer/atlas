@@ -366,6 +366,23 @@ function attachDmnWarnings(modeler, strip, toast) {
     }).join("")}</ul>`;
   };
 
+  // focusCanvas puts keyboard focus on the drawing. dmn-js binds its keyboard to the
+  // canvas SVG, so anything done from outside the canvas — a button in the strip below
+  // it — has to hand focus back, or the author's next shortcut goes to the body.
+  // canvas.focus() is the supported way and older diagram-js builds lack it, so the SVG
+  // is focused directly when it is not there.
+  const focusCanvas = (viewer) => {
+    try {
+      const canvas = viewer.get("canvas");
+      if (typeof canvas.focus === "function") {
+        canvas.focus();
+        return;
+      }
+      const svg = canvas.getContainer().querySelector("svg");
+      svg && svg.focus && svg.focus();
+    } catch { /* a view without a canvas: nothing to focus */ }
+  };
+
   const showInGraph = (id) => {
     const viewer = viewerNow();
     if (!viewer) return;
@@ -374,21 +391,21 @@ function attachDmnWarnings(modeler, strip, toast) {
       if (!el) return;
       viewer.get("selection").select(el);
       try { viewer.get("canvas").scrollToElement(el); } catch { /* older diagram-js */ }
+      focusCanvas(viewer);
     } catch { /* the view changed under the click */ }
   };
 
   // applyFix draws the missing requirement: the author's edit, made for them. It is
-  // worth offering only because it is as easy to take back as to make, so the new
-  // connection is left *selected*, which puts its context pad — a single entry, the
-  // trash — under the author's eyes at the moment the edit lands.
+  // worth offering only because it is as easy to take back as to make, and it leaves
+  // both ways of doing that within reach — the new connection is *selected*, which puts
+  // its context pad (a single entry, the bin) under the author's eyes, and the canvas is
+  // *focused*, which is what makes Ctrl+Z work.
   //
-  // Not Ctrl+Z, which would be the obvious thing to say: dmn-js's keyboard module is
-  // not bound to anything reachable in this editor (its container carries no tabindex),
-  // so no keyboard shortcut works here, for this edit or any other. Saying "undo it"
-  // would be telling the author to press a key that does nothing. Binding the keyboard
-  // is worth doing and is not this change: it touches every edit in the editor, and it
-  // has to be done without taking Ctrl+Z away from the CodeMirror in the expression
-  // views or from the fields in the bar.
+  // The focus is the part that is not obvious. dmn-js binds its keyboard to the canvas
+  // SVG, not to the document, so a shortcut reaches the model only while that SVG has
+  // focus. A button in the strip below the canvas does not give it focus — the click
+  // leaves it on the body — so without this the author's first Ctrl+Z would go nowhere
+  // and they would reasonably conclude the edit could not be undone.
   //
   // dmn-js's own rules decide whether the connection may be made and what it is; the
   // answer for a knowledge model reaching a decision is a knowledge requirement. Asking
@@ -428,8 +445,9 @@ function attachDmnWarnings(modeler, strip, toast) {
     // Selecting it is half the feature: it is both where the author looks to see what
     // was drawn, and the gesture that offers to remove it again.
     try { viewer.get("selection").select(connection); } catch { /* drawn either way */ }
-    toast && toast("Knowledge requirement drawn. It is selected — the bin in its context "
-      + "pad removes it again.", "ok");
+    focusCanvas(viewer);
+    toast && toast("Knowledge requirement drawn — Ctrl+Z takes it back, or the bin in its "
+      + "context pad.", "ok");
   };
 
   const onClick = (e) => {

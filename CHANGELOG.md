@@ -298,13 +298,13 @@ _Changed_ / _Removed_ for each version.
   model is the author's to decide, and a button that guessed would be writing their model
   for them. dmn-js's own rules are asked whether the connection may be made rather than the
   element being constructed, so the button cannot force a connection the palette would
-  refuse, and says why when it is refused. What it draws is left selected, which is both
-  where the author looks to see what happened and the gesture that takes it back: the
-  connection's context pad has one entry, the bin. Deliberately not "press Ctrl+Z" —
-  dmn-js's keyboard module is bound to nothing reachable in this editor, so no shortcut
-  works here, for this edit or any other. Binding it is worth doing and is not this change:
-  it touches every edit, and it has to be done without taking Ctrl+Z away from the
-  CodeMirror in the expression views or from the fields in the bar.
+  refuse, and says why when it is refused. What it draws is left selected *and* the canvas
+  is given focus, which is both ways of taking it back within reach: the connection's
+  context pad has one entry, the bin, and Ctrl+Z works. The focus is the part that is not
+  obvious — dmn-js binds its keyboard to the canvas SVG rather than to the document, so a
+  button in the strip below the canvas has to hand focus back, or the author's first
+  Ctrl+Z would go nowhere and they would reasonably conclude the edit could not be undone.
+  Clicking a finding to jump to its element hands focus back for the same reason.
 
 - **The class diagram can say which members anything actually uses.** Where a business object
   is used has been readable since **Data › Business objects** arrived — one class at a time,

@@ -977,21 +977,30 @@ test("the missing requirement can be drawn from the finding, and the drawing is 
   await expect(strip).toContainText("Nothing invokes the knowledge model “unused rate”");
   await expect(page.locator(".dmn-canvas .djs-overlay .unsup-badge")).toHaveCount(1);
 
-  // What was drawn is in the model, not only on the canvas — the save carries it.
-  await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
-  expect(state.draftSaves).toHaveLength(1);
-  expect(state.draftSaves[0].xml).toMatch(/<knowledgeRequirement[\s\S]*?requiredKnowledge[^>]*#bkm_tier/);
-
-  // And it is as easy to take back as it was to make, which is what makes offering the
-  // button safe at all. The new connection is left selected, so its context pad is
-  // already open on the one entry it has — the bin — and using it brings the finding
-  // back. (Not Ctrl+Z: dmn-js's keyboard is bound to nothing reachable in this editor,
-  // so no shortcut works here, for this edit or any other.)
+  // It is as easy to take back as it was to make, both ways, and without the author
+  // having to find the canvas first. dmn-js binds its keyboard to the canvas SVG, so a
+  // button in the strip below the canvas has to hand focus back or the first Ctrl+Z
+  // would go to the body — which is what these two lines are really asserting.
   await expect(page.locator(".dmn-canvas .djs-element.selected")).toHaveCount(1);
+  expect(await page.evaluate(() => document.activeElement.tagName.toLowerCase())).toBe("svg");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(strip.locator("li")).toHaveCount(2);
+  await expect(strip).toContainText("does not require it");
+
+  // The other way back is the connection's own context pad, whose single entry is the
+  // bin — reachable because the new connection is left selected.
+  await strip.locator(".dmn-warn-fix").click();
+  await expect(strip.locator("li")).toHaveCount(1);
   const bin = page.locator('.dmn-canvas .djs-context-pad .entry[data-action="delete"]');
   await expect(bin).toHaveCount(1);
   await bin.click();
   await expect(strip.locator("li")).toHaveCount(2);
-  await expect(strip).toContainText("does not require it");
+
+  // And what it draws is in the model, not only on the canvas — the save carries it.
+  await strip.locator(".dmn-warn-fix").click();
+  await expect(strip.locator("li")).toHaveCount(1);
+  await page.locator("#dmn-save").click();
+  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  expect(state.draftSaves).toHaveLength(1);
+  expect(state.draftSaves[0].xml).toMatch(/<knowledgeRequirement[\s\S]*?requiredKnowledge[^>]*#bkm_tier/);
 });
