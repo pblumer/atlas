@@ -261,6 +261,18 @@ function shareWhoField(dir, cat) {
     </select></label>`;
 }
 
+// approvalFrom reads the approver the chosen kind asks for, and nothing else.
+//
+// Reading only the field in play is what clears a ref when somebody switches from
+// "a named person" to "the orderer's superior": the old username would otherwise
+// ride along in a rule that has no use for it, and sit in the catalogue looking
+// like an answer to a question nobody asked.
+function approvalFrom(f) {
+  const kind = String(f.get("akind") || "none");
+  const field = { fixed: "aref-fixed", role: "aref-role" }[kind];
+  return { kind, ref: field ? String(f.get(field) || "").trim() : "" };
+}
+
 // audienceFrom reads whichever of the two controls was rendered. The picker names
 // its boxes "groups"; the degraded input is "groups-raw", and its absence is what
 // says a picker was drawn.
@@ -294,9 +306,9 @@ const parseTargets = (raw) => String(raw || "").split("\n")
 // ---------- One catalogue ----------
 
 export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
-  let cat, items, releases, processes, forms, dir;
+  let cat, items, releases, processes, forms, dir, people;
   try {
-    [cat, items, releases, processes, forms, dir] = await Promise.all([
+    [cat, items, releases, processes, forms, dir, people] = await Promise.all([
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}`),
       api("GET", "/api/v1/catalog-products"),
       api("GET", `/api/v1/catalogs/${encodeURIComponent(id)}/releases`),
@@ -309,6 +321,10 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
       // somebody to type an id. null is "could not read it", which the pickers
       // degrade on; it is deliberately not [] , which would read as "nobody exists".
       api("GET", "/api/v1/principals").catch(() => null),
+      // The accounts a task can be assigned to (ADR-0045), which is the one list
+      // that carries a *username* — the principals directory carries display names
+      // and ids, and an approval for a named person is matched by username.
+      api("GET", "/api/v1/users/assignable").catch(() => null),
     ]);
   } catch (e) {
     if (isSuperseded()) return;
@@ -392,7 +408,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     : `<p class="muted">Never published. Until it is, the portal shows this catalogue to nobody.</p>`}`;
 
   wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList,
-    mayShare(cat, me, enforced), mayTheme(me, enforced), dir);
+    mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people);
 }
 
 function productRow(it, iid, langs) {
@@ -608,7 +624,7 @@ function sharingCard(cat, me, enforced, dir) {
 // The palette is the console's own tokens throughout. Nothing here introduces a
 // colour: the sections are separated by --border, their hints are --muted, and a
 // theme change reaches this form because it never spelled a colour out.
-function productForm(it, cat, langs, procIDs, formList, items, dir) {
+function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
   const opt = (id, sel, label) =>
@@ -665,8 +681,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir) {
       <label class="field">Approval<select name="akind">
         ${APPROVAL_KINDS.map((k) => opt(k.id, ap.kind || "none", `${k.name} — ${k.what}`)).join("")}
       </select></label>
-      <label class="field wide">Approver (a username for a named person, a group for a group; empty otherwise)
-        <input name="aref" value="${esc(ap.ref || "")}" autocomplete="off"></label>
+      ${approverField(ap, dir, people)}
       <label class="field wide">Details the orderer fills in
         <span class="muted" style="display:block; margin:2px 0 6px">An Atlas form, for what
           this product needs that its name does not say — a cost centre, a site, an
@@ -700,6 +715,65 @@ function productForm(it, cat, langs, procIDs, formList, items, dir) {
       </div>
     </form>
   </div>`;
+}
+
+// approverField is the approver control, and there are three of them because the
+// question has three answers: a username for a named person, a group for a group,
+// and nothing at all for the two kinds that resolve without one. Only the one the
+// chosen kind asks for is shown.
+//
+// **The value differs per kind, and that is not a preference.** genehmigung-fix.bpmn
+// puts the ref in `assignee`, and holdsTask compares an assignee against the
+// caller's *username*; genehmigung-rolle.bpmn puts it in `candidateGroups`, matched
+// against group *ids* first and names only after. So a named person is a username
+// and a group is an id — an id in the first or a name in the second matches nobody,
+// and the order waits for an approval that reaches no inbox. That is the most
+// expensive typo left in this screen, because nothing reports it: the approval is
+// created, it simply sits there.
+//
+// APPROVAL_KINDS already carries which sort each kind wants, in its `ref` field, so
+// the table above is the one place that says it.
+function approverField(ap, dir, people) {
+  const kind = ap.kind || "none";
+  const ref = ap.ref || "";
+  const box = (forKind, body) => `<label class="field wide aref-for" data-kind="${forKind}"${
+    kind === forKind ? "" : " hidden"}>Approver${body}</label>`;
+
+  // A username, from the list a task assignee is picked from (ADR-0045) — not from
+  // the principals directory, which carries display names and ids and cannot answer
+  // "what is this person's username".
+  const person = people === null
+    ? `<input name="aref-fixed" value="${esc(kind === "fixed" ? ref : "")}" autocomplete="off"
+         placeholder="username">
+       <span class="muted" style="display:block; margin:4px 0 0">The account list could not be
+         read, so the approver is named by username here for now.</span>`
+    : `<select name="aref-fixed">
+         <option value="">— nobody yet —</option>
+         ${people.map((u) => `<option value="${esc(u.username)}"${
+      kind === "fixed" && u.username === ref ? " selected" : ""}>${
+      esc(u.displayName ? `${u.displayName} (${u.username})` : u.username)}</option>`).join("")}
+         ${kind === "fixed" && ref && !people.some((u) => u.username === ref)
+      ? `<option value="${esc(ref)}" selected>${esc(ref)} — no such account</option>` : ""}
+       </select>
+       <span class="muted" style="display:block; margin:4px 0 0">Always this person. The
+         approval lands in their inbox by username.</span>`;
+
+  const groups = dir === null
+    ? `<input name="aref-role" value="${esc(kind === "role" ? ref : "")}" autocomplete="off"
+         placeholder="grp_…">
+       <span class="muted" style="display:block; margin:4px 0 0">The directory could not be
+         read, so the group is named by id here for now.</span>`
+    : `<select name="aref-role">
+         <option value="">— no group yet —</option>
+         ${groupChoices(dir).map((g) => `<option value="${esc(g.id)}"${
+      kind === "role" && g.id === ref ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
+         ${kind === "role" && ref && !groupChoices(dir).some((g) => g.id === ref)
+      ? `<option value="${esc(ref)}" selected>${esc(ref)} — no such group</option>` : ""}
+       </select>
+       <span class="muted" style="display:block; margin:4px 0 0">Whoever in the group picks it
+         up. Stored as the group's id, so renaming the group does not lose the approver.</span>`;
+
+  return box("fixed", person) + box("role", groups);
 }
 
 // maintainersNote answers, where it is asked, a question this form has no field
@@ -781,6 +855,19 @@ function wireAppearance({ api, toast, view }, id, reload) {
     if (img.complete) (img.naturalWidth ? has : hasNot)();
   }
 
+  // Which approver control is in play follows from the kind, and the form is
+  // re-rendered from scratch each time a product is opened — so the listener sits on
+  // the view rather than on the select, and survives every re-render.
+  view.addEventListener("change", (e) => {
+    const sel = e.target.closest('select[name="akind"]');
+    if (!sel) return;
+    const form = sel.closest("form");
+    if (!form) return;
+    for (const box of form.querySelectorAll(".aref-for")) {
+      box.hidden = box.dataset.kind !== sel.value;
+    }
+  });
+
   view.addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-act]");
     if (!b) return;
@@ -827,7 +914,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
   });
 }
 
-function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir) {
+function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, canShare, canTheme, dir, people) {
   const id = cat.id;
   const reload = () => { const h = location.hash; location.hash = "#/catalog"; location.hash = h; };
   const patch = async (body) => {
@@ -861,12 +948,12 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir);
+      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir, people);
       wireProductForm();
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir);
+      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people);
       wireProductForm();
       return;
     }
@@ -984,7 +1071,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       }
       const body = {
         id: pid, homeCatalog: id, state: f.get("state"), texts,
-        approval: { kind: f.get("akind"), ref: String(f.get("aref") || "").trim() },
+        approval: approvalFrom(f),
         category: String(f.get("category") || "").trim(),
         price: String(f.get("price") || "").trim(),
         configForm: f.get("configForm") || "",
