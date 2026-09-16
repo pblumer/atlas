@@ -430,7 +430,7 @@ const state = {
   // nobody to notify and nobody to hold responsible. With enforcement off there is
   // nobody to be, so the catalogue is readable and an order is not — and the page
   // says so rather than offering a button that fails at the end
-  // (ADR-draft-portal-without-identity).
+  // (ADR-0377).
   canOrder: false,
   // meID is the account reading, which is what addresses its picture. Separate
   // from meName because a name is for a person to read and an id is for a URL.
@@ -575,7 +575,7 @@ async function load() {
   // account, and with enforcement off there is no account — the server says so
   // rather than inventing an empty answer, which is right of the server and must
   // not take the page down with it. An unreadable per-person list is a list
-  // missing, not a catalogue missing (ADR-draft-portal-without-identity).
+  // missing, not a catalogue missing (ADR-0377).
   state.held = new Map();
   state.favourites = new Set();
   try {
@@ -800,7 +800,7 @@ function toggle(release, id, integral) {
   // meant to avoid: filling one and finding no way out teaches somebody the page
   // is broken. Shown disabled rather than hidden, for the reason an integral part
   // is — the column stays readable as a decomposition, which is what the mode is
-  // for (ADR-draft-portal-without-identity).
+  // for (ADR-0377).
   if (!state.canOrder) {
     return el('button', {
       class: 'sq', disabled: 'disabled', title: t('noid.title'),

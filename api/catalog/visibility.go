@@ -147,7 +147,7 @@ func (s *Service) nobodyToBe() bool { return s.admin(nil) }
 // [Catalog.ReachedBy] answers false for every catalogue and the portal could never
 // resolve one. The documented development and demo mode showed an empty page and
 // said a catalogue had not been assigned — to somebody there is no "you" to assign
-// one to (ADR-draft-portal-without-identity).
+// one to (ADR-0377).
 //
 // So when there is nobody to be, the audience question is not asked and the
 // highest-ranked catalogue is the answer. That relaxes a rule this package is
