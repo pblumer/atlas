@@ -63,6 +63,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A JavaScript script task could not start under the strict sandbox.** Node's bundled
+  OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
+  profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with
+  an OpenSSL configuration error on any host that keeps its interpreter in one of the
+  sandbox's runtime roots, which is where an ordinary install puts it. The file is now
+  allowed for reading; `/etc/ssl` as a whole deliberately is not, because that directory
+  also holds `/etc/ssl/private`.
+
+  It went unnoticed because the proof that starts every installed interpreter under the
+  profile **skips** one it finds outside those roots — the honest answer on a host whose
+  toolchain unpacks runtimes elsewhere, and exactly what CI was while it installed node
+  into a toolchain cache. The JavaScript half of that proof had therefore never run. It
+  runs now, and a second guard reads the allowlist directly, so the rule no longer
+  depends on where a host happens to keep its binaries.
 - **A knowledge model's expression opened unstyled.** dmn-js does not show a business
   knowledge model in the literal-expression view a decision's expression opens in. A
   knowledge model is a FEEL *function* — it has an expression language, formal parameters
