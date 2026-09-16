@@ -62,6 +62,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The coverage floor runs as its own CI job, so a healthy run stops being cancelled
+  for being slow.** The main check job carried two full passes over the test suite in
+  sequence: the race detector, and then the statement floor, which is the same suite
+  again with different instrumentation. On `main` those measured 24m30s and 3m59s —
+  28m29s of a 30-minute cap that exists to catch a hang, not to be a deadline.
+
+  A ceiling that close to the real figure is not a ceiling. It is a coin toss decided
+  by runner variance, and it started coming up tails: run 2160 on `main` was cancelled
+  with both test runs green, having been cut mid-way through the trailing benchmark
+  smoke. Nothing was wrong with the commit, and nothing in the log said so — a
+  cancelled job reads like a failure and is not one.
+
+  The floor is now a job beside the race detector rather than behind it. The two share
+  nothing but the checkout, so each finishes well inside its own cap and neither can
+  cancel the other by being slow; they also overlap instead of queueing, which is the
+  smaller benefit and the one worth naming as smaller. The main job is renamed to
+  `build · vet · fmt · race` accordingly — **a repository whose branch protection
+  requires the old `build · vet · fmt · race · cover` name has to be told the two new
+  ones.**
+
+  Nothing is skipped, relaxed or reordered: every test still runs, the floor is still
+  94% checked against the same script, and `make check` on a contributor's machine is
+  unchanged — one laptop has one set of cores, so splitting there would buy nothing.
+
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
   keeps the web UI buildless. CI regenerates it to check the commit is current — and

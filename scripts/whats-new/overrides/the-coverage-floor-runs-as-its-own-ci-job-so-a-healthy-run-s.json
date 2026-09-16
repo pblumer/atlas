@@ -1,0 +1,4 @@
+{
+  "hidden": true,
+  "_why": "CI plumbing. It changes how this repository's checks are arranged, not anything an Atlas installation runs or a reader of the Console can act on. The one part with an audience outside CI — the renamed check, which a repository's branch protection may still require by its old name — is a note for whoever administers this repository, and belongs in the CHANGELOG where they look, not in a product feed."
+}
