@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The operator's half of ADR-0340, which the record makes part of the decision rather
@@ -199,12 +201,14 @@ func TestBreakerMetricsSayWhatAnAlertNeeds(t *testing.T) {
 	srv, advance := floodedServer(t, 20)
 
 	body := scrapeServer(t, srv)
-	for _, want := range []string{
-		"atlas_worker_breakers_open 1",
-		"atlas_worker_breaker_trips_total 1",
-		"atlas_worker_breaker_probes_total",
-		"atlas_worker_breaker_refused_total",
-	} {
+	if got := seriesValue(t, body, "atlas_worker_breakers_open"); got < 1 {
+		t.Errorf("breakers_open = %v while a target is held, want at least one:\n%s", got, breakerLines(body))
+	}
+	trips := seriesValue(t, body, "atlas_worker_breaker_trips_total")
+	if trips < 1 {
+		t.Errorf("trips_total = %v after a trip, want at least one:\n%s", trips, breakerLines(body))
+	}
+	for _, want := range []string{"atlas_worker_breaker_probes_total", "atlas_worker_breaker_refused_total"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("scrape is missing %q:\n%s", want, breakerLines(body))
 		}
@@ -221,24 +225,59 @@ func TestBreakerMetricsSayWhatAnAlertNeeds(t *testing.T) {
 	// A recovered target stops being counted as open — the gauge is a statement about
 	// now — but the totals stay, because a counter that restarts at zero reads as a
 	// reset and every rate computed over it is wrong.
-	advance(breakerCooldown)
 	conn := `{"name":"Patrick Blumer","kind":"mail","provider":"preview","endpoint":"mx.example.ch:587","sender":"a@b.ch"}`
 	if code, raw := serveInternal(t, srv, http.MethodPost, "/api/v1/connectors", conn, "application/json"); code != http.StatusOK {
 		t.Fatalf("configure the worker: status=%d body=%s", code, raw)
 	}
-	for i := 0; i < 10 && srv.breakers.holdingFor(mailJobType(t, srv)); i++ {
+	driveUntilRecovered(t, srv, advance, mailJobType(t, srv))
+
+	after := scrapeServer(t, srv)
+	if got := seriesValue(t, after, "atlas_worker_breakers_open"); got != 0 {
+		t.Errorf("breakers_open = %v after recovery, want 0:\n%s", got, breakerLines(after))
+	}
+	if got := seriesValue(t, after, "atlas_worker_breaker_trips_total"); got < trips {
+		t.Errorf("trips_total fell from %v to %v with the recovery; every rate over it would read as a reset:\n%s",
+			trips, got, breakerLines(after))
+	}
+}
+
+// driveUntilRecovered drives the engine until the breaker on this job type closes, stepping the
+// clock past a whole cooldown each round.
+//
+// It steps by the *maximum* cooldown rather than the current one on purpose: a probe
+// that fails doubles the wait, so a fixture that advanced by one cooldown would recover
+// only if the first probe happened to succeed — and would flake the day it does not.
+func driveUntilRecovered(t *testing.T, srv *Server, advance func(time.Duration), jobType int32) {
+	t.Helper()
+	for i := 0; i < 12; i++ {
+		if !srv.breakers.holdingFor(jobType) {
+			return
+		}
+		advance(breakerMaxCooldown)
 		if err := srv.drive(); err != nil {
 			t.Fatalf("drive: %v", err)
 		}
 	}
-	after := scrapeServer(t, srv)
-	if !strings.Contains(after, "atlas_worker_breakers_open 0") {
-		t.Errorf("the open gauge did not fall back to zero after recovery:\n%s", breakerLines(after))
+	if srv.breakers.holdingFor(jobType) {
+		t.Fatal("the breaker never closed against a target that answers")
 	}
-	if !strings.Contains(after, "atlas_worker_breaker_trips_total 1") {
-		t.Errorf("the trip total changed with the recovery; every rate over it would read as a reset:\n%s",
-			breakerLines(after))
+}
+
+// seriesValue reads one unlabelled Prometheus series out of a scrape.
+func seriesValue(t *testing.T, body, name string) float64 {
+	t.Helper()
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, name+" ") {
+			continue
+		}
+		v, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, name)), 64)
+		if err != nil {
+			t.Fatalf("parse %q: %v", line, err)
+		}
+		return v
 	}
+	t.Fatalf("no series %q in the scrape:\n%s", name, breakerLines(body))
+	return 0
 }
 
 func scrapeServer(t *testing.T, srv *Server) string {

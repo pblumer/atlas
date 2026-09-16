@@ -65,6 +65,12 @@ _Changed_ / _Removed_ for each version.
   including the warning that matters most: a queue growing without incidents is not
   evidence that everything is fine.
 
+  An agent sees it too. `atlas_workers` now carries the held rows, and its description
+  says so where it matters: the diagnosis it used to teach — a deep queue with nothing
+  in flight and nobody pulling — is exactly what a held target looks like, and reading
+  one as the other sends an agent after the wrong thing. `atlas_close_breaker` is the
+  one action, for an agent that has just fixed the configuration it was holding on.
+
 - **The catalogue can now say what must never be held together.** Everything the portal had
   learned about access was **detective or temporal**: the commissioning load records what was
   there, reconciliation checks whether the record is true, recertification asks whether it is

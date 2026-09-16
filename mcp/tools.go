@@ -639,16 +639,59 @@ func runtimeTools() []Tool {
 		{
 			Name: "atlas_workers",
 			Description: "The Workers view — who is doing the engine's out-of-process work, and what is waiting. " +
-				"Returns {types, workers}. Each 'types' row is a job type with its 'parked' queue depth, " +
+				"Returns {types, workers, breakers}. Each 'types' row is a job type with its 'parked' queue depth, " +
 				"'inFlight' count (leased to a worker right now), 'incidents', and 'servedInProcess' — true when " +
 				"Atlas works that type itself, in which case no external worker can lease it. Each 'workers' row " +
 				"is a worker seen since this server started: the 'types' it pulls, how many it holds 'inFlight', " +
-				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. The diagnosis to look for is a " +
-				"type with a growing 'parked' count, zero 'inFlight' and no worker pulling it — work nobody is " +
-				"serving. Worker counters cover this server run only and are not restored on restart.",
+				"and its 'pulled' / 'completed' / 'failed' counts with 'lastSeen'. " +
+				"CHECK 'breakers' FIRST when a queue is not moving: each row is a target whose jobs Atlas is " +
+				"deliberately holding back because it kept failing (ADR-0340), with 'connector' (the Worker the " +
+				"model names), 'jobType', 'state' (\"open\" or \"probing\"), 'trippedAt', 'reason' (what it last " +
+				"failed with), 'probeAt' (when the next single job goes through to test it) and 'refused'. That " +
+				"work is WAITING, NOT FAILED — no retry spent, no incident raised — and it resumes by itself as " +
+				"soon as the target answers, so there is nothing to resolve and no incident will appear for it. " +
+				"A type with a growing 'parked' count, zero 'inFlight' and no worker pulling it means work nobody " +
+				"is serving ONLY when no breaker row covers it; otherwise the engine has stopped serving it on " +
+				"purpose and the fix is the target, not the worker. Use atlas_close_breaker after fixing one " +
+				"rather than waiting out its cooldown. Worker counters cover this server run only and are not " +
+				"restored on restart.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				return asText(c.get("/api/v1/workers"))
+			},
+		},
+		{
+			Name: "atlas_close_breaker",
+			Description: "Stop holding one target's jobs back, now, without waiting for the engine's next " +
+				"attempt (ADR-0340). Use it after fixing what a breaker row in atlas_workers reported — a " +
+				"worker configuration, a credential, the endpoint itself. 'jobType' is required and is the row's " +
+				"job type; 'connector' is its Worker name, omitted for a job type that names no Worker. " +
+				"Returns {jobType, connector, closed}; closed=false means nothing was being held, which is not " +
+				"an error — a target that recovered on its own a moment earlier looks exactly like that. " +
+				"Closing a target that is in fact still down is safe and cheap: the next three failures simply " +
+				"hold it again, and they spend one retry each rather than parking tokens. There is deliberately " +
+				"no way to OPEN a breaker: judging a target down is a conclusion the engine draws from what " +
+				"workers report, not something to assert.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"jobType":   map[string]any{"type": "string", "description": "The held row's job type, e.g. io.atlas.mail.send"},
+					"connector": map[string]any{"type": "string", "description": "The Worker name the model states; omit when the row has none"},
+				},
+				"required": []any{"jobType"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				jobType, err := argString(args, "jobType")
+				if err != nil {
+					return "", err
+				}
+				body, err := json.Marshal(map[string]any{
+					"jobType": jobType, "connector": optString(args, "connector"),
+				})
+				if err != nil {
+					return "", err
+				}
+				return asText(c.post("/api/v1/workers/breakers/close", "application/json", body))
 			},
 		},
 		{
