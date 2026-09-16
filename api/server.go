@@ -622,6 +622,15 @@ type Server struct {
 	// deterministic-test seam as the retention sweep and the exporter.
 	checkpointTicks <-chan time.Time
 	checkpointDone  chan struct{}
+	// checkpointOffLoop, when non-nil, runs on the checkpoint goroutine at each point
+	// where the pass has just left the run loop and is about to do work that reads the
+	// whole state store: phase "commit" before publishing a staged checkpoint, phase
+	// "cut" before verifying checkpoints for compaction. Nil in production.
+	//
+	// It is a test seam because the property it guards — that the loop is free during
+	// those reads — is invisible from outside the server, and losing it costs seconds of
+	// a server that answers nothing, with no symptom pointing at the checkpoint.
+	checkpointOffLoop func(phase string)
 
 	// compactWAL enables deleting the WAL segments a checkpoint and every consumer
 	// watermark make redundant (ADR-0131), on the same tick that takes the checkpoint —
@@ -1107,6 +1116,20 @@ func withCheckpointTrigger(ticks <-chan time.Time, done chan struct{}) Option {
 	return func(s *Server) {
 		s.checkpointTicks = ticks
 		s.checkpointDone = done
+	}
+}
+
+// withCheckpointOffLoopHook installs the just-left-the-loop seam. Test-only, for the
+// same reason as withCheckpointTrigger.
+func withCheckpointOffLoopHook(fn func(phase string)) Option {
+	return func(s *Server) { s.checkpointOffLoop = fn }
+}
+
+// offLoop announces that the pass has left the run loop and is about to read the state
+// store. It is a no-op unless a test installed the seam.
+func (s *Server) offLoop(phase string) {
+	if s.checkpointOffLoop != nil {
+		s.checkpointOffLoop(phase)
 	}
 }
 
@@ -2309,29 +2332,50 @@ func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
 // takeCheckpoint publishes one checkpoint and prunes older ones, returning the position
 // it captured (zero when nothing was published — an idle server or a failed pass).
 //
-// The snapshot hops onto the run loop via do(): between batches, the store's applied
+// It is two halves, and which half runs where is the point.
+//
+// The **snapshot** hops onto the run loop via do(): between batches, the store's applied
 // position and the state it holds agree exactly, which is precisely what makes a
-// checkpoint's consistency boundary meaningful (invariant I3). Pruning then runs off
-// the loop, keeping directory removal and an fsync out of the writer's way; it is safe
-// there because only this goroutine ever publishes into the root.
+// checkpoint's consistency boundary meaningful (invariant I3). That half is bounded — a
+// flush and a directory of hard links to immutable files.
+//
+// The **commit** then runs off the loop, and has to. It checksums the staged directory,
+// which means reading every byte of the state store; on a store of any size that is by
+// far the longest step, and on the loop it would stop command processing — and with it
+// every request the API serves, since even an off-loop reader takes a loop turn to open
+// its view. The staged directory is a set of hard links under a name nothing else looks
+// at, so the writer running on during the commit cannot change what is published.
+// Pruning runs off the loop for the same reason, and is safe there because only this
+// goroutine ever publishes into the root.
 func (s *Server) takeCheckpoint() (uint64, error) {
-	var pos uint64
+	var staged *checkpoint.Staged
 	var err error
 	s.do(func() {
 		var applied uint64
 		if applied, err = s.store.LastAppliedPosition(); err != nil || applied == 0 {
 			return // nothing durable yet: there is no state worth snapshotting
 		}
-		pos, err = s.proc.Checkpoint(s.checkpointRoot)
+		staged, err = s.proc.StageCheckpoint(s.checkpointRoot)
 	})
 	if err != nil {
 		logging.Warn(logging.CheckpointFailed, "taking a recovery checkpoint failed; will retry next tick",
 			slog.String("error", err.Error()))
 		return 0, err
 	}
-	if pos == 0 {
+	if staged == nil {
+		// Nothing durable yet, or the loop is closing and the closure never ran. Either
+		// way no snapshot was taken, so there is nothing to commit.
 		return 0, nil
 	}
+	s.offLoop("commit")
+	if _, err := staged.Commit(); err != nil {
+		// Commit clears its own temporary directory, so a failed pass leaves nothing
+		// behind for the next one to trip over.
+		logging.Warn(logging.CheckpointFailed, "publishing a recovery checkpoint failed; will retry next tick",
+			slog.String("error", err.Error()))
+		return 0, err
+	}
+	pos := staged.AppliedPosition()
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
 		// The checkpoint is published either way; a failed prune costs disk, not recovery,
 		// so it is reported without discarding the position that was captured.
@@ -2369,8 +2413,40 @@ func (s *Server) compactLog() (int, string, error) {
 			slog.String("error", err.Error()))
 		return 0, "", err
 	}
+	// The applied position is loop-owned, so it is read on the loop — one point read.
+	var lastApplied uint64
+	s.do(func() { lastApplied, err = s.store.LastAppliedPosition() })
+	if err != nil {
+		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
+			slog.String("error", err.Error()))
+		return 0, "", err
+	}
+	if lastApplied == 0 {
+		// Nothing durable yet, or the loop is closing and the closure never ran. No
+		// checkpoint can qualify against a zero position, so skip the verification
+		// entirely rather than read every checkpoint to reach the same answer.
+		return 0, "", nil
+	}
+	// Resolving the cut verifies checkpoints, and verifying one reads every byte of its
+	// state files — the same whole-store read that must not happen on the writer. It runs
+	// here, with the loop free. Checkpoints are immutable once published and only this
+	// goroutine publishes into the root, so nothing it reads can change under it.
+	s.offLoop("cut")
+	cut, err := s.proc.CompactionCut(s.checkpointRoot, lastApplied, limits)
+	if err != nil {
+		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
+			slog.String("error", err.Error()))
+		return 0, "", err
+	}
+	if cut == 0 {
+		return 0, "", nil // nothing is provably redundant: the log stays whole
+	}
+	// The deletion itself does go on the loop: the WAL belongs to the single writer,
+	// which may be rolling a segment at the same moment (invariant I3). This really is
+	// the bounded work — a few unlinks and one directory fsync, for segments already
+	// proven redundant.
 	var removed int
-	s.do(func() { removed, err = s.proc.CompactLog(s.checkpointRoot, limits) })
+	s.do(func() { removed, err = s.proc.CompactLogAt(cut) })
 	if err != nil {
 		logging.Warn(logging.WALCompactionFailed, "wal compaction failed; will retry next tick",
 			slog.String("error", err.Error()))
@@ -3061,28 +3137,38 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	return mux, policy
 }
 
-// readStats reads the live instance counts. It must be called on the run-loop
-// goroutine (inside do).
-// readStats counts what the runtime holds, from a consistent view.
+// readStats reads the live runtime counts from a consistent view.
 //
-// All three counts are scans of a whole column family rather than maintained
-// counters. That is deliberate for incidents, which leave state two ways and so
-// cannot be tracked by a number kept up to date, and it is what makes the instance
-// and token counts the *authoritative* ones ADR-0080 contrasts with its
-// per-definition sums. The price is that one call costs O(active instances +
-// tokens): on a server holding 50.000 instances and 200.000 tokens it walks a
-// quarter of a million keys.
+// The instance and token counts come from the maintained per-definition counters
+// (ADR-0080), not from walking the runtime families. Both readings are the same number
+// — [TestStatsReadFromCountersAgreeWithTheScan] holds them against the authoritative
+// scan across starts, completions and cancels — and they cost very differently: the
+// counters are bounded by how many definitions and elements are *deployed*, which is
+// design-time size, while the scan is O(active instances + tokens). On a server holding
+// 50.000 instances and 200.000 tokens the scan walks a quarter of a million keys:
+// measured at 49ms against 1.2ms for the counters, and — the part that matters more
+// than the ratio — the scan tenfolds with the population while the counters barely move
+// (BenchmarkStatsAtProductionSize).
 //
-// Affordable for a request; ruinous on the run loop, which is where all eight of its
-// callers used to put it. Taking a [state.ReadView] is what moved it off, and the
-// signature is the enforcement — there is no way to call this against the live store
-// any more (ADR-0266).
+// That difference is not a nicety. Eight call sites reach this, and seven of them are
+// write paths that report the counts back in their response — starting an instance,
+// **publishing a message**, cancelling or terminating a batch, a CSV upload — so on a
+// message-driven model the engine paid that scan once per message. The eighth is
+// GET /api/v1/stats, which the Console's incident badge polls every five seconds for a
+// single field. ADR-0266 moved the scan off the run loop; this stops paying for it.
+//
+// The incident count stays a scan, deliberately. An incident leaves state two ways —
+// resolved by an operator *and* dropped with the element instance it sits on (an
+// instance cancel or an interrupting boundary event, which announce no resolution) — so
+// a maintained number would drift where a scan cannot. It is affordable because the
+// family holds one key per stuck token, which is the population an operator is expected
+// to keep near zero; if that ever stops being true, the honest fix is fewer incidents.
 func readStats(rv *state.ReadView) (statsResp, error) {
-	pi, err := rv.ActiveProcessInstanceCount()
+	pi, err := rv.TotalActiveInstances()
 	if err != nil {
 		return statsResp{}, err
 	}
-	ei, err := rv.ActiveElementInstanceCount()
+	ei, err := rv.TotalLiveTokens()
 	if err != nil {
 		return statsResp{}, err
 	}
@@ -3090,7 +3176,7 @@ func readStats(rv *state.ReadView) (statsResp, error) {
 	if err != nil {
 		return statsResp{}, err
 	}
-	return statsResp{ActiveProcessInstances: pi, ActiveElementInstances: ei, UnresolvedIncidents: inc}, nil
+	return statsResp{ActiveProcessInstances: int(pi), ActiveElementInstances: int(ei), UnresolvedIncidents: inc}, nil
 }
 
 // statsOffLoop reads the runtime counts with the run loop free.
@@ -3098,12 +3184,14 @@ func readStats(rv *state.ReadView) (statsResp, error) {
 // Seven of the eight callers are write paths that report the counts back in their
 // response — starting an instance, publishing a message, cancelling or terminating a
 // batch, a CSV upload. Each took a run-loop turn of its own purely for that read-back,
-// so under a load generator the engine paid the quarter-million-key scan above *per
-// write*, on the single writer. That, rather than the parked instances themselves, is
-// what kept the loop busy enough to put the whole API out of reach.
+// so under a load generator the engine paid a quarter-million-key scan *per write*, on
+// the single writer. That, rather than the parked instances themselves, is what kept the
+// loop busy enough to put the whole API out of reach.
 //
 // The turn this still takes is the bounded one [Server.readOffLoop] describes: take
-// the view, copy the deployment metadata. The counting happens with the loop free.
+// the view, copy the deployment metadata. The counting happens with the loop free — and
+// since [readStats] reads the maintained counters rather than scanning, it is now cheap
+// there too rather than merely out of the way.
 func (s *Server) statsOffLoop() (statsResp, error) {
 	var stats statsResp
 	err := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {

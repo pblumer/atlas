@@ -62,6 +62,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The state store is configured for the size it has grown to, not for Pebble's
+  defaults.** It was opened with only a merger set, which left an 8 MB block cache, a
+  4 MB write buffer that stops writes at two unflushed, and a single compaction
+  goroutine — sensible for an embedded store of a few thousand keys, and the reason a
+  store holding millions sends scans to disk and turns a compaction backlog into a write
+  stall, which stalls the run loop that issued it.
+
+  `state.Open` now takes options. Compaction concurrency is raised for every store, since
+  it costs CPU and an idle store starts none; the block cache (`--state-cache-mb`,
+  default 64) and write buffer (`--state-memtable-mb`, default 16) are set by the server
+  for its own long-lived store only, because a process may hold several — the Playground
+  opens one per session — and resident memory would multiply. Both accept 0 to fall back
+  to Pebble's default.
+
+  The write buffer's trade-off, stated because it is real: a larger one means the store
+  trails the log further after a crash, so recovery replays a longer suffix. That costs
+  recovery time and never durability — the WAL's fsync is the durability point (ADR-0005)
+  — and the checkpoint cadence bounds how long the suffix gets. The sizes themselves are
+  reasoned rather than measured against a production store; the record carries that as an
+  open question, and the flags exist so the answer can be corrected without a rebuild.
+
 - **The info panel is reachable from every column of the catalogue, not only from
   services.** This was not a missing feature but an inconsistency inside one page.
   The panel already worked for a bundle: picking one out of the search opens it, and
@@ -158,6 +179,42 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **The server froze for seconds at a time, on a cadence, once its store grew.** Every
+  list in the Console stopped, everything the browser already had stayed responsive, and
+  after some seconds the whole backlog arrived at once. Nothing in the code had changed;
+  the store had — to ~50.000 active instances carrying ~200.000 tokens, over 2.000.000
+  finished instances of history behind them.
+
+  Three pieces of work grew with that store, and all three ran on the run loop, which is
+  the single writer *and* the gate every request passes through — an off-loop reader
+  still takes a loop turn to open its view, so holding the writer holds everything.
+
+  The checkpoint was the cadence. `checkpoint.Publish` checksums the snapshot it takes,
+  which means reading every SST file in the store, and it did that inside the `do()` turn
+  that took the snapshot. Measured at 735 MB/s with a warm page cache — 2,9 s for a 2 GB
+  store, linear from there — on the default five-minute interval. WAL compaction did the
+  same read again, through `checkpoint.Verify`, in a turn whose own comment called it
+  "bounded work — a few unlinks and one directory fsync". And `readStats` counted active
+  instances and live tokens by walking their column families: 48,9 ms at that population,
+  paid by `GET /api/v1/stats` — which the incident badge polls every five seconds for one
+  field — and by seven write paths that report the counts back in their response,
+  including `POST /api/v1/messages`, so a message-driven model paid it per message.
+
+  Only the snapshot needs the writer stopped; once taken it is hard links to immutable
+  files under a name nothing else looks at. So `Publish` splits into `Stage` and
+  `Staged.Commit`, `CompactLog` into `CompactionCut` and `CompactLogAt`, and the counts
+  come from the maintained ADR-0080 counters — 1,2 ms, and rising by half where the scan
+  rises elevenfold. Both single calls remain for tests and synchronous embedding. The
+  incident count stays a scan on purpose: an incident leaves state two ways, so a
+  maintained number would drift where a scan cannot.
+
+  Two tests hold the line rather than a convention —
+  `TestCheckpointCommitRunsWithTheRunLoopFree` and
+  `TestCompactionVerificationRunsWithTheRunLoopFree` ask the loop whether it is free at
+  the moment each read begins — and two benchmarks keep the numbers above honest
+  (`BenchmarkChecksumDirBySize`, `BenchmarkStatsAtProductionSize`).
+  See `docs/adr/draft-whole-store-reads-leave-the-writer.md`.
 
 - **CI failed a change on a slow runner rather than on a defect, for the second time.**
   The race-detector step carries a per-package timeout because the `api` package needs
