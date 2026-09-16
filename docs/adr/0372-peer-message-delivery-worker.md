@@ -100,6 +100,59 @@ run loop (ADR-0239); only the resulting publish command goes onto it. The respon
 returned after the batch's fsync, never before (I2) — the acceptance promise above is
 worth nothing otherwise.
 
+### The first cut: a configured peer, before there is a contract
+
+Everything above addresses a peer as `(node, interface, contract version, entry
+point)` and authorizes the caller against an interface's **send** grant. Neither the
+interface nor the grant exists while [ADR-0373](0373-published-process-interface.md)
+is `Proposed`, so taken literally this record could not be built at all until that one
+is. That is not the intent, and leaving it unsaid would let the gap be closed during
+implementation by whoever hits it first.
+
+So the first slice is deliberately cut below the contract:
+
+- **The sending element names a Worker, not a participant.** It is an ordinary Worker
+  Type task naming one configured Worker of the peer type (ADR-0203), whose
+  configuration carries the peer's base URL and a vault credential reference — an
+  ADR-0129 deployment target. There is no `atlas:interfaceRef`, no message-flow
+  binding and no contract version. This adds **no model vocabulary at all**, which is
+  the whole reason to cut here: an operator configures a peer the way they configure
+  every other outbound target, and nothing has to be un-taught later.
+- **The envelope is not cut down with it.** Every field of
+  [ADR-0369](0369-cross-instance-message-addressing.md) travels, `messageId` and
+  `conversationId` included. What is deferred is the *resolution* of an interface
+  reference to a node and the *granularity* of authorization — never the envelope,
+  because those are the fields that cannot be added to history after the fact.
+- **The receiver delivers to subscriptions and the buffer only, never to a message
+  start.** This is the load-bearing constraint of the cut. Without an interface there
+  is nothing to qualify an entry point by, and delivering to a message start by bare
+  name is precisely the global-topic failure ADR-0369 exists to prevent. A peer may
+  therefore continue an instance that is already waiting; it may not create one.
+  Authorization is correspondingly coarse: the scoped token says *this peer may
+  deliver to this node*, and ADR-0373's per-interface send grants narrow it later.
+
+Two statements above read differently under this cut, and say so here rather than
+being quietly wrong: **Sending** describes a message flow bound to a remote
+participant, which is ADR-0371's and arrives with it; and the incident in **Failure,
+and who owns it** names the Worker and the peer rather than an interface and a
+contract version, because neither is known yet.
+
+What closes the cut is not a cleanup task but the two records it is waiting on.
+ADR-0373 supplies the qualified entry point — which is what makes start-by-message
+safe — and the per-interface grant. ADR-0371 supplies the binding a *model* uses, at
+which point the Worker stops being the address and becomes what it should have been
+all along: the mechanism.
+
+The honest risk is that a through-cut that ships becomes the permanent way people
+address a peer. It is mitigated by the cut adding no notation to defend — a peer task
+is indistinguishable from any other outbound integration, so there is nothing for a
+modeller to become attached to — and not by anybody's intention to tidy it up.
+
+The alternatives were weighed and are worse. Waiting for ADR-0373 makes this record an
+intention with no next step. Building a minimal interface registry to be replaced
+later creates exactly the second source of truth ADR-0373 exists to remove, and it
+would be the one already in production when that record is written.
+
 ### Consequences
 
 - **Positive:** no new engine machinery, no new recovery path, and the operational
