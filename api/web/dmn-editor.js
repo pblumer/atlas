@@ -35,6 +35,7 @@ import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 import { attachCollab } from "./collab.js";
 import { dmnSurface } from "./dmn-collab.js";
+import { knowledgeModelFindings } from "./dmn-warnings.js";
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -292,6 +293,150 @@ function hintFor(active) {
     calls this decision. ` + HINT_TAIL;
 }
 
+// attachDmnWarnings keeps the findings strip under the canvas, and the badges on the
+// requirements graph, in step with the model. It returns a teardown.
+//
+// What it says is dmn-warnings.js's to decide; this is only where it is said. Two
+// placements, because a finding has two moments: the strip is what an author sees
+// without looking for it, including from a decision's own view where the graph is not
+// on screen at all, and the badge is what marks the shape once they are looking at
+// the graph. Clicking a finding goes to its element — back to the graph first when
+// the author is elsewhere, since pointing at a shape in a view that does not draw it
+// would point at nothing.
+function attachDmnWarnings(modeler, strip) {
+  let findings = [];
+  let badges = []; // overlay ids on the graph, ours to reap
+  let bound = null; // the viewer whose changes we are listening to
+  let timer = null;
+
+  const viewerNow = () => {
+    try { return modeler.getActiveViewer(); } catch { return null; }
+  };
+
+  const clearBadges = () => {
+    const viewer = viewerNow();
+    if (viewer && badges.length) {
+      try {
+        const overlays = viewer.get("overlays");
+        for (const id of badges) { try { overlays.remove(id); } catch { /* went with its view */ } }
+      } catch { /* a view without overlays has nothing of ours on it */ }
+    }
+    badges = [];
+  };
+
+  const drawBadges = () => {
+    clearBadges();
+    const view = modeler.getActiveView();
+    if (!view || view.type !== "drd") return; // only the graph has shapes to mark
+    const viewer = viewerNow();
+    if (!viewer) return;
+    let overlays, registry;
+    try { overlays = viewer.get("overlays"); registry = viewer.get("elementRegistry"); } catch { return; }
+    const marked = new Set(); // one badge per shape, however many findings name it
+    for (const f of findings) {
+      if (marked.has(f.element) || !registry.get(f.element)) continue;
+      marked.add(f.element);
+      try {
+        badges.push(overlays.add(f.element, "atlas-dmn-warning", {
+          position: { top: -8, right: -8 },
+          html: `<span class="unsup-badge" title="${esc(f.message)}">!</span>`,
+        }));
+      } catch { /* a shape without graphics yet (mid-import) */ }
+    }
+  };
+
+  const render = () => {
+    try {
+      findings = knowledgeModelFindings(modeler.getDefinitions());
+    } catch {
+      findings = []; // mid-import, or a model dmn-js has not settled: nothing to say yet
+    }
+    strip.hidden = findings.length === 0;
+    if (strip.hidden) {
+      strip.innerHTML = "";
+      return;
+    }
+    strip.innerHTML = `<ul>${findings.map((f) =>
+      `<li><button type="button" data-el="${esc(f.element)}" data-rule="${esc(f.rule)}">${esc(f.message)}</button></li>`
+    ).join("")}</ul>`;
+  };
+
+  const showInGraph = (id) => {
+    const viewer = viewerNow();
+    if (!viewer) return;
+    try {
+      const el = viewer.get("elementRegistry").get(id);
+      if (!el) return;
+      viewer.get("selection").select(el);
+      try { viewer.get("canvas").scrollToElement(el); } catch { /* older diagram-js */ }
+    } catch { /* the view changed under the click */ }
+  };
+
+  const onClick = (e) => {
+    const btn = e.target.closest("button[data-el]");
+    if (!btn) return;
+    const id = btn.getAttribute("data-el");
+    const view = modeler.getActiveView();
+    if (view && view.type === "drd") {
+      showInGraph(id);
+      return;
+    }
+    const drd = modeler.getViews().find((v) => v.type === "drd");
+    if (!drd) return;
+    modeler.open(drd).then(() => showInGraph(id)).catch(() => { /* nothing to show */ });
+  };
+
+  // A finding is recomputed from the whole model, and typing into an expression
+  // fires per keystroke, so the recompute is debounced rather than run on each one.
+  const refresh = () => { render(); drawBadges(); };
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 200);
+  };
+
+  // Each view is its own dmn-js instance, so the listener is moved with the author — a
+  // listener left on the view they came from goes quiet without saying so. dmn-collab.js
+  // binds the collaboration session the same way, for the same reason.
+  //
+  // `commandStack.changed` rather than the graph's `element.changed`, because the views
+  // are not all diagram-js: editing an expression in a decision's own view changes the
+  // model without any element changing on a canvas, and the findings are about the model.
+  // Subscribing to the element event as well costs one more debounced call on the graph
+  // and keeps a change that arrives outside a command — a peer's, applied by the
+  // collaboration session — from going unseen.
+  const CHANGE_EVENTS = ["commandStack.changed", "elements.changed", "element.changed"];
+  const bindActive = () => {
+    unbindActive();
+    const viewer = viewerNow();
+    if (!viewer) return;
+    for (const event of CHANGE_EVENTS) {
+      try { viewer.on(event, schedule); } catch { /* a view without that event */ }
+    }
+    bound = viewer;
+  };
+  const unbindActive = () => {
+    if (!bound) return;
+    for (const event of CHANGE_EVENTS) {
+      try { bound.off(event, schedule); } catch { /* gone with its view */ }
+    }
+    bound = null;
+  };
+  const onViews = () => { bindActive(); refresh(); };
+
+  modeler.on("views.changed", onViews);
+  strip.addEventListener("click", onClick);
+  bindActive();
+  refresh();
+
+  return () => {
+    clearTimeout(timer);
+    strip.removeEventListener("click", onClick);
+    unbindActive();
+    try { modeler.off("views.changed", onViews); } catch { /* torn down with the modeler */ }
+    clearBadges();
+  };
+}
+
 // keepCaretOnRewrite works around an upstream dmn-js bug (17.x). The DRD "definition
 // properties" widget (the editable model name/id at the top-left of the DRG view)
 // rewrites its contenteditable's textContent on *every* committed model change —
@@ -440,6 +585,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         <div class="dmn-canvas"></div>
         <div class="dmn-props"></div>
       </div>
+      <div class="dmn-warn" id="dmn-warn" hidden></div>
       <div class="dmn-hint muted" id="dmn-hint">${hintFor(null)}</div>
     </div>`;
 
@@ -462,6 +608,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const testErr = root.querySelector("#dmn-test-err");
   const backEl = root.querySelector("#dmn-back");
   const hintEl = root.querySelector("#dmn-hint");
+  const warnEl = root.querySelector("#dmn-warn");
 
   // ---- identity ------------------------------------------------------------
   // What this session is editing, across the three layers a decision has
@@ -551,9 +698,11 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const caretObserver = new MutationObserver(patchCaretFields);
   caretObserver.observe(canvas, { childList: true, subtree: true });
 
+  let dropWarnings = () => {};
   current = {
     destroy() {
       caretObserver.disconnect();
+      dropWarnings();
       try { modeler && modeler.destroy(); } catch { /* already gone */ }
       modeler = null;
     },
@@ -620,6 +769,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     await modeler.importXML(xml);
     if (gen !== generation) return;
     renderViews();
+    dropWarnings = attachDmnWarnings(modeler, warnEl);
     patchCaretFields();
     // The status line says what a *save* just did, so it starts empty and is cleared
     // by anything else. That a draft is open is a standing fact rather than an event,

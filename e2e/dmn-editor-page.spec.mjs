@@ -822,3 +822,129 @@ test("a knowledge model's expression opens styled, and the hint says what it is"
   await tabs.nth(0).click();
   await expect(page.locator("#dmn-hint")).toContainText("decision requirements graph");
 });
+
+// A knowledge model only runs when something invokes it, and DMN says the invoking
+// decision declares a knowledge requirement for it — the arrow the DRG draws. temis
+// does not enforce that: a decision whose expression calls one by name evaluates
+// correctly with no arrow at all (dmn/knowledgemodel_test.go pins the invocation;
+// the same harness says the edge is optional to the engine).
+//
+// So the two ways a model's graph and its logic can disagree both deploy and both
+// run, which is precisely why neither can be left to Deploy to report.
+//
+// WARN_XML holds one of each, beside a correctly wired pair that must stay quiet:
+// "fee" is required and called; "unused rate" is neither; "tier" is called by
+// "total" without being required.
+const WARN_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" id="Definitions_warn" name="Fee" namespace="http://atlas/dmn">
+  <inputData id="id_amount" name="amount"><variable name="amount" typeRef="number"/></inputData>
+  <businessKnowledgeModel id="bkm_fee" name="fee">
+    <variable name="fee" typeRef="number"/>
+    <encapsulatedLogic id="fd1" kind="FEEL">
+      <formalParameter id="fp1" name="base" typeRef="number"/>
+      <literalExpression id="le_fee"><text>base * 0.1</text></literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+  <businessKnowledgeModel id="bkm_orphan" name="unused rate">
+    <variable name="unused rate" typeRef="number"/>
+    <encapsulatedLogic id="fd2" kind="FEEL">
+      <formalParameter id="fp2" name="x" typeRef="number"/>
+      <literalExpression id="le_orphan"><text>x * 2</text></literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+  <businessKnowledgeModel id="bkm_tier" name="tier">
+    <variable name="tier" typeRef="number"/>
+    <encapsulatedLogic id="fd3" kind="FEEL">
+      <formalParameter id="fp3" name="n" typeRef="number"/>
+      <literalExpression id="le_tier"><text>n * 2</text></literalExpression>
+    </encapsulatedLogic>
+  </businessKnowledgeModel>
+  <decision id="dec_total" name="total">
+    <variable name="total" typeRef="number"/>
+    <informationRequirement id="ir1"><requiredInput href="#id_amount"/></informationRequirement>
+    <knowledgeRequirement id="kr1"><requiredKnowledge href="#bkm_fee"/></knowledgeRequirement>
+    <literalExpression id="le_total"><text>amount + fee(amount) + tier(amount)</text></literalExpression>
+  </decision>
+  <dmndi:DMNDI><dmndi:DMNDiagram id="DMNDiagram_warn">
+    <dmndi:DMNShape id="s1" dmnElementRef="id_amount"><dc:Bounds x="60" y="320" width="160" height="70"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s2" dmnElementRef="bkm_fee"><dc:Bounds x="300" y="320" width="160" height="70"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s3" dmnElementRef="bkm_orphan"><dc:Bounds x="520" y="320" width="160" height="70"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s4" dmnElementRef="bkm_tier"><dc:Bounds x="740" y="320" width="160" height="70"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s5" dmnElementRef="dec_total"><dc:Bounds x="300" y="140" width="160" height="70"/></dmndi:DMNShape>
+  </dmndi:DMNDiagram></dmndi:DMNDI>
+</definitions>`;
+
+test("the editor says when a knowledge model is never invoked, or invoked without being required", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "Fee", modelRef: "fee", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: WARN_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const strip = page.locator("#dmn-warn");
+  await expect(strip).toBeVisible();
+  const rows = strip.locator("li button");
+  await expect(rows).toHaveCount(2);
+  // Both findings name the model they are about, and say what actually follows —
+  // one is never evaluated, the other runs and draws a graph that omits it.
+  await expect(rows.nth(0)).toContainText("Nothing invokes the knowledge model “unused rate”");
+  await expect(rows.nth(1)).toContainText("“total” calls the knowledge model “tier” but does not require it");
+  // The correctly wired pair is not mentioned: a warning an author learns to ignore
+  // is worse than no warning.
+  await expect(strip).not.toContainText("“fee”");
+
+  // One badge per offending shape in the requirements graph: the knowledge model
+  // nothing reaches, and the decision whose declaration is incomplete. The knowledge
+  // model that is properly required is unmarked, and so is the one being called —
+  // the incomplete declaration is the caller's.
+  const badged = await page.locator(".dmn-canvas .djs-overlay .unsup-badge").count();
+  expect(badged).toBe(2);
+
+  // A finding points at its element. Clicked from a decision's own view — where the
+  // graph is not on screen at all — it goes back to the graph first, because pointing
+  // at a shape in a view that does not draw it would point at nothing.
+  await page.locator(".editor-bar .etabs#dmn-views button", { hasText: "total" }).click();
+  await expect(page.locator(".dmn-canvas .dmn-literal-expression-container")).toBeVisible();
+  await expect(strip).toBeVisible(); // the findings are about the model, not the view
+  await strip.locator("li button").first().click();
+  await expect(page.locator(".editor-bar .etabs#dmn-views button").first()).toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() =>
+    document.querySelectorAll(".dmn-canvas .djs-element.selected").length)).toBeGreaterThan(0);
+});
+
+test("the findings follow the model as it is edited, from whichever view is doing the editing", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "Fee", modelRef: "fee", projectId: "app-1" }] });
+  await page.route("**/api/v1/dmn-models/*/xml", (route) =>
+    route.fulfill({ body: WARN_XML, contentType: "application/xml" }));
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+
+  const strip = page.locator("#dmn-warn");
+  await expect(strip).toContainText("calls the knowledge model “tier” but does not require it");
+
+  // Edit the expression in the decision's own view — a different diagram-js instance
+  // from the graph the findings are drawn on. Taking the call out of it changes which
+  // finding is true: "tier" stops being called without being required, and starts
+  // being a knowledge model nothing invokes at all.
+  await page.locator(".editor-bar .etabs#dmn-views button", { hasText: "total" }).click();
+  const body = page.locator(".dmn-canvas .cm-content");
+  await expect(body).toBeVisible();
+  await body.click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("amount + fee(amount)");
+
+  // No save, no blur, no going back to the graph: the strip is about the model, and
+  // the model changed.
+  await expect(strip).toContainText("Nothing invokes the knowledge model “tier”");
+  await expect(strip).not.toContainText("does not require it");
+  await expect(strip.locator("li button")).toHaveCount(2);
+});
+
+test("a decision model with nothing to say says nothing", async ({ page }) => {
+  installMock(page, { refs: [{ id: "ref-1", name: "Eligibility", modelRef: "eligibility", projectId: "app-1" }] });
+  await page.goto("/index.html#/modeler/dmn/e/ref-1");
+  await editorReady(page);
+  // The stored fixture is a plain decision table: no knowledge model, no finding, and
+  // a strip that is present in the DOM but never shown.
+  await expect(page.locator("#dmn-warn")).toBeHidden();
+});

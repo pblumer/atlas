@@ -138,6 +138,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The decision editor says when a knowledge model is never invoked, or invoked without
+  being required.** A knowledge model is a reusable FEEL function, and DMN says the
+  decision invoking one declares a knowledge requirement for it — the arrow the
+  requirements graph draws. temis does not enforce that: a decision whose expression calls
+  a knowledge model by name evaluates correctly with no arrow at all. Both of the
+  disagreements that follow deploy, run, and are reported by nothing.
+
+  A knowledge model nothing invokes is dead weight. The model is valid, its decisions
+  deploy, the engine never complains — so there is no later moment at which anybody finds
+  out, and on the canvas it looks exactly like one that is called: the only difference is
+  an arrow that is not there. A decision that calls one without requiring it is worse in a
+  quieter way. It runs, and draws a graph that omits the dependency — and the graph is
+  what gets reviewed, and what goes into the decision's published documentation.
+
+  The editor now says both, while the model is on screen: a strip under the canvas naming
+  what is wrong and what follows from it, and a warning badge on the shape in the
+  requirements graph. Clicking a finding goes to its element, from a decision's own view
+  as well — back to the graph first, since pointing at a shape in a view that does not
+  draw it would point at nothing. Both are warnings and never errors, because each
+  describes a model that deploys and runs, and both are biased towards silence: an
+  invocation is anything that reads as the knowledge model's name followed by an open
+  parenthesis in any other element's expression, so an unusual way of calling one costs a
+  missed warning rather than a false one. A warning an author learns to ignore is worse
+  than no warning.
+
 - **An approver decides a request once, instead of deciding it twelve times.** An
   approval in Atlas is one user task per order line — the approval process is
   started multi-instance from the order's ready lines, so a workplace ordered as

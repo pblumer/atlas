@@ -137,6 +137,51 @@
       }
     },
     {
+      "id": "the-decision-editor-says-when-a-knowledge-model-is-never-inv",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The decision editor points out a knowledge model nothing calls",
+        "de": "Der Entscheidungseditor meldet ein Knowledge Model, das niemand aufruft"
+      },
+      "summary": {
+        "en": "A knowledge model is a reusable calculation — a fee, a discount, a risk score — that decisions call instead of each repeating it. Two things could go wrong with one and nothing anywhere said so, because both deploy and both run. A knowledge model that nothing calls is simply never evaluated, and on the canvas it looks exactly like one that is called: the only difference is an arrow that is not there. And a decision that calls one without drawing that arrow works, while its diagram quietly omits the dependency — the same diagram that gets reviewed and printed into the decision's documentation. The editor now says both while the model is on screen, as a strip under the canvas and a warning mark on the shape itself; clicking a finding jumps to the element it is about. Both are warnings rather than errors, because each describes a model that runs, and both stay quiet when in doubt: a knowledge model counts as called if its name appears as a call anywhere in another element, so an unusual way of writing one costs a missed warning rather than a wrong one.",
+        "de": "Ein Knowledge Model ist eine wiederverwendbare Berechnung — eine Gebühr, ein Rabatt, ein Risikowert —, die Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Zwei Fehler waren dabei möglich, ohne dass irgendetwas darauf hinwies, denn beide lassen sich ausliefern und beide laufen. Ein Knowledge Model, das niemand aufruft, wird schlicht nie ausgewertet — und auf der Zeichenfläche sieht es genauso aus wie ein aufgerufenes: Der einzige Unterschied ist ein Pfeil, der fehlt. Und eine Entscheidung, die eines aufruft, ohne diesen Pfeil zu zeichnen, funktioniert, während ihr Diagramm die Abhängigkeit stillschweigend verschweigt — dasselbe Diagramm, das geprüft und in die Dokumentation der Entscheidung übernommen wird. Der Editor benennt nun beides, solange das Modell auf dem Bildschirm ist: als Streifen unter der Zeichenfläche und als Warnzeichen am Element selbst. Ein Klick auf einen Befund springt zum betroffenen Element. Beides sind Warnungen und keine Fehler, denn jeder Fall beschreibt ein lauffähiges Modell. Und beides schweigt im Zweifel: Ein Knowledge Model gilt als aufgerufen, sobald sein Name irgendwo in einem anderen Element als Aufruf vorkommt — eine ungewöhnliche Schreibweise kostet also eine ausbleibende Warnung statt einer falschen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler and stay on the Overview (DRG) tab.",
+          "Draw a Knowledge Model and give it logic. The strip under the canvas appears at once: nothing calls it yet.",
+          "Open a decision's own tab and call the knowledge model from its expression, by name — for example fee(amount).",
+          "Back on Overview (DRG): the first finding is gone and a second has taken its place, because the decision now calls a model it does not require.",
+          "Draw a knowledge requirement from the knowledge model to the decision. The strip disappears."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen und im Reiter «Overview (DRG)» bleiben.",
+          "Ein Knowledge Model zeichnen und ihm Logik geben. Der Streifen unter der Zeichenfläche erscheint sofort: Noch ruft es niemand auf.",
+          "Den eigenen Reiter einer Entscheidung öffnen und das Knowledge Model im Ausdruck beim Namen aufrufen, etwa fee(amount).",
+          "Zurück auf «Overview (DRG)»: Der erste Befund ist verschwunden, ein zweiter hat seinen Platz eingenommen, denn die Entscheidung ruft nun ein Modell auf, das sie nicht anfordert.",
+          "Eine Knowledge-Requirement-Kante vom Knowledge Model zur Entscheidung ziehen. Der Streifen verschwindet."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
       "version": "Unreleased",
       "date": null,
@@ -220,24 +265,6 @@
       "summary": {
         "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
         "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-catalogue-s-appearance-is-set-on-the-screen-that-fills-it",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "A catalogue's appearance is set on the screen that fills it.",
-        "de": "A catalogue's appearance is set on the screen that fills it."
-      },
-      "summary": {
-        "en": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it.",
-        "de": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it."
       },
       "link": {
         "label": "Changelog",
