@@ -173,6 +173,7 @@ var mcpOmittedRoutes = map[string]string{
 	"POST /api/v1/orders/{id}/lines/{item}/return":   "revoking an access somebody is using is the one order act with a blast radius outside Atlas; it is the orderer's to ask for, not an agent's",
 	"POST /api/v1/orders/{id}/lines/{item}/escalate": "moving an approval is a deadline's act or a person's, and an agent is neither; the decision it leads to is one nobody should be able to nudge from a tool",
 	"POST /api/v1/orders/{id}/lines/{item}/reassign": "same: an intervention records the person who made it, and an agent is not one",
+	"POST /api/v1/approvals/decide":                  "a decision is a person's, and this one is several at once: the surface exists to let one person say once what they would otherwise have typed twelve times. An agent deciding twelve approvals in one call is the failure this route's shape is built to make legible, not a use for it",
 	"GET /api/v1/approvals":                          "answers one signed-in person's own approvals from their session; an agent holds no tasks, so the tool would always be empty",
 	"GET /api/v1/approvals/{key}/logo":               "a brand mark is bytes for a browser; an agent has no use for the image",
 	"GET /api/v1/catalogs/{id}/logo":                 "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
