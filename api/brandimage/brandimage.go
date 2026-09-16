@@ -25,26 +25,81 @@ package brandimage
 import (
 	"bytes"
 	"net/http"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
 
-// Exts is the fixed, ordered set of stored extensions. It is a slice rather than
-// a map so a reader that has to look for "whichever one is there" does it
-// deterministically, and finds the same mark on every call.
-var Exts = []string{"png", "svg"}
+// A Set is what one upload surface accepts: which media types, and the extension
+// each is stored under.
+//
+// There is a set per surface and one [Valid] for all of them, and the split is
+// the point. Whether bytes really are the type they claim is a security question
+// with one answer everywhere — two copies of it is one copy a future hardening
+// will miss. *Which* types a surface accepts is a different question, and the
+// surfaces genuinely differ: see [Mark] and [Photo].
+type Set struct {
+	// exts is the stored extensions, ordered. A slice rather than a map so a reader
+	// that has to look for "whichever one is there" does it deterministically, and
+	// finds the same image on every call.
+	exts   []string
+	byType map[string]string
+	byExt  map[string]string
+}
 
-// ExtByType maps an accepted upload's media type to the extension it is stored
-// under; TypeByExt is the reverse, used to report the type on read.
-var (
-	ExtByType = map[string]string{"image/png": "png", "image/svg+xml": "svg"}
-	TypeByExt = map[string]string{"png": "image/png", "svg": "image/svg+xml"}
-)
+func newSet(byType map[string]string) Set {
+	s := Set{byType: byType, byExt: make(map[string]string, len(byType))}
+	for ct, ext := range byType {
+		s.exts = append(s.exts, ext)
+		s.byExt[ext] = ct
+	}
+	sort.Strings(s.exts)
+	return s
+}
 
-// pngMagic is the 8-byte signature every PNG begins with. Validating the bytes
+// Exts is the stored extensions, in a fixed order.
+func (s Set) Exts() []string { return s.exts }
+
+// ExtFor is the extension an accepted upload is stored under; ok is false for a
+// type this surface does not take, which makes it the acceptance test as well.
+func (s Set) ExtFor(contentType string) (string, bool) {
+	ext, ok := s.byType[contentType]
+	return ext, ok
+}
+
+// TypeFor is the media type a stored extension is reported as.
+func (s Set) TypeFor(ext string) (string, bool) {
+	ct, ok := s.byExt[ext]
+	return ct, ok
+}
+
+// Mark is what a brand mark may be: a raster PNG or a vector SVG. An instance's
+// mark and a catalogue's are both marks, and both take this set.
+var Mark = newSet(map[string]string{"image/png": "png", "image/svg+xml": "svg"})
+
+// Photo is what a picture of a person may be: PNG or JPEG.
+//
+// **Deliberately not SVG**, and that is the one place the two sets differ in
+// kind rather than in taste. An SVG is a document with scripting in it; [Serve]
+// makes one inert, but a mark has a reason to be a vector — it is drawn, it is
+// scaled, a designer delivers one — and a photograph does not. A picture of a
+// person arrives from a camera or from a directory, and both give raster bytes.
+// Accepting a format nothing needs, in the one place where the uploader is every
+// account rather than an administrator, is widening the surface for nothing.
+//
+// JPEG is here because that is what Microsoft Graph answers with for a user's
+// photo. A set that refused it would have made the directory path impossible and
+// said nothing about why.
+var Photo = newSet(map[string]string{"image/png": "png", "image/jpeg": "jpg"})
+
+// pngMagic is the 8-byte signature every PNG begins with, and jpegMagic the three
+// bytes every JPEG does (SOI, then the first marker). Validating the bytes
 // server-side — not only the client's Content-Type — means a mislabelled or
 // corrupt upload can never be persisted and served on to every browser.
-var pngMagic = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+var (
+	pngMagic  = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+	jpegMagic = []byte{0xff, 0xd8, 0xff}
+)
 
 // NormalizeType canonicalises an upload's Content-Type to a bare, lowercase
 // media type, dropping any parameters (e.g. "image/svg+xml; charset=utf-8").
@@ -56,13 +111,18 @@ func NormalizeType(h string) string {
 }
 
 // Valid reports whether the bytes look like the media type they were declared
-// as: the PNG magic for a raster mark, well-formed UTF-8 containing an "<svg"
-// root for a vector one. An unknown type is never valid, which is what makes this
-// the type check as well as the content check.
+// as: the PNG or JPEG magic for a raster image, well-formed UTF-8 containing an
+// "<svg" root for a vector one. An unknown type is never valid.
+//
+// It answers for every [Set], and knowing a type here does not make a surface
+// take it — the surface's own set decides that, and asks this only about what it
+// already accepts.
 func Valid(contentType string, data []byte) bool {
 	switch contentType {
 	case "image/png":
 		return bytes.HasPrefix(data, pngMagic)
+	case "image/jpeg":
+		return bytes.HasPrefix(data, jpegMagic)
 	case "image/svg+xml":
 		return utf8.Valid(data) && bytes.Contains(bytes.ToLower(data), []byte("<svg"))
 	}

@@ -12,6 +12,27 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Changed
+
+- **The portal's corner names whoever the order is for, and the help moved to the end
+  of the row.** The corner said **"mich selbst"** to everybody. That was true, and it
+  was true of every reader alike, so it identified nobody — and on a screen where the
+  next click can place an order in somebody else's name, the one thing the corner is
+  there for is to say whose name that is.
+
+  It now names the chosen recipient, or the person reading where none is chosen, and
+  falls back to "mich selbst" only where neither is known — with enforcement off there
+  is nobody to be, and saying so is the honest answer. The name is the account's
+  display name, its username where it has none: the other half of the same label is a
+  recipient's display name, and two kinds of thing in one place would read as two
+  different questions being answered.
+
+  The round **?** moved from beside the first destination to the far end of the row,
+  past the person. Among the destinations it was a round button the same height as its
+  neighbours in a row where everything else navigates the catalogue, so it read as a
+  fourth place to go. At the end it reads as what it is: part of the corner that is
+  about the reader rather than about what they are reading.
+
 ### Fixed
 
 - **A knowledge model's expression opened unstyled.** dmn-js does not show a business
@@ -153,6 +174,98 @@ _Changed_ / _Removed_ for each version.
   borrowers no deployed process uses, is left unshaded: "no process reaches this state" and "no
   process was in a position to" are different claims, and fading a state machine nothing drives
   would report the second as the first.
+
+- **A face can come from the directory, and it arrives the way every other directory
+  fact does.** A tenant that already holds a photo for everybody should not be asked
+  to collect them a second time. The constraint that shaped this is not about
+  pictures: **Atlas holds no tenant credential** and must not start holding one, so
+  the mirror *pulls* — a process reads Graph through the Entra worker and reports
+  what it read, and nothing in the server calls Graph.
+
+  The worker gained one operation, **`get-user-photo`**, and with it the ability to
+  read bytes at all: every Graph call Atlas had returned JSON, and a photo does not.
+  The change is one field on the request rather than a second method on the client,
+  because what differs is a property of *the request*. The result reaches a process
+  as `{contentType, data}` with the data base64 — a process variable is FEEL, and
+  FEEL has no bytes — and `null` where there is no photo, so a model asks whether
+  there is one instead of comparing an empty string.
+
+  **A 404 is an answer, not a failure**, and that is the one place in this worker
+  where a non-2xx is not an error. Graph answers 404 both for a person with no photo
+  and for an id that is not anybody's, and its error code distinguishing them is not
+  something to hang a directory run on. The trade is stated rather than hidden: a
+  mistyped id reads as "no photo", where the other way round every person without
+  one would fail a job — in a tenant where most have none, an incident queue nobody
+  can read. It is confined to binary requests and held by a test, because the day it
+  leaks into the JSON path is the day a failed directory read looks like an empty
+  one. A body past the limit is **refused rather than cut short**: the magic is at
+  the front, so half a JPEG passes every format check and is still broken.
+
+  The synchronisation message carries the pictures in a field of its own — not on the
+  user object, which is documented as one object from `/users/delta` and would have
+  been a small lie in the file where a reader most needs to know what came from
+  where. **Removal is explicit**, because the absence of an entry has to keep meaning
+  "not fetched": without a way to say "there is none", a photo deleted in the tenant
+  would stay on the account for ever.
+
+  **A mirror does not overwrite a choice.** A picture somebody uploaded is left where
+  it is, in both directions — the directory may replace or remove what the directory
+  gave, and neither what a person picked for themselves. The run counts how often it
+  stood back rather than writing a line per person; what is surprising, bytes that
+  are not a picture, is a note, and it never costs the account the rest of its page.
+
+  The account carries a **fingerprint** of its picture, and that is what keeps
+  "unchanged" true. The mirror decides an account unchanged by comparing the record
+  before and after; a photo that changed while the record did not would be planned as
+  unchanged and written anyway, which breaks the one rule that makes the reporting
+  mode worth reading — the plan says what the apply does. It also makes the write
+  idempotent, so a process that fetches photos every run does not report a change on
+  every account for ever.
+
+- **A person can have a face.** Atlas showed people as strings: an approval said
+  `usr_4be5b4ad`, the portal's corner drew an empty circle, and a recipient picked
+  out of the directory was a name in a list of names. That is fine while somebody
+  works with three colleagues, and it stops being fine first exactly where the
+  mistake is expensive — ordering in somebody else's name, deciding somebody else's
+  request.
+
+  An account now carries a **picture**: `PUT /api/v1/users/{id}/avatar` takes the
+  bytes, `GET` serves them to anybody signed in, `DELETE` takes them away. It is
+  shown in the portal's corner beside whoever the order is for, and in the
+  console's user administration, where it is also uploaded and removed.
+
+  **Set by the account itself or by an administrator — not by an operator.** An
+  operator runs what is deployed, and changing the face a colleague wears to
+  everybody else is not running anything. Read by everybody signed in, which is the
+  point of having one: it is read beside a name in a task list, an approval and a
+  recipient picker, by colleagues rather than by administrators, and it discloses
+  less than the principals directory the same caller already reads.
+
+  **Stored beside the account record**, and two things follow without anybody
+  arranging them: a snapshot that carries the accounts carries their pictures, and
+  deleting an account deletes its picture — in the store rather than in a handler,
+  so every deletion path does it. Ids are assigned, so a file left behind is not
+  untidy but wrong: the next account handed that id would inherit a stranger's
+  face.
+
+  **PNG or JPEG, and deliberately not SVG.** A brand mark may be a vector — it is
+  drawn, it is scaled, a designer delivers one — and the serve headers make a
+  hostile one inert. A photograph has no such reason: it comes from a camera or
+  from a directory, and both give raster bytes. Accepting a document format with
+  scripting in it, in the one place where the uploader is *every account* rather
+  than an administrator, would be widening the surface for nothing. So the image
+  package now has a set per surface over one content check: which types a surface
+  takes is a policy and the surfaces differ, while whether bytes really are the
+  type they claim has one answer everywhere.
+
+  The account records **where the picture came from** — uploaded, or from the
+  directory — because nothing in a JPEG says who chose it, and that is exactly what
+  somebody looking at a wrong picture needs: whether to change it here or in the
+  directory. The directory half is not in this change: the photo will arrive the
+  way every other directory fact arrives, read through the Entra worker by a
+  process and reported here, because Atlas holds no tenant credential and must not
+  start holding one for a picture.
+
 
 - **The decision editor says when a knowledge model is never invoked, or invoked without
   being required.** A knowledge model is a reusable FEEL function, and DMN says the
@@ -1068,6 +1181,90 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An operations number is a counter or a walk, never the length of a page.** The live
+  diagram's wrong incident counts had a shape worth searching for: a list is fetched
+  with a page cap, the console counts its rows, and the count is rendered as a fact
+  about the population. That agrees with the truth until an installation is busy enough
+  to need the number — and because every capped list here is ordered, what falls off is
+  a contiguous slice rather than a sample, so a whole class of subject goes missing
+  together and the count reads zero rather than low. Zero is not a floor.
+
+  Every number the Operations views state was audited against what produced it. Most
+  were already right: the overview's Running and Finished columns (per-definition
+  counters), the Incidents view's cause table (a complete walk), the nav badge, and
+  every floor that says it is one — the Workers view's queue depth with its `+`, the
+  mock directory and mock database printing "showing n of m held", the saved task
+  folders' badges. Three were not:
+
+  - **A search hit that is stuck now says so on its own row.** The flag came from
+    bucketing the server's whole incident list — capped at 5 000 rows, with a
+    truncation header the console never read. Measured on a store holding 5 200 parked
+    instances, 200 running instances that were each parked behind an incident rendered
+    as a plain "active", on the surface an operator opens to debug one. The count is now
+    part of the row, taken through that instance's own element index, and the 5 000-row
+    transfer per search is gone with it.
+  - **The task inbox's fixed folder badges count the inbox.** "All tasks", "Assigned to
+    me", "Unassigned" and "Group tasks" were counted in the browser off the newest-first
+    page it had already loaded. Measured: with 700 open tasks, claiming the oldest one
+    for a user left their "Assigned to me" reading 0 while the task sat in their inbox.
+    The four predicates now live in one place, and the badge comes from the server's own
+    walk once the page stops holding the whole inbox — an uncapped page *is* the inbox,
+    so counting its rows there is both exact and free.
+  - **Nothing walks the incident family on the run loop any more.** `incidentsByJobType`
+    walks it whole and does a point read per parked token, and it ran inside a run-loop
+    turn — once for the Workers view, once for every Starmap page load. On a flooded
+    engine that dispatches tens of thousands of reads onto the goroutine that executes
+    process instances, which is exactly what
+    [ADR-0266](docs/adr/0266-stats-and-incidents-off-the-loop.md) removed from `/stats`.
+    Both callers now take the tally off the loop, before their turn.
+
+  The rule is now checked rather than written down. Five instances of one mistake, none
+  caught by review, is not a case for another paragraph of guidance:
+  `api/pagecount_internal_test.go` fails a build where `fmtCount()` is handed a list
+  length, where a raw read of a capped listing drops the headers that say it is capped,
+  or where such a listing is read with nothing nearby that names its bound. Each rule
+  was verified by putting the original defect back and watching it fail, and the
+  patterns themselves are pinned against known-bad and known-good lines so a guard
+  cannot quietly stop matching and pass as coverage. They do not follow data flow, so
+  they are a tripwire at the places the mistake has been made rather than a proof that
+  it cannot be made again.
+
+  ([ADR-0365](docs/adr/0365-a-number-is-a-counter-or-a-walk.md))
+
+- **The live diagram counts every parked token, not the ones a bounded scan reached.**
+  One process, two deployed versions, both under the same broken worker: the Operations
+  overview reported 10 910 stuck tokens, the live view of the current version reported
+  none at all, and the previous version's diagram badged "50" on each of two tasks
+  holding some 5 452 each. Only the overview was right, and the current version's
+  diagram — the surface an operator opens *because* the overview flagged the process —
+  drew a process whose every running instance was parked as a healthy one.
+
+  The overlay collected its incidents on the run loop, so it was bounded twice, and it
+  walked the incident family in key order, attributing each entry to its definition only
+  after reading it. Incidents are keyed by element instance and those keys ascend, so
+  the budget was spent oldest-first: a version deployed after a flood sat entirely past
+  it and was never reached. The per-element numbers were then read off what the scan had
+  returned, which is where "50" came from — the page held 100 rows, they fell on two
+  tasks, and each badge reported its share of the page rather than of the process.
+
+  The overlay now reads what
+  [the cause summary](docs/adr/0337-incident-floods.md) reads, the way it reads it: one
+  walk of the incident family off the run loop against a snapshot, through the same
+  attribution every other incident surface uses, held for five seconds so a 1.5-second
+  poll does not pay for one each time and dropped the moment anything is resolved. The
+  count and the detail page are now separate things — `incidentTotal` and
+  `elements[].incidents` are exact, `incidents[]` stays a 100-row page for the resolve
+  panel, and `incidentCountsExact` says which is which. A definition with nothing parked
+  now *states* that it has nothing parked, where before it could not be told apart from
+  one the scan had not got to. Nothing walks the incident family on the run loop any
+  more.
+
+  Two more readings were wrong for the same reason and are fixed with it: isolating a
+  single instance stopped counting its parked tokens once its detail page filled, so an
+  instance holding more than 100 reported exactly 100; and the browser hid the incident
+  pill whenever the detail list was empty, which is what turned an unreached definition
+  into a silent one.
+  ([ADR-0366](docs/adr/0366-the-live-diagram-counts-every-parked-token.md))
 - **Restoring a backup from another installation no longer attaches this one's history
   to a foreign process.** The portable design-time backup
   ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carries `deployments/` and
