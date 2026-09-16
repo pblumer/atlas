@@ -68,6 +68,11 @@ test("the classes the application models are offered, with what tells them apart
   expect(labels).toEqual(["— none —", "Customer", "Order · key id", "Another class, not modelled yet…"]);
   // Grouped by the model they live in, so a name says where it comes from.
   await expect(pick.locator("optgroup")).toHaveAttribute("label", "Sales data");
+  // And the fixture's «enumeration» is not among them. An enumeration is machinery of
+  // the model — an attribute's type, or the states a lifecycle takes (ADR-0306) — and no
+  // process carries one as a data object; the difference reading already excludes them
+  // from the backlog for that reason, and offering one here contradicted it.
+  expect(labels.some((l) => l.startsWith("Priority"))).toBe(false);
 
   await selectDataObject(page, "Ref_note");
   await expect(page.locator("#f-itemtype")).toHaveValue("");
@@ -83,7 +88,7 @@ test("the class the type points at is shown, so it can be checked without leavin
   const card = page.locator(".im-card");
   await expect(card.locator(".im-card-name")).toHaveText("Order");
   await expect(card.locator(".im-card-stereo")).toHaveText("«businessObject»");
-  await expect(card.locator(".im-card-attrs li")).toHaveCount(4);
+  await expect(card.locator(".im-card-attrs li")).toHaveCount(5);
   // The business key is marked here exactly as the canvas marks it: it is what makes
   // two of these the same one, and the reason to check the class at all.
   await expect(card.locator("li.key .n")).toHaveText("⚿ id");
@@ -121,8 +126,10 @@ test("a type nothing models yet can be modelled from here", async ({ page }) => 
   expect(added.stereotype).toBe("businessObject");
   expect(added.attributes).toEqual([]);
   expect(added.identity).toEqual([]);
-  // Placed where the canvas would place it, not on top of the class before it.
-  expect(added.x).toBe(560);
+  // Placed where the canvas would place it, not on top of the class before it. The
+  // number is the next free column after the classes the fixture holds, so it moves
+  // when the fixture grows — the claim is that it is past them, not that it is 820.
+  expect(added.x).toBe(820);
   expect(page.__errors).toEqual([]);
 });
 

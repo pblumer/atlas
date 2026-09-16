@@ -207,6 +207,92 @@ type Limits struct {
 	// findings mean the scope or the catalogue is wrong, and filling a disk with
 	// them helps nobody read the first ten.
 	ReconcileJournal int32
+
+	// Recertify is one message opening a recertification campaign: its name, its
+	// scope, and the map of who reviews whom (ADR-0341).
+	// The reviewer map is what makes it large — one entry per person in scope — and
+	// it is external input like any other.
+	Recertify int64
+
+	// RecertifyRows is how many questions one campaign may ask.
+	//
+	// A ceiling on what a *read of Atlas's own inventory* produced, which is unusual
+	// and deliberate. The number that matters is not a message size, it is how many
+	// judgements one campaign asks of people: a campaign of twenty thousand rows is
+	// not answered, it is signed, and this is the one place where making that
+	// impossible is cheaper than detecting it afterwards. A campaign above it is
+	// refused whole rather than shortened, because a campaign missing its tail looks
+	// exactly like a complete one to whoever closes it.
+	RecertifyRows int32
+
+	// RecertifyReport is how many rows one answer renders. Unlike RecertifyRows this
+	// is only about reading: the campaign keeps every row and every one is decidable
+	// through its own route, so a view that stops at five hundred costs nothing but
+	// a second request.
+	RecertifyReport int32
+
+	// RecertifyNote is one decision's free text. Small on purpose — it is a
+	// sentence explaining a judgement, not an attachment, and a justification field
+	// that invites an essay gets an essay from the first reviewer and "ok" from
+	// every one after.
+	RecertifyNote int64
+
+	// ExpiringWindow is how far ahead one read may look, in days
+	// (ADR-0344). A ceiling on a *question* rather than
+	// on a message, and it earns that: a window wide enough to cover every right
+	// with an end turns "what ends soon" into a list of the whole inventory, which
+	// is a different route's job and a different cost.
+	ExpiringWindow int32
+
+	// ExpiringReport is how many rights one answer renders. The counts are over
+	// everything either way, so a cut list costs a second request and never a wrong
+	// number — which is why this one is a truncation where a campaign's rows are a
+	// refusal.
+	ExpiringReport int32
+
+	// ConflictReport is how many held incompatible pairs one answer lists
+	// (ADR-0342). The counts are over everything, so a cut list
+	// costs a second request and never a wrong number. A rule declared over a large
+	// estate can produce a great many findings at once and none of them is cleared
+	// automatically — which is correct, and is also why the list is bounded and the
+	// number is not.
+	ConflictReport int32
+
+	// HistoryReport is how many ended holds one answer lists
+	// (ADR-0346).
+	//
+	// Larger than the others in this group, and deliberately: every ceiling beside
+	// it bounds a list of problems, and a problem list that needs a high ceiling
+	// is telling you something. This one bounds a person's access history, which
+	// grows with their tenure rather than with anything being wrong — somebody ten
+	// years in a job that changes has a long and entirely healthy list, and a
+	// ceiling that truncated it would omit the oldest rows, which are the ones an
+	// audit reaches for.
+	HistoryReport int32
+
+	// Favourites is how many products one account may mark
+	// (ADR-0348). The smallest ceiling in this file, and the one whose
+	// number is a *product* judgement as much as a budget: a shortcut list nobody
+	// can scan has stopped being a shortcut. It is a budget nonetheless, because
+	// without it one account can grow a stored file without bound by pressing a
+	// star.
+	Favourites int32
+
+	// OrderLineAnswers is how many configuration answers one order line may carry
+	// (ADR-0358) — the fields of
+	// the form its product declares. Small, because a form somebody fills in while
+	// ordering a laptop is a handful of questions, and one with forty is a process
+	// wearing a form's clothes.
+	//
+	// It bounds a map that arrives whole in a request body, so without it one
+	// request can grow the order store without bound.
+	OrderLineAnswers int32
+
+	// PendingWorkItems is how many waiting items one person's answer lists
+	// (ADR-0343). Small, because the consumer is a reminder and a
+	// reminder listing two hundred lines is one nobody reads to the end. The counts
+	// are over everything, so a message can say "and 190 more" truthfully.
+	PendingWorkItems int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -257,6 +343,17 @@ func Default() Limits {
 		ReconcileObservations: 2_000,
 		ReconcileReport:       500,
 		ReconcileJournal:      10_000,
+		Recertify:             8 << 20,
+		RecertifyRows:         5_000,
+		RecertifyReport:       500,
+		RecertifyNote:         4 << 10,
+		ExpiringWindow:        365,
+		ExpiringReport:        500,
+		PendingWorkItems:      50,
+		ConflictReport:        500,
+		HistoryReport:         2000,
+		Favourites:            100,
+		OrderLineAnswers:      50,
 	}
 }
 

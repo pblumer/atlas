@@ -4,13 +4,17 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
 
 // The order API area (ADR-0147).
@@ -46,6 +50,30 @@ type Service struct {
 	// the catalogue service dispatches onto the loop itself and a nested Do would
 	// deadlock.
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error)
+	// groupsOf answers which groups somebody belongs to, for the eligibility check
+	// (ADR-0347). It asks about the **recipient**, who is not
+	// the caller and therefore has no principal in the request — a manager ordering
+	// for a new hire is the ordinary case, and checking the caller's groups would
+	// refuse exactly that.
+	//
+	// It answers [httpapi.ErrNoSuchPrincipal] for a name nobody holds, which is a
+	// different failure from a store it could not read: the first refuses the
+	// order as bad input, the second as a server fault, and telling them apart is
+	// what stops a misspelled recipient reading as an outage.
+	groupsOf func(string) ([]string, error)
+	// mayOrderForOthers answers whether this caller may place an order naming
+	// somebody else as the recipient (ADR-0349).
+	//
+	// A separate question from mayOrderFrom, which asks whether the *shop* is
+	// theirs. This asks whether the *order* may be somebody else's, and the two are
+	// independent: being the audience for a catalogue says nothing about whose name
+	// an order may carry.
+	mayOrderForOthers func(*httpapi.Principal) bool
+	// Limits are the resource budgets this service enforces. Set after
+	// construction, like every other per-area service's, so that the constructor
+	// does not grow a thirteenth positional argument for a value the server hands
+	// to all of them the same way.
+	Limits limits.Limits
 	// wake tells the fulfilment process that an order moved. The variables it
 	// carries are the message's start variables, which is how the orchestrator
 	// learns anything beyond the order id it correlates on.
@@ -74,7 +102,7 @@ type Service struct {
 	// service's loop closure — writing an engine fact runs the processor, which
 	// is a visit to the loop of its own, and a nested Do would deadlock.
 	grant  func(Grant) error
-	revoke func(principal, itemID string) error
+	revoke func(principal, itemID string, at int64, by string) error
 	// held answers what one principal already holds, as a set of item ids. It is
 	// what makes the basket's second resolution possible — an item the recipient
 	// already has and may not have twice is ordered as skipped rather than
@@ -102,14 +130,27 @@ const (
 func New(loop *runloop.Loop, store *Store, now func() int64,
 	release func(id string) (catalog.Release, bool, error),
 	mayOrderFrom func(*httpapi.Principal, string) (bool, error),
+	groupsOf func(string) ([]string, error),
+	mayOrderForOthers func(*httpapi.Principal) bool,
 	wake func(message, orderID string, vars map[string]string) error,
 	portalBase func() string,
 	grant func(Grant) error,
-	revoke func(principal, itemID string) error,
+	revoke func(principal, itemID string, at int64, by string) error,
 	held func(principal string) (map[string]bool, error)) *Service {
 	return &Service{loop: loop, store: store, now: now,
-		release: release, mayOrderFrom: mayOrderFrom, wake: wake, portalBase: portalBase,
+		release: release, mayOrderFrom: mayOrderFrom, groupsOf: groupsOf,
+		mayOrderForOthers: mayOrderForOthers, wake: wake, portalBase: portalBase,
 		grant: grant, revoke: revoke, held: held}
+}
+
+// budgets is the effective budget set: the server's where it set one, the defaults
+// otherwise, so a service built in a test bounds what a service built by the server
+// bounds.
+func (s *Service) budgets() limits.Limits {
+	if s.Limits == (limits.Limits{}) {
+		return limits.Default()
+	}
+	return s.Limits
 }
 
 func newID(prefix string) (string, error) {
@@ -128,6 +169,14 @@ type placeReq struct {
 	// Recipient is who the products are for, defaulting to the orderer. They
 	// differ when an integration manager orders for somebody assigned to them.
 	Recipient string `json:"recipient,omitempty"`
+	// Config carries the answers to each product's configuration form, keyed by
+	// item id and then by the form's own field key
+	// (ADR-0358).
+	//
+	// Keyed by item rather than flat because two products in one basket legitimately
+	// ask the same question — two laptops, two cost centres — and a flat map would
+	// silently keep one answer.
+	Config map[string]map[string]string `json:"config,omitempty"`
 }
 
 // HandlePlace places an order against one release.
@@ -186,6 +235,21 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// And whose name this order may carry (ADR-0349).
+	//
+	// Checked here rather than folded into the recipient's eligibility below,
+	// because the two refuse different things: eligibility asks whether *this
+	// person* may have *this product*, and would happily let somebody place an
+	// order in a colleague's name for something the colleague is perfectly entitled
+	// to. What is wrong there is not the product — it is the name on the order.
+	if recipient != p.UserID && !s.mayOrderForOthers(p) {
+		httpapi.Error(w, http.StatusForbidden,
+			"ordering in somebody else's name needs the operator role. An order placed "+
+				"for another person puts an approval in their manager's inbox and a line "+
+				"in their record, which is why it is not something every account may do")
+		return
+	}
+
 	// What the recipient already holds, read before the loop is entered for the
 	// same reason the catalogue gate is. An unreadable inventory refuses the order
 	// rather than placing one that would provision a second copy of something:
@@ -197,10 +261,34 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// And which groups the recipient is in, read here for the reason the two above
+	// are: it needs the loop itself, and the placement below already holds it. An
+	// unreadable answer refuses the order rather than placing one — a restriction
+	// that fails open is not a restriction.
+	recipientGroups, groupErr := s.groupsOf(recipient)
+	switch {
+	case errors.Is(groupErr, httpapi.ErrNoSuchPrincipal):
+		// A recipient nobody holds is the caller's mistake, and it was being answered
+		// as the server's. That matters beyond the status code: an order naming a
+		// person who does not exist puts an approval in nobody's inbox, provisions
+		// against nothing, and leaves a right attached to a string — so the refusal
+		// has to be readable by whoever typed the name, not by whoever reads the
+		// server log.
+		httpapi.Error(w, http.StatusBadRequest, groupErr.Error())
+		return
+	case groupErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError,
+			"check who the recipient is: "+groupErr.Error())
+		return
+	}
+
 	var (
-		out   Order
-		empty bool
-		opErr error
+		out    Order
+		empty  bool
+		clash  *conflict
+		barred *ineligible
+		stray  string
+		opErr  error
 	)
 	s.loop.Do(func() {
 		ordered := rel.Expand(req.Items)
@@ -211,10 +299,32 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 			empty = true
 			return
 		}
+		// Refused here rather than reported later, which is the whole point of a
+		// preventive control (ADR-0342): detection means the
+		// forbidden combination exists in the real world for as long as detection
+		// takes, and a control that permits what it forbids and then reports it is a
+		// detective control with extra steps.
+		if clash = conflictIn(rel, ordered, has); clash != nil {
+			return
+		}
+		// And who may receive it at all. Beside the conflict check rather than
+		// before the catalogue gate, because it is the same kind of rule read at the
+		// same moment: what the release says about this basket
+		// (ADR-0347). The catalogue's audience has already
+		// decided whether this shop is theirs; this decides whether this shelf is.
+		if barred = ineligibleIn(rel, ordered, recipientGroups); barred != nil {
+			return
+		}
+		// And that the answers belong to this basket. Checked here because it needs
+		// the expanded list: an integral part is ordered without being asked for,
+		// and it may perfectly well carry a form of its own.
+		if stray = s.strayAnswers(rel, ordered, req.Config); stray != "" {
+			return
+		}
 
 		out = Order{
 			ID: id, ReleaseID: rel.ID, Orderer: p.UserID, Recipient: recipient,
-			Lines:     linesFor(rel, ordered, has),
+			Lines:     linesFor(rel, ordered, has, req.Config),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
 			CreatedAt: s.now(),
@@ -228,6 +338,16 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "place order: "+opErr.Error())
 	case empty:
 		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
+	case clash != nil:
+		httpapi.Error(w, http.StatusConflict, clash.reason())
+	case stray != "":
+		httpapi.Error(w, http.StatusBadRequest, stray)
+	case barred != nil:
+		// 403 and not 409: a conflict is a state of the estate that could be
+		// resolved by giving something back, and this is a statement about who the
+		// recipient is. Telling the two apart is what lets a caller know whether
+		// there is anything to do about it.
+		httpapi.Error(w, http.StatusForbidden, barred.reason())
 	default:
 		// Start the fulfilment process for it. Durable first, then the side effect
 		// (I2): the order stands whether or not this succeeds, and a failure here
@@ -266,10 +386,27 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 // from silence, and a reader of the order months later can tell the two apart.
 // Skipped also counts as satisfied, so a line that requires this one is not left
 // waiting for something nobody is going to provision.
-func linesFor(rel catalog.Release, ordered []string, held map[string]bool) []Line {
+func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
+	config map[string]map[string]string) []Line {
 	bound := make(map[string]catalog.Item, len(rel.Items))
 	for _, it := range rel.Items {
 		bound[it.ID] = it
+	}
+	// Which of these arrived because something else in the order always carries it.
+	// Computed from the release rather than from what the caller asked for: the
+	// question is whether *this order* carries it as a part, and an id that was
+	// both chosen and carried is carried — the whole is in the basket either way.
+	inOrder := make(map[string]bool, len(ordered))
+	for _, id := range ordered {
+		inOrder[id] = true
+	}
+	carried := map[string]bool{}
+	for _, id := range ordered {
+		for _, part := range rel.Includes[id] {
+			if inOrder[part] {
+				carried[part] = true
+			}
+		}
 	}
 	out := make([]Line, len(ordered))
 	for i, id := range ordered {
@@ -281,10 +418,104 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool) []Lin
 		out[i] = Line{ItemID: id, Status: status,
 			ProvisionProcess:   it.ProvisionProcess,
 			DeprovisionProcess: it.DeprovisionProcess,
+			MaxDays:            it.MaxDays,
+			// The form's id travels with the line beside the answers, so a reader of
+			// the order months later knows which set of questions these answers were
+			// given to — the answers alone are a map of keys nobody can interpret.
+			Price:      it.Price,
+			ConfigForm: it.ConfigForm,
+			Config:     copyAnswers(config[id]),
+			Integral:   carried[id],
+			Includes:   partsOf(rel, id, inOrder),
 			Approval: Approval{
 				Kind: string(it.Approval.Kind),
 				Ref:  it.Approval.Ref,
 			}}
+	}
+	return out
+}
+
+// strayAnswers reports why a basket's configuration answers do not belong to it,
+// or "" when they do (ADR-0358).
+//
+// Two refusals, both because the alternative is an order that silently loses
+// something somebody typed:
+//
+//   - answers for a product this order does not carry. Almost always a stale
+//     basket — the product was taken out and its answers were not — and the
+//     honest response is to say so rather than to drop them.
+//   - answers for a product that asks no questions. The catalogue does not know
+//     what to do with them and no process will read them, so storing them would
+//     put data in the record that nothing can interpret.
+//
+// It deliberately does *not* refuse a product whose form went unanswered. Whether
+// a field is required is the form's own statement, rendered by the form runtime,
+// and re-deciding it here would be a second copy of a rule that already exists —
+// wrong the first time somebody marks a field optional.
+func (s *Service) strayAnswers(rel catalog.Release, ordered []string,
+	config map[string]map[string]string) string {
+	if len(config) == 0 {
+		return ""
+	}
+	inBasket := make(map[string]catalog.Item, len(ordered))
+	for _, id := range ordered {
+		for _, it := range rel.Items {
+			if it.ID == id {
+				inBasket[id] = it
+				break
+			}
+		}
+	}
+	// Sorted, so the same bad basket is refused with the same sentence every time.
+	ids := make([]string, 0, len(config))
+	for id := range config {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if len(config[id]) == 0 {
+			continue
+		}
+		it, carried := inBasket[id]
+		switch {
+		case int32(len(config[id])) > s.budgets().OrderLineAnswers:
+			return fmt.Sprintf("%q carries %d details and no more than %d are kept for "+
+				"one line. A form with that many questions is a process wearing a form's "+
+				"clothes", id, len(config[id]), s.budgets().OrderLineAnswers)
+		case !carried:
+			return fmt.Sprintf("the order carries details for %q, which is not in it. "+
+				"Remove them or order the product they belong to", id)
+		case it.ConfigForm == "":
+			return fmt.Sprintf("%q asks for no details and the order carries some. "+
+				"Nothing would read them, so they are refused rather than stored", id)
+		}
+	}
+	return ""
+}
+
+// partsOf names the parts this line always carries that this order also has, so a
+// refusal can say what carries the part it will not take back. Sorted and copied,
+// because the release's slice must not reach into an order.
+func partsOf(rel catalog.Release, id string, inOrder map[string]bool) []string {
+	var out []string
+	for _, part := range rel.Includes[id] {
+		if inOrder[part] {
+			out = append(out, part)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// copyAnswers is the line's own map, so the request body cannot be edited into an
+// order after it has been written.
+func copyAnswers(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
 	}
 	return out
 }
@@ -516,19 +747,42 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 func (s *Service) recordInventory(o Order, itemID string, status LineStatus) error {
 	switch status {
 	case StatusDone:
-		var variant string
+		var (
+			variant string
+			maxDays int
+		)
 		for _, l := range o.Lines {
 			if l.ItemID == itemID {
-				variant = l.VariantID
+				variant, maxDays = l.VariantID, l.MaxDays
 				break
 			}
 		}
+		// The end, computed here because this is where the release's ceiling and
+		// the moment the right began are both in hand. Zero days is a right that
+		// does not end, and stays the ordinary case.
+		var until int64
+		if maxDays > 0 {
+			until = o.UpdatedAt + int64(maxDays)*int64(24*time.Hour)
+		}
 		return s.grant(Grant{
 			Principal: o.Recipient, ItemID: itemID, VariantID: variant,
-			OrderID: o.ID, At: o.UpdatedAt,
+			OrderID: o.ID, At: o.UpdatedAt, Until: until,
 		})
 	case StatusReturned:
-		return s.revoke(o.Recipient, itemID)
+		// The moment is the order's, not a fresh clock reading: it is the same
+		// frozen, command-time value the grant above uses, so the pair of history
+		// timestamps comes from one source. The actor is whoever asked for the
+		// return, carried on the line since then — what completed it is a
+		// deprovisioning process, and naming that as the decider would attribute a
+		// decision to a robot.
+		var by string
+		for _, l := range o.Lines {
+			if l.ItemID == itemID {
+				by = l.ReturnedBy
+				break
+			}
+		}
+		return s.revoke(o.Recipient, itemID, o.UpdatedAt, by)
 	}
 	return nil
 }
@@ -607,4 +861,68 @@ func (s *Service) HandleDecide(w http.ResponseWriter, r *http.Request) {
 		}
 		httpapi.JSON(w, http.StatusOK, got)
 	}
+}
+
+// conflict is one incompatible pair an order would create
+// (ADR-0342).
+//
+// It names both items, never one. A conflict is a fact about a pair, and no rule
+// can say which half is wrong — the person needs one of them to do their job, and
+// which one is a question about the job rather than about the catalogue.
+type conflict struct {
+	// Ordered is the item this order asked for. Other is what it is incompatible
+	// with, and Held says whether the recipient already has that other half or is
+	// asking for it in the same basket.
+	Ordered string
+	Other   string
+	Held    bool
+}
+
+// reason is the sentence the placer reads.
+func (c conflict) reason() string {
+	if c.Held {
+		return fmt.Sprintf("%q cannot be held together with %q, which the recipient already "+
+			"has. Neither is wrong on its own — the catalogue says the combination is. Giving "+
+			"up whichever is no longer needed is a return or an access review, and both record "+
+			"who decided", c.Ordered, c.Other)
+	}
+	return fmt.Sprintf("%q and %q cannot be held together, and this order asks for both. "+
+		"Neither is wrong on its own — the catalogue says the combination is", c.Ordered, c.Other)
+}
+
+// conflictIn finds the first incompatibility an order would create, against what the
+// recipient holds and against the rest of the same basket.
+//
+// The first rather than all of them, deliberately: an order is refused whole, so a
+// second conflict changes nothing about the outcome and a list of them reads as a
+// bigger problem than the one that has to be solved. The next placement finds the
+// next one.
+//
+// Deterministic, because the refusal is a message somebody may quote back: the
+// ordered items are walked in the order the release expanded them, and each item's
+// exclusions are already sorted by [catalog.Publish].
+func conflictIn(rel catalog.Release, ordered []string, held map[string]bool) *conflict {
+	if len(rel.Excludes) == 0 {
+		return nil
+	}
+	asking := make(map[string]bool, len(ordered))
+	for _, id := range ordered {
+		asking[id] = true
+	}
+	for _, id := range ordered {
+		for _, other := range rel.Excludes[id] {
+			switch {
+			case held[other]:
+				return &conflict{Ordered: id, Other: other, Held: true}
+			case asking[other]:
+				// Both halves in one basket. Reported once rather than twice: the
+				// walk would meet the same pair again from the other side, and two
+				// refusals about one pair is one refusal too many.
+				if id < other {
+					return &conflict{Ordered: id, Other: other}
+				}
+			}
+		}
+	}
+	return nil
 }

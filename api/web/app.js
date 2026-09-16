@@ -12,6 +12,7 @@ import {
 import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { copyText } from "./clipboard.js";
+import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
 // has to agree on what the markup means — and on the escaping that keeps it inert.
@@ -76,7 +77,12 @@ export async function apiRaw(method, path, body, isXML) {
     // The message is the readable half; the status and the decoded body ride along for
     // the few callers that need to *act* on the failure rather than report it — a 409
     // that names what is in the way, say (ADR-0163).
-    const err = new Error((data && data.error) || res.statusText);
+    // statusText is empty over HTTP/2, which carries no reason phrase — so a body
+    // with no "error" key produced `new Error("")`, and every caller that reports
+    // err.message showed a blank box where the reason belonged. The status number
+    // is not a good message; it is a great deal better than nothing, and it says
+    // out loud that the caller is reading the wrong half of the body.
+    const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
@@ -637,6 +643,13 @@ const TOPNAV = {
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
+    // The second kind of thing addressed to a person
+    // (ADR-0341). Not Operations, where reconciliation
+    // sits: a finding is repair and the operator's, while this asks a line manager
+    // whether somebody on their team still needs something — and a line manager has
+    // never opened Operations. Not one of the two portal pages either: those carry
+    // the catalogue's brand and are written for people outside the tooling.
+    { name: "Access review", route: "#/tasks/recertification", role: "user" },
     { name: "Start", route: "#/tasks/start", role: "operator" },
   ],
   panorama: [
@@ -953,6 +966,10 @@ function handbookHelp(path) {
   // the workshop chapter is the one that builds exactly that, end to end.
   if (/^#\/modeler\/p\//.test(path)) return H("werkstatt", "Building an application");
   if (path.startsWith("#/modeler")) return H("designen", "Designing processes");
+  // Before the Tasks rule below, and it has to be: a prefix match on "#/tasks"
+  // would swallow it. An access review is not a user task — it is not in the engine
+  // at all — so the forms chapter would answer a question nobody asked here.
+  if (path.startsWith("#/tasks/recertification")) return H("beispiele", "Rezertifizierung");
   if (path.startsWith("#/tasks")) return H("formulare", "Tasks & forms");
   if (path.startsWith("#/operations/decisions")) return H("dmn", "Learn DMN");
   if (path.startsWith("#/operations/call-activities")) return H("elemente", "BPMN elements");
@@ -1641,7 +1658,13 @@ async function viewConsoleBackup() {
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error((data && data.error) || res.statusText);
         status.textContent = onOk(data || {});
-        toast("Restore complete", "ok");
+        // A restore that held records back is not a restore that succeeded quietly:
+        // the records it declined are the operator's next decision, so the toast says
+        // so rather than going green over a partial result
+        // (ADR-0357).
+        const held = (data && data.skipped) || 0;
+        toast(held ? `Restored, but ${held} deployed definition(s) were not taken` : "Restore complete",
+          held ? "warn" : "ok");
       } catch (e) {
         status.textContent = "Restore failed: " + (e && e.message || e);
         toast("Restore failed", "error");
@@ -1651,8 +1674,8 @@ async function viewConsoleBackup() {
 
   wireRestore(
     "restore-file", "restore-btn", "restore-status", "/api/v1/restore",
-    "Restore from this file? Artifacts sharing an id will be overwritten.",
-    (d) => `Restored ${d.restored || 0} file(s).` + (d.restartRequired ? " Restart the server to activate restored deployments." : ""),
+    "Restore from this file? Artifacts sharing an id will be overwritten. Deployed definitions whose key is already in use here are NOT taken — a key belongs to the installation that issued it.",
+    (d) => restoreSummary(d),
   );
   wireRestore(
     "restore-full-file", "restore-full-btn", "restore-full-status", "/api/v1/restore/full",
@@ -9584,6 +9607,10 @@ async function route() {
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
     if (path === "#/operations/decisions") return await viewDecisions();
+    if (path === "#/tasks/recertification") {
+      const { viewRecertification } = await import("./recertification.js");
+      return await viewRecertification({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/reconciliation") {
       const { viewReconciliation } = await import("./reconciliation.js");
       return await viewReconciliation({ api, toast, view, isSuperseded: () => superseded(gen) });

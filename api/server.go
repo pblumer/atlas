@@ -296,9 +296,14 @@ type Server struct {
 	// a disagreement that persists is one record whose last-seen moment moves, and
 	// one that goes away is that record closed.
 	discrepancies *discrepancyStore
-	apiTokens     *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
-	targets       *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
-	appVersions   map[string]int32 // applicationId → highest release version published (ADR-0128)
+	// recertifications is what people attested about the inventory
+	// (ADR-0341): the campaigns, and the judgements made in
+	// them. It answers the question the journal beside it cannot — not "is this
+	// record true" but "is this right still needed", which only a person can say.
+	recertifications *recertifyStore
+	apiTokens        *apiTokenIndex   // in-memory hash->token index, same discipline as the deploy one
+	targets          *targetStore     // durable sidecar for peer deployment targets (ADR-0129)
+	appVersions      map[string]int32 // applicationId → highest release version published (ADR-0128)
 	// processDocs is the documentation area as a self-contained service: it owns
 	// its store and version counters and reaches shared state only through the run
 	// loop it was given (ADR-0143/0147).
@@ -369,6 +374,7 @@ type Server struct {
 	deploySysProcs   bool                // opt-in: bootstrap-deploy the embedded platform processes at startup (ADR-0122)
 	userProvisioning bool                // opt-in: enable the user-provisioning worker for system processes (ADR-0123)
 	dmnrefs          *dmnRefStore        // durable sidecar for DMN reference artifacts (ADR-0034)
+	favourites       *favouriteStore     // one list of marked products per account (ADR-0348)
 	dmnDrafts        *dmnDraftStore      // durable sidecar for decision work in progress (ADR-0321)
 	connectors       *connectorStore     // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore  // durable sidecar for per-server call-activity target overrides (ADR-0105)
@@ -1241,6 +1247,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	favourites, err := newFavouriteStore(filepath.Join(dataDir, "favourites"))
+	if err != nil {
+		return nil, err
+	}
 	dmnDrafts, err := newDmnDraftStore(filepath.Join(dataDir, "dmn-drafts"))
 	if err != nil {
 		return nil, err
@@ -1262,6 +1272,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	discrepancies, err := newDiscrepancyStore(filepath.Join(dataDir, "discrepancies"))
+	if err != nil {
+		return nil, err
+	}
+	recertifications, err := newRecertifyStore(
+		filepath.Join(dataDir, "recertification-campaigns"),
+		filepath.Join(dataDir, "recertification-rows"))
 	if err != nil {
 		return nil, err
 	}
@@ -1367,6 +1383,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		targets:           targets,
 		appVersions:       map[string]int32{},
 		dmnrefs:           dmnrefs,
+		favourites:        favourites,
 		dmnDrafts:         dmnDrafts,
 		connectors:        connectors,
 		callOverrides:     callOverrides,
@@ -1388,6 +1405,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		directorySync:     directorySync,
 		inventoryLoads:    inventoryLoads,
 		discrepancies:     discrepancies,
+		recertifications:  recertifications,
 		sessions:          newSessionStore(defaultSessionTTL),
 		oidcStates:        newOIDCStateStore(),
 		collab:            collab.NewRegistry(),
@@ -1462,6 +1480,31 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogStore, s.orderStore = catalogStore, orderStore
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
+		// Which groups the recipient is in, for the eligibility check
+		// (ADR-0347). It reuses the principal synthesis the
+		// reminder route needed — the same question, asked about somebody who is not
+		// calling — and takes its group ids and nothing else.
+		func(recipient string) ([]string, error) {
+			p, err := s.principalOf(recipient)
+			if err != nil {
+				return nil, err
+			}
+			return p.GroupIDs, nil
+		},
+		// Whose name an order may carry (ADR-0349).
+		//
+		// The operator role, and not a manager relationship, because Atlas cannot
+		// answer what a manager relationship *is*: the escalation path has the
+		// caller name a superior precisely because a directory lookup belongs to a
+		// modelled process and not to the engine. Gating on something this server
+		// cannot evaluate would mean inventing a hierarchy, and an invented
+		// hierarchy decides who may act in whose name.
+		//
+		// With enforcement off there is nobody to be, exactly as everywhere else.
+		func(p *httpapi.Principal) bool {
+			return !s.authEnabled ||
+				(p != nil && (p.HasRole(RoleOperator) || p.HasRole(RoleAdmin)))
+		},
 		func(message, orderID string, vars map[string]string) error {
 			start := make([]model.VariableValue, 0, len(vars))
 			for name, value := range vars {
@@ -1489,12 +1532,25 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 				s.proc.GrantEntitlement(model.EntitlementValue{
 					Principal: g.Principal, ItemID: g.ItemID, VariantID: g.VariantID,
 					OrderID: g.OrderID, Since: g.At, Origin: model.OriginOrdered,
+					// The end travels with the grant, computed from the ceiling the
+					// release froze (ADR-0344). It is set
+					// only here, which is what keeps it off adopted and legacy rights:
+					// neither is granted by an order, and neither knows when it began.
+					Until: g.Until,
 				})
 			})
 			return s.drive()
 		},
-		func(principal, itemID string) error {
-			s.do(func() { s.proc.RevokeEntitlement(principal, itemID) })
+		// And the closing of a hold. The reason is Returned and never anything
+		// else: this callback is reached only from a line that reached Returned,
+		// which is a right that was given back. The correction path — a right
+		// reconciliation found the target system does not have — goes through
+		// handleRevokeDiscrepancy and says so there, because the two rows assert
+		// different things (ADR-0346).
+		func(principal, itemID string, at int64, by string) error {
+			s.do(func() {
+				s.proc.RevokeEntitlement(principal, itemID, at, model.EndReturned, by)
+			})
 			return s.drive()
 		},
 		// And what they already hold, for the basket's second resolution. Read off
@@ -1606,6 +1662,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.panorama.Limits = s.budgets()
 	s.infomodel.Limits = s.budgets()
 	s.catalogs.Limits = s.budgets()
+	s.orders.Limits = s.budgets()
 	s.capabilities.Limits = s.budgets()
 	s.playground.Limits = s.budgets()
 	// The encrypted secret vault (ADR-0069) is on by default (ADR-0070) unless

@@ -78,6 +78,7 @@ func newService(t *testing.T) *Service {
 		// These tests are about placing and reading orders; the catalogue gate and
 		// the wake have their own cases below.
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -299,6 +300,7 @@ func serviceGatedBy(t *testing.T, allow bool) *Service {
 			}
 			return allow, nil
 		},
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -350,6 +352,7 @@ func TestAFailingAccessCheckIsAnError(t *testing.T) {
 		func(*httpapi.Principal, string) (bool, error) {
 			return false, errTest
 		},
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -374,6 +377,7 @@ func TestAFailingReleaseLookupIsAnError(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return catalog.Release{}, false, errTest },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -422,6 +426,7 @@ func TestAnUnreadableStoreIsAnError(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return nil },
 		func() string { return "https://atlas.example.ch" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -589,6 +594,7 @@ func TestReportingWakesTheFulfilmentProcess(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error {
 			woken = append(woken, message+":"+orderID)
 			return nil
@@ -635,6 +641,7 @@ func TestAFailedWakeIsReported(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error {
 			if message == AdvancedMessage {
 				return errTest
@@ -679,6 +686,7 @@ func TestAnOrderNobodyWillFulfilIsReported(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { return errTest },
 		func() string { return "https://atlas.example.ch" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -765,6 +773,7 @@ func TestARejectionWakesTheFulfilmentProcess(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error {
 			woken = append(woken, message)
 			return nil
@@ -874,6 +883,7 @@ func TestPlacingCarriesTheOrchestratorsStartVariables(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error {
 			if message == PlacedMessage {
 				got = vars
@@ -916,6 +926,7 @@ func TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence(t *testing.T) {
 	s := New(loop, store, func() int64 { return 1700 },
 		func(string) (catalog.Release, bool, error) { return rel, true, nil },
 		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup, mayOrderForAnyone,
 		func(message, orderID string, vars map[string]string) error { got = vars; return nil },
 		func() string { return "" },
 		ignoreGrant, ignoreRevoke, holdsNothing)
@@ -931,9 +942,113 @@ func TestAnUnconfiguredOriginIsAnEmptyStringAndNotAnAbsence(t *testing.T) {
 // turn "nobody wired the inventory" into a right that is silently never
 // recorded, which is the one failure an access record must not have. These say
 // out loud that a given test does not look at that.
-func ignoreGrant(Grant) error           { return nil }
-func ignoreRevoke(string, string) error { return nil }
+func ignoreGrant(Grant) error                          { return nil }
+func ignoreRevoke(string, string, int64, string) error { return nil }
 
 // holdsNothing is the inventory of somebody with no rights yet, which is what
 // every test that is not about the basket's second resolution assumes.
 func holdsNothing(string) (map[string]bool, error) { return nil, nil }
+
+// inAnyGroup is the eligibility fixture's default: a recipient who belongs to no
+// group at all. It is the right default because it is the one that proves the
+// rule is *narrowing* — an item naming no eligible group must still be orderable
+// by somebody in no groups, or every catalogue in existence would stop working
+// the day this landed (ADR-0347).
+func inAnyGroup(string) ([]string, error) { return nil, nil }
+
+// mayOrderForAnyone is the fixture's default: a caller who may place an order in
+// anybody's name. It is the permissive default because almost every test here is
+// about something else — the gate itself is held by its own tests, where the
+// refusal is the subject rather than a precondition.
+func mayOrderForAnyone(*httpapi.Principal) bool { return true }
+
+// TestOrderingInSomebodyElsesNameNeedsTheRole.
+//
+// The hole this closes: the recipient came straight out of the request body with
+// nothing asked about it, so any account that could reach a catalogue could put
+// an order — and an approval in somebody's manager's inbox, and a line in their
+// record — in a colleague's name.
+//
+// It is deliberately *not* covered by the eligibility check beside it. That one
+// asks whether this person may have this product, and would wave through an
+// order placed in a colleague's name for something the colleague is perfectly
+// entitled to. What is wrong there is the name on the order, not the product.
+func TestOrderingInSomebodyElsesNameNeedsTheRole(t *testing.T) {
+	newFor := func(t *testing.T, may bool) *Service {
+		t.Helper()
+		store, err := NewStore(t.TempDir())
+		if err != nil {
+			t.Fatalf("NewStore: %v", err)
+		}
+		quit := make(chan struct{})
+		loop := runloop.New(quit)
+		go loop.Run()
+		t.Cleanup(func() { close(quit) })
+		rel := testRelease(t)
+		return New(loop, store, func() int64 { return 1700 },
+			func(string) (catalog.Release, bool, error) { return rel, true, nil },
+			func(*httpapi.Principal, string) (bool, error) { return true, nil },
+			inAnyGroup,
+			func(*httpapi.Principal) bool { return may },
+			func(message, orderID string, vars map[string]string) error { return nil },
+			func() string { return "https://atlas.example.ch" },
+			ignoreGrant, ignoreRevoke, holdsNothing)
+	}
+
+	body := `{"releaseId":"rel_1","items":["account"],"recipient":"usr_kollegin"}`
+
+	refused := do(t, newFor(t, false).HandlePlace, someone("usr_1"), "POST", body)
+	if refused.Code != http.StatusForbidden {
+		t.Fatalf("ordering in a colleague's name without the role = %d, want 403 (%s)",
+			refused.Code, refused.Body.String())
+	}
+	// The refusal has to say what would happen, not only that it may not: somebody
+	// told "forbidden" about an order they believe is routine files a ticket.
+	if !strings.Contains(refused.Body.String(), "operator") {
+		t.Errorf("the refusal does not name what is missing: %s", refused.Body.String())
+	}
+
+	allowed := do(t, newFor(t, true).HandlePlace, someone("usr_1"), "POST", body)
+	if allowed.Code != http.StatusCreated {
+		t.Fatalf("ordering with the role = %d, want 201 (%s)",
+			allowed.Code, allowed.Body.String())
+	}
+}
+
+// TestOrderingForYourselfNeedsNothingExtra.
+//
+// The ordinary case, and the half that proves this gate narrows rather than
+// closes: a self-service portal whose every order needed the operator role would
+// not be self-service. Both spellings count — an omitted recipient and the
+// caller's own id are the same order.
+func TestOrderingForYourselfNeedsNothingExtra(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+	rel := testRelease(t)
+	s := New(loop, store, func() int64 { return 1700 },
+		func(string) (catalog.Release, bool, error) { return rel, true, nil },
+		func(*httpapi.Principal, string) (bool, error) { return true, nil },
+		inAnyGroup,
+		// Nobody may order for anybody else here, which is what makes the two
+		// passes below meaningful.
+		func(*httpapi.Principal) bool { return false },
+		func(message, orderID string, vars map[string]string) error { return nil },
+		func() string { return "https://atlas.example.ch" },
+		ignoreGrant, ignoreRevoke, holdsNothing)
+
+	for _, tc := range []struct{ name, body string }{
+		{"no recipient named", `{"releaseId":"rel_1","items":["account"]}`},
+		{"their own id named", `{"releaseId":"rel_1","items":["account"],"recipient":"usr_1"}`},
+	} {
+		rec := do(t, s.HandlePlace, someone("usr_1"), "POST", tc.body)
+		if rec.Code != http.StatusCreated {
+			t.Errorf("%s = %d, want 201 (%s)", tc.name, rec.Code, rec.Body.String())
+		}
+	}
+}

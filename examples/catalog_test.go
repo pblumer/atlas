@@ -205,6 +205,22 @@ var catalogSources = []catalogSource{
 		Files: []string{"bestandsaufnahme.bpmn"},
 	},
 	{
+		ID: "rezertifizierung", App: "Beispiel: Rezertifizierung (Entra)",
+		Files: []string{"rezertifizierung.bpmn"},
+	},
+	{
+		ID: "befristung", App: "Beispiel: Befristung",
+		Files: []string{"befristung.bpmn"},
+	},
+	{
+		ID: "erinnerung", App: "Beispiel: Erinnerung", Dir: "erinnerung",
+		Main: "erinnerung/erinnerung.bpmn",
+	},
+	{
+		ID: "unvereinbarkeit", App: "Beispiel: Unvereinbarkeit",
+		Files: []string{"unvereinbarkeit.bpmn"},
+	},
+	{
 		// Two processes, one card, and that is the point rather than a saving: they
 		// are the same comparison promising completeness on its two axes. The daily
 		// run names the groups it read whole; the leaver check names the person. A

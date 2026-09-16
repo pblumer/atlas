@@ -2,373 +2,220 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
-      "id": "a-business-object-says-where-it-is-used",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Every business object now says where it is used",
-        "de": "Jedes Business Object zeigt jetzt, wo es verwendet wird"
-      },
-      "summary": {
-        "en": "You could always see what an Order is. What you could not see was what depends on it — so renaming a member, retiring an enumeration literal or dropping a state meant guessing. Data now has a Business objects list: every class of every information model you can see, in one sortable, filterable table across all applications. Open one and it says where it is used and how — every deployed process that declares it, and every element that reads it, writes one member of it, moves it into a state or names the store it is kept in, plus everything in the model itself that refers to it.",
-        "de": "Was ein Auftrag ist, war immer sichtbar. Was von ihm abhängt, nicht — ein Attribut umbenennen, ein Literal streichen oder einen Zustand entfernen hiess raten. Data hat jetzt die Liste Business objects: jede Klasse jedes Informationsmodells, das Sie sehen dürfen, in einer sortier- und filterbaren Tabelle über alle Applikationen hinweg. Ein Klick darauf zeigt, wo und wie sie verwendet wird — jeder deployte Prozess, der sie deklariert, und jedes Element, das sie liest, ein Attribut davon schreibt, sie in einen Zustand überführt oder den Speicher nennt, in dem sie liegt, dazu alles im Modell selbst, was auf sie verweist."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Data"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Data and switch to the Business objects tab.",
-          "Filter the list by name, kind or application — the Used by column says how many processes depend on each class.",
-          "Click a name to open it: its members and lifecycle first, then every process use with the element, the member and the state named.",
-          "An enumeration used by no process is not unused — its uses are listed under \"Used in the model\"."
-        ],
-        "de": [
-          "Data öffnen und auf den Reiter Business objects wechseln.",
-          "Die Liste nach Name, Art oder Applikation filtern — die Spalte Used by sagt, wie viele Prozesse von einer Klasse abhängen.",
-          "Auf einen Namen klicken: zuerst Attribute und Lebenszyklus, dann jede Verwendung im Prozess mit Element, Attribut und Zustand.",
-          "Eine Enumeration ohne Prozessverwendung ist nicht ungenutzt — ihre Verwendungen stehen unter «Used in the model»."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Business objects",
-          "de": "Business objects öffnen"
-        },
-        "route": "#/data/objects"
-      }
-    },
-    {
-      "id": "an-incident-flood-is-read-by-cause-and-cleared-in-one-action",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "An incident flood is read by cause, and cleared in one action.",
-        "de": "An incident flood is read by cause, and cleared in one action."
-      },
-      "summary": {
-        "en": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems.",
-        "de": "Every incident surface built so far answers \"what is stuck here\" one incident at a time, which is the right size until a worker stops answering: then every instance that reaches its task parks, and a few thousand incidents are one cause with one fix that the product treats as a few thousand problems."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-deployed-decision-version-can-now-be-removed-and-so-can-a-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Old decision versions can finally be cleared away",
-        "de": "Alte Entscheidungsversionen lassen sich endlich aufräumen"
-      },
-      "summary": {
-        "en": "Every press of Deploy in the decision editor minted a version and kept the whole model with it, and every uploaded model file stayed where it was put. Nothing could take either back, so iterating on a decision — which is what that button is for — cost permanent disk. Both can now be removed, under a rule that protects what is actually running. A deployed version is refused while a deployed process is pinned to it: that process resolved its decision to exactly that version when it was deployed and keeps no copy of it, and the pin outlives the instances that used it — so having nothing running is not enough. It is also refused while it is the newest version of a decision that still has older ones behind it, because removing it would send the next deployment quietly back a version. Clearing a history therefore works oldest first, and the refusal says which of the two reasons applies. Operations' page for a decision now lists every deployed version with the processes holding each one — the first place in Atlas that answers what is using this version — and offers Delete where nothing does. A model file that no reference points at can be deleted from Not assigned; decisions already deployed from it keep running, because they carry their own copy.",
-        "de": "Jeder Druck auf «Deploy» im Entscheidungseditor erzeugte eine Version und behielt das ganze Modell dazu, und jede hochgeladene Modelldatei blieb liegen. Zurücknehmen liess sich beides nicht — das Iterieren an einer Entscheidung, wofür diese Schaltfläche da ist, kostete also dauerhaft Speicher. Beides lässt sich nun entfernen, nach einer Regel, die schützt, was tatsächlich läuft. Eine ausgelieferte Version wird abgelehnt, solange ein ausgelieferter Prozess darauf festgelegt ist: Dieser Prozess hat seine Entscheidung beim Ausliefern auf genau diese Version aufgelöst und hält keine eigene Kopie davon, und die Festlegung überdauert die Instanzen, die sie genutzt haben — dass nichts mehr läuft, genügt also nicht. Abgelehnt wird auch die neueste Version einer Entscheidung, hinter der noch ältere stehen, denn ihr Entfernen würde die nächste Auslieferung stillschweigend eine Version zurückwerfen. Eine Historie räumt man daher von der ältesten Version her ab, und die Ablehnung sagt, welcher der beiden Gründe greift. Die Entscheidungsseite in Operations führt jetzt jede ausgelieferte Version mit den Prozessen auf, die sie halten — die erste Stelle in Atlas, die beantwortet, was eine Version verwendet — und bietet «Delete» dort an, wo nichts sie hält. Eine Modelldatei, auf die keine Referenz zeigt, lässt sich unter «Nicht zugeordnet» löschen; bereits daraus ausgelieferte Entscheidungen laufen weiter, weil sie ihre eigene Kopie tragen."
-      },
-      "link": {
-        "label": "ADR-0329",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0329-a-decision-deployment-is-not-deletable.md"
-      },
-      "tags": [
-        "Operations",
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Decisions and choose a decision.",
-          "Deployed versions lists every version with its key, when it was deployed, and what is holding it.",
-          "A version nothing holds carries a Delete button; one that is held says held, and the tooltip says why.",
-          "For model files, open the Modeler's Not assigned and use ⋯ → Delete model on a row marked No reference."
-        ],
-        "de": [
-          "«Operations → Decisions» öffnen und eine Entscheidung auswählen.",
-          "«Deployed versions» führt jede Version auf, mit Schlüssel, Auslieferungszeitpunkt und dem, was sie hält.",
-          "Eine Version, die nichts hält, trägt eine Schaltfläche «Delete»; eine gehaltene zeigt «held», und der Tooltip nennt den Grund.",
-          "Für Modelldateien im Modeler «Nicht zugeordnet» öffnen und bei einer mit «No reference» markierten Zeile «⋯ → Delete model» wählen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Decisions",
-          "de": "Decisions öffnen"
-        },
-        "route": "#/operations/decisions"
-      }
-    },
-    {
-      "id": "the-inventory-can-now-be-checked-rather-than-trusted",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The inventory can now be checked rather than trusted.",
-        "de": "The inventory can now be checked rather than trusted."
-      },
-      "summary": {
-        "en": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it.",
-        "de": "An entitlement asserts that a right exists in another system — an assertion Atlas cannot guarantee, because target systems are changed from outside it."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-inventory-is-taken-before-it-is-enforced",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "The inventory is taken before it is enforced.",
-        "de": "The inventory is taken before it is enforced."
-      },
-      "summary": {
-        "en": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted.",
-        "de": "model.OriginLegacy has existed since the portal's three models were decided and has had no writer, which meant the inventory could only ever contain what Atlas itself had granted."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "atlas-keeps-its-accounts-and-groups-from-a-microsoft-entra-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Added",
-      "title": {
-        "en": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing.",
-        "de": "Atlas keeps its accounts and groups from a Microsoft Entra tenant, and the first run writes nothing."
-      },
-      "summary": {
-        "en": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there.",
-        "de": "An account only ever came into being when somebody signed in through OIDC, so a fresh installation starts with an almost empty user store — and the next piece of work, taking an inventory of the rights that already exist, has to attribute every right it finds to an account that is not there."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-deleted-definition-s-key-is-never-issued-again-so-a-new-pr",
+      "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A new process no longer inherits a deleted one's history",
-        "de": "Ein neuer Prozess erbt nicht mehr die Historie eines gelöschten"
+        "en": "With authentication off, a catalogue's appearance could not be set at all.",
+        "de": "With authentication off, a catalogue's appearance could not be set at all."
       },
       "summary": {
-        "en": "Every deployed process and every deployed decision gets a number, and that number is what the engine files its history under: which instances finished, how often each step was reached, when it last did anything. The number was worked out at startup from the deployments still on disk — which is right only as long as none is ever deleted. Delete the newest one, restart, and the next deployment got the same number back, together with everything filed under it: a process deployed a minute ago would report a finished instance and a step it had never reached. Nothing was lost and nothing crashed; the figures simply belonged to something else. The numbers are now written down as they are handed out, so one that has been used is never used again — even after the deployment that held it is gone. A restart in the middle of a deployment can now leave a gap in the numbering, which costs nothing. An installation that upgrades starts keeping the record from its next deployment onward.",
-        "de": "Jeder ausgelieferte Prozess und jede ausgelieferte Entscheidung erhält eine Nummer, und unter dieser Nummer legt die Engine ihre Historie ab: welche Instanzen abgeschlossen wurden, wie oft jeder Schritt erreicht wurde, wann zuletzt etwas geschah. Die Nummer wurde beim Start aus den noch vorhandenen Auslieferungen ermittelt — was nur stimmt, solange keine je gelöscht wird. Löscht man die neueste und startet neu, bekam die nächste Auslieferung dieselbe Nummer zurück, mitsamt allem, was darunter abgelegt war: Ein vor einer Minute ausgelieferter Prozess meldete eine abgeschlossene Instanz und einen Schritt, den er nie erreicht hatte. Verloren ging nichts und abgestürzt ist nichts; die Zahlen gehörten schlicht zu etwas anderem. Die Nummern werden nun bei der Vergabe festgehalten, sodass eine bereits vergebene nie wieder vergeben wird — auch nicht, wenn die Auslieferung, die sie hielt, verschwunden ist. Ein Neustart mitten in einer Auslieferung kann jetzt eine Lücke in der Nummerierung hinterlassen, was nichts kostet. Eine aktualisierte Installation beginnt mit ihrer nächsten Auslieferung, die Nummern festzuhalten."
+        "en": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may.",
+        "de": "The predicate every gate in the catalogue package asks is !authEnabled || (p != nil && p.HasRole(admin)) — true for everybody when nobody is signed in, which is the rule stated beside it: enforcement off means there is nobody to be, not nobody who may."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations",
-        "Engine"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Operations → Processes and note a deployment's key.",
-          "Delete that deployment, restart the server, and deploy something else.",
-          "The new deployment gets a fresh key, and its runtime view starts at zero instances and zero visits."
-        ],
-        "de": [
-          "«Operations → Processes» öffnen und den Schlüssel einer Auslieferung notieren.",
-          "Diese Auslieferung löschen, den Server neu starten und etwas anderes ausliefern.",
-          "Die neue Auslieferung erhält einen neuen Schlüssel, und ihre Laufzeitansicht beginnt bei null Instanzen und null Besuchen."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Processes",
-          "de": "Processes öffnen"
-        },
-        "route": "#/operations"
       }
     },
     {
-      "id": "deleting-a-dmn-reference-now-says-what-it-would-break",
+      "id": "the-catalogue-screen-said-an-empty-audience-means-everybody-",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "Deleting a decision reference now tells you what it costs",
-        "de": "Das Löschen einer Entscheidungs-Referenz sagt jetzt, was es kostet"
+        "en": "The catalogue screen said an empty audience means everybody. It means nobody.",
+        "de": "The catalogue screen said an empty audience means everybody. It means nobody."
       },
       "summary": {
-        "en": "The question before deleting a DMN reference was \"are you sure?\" with one reassuring sentence about the model file, which is not the thing at stake. What a reference decides is whether anything can still be deployed against the decisions in that model: a business rule task set to Deployment evaluates the copy shipped with its own process, and that copy comes from the reference. Delete the last one and that process can never be deployed again — a refusal that turns up weeks later, without a word about the deletion that caused it. The confirm now runs the same check the deploy runs and lists what it finds: which decisions lose their last model, and which deployed processes and drafts could then not be deployed, each with its binding. It also says what is not at risk, because that is the actual fear: running instances are untouched. Nothing is blocked — the reference stays yours to delete — and a draft in an application you cannot see is counted without being named.",
-        "de": "Vor dem Löschen einer DMN-Referenz stand «Sind Sie sicher?» mit einem beruhigenden Satz über die Modelldatei — also nicht über das, worum es geht. Eine Referenz entscheidet darüber, ob überhaupt noch etwas gegen die Entscheidungen dieses Modells ausgeliefert werden kann: Eine auf «Deployment» gesetzte Geschäftsregelaufgabe wertet die Kopie aus, die mit ihrem eigenen Prozess ausgeliefert wird, und diese Kopie stammt aus der Referenz. Löscht man die letzte, lässt sich dieser Prozess nie wieder ausliefern — eine Ablehnung, die Wochen später auftaucht, ohne ein Wort über die Löschung, die sie verursacht hat. Der Bestätigungsdialog führt jetzt dieselbe Prüfung durch wie das Ausliefern und listet auf, was er findet: welche Entscheidungen ihr letztes Modell verlieren und welche ausgelieferten Prozesse und Entwürfe danach nicht mehr ausgeliefert werden könnten, jeweils mit ihrer Bindung. Er sagt auch, was nicht gefährdet ist — denn das ist die eigentliche Sorge: Laufende Instanzen bleiben unberührt. Blockiert wird nichts; die Referenz bleibt Ihre Entscheidung. Ein Entwurf in einer Anwendung, die Sie nicht sehen können, wird gezählt, aber nicht benannt."
+        "en": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all.",
+        "de": "ReachedBy returns false for a catalogue naming no group — deliberately, and held by a test, because the dangerous default is the one where a catalogue somebody is still filling is already open to all."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "Open an application in the Modeler and find a DMN reference in its artifact list.",
-          "Choose ⋯ → Delete on it.",
-          "The confirm names the decisions that would lose their last model, and every deployed process or draft that could then not be deployed.",
-          "Cancel, and the reference stays. Nothing about the check changes anything."
-        ],
-        "de": [
-          "Eine Anwendung im Modeler öffnen und in ihrer Artefaktliste eine DMN-Referenz suchen.",
-          "Dort «⋯ → Delete» wählen.",
-          "Der Bestätigungsdialog nennt die Entscheidungen, die ihr letztes Modell verlieren würden, sowie jeden ausgelieferten Prozess und jeden Entwurf, der danach nicht mehr ausgeliefert werden könnte.",
-          "Abbrechen — die Referenz bleibt. Die Prüfung selbst verändert nichts."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     },
     {
-      "id": "a-dmn-model-whose-last-reference-is-deleted-is-no-longer-los",
+      "id": "a-refused-publish-said-not-published-and-withheld-every-reas",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A decision model you removed the reference to can be found again",
-        "de": "Ein Entscheidungsmodell ohne Referenz ist wieder auffindbar"
+        "en": "A refused publish said \"not published\" and withheld every reason.",
+        "de": "A refused publish said \"not published\" and withheld every reason."
       },
       "summary": {
-        "en": "Everything in Atlas that shows decisions — the picker, the catalogue, an application's artifact list, a publish — reads DMN references, not the model files themselves. So deleting a reference took the model out of the product while leaving it on disk: still there, reachable only by a handle you had to remember, and invisible everywhere. The usual recovery was to upload the file again, which filed a second copy under a slightly different name. Not assigned — the place artifacts that belong to no application already live — now also lists the stored models nothing points at, with what each one declares and an Add reference action that puts a reference back on the existing file rather than copying it. A model that no longer compiles is listed too, because somebody who has to fix it has to find it first. And the delete confirm now says where the file goes instead of assuring you it is unaffected.",
-        "de": "Alles, was in Atlas Entscheidungen anzeigt — die Auswahl, der Katalog, die Artefaktliste einer Anwendung, ein Publish — liest DMN-Referenzen, nicht die Modelldateien selbst. Das Löschen einer Referenz nahm das Modell also aus dem Produkt heraus und liess es auf der Platte zurück: weiterhin vorhanden, nur noch über einen Handle erreichbar, den man sich merken musste, und überall unsichtbar. Die übliche Rettung bestand darin, die Datei erneut hochzuladen — womit eine zweite Kopie unter leicht abweichendem Namen entstand. «Nicht zugeordnet» — der Ort, an dem Artefakte ohne Anwendung ohnehin schon liegen — führt nun auch die gespeicherten Modelle auf, auf die nichts zeigt, mit dem, was jedes davon deklariert, und einer Aktion «Add reference», die eine Referenz auf die bestehende Datei zurücksetzt, statt sie zu kopieren. Ein Modell, das nicht mehr kompiliert, wird ebenfalls aufgeführt, denn wer es reparieren soll, muss es zuerst finden. Und der Löschdialog sagt jetzt, wohin die Datei geht, statt zu versichern, sie sei nicht betroffen."
+        "en": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to.",
+        "de": "Publishing is the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text for every declared language, ranks unique — and the server answers 422 with every problem at once, each naming the catalogue or the item it belongs to."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions"
-      ],
-      "tutorial": {
-        "en": [
-          "In the Modeler, open Not assigned.",
-          "Stored decision models that no reference points at are listed there, marked No reference.",
-          "Choose ⋯ → Add reference on one to put it back in the catalogue under a name you pick.",
-          "It reappears in the business rule task's decision picker straight away."
-        ],
-        "de": [
-          "Im Modeler «Nicht zugeordnet» öffnen.",
-          "Gespeicherte Entscheidungsmodelle, auf die keine Referenz zeigt, sind dort aufgeführt und mit «No reference» gekennzeichnet.",
-          "Bei einem davon «⋯ → Add reference» wählen, um es unter einem selbst gewählten Namen zurück in den Katalog zu holen.",
-          "Es erscheint unmittelbar wieder in der Entscheidungsauswahl der Geschäftsregelaufgabe."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
       }
     },
     {
-      "id": "a-decision-that-is-only-deployed-no-longer-blocks-the-deploy",
+      "id": "who-is-this-failing-for-two-different-reasons-was-answered-a",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A decision you just deployed can now be used right away",
-        "de": "Eine soeben ausgelieferte Entscheidung ist jetzt sofort verwendbar"
+        "en": "\"Who is this?\" failing for two different reasons was answered as though it were one.",
+        "de": "\"Who is this?\" failing for two different reasons was answered as though it were one."
       },
       "summary": {
-        "en": "Since a decision could be deployed on its own from its editor, there was a state the product invited you into and then refused: you deployed a decision, the business rule task's picker offered it, and deploying the process came back with \"no DMN model provides it — create the decision in Atlas, then deploy\". You had just created it. The check exists to stop a step whose evaluation can never happen, and for a task set to Latest that was simply not the case: deploying resolves it to the newest deployed version of that decision, and the copy bundled with the process is never consulted. The check now distinguishes the two bindings. A task set to Deployment still needs the decision as a model, because it evaluates the copy shipped with its own process — and its refusal now says that, rather than telling you to do something you have already done.",
-        "de": "Seit eine Entscheidung aus ihrem Editor heraus allein ausgeliefert werden kann, gab es einen Zustand, in den das Produkt einlud und den es anschliessend verweigerte: Man lieferte eine Entscheidung aus, die Auswahl der Geschäftsregelaufgabe bot sie an — und das Ausliefern des Prozesses endete mit «no DMN model provides it — create the decision in Atlas, then deploy». Erstellt hatte man sie gerade eben. Die Prüfung existiert, um einen Schritt zu verhindern, dessen Auswertung nie stattfinden kann; für eine auf «Latest» gesetzte Aufgabe traf das schlicht nicht zu: Das Ausliefern löst sie auf die neueste ausgelieferte Version dieser Entscheidung auf, die mit dem Prozess mitgelieferte Kopie wird gar nicht herangezogen. Die Prüfung unterscheidet nun die beiden Bindungen. Eine auf «Deployment» gesetzte Aufgabe braucht die Entscheidung weiterhin als Modell, weil sie die mit dem eigenen Prozess ausgelieferte Kopie auswertet — und ihre Ablehnung sagt das jetzt, statt zu etwas aufzufordern, das längst getan ist."
-      },
-      "link": {
-        "label": "ADR-0322",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0322-deploying-one-decision.md"
-      },
-      "tags": [
-        "Modeler",
-        "Decisions",
-        "Deployment"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a decision in the Modeler and press Deploy.",
-          "Open a diagram, add a business rule task and pick that decision; leave Binding on Latest.",
-          "Press Deploy on the diagram: it goes through, and the task evaluates the decision you deployed.",
-          "Switch Binding to Deployment and the deploy is refused again — that task needs the decision as a model, and the message says why."
-        ],
-        "de": [
-          "Eine Entscheidung im Modeler öffnen und «Deploy» drücken.",
-          "Ein Diagramm öffnen, eine Geschäftsregelaufgabe hinzufügen und diese Entscheidung auswählen; «Binding» auf «Latest» belassen.",
-          "Beim Diagramm «Deploy» drücken: Es geht durch, und die Aufgabe wertet die ausgelieferte Entscheidung aus.",
-          "«Binding» auf «Deployment» umstellen: Das Ausliefern wird wieder abgelehnt — diese Aufgabe braucht die Entscheidung als Modell, und die Meldung sagt, warum."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Modeler",
-          "de": "Modeler öffnen"
-        },
-        "route": "#/modeler"
-      }
-    },
-    {
-      "id": "a-decision-whose-logic-is-a-literal-expression-no-longer-cov",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision whose logic is a literal expression no longer covers the editor's own bar.",
-        "de": "A decision whose logic is a literal expression no longer covers the editor's own bar."
-      },
-      "summary": {
-        "en": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport.",
-        "de": "dmn-js uses editor as a state class inside its own components — its literal expression view is <div class=\"literal-expression textarea editor\"> — and Atlas's .editor is the full-bleed page shell, pinned to the viewport."
-      },
-      "link": {
-        "label": "ADR-0320",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0320-the-decision-editor-is-a-page.md"
-      }
-    },
-    {
-      "id": "the-hosted-example-apps-find-the-instance-they-just-started-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The example apps find the instance they just started, however busy the engine is",
-        "de": "Die Beispiel-Apps finden die soeben gestartete Instanz, egal wie ausgelastet die Engine ist"
-      },
-      "summary": {
-        "en": "The example apps Atlas serves itself — the travel-booking wizard and the two order-to-cash pages — start a process and then have to find that instance again, both to open its first form and to tell when it has finished. They looked for it in the plain instance list, which is a page rather than the whole set: it is capped, and it fills with the oldest running instances first. On a server holding more running instances than the cap, an app's own instance was never on the page it was searching, so pressing Start ended in a script error while the process itself was running perfectly well — and nothing about the app had changed, only the number of instances in front of it. The pages now ask for one process definition's instances, newest first, and read their own instance by its key. Neither question depends on how busy the engine is any more.",
-        "de": "Die Beispiel-Apps, die Atlas selbst ausliefert — der Reisebuchungs-Assistent und die beiden Order-to-Cash-Seiten — starten einen Prozess und müssen diese Instanz danach wiederfinden: einmal, um ihr erstes Formular zu öffnen, und einmal, um zu erkennen, dass sie fertig ist. Gesucht haben sie in der einfachen Instanzliste, und die ist eine Seite und nicht der ganze Bestand: Sie ist gedeckelt und füllt sich zuerst mit den ältesten laufenden Instanzen. Auf einem Server mit mehr laufenden Instanzen als dem Deckel stand die eigene Instanz nie auf der Seite, die durchsucht wurde. Ein Klick auf Start endete dann mit einem Skriptfehler, obwohl der Prozess selbst einwandfrei lief — und an der App hatte sich nichts geändert, nur die Zahl der Instanzen davor. Die Seiten fragen jetzt die Instanzen einer Prozessdefinition ab, neueste zuerst, und lesen die eigene Instanz über ihren Schlüssel. Keine der beiden Fragen hängt noch davon ab, wie ausgelastet die Engine ist."
+        "en": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault.",
+        "de": "Resolving a person fails because the name is nobody's — the caller's input is wrong — or because the user store could not be read, which is the server's fault."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "an-order-could-be-placed-in-anybody-s-name",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "An order could be placed in anybody's name.",
+        "de": "An order could be placed in anybody's name."
       },
-      "tags": [
-        "Examples",
-        "API"
-      ]
+      "summary": {
+        "en": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name.",
+        "de": "HandlePlace took the recipient straight out of the request body and asked nothing about it, so any account that could reach a catalogue could put an order — and an approval in that person's manager's inbox, a line in their record, and eventually a provisioning run — in a colleague's name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "an-approver-decides-a-request-once-instead-of-deciding-it-tw",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An approver decides a request once, instead of deciding it twelve times.",
+        "de": "An approver decides a request once, instead of deciding it twelve times."
+      },
+      "summary": {
+        "en": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks.",
+        "de": "An approval in Atlas is one user task per order line — the approval process is started multi-instance from the order's ready lines, so a workplace ordered as twelve products is twelve process instances and twelve tasks."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-product-says-what-kind-of-thing-it-is-and-the-portal-s-fir",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product says what kind of thing it is, and the portal's first column finally carries data.",
+        "de": "A product says what kind of thing it is, and the portal's first column finally carries data."
+      },
+      "summary": {
+        "en": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service.",
+        "de": "The portal's cascade has drawn four columns since the layout landed — Kategorie, Bundle, Angebot, Service."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-product-can-say-what-it-costs-and-the-approver-sees-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can say what it costs, and the approver sees it.",
+        "de": "A product can say what it costs, and the approver sees it."
+      },
+      "summary": {
+        "en": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost.",
+        "de": "There was no price field anywhere in Atlas — not on a product, not on an order line, not on the approval surface — so an approver was asked to approve a laptop without being told what it cost."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "one-position-can-be-withdrawn-on-its-own-and-its-details-cor",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One position can be withdrawn on its own, and its details corrected.",
+        "de": "One position can be withdrawn on its own, and its details corrected."
+      },
+      "summary": {
+        "en": "The story asks to modify or delete positions directly.",
+        "de": "The story asks to modify or delete positions directly."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-product-can-ask-the-orderer-for-what-its-name-does-not-say",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A product can ask the orderer for what its name does not say.",
+        "de": "A product can ask the orderer for what its name does not say."
+      },
+      "summary": {
+        "en": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to.",
+        "de": "A laptop is not fully described by being a laptop: somebody has to say which cost centre it is booked to and which site it goes to."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "a-catalogue-s-appearance-is-set-on-the-screen-that-fills-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A catalogue's appearance is set on the screen that fills it.",
+        "de": "A catalogue's appearance is set on the screen that fills it."
+      },
+      "summary": {
+        "en": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it.",
+        "de": "A catalogue has carried its own colour, typeface and brand mark since it was built — the portal and the approval page paint themselves from it — and no screen offered any of it."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-recipient-of-an-order-is-picked-not-typed-and-the-field-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it.",
+        "de": "The recipient of an order is picked, not typed — and the field is only shown to accounts that may use it."
+      },
+      "summary": {
+        "en": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one.",
+        "de": "Ordering in somebody else's name became a first-class screen gated on the operator role, and the field it goes through took a free string and offered no help finding one."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
     }
   ]
 }

@@ -91,6 +91,15 @@ type Release struct {
 	// there. Both are wrong, so the edges travel with the schedule and [Blocked] is
 	// what the fulfilment process asks when a line fails.
 	Requires map[string][]string `json:"requires,omitempty"`
+	// Excludes is what must never be held together with what
+	// (ADR-0342), sorted, with no entry for an item that
+	// excludes nothing.
+	//
+	// **Every pair appears under both ids.** EdgeExcludes is the only symmetric
+	// edge kind, and a release recording one direction would make each reader
+	// responsible for knowing which — a reader that got it wrong would find half
+	// the violations and report the estate as half clean.
+	Excludes map[string][]string `json:"excludes,omitempty"`
 	// Includes and Options are the structure: what a product is made of, and what
 	// is offered alongside it. Both are direct edges, sorted, with no entry for a
 	// product made of nothing.
@@ -143,8 +152,51 @@ func Publish(in Input) (Release, []Problem) {
 		Options:         structure[EdgeAggregation],
 		Waves:           schedule(in),
 		Requires:        preconditions(in),
+		Excludes:        incompatibilities(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
 	}, nil
+}
+
+// incompatibilities freezes the excluding edges, **both ways round**
+// (ADR-0342).
+//
+// EdgeExcludes is the only symmetric kind: "A must not be held with B" is exactly
+// "B must not be held with A". Writing one direction would leave every reader
+// responsible for knowing which, and a reader that got it wrong would find half the
+// violations and report the estate as half clean — silently, because nothing about
+// a one-directional check looks wrong.
+//
+// So the release answers "what does this item exclude" in one lookup that cannot be
+// half-asked. The cost is each pair stored twice, which is a few bytes against a
+// class of bug whose symptom is a clean report.
+func incompatibilities(in Input) map[string][]string {
+	both := map[string]map[string]bool{}
+	pair := func(a, b string) {
+		if both[a] == nil {
+			both[a] = map[string]bool{}
+		}
+		both[a][b] = true
+	}
+	for _, e := range in.Edges {
+		if e.Kind != EdgeExcludes || e.From == e.To {
+			continue // a self-conflict is refused in checkEdges, not folded here
+		}
+		pair(e.From, e.To)
+		pair(e.To, e.From)
+	}
+	if len(both) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(both))
+	for id, others := range both {
+		list := make([]string, 0, len(others))
+		for other := range others {
+			list = append(list, other)
+		}
+		sort.Strings(list)
+		out[id] = list
+	}
+	return out
 }
 
 // checkCatalogs holds what a catalogue owes independently of its items: a unique
@@ -203,8 +255,66 @@ func checkItems(in Input, add func(Problem)) {
 					Message: "approval kind " + string(it.Approval.Kind) + " needs a ref"})
 			}
 		}
+		// A blank eligible group matches nobody, so the product would be orderable
+		// by no one and the catalogue would not say why
+		// (ADR-0347). It is the only static check this list
+		// admits: a list naming groups disjoint from the catalogue's audience is
+		// *not* an error, because one person is in many groups at once and being
+		// reached through one while being eligible through another is the ordinary
+		// way this is used.
+		for _, g := range it.Eligible {
+			if strings.TrimSpace(g) == "" {
+				add(Problem{Item: it.ID, Message: "names a blank eligible group; it " +
+					"would match nobody, and the product would be orderable by nobody " +
+					"with nothing in the catalogue saying so"})
+				break
+			}
+		}
+		// A category of nothing but spaces is a heading nobody can read and nobody
+		// can group by: the portal would render an empty column head, and a second
+		// product with a different number of spaces would sit under a different one
+		// (ADR-0360).
+		if it.Category != "" && strings.TrimSpace(it.Category) == "" {
+			add(Problem{Item: it.ID, Message: "names a blank category; leave it out for a " +
+				"product the catalogue groups under nothing"})
+		}
+		// A price of nothing but spaces is a product that claims to say what it costs
+		// and says nothing — worse than saying nothing at all, because the portal
+		// renders an empty field where a figure belongs
+		// (ADR-0361).
+		if it.Price != "" && strings.TrimSpace(it.Price) == "" {
+			add(Problem{Item: it.ID, Message: "names a blank price; leave it out for a " +
+				"product the catalogue says nothing about the cost of"})
+		}
+		// A form id of nothing but spaces is a product that asks a question nobody
+		// can answer: the portal would look for a form under a name no form has, and
+		// the orderer would be stopped by a blank that cannot be filled in
+		// (ADR-0358).
+		if it.ConfigForm != "" && strings.TrimSpace(it.ConfigForm) == "" {
+			add(Problem{Item: it.ID, Message: "names a blank configuration form; " +
+				"leave it out for a product that needs no extra details"})
+		}
+		// A blank keyword matches every query at once, which is the opposite of a
+		// search term (ADR-0355).
+		for _, k := range it.Keywords {
+			if strings.TrimSpace(k) == "" {
+				add(Problem{Item: it.ID, Message: "names a blank keyword; an empty term " +
+					"matches every search at once, so the product would surface for " +
+					"everything anybody typed"})
+				break
+			}
+		}
 		if it.Lifecycle.From != 0 && it.Lifecycle.Until != 0 && it.Lifecycle.Until <= it.Lifecycle.From {
 			add(Problem{Item: it.ID, Message: "orderable window ends before it begins"})
+		}
+		// A negative ceiling would grant a right that ended before it began, and
+		// every reader of the inventory would report it overdue from the first
+		// moment. Zero is the ordinary answer and means no end; it is a different
+		// statement from "ends immediately", and nothing should be able to say the
+		// second by accident.
+		if it.MaxDays < 0 {
+			add(Problem{Item: it.ID,
+				Message: "maxDays is negative; leave it out for a right that does not end"})
 		}
 	}
 	checkTargets(items, add)
@@ -281,6 +391,14 @@ func checkEdges(in Input, byID map[string]Item, add func(Problem)) {
 		}
 		if _, ok := byID[e.To]; !ok {
 			add(Problem{Message: "edge to unknown item " + e.To})
+		}
+		// A self-conflict would make holding the item once a violation, so it is
+		// refused rather than folded away: somebody wrote it meaning something, and
+		// dropping it silently would publish a catalogue that does not say what its
+		// author wrote (ADR-0342).
+		if e.Kind == EdgeExcludes && e.From == e.To {
+			add(Problem{Item: e.From,
+				Message: "excludes itself; holding it once would be a conflict"})
 		}
 	}
 }
@@ -573,6 +691,16 @@ func freeze(items []Item) []Item {
 		// field promises.
 		if len(it.Targets) > 0 {
 			it.Targets = append([]TargetRef(nil), it.Targets...)
+		}
+		// The same for the two plain string lists. They were missed once already —
+		// Eligible shipped sharing its backing array with the catalogue — which is
+		// why TestAReleaseSharesNothingWithTheCatalogue walks the struct by
+		// reflection instead of naming the fields a reader happened to remember.
+		if len(it.Eligible) > 0 {
+			it.Eligible = append([]string(nil), it.Eligible...)
+		}
+		if len(it.Keywords) > 0 {
+			it.Keywords = append([]string(nil), it.Keywords...)
 		}
 		out[i] = it
 	}

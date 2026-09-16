@@ -66,7 +66,7 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		process = order.ReturnProcessOf(ord, item)
-		out, returnErr = order.Returning(ord, item, at)
+		out, returnErr = order.Returning(ord, item, at, principalID(r))
 		if returnErr != nil {
 			return
 		}

@@ -91,7 +91,7 @@ var persistentStores = []storeEntry{
 	// --- runtime -----------------------------------------------------------
 	{name: "wal", class: classRuntime, why: "the log: every event that ever happened"},
 	{name: "checkpoints", class: classRuntime, onDemand: true, ownMechanism: true, why: "the prefix a compacted log no longer carries"},
-	{name: "jobtypes", class: classRuntime, why: "the numbers already-stored jobs mean by their type; re-interning assigns different ones"},
+	{name: "jobtypes", class: classRuntime, why: "the numbers already-stored jobs mean by their type, and the high-water mark that keeps one from being issued twice; re-interning assigns different ones"},
 	{name: "keyspace", class: classRuntime, why: "the highest definition key ever issued; without it a deleted definition's key comes back and the next one inherits its instance history"},
 	{name: "exporter", class: classRuntime, onDemand: true, why: "how far the event export has read, so a restore does not re-export history"},
 
@@ -112,6 +112,7 @@ var persistentStores = []storeEntry{
 	{name: "connectors", class: classDesignTime, why: "worker definitions"},
 	{name: "catalog", class: classDesignTime, why: "the portal's catalogues, the products in them, and the releases orders are placed against"},
 	{name: "orders", class: classInstance, why: "what somebody asked for, and how far each line got"},
+	{name: "favourites", class: classInstance, why: "the products each account marked to find again (ADR-0348). A convenience and not a right — nothing here decides what anybody may order — but it is one person's own arrangement of a catalogue they use, and restoring an estate without it hands everybody back a portal they have to set up again"},
 	{name: "repository", class: classDesignTime, why: "the shared artifact repository"},
 	{name: "inbound-subscriptions", class: classDesignTime, why: "which worker receives which message"},
 	{name: "settings", class: classDesignTime, why: "installation settings, including the OIDC claim mapping"},
@@ -128,6 +129,8 @@ var persistentStores = []storeEntry{
 	{name: "directory-sync", class: classIdentity, onDemand: true, why: "where the Entra mirror resumes from; without it the next run enumerates the whole tenant again, which is expensive and safe"},
 	{name: "inventory-loads", class: classIdentity, onDemand: true, why: "whether a commissioning load has ever been applied per target system; without it a restored installation cannot tell a system it loaded and found empty from one it never loaded, and those call for opposite actions"},
 	{name: "discrepancies", class: classIdentity, onDemand: true, why: "the journal of what Atlas and the target systems disagreed about, and who decided what about it; it is evidence and it is not in the event log, so nothing else can rebuild it"},
+	{name: "recertification-campaigns", class: classIdentity, onDemand: true, why: "what was asked of whom, when, and by whose authority; an attestation with no campaign around it says nothing about what else was in front of the reviewer"},
+	{name: "recertification-rows", class: classIdentity, onDemand: true, why: "the attestations themselves — who judged which right still needed, and when. Separate from the campaigns because there are thousands per campaign and each is written once; losing them loses the evidence and nothing can reconstruct a judgement"},
 
 	// --- credentials -------------------------------------------------------
 	{name: "api-tokens", class: classCredential, why: "machine access to the API"},

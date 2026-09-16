@@ -12,7 +12,643 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **With authentication off, a catalogue's appearance could not be set at all.** The
+  predicate every gate in the catalogue package asks is `!authEnabled || (p != nil &&
+  p.HasRole(admin))` — true for everybody when nobody is signed in, which is the rule
+  stated beside it: *enforcement off means there is nobody to be, not nobody who may*.
+  Three gates wrote `p != nil && s.admin(p)` in front of it, and so turned "everybody"
+  back into "nobody".
+
+  So with `--auth=false` — the documented development and demo mode — a catalogue's
+  colour, typeface and brand mark could not be set or removed. Every attempt was **403**,
+  telling somebody the appearance is an administrator's while, as far as the server was
+  concerned, they were nobody. The nil check was never load-bearing: with enforcement on,
+  the predicate already answers false for a nil principal. It only ever subtracted.
+
+  It survived because every test in that package builds its service with the
+  enforcement-**on** shape of the predicate, so nothing modelled the mode in which it
+  bites. There is now a service built the way the server builds one with `--auth=false`,
+  and the other half beside it: an unauthenticated request is still refused while
+  enforcement is on.
+
+- **The catalogue screen said an empty audience means everybody. It means nobody.**
+  `ReachedBy` returns false for a catalogue naming no group — deliberately, and held by a
+  test, because the dangerous default is the one where a catalogue somebody is still
+  filling is already open to all. The field said "empty means everybody" and the list
+  showed an empty audience as "everybody".
+
+  An operator therefore created a catalogue, was told it was open to everybody, and every
+  visitor read "no catalogue is assigned to you" — with the one screen that could have
+  explained it saying the opposite. The behaviour is right; the sentence was the defect.
+  The field now says what happens, and the form says it again under the input while no
+  group is named.
+
+- **A refused publish said "not published" and withheld every reason.** Publishing is
+  the moment a catalogue is proved — both graphs acyclic, every binding resolved, a text
+  for every declared language, ranks unique — and the server answers **422 with every
+  problem at once**, each naming the catalogue or the item it belongs to. The authoring
+  screen's own opening comment says that list is what it renders, "because the problems
+  are the work, and hiding them behind 'publish failed' would make the screen useless
+  exactly when it matters".
+
+  It did the opposite. The page read `err.message`, which the shared fetch wrapper fills
+  from the body's `error` key — a key a 422 does not have — falling back to
+  `res.statusText`, which is **the empty string over HTTP/2**, because HTTP/2 carries no
+  reason phrase. So a product manager pressed Publish and got a red card reading "Not
+  published. Nothing was frozen" above an empty box, with no way to learn what to fix and
+  nothing on screen admitting that anything had been withheld. The one honest sentence on
+  it — "Never published. Until it is, the portal shows this catalogue to nobody" — then
+  read as a dead end rather than as a to-do list.
+
+  The refusal is now rendered as what it is: every problem, with the product or catalogue
+  it belongs to named. Two tests hold the two halves together — one against the real 422
+  so that renaming `problems` or adding an `error` key fails loudly, one over the page so
+  that reading the wrong half of the body fails.
+
+  **And the empty message was never only this page's.** `apiRaw` backs every screen in the
+  console, and any error body without an `error` key became an `Error` with no message at
+  all. It falls back to the status number now, which is not a good message and is a great
+  deal better than a blank box.
+
+- **"Who is this?" failing for two different reasons was answered as though it were
+  one.** Resolving a person fails because the name is nobody's — the caller's input is
+  wrong — or because the user store could not be read, which is the server's fault. Both
+  came back the same way, and in both directions: an order for a misspelled recipient
+  answered **500**, and the approval inbox turned an unreadable user store into a **404**
+  saying the person does not exist. An operator was told their colleague has no account
+  when what happened is that Atlas could not look.
+
+  `httpapi.ErrNoSuchPrincipal` now says which. An order for a name nobody holds is
+  **400**, with the sentence naming the four spellings that resolve; an unreadable store
+  stays **500**; the approval inbox keeps its **404** for a name nobody holds and stops
+  giving it for a store it could not read. A sentinel and not a match on the error text,
+  because a status code decided by string comparison changes the day somebody improves a
+  message.
+
+- **An order could be placed in anybody's name.** `HandlePlace` took the recipient straight
+  out of the request body and asked nothing about it, so any account that could reach a
+  catalogue could put an order — and an approval in that person's manager's inbox, a line in
+  their record, and eventually a provisioning run — in a colleague's name.
+
+  It stayed harmless only because nothing exercised it: the portal never sent a recipient, and
+  no shipped model places an order at all — every `recipient` in a BPMN file *reads* the one
+  the order already carries and passes it down. The mockups end that, by making ordering for
+  somebody else a first-class screen. A latent hole with no caller becomes an open path with a
+  button.
+
+  Naming somebody else as recipient now needs the **operator** role. Naming yourself is
+  unchanged, so a self-service portal stays self-service.
+
+  **A role and not a manager relationship, because Atlas cannot evaluate one** — and that is
+  settled rather than open: the escalation path has the *caller* name the superior precisely
+  because a directory lookup belongs to a modelled process and not to the engine. An engine
+  that gated on a hierarchy it had to invent would decide who may act in whose name from a
+  guess.
+
+  The product-eligibility check beside it does not cover this and was never going to: it asks
+  whether *this person* may have *this product*, and would wave through an order placed in a
+  colleague's name for something the colleague is perfectly entitled to. What is wrong there
+  is the name on the order, not the product.
+
 ### Added
+
+- **An approver decides a request once, instead of deciding it twelve times.** An
+  approval in Atlas is one user task per order line — the approval process is
+  started multi-instance from the order's ready lines, so a workplace ordered as
+  twelve products is twelve process instances and twelve tasks. That shape is
+  right and is unchanged: a line is what gets provisioned, refused, escalated,
+  reassigned and returned, and each of those needs its own instance.
+
+  What was wrong was the surface. The approver of a twelve-line workplace pressed
+  Genehmigen twelve times, read the same recipient twelve times, and on a refusal
+  typed the same reason twelve times. A person doing the same thing for the fourth
+  time is no longer reading it: a surface producing twelve identical clicks has not
+  obtained twelve judgements, it has obtained one and a habit.
+
+  The decision card for a position that is part of a larger request now names **the
+  rest of the request** — each position with its price, not a count, because the
+  thing being agreed to is "I have seen what is in this request" — and offers one
+  checkbox. Ticked, one call decides all of that order's open approvals the caller
+  holds, with one reason, and **each is still completed as its own task**, because
+  each is still its own process instance and each still has to act on what it was
+  told. The count moves onto the buttons, since the button is the last thing
+  somebody reads before the decision is irreversible. A request with one position
+  gets no checkbox and still takes the single-task route.
+
+  **The record is read as one decision, not counted as twelve.** Twelve completions
+  in the same second by the same person on the same order with the same reason are
+  the legible signature of one collective decision — where twelve clicks a minute
+  apart, from somebody who stopped reading after the third, look like twelve
+  examinations and are indistinguishable from them.
+
+  **There is no atomicity and the page says so.** Nothing spans twelve process
+  instances, and a completion that went through has already handed its answer to
+  its process, which may have started provisioning. So the answer is per line:
+  what was decided, and what was not with the reason for each, named on screen.
+  "Eleven of twelve" is a number nobody can act on; "the laptop is still open
+  because it was decided in another tab" is.
+
+  Refused, on the server and not only in the browser: keys from more than one order
+  (one reason cannot cover two people's requests), a refusal with no reason, and
+  more than a hundred keys — which is not a resource limit but a statement about
+  what one decision can plausibly be. The gate is the approval list's and has no
+  operator bypass: an operator who must step in does it on the task itself, where
+  the record says an operator did.
+
+- **A product says what kind of thing it is, and the portal's first column finally
+  carries data.** The portal's cascade has drawn four columns since the layout
+  landed — Kategorie, Bundle, Angebot, Service. The first one was filled with the
+  catalogue's own name and a note reading *"Atlas has no category level above the
+  bundle today"*: a placeholder telling the truth, because there was nowhere for a
+  product to say what kind of thing it was. A catalogue of eight products does not
+  need headings. A catalogue of two hundred is unusable without them.
+
+  A product now carries a **category**, and it is a **plain string the maintainer
+  types** while they have the product open, offered back through a list of the
+  headings already in the catalogue so the second product is spelled like the
+  first. The column shows **Alle** above the headings, so it is never a dead end;
+  the headings alphabetically, by the locale's own rule; and **Ohne Kategorie**
+  last, appearing only when something is in it — a heading for nothing is a heading
+  nobody can use, and hiding uncategorised products instead would lose them. The
+  services view groups what a person already holds by the same headings, so "where
+  do I find this" has one answer on both sides of the portal. Publishing refuses a
+  category that is present and **blank**, because blank is the bucket's own value
+  and a product that meant to say something and lost it would be invisible against
+  one that never said anything.
+
+  **A heading, not an entity, and the three costs are stated rather than hidden.**
+  Nothing in Atlas branches on a category — no rule, no approval, no eligibility,
+  no process binding reads it; it is a way of *looking* at a release. Every property
+  that would justify an entity is a property something else would need, and no such
+  something exists. So: the headings have **no ordering of their own** (a rank on a
+  category is the entity this refused, arriving through the back door, and a test
+  holds the sort against it); they are **not translated**, unlike every other text
+  on a product, which is a genuine regression against the rest of the surface; and
+  **two spellings are two categories**, recorded as a deliberate non-check so that
+  the day it becomes intolerable, the reason it was tolerable is on file.
+
+- **A product can say what it costs, and the approver sees it.** There was **no price
+  field anywhere in Atlas** — not on a product, not on an order line, not on the
+  approval surface — so an approver was asked to approve a laptop without being told
+  what it cost.
+
+  A product now carries a price, and it is a **string written as the catalogue's
+  maintainer wants it read**: `CHF 1'200.–`, `49.– / Monat`, `ab 10 Stück CHF 39.–`,
+  `im Grundpaket enthalten`. None of those is a number, and every one of them is an
+  answer an approver can act on.
+
+  **Displayed and never computed, on purpose.** A number invites a total; a total
+  invites two products in different currencies; that invites a rate and an effective
+  date. Every one of those belongs to an installation's finance rules, and a catalogue
+  storing a number would have started deciding them by implication before anybody had
+  chosen. The cost is stated rather than hidden: **nothing adds these up.** That is
+  survivable because one approval decides one line, so the one figure it shows is the
+  one figure it needs — and a test asserts that no page parses a price into a number,
+  because a single `Number(price)` somewhere is the whole money model, invented without
+  being chosen.
+
+  **It is frozen like a rule although it is not one.** Nothing branches on a price, and
+  it travels into the release and onto the order line anyway, for the sentence that
+  governs the approval rule and the ceiling beside it: an approver saw a figure and
+  decided on it, and a catalogue edit next week must not make the record show a
+  different one. The approval surface therefore reads it **from the order line** — the
+  line is the order's own record of what was decided on, and reading from the catalogue
+  would give the same answer today and a different one the day somebody edits a price,
+  which is exactly when it matters and nobody is looking.
+
+  Publishing refuses one thing: a price that is present and blank. That is worse than
+  saying nothing, because the portal renders an empty field where a figure belongs and
+  a reader cannot tell "we do not say" from "somebody left it blank" — so the portal
+  says the first out loud instead. It shows on the product's details, on the approval
+  panel, and on the approval **row**, because a list of forty is scanned rather than
+  opened one at a time.
+
+- **One position can be withdrawn on its own, and its details corrected.** The story
+  asks to modify or delete positions directly. Deleting existed only for a **whole
+  order**, so somebody who no longer wanted the second screen had to take the laptop
+  back with it — the per-line transition had been in the package since it was written,
+  with nothing calling it. Modifying did not exist at all.
+
+  **"Modify" is two different acts, and treating them as one is how a record starts
+  lying.**
+
+  Changing *what is held* — another product, another variant — is **not offered**. A
+  line that was provisioned and then quietly became a different product leaves the
+  access record unable to answer what somebody had and when, which is the one question
+  it exists for. The honest path already exists: give it back, order the other thing,
+  and the record carries both with the dates that make it readable.
+
+  Correcting *what was recorded about it* — the answers to the product's configuration
+  form — **is** offered, and what it may do is asked of the status machine that already
+  decides what can still change, rather than decided a second time beside it:
+
+  - A position **not yet attempted** is simply corrected. No amendment is recorded:
+    nothing was delivered under the old answers, and recording one would tell a reader
+    that something had been.
+  - A position the recipient **already holds** is corrected *and the correction is
+    recorded* — what the answers said before, who changed them, when, and why. The
+    laptop is at the wrong site and correcting the record does not move it; an
+    overwrite would leave the order saying something that was never true of the
+    delivery, and a reader could not tell the corrected record from an accurate one.
+    The amendments are a list and not a slot, because details having been wrong twice
+    is a different fact from their having been wrong once.
+  - A position **being provisioned now** is refused, and the refusal says to wait. A
+    process has the line, which is a conversation with a system Atlas does not control.
+  - A **rejected, cancelled or abandoned** position is refused: a closed record of a
+    request that produced nothing.
+
+  Whether a field is required is still the form's own statement, not a second copy of
+  that rule in the order service.
+
+  **A position its whole always carries cannot be withdrawn on its own.** The basket
+  will not let anybody deselect an integral part — a workplace is not a workplace
+  without its account — and a rule enforced when ordering and not afterwards is not a
+  rule. The order could not tell, because it carries the precedence graph and not the
+  composition one, so the line now carries that too, frozen at placement like every
+  other statement about the release. The refusal names what carries the part, because
+  the answer somebody needs is "take back the workplace instead".
+
+- **A product can ask the orderer for what its name does not say.** A laptop is not
+  fully described by being a laptop: somebody has to say which cost centre it is booked
+  to and which site it goes to. Nothing could hold that — a product declared no fields
+  and an order line carried no values — so every order needing more than a product name
+  finished as a phone call, and the answer lived in whatever the caller wrote down.
+  Variants do not solve it: a variant is a fixed shape chosen in advance, and a cost
+  centre is not one of a list.
+
+  A product now names **one Atlas form**. The basket renders it — the last screen before
+  an order exists, and the one that already shows what will actually be provisioned —
+  and the answers travel with the order line, beside the id of the form they answered.
+
+  **A form id and not a field list of its own**, because Atlas already has forms: a
+  definition, an editor, a generator, a renderer, and two surfaces rendering them. A
+  second way to declare "these are the fields somebody fills in" would be a second thing
+  to author, a second thing to render, and a second set of types, validation rules and
+  localisation to keep level with the first — behind on the day it shipped. The
+  catalogue names an id and interprets nothing; which questions there are, which are
+  required and what counts as valid stay the form's own statements, checked by the form
+  runtime before anything is sent.
+
+  **The release freezes the id and the line freezes the answers.** A release freezes
+  *rules* — the approval, the ceiling, the bindings — because a rule relaxed next week
+  must not change what somebody was held to this week. A form is not a rule: what has to
+  survive is what was answered, and "cost centre 4711" stays true whatever the form does
+  afterwards. Copying the schema into every release would put a rendering artifact inside
+  a design-time model that has kept rendering out of itself, and send it to every browser
+  that opens the portal.
+
+  Answers are keyed by item, because two laptops in one basket are two cost centres and a
+  flat map would keep one of them. Two things are refused rather than dropped, both
+  because the alternative is an order that silently loses something somebody typed:
+  answers for a product the order does not carry (a stale basket), and answers for a
+  product that asks nothing (nothing would read them). A form left *unanswered* is not
+  refused there — that is the form's own rule, and a second copy of it in the order
+  service would be wrong the first time somebody marks a field optional.
+
+  The product editor offers the forms that exist, never free text — the same rule the
+  process bindings follow, because a product bound to a form nobody wrote is a basket the
+  orderer cannot get past, found by them rather than by whoever bound it.
+
+- **A catalogue's appearance is set on the screen that fills it.** A catalogue has carried
+  its own colour, typeface and brand mark since it was built — the portal and the approval
+  page paint themselves from it — and no screen offered any of it. The one thing that makes
+  a catalogue somebody *else's* was reachable only by whoever was willing to write JSON by
+  hand, which is the exact state the authoring page exists to end.
+
+  An accent colour with a picker beside the field, the four typefaces the binary ships, and
+  a brand mark uploaded and removed with a preview. Empty means the catalogue wears the
+  instance's appearance, and a button says so in those words.
+
+  The typefaces are a list and not a URL, as the server has it: a web font would reach a
+  third party on every portal page load, carrying the visitor's address there — an outbound
+  dependency on pages that must render when nothing else is reachable. A test holds the four
+  on screen against the four the server ships, in both directions: an option the server
+  refuses is a control that cannot work, and one it accepts but the page omits is a
+  capability lost to a forgotten line.
+
+  Administration and not catalogue maintenance, like the server has it: an editor may change
+  what a catalogue offers and not whose it looks like. The form is drawn for an administrator
+  only, because offering one that always ends in 403 is its own kind of lie.
+
+- **The recipient of an order is picked, not typed — and the field is only shown to
+  accounts that may use it.** Ordering in somebody else's name became a first-class
+  screen gated on the operator role, and the field it goes through took a free string
+  and offered no help finding one. The comment above it said a picker would mean
+  shipping an organisation chart.
+
+  **That was wrong, and it is worth saying so rather than quietly changing it.** Atlas
+  already serves exactly this list, to any authenticated caller, at
+  `GET /api/v1/principals` — the directory every member and assignee picker in the
+  product reads. It carries a type, an opaque id and a display name, and deliberately
+  nothing else: no address, no roles, no reporting line. There is no hierarchy in it to
+  disclose, and a hierarchy is what an organisation chart is.
+
+  The field now suggests from that list as somebody types, shows the person's name, and
+  sends the id — a display name is not something the server can resolve, and an id is
+  not something a person can check. Typing over a picked name un-picks it, or the order
+  would be placed for whoever was chosen before under a name no longer on screen. Free
+  text still resolves, by principal id, username, directory id or mail address.
+
+  Groups are in that directory and are not offered here: an entitlement is held by a
+  person, so a group would be a recipient the server refuses after the basket is
+  already full.
+
+  **The scope is the role and not an "area of responsibility"**, and that is settled
+  rather than left open: an area of responsibility means a reporting line, and Atlas
+  has no reporting line. The `superior` approval kind has the caller name the superior
+  precisely because a directory lookup belongs to a modelled process and not to the
+  engine. Scoping a person search to a hierarchy would mean inventing the hierarchy
+  first, and an invented hierarchy decides who may act in whose name.
+
+  **The page also learns who is reading it.** It fetched a catalogue, a release, orders,
+  the inventory and favourites and never asked what the account may do, so the recipient
+  field was drawn for every visitor and answered 403 for almost all of them — which
+  reads as a permission that failed rather than one they never had.
+
+- **A catalogue can be searched, and by words it does not display.** The portal browsed
+  and did not find. Four columns cascade from the catalogue to the individual service,
+  which works for somebody who knows roughly where a thing sits and is useless to
+  everybody else — the cascade shows what a thing is *part of*, and that is exactly the
+  knowledge the searcher does not have. "Power BI Pro" sits two levels under "Productivity
+  Enabling", and nobody looking for a reporting tool has a reason to open either.
+
+  A product now carries **keywords**: the synonym, the abbreviation, the vendor's own
+  term, the name of the thing it replaced. They are searched together with every name the
+  item carries, and a publish refuses a blank one — an empty string is contained in every
+  query, so one product holding one would surface for everything anybody typed.
+
+  **The list is flat and not per locale**, unlike every other text on an item. A synonym
+  list is for finding, not for displaying; nothing renders it; and a searcher's language is
+  not the catalogue's. Somebody reading a German catalogue types "laptop" as readily as
+  "Notebook", and "M365" belongs to no language at all. For the same reason the search
+  reads *every* locale's name rather than the one on screen: refusing to match a word the
+  catalogue itself carries would be the search failing at its only job.
+
+  **A query replaces the cascade rather than filtering it.** Filtering the four columns
+  was the obvious shape and is the wrong one — a match three levels deep would leave an
+  empty column on screen and the person would conclude the catalogue does not carry it.
+  So the columns are replaced by a flat list, and each hit says the path it sits on: the
+  answer is both *what* and *where*. Choosing a hit opens the cascade at that item rather
+  than ordering from a list that does not show what the thing comes with.
+
+  The search runs in the browser over the release the page already fetched. Not for speed:
+  a route would re-send data the page has, an index would be a second copy of the
+  catalogue to keep true, and — the part that matters — a server-side search would need
+  its own audience filter, correct forever, in a second place. The page can only search
+  what it was given, and it was given exactly one catalogue.
+
+- **The approval list can be searched and ordered.** It rendered every open approval in
+  whatever order the endpoint returned — newest first — which is fine at three and a wall at
+  forty. The story asks for what a wall needs.
+
+  A search field, a sort control and a count. Deliberately **not** a table with a filter per
+  column, for the reason [ADR-0311](docs/adr/0311-portal-approval-page.md) gives: the common
+  approver is a line manager who decides perhaps four times a year, and a page that grew into
+  a console is one they will ask a colleague to operate. One field matches across the product,
+  the recipient, the orderer, the order id and the catalogue, because somebody looking for
+  "the laptop for Ada" does not know which column they are searching.
+
+  **Oldest first is now the default**, which changes what the page did. What has waited
+  longest is what nobody has looked at — the argument the recertification campaign and the
+  conflict report each make about their own lists.
+
+  Age is the job key, because a user task carries no created-at and the approvals endpoint
+  already pages by it; a clock reading taken in the browser would be a number nobody can
+  check. A row shows a due date where the model set one and *passed on* where an assignment
+  record exists — and says nothing where it does not, because that absence is the answer
+  "nobody has had to chase this".
+
+  Due dates sort ahead of everything undated: a task somebody put a deadline on is a different
+  thing from one nobody did, and sorting the undated in among them would bury the deadlines.
+
+### Fixed
+
+- **Two pages rendered the literal word "null".** `render()` passed `cond ? node : null` to
+  `replaceChildren`, which — unlike the `el()` helper beside it — turns a non-node argument
+  into a *text* node. The approval page has three such slots (an error, a stale link, a
+  truncation notice) and none is usually filled, so an ordinary load showed `nullnullnull`
+  above the list and `null` below it; the portal showed one under its header. Both have
+  carried it since they were written. A `paint()` helper filters, in both.
+
+- **The catalogue can now be read backwards.** Every question it answered ran forwards: a
+  product names what it contains, what it needs, what it excludes. That is the question an
+  *order* asks, and the portal, the basket and the fulfilment schedule are all built on it.
+
+  The person who **maintains** a service asks the opposite, and could not ask it at all. Where
+  is this used, and integrally or optionally? **What needs it** — nobody reading the VPN's own
+  page learns that the laptop cannot be provisioned without it. What may it never be held
+  with? How many people have it, and did this portal grant them or merely find them? A product
+  manager about to retire a service, rebind its provisioning or move it between catalogues had
+  no way to find out what they were about to break.
+
+  `GET /api/v1/catalog-products/{id}/usage` answers all of it out of the edges every release
+  already froze. **No new data, no migration**: the answer has been in the store since the
+  first release was published, with nothing to ask it.
+
+  Merged across catalogues, because a service does not belong to one — the same product
+  carried by two of them is one thing somebody is about to change, and a per-catalogue answer
+  would let them fix one estate and break another. Composition and aggregation stay apart,
+  because retiring an integral part changes what the whole *is* and retiring an optional one
+  does not.
+
+  **Holders are counted and never named.** A list of the people holding one service is the
+  inventory filtered to the interesting part. The count is broken down by origin, because that
+  decides what can be done: an ordered right can be returned through its order, an adopted or
+  legacy one cannot.
+
+  It is an **MCP tool** (`atlas_product_usage`), unlike every other read this line of work
+  added — those were withheld because they are other people's access, and this one names no
+  person at all.
+
+  An unknown product answers 404 rather than an empty report: "nothing uses this" and "this
+  does not exist" are different answers, and an empty one reads as *safe to retire*.
+
+- **Products can be marked as favourites.** The smallest measure in the plan, and the one
+  whose two decisions are the kind that get made by accident.
+
+  **A favourite is a bookmark and never an entitlement.** It stores a product id and nothing
+  else — no release, no catalogue, no variant. It says "show me this again", not "I may have
+  this", and everything deciding whether the person may still *order* it is asked at read time
+  by the routes that already decide it.
+
+  The tidier-looking alternative is a trap: validating a mark against the caller's catalogue
+  at write time would mean a catalogue reassignment starts **refusing** marks the person
+  already has, and a withdrawn product makes an existing list unwritable — the list would
+  break on exactly the events it should survive. Marks that no longer resolve are counted
+  rather than hidden, because a star that stopped appearing with no word looks like the page
+  lost it.
+
+  **Yours only, with no `?principal=`.** Every other portal read has one for an operator
+  administering an estate. Nothing needs to see what another person bookmarked, and a
+  parameter nobody needs is a surface to keep closed.
+
+  One product per call rather than a list per call: a replace-the-list write would silently
+  drop whatever a second tab marked in between. Marking what is already marked writes nothing,
+  so a star pressed twice does not churn a stored file, and the list is sorted on write so the
+  stored bytes are a function of the set rather than of the order somebody pressed things in.
+
+  In the portal it is a filter over the columns and not a fourth destination — a favourite is
+  still a product in the catalogue, and a separate screen would hide what it is part of. A
+  bundle is kept when something under it is marked, or starring a service would hide the way
+  to reach it.
+
+- **A product can now say who may receive it.** A catalogue carries an audience and that gate
+  is fail-closed — but it was the *only* gate: whoever was in a catalogue's audience could
+  order anything in it, and the sole thing between a person and domain administration was an
+  approval rule, which says *who decides* rather than *who may ask*.
+
+  "Put it in a stricter catalogue" is the obvious workaround and does not work, for a reason
+  written into the design: **a person sees exactly one catalogue**, the highest-ranked one
+  their groups reach. A second, stricter catalogue does not restrict a product — it hides it
+  behind the shop that person already has. A product offered to part of a catalogue's audience
+  could not be expressed at all, short of duplicating the whole catalogue per audience.
+
+  `eligible` on a product names the groups whose members may receive it, frozen into the
+  release like the ceiling and the approval rule beside it. **It narrows; it never replaces.**
+  An item naming no group inherits the catalogue's restriction rather than removing one, which
+  is why the first test in the file is the one proving an unrestricted product still works.
+
+  **Checked against the recipient, never the orderer.** An order has two people, and the
+  question is who ends up holding the thing. Checking the caller would refuse a manager
+  ordering a workplace for a new hire — the ordinary case — and would equally let an eligible
+  manager order a restricted product *for* somebody who may not have it.
+
+  A refusal over an integral part names the product that carries it: a `composition` part is
+  never deselectable, so "you may not receive a licence" about a licence nobody chose reads as
+  a bug rather than as a rule. 403 and not 409 — a conflict is a state of the estate that
+  giving something back would resolve, this is a statement about who the recipient is.
+
+  Publishing refuses a blank group id and deliberately **not** an eligible list disjoint from
+  the catalogue's audience: one person is in many groups at once, and being reached through one
+  while being eligible through another is the ordinary way this is used.
+
+- **A hold that ends now leaves a record that it existed.** The inventory is present tense by
+  construction — a grant writes a row, a revocation deletes it — and the order behind a right
+  is deleted by retention long before the right ends, which is why the inventory is engine
+  state at all. Put those two facts together and a third follows that nothing had a place for:
+  when a right ends, *everything* about it goes, and the estate can no longer say whether the
+  person ever held the thing, under whose approval, or for how long.
+
+  It got worse as detection got better. Every finding the last three slices added is about a
+  **held** right, and every remedy ends the hold — so "this person held `create-supplier` and
+  `approve-payment` together for six months" is a finding that ceases to exist the moment
+  anybody acts on it. **The remedy destroyed the evidence of the problem**, and an estate that
+  remembers only the mistakes nobody fixed has the record backwards.
+
+  Closing a hold now writes a row into a new engine-state column family, in the same
+  transaction that deletes the live entitlement. It **copies** the hold rather than referring
+  to it, because there is nothing left to refer to.
+
+  **The reason it ended changes what the row means.** A `returned` hold is evidence the person
+  *had* the access; a `corrected` one — reconciliation found the target system did not have it
+  — is evidence only that Atlas *claimed* they did, which is all `handleRevokeDiscrepancy`
+  ever decided. Writing the second as the first would assert, in a record kept for years, that
+  somebody had access nobody can show they had. Every row carries the word and the flag.
+
+  `GET /api/v1/entitlements/history` lists what has ended, and `?at=` answers the question an
+  access review actually asks — what the record said on a given day, drawn from the ended holds
+  *and* from what is still held. It is not an MCP tool: an assistant that could read it would
+  assemble a person's whole access biography in one call, and `?at=` reconstructs a past day.
+
+  The fold reads the hold through its own transaction rather than taking a frozen copy, which
+  stays inside I4/I6 — those require determinism, not the absence of reads — and is what makes
+  a double revocation write one row instead of two. `Line.ReturnedBy` joins `DecidedBy` and
+  `AbandonedBy`, recorded when a return is *asked for*: what completes one is a deprovisioning
+  process, and naming that as the decider would attribute a decision to a robot.
+
+  This is the first slice in this line of work that needs **no modelled process at all** — the
+  record accrues as a consequence of what the portal already does.
+
+- **The catalogue can now say what must never be held together.** Everything the portal had
+  learned about access was **detective or temporal**: the commissioning load records what was
+  there, reconciliation checks whether the record is true, recertification asks whether it is
+  justified, an expiry ends it by itself. All four look at one right at a time, and all four
+  look *after*. None could express the oldest control in access governance — the clerk who
+  may create a supplier must not also approve payments to it.
+
+  A catalogue declares it as a third edge kind, `excludes`, beside structure and precedence.
+  It is the **only symmetric** kind — "A must not be held with B" is exactly the reverse — so
+  publishing writes **both directions** into the release. A release recording one would make
+  every reader responsible for knowing which, and a reader that got it wrong would find half
+  the violations and report the estate as half clean, silently. Publishing refuses an item
+  that excludes itself.
+
+  **An order that would create a forbidden combination is refused at placement**, against
+  what the recipient already holds and against the rest of the same basket. Detecting instead
+  would let the combination exist for as long as detection takes, which is a detective
+  control with extra steps. The refusal names both items and which side is already held.
+
+  `GET /api/v1/conflicts` reports who already holds one, against the **current** release —
+  and that is the deliberate opposite of the expiry ceiling, which never reaches a right
+  granted before it was declared. An expiry is part of what was granted; an incompatibility
+  is a statement about what may coexist now, so declaring a rule surfaces its violations the
+  same day.
+
+  **A conflict has no culprit**, and that is why nothing here acts: it is a fact about a
+  pair, no rule can say which half is wrong, and an automatic remedy would have to choose —
+  taking away the right the person actually needs while leaving the other. The remedy is an
+  order's return or an access review, both of which already exist and both of which record
+  who decided. This is the first slice in this line of work that adds no new way to take
+  access away. `examples/unvereinbarkeit.bpmn` is the modelled process.
+
+- **A reminder can now ask what is waiting for somebody else.** The portal asks people for
+  three different things — decide an order line, answer a recertification row, do a task —
+  and none of it happens while nobody opens Atlas and looks. A campaign of five hundred rows
+  across forty managers, with nobody told, closes with four hundred and eighty undecided:
+  each correctly recorded as *not certified*, and useless.
+
+  The gap was sharper than "there is no notification". Atlas could already send mail — a
+  modelled process carries a mail task, `to=` names a principal or a group, and the address
+  is resolved in the server at the moment of sending, so it never enters a variable, an
+  order or the event log. **What was missing is that every route answering "what is waiting"
+  answers only for the caller**, and a reminder process is not the person it is reminding.
+
+  `GET /api/v1/pending-work` answers the caller's own; `?principal=` answers somebody
+  else's and is the **operator's**, because a portal where any user can enumerate any other
+  user's pending work has turned an inbox into an organisation chart with workloads
+  attached. A reminder's token carries the new `reminders` scope, which reaches exactly that
+  one route — it cannot read an inventory, run a comparison or decide anything.
+
+  **One wrong reminder costs more than ten right ones earn**, so nothing is listed that the
+  person cannot act on right now: not a row in a campaign that has closed, not one somebody
+  already decided, not an approval that has escalated away. It counts as well as lists,
+  because the first decision a reminder makes is whether to send at all. **Atlas does not
+  send** — `examples/erinnerung/` does, one mail per person rather than one per row.
+
+- **A right can now end by itself.** Everything the portal grants, it granted forever — which
+  nobody notices on the day it is built, and which is why the commissioning load,
+  reconciliation and recertification all exist: three controls that find access which should
+  not be there, *after* it is there. Recertification in particular is the manual compensation
+  for a missing expiry, paid for in the scarcest resource in the system, a line manager's
+  attention. **A question that did not need to be asked is worth more than a better way of
+  asking it.**
+
+  A product declares a ceiling with `maxDays`, it travels into the order line frozen from the
+  release — like the provisioning process, the deprovisioning process and the approval rule
+  already do — and a grant made under it carries an end. Products without one grant
+  open-ended rights, which is every product until somebody sets a ceiling.
+
+  **An expiry is not a removal.** The day after the end the target system still has the
+  membership and nothing has run; all that is true is that Atlas said the access should have
+  ended. So an expired right stays **held** and is reported overdue — dropping the record
+  when a clock ticks would make Atlas assert that somebody does not have access they
+  demonstrably do, which is the direction of wrongness that corrupts the evidence.
+
+  `GET /api/v1/entitlements/expiring` answers what is due within a window and what is past
+  its end. The removing is done by a modelled process returning the **order line**, which is
+  a stronger mechanism than either sibling can use: only an ordered right ever carries an
+  end, so an expiring right always has an order behind it, and a return revokes by the
+  release it was placed against, frozen when it was placed. A right whose order has since
+  been deleted by retention cannot be returned at all, and those are counted apart as
+  `unendable` — a number that never moves has to say why rather than look like a backlog.
+
+  **The ceiling never reaches an adopted or legacy right.** A commissioning load records a
+  found right's start as the moment it was *found*, so a ceiling measured from it would
+  schedule an entire estate to expire on the anniversary of the day somebody switched the
+  portal on. `examples/befristung.bpmn` is the modelled process, and a recertification row
+  whose right ends by itself now says so — those are questions that did not need asking.
 
 - **A business object says where it is used.** The information model gave a data object's
   `itemSubjectRef` a type to resolve against, and every reading built on it since has run
@@ -78,6 +714,37 @@ _Changed_ / _Removed_ for each version.
   the fix was to the thing all of them share. The Instances overview reads its Incidents
   column from the summary — the same column, from a couple of hundred bytes instead of
   megabytes.
+
+- **The third question about somebody's access can now be asked.** Ordering answers *may they
+  have it*; reconciliation answers *do they actually have it*; nothing asked *do they still
+  need it*. That third one is not the smaller sibling of the other two — a right that was
+  properly approved, properly provisioned and is correctly recorded can still be wrong, and
+  in most estates it is the dominant way wrong access accumulates. People change roles and
+  keep what the old one needed. Nobody granted anything improperly; nobody removed anything
+  either, because removing is somebody's job and therefore nobody's.
+
+  `POST /api/v1/recertification` turns what the inventory records into questions, each
+  addressed to the person who can judge it. **Who reviews is named by the caller**, because
+  Atlas does not resolve line managers — a directory lookup belongs to a modelled process,
+  exactly as it does for the `superior` approval rule. A holder nobody names gives an
+  *unassigned* row, which lands with the campaign's owner rather than stopping the campaign.
+
+  The whole design is a refusal to make a signature cheap. **There is no way to answer more
+  than one row** — not in the screen and not in the API — because a campaign answered in bulk
+  is an attestation with no reading behind it, which is worse than none: an auditor believes
+  it. **Silence is never a decision**: a campaign closes with unanswered rows in it and they
+  stay unanswered, so `undecided` is a first-class count rather than a remainder. There is no
+  auto-revoke at the deadline, and no re-grant — granting is ordering, and ordering carries
+  the approval rule.
+
+  Each row carries what the reviewer was shown, frozen: origin, order, how long it has been
+  held, and whether an open reconciliation finding disputes it. Certifying a disputed right
+  is signing a statement about something two systems currently disagree about, so it is
+  marked — and marked rather than refused, because one finding must not block a campaign over
+  an estate. Withdrawing a right runs the product's own deprovisioning process, never a
+  direct worker call. `examples/rezertifizierung.bpmn` is the modelled process, and **Tasks →
+  Access review** is where somebody answers — Tasks rather than Operations, because the
+  reviewer is a line manager who has never opened Operations.
 
 - **A deployed decision version can now be removed, and so can a model file nothing
   points at.** Both stores only ever grew: every Deploy in the decision editor minted a
@@ -215,6 +882,77 @@ _Changed_ / _Removed_ for each version.
   (`ATLAS_LIMIT_DIRECTORY_SYNC`, `_DIRECTORY_OBJECTS`, `_DIRECTORY_REPORT`).
   ([ADR-0332](docs/adr/0332-entra-directory-provisioning.md))
 
+- **A relationship is drawn from the class it starts at, the way a sequence flow is.**
+  Selecting a class on the information model's canvas now opens the little menu beside
+  it that the BPMN modeler has had all along: the relationship kinds that class could
+  actually reach something with, and a bin. Drag one onto the class at the other end and
+  the line is drawn.
+
+  Drawing used to be a mode. The kind was armed in the palette, and the next two classes
+  clicked became its ends — which had to be entered before the classes were looked at,
+  remembered between the two clicks, and aimed from a convention nothing on screen
+  stated. Which end a composition's diamond goes on is the question the notation turns
+  on, and it was answered by the order somebody happened to click.
+
+  The subset now answers under the pointer rather than after the drop: a target that
+  cannot take this kind of relationship never lights, and the question asked is the
+  narrow one — not whether two classes may relate, but whether they may relate *like
+  this*. A drop on a refused target still says why, in the same words the deploy would
+  use. The BPMN modeler drops such a gesture in silence; this canvas has explained the
+  notation at that exact moment since the palette did the drawing.
+
+  The armed palette mode still works. It is the only way to draw a relationship without
+  a pointer that can drag, and removing it is a separate decision.
+  ([ADR-0352](docs/adr/0352-draw-a-relationship-from-the-class-it-starts-at.md),
+  [ADR-0237](docs/adr/0237-class-canvas-on-diagram-js.md))
+- **An «enumeration» now says which values a member may take, and is drawn as part of the
+  class diagram.** Four questions an author answers while drawing a write arrow have the
+  same shape, and only three of them were asked that way: which class is this data
+  object, which state does the write move it into, which member does it target — and
+  then, in free text, what goes in. Where the member's type is an «enumeration», the
+  model has already written down the complete list of values it may hold. The write row
+  offers them, and a value that is computed still takes any FEEL expression, because a
+  picker that cannot be left would be lying about what the field is.
+
+  At deploy, a value that is **constant** is checked against the literals, and one that
+  is none of them is a warning worded like the unknown-state warning, for the same
+  reason: a model that is merely behind its process is not broken. Constant means an
+  expression that reads no variable — the inputs decide, not what an evaluation happens
+  to return, because `=if x then "approved" else "approvd"` with `x` unbound hands back a
+  perfectly concrete else branch that the process may never write.
+
+  On the class diagram, an «enumeration» that types an attribute is joined to the class
+  that uses it, derived and never authored, the way a data store's line and the
+  `«lifecycle»` line already are. Until now it was the one box that floated: the
+  compartment said `status : Lebenszustand` and nothing held the two together. One line
+  per pair, labelled with the attributes that justify it, and none where the `«lifecycle»`
+  line already joins them — a derived line is routed straight, so a second would be drawn
+  on the first. A straight line's label also moved to its midpoint, where it was landing
+  on the target box.
+  ([ADR-0351](docs/adr/0351-an-enumeration-says-which-values-a-member-may-take.md),
+  [ADR-0306](docs/adr/0306-a-lifecycle-may-take-its-states-from-an-enumeration.md))
+- **A write arrow can set several members of a data object at once.** A step that
+  captures a form's worth of fields writes them from one arrow with a row per field,
+  rather than one arrow per field. BPMN always allowed this — a data association carries
+  `assignment [0..*]` — and Atlas read one and silently dropped the rest, so a model
+  another tool wrote deployed and quietly did something other than what it said.
+
+  The writes are applied in the order they are listed and recorded as **one** change to
+  the object, not one per field: an activity that fills in a record did one thing, and a
+  timeline showing four half-built identities would be an artefact of how the write was
+  compiled rather than something that happened. Order is load-bearing and falls out of
+  that: two writes to the same member mean the later one, and a member write after a
+  whole-object write on the same arrow lands on the new value.
+
+  This is also the way out of the trade-off the previous release left standing. Writing
+  the whole object from one FEEL expression drew well and told the model nothing — the
+  members inside an expression cannot be read at deploy time, so the write went
+  unchecked and the class derived as having none. Named on their own rows, every member
+  is a static fact again: checked against the class, listed in the derived model, and
+  compared rather than excluded by the difference reading.
+  ([ADR-0350](docs/adr/0350-a-write-arrow-may-set-several-members.md),
+  [ADR-0060](docs/adr/0060-field-level-data-object-writes.md))
+
 ### Fixed
 
 - **An operations number is a counter or a walk, never the length of a page.** The live
@@ -301,6 +1039,63 @@ _Changed_ / _Removed_ for each version.
   pill whenever the detail list was empty, which is what turned an unreached definition
   into a silent one.
   ([ADR-draft-the-live-diagram-counts-every-parked-token](docs/adr/draft-the-live-diagram-counts-every-parked-token.md))
+- **Restoring a backup from another installation no longer attaches this one's history
+  to a foreign process.** The portable design-time backup
+  ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carries `deployments/` and
+  `decisions/`, which are filed by definition key — and it does not carry the counter
+  that issues those keys, because that counter is runtime. So the archive held records
+  whose identity was minted by a sequence it left behind, and the restore resolved the
+  ambiguity by overwriting.
+
+  Measured: install A deploys `alpha`, which takes key 1. Install B deploys `beta`,
+  which also takes key 1, and runs one instance to completion. Restore A's backup onto
+  B — the documented use — and after the restart key 1 is `alpha`, `beta` is gone from
+  the listing, and `alpha` reports one finished instance plus a visit on element
+  `wait`, which it has never reached. The per-element aggregates are keyed by
+  definition key and element index, so a foreign definition did not merely inherit the
+  numbers, it redistributed them across its own elements.
+
+  Measured too: the archive carried `settings/node.json`, so B came back answering with
+  A's node id — two running installations claiming one identity, and no provenance left
+  to tell where the rest of the archive came from.
+
+  A restored deployment record is now written only when its key is free, or when the
+  record already there is the same deployment — the same `processId` at the same
+  `version`, or for a decision deployment the same decisions at the same versions.
+  Anything else is held back, and the response and the Console name the keys and both
+  sides of the clash. The node identity no longer travels, on the way out or the way
+  in, so an archive taken before this cannot carry one either. Restoring an
+  installation's own backup, including an older one, is unchanged.
+
+  The whole-instance snapshot ([ADR-0109](docs/adr/0109-full-instance-snapshot.md)) was
+  never affected and is unchanged: it carries the key space, the job-type table and the
+  WAL together and drops the derived state, so it is one consistent point in time —
+  measured, a restore left nothing inherited and no key reused.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
+
+
+- **A job-type index is never issued twice, so a worker cannot be handed another
+  type's work.** The engine-wide job-type table maps a model-authored task type to the
+  integer index a job on disk carries, and a worker polling by type is resolved through
+  it ([ADR-0007](docs/adr/0007-job-worker-protocol.md)). The table has always stated
+  that an index, once issued, is permanent — "jobs already on disk carry it … not even
+  after a record is removed by hand" — and derived its counter from the entries that
+  survived a reload, which is not the same thing.
+
+  Two things lowered it. Measured: remove the highest entry file and restart, and the
+  next new task type is issued that index (`ship-parcel` = 1001, where `send-email`
+  was). And with no editing at all — a stored type whose *name* a later build turns
+  into a built-in is dropped on load, correctly, but its claim on its index was dropped
+  with it, so a store holding such a name at 1005 issued 1005 again to an unrelated
+  type five interns later. A parked job carries the number, not the name.
+
+  The dynamic indices now have a durable high-water mark, kept beside the table and
+  raised **before** the index it covers is issued, so a crash in between costs a gap
+  rather than a repeat; and the load counts every index the store shows it, whether or
+  not this build can still use the name it went to. An installation upgrading gets its
+  mark written on the boot that upgrades, from what its entries still say — the one
+  moment that knowledge exists.
+  ([issue #919](https://github.com/pblumer/atlas/issues/919))
 
 - **A deleted definition's key is never issued again, so a new process cannot inherit
   its history.** Every process definition and every decision deployment draws a key
@@ -627,6 +1422,30 @@ _Changed_ / _Removed_ for each version.
   The field is also called **Class** now rather than *Type*: what it holds is the class
   from the information model, and calling it by that name is a shorter explanation than
   the paragraph underneath (ADR-0230).
+
+- **A data object whose state a task advances is no longer treated as one the task
+  writes whole.** An association with no assignment moves the object's data state and
+  leaves its value alone, so it replaces nothing and hides nothing. The derivation read
+  it as a whole-object write anyway, which withheld the member comparison from every
+  class whose lifecycle is driven by state-only transitions — most of them. Shipped in
+  the same release as the exclusion it defeated, and never released.
+  ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md))
+- **A class a process writes whole no longer fills the difference reading with work that
+  is already done.** A write with no target path replaces a data object's entire value
+  with whatever a FEEL expression evaluates to at run time, so none of the fields it sets
+  can be read from the model. Derivation produced an empty member list for such a class,
+  and the difference between built and planned read that silence as an answer: every
+  member the model declared came back as *planned, not built*. On a real model one such
+  write invented five of them — exactly the kind of false backlog item that costs the
+  list its credibility.
+
+  Derivation now records the fact it could not see inside, as a gap stated on that class,
+  and the difference honours it: the member comparison is withheld and the exclusion says
+  so by name, in the same place it lists. The *states* of such a class are still compared,
+  because a data state is written on the object rather than inside its value, so a
+  whole-object write hides none of them.
+  ([ADR-0301](docs/adr/0301-derive-the-model-from-the-processes.md),
+  [ADR-0310](docs/adr/0310-read-the-difference-between-what-is-built-and-what-is-planned.md))
 
 ### Added
 
