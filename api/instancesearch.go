@@ -325,8 +325,10 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 	scanErr := s.readOffLoop(func(rv *state.ReadView, d defIndex) error {
 		var err error
 		defs = d
-		out, err = searchInstances(rv, d, defKey, raw, pred)
-		return err
+		if out, err = searchInstances(rv, d, defKey, raw, pred); err != nil {
+			return err
+		}
+		return countParkedTokens(rv, out)
 	})
 	switch {
 	case errors.Is(scanErr, errLoopClosing):
@@ -346,4 +348,46 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		out = append(out, archiveRows(archive.Instances, defs)...)
 	}
 	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// countParkedTokens fills in each running row's incident count, from the instance's
+// own element index.
+//
+// The console used to answer this by bucketing GET /api/v1/incidents — the server's
+// whole list, capped at 5 000 rows — and flagging a hit when its key turned up in the
+// bucket. Past that cap the bucket is a page, so an instance beyond it carried no flag
+// and rendered as a plain "active": the word an operator reads as healthy, on the
+// surface they debug from. Measured on a store holding 5 200 parked instances, 200 of
+// them came back unflagged, and the truncation header that said so was not read
+// (ADR-draft-a-number-is-a-counter-or-a-walk).
+//
+// Here the number is the row's own. A result set is capped at maxInstanceSearchResults,
+// so this is a bounded number of walks, each bounded by one instance's live tokens —
+// the shape ADR-0080 settled for a per-instance question, and the same one the
+// single-instance overlay uses.
+//
+// Finished and archived rows are left alone: an instance that has ended holds no token
+// to park, and an archived row is the exported log's answer rather than this store's.
+func countParkedTokens(rv *state.ReadView, rows []instanceResp) error {
+	for i := range rows {
+		if rows[i].State != "active" || rows[i].Archived {
+			continue
+		}
+		parked := 0
+		err := rv.ElementInstancesOfProcess(rows[i].Key, func(elKey uint64) error {
+			inc, err := rv.GetIncident(elKey)
+			if err != nil {
+				return err
+			}
+			if inc != nil {
+				parked++
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		rows[i].Incidents = &parked
+	}
+	return nil
 }

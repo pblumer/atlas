@@ -45,7 +45,15 @@ func (s *Server) collectFacts(r *http.Request) (panorama.Facts, error) {
 		err   error
 		ran   bool
 	)
-	s.do(func() { ran = true; facts, peers, err = s.collectLocalFacts(r) })
+	// Taken before the turn and off the loop: it is a walk of the whole incident
+	// family plus a point read per parked token, and it used to run inside the turn
+	// below — so a flooded engine paid tens of thousands of reads on the single writer
+	// every time somebody opened the Starmap (ADR-draft-a-number-is-a-counter-or-a-walk).
+	jobIncidents, err := s.incidentsByJobType()
+	if err != nil {
+		return panorama.Facts{}, err
+	}
+	s.do(func() { ran = true; facts, peers, err = s.collectLocalFacts(r, jobIncidents) })
 	if !ran {
 		return panorama.Facts{}, panorama.ErrShuttingDown
 	}
@@ -63,8 +71,10 @@ func (s *Server) collectFacts(r *http.Request) (panorama.Facts, error) {
 // credentials are resolved here because reading the vault is a run-loop read; they
 // never leave this process except as an Authorization header.
 //
-// Run-loop goroutine only.
-func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTarget, error) {
+// Run-loop goroutine only. jobIncidents is handed in rather than read here for that
+// exact reason: it is the one reading in this function that grows with the incident
+// population, and the loop is where it must not happen.
+func (s *Server) collectLocalFacts(r *http.Request, jobIncidents map[int32]int64) (panorama.Facts, []remoteTarget, error) {
 	projs, err := s.projectsByID()
 	if err != nil {
 		return panorama.Facts{}, nil, err
@@ -99,7 +109,6 @@ func (s *Server) collectLocalFacts(r *http.Request) (panorama.Facts, []remoteTar
 	// bindings: a model can bind a type nothing currently uses, and reporting it as
 	// absent would blame the model for a fact about the traffic.
 	taken := s.jobTypeTaken()
-	jobIncidents := s.incidentsByJobType()
 	users := s.jobTypeUsers()
 	for _, e := range s.jobTypes.All() {
 		state, reason := jobTypeStatus(taken[e.Name], jobIncidents[e.Index],

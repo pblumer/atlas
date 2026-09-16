@@ -447,6 +447,30 @@ type User struct {
 	Groups []string
 }
 
+// BuiltinFolder is one of the fixed inbox folders the console lists above the saved
+// ones. They are not rules: nobody wrote them, nobody can edit them, and expressing
+// them as FEEL would only be a longer way to say `t.Assignee == u.Name`.
+//
+// They live here, beside the rules, because the counting walk has to apply them and
+// the console has to label them, and a predicate written twice is a predicate that
+// drifts — which is exactly how the console's badges came to disagree with what the
+// inbox held (ADR-draft-a-number-is-a-counter-or-a-walk).
+type BuiltinFolder struct {
+	// ID is the console's own folder id, so a returned count lands on the right badge.
+	ID string
+	// Match is the predicate, in the order the console shows the folders.
+	Match func(t Task, u User) bool
+}
+
+// BuiltinFolders is that list. An empty viewer name matches nothing under "mine",
+// which is right: with auth off and no display identity typed in, nobody is "me".
+var BuiltinFolders = []BuiltinFolder{
+	{ID: "all", Match: func(Task, User) bool { return true }},
+	{ID: "mine", Match: func(t Task, u User) bool { return u.Name != "" && t.Assignee == u.Name }},
+	{ID: "unassigned", Match: func(t Task, _ User) bool { return t.Assignee == "" }},
+	{ID: "group", Match: func(t Task, _ User) bool { return t.CandidateGroups != "" }},
+}
+
 // Match reports whether one task belongs in the folder.
 //
 // Anything that is not FEEL true excludes the task: a null from comparing an

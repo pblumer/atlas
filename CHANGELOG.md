@@ -1051,6 +1051,90 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An operations number is a counter or a walk, never the length of a page.** The live
+  diagram's wrong incident counts had a shape worth searching for: a list is fetched
+  with a page cap, the console counts its rows, and the count is rendered as a fact
+  about the population. That agrees with the truth until an installation is busy enough
+  to need the number — and because every capped list here is ordered, what falls off is
+  a contiguous slice rather than a sample, so a whole class of subject goes missing
+  together and the count reads zero rather than low. Zero is not a floor.
+
+  Every number the Operations views state was audited against what produced it. Most
+  were already right: the overview's Running and Finished columns (per-definition
+  counters), the Incidents view's cause table (a complete walk), the nav badge, and
+  every floor that says it is one — the Workers view's queue depth with its `+`, the
+  mock directory and mock database printing "showing n of m held", the saved task
+  folders' badges. Three were not:
+
+  - **A search hit that is stuck now says so on its own row.** The flag came from
+    bucketing the server's whole incident list — capped at 5 000 rows, with a
+    truncation header the console never read. Measured on a store holding 5 200 parked
+    instances, 200 running instances that were each parked behind an incident rendered
+    as a plain "active", on the surface an operator opens to debug one. The count is now
+    part of the row, taken through that instance's own element index, and the 5 000-row
+    transfer per search is gone with it.
+  - **The task inbox's fixed folder badges count the inbox.** "All tasks", "Assigned to
+    me", "Unassigned" and "Group tasks" were counted in the browser off the newest-first
+    page it had already loaded. Measured: with 700 open tasks, claiming the oldest one
+    for a user left their "Assigned to me" reading 0 while the task sat in their inbox.
+    The four predicates now live in one place, and the badge comes from the server's own
+    walk once the page stops holding the whole inbox — an uncapped page *is* the inbox,
+    so counting its rows there is both exact and free.
+  - **Nothing walks the incident family on the run loop any more.** `incidentsByJobType`
+    walks it whole and does a point read per parked token, and it ran inside a run-loop
+    turn — once for the Workers view, once for every Starmap page load. On a flooded
+    engine that dispatches tens of thousands of reads onto the goroutine that executes
+    process instances, which is exactly what
+    [ADR-0266](docs/adr/0266-stats-and-incidents-off-the-loop.md) removed from `/stats`.
+    Both callers now take the tally off the loop, before their turn.
+
+  The rule is now checked rather than written down. Five instances of one mistake, none
+  caught by review, is not a case for another paragraph of guidance:
+  `api/pagecount_internal_test.go` fails a build where `fmtCount()` is handed a list
+  length, where a raw read of a capped listing drops the headers that say it is capped,
+  or where such a listing is read with nothing nearby that names its bound. Each rule
+  was verified by putting the original defect back and watching it fail, and the
+  patterns themselves are pinned against known-bad and known-good lines so a guard
+  cannot quietly stop matching and pass as coverage. They do not follow data flow, so
+  they are a tripwire at the places the mistake has been made rather than a proof that
+  it cannot be made again.
+
+  ([ADR-draft-a-number-is-a-counter-or-a-walk](docs/adr/draft-a-number-is-a-counter-or-a-walk.md))
+
+- **The live diagram counts every parked token, not the ones a bounded scan reached.**
+  One process, two deployed versions, both under the same broken worker: the Operations
+  overview reported 10 910 stuck tokens, the live view of the current version reported
+  none at all, and the previous version's diagram badged "50" on each of two tasks
+  holding some 5 452 each. Only the overview was right, and the current version's
+  diagram — the surface an operator opens *because* the overview flagged the process —
+  drew a process whose every running instance was parked as a healthy one.
+
+  The overlay collected its incidents on the run loop, so it was bounded twice, and it
+  walked the incident family in key order, attributing each entry to its definition only
+  after reading it. Incidents are keyed by element instance and those keys ascend, so
+  the budget was spent oldest-first: a version deployed after a flood sat entirely past
+  it and was never reached. The per-element numbers were then read off what the scan had
+  returned, which is where "50" came from — the page held 100 rows, they fell on two
+  tasks, and each badge reported its share of the page rather than of the process.
+
+  The overlay now reads what
+  [the cause summary](docs/adr/0337-incident-floods.md) reads, the way it reads it: one
+  walk of the incident family off the run loop against a snapshot, through the same
+  attribution every other incident surface uses, held for five seconds so a 1.5-second
+  poll does not pay for one each time and dropped the moment anything is resolved. The
+  count and the detail page are now separate things — `incidentTotal` and
+  `elements[].incidents` are exact, `incidents[]` stays a 100-row page for the resolve
+  panel, and `incidentCountsExact` says which is which. A definition with nothing parked
+  now *states* that it has nothing parked, where before it could not be told apart from
+  one the scan had not got to. Nothing walks the incident family on the run loop any
+  more.
+
+  Two more readings were wrong for the same reason and are fixed with it: isolating a
+  single instance stopped counting its parked tokens once its detail page filled, so an
+  instance holding more than 100 reported exactly 100; and the browser hid the incident
+  pill whenever the detail list was empty, which is what turned an unreached definition
+  into a silent one.
+  ([ADR-draft-the-live-diagram-counts-every-parked-token](docs/adr/draft-the-live-diagram-counts-every-parked-token.md))
 - **Restoring a backup from another installation no longer attaches this one's history
   to a foreign process.** The portable design-time backup
   ([ADR-0107](docs/adr/0107-backup-and-restore.md)) carries `deployments/` and
