@@ -462,6 +462,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
 | [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
+| [0377](0377-portal-without-identity.md) | With nobody to be, the portal shows a catalogue and refuses an order | Accepted | Landed |
 
 ## The two states of a record
 
