@@ -33,6 +33,13 @@ mapfile -t pkgs < <(go list -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' ./
 # This was survivable while the floor ran in the same job as the race step, which
 # left the build cache warm; on its own runner it was not. That the flag's absence
 # only mattered under one arrangement is the argument for the flag, not against it.
+#
+# Twenty-five and not the race command's forty-five: this pass is the same tests
+# without the detector, and api under instrumentation was measured at 198s and 202s
+# on two runners and at over 600s on a third — where 600s was the default cutting it
+# short rather than its real duration. 25m is several times any of those, and it
+# stays below the job's own cap (40) so a hung package is reported by Go, which names
+# it, rather than by the cap, which cancels in silence.
 go test -covermode=atomic -timeout=25m -coverprofile="${profile}" "${pkgs[@]}"
 
 # The total is computed from the profile rather than read off `go tool cover -func`,

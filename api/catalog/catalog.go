@@ -434,7 +434,28 @@ type Catalog struct {
 	Edges []Edge `json:"edges,omitempty"`
 	// OwnerID is whoever created it, because creation is the one moment where
 	// there is nobody to ask. The owner may always read, write and share.
-	OwnerID   string `json:"ownerId,omitempty"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	OwnerID string `json:"ownerId,omitempty"`
+	// Revision is optimistic concurrency, the same field and the same rule
+	// [Item.Revision] and the capability map carry.
+	//
+	// A catalogue's patch is partial, so it cannot clear a field nobody mentioned
+	// the way a product's full replace could. What it can still lose is a list:
+	// Items, Edges and Members are replaced whole when sent, and the surfaces that
+	// send them compute the new value from a snapshot — adding one product posts
+	// every product plus that one. Two maintainers adding a product a second apart,
+	// and the second write is the first one's disappearance, with no error and no
+	// trace.
+	//
+	// Zero in a patch means the caller stated no precondition and the write is
+	// unconditional, which is right for a form whose every field is on the screen
+	// in front of somebody. The caller holding a snapshot is the one that should
+	// say so. A catalogue itself is never at zero: it is created at one, so there
+	// is always a revision to hold on to.
+	//
+	// Every writer advances it, and that is not a detail — a path that changes a
+	// catalogue without advancing it is a path whose changes a stale caller
+	// overwrites in silence. TestEveryWriterAdvancesTheRevision names them all.
+	Revision  int64 `json:"revision"`
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
 }

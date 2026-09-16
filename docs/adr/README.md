@@ -425,7 +425,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 | [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
 | [0339](0339-the-definition-key-space-never-goes-backwards.md) | The definition key space never goes backwards | Accepted | Landed |
-| [0340](0340-worker-circuit-breaker.md) | An outage stops at the worker, not at every token | Accepted | Not started |
+| [0340](0340-worker-circuit-breaker.md) | An outage stops at the worker, not at every token | Accepted (amended) | Landed |
 | [0341](0341-access-recertification.md) | Recertification asks whether a right is still justified, and refuses to let silence answer | Accepted | Landed |
 | [0342](0342-conflicting-rights.md) | A conflict is a fact about a pair, and no rule can say which half is wrong | Accepted | Landed |
 | [0343](0343-pending-work.md) | A reminder has to be able to ask about somebody else, and a person must not | Accepted | Landed |
@@ -463,6 +463,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
 | [0377](0377-portal-without-identity.md) | With nobody to be, the portal shows a catalogue and refuses an order | Accepted | Landed |
+| [0378](0378-a-capped-listing-answers-with-a-page.md) | A capped listing answers with a page, not with an array | Accepted | Landed |
+| [0379](0379-dmn-version-follows-the-document.md) | A DMN document's own namespace decides which DMN version reads and writes it | Accepted | Landed |
 
 ## The two states of a record
 

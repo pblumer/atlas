@@ -219,10 +219,11 @@ async function findProcess(){
 // are index-backed instead: ?process= reads one definition's own index, newest first,
 // and /instances/search?q=<key> is a point read of one instance, live or finished.
 async function instancesOfProcess(defKey){
-  return (await api("GET",`/instances?process=${defKey}`)).filter(i=>i.processDefKey===defKey);
+  const page = await api("GET",`/instances?process=${defKey}`);
+  return ((page||{}).items||[]).filter(i=>i.processDefKey===defKey);
 }
 async function readInstance(key){
-  return (await api("GET",`/instances/search?q=${key}`)).find(i=>i.key===key) || null;
+  return (((await api("GET",`/instances/search?q=${key}`))||{}).items||[]).find(i=>i.key===key) || null;
 }
 
 // START — the create response carries no instance key, so diff the scoped listing
@@ -238,12 +239,11 @@ async function startInstance(defKey){
   return fresh.key;
 }
 
-// the tasks endpoint returns a bare array over HTTP (an {items} envelope via MCP);
-// accept both, and always scope to THIS instance.
+// the tasks endpoint answers {items, total, truncated} — one shape, HTTP and MCP
+// alike. Always scope to THIS instance.
 async function openTasks(){
-  const raw = await api("GET",`/tasks?processInstance=${instanceKey}`);
-  const list = Array.isArray(raw) ? raw : (raw.items || []);
-  return list.filter(t => t.processInstanceKey === instanceKey);
+  const page = await api("GET",`/tasks?processInstance=${instanceKey}`);
+  return ((page||{}).items||[]).filter(t => t.processInstanceKey === instanceKey);
 }
 
 // ADVANCE — the heart of the "no jarring switch" UX: after each completion we

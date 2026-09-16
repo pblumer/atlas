@@ -28,15 +28,38 @@ import (
 // layout: what a decision requires sits below it, and what shares a layer is spread
 // sideways.
 
-// The DMN 1.3 diagram-interchange namespaces. dmn-js resolves diagram interchange
-// by namespace URI, so the prefixes are arbitrary as long as they are declared —
-// which they are, on the injected block itself, so the model's own root element is
-// never rewritten.
+// The diagram-interchange namespaces. dmn-js resolves diagram interchange by
+// namespace URI, so the prefixes are arbitrary as long as they are declared — which
+// they are, on the injected block itself, so the model's own root element is never
+// rewritten.
+//
+// DMNDI is versioned and DC/DI are not. dmn-js binds the two DMNDI URIs to the DMN
+// version the document is opened as, and exactly one DC and one DI URI for both. A
+// diagram written in the wrong DMNDI namespace therefore does not fail loudly: the
+// model opens and its layout is simply not there, which is how a 1.5 model came to
+// be uneditable while a read-only view of it rendered (#994).
 const (
-	nsDMNDI = "https://www.omg.org/spec/DMN/20191111/DMNDI/"
-	nsDC    = "http://www.omg.org/spec/DMN/20180521/DC/"
-	nsDI    = "http://www.omg.org/spec/DMN/20180521/DI/"
+	nsDMNDI13 = "https://www.omg.org/spec/DMN/20191111/DMNDI/"
+	nsDMNDI15 = "https://www.omg.org/spec/DMN/20230324/DMNDI/"
+	nsDC      = "http://www.omg.org/spec/DMN/20180521/DC/"
+	nsDI      = "http://www.omg.org/spec/DMN/20180521/DI/"
+
+	// The MODEL namespace that picks nsDMNDI15. Every other value — 1.3, an older
+	// draft, a typo — keeps 1.3, which is what every already-stored model was
+	// written under and what the editor's own seed emits.
+	nsModel15 = "https://www.omg.org/spec/DMN/20230324/MODEL/"
 )
+
+// dmndiFor answers which DMNDI namespace belongs with a model's own MODEL
+// namespace. It is the whole of the version decision, stated once, so the read path
+// and the Auto-layout path cannot come to disagree about it
+// (ADR-0379).
+func dmndiFor(modelNS string) string {
+	if modelNS == nsModel15 {
+		return nsDMNDI15
+	}
+	return nsDMNDI13
+}
 
 // The drawn size of each kind of node, and the space between them. The sizes are
 // dmn-js's own defaults, so a generated diagram opens looking like one drawn in the
@@ -127,6 +150,9 @@ type drg struct {
 	nodes []drgNode
 	edges []drgEdge
 	drawn map[string]bool
+	// modelNS is the document's own MODEL namespace, kept because the diagram to be
+	// written has to match the DMN version the model is in — see dmndiFor.
+	modelNS string
 }
 
 // fullyDrawn reports whether the model's diagram already covers every node. A
@@ -141,6 +167,10 @@ func (g drg) fullyDrawn() bool {
 }
 
 type xmlDefs struct {
+	// XMLName records the root element as the parser resolved it, so modelNS below
+	// is the namespace the document actually declares rather than one guessed from
+	// the bytes.
+	XMLName   xml.Name
 	InputData []xmlElem     `xml:"inputData"`
 	Decisions []xmlDecision `xml:"decision"`
 	BKMs      []xmlElem     `xml:"businessKnowledgeModel"`
@@ -190,7 +220,7 @@ func parseDRG(src []byte) (drg, bool) {
 	if err := xml.Unmarshal(src, &defs); err != nil {
 		return drg{}, false
 	}
-	g := drg{drawn: map[string]bool{}}
+	g := drg{drawn: map[string]bool{}, modelNS: defs.XMLName.Space}
 	for _, in := range defs.InputData {
 		if in.ID != "" {
 			g.nodes = append(g.nodes, drgNode{id: in.ID, isInput: true})
@@ -366,7 +396,7 @@ func generateDMNDI(g drg) (string, bool) {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "  <dmndi:DMNDI xmlns:dmndi=%q xmlns:dc=%q xmlns:di=%q>\n", nsDMNDI, nsDC, nsDI)
+	fmt.Fprintf(&b, "  <dmndi:DMNDI xmlns:dmndi=%q xmlns:dc=%q xmlns:di=%q>\n", dmndiFor(g.modelNS), nsDC, nsDI)
 	b.WriteString("    <dmndi:DMNDiagram id=\"DMNDiagram_atlas\">\n")
 	for _, p := range places {
 		fmt.Fprintf(&b, "      <dmndi:DMNShape id=%q dmnElementRef=%q>\n", "DMNShape_"+xmlAttr(p.node.id), xmlAttr(p.node.id))

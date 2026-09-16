@@ -113,7 +113,55 @@ type Runner struct {
 	claimBatch int
 	// leaseFor is how long a claimed job is held; see SetLease.
 	leaseFor int64
+	// gate, when set, decides which candidates may be handed out and hears how the
+	// ones that were ended; see [Gate]. nil dispatches everything, which is what a
+	// runner built without one does.
+	gate Gate
+	// resume is where a *gated* scan of each job type stopped — a descending cursor, so
+	// consecutive rounds rotate down through a held backlog instead of re-reading the
+	// same page forever. Touched only while a type is held, and only on the run loop.
+	resume map[int32]uint64
 }
+
+// Gate decides whether a candidate job may be handed out, and hears how the ones that
+// were handed out ended. It is how the circuit breaker of
+// [ADR-0340](../docs/adr/0340-worker-circuit-breaker.md) reaches the dispatch path
+// without this package learning what a Worker is: everything about *why* a job is held
+// — which target it belongs to, whether that target is answering — lives on the other
+// side of these four methods, and all this package knows is a job type and a key.
+//
+// Every method runs on the run loop, so none of them may block or do anything slow.
+type Gate interface {
+	// Holding reports whether anything under this job type is currently held back. It
+	// is asked once per type per round, before any candidate is looked at, and a false
+	// answer — the steady state — costs the round nothing at all.
+	Holding(jobType int32) bool
+	// Allow reports whether this particular job may go out. It is asked only for the
+	// candidates of a type Holding said yes to, and only for jobs the round will
+	// actually hand out if allowed.
+	Allow(jobType int32, jobKey uint64) bool
+	// Failed and Succeeded report a worked job's outcome. They are called before the
+	// command that records it, while the job is still readable.
+	Failed(jobType int32, jobKey uint64, message string)
+	Succeeded(jobType int32, jobKey uint64)
+}
+
+// GatedScanBudget is how many candidates one round of a *held* job type looks at
+// before it stops and resumes next round.
+//
+// Asking the gate about a candidate costs reads — the job and its element instance,
+// to find which target it belongs to — so a round that walked a hundred thousand held
+// jobs looking for one dispatchable job would hold the single writer for all of them,
+// which is exactly the cost [ADR-0270](../docs/adr/0270-bounded-job-polling.md)
+// removed. The budget keeps a held round in the same order of magnitude as an ordinary
+// one, and the resume cursor is what keeps it from being a cap on *which* jobs are
+// ever reached rather than on how many are read at once.
+const GatedScanBudget = 256
+
+// SetGate installs the dispatch gate, or removes it with nil. A runner with no gate
+// hands out every activatable job of a type it serves, which is what it did before
+// there was a gate and what it still does on a server where nothing is failing.
+func (r *Runner) SetGate(g Gate) { r.gate = g }
 
 // DefaultConcurrency is how many handlers a round runs at once when nothing says
 // otherwise. It is well above serial, so a burst still drains quickly, and well
@@ -258,6 +306,16 @@ func (r *Runner) Claim() ([]Job, error) {
 	}
 	var keys []uint64
 	for jobType := range r.factories {
+		if r.gate != nil && r.gate.Holding(jobType) {
+			if err := r.claimHeld(jobType, share, &keys); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		// Nothing held: forget where a gated scan of this type once stopped, so the
+		// next outage starts at the newest jobs rather than part-way down a rotation
+		// that ended when the last one recovered.
+		delete(r.resume, jobType)
 		before := len(keys)
 		err := r.store.ActivatableJobs(jobType, func(k uint64) error {
 			keys = append(keys, k)
@@ -301,6 +359,62 @@ func (r *Runner) Claim() ([]Job, error) {
 		})
 	}
 	return jobs, nil
+}
+
+// claimHeld collects a share of one job type whose gate is holding something back.
+//
+// Three things separate it from the ordinary scan.
+//
+// The filter sits *inside* the scan rather than after it: a round that collected its
+// share first and filtered afterwards would collect nothing but held jobs and hand out
+// none, which is the whole failure this exists to avoid.
+//
+// It scans **newest first**. The activatable index is ordered by key, so a held
+// target's backlog sits in front of every job created after it — and scanning oldest
+// first would spend the round's budget re-reading that backlog while another Worker's
+// jobs, created since, wait behind it. Newest first reaches them immediately. It is the
+// same inversion the task inbox makes under a flood, for the same reason: the low keys
+// are where a flood parks, and paging down from the newest is what keeps a bounded scan
+// useful.
+//
+// And it resumes where the last round stopped, so the rounds rotate through the held
+// backlog rather than re-reading the same newest page forever. Reaching the far end
+// starts the next round at the newest again, so the rotation covers the index rather
+// than walking off it.
+//
+// The price is that a held type gives up oldest-first order until it recovers. That
+// order is already broken while a breaker is open — the oldest jobs are precisely the
+// ones not going out — and it returns intact with the first ungated round.
+func (r *Runner) claimHeld(jobType int32, share int, keys *[]uint64) error {
+	before := len(*keys)
+	var (
+		last  uint64
+		seen  int
+		atEnd = true
+	)
+	err := r.store.ActivatableJobsDesc(jobType, r.resume[jobType], func(k uint64) error {
+		last, seen = k, seen+1
+		if r.gate.Allow(jobType, k) {
+			*keys = append(*keys, k)
+		}
+		if len(*keys)-before >= share || seen >= GatedScanBudget {
+			atEnd = false
+			return errClaimFull
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errClaimFull) {
+		return err
+	}
+	if atEnd {
+		delete(r.resume, jobType) // back to the newest next round
+		return nil
+	}
+	if r.resume == nil {
+		r.resume = map[int32]uint64{}
+	}
+	r.resume[jobType] = last
+	return nil
 }
 
 // holdsLease reports whether the job is still held by the round that claimed it.
@@ -381,9 +495,18 @@ func (r *Runner) Submit(outcomes []Outcome) {
 		if !r.holdsLease(o.Job) {
 			continue
 		}
+		// The gate hears the outcome before the command that records it, while the job
+		// is still readable: finding which target a job belongs to is a read of the job
+		// and its element instance, and CompleteJob removes the job.
 		if o.Err != nil {
+			if r.gate != nil {
+				r.gate.Failed(o.Job.Type, o.Job.Key, o.Err.Error())
+			}
 			r.engine.FailJob(o.Job.Key, o.Job.Retries-1, o.Err.Error(), 0)
 			continue
+		}
+		if r.gate != nil {
+			r.gate.Succeeded(o.Job.Type, o.Job.Key)
 		}
 		if len(o.Completion.ToolCalls) > 0 {
 			// An agent's round: the completion carries what to run next, not what the

@@ -51,7 +51,7 @@ func TestSearchInstancesByVariable(t *testing.T) {
 			t.Fatalf("search %q: status=%d body=%s", q, code, body)
 		}
 		var rows []searchRow
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 			t.Fatalf("decode search %q: %v (%s)", q, err, body)
 		}
 		return rows
@@ -140,7 +140,7 @@ func TestSearchInstancesFinished(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), "{}", "application/json")
@@ -153,7 +153,7 @@ func TestSearchInstancesFinished(t *testing.T) {
 		t.Fatalf("search: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(rows) != 1 {
@@ -167,7 +167,7 @@ func TestSearchInstancesFinished(t *testing.T) {
 	}
 }
 
-// TestSearchInstancesEmptyQuery: a blank query returns an empty array, not an
+// TestSearchInstancesEmptyQuery: a blank query returns an empty page, not an
 // error and not every instance.
 func TestSearchInstancesEmptyQuery(t *testing.T) {
 	ts := newTestServer(t)
@@ -176,7 +176,7 @@ func TestSearchInstancesEmptyQuery(t *testing.T) {
 		t.Fatalf("empty query: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(rows) != 0 {
@@ -217,7 +217,7 @@ func TestSearchInstancesByKey(t *testing.T) {
 		t.Fatalf("list instances: status=%d body=%s", code, body)
 	}
 	var listed []searchRow
-	if err := json.Unmarshal(body, &listed); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &listed); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(listed) != 2 {
@@ -230,7 +230,7 @@ func TestSearchInstancesByKey(t *testing.T) {
 		t.Fatalf("search by key: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(rows) != 1 {
@@ -276,7 +276,7 @@ func TestSearchInstancesByKeyFinished(t *testing.T) {
 		t.Fatalf("list instances: status=%d body=%s", code, body)
 	}
 	var listed []searchRow
-	if err := json.Unmarshal(body, &listed); err != nil || len(listed) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &listed); err != nil || len(listed) != 1 {
 		t.Fatalf("expected 1 instance, got %v (%s)", err, body)
 	}
 	key := listed[0].Key
@@ -288,7 +288,7 @@ func TestSearchInstancesByKeyFinished(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/tasks/%d/complete", tasks[0].Key), "{}", "application/json")
@@ -301,7 +301,7 @@ func TestSearchInstancesByKeyFinished(t *testing.T) {
 		t.Fatalf("search by key: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(rows) != 1 || rows[0].Key != key {
@@ -338,7 +338,7 @@ func TestSearchInstancesNumericQueryStillSearchesContent(t *testing.T) {
 		t.Fatalf("search: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(rows) != 1 {
@@ -387,7 +387,7 @@ func TestSearchInstancesScopedToProcess(t *testing.T) {
 			t.Fatalf("search %s: status=%d body=%s", query, code, body)
 		}
 		var rows []searchRow
-		if err := json.Unmarshal(body, &rows); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 			t.Fatalf("decode search %s: %v (%s)", query, err, body)
 		}
 		return rows
@@ -458,7 +458,7 @@ func TestSearchInstancesScopedStopsAtTheCap(t *testing.T) {
 		t.Fatalf("search: status=%d body=%s", code, body)
 	}
 	var rows []searchRow
-	if err := json.Unmarshal(body, &rows); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &rows); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(rows) != 200 {
@@ -485,7 +485,7 @@ func TestSearchInstancesScopedStopsAtTheCap(t *testing.T) {
 		t.Fatalf("unscoped search: status=%d body=%s", code, body)
 	}
 	var unscoped []searchRow
-	if err := json.Unmarshal(body, &unscoped); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &unscoped); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(unscoped) != 200 {

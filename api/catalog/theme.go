@@ -108,6 +108,9 @@ func (s *Service) HandleSetTheme(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		got.Theme = in
+		// Advanced like every other writer: an appearance change a stale caller
+		// cannot see is still a change it must not overwrite.
+		got.Revision++
 		got.UpdatedAt = s.now()
 		opErr = s.store.SaveCatalog(got)
 	})

@@ -603,3 +603,82 @@ func TestBlockedOnNothingBlocksNothing(t *testing.T) {
 		t.Fatalf("Blocked(unknown) = %v, want nothing", got)
 	}
 }
+
+// TestOneStructuralPairCannotBeBothKinds.
+//
+// [Release.Includes] and [Release.Options] are kept apart because they mean
+// opposite things to a basket: an inclusion is a consequence of ordering the whole
+// — integral, never deselectable — and an option is an offer. A pair carrying both
+// structural kinds lands in both lists, so the same part is ordered without asking
+// *and* offered as a choice, on one screen.
+//
+// It is reachable without anybody writing a contradiction. mergeEdges, behind the
+// ArchiMate import, only ever adds — deliberately, because "an import is not a
+// synchronisation" — so redrawing a composition as an aggregation in the model and
+// importing again leaves the catalogue holding both, and the old edge is the one
+// nobody remembers.
+//
+// Refused rather than resolved: picking one would publish a catalogue that does not
+// say what its author drew, and there is no honest rule for which of the two they
+// meant. Refused *here* because it is provable at publish, which is where anything
+// provable at publish belongs (I5).
+func TestOneStructuralPairCannotBeBothKinds(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"workplace", "laptop"}}},
+		Items: []Item{item("workplace"), item("laptop")},
+		Edges: []Edge{
+			{From: "workplace", To: "laptop", Kind: EdgeComposition},
+			{From: "workplace", To: "laptop", Kind: EdgeAggregation},
+		},
+	}
+	rel, problems := Publish(in)
+	if len(problems) == 0 {
+		t.Fatalf("published a part that is integral and optional at once: includes=%v options=%v",
+			rel.Includes, rel.Options)
+	}
+	contains(t, problems, "both as composition and as aggregation")
+}
+
+// TestTheSameStructuralEdgeTwiceIsNotAContradiction.
+//
+// The check above has to distinguish two kinds on one pair from one kind written
+// twice. The second is what an import produces routinely — the same model read
+// again — and refusing it would make re-importing an unchanged model an error.
+func TestTheSameStructuralEdgeTwiceIsNotAContradiction(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"workplace", "laptop"}}},
+		Items: []Item{item("workplace"), item("laptop")},
+		Edges: []Edge{
+			{From: "workplace", To: "laptop", Kind: EdgeComposition},
+			{From: "workplace", To: "laptop", Kind: EdgeComposition},
+		},
+	}
+	rel := mustPublish(t, in)
+	if got := rel.Includes["workplace"]; len(got) == 0 {
+		t.Errorf("the part was lost: includes=%v", rel.Includes)
+	}
+}
+
+// TestTheTwoKindsAreFineOnDifferentPairs.
+//
+// A whole legitimately contains one part integrally and offers another alongside
+// it — that is the ordinary shape of a bundle, and a check that looked at the
+// parent alone rather than at the pair would refuse it.
+func TestTheTwoKindsAreFineOnDifferentPairs(t *testing.T) {
+	in := Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"},
+			Items: []string{"workplace", "laptop", "monitor"}}},
+		Items: []Item{item("workplace"), item("laptop"), item("monitor")},
+		Edges: []Edge{
+			{From: "workplace", To: "laptop", Kind: EdgeComposition},
+			{From: "workplace", To: "monitor", Kind: EdgeAggregation},
+		},
+	}
+	rel := mustPublish(t, in)
+	if len(rel.Includes["workplace"]) != 1 || len(rel.Options["workplace"]) != 1 {
+		t.Errorf("a bundle with one integral part and one option was not published as such: "+
+			"includes=%v options=%v", rel.Includes, rel.Options)
+	}
+}

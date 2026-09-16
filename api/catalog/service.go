@@ -197,6 +197,9 @@ func (s *Service) HandleCreateCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.ID = id
+	// Revision 1, so there is always a revision to state: a catalogue at zero
+	// would read as "no precondition available" from the moment it existed.
+	in.Revision = 1
 	in.CreatedAt, in.UpdatedAt = s.now(), s.now()
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		in.OwnerID = p.UserID
@@ -254,6 +257,11 @@ type catalogUpdate struct {
 	// offers. They live with the catalogue because they are what its release is
 	// computed from.
 	Edges []Edge `json:"edges,omitempty"`
+	// Revision is the precondition: the revision the caller read. Zero states none
+	// and writes unconditionally. See [Catalog.Revision] for why a partial patch
+	// needs one at all — the three list fields above are replaced whole, and the
+	// callers that send them compute the new list from a snapshot.
+	Revision int64 `json:"revision,omitempty"`
 }
 
 // HandleUpdateCatalog changes what a catalogue offers.
@@ -271,6 +279,7 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		found       bool
 		allowed     bool
 		mayNotShare bool
+		stale       bool
 		loadErr     error
 	)
 	s.loop.Do(func() {
@@ -285,6 +294,14 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if allowed = s.mayEdit(got, p); !allowed {
+			return
+		}
+		// The precondition, checked after the authority and before anything is
+		// applied: a caller who may not write this catalogue learns nothing about
+		// which revision it is on, and a refused patch changes none of the fields
+		// below rather than some of them.
+		if in.Revision != 0 && in.Revision != got.Revision {
+			stale = true
 			return
 		}
 		if in.Texts != nil {
@@ -315,6 +332,7 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		if in.Edges != nil {
 			got.Edges = in.Edges
 		}
+		got.Revision++
 		got.UpdatedAt = s.now()
 		loadErr = s.store.SaveCatalog(got)
 	})
@@ -325,6 +343,10 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
 	case !allowed:
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+id)
+	case stale:
+		httpapi.Error(w, http.StatusConflict,
+			"catalogue "+id+" changed since it was read; read it again, reapply the change "+
+				"and state the revision you read")
 	case mayNotShare:
 		// Said plainly, because the difference is the point: this caller may change
 		// the catalogue and may not change who else can.

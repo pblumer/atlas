@@ -92,7 +92,7 @@ func parkTaskWithMessage(t *testing.T, ts *httptest.Server, defKey uint64, messa
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 		ProcessDefKey      uint64 `json:"processDefKey"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	for _, task := range tasks {
@@ -295,7 +295,7 @@ func TestResolveIncidentsByKeys(t *testing.T) {
 	// The resolved tasks are back in the inbox: resolving really re-activated them.
 	code, body2 := doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
 	var tasks []json.RawMessage
-	_ = json.Unmarshal(body2, &tasks)
+	_ = json.Unmarshal(listRows(t, body2), &tasks)
 	if code != http.StatusOK || len(tasks) != 2 {
 		t.Errorf("tasks after bulk resolve: status=%d count=%d, want 2", code, len(tasks))
 	}
@@ -414,7 +414,7 @@ func TestResolveIncidentsGrantsTheRetryBudget(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("tasks after resolve = %v (%s)", err, body)
 	}
 	// One failure with 2 left: still no incident, because the budget was granted.
@@ -456,15 +456,20 @@ func TestIncidentSummaryCarriesWorkerContext(t *testing.T) {
 	}
 	// Nothing is configured under that name, so every instance parks on the same task
 	// with the same cause — the flood this whole surface exists for.
-	for i := 0; i < 3; i++ {
+	//
+	// Two instances, not more: three distinct instances failing in a row is what trips
+	// the circuit breaker (ADR-0340), after which the rest of a flood is *held* rather
+	// than parked, and this test is about what a group says, not about how large one
+	// gets. TestABreakerStopsAFloodAtItsSource covers the interaction itself.
+	for i := 0; i < 2; i++ {
 		if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
 			t.Fatalf("create instance: status=%d body=%s", code, body)
 		}
 	}
 
 	s := incidentSummaryQuery(t, ts, "")
-	if len(s.Groups) != 1 || s.Groups[0].Count != 3 {
-		t.Fatalf("groups = %+v, want one cause of 3", s.Groups)
+	if len(s.Groups) != 1 || s.Groups[0].Count != 2 {
+		t.Fatalf("groups = %+v, want one cause of 2", s.Groups)
 	}
 	g := s.Groups[0]
 	if g.Connector != "Patrick Blumer" || g.ConnectorKind != "mail" {
@@ -487,8 +492,8 @@ func TestIncidentSummaryCarriesWorkerContext(t *testing.T) {
 		t.Errorf("after configuring: groups = %+v, want the configured record named", s.Groups)
 	}
 	res := resolveIncidents(t, ts, fmt.Sprintf(`{"processDefKey":%d,"elementId":"send"}`, deploy.Key))
-	if res.Resolved != 3 {
-		t.Fatalf("resolve the cause = %+v, want all 3", res)
+	if res.Resolved != 2 {
+		t.Fatalf("resolve the cause = %+v, want both", res)
 	}
 	if got := listIncidents(t, ts); len(got) != 0 {
 		t.Errorf("after the fix and the bulk resolve: %d incidents remain (%+v)", len(got), got)
@@ -538,7 +543,7 @@ func TestIncidentScopeByCompiledElementIndex(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 2 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 2 {
 		t.Fatalf("tasks = %v (%s), want the two parallel branches", err, body)
 	}
 	for _, task := range tasks {

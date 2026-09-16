@@ -3,10 +3,8 @@ package api_test
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -19,29 +17,6 @@ import (
 // here is ordered, what falls off is a contiguous slice rather than a sample, so a
 // whole class of subject goes missing together and the count reads zero rather than
 // low. Zero is not a floor; it is a claim that nothing is there.
-
-// doReqHeaders is doReq with the response headers, which the pagination signals ride on.
-func doReqHeaders(t *testing.T, ts *httptest.Server, method, path, body, contentType string) (int, []byte, http.Header) {
-	t.Helper()
-	var r io.Reader
-	if body != "" {
-		r = strings.NewReader(body)
-	}
-	req, err := http.NewRequest(method, ts.URL+path, r)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("%s %s: %v", method, path, err)
-	}
-	defer res.Body.Close()
-	data, _ := io.ReadAll(res.Body)
-	return res.StatusCode, data, res.Header
-}
 
 // parkEveryInstance starts n instances of defKey, giving the last `marked` of them a
 // variable the search can find, and parks every one. The marking matters: the incident
@@ -65,7 +40,7 @@ func parkEveryInstance(t *testing.T, ts *httptest.Server, defKey uint64, n, mark
 		var tasks []struct {
 			Key uint64 `json:"key"`
 		}
-		_ = json.Unmarshal(body, &tasks)
+		_ = json.Unmarshal(listRows(t, body), &tasks)
 		if len(tasks) == 0 {
 			return
 		}
@@ -92,22 +67,21 @@ func TestSearchHitSaysWhetherItIsStuck(t *testing.T) {
 	parkEveryInstance(t, ts, defKey, flood, marked)
 
 	// The page the console used to count. It is short of the population, and it says so
-	// in a header the console did not read — the fact this test exists to outlive.
-	_, listBody, hdr := doReqHeaders(t, ts, http.MethodGet, "/api/v1/incidents", "", "")
-	var listed struct {
-		Incidents []struct {
-			ProcessInstanceKey uint64 `json:"processInstanceKey"`
-		} `json:"incidents"`
+	// — the fact this test exists to outlive.
+	_, listBody := doReq(t, ts, http.MethodGet, "/api/v1/incidents", "", "")
+	facts := decodePage(t, listBody)
+	var listed []struct {
+		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 	}
-	if err := json.Unmarshal(listBody, &listed); err != nil {
+	if err := json.Unmarshal(facts.Items, &listed); err != nil {
 		t.Fatalf("decode incidents: %v", err)
 	}
-	if len(listed.Incidents) >= flood || hdr.Get("X-Incidents-Truncated") != "true" {
-		t.Fatalf("expected a capped incident page under a flood of %d; got %d rows, truncated=%q",
-			flood, len(listed.Incidents), hdr.Get("X-Incidents-Truncated"))
+	if len(listed) >= flood || !facts.Truncated {
+		t.Fatalf("expected a capped incident page under a flood of %d; got %d rows, truncated=%v",
+			flood, len(listed), facts.Truncated)
 	}
 	inThePage := map[uint64]bool{}
-	for _, r := range listed.Incidents {
+	for _, r := range listed {
 		inThePage[r.ProcessInstanceKey] = true
 	}
 
@@ -119,7 +93,7 @@ func TestSearchHitSaysWhetherItIsStuck(t *testing.T) {
 		State     string `json:"state"`
 		Incidents *int   `json:"incidents"`
 	}
-	if err := json.Unmarshal(searchBody, &hits); err != nil {
+	if err := json.Unmarshal(listRows(t, searchBody), &hits); err != nil {
 		t.Fatalf("decode search: %v (%s)", err, truncateForLog(searchBody))
 	}
 	if len(hits) == 0 {
@@ -161,7 +135,7 @@ func TestHealthySearchHitSaysZeroRatherThanNothing(t *testing.T) {
 		State     string `json:"state"`
 		Incidents *int   `json:"incidents"`
 	}
-	if err := json.Unmarshal(body, &hits); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &hits); err != nil {
 		t.Fatalf("decode search: %v (%s)", err, truncateForLog(body))
 	}
 	if len(hits) == 0 {
@@ -200,7 +174,7 @@ func TestBuiltinFolderCountsTheInboxNotThePage(t *testing.T) {
 	var every []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &every); err != nil || len(every) != waiting {
+	if err := json.Unmarshal(listRows(t, body), &every); err != nil || len(every) != waiting {
 		t.Fatalf("expected %d waiting tasks, got %d (%v)", waiting, len(every), err)
 	}
 	oldest := every[len(every)-1].Key
@@ -209,13 +183,14 @@ func TestBuiltinFolderCountsTheInboxNotThePage(t *testing.T) {
 	}
 
 	// The page the badges used to be counted from does not contain that task.
-	_, pageBody, hdr := doReqHeaders(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	_, pageBody := doReq(t, ts, http.MethodGet, "/api/v1/tasks", "", "")
+	taskPage := decodePage(t, pageBody)
 	var page []struct {
 		Key      uint64 `json:"key"`
 		Assignee string `json:"assignee"`
 	}
-	_ = json.Unmarshal(pageBody, &page)
-	if hdr.Get("X-Tasks-Truncated") != "true" {
+	_ = json.Unmarshal(taskPage.Items, &page)
+	if !taskPage.Truncated {
 		t.Fatalf("the default task page was not capped; the fixture proves nothing")
 	}
 	for _, r := range page {
