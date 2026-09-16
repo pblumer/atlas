@@ -93,9 +93,10 @@ _Changed_ / _Removed_ for each version.
   nothing but the checkout, so each finishes well inside its own cap and neither can
   cancel the other by being slow; they also overlap instead of queueing, which is the
   smaller benefit and the one worth naming as smaller. The main job is renamed to
-  `build · vet · fmt · race` accordingly — **a repository whose branch protection
-  requires the old `build · vet · fmt · race · cover` name has to be told the two new
-  ones.**
+  `build · vet · fmt · race` accordingly, and a second check, `cover · statement
+  floor`, appears beside it. Nothing here requires either by name — `main` carries no
+  branch protection — so the rename costs nothing; a fork that has added required
+  checks is the one place it has to be told the two new names.
 
   Nothing is skipped, relaxed or reordered: every test still runs, the floor is still
   94% checked against the same script, and `make check` on a contributor's machine is
