@@ -72,7 +72,7 @@ type Request struct {
 	Eventual bool
 
 	// Binary asks for the response *bytes* rather than a decoded object, and it is
-	// how a photo is read (ADR-draft-directory-photo). Graph serves one as
+	// how a photo is read (ADR-0367). Graph serves one as
 	// image/jpeg, and every other operation this worker performs returns JSON.
 	//
 	// A field on the request rather than a second method on [Client], because what

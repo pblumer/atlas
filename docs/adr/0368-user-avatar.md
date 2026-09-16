@@ -1,4 +1,4 @@
-# ADR-DRAFT: A picture of a person belongs to the account, in two provenances and one place
+# ADR-0368: A picture of a person belongs to the account, in two provenances and one place
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -99,7 +99,7 @@ nothing it did not already have.
 The cost is honest and worth stating: **the directory half is not in this
 change.** What is here is the store, the routes, the provenance and the surfaces;
 the worker operation and the carriage on the sync message followed immediately
-after, in [ADR-draft-directory-photo].
+after, in [ADR-0367].
 
 ### What this route refuses
 

@@ -35,6 +35,7 @@ import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 import { attachCollab } from "./collab.js";
 import { dmnSurface } from "./dmn-collab.js";
+import { knowledgeModelFindings } from "./dmn-warnings.js";
 
 // Only the editor stylesheets we actually use are loaded, lazily, so non-editor
 // pages stay light — same discipline as the bpmn-js loader.
@@ -45,6 +46,19 @@ const DMN_CSS = [
   "vendor/dmn/assets/dmn-js-decision-table.css",
   "vendor/dmn/assets/dmn-js-decision-table-controls.css",
   "vendor/dmn/assets/dmn-js-literal-expression.css",
+  // A business knowledge model's logic is *not* the literal-expression view above.
+  // dmn-js opens a `dmn:BusinessKnowledgeModel` in its boxed-expression view — a
+  // separate component, with its own container class and its own two stylesheets —
+  // because a knowledge model is a FEEL *function*: it has a kind, formal
+  // parameters and a body, none of which a decision's literal expression has.
+  // Without these two the view still renders every one of those parts, and renders
+  // them raw: no boxes, no borders, the `F` kind marker and the `()` parameter list
+  // as bare text at the page edge, and the edit buttons that should stay hidden
+  // until their section is hovered sitting permanently on top of the content.
+  // TestEveryDmnViewIsStyled keeps this list honest when the vendored fork gains
+  // another view.
+  "vendor/dmn/assets/dmn-js-boxed-expression.css",
+  "vendor/dmn/assets/dmn-js-boxed-expression-controls.css",
   "vendor/dmn/assets/dmn-font/css/dmn.css",
   "vendor/dmn/assets/properties-panel.css",
 ];
@@ -240,6 +254,283 @@ function viewLabel(v) {
   return (v.element && v.element.name) || (v.element && v.element.id) || "Decision";
 }
 
+// HINT_TAIL is the part of the hint that is the same under every view: the three
+// verbs on the bar. They mean what they mean regardless of how the logic on screen
+// is written (ADR-0321, ADR-0322).
+const HINT_TAIL = `<b>Save</b> keeps a draft only you see; <b>Save to model</b> writes the
+  decision every process resolves, and is what the next Publish ships; <b>Deploy</b> ships this
+  decision to the engine on its own, as a new version. <b>Test</b> runs it against sample inputs
+  and shows which rules fired — nothing is saved or deployed by asking.`;
+
+// hintFor says what the view on screen is for. dmn-js opens four, and they are not
+// variations on one editor: the requirements graph, a decision's rule table, a
+// decision written as one FEEL expression, and a business knowledge model — a
+// reusable function with its own parameters — are four different things to author.
+// The hint used to describe the decision table under all of them, which left it
+// wrong on three views out of four, and most wrong on the one whose layout explains
+// itself least: a knowledge model shows `F`, a parameter list and a result variable,
+// and none of that is a table.
+function hintFor(active) {
+  const type = (active && active.type) || "decisionTable";
+  if (type === "drd") {
+    return `Draw the decision requirements graph. An <b>Input Data</b> node is something this
+      model is given, a <b>Decision</b> holds logic, and a <b>Knowledge Model</b> is a reusable
+      function a decision can invoke. Open a decision's own tab to model its logic. ` + HINT_TAIL;
+  }
+  if (type === "literalExpression") {
+    return `This decision's logic is one FEEL expression: what it evaluates to is the decision's
+      result, under the variable named below it. Its inputs are whatever the requirements graph
+      gives it — both are adopted into a business rule task that calls this decision. ` + HINT_TAIL;
+  }
+  if (type === "boxedExpression") {
+    return `A <b>knowledge model</b> is a reusable FEEL function, not a decision: nothing calls it
+      from a process. <b>F</b> is the expression language, the list beside it is the parameters a
+      caller passes, the body is evaluated with them, and <b>Result</b> names the variable a
+      decision binds when it invokes this model. ` + HINT_TAIL;
+  }
+  return `Model the decision table. <b>Input Data</b> nodes become the decision's inputs and the
+    output column becomes its result variable — both are adopted into a business rule task that
+    calls this decision. ` + HINT_TAIL;
+}
+
+// attachDmnWarnings keeps the findings strip under the canvas, and the badges on the
+// requirements graph, in step with the model. It returns a teardown.
+//
+// What it says is dmn-warnings.js's to decide; this is only where it is said. Two
+// placements, because a finding has two moments: the strip is what an author sees
+// without looking for it, including from a decision's own view where the graph is not
+// on screen at all, and the badge is what marks the shape once they are looking at
+// the graph. Clicking a finding goes to its element — back to the graph first when
+// the author is elsewhere, since pointing at a shape in a view that does not draw it
+// would point at nothing.
+function attachDmnWarnings(modeler, strip, toast) {
+  let findings = [];
+  let badges = []; // overlay ids on the graph, ours to reap
+  let bound = null; // the viewer whose changes we are listening to
+  let timer = null;
+
+  const viewerNow = () => {
+    try { return modeler.getActiveViewer(); } catch { return null; }
+  };
+
+  const clearBadges = () => {
+    const viewer = viewerNow();
+    if (viewer && badges.length) {
+      try {
+        const overlays = viewer.get("overlays");
+        for (const id of badges) { try { overlays.remove(id); } catch { /* went with its view */ } }
+      } catch { /* a view without overlays has nothing of ours on it */ }
+    }
+    badges = [];
+  };
+
+  const drawBadges = () => {
+    clearBadges();
+    const view = modeler.getActiveView();
+    if (!view || view.type !== "drd") return; // only the graph has shapes to mark
+    const viewer = viewerNow();
+    if (!viewer) return;
+    let overlays, registry;
+    try { overlays = viewer.get("overlays"); registry = viewer.get("elementRegistry"); } catch { return; }
+    const marked = new Set(); // one badge per shape, however many findings name it
+    for (const f of findings) {
+      if (marked.has(f.element) || !registry.get(f.element)) continue;
+      marked.add(f.element);
+      try {
+        badges.push(overlays.add(f.element, "atlas-dmn-warning", {
+          position: { top: -8, right: -8 },
+          html: `<span class="unsup-badge" title="${esc(f.message)}">!</span>`,
+        }));
+      } catch { /* a shape without graphics yet (mid-import) */ }
+    }
+  };
+
+  const render = () => {
+    try {
+      findings = knowledgeModelFindings(modeler.getDefinitions());
+    } catch {
+      findings = []; // mid-import, or a model dmn-js has not settled: nothing to say yet
+    }
+    strip.hidden = findings.length === 0;
+    if (strip.hidden) {
+      strip.innerHTML = "";
+      return;
+    }
+    strip.innerHTML = `<ul>${findings.map((f) => {
+      const fix = f.fix
+        ? ` <button type="button" class="dmn-warn-fix" data-fix-source="${esc(f.fix.source)}"`
+          + ` data-fix-target="${esc(f.fix.target)}">${esc(f.fix.label)}</button>`
+        : "";
+      return `<li><button type="button" data-el="${esc(f.element)}" data-rule="${esc(f.rule)}">`
+        + `${esc(f.message)}</button>${fix}</li>`;
+    }).join("")}</ul>`;
+  };
+
+  // focusCanvas puts keyboard focus on the drawing. dmn-js binds its keyboard to the
+  // canvas SVG, so anything done from outside the canvas — a button in the strip below
+  // it — has to hand focus back, or the author's next shortcut goes to the body.
+  // canvas.focus() is the supported way and older diagram-js builds lack it, so the SVG
+  // is focused directly when it is not there.
+  const focusCanvas = (viewer) => {
+    try {
+      const canvas = viewer.get("canvas");
+      if (typeof canvas.focus === "function") {
+        canvas.focus();
+        return;
+      }
+      const svg = canvas.getContainer().querySelector("svg");
+      svg && svg.focus && svg.focus();
+    } catch { /* a view without a canvas: nothing to focus */ }
+  };
+
+  const showInGraph = (id) => {
+    const viewer = viewerNow();
+    if (!viewer) return;
+    try {
+      const el = viewer.get("elementRegistry").get(id);
+      if (!el) return;
+      viewer.get("selection").select(el);
+      try { viewer.get("canvas").scrollToElement(el); } catch { /* older diagram-js */ }
+      focusCanvas(viewer);
+    } catch { /* the view changed under the click */ }
+  };
+
+  // applyFix draws the missing requirement: the author's edit, made for them. It is
+  // worth offering only because it is as easy to take back as to make, and it leaves
+  // both ways of doing that within reach — the new connection is *selected*, which puts
+  // its context pad (a single entry, the bin) under the author's eyes, and the canvas is
+  // *focused*, which is what makes Ctrl+Z work.
+  //
+  // The focus is the part that is not obvious. dmn-js binds its keyboard to the canvas
+  // SVG, not to the document, so a shortcut reaches the model only while that SVG has
+  // focus. A button in the strip below the canvas does not give it focus — the click
+  // leaves it on the body — so without this the author's first Ctrl+Z would go nowhere
+  // and they would reasonably conclude the edit could not be undone.
+  //
+  // dmn-js's own rules decide whether the connection may be made and what it is; the
+  // answer for a knowledge model reaching a decision is a knowledge requirement. Asking
+  // rather than constructing the element means this cannot force a connection dmn-js
+  // would refuse from the palette — and when it does refuse, the author is told why
+  // instead of watching a button do nothing.
+  const applyFix = (sourceId, targetId) => {
+    const viewer = viewerNow();
+    if (!viewer) return;
+    let registry, modeling, rules;
+    try {
+      registry = viewer.get("elementRegistry");
+      modeling = viewer.get("modeling");
+      rules = viewer.get("rules");
+    } catch {
+      toast && toast("This view cannot draw the requirement.", "err");
+      return;
+    }
+    const source = registry.get(sourceId);
+    const target = registry.get(targetId);
+    if (!source || !target) {
+      toast && toast("One of the two elements is not on the requirements graph, so the "
+        + "requirement cannot be drawn here.", "err");
+      return;
+    }
+    if (!rules.allowed("connection.create", { source, target })) {
+      toast && toast("dmn-js will not connect these two, so this has to be drawn by hand.", "err");
+      return;
+    }
+    let connection;
+    try {
+      connection = modeling.connect(source, target);
+    } catch (err) {
+      toast && toast("Could not draw the requirement: " + err.message, "err");
+      return;
+    }
+    // Selecting it is half the feature: it is both where the author looks to see what
+    // was drawn, and the gesture that offers to remove it again.
+    try { viewer.get("selection").select(connection); } catch { /* drawn either way */ }
+    focusCanvas(viewer);
+    toast && toast("Knowledge requirement drawn — Ctrl+Z takes it back, or the bin in its "
+      + "context pad.", "ok");
+  };
+
+  const onClick = (e) => {
+    const fixBtn = e.target.closest("button[data-fix-source]");
+    if (fixBtn) {
+      const source = fixBtn.getAttribute("data-fix-source");
+      const target = fixBtn.getAttribute("data-fix-target");
+      // The repair is a drawing, so it happens on the drawing: from a decision's own
+      // view the graph is opened first, which is also where the author then sees it.
+      const view = modeler.getActiveView();
+      if (view && view.type === "drd") {
+        applyFix(source, target);
+        return;
+      }
+      const graph = modeler.getViews().find((v) => v.type === "drd");
+      if (!graph) return;
+      modeler.open(graph).then(() => applyFix(source, target)).catch(() => { /* nothing to draw on */ });
+      return;
+    }
+    const btn = e.target.closest("button[data-el]");
+    if (!btn) return;
+    const id = btn.getAttribute("data-el");
+    const view = modeler.getActiveView();
+    if (view && view.type === "drd") {
+      showInGraph(id);
+      return;
+    }
+    const drd = modeler.getViews().find((v) => v.type === "drd");
+    if (!drd) return;
+    modeler.open(drd).then(() => showInGraph(id)).catch(() => { /* nothing to show */ });
+  };
+
+  // A finding is recomputed from the whole model, and typing into an expression
+  // fires per keystroke, so the recompute is debounced rather than run on each one.
+  const refresh = () => { render(); drawBadges(); };
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 200);
+  };
+
+  // Each view is its own dmn-js instance, so the listener is moved with the author — a
+  // listener left on the view they came from goes quiet without saying so. dmn-collab.js
+  // binds the collaboration session the same way, for the same reason.
+  //
+  // `commandStack.changed` rather than the graph's `element.changed`, because the views
+  // are not all diagram-js: editing an expression in a decision's own view changes the
+  // model without any element changing on a canvas, and the findings are about the model.
+  // Subscribing to the element event as well costs one more debounced call on the graph
+  // and keeps a change that arrives outside a command — a peer's, applied by the
+  // collaboration session — from going unseen.
+  const CHANGE_EVENTS = ["commandStack.changed", "elements.changed", "element.changed"];
+  const bindActive = () => {
+    unbindActive();
+    const viewer = viewerNow();
+    if (!viewer) return;
+    for (const event of CHANGE_EVENTS) {
+      try { viewer.on(event, schedule); } catch { /* a view without that event */ }
+    }
+    bound = viewer;
+  };
+  const unbindActive = () => {
+    if (!bound) return;
+    for (const event of CHANGE_EVENTS) {
+      try { bound.off(event, schedule); } catch { /* gone with its view */ }
+    }
+    bound = null;
+  };
+  const onViews = () => { bindActive(); refresh(); };
+
+  modeler.on("views.changed", onViews);
+  strip.addEventListener("click", onClick);
+  bindActive();
+  refresh();
+
+  return () => {
+    clearTimeout(timer);
+    strip.removeEventListener("click", onClick);
+    unbindActive();
+    try { modeler.off("views.changed", onViews); } catch { /* torn down with the modeler */ }
+    clearBadges();
+  };
+}
+
 // keepCaretOnRewrite works around an upstream dmn-js bug (17.x). The DRD "definition
 // properties" widget (the editable model name/id at the top-left of the DRG view)
 // rewrites its contenteditable's textContent on *every* committed model change —
@@ -388,13 +679,8 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         <div class="dmn-canvas"></div>
         <div class="dmn-props"></div>
       </div>
-      <div class="dmn-hint muted">Model the decision table. <b>Input Data</b> nodes become the
-        decision's inputs and the output column becomes its result variable — both are adopted
-        into a business rule task that calls this decision. <b>Save</b> keeps a draft only you
-        see; <b>Save to model</b> writes the decision every process resolves, and is what the
-        next Publish ships; <b>Deploy</b> ships this decision to the engine on its own, as a new
-        version. <b>Test</b> runs it against sample inputs and shows which rules fired — nothing is
-        saved or deployed by asking.</div>
+      <div class="dmn-warn" id="dmn-warn" hidden></div>
+      <div class="dmn-hint muted" id="dmn-hint">${hintFor(null)}</div>
     </div>`;
 
   const canvas = root.querySelector(".dmn-canvas");
@@ -415,6 +701,8 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const testResult = root.querySelector("#dmn-test-result");
   const testErr = root.querySelector("#dmn-test-err");
   const backEl = root.querySelector("#dmn-back");
+  const hintEl = root.querySelector("#dmn-hint");
+  const warnEl = root.querySelector("#dmn-warn");
 
   // ---- identity ------------------------------------------------------------
   // What this session is editing, across the three layers a decision has
@@ -504,9 +792,11 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
   const caretObserver = new MutationObserver(patchCaretFields);
   caretObserver.observe(canvas, { childList: true, subtree: true });
 
+  let dropWarnings = () => {};
   current = {
     destroy() {
       caretObserver.disconnect();
+      dropWarnings();
       try { modeler && modeler.destroy(); } catch { /* already gone */ }
       modeler = null;
     },
@@ -551,6 +841,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         viewsBar.appendChild(b);
       }
       propsPanel.hidden = !(active && active.type === "drd");
+      hintEl.innerHTML = hintFor(active);
     };
     modeler.on("views.changed", renderViews);
 
@@ -572,6 +863,7 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
     await modeler.importXML(xml);
     if (gen !== generation) return;
     renderViews();
+    dropWarnings = attachDmnWarnings(modeler, warnEl, toast);
     patchCaretFields();
     // The status line says what a *save* just did, so it starts empty and is cleared
     // by anything else. That a draft is open is a standing fact rather than an event,

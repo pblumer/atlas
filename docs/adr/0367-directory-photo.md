@@ -1,4 +1,4 @@
-# ADR-DRAFT: A directory photo arrives the way every other directory fact does
+# ADR-0367: A directory photo arrives the way every other directory fact does
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -15,7 +15,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-user-avatar] gave an account a picture and two provenances, and built
+[ADR-0368] gave an account a picture and two provenances, and built
 one of them: an upload. The other was the reason the field records where a picture
 came from at all — a tenant that already holds a photo for everybody should not be
 asked to collect them a second time.
@@ -157,7 +157,7 @@ record claiming a picture that is not there.
 
 ## Links
 
-- relates to ADR-draft-user-avatar — the picture itself, and the provenance this
+- relates to ADR-0368 — the picture itself, and the provenance this
   one fills in
 - relates to ADR-0332 — the mirror, its plan/apply split, and why the credential
   stays in the worker

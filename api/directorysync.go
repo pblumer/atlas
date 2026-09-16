@@ -63,7 +63,7 @@ type directorySyncMessage struct {
 	Users          []directoryUser `json:"users"`
 	UsersDeltaLink string          `json:"usersDeltaLink"`
 	// Photos is what the run read about people's pictures
-	// (ADR-draft-directory-photo). It is a field of its own and not part of
+	// (ADR-0367). It is a field of its own and not part of
 	// [directoryUser] on purpose: that type is one object from /users/delta, and a
 	// photo is not in that page — it is a second thing the run read, one call per
 	// person. Putting it there would be a small lie in the file where a reader most
@@ -205,7 +205,7 @@ type directoryUserDecision struct {
 
 	// Photo is the picture to write beside the record, and PhotoType what it is;
 	// PhotoClear says to take away the one that is there
-	// (ADR-draft-directory-photo). All three are excluded from the JSON for the
+	// (ADR-0367). All three are excluded from the JSON for the
 	// reason Record is: a reporting run answers with counts and notes, and never
 	// with a megabyte of base64 per person.
 	Photo      []byte `json:"-"`
@@ -404,7 +404,7 @@ func photoFingerprint(data []byte) string {
 }
 
 // applyPhoto decides one account's picture, mutating the record and returning what
-// the apply must write (ADR-draft-directory-photo).
+// the apply must write (ADR-0367).
 //
 // The rule that shapes it: **a mirror does not overwrite a choice.** A picture
 // whose provenance is an upload is left where it is, in both directions — the

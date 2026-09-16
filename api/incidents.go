@@ -476,6 +476,11 @@ func (s *Server) handleResolveIncidents(w http.ResponseWriter, r *http.Request) 
 				s.proc.ResolveIncident(k, retries)
 			}
 		})
+		// Clearing a whole cause is the point of this call, and the live diagram is
+		// where an operator checks that it worked. Holding the previous counts for the
+		// rest of the TTL would show the flood still standing
+		// (ADR-0366).
+		s.forgetIncidentCounts()
 		// Drive what this call unblocked OUTSIDE the run loop: a bulk resolve can hand
 		// hundreds of jobs back to the workers at once, and every one of them is an
 		// outbound call. Holding the single writer for that is the stall ADR-0157

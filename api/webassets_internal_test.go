@@ -209,3 +209,107 @@ func TestHostedAppsNeverLookForOneInstanceInTheCappedListing(t *testing.T) {
 		}
 	}
 }
+
+// The vendored dmn-js modeler ships one stylesheet family per *view*, and which
+// view opens is decided by what the author is editing: a decision's rule table, a
+// decision written as a single FEEL expression, the requirements graph, or — for a
+// business knowledge model — the boxed-expression view. dmn-editor.js loads the
+// stylesheets by hand, because the Console is buildless and nothing else would.
+//
+// A view whose stylesheet is missing from that list does not fail loudly. It
+// renders: every element is in the DOM, the editor works, saves work. It is simply
+// unstyled — raw text at the page edge, no boxes, and controls that should stay
+// hidden until hovered permanently on top of the content. Nothing in a Go or a
+// browser test notices, because the only thing wrong is what it looks like.
+//
+// That is exactly what happened to the knowledge model's view, and it is the kind
+// of gap that reappears the next time the pinned fork adds a view. So the list is
+// checked against the bundle instead of being maintained by hand.
+var (
+	dmnCSSBlock      = regexp.MustCompile(`(?s)const DMN_CSS = \[(.*?)\n\];`)
+	dmnCSSEntry      = regexp.MustCompile(`"(vendor/dmn/assets/[^"]+\.css)"`)
+	dmnViewContainer = regexp.MustCompile(`<div class="(dmn-[a-z-]+-container)">`)
+)
+
+// dmnStylesheets returns the vendored stylesheets dmn-editor.js loads, as paths
+// under web/.
+func dmnStylesheets(t *testing.T) map[string]bool {
+	t.Helper()
+	body, err := fs.ReadFile(webFS, "web/dmn-editor.js")
+	if err != nil {
+		t.Fatalf("read dmn-editor.js: %v", err)
+	}
+	block := dmnCSSBlock.FindStringSubmatch(string(body))
+	if block == nil {
+		t.Fatal("no DMN_CSS list found in dmn-editor.js; this guard would pass vacuously")
+	}
+	loaded := map[string]bool{}
+	for _, m := range dmnCSSEntry.FindAllStringSubmatch(block[1], -1) {
+		loaded["web/"+m[1]] = true
+	}
+	if len(loaded) == 0 {
+		t.Fatal("DMN_CSS names no vendored stylesheet; the pattern must have stopped matching")
+	}
+	return loaded
+}
+
+// TestEveryDmnStylesheetTheEditorLoadsIsEmbedded: a mistyped href is a 404 the
+// browser reports to nobody, and the view it styles comes up raw.
+func TestEveryDmnStylesheetTheEditorLoadsIsEmbedded(t *testing.T) {
+	for href := range dmnStylesheets(t) {
+		if _, err := fs.Stat(webFS, href); err != nil {
+			t.Errorf("dmn-editor.js loads %q, which is not embedded (%v). A stylesheet that "+
+				"404s does not break the editor — it renders that view unstyled, and only a "+
+				"human looking at it can tell.", href, err)
+		}
+	}
+}
+
+// TestEveryDmnViewIsStyled: every view container the vendored bundle can create
+// must have every stylesheet that styles it in DMN_CSS. The bundle is the authority
+// on which views exist — the fork adds them — so it is read rather than listed here.
+func TestEveryDmnViewIsStyled(t *testing.T) {
+	bundle, err := fs.ReadFile(webFS, "web/vendor/dmn/dmn-modeler.js")
+	if err != nil {
+		t.Fatalf("read the vendored dmn-js bundle: %v", err)
+	}
+	containers := map[string]bool{}
+	for _, m := range dmnViewContainer.FindAllStringSubmatch(string(bundle), -1) {
+		containers[m[1]] = true
+	}
+	if len(containers) == 0 {
+		t.Fatal("no view containers found in the dmn-js bundle; this guard would pass vacuously")
+	}
+
+	assets, err := fs.Glob(webFS, "web/vendor/dmn/assets/*.css")
+	if err != nil {
+		t.Fatalf("glob the vendored stylesheets: %v", err)
+	}
+	loaded := dmnStylesheets(t)
+	styled := map[string]bool{}
+	for _, asset := range assets {
+		body, err := fs.ReadFile(webFS, asset)
+		if err != nil {
+			t.Fatalf("read %s: %v", asset, err)
+		}
+		for container := range containers {
+			if !strings.Contains(string(body), "."+container) {
+				continue
+			}
+			styled[container] = true
+			if !loaded[asset] {
+				t.Errorf("%s styles .%s, but dmn-editor.js does not load it. The view the "+
+					"vendored modeler opens in that container renders unstyled: every element "+
+					"is there and nothing errors, so add the stylesheet to DMN_CSS.",
+					strings.TrimPrefix(asset, "web/"), container)
+			}
+		}
+	}
+	for container := range containers {
+		if !styled[container] {
+			t.Errorf("the dmn-js bundle creates .%s, but no vendored stylesheet styles it — "+
+				"the distro under web/vendor/dmn/assets is missing a file the pinned fork ships.",
+				container)
+		}
+	}
+}

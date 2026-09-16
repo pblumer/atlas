@@ -67,7 +67,7 @@ nuggets-check:
 # and scripts/whats-new/overrides/. Commit the regenerated JSON. See
 # scripts/whats-new/README.md.
 whats-new:
-	node scripts/whats-new/gen.mjs
+	go run ./scripts/whats-new
 
 # Resolve the feed's merge conflict. `.gitattributes` marks api/web/whats-new.json
 # unmergeable on purpose, so any merge where both sides added a changelog entry stops
@@ -88,7 +88,7 @@ whats-new-resolve:
 		exit 1; \
 	fi
 	@git checkout --theirs -- api/web/whats-new.json 2>/dev/null || true
-	node scripts/whats-new/gen.mjs
+	go run ./scripts/whats-new
 	@git add api/web/whats-new.json
 	@echo "The feed is regenerated from the merged CHANGELOG.md and staged."
 

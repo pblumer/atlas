@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// A picture of the person behind an account (ADR-draft-user-avatar), end to end.
+// A picture of the person behind an account (ADR-0368), end to end.
 //
 // The bytes are the easy half. What these hold is the half that is easy to get
 // wrong and hard to notice wrong: who may change how a colleague appears, that a
