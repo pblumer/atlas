@@ -122,7 +122,19 @@ prefix, and metadata hashing cannot detect a truncated SST.
   point than the ratio: over a tenfold rise in population the scan rose elevenfold and
   the counters by half, so the cost stops tracking how much data exists. Fewer and shorter Pebble snapshots are held open, so compaction is held back
   less.
-- **Negative / trade-offs accepted:** a larger write buffer means more committed state
+- **Negative / trade-offs accepted:** the runtime counts now depend on the counters
+  being maintained correctly, where the scan could not be wrong. A scan is
+  self-correcting by construction; a counter drifts silently if any write ever puts a
+  record without its counter beside it, and a wrong number on `/api/v1/stats` announces
+  nothing. Two things bound that risk rather than remove it: every write to those
+  families lives in `applyToState` (invariant I4), which puts record and counter in one
+  `firstErr` so no event can produce one without the other, and
+  `TestStatsReadFromCountersAgreeWithTheScan` holds the two readings against each other
+  across starts, completions and cancels. It is also not a new risk so much as a wider
+  one — ADR-0080 already took it for the per-definition views and the Prometheus gauges.
+  The authoritative scan stays in the code for anything that needs to be certain.
+
+  Separately, a larger write buffer means more committed state
   in memory, so after a crash the store trails the log further and recovery replays a
   longer suffix. That is recovery time, not durability, and the ADR-0131 checkpoint
   cadence bounds it. The block cache and write buffer are resident memory the server

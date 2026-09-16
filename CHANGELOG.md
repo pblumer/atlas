@@ -209,6 +209,12 @@ _Changed_ / _Removed_ for each version.
   incident count stays a scan on purpose: an incident leaves state two ways, so a
   maintained number would drift where a scan cannot.
 
+  What that costs, stated because it is real: a scan cannot be wrong, a counter can. If
+  any write ever put one of those records without its counter beside it, the number would
+  drift silently. `applyToState` is the only place either is written and it puts the two
+  in one `firstErr`, and `TestStatsReadFromCountersAgreeWithTheScan` holds the readings
+  against each other — but the guarantee is now maintenance rather than construction.
+
   Two tests hold the line rather than a convention —
   `TestCheckpointCommitRunsWithTheRunLoopFree` and
   `TestCompactionVerificationRunsWithTheRunLoopFree` ask the loop whether it is free at

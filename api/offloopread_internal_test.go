@@ -247,8 +247,14 @@ func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 }
 
 // TestStatsCountsWhatTheViewHolds checks the conversion did not change the answer:
-// the counts still come from the same three queries, now read from a snapshot. The
-// write goes through the loop, so it is ordered before the view this takes.
+// the counts are read from a snapshot, and a write that went through the loop before
+// it is ordered before the view, so it is visible in it.
+//
+// The write has to maintain the per-definition counter beside the record, because that
+// is what the count is read from now (ADR-draft-whole-store-reads-leave-the-writer) and
+// because it is what writing an instance *means*: applyToState puts the two in one
+// firstErr, so no event can produce one without the other. A raw PutProcessInstance on
+// its own would set up a state the engine cannot reach, and assert against it.
 func TestStatsCountsWhatTheViewHolds(t *testing.T) {
 	srv, _ := newOffLoopServer(t)
 
@@ -261,6 +267,10 @@ func TestStatsCountsWhatTheViewHolds(t *testing.T) {
 		tx := srv.store.NewTransaction()
 		if err := tx.PutProcessInstance(4242, &model.ProcessInstanceValue{ProcessDefKey: 1}); err != nil {
 			t.Errorf("PutProcessInstance: %v", err)
+			return
+		}
+		if err := tx.IncDefInstanceCount(1); err != nil {
+			t.Errorf("IncDefInstanceCount: %v", err)
 			return
 		}
 		if err := tx.Commit(); err != nil {
