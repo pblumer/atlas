@@ -161,6 +161,48 @@
       ]
     },
     {
+      "id": "editing-a-product-in-the-console-silently-cleared-five-of-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "Editing a product no longer clears the fields you cannot see",
+        "de": "Ein Produkt zu bearbeiten löscht nicht mehr die Felder, die man nicht sieht"
+      },
+      "summary": {
+        "en": "Saving a product replaces it, and the product form does not show every field a product has — there is no box for variants, the orderable window, the search keywords, the eligible groups or the ceiling on how long a right may last. So correcting a price cleared all five and moved the creation date to today, and nothing said so: the save succeeded and everything on screen looked right, because the fields it dropped are the ones it never displays. The form now starts from the stored product and changes only what you edited. If you have edited products here before, it is worth checking the ones that carried keywords, eligible groups or a validity ceiling — those may have been lost on an earlier save.",
+        "de": "Ein Produkt zu speichern ersetzt es, und das Produktformular zeigt nicht jedes Feld, das ein Produkt hat — für Varianten, das Bestellfenster, die Suchbegriffe, die berechtigten Gruppen und die Höchstdauer einer Berechtigung gibt es kein Eingabefeld. Eine Preiskorrektur löschte daher alle fünf und setzte das Erstellungsdatum auf heute, ohne jeden Hinweis: Das Speichern gelang, und auf dem Bildschirm sah alles richtig aus, denn die verworfenen Felder sind genau jene, die nie angezeigt werden. Das Formular geht jetzt vom gespeicherten Produkt aus und ändert nur das Bearbeitete. Wer hier bereits Produkte bearbeitet hat, sollte jene prüfen, die Suchbegriffe, berechtigte Gruppen oder eine Höchstdauer trugen — diese können bei einem früheren Speichern verloren gegangen sein."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Console"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the catalogue and a product whose keywords, eligible groups or validity ceiling you set through the API or an import.",
+          "Change something the form does show — the price, say — and save. Everything else stays as it was.",
+          "A product shared with another catalogue keeps its texts in languages this catalogue does not declare; the boxes you do see still clear a text when you empty them.",
+          "If a colleague changed the product while you had it open, the save is refused instead of overwriting them: nothing is saved, the page shows their version, and you reapply your change."
+        ],
+        "de": [
+          "Den Katalog und ein Produkt öffnen, dessen Suchbegriffe, berechtigte Gruppen oder Höchstdauer über die API oder einen Import gesetzt wurden.",
+          "Etwas ändern, das das Formular zeigt — etwa den Preis — und speichern. Alles Übrige bleibt unverändert.",
+          "Ein mit einem anderen Katalog geteiltes Produkt behält seine Texte in Sprachen, die dieser Katalog nicht führt; die sichtbaren Felder löschen einen Text weiterhin, wenn man sie leert.",
+          "Hat eine Kollegin das Produkt geändert, während es offen war, wird das Speichern abgewiesen statt zu überschreiben: Nichts wird gespeichert, die Seite zeigt deren Fassung, und man wendet die eigene Änderung erneut an."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open the catalogue",
+          "de": "Katalog öffnen"
+        },
+        "route": "#/catalog"
+      }
+    },
+    {
       "id": "a-javascript-script-task-could-not-start-under-the-strict-sa",
       "version": "Unreleased",
       "date": null,

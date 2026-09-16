@@ -813,12 +813,31 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       const editing = e.target.dataset.editing;
       const pid = String(editing || f.get("id") || "").trim();
       if (!pid) { toast("A product needs an id", "err"); return; }
-      const texts = {};
+
+      // Saving a product REPLACES it, and this form does not render every field a
+      // product has: there is no control here for variants, the orderable window,
+      // the search keywords, the eligible groups or the ceiling on how long the
+      // right may last. Built from the controls alone, the body cleared all five on
+      // every save and moved the creation date to today — silently, because the
+      // fields it dropped are the ones it never shows.
+      //
+      // So the stored record is the seed and the form's own fields are laid over
+      // it. It also carries the revision, which turns a colleague's edit in between
+      // from a silent overwrite into a refusal (ADR-0376).
+      const stored = byID[pid] || {};
+
+      // Texts are merged rather than rebuilt, for the same reason one level down: a
+      // product is shared between catalogues, this form renders one box per
+      // language *this* catalogue declares, and a text in a language it does not
+      // declare belongs to a catalogue that does. Emptying a box that is rendered
+      // still clears that text, or a text could be added and never taken away.
+      const texts = { ...(stored.texts || {}) };
       for (const l of langs) {
         const val = String(f.get(`t-${l}`) || "").trim();
-        if (val) texts[l] = val;
+        if (val) texts[l] = val; else delete texts[l];
       }
       const body = {
+        ...stored,
         id: pid, homeCatalog: id, state: f.get("state"), texts,
         approval: { kind: f.get("akind"), ref: String(f.get("aref") || "").trim() },
         category: String(f.get("category") || "").trim(),
@@ -838,7 +857,22 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
         }
         toast("Saved");
         reload();
-      } catch (err) { toast(err.message, "err"); }
+      } catch (err) {
+        // The server's refusal is written for a caller that can state a revision.
+        // A person has none; they have a page that is out of date, so say the thing
+        // they can act on and put the current record in front of them. reload()
+        // returns to the catalogue rather than reopening this form, and the message
+        // says so — telling somebody their form was refreshed when it was closed
+        // sends them looking for a change that is not on the screen.
+        if (err.status === 409) {
+          toast("Somebody else changed this product while you were editing it. " +
+            "Nothing was saved — the page now shows their version, so open the " +
+            "product again and reapply your change.", "err");
+          reload();
+          return;
+        }
+        toast(err.message, "err");
+      }
     });
   }
 }
