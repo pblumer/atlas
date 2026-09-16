@@ -165,8 +165,16 @@ export function knowledgeModelFindings(definitions) {
         element: callerId,
         label: labelFor(caller),
         message: `“${labelFor(caller)}” calls the knowledge model “${labelFor(bkm)}” but does not `
-          + `require it. It will run, and the requirements graph will not show the dependency — `
-          + `draw a knowledge requirement from “${labelFor(bkm)}” to it.`,
+          + `require it. It will run, and the requirements graph will not show the dependency.`,
+        // This one finding has a determinate repair, so it carries it: the missing edge
+        // runs from the knowledge model to the element that calls it, and there is
+        // nothing to choose. The other finding has no fix here on purpose — which
+        // decision ought to call an uninvoked knowledge model is the author's to decide,
+        // and a button that guessed would be writing their model for them.
+        //
+        // It is declared rather than performed: this module knows the model, not the
+        // canvas, and the editor is what owns dmn-js.
+        fix: { kind: "connect", source: bkm.id, target: callerId, label: "Draw the requirement" },
       });
     }
   }

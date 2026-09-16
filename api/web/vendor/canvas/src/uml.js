@@ -179,18 +179,21 @@ function classVisual(parent, shape) {
   }
   rows.forEach((row, i) => {
     const y = HEAD_H + PAD + i * ROW_H + 13;
+    // Used, or nothing the reading can see names it. The host decides which names are
+    // used and hands the list over; the drawing is told, the way it is told which
+    // shapes a relationship cannot land on. No list means no reading was taken, and
+    // the row is drawn exactly as it was before there was one. A literal is marked on
+    // the same list as a member: what makes one used is a different question, and the
+    // host is where that question is answered.
+    const name = bo.stereotype === "enumeration" ? String(row) : row.name;
+    const mark = bo.usedMembers ? (bo.usedMembers.includes(name) ? " used" : " unused") : "";
     if (bo.stereotype === "enumeration") {
-      text(g, shorten(String(row), roomFor(shape.width)), { x: PAD, y, class: "uml-literal" });
+      text(g, shorten(String(row), roomFor(shape.width)), { x: PAD, y, class: `uml-literal${mark}` });
       return;
     }
     // The business key is marked on the box because it is the fact the whole model
     // turns on: what makes Order#ORD-1 the same order in two processes.
     const isKey = (bo.identity || []).includes(row.name);
-    // Used, or nothing the reading can see names it. The host decides which names are
-    // used and hands the list over; the drawing is told, the way it is told which
-    // shapes a relationship cannot land on. No list means no reading was taken, and
-    // the row is drawn exactly as it was before there was one.
-    const mark = bo.usedMembers ? (bo.usedMembers.includes(row.name) ? " used" : " unused") : "";
     const line = svg("text", { x: PAD, y, class: `uml-attr${isKey ? " key" : ""}${mark}` }, g);
     const span = (content, cls) => {
       const t = svg("tspan", { class: cls }, line);
@@ -277,9 +280,8 @@ UmlRenderer.prototype.drawConnection = function(parent, connection) {
   // A store's line to its class, and a class's two lines to an enumeration, are
   // annotations rather than relationships: a store and its class do not relate, one *is
   // kept in* the other (ADR-0230 §7), and a class does not relate to an enumeration — it
-  // *takes its states from* one (ADR-0306) or *is typed by* one
-  // (ADR-draft-an-enumeration-says-which-values-a-member-may-take). None of them is an
-  // association, so nothing that counts relationships counts them.
+  // *takes its states from* one (ADR-0306) or *is typed by* one (ADR-0351). None of them
+  // is an association, so nothing that counts relationships counts them.
   const derived = bo.element === "store-link" || bo.element === "lifecycle-link" || bo.element === "type-link";
   const g = svg("g", {
     class: derived ? `uml-${bo.element}` : `uml-edge ${bo.kind || "association"}`,
@@ -777,8 +779,7 @@ export class ClassCanvas {
     const badStore = new Set(findings.map((f) => f.storeId).filter(Boolean));
     const invalid = (id) => badClass.has(id) || badStore.has(id);
     const unreachable = new Set(marks.unreachable || []);
-    // What a where-used reading knows and the drawing only shows
-    // (ADR-draft-the-drawing-says-which-members-are-used): which
+    // What a where-used reading knows and the drawing only shows (ADR-0363): which
     // shapes nothing it can see uses at all, and — for a class deployed processes do
     // use — which of its members those processes name. Both absent while no reading
     // has been asked for, which is what leaves the drawing as it always was.
@@ -870,7 +871,7 @@ export class ClassCanvas {
     }
     // And the class's line to each «enumeration» that *types* one of its attributes —
     // derived the same way, from the attribute's type, and never authored
-    // (ADR-draft-an-enumeration-says-which-values-a-member-may-take).
+    // (ADR-0351).
     //
     // Only enumerations. An attribute typed by another class is what an association is
     // for, and the author draws that one deliberately; deriving a second line beside it
