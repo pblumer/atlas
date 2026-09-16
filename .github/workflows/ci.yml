@@ -87,12 +87,6 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      # For the What's New generator below; it is plain ESM with no dependencies.
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Build
         run: go build ./...
 
@@ -115,7 +109,7 @@ jobs:
       # someone remembered. Re-run it here and fail on any diff.
       - name: What's New feed is up to date
         run: |
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
             echo "(Add curated DE/EN prose in scripts/whats-new/overrides/<id>.json — see scripts/whats-new/README.md.)"
@@ -161,7 +155,7 @@ jobs:
   # record *and* every ADR-NNNN citation in the repository, so a renamed record or a
   # mistyped citation fails here exactly as it would in the full job. The guards that
   # live elsewhere and read this tree are covered too — api/releasedkinds_internal_test.go
-  # parses each record's Status line, and scripts/whats-new/gen.mjs builds the feed's
+  # parses each record's Status line, and the generator in scripts/whats-new builds the feed's
   # links from the file names in docs/adr.
   #
   # So this runs the whole test suite rather than a list of test names: an enumeration
@@ -184,11 +178,6 @@ jobs:
           go-version: '1.26'
           check-latest: true
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       # docs/adr carries Go (number.go and the guards), so the formatting rule reaches
       # into this tree like any other.
       - name: Format check
@@ -205,7 +194,7 @@ jobs:
 
       - name: What's New feed is up to date
         run: |
-          node scripts/whats-new/gen.mjs
+          go run ./scripts/whats-new
           if ! git diff --quiet -- api/web/whats-new.json; then
             echo "api/web/whats-new.json is stale. Run 'make whats-new' and commit the result."
             git --no-pager diff -- api/web/whats-new.json
