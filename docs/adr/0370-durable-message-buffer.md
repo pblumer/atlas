@@ -1,6 +1,6 @@
 # ADR-0370: A published message waits for its subscriber
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
