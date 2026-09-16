@@ -2,6 +2,51 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-knowledge-model-s-expression-opened-unstyled",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A knowledge model's logic is readable again",
+        "de": "Die Logik eines Knowledge Models ist wieder lesbar"
+      },
+      "summary": {
+        "en": "A knowledge model is the piece of a decision model that holds a reusable calculation — a fee, a discount, a risk score — that several decisions call rather than each repeating it. Opening one showed its parts, but drawn as bare lines of text against the left edge of the page: no boxes, no separators, and the small edit buttons that belong to a section sitting on top of the expression instead of appearing when you point at it. Nothing was broken underneath — what you typed was saved, and what was saved was correct — but the layout gave no clue which part was the calculation, which were the parameters a caller passes, and which was the result. It now opens as the three-part box it is: the name, the F for FEEL beside the parameter list, the expression itself, and the result variable a decision binds when it calls this model. The line beneath the canvas also says what you are looking at — it used to explain the decision table under every view, including the three that are not one.",
+        "de": "Ein Knowledge Model ist der Teil eines Entscheidungsmodells, der eine wiederverwendbare Berechnung hält — eine Gebühr, einen Rabatt, einen Risikowert —, die mehrere Entscheidungen aufrufen, statt sie jeweils zu wiederholen. Beim Öffnen waren zwar alle Bestandteile da, aber als nackte Textzeilen am linken Seitenrand: keine Kästen, keine Trennlinien, und die kleinen Bearbeiten-Schaltflächen eines Abschnitts lagen auf dem Ausdruck, statt erst beim Zeigen darauf zu erscheinen. Darunter war nichts kaputt — Eingetipptes wurde gespeichert, Gespeichertes war korrekt —, aber die Darstellung liess nicht erkennen, was die Berechnung ist, was die Parameter sind, die ein Aufrufer übergibt, und was das Ergebnis. Nun öffnet sich der dreiteilige Kasten, der es ist: der Name, das F für FEEL neben der Parameterliste, der Ausdruck selbst und die Ergebnisvariable, die eine Entscheidung bindet, wenn sie dieses Modell aufruft. Auch die Zeile unter der Zeichenfläche benennt jetzt die geöffnete Ansicht — sie erklärte zuvor unter jeder Ansicht die Entscheidungstabelle, auch unter den drei, die keine ist."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler",
+        "Decisions"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a decision in the Modeler, or create one from an application with Create new → Decision (DMN).",
+          "On the Overview (DRG) tab, draw a Knowledge Model and give it a name — this is the reusable calculation.",
+          "Select it and pick Literal Expression from its wrench menu to give it logic.",
+          "Open its own tab beside Overview (DRG): F names the expression language, the list beside it holds the parameters a caller passes, and Result names the variable a decision binds.",
+          "Draw a knowledge requirement from a decision to the model so something actually invokes it — a model with no decision has nothing to deploy."
+        ],
+        "de": [
+          "Eine Entscheidung im Modeler öffnen oder in einer Anwendung über Create new → Decision (DMN) anlegen.",
+          "Im Reiter «Overview (DRG)» ein Knowledge Model zeichnen und benennen — das ist die wiederverwendbare Berechnung.",
+          "Es auswählen und im Werkzeugmenü «Literal Expression» wählen, um ihm Logik zu geben.",
+          "Den eigenen Reiter neben «Overview (DRG)» öffnen: «F» benennt die Ausdruckssprache, die Liste daneben hält die Parameter, die ein Aufrufer übergibt, und «Result» benennt die Variable, die eine Entscheidung bindet.",
+          "Von einer Entscheidung eine Knowledge-Requirement-Kante auf das Modell ziehen, damit es auch aufgerufen wird — ein Modell ohne Entscheidung hat nichts, was ausgeliefert werden könnte."
+        ]
+      },
+      "try": {
+        "label": {
+          "en": "Open Modeler",
+          "de": "Modeler öffnen"
+        },
+        "route": "#/modeler"
+      }
+    },
+    {
       "id": "with-authentication-off-a-catalogue-s-appearance-could-not-b",
       "version": "Unreleased",
       "date": null,
@@ -193,24 +238,6 @@
       "summary": {
         "en": "Every question it answered ran forwards: a product names what it contains, what it needs, what it excludes.",
         "de": "Every question it answered ran forwards: a product names what it contains, what it needs, what it excludes."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "products-can-be-marked-as-favourites",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "Products can be marked as favourites.",
-        "de": "Products can be marked as favourites."
-      },
-      "summary": {
-        "en": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident.",
-        "de": "The smallest measure in the plan, and the one whose two decisions are the kind that get made by accident."
       },
       "link": {
         "label": "Changelog",
