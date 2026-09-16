@@ -189,7 +189,7 @@ function stashAdoption(forTask, name, modelRef) {
 // parse, so parsing first would be circular. Anything it does not recognise stays
 // "1.3", which is what every stored model was written under and what seedDmnXml
 // below still emits — deliberately, see
-// ADR-draft-dmn-version-follows-the-document.
+// ADR-0379.
 const DMN_15_MODEL_NS = "https://www.omg.org/spec/DMN/20230324/MODEL/";
 function dmnVersionOf(xml) {
   return typeof xml === "string" && xml.includes(DMN_15_MODEL_NS) ? "1.5" : "1.3";

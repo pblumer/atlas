@@ -1,4 +1,4 @@
-# ADR-DRAFT: A DMN document's own namespace decides which DMN version reads and writes it
+# ADR-0379: A DMN document's own namespace decides which DMN version reads and writes it
 
 - **Status:** Accepted
 - **Implementation:** Landed

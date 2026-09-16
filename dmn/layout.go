@@ -53,7 +53,7 @@ const (
 // dmndiFor answers which DMNDI namespace belongs with a model's own MODEL
 // namespace. It is the whole of the version decision, stated once, so the read path
 // and the Auto-layout path cannot come to disagree about it
-// (ADR-draft-dmn-version-follows-the-document).
+// (ADR-0379).
 func dmndiFor(modelNS string) string {
 	if modelNS == nsModel15 {
 		return nsDMNDI15

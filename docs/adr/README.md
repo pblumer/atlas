@@ -464,6 +464,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
 | [0377](0377-portal-without-identity.md) | With nobody to be, the portal shows a catalogue and refuses an order | Accepted | Landed |
 | [0378](0378-a-capped-listing-answers-with-a-page.md) | A capped listing answers with a page, not with an array | Accepted | Landed |
+| [0379](0379-dmn-version-follows-the-document.md) | A DMN document's own namespace decides which DMN version reads and writes it | Accepted | Landed |
 
 ## The two states of a record
 
