@@ -156,7 +156,7 @@ function classVisual(parent, shape) {
   // where it happens to sit.
   const g = svg("g", {
     class: `uml-class ${bo.stereotype || ""}${bo.invalid ? " invalid" : ""}` +
-      `${bo.unreachable ? " unreachable" : ""}`,
+      `${bo.unused ? " unused" : ""}${bo.unreachable ? " unreachable" : ""}`,
     "data-name": bo.name || "", "data-id": bo.id || "",
   }, parent);
 
@@ -186,7 +186,12 @@ function classVisual(parent, shape) {
     // The business key is marked on the box because it is the fact the whole model
     // turns on: what makes Order#ORD-1 the same order in two processes.
     const isKey = (bo.identity || []).includes(row.name);
-    const line = svg("text", { x: PAD, y, class: `uml-attr${isKey ? " key" : ""}` }, g);
+    // Used, or nothing the reading can see names it. The host decides which names are
+    // used and hands the list over; the drawing is told, the way it is told which
+    // shapes a relationship cannot land on. No list means no reading was taken, and
+    // the row is drawn exactly as it was before there was one.
+    const mark = bo.usedMembers ? (bo.usedMembers.includes(row.name) ? " used" : " unused") : "";
+    const line = svg("text", { x: PAD, y, class: `uml-attr${isKey ? " key" : ""}${mark}` }, g);
     const span = (content, cls) => {
       const t = svg("tspan", { class: cls }, line);
       t.textContent = content;
@@ -772,6 +777,13 @@ export class ClassCanvas {
     const badStore = new Set(findings.map((f) => f.storeId).filter(Boolean));
     const invalid = (id) => badClass.has(id) || badStore.has(id);
     const unreachable = new Set(marks.unreachable || []);
+    // What a where-used reading knows and the drawing only shows
+    // (ADR-draft-the-drawing-says-which-members-are-used): which
+    // shapes nothing it can see uses at all, and — for a class deployed processes do
+    // use — which of its members those processes name. Both absent while no reading
+    // has been asked for, which is what leaves the drawing as it always was.
+    const unused = new Set((marks.usage && marks.usage.unused) || []);
+    const usedMembers = (marks.usage && marks.usage.members) || {};
 
     // Gone first, so a class removed and a class added in one edit cannot collide.
     for (const [id, shape] of [...this.shapes]) {
@@ -788,7 +800,10 @@ export class ClassCanvas {
       const width = kind === "store" ? BOX_W : classWidth(item);
       // `element` says what sort of thing this is; `kind` on an association says
       // which of the four it is. The panel needs both, so they are two names.
-      const bo = { element: kind, kind, ...item, invalid: invalid(id), unreachable: unreachable.has(id) };
+      const bo = {
+        element: kind, kind, ...item, invalid: invalid(id), unreachable: unreachable.has(id),
+        unused: unused.has(id), usedMembers: usedMembers[id],
+      };
       let shape = this.shapes.get(id);
       if (shape) {
         // The businessObject is replaced rather than mutated so a stale reference

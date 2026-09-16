@@ -81,6 +81,35 @@ type createRequest struct {
 	Documentation string `json:"documentation"`
 }
 
+// HandleValidate judges a document the caller is holding and has not saved
+// (ADR-0364).
+//
+// It exists for the same reason HandleSubset does, one step further on. The subset is
+// served so the canvas refuses mid-drag exactly what the server refuses on write; the
+// *verdict* was not, so everything the subset cannot express — a store naming a class
+// nothing declares, an attribute typed with something gone, a lifecycle whose states
+// drifted from its enumeration — stayed invisible until Save, and was then reported
+// about an edit the author had stopped thinking about.
+//
+// Duplicating Validate into the browser would answer that and is exactly what
+// ADR-0230 refused for the far smaller relationship matrix: two copies of a rule set
+// are two rule sets, and the one the author sees would drift from the one the server
+// enforces. So the verdict is served instead.
+//
+// Three properties make it cheap enough to ask on every edit. It reads no stored
+// model, so it needs no loop turn and no application scope: like the subset, asking
+// discloses nothing about what exists. It writes nothing. And an invalid document is
+// a 200 carrying findings rather than an error — a model mid-edit is *expected* to be
+// invalid, and answering the normal case with a fault would teach the canvas to
+// ignore it.
+func (s *Service) HandleValidate(w http.ResponseWriter, r *http.Request) {
+	var model Model
+	if !s.decodeJSON(w, r, &model) {
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, Validate(model))
+}
+
 // HandleCreate starts an empty information model for an application.
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var payload createRequest

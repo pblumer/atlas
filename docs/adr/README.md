@@ -448,6 +448,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0360](0360-product-category.md) | A category is a heading a product writes on itself, not a thing the catalogue owns | Accepted | Landed |
 | [0361](0361-product-price.md) | A price is a sentence the catalogue writes, frozen like a rule and computed by nothing | Accepted | Landed |
 | [0362](0362-collective-approval.md) | One decision covers a request; the engine still completes one task per line | Accepted | Landed |
+| [0363](0363-the-drawing-says-which-members-are-used.md) | The drawing says which members are used | Accepted | Landed |
+| [0364](0364-the-verdict-is-served-not-duplicated.md) | The verdict is served, not duplicated | Accepted | Landed |
 
 ## The two states of a record
 
