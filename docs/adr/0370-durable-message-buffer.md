@@ -1,9 +1,34 @@
 # ADR-0370: A published message waits for its subscriber
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; see the amendment note below)
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-09-16): this is a local fix first, and it has to earn its place as
+> one.** The record below argues the buffer mainly from the cross-node need, because
+> that is the need that makes it unavoidable. The delivery order is the other way
+> round: the buffer is built **before** anything can send to it from another node, and
+> is justified on its own.
+>
+> Two consequences follow, and both bind the first slice:
+>
+> - **The only writer is a local publish that declares a TTL.** The inbound peer
+>   endpoint belongs to [ADR-0372](0372-peer-message-delivery-worker.md) and is not in
+>   this slice. So the slice is worth building only if the opt-in fix for the
+>   publish-before-subscribe race is worth it *by itself* — and that is the claim it
+>   has to demonstrate, on a model that today has to be shaped around the race and
+>   afterwards does not.
+> - **"A message can arrive from the past" is the behaviour under test**, not a side
+>   effect noted in passing. The first failing test states it directly: publish with a
+>   TTL, subscribe afterwards, correlate exactly once. Because this adds a column
+>   family, the recovery test comes with it and is written up front
+>   ([ADR-0018](0018-test-driven-development.md)) — process, restart, replay, assert
+>   the buffer and its dedup window rebuild identically.
+>
+> Nothing in the decision changes. TTL still defaults to 0, so ADR-0020's no-op stands
+> for every deployed model, and the cross-node case still consumes the same buffer
+> when ADR-0372 is built.
 
 ## Context and problem statement
 

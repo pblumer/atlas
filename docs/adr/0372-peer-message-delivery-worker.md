@@ -1,6 +1,6 @@
 # ADR-0372: Delivering a message to another node is a worker's job
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
