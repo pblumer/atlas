@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   # What kind of change is this? A pull request that only touches docs/ takes the
-  # `docs` job below instead of the two heavy ones, because the race detector, the
+  # `docs` job below instead of the heavy ones, because the race detector, the
   # coverage floor, the benchmark harness and a browser cannot be moved by a markdown
   # file — and a change of two lines in an ADR paid twenty-four minutes for them.
   #
@@ -67,33 +67,35 @@ jobs:
             echo "Only docs/ changed: the docs job."
           fi
 
+  # The suite is run twice on every pull request — once under the race detector and
+  # once under the coverage instrumentation — because the two answer different
+  # questions and neither substitutes for the other. They used to run one after the
+  # other in a single job, which made the job's wall clock their *sum*, and that sum
+  # outgrew three successive caps in one afternoon (30, then 45, then 60).
+  #
+  # The measurements that ended the argument, two runs of the same tree an hour apart
+  # on 2026-09-16:
+  #
+  #   fast runner  1m15 setup + 24m24 race + 4m03 cover + ~1m bench ≈ 31m
+  #   slow runner  ~3m   setup + 36m   race + ~9m  cover + ~2m bench ≈ 50m
+  #
+  # The api package alone took 1352s on one and 2048s on the other. A 51% spread on
+  # identical code is not something a ceiling can be tuned against: whatever number
+  # covers the slow draw is dead time on the fast one, and whatever number is honest
+  # about the fast one cancels the slow one with every check green.
+  #
+  # So they are two jobs, and the wall clock is the *larger* of the two rather than
+  # the sum — about 39 minutes instead of 50 on the slow draw, and both caps are
+  # comfortably above what their own step needs. That is what a cap is for: ending a
+  # wedged test, not setting a deadline the suite has to beat.
   check:
-    name: build · vet · fmt · race · cover
+    name: build · vet · fmt · race
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
-    # Same reasoning as the e2e job below: the expensive failure mode is the hang,
-    # not the error, and this job had no ceiling at all — a wedged test would have
-    # held a runner for the six-hour default. The cap is what keeps one stuck package
-    # from turning into hours of runner time.
-    #
-    # It is 60 rather than the 30 it was, because 30 stopped being a ceiling and
-    # became a deadline. Two runs of the same tree on 2026-09-16 measured:
-    #
-    #   fast runner  1m15 setup + 24m24 race + 4m03 cover + ~1m bench ≈ 31m
-    #   slow runner  ~3m   setup + 36m   race + ~9m  cover + ~2m bench ≈ 50m
-    #
-    # The same code, an hour apart: the api package alone took 1352s on one and
-    # 2048s on the other. That 51% spread is the number this cap has to survive, and
-    # 30 — or 45 — does not. Both runs were cancelled with every check before the
-    # last one green, which reads as a failure and is not one.
-    #
-    # Raising it buys nothing an author can abuse: a genuinely wedged test still ends
-    # the job, an hour in rather than half an hour. What it does not do is fix the
-    # reason the number keeps moving — the job runs the whole suite twice, once under
-    # the race detector and once under the coverage instrumentation, one after the
-    # other. That is the thing worth changing, and it is not a cap.
-    timeout-minutes: 60
+    # Setup plus the race pass: ~27m on a fast runner, ~39m on a slow one. 50 leaves
+    # room for a draw worse than any observed and still ends a hang inside the hour.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -166,6 +168,29 @@ jobs:
           # at all, and there the skip is the correct answer rather than a failure.
           ATLAS_SANDBOX_E2E: required
         run: go test -race -timeout=50m ./...
+
+  # The second pass over the suite: the coverage floor, plus the benchmark harness
+  # smoke that used to sit behind it. It runs beside the race job rather than after
+  # it — see the note above that job for why — and needs neither Node nor the sandbox
+  # variable, because it runs no generator and asserts nothing about the sandbox.
+  cover:
+    name: cover · bench
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    # The coverage pass is the same tests without the race detector: ~4m on a fast
+    # runner, ~9m on a slow one, and the benchmark smoke adds one to two. 30 is
+    # generous on purpose — it is a hang guard, and the whole point of splitting was
+    # to stop these numbers being deadlines.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          check-latest: true
 
       - name: Coverage floor (>= 95%, ADR-0018)
         run: ./scripts/check-coverage.sh 94
