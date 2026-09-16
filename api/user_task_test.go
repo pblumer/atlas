@@ -67,7 +67,7 @@ func TestCompleteTaskWithVariables(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	payload := `{"variables":{"approved":true,"score":7,"note":"looks good"}}`
@@ -89,7 +89,7 @@ func TestCompleteTaskWithVariables(t *testing.T) {
 			Value string `json:"value"`
 		} `json:"variables"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	got := map[string]string{}
@@ -146,7 +146,7 @@ func TestUserTaskListAndComplete(t *testing.T) {
 		Priority           int32  `json:"priority"`
 		DueDate            int64  `json:"dueDate"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 
@@ -187,7 +187,7 @@ func TestUserTaskListAndComplete(t *testing.T) {
 		t.Fatalf("list tasks after complete: status=%d body=%s", code, body)
 	}
 	var after []struct{ Key uint64 }
-	if err := json.Unmarshal(body, &after); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &after); err != nil {
 		t.Fatalf("decode tasks after: %v (%s)", err, body)
 	}
 	if len(after) != 0 {
@@ -226,7 +226,7 @@ func listOneTask(t *testing.T, ts *httptest.Server) struct {
 		Assignee        string `json:"assignee"`
 		CandidateGroups string `json:"candidateGroups"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 {
@@ -256,7 +256,7 @@ func TestClaimAndUnclaimTask(t *testing.T) {
 		Key      uint64 `json:"key"`
 		Assignee string `json:"assignee"`
 	}
-	if err := json.Unmarshal(body, &afterClaim); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &afterClaim); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	var claimed string
@@ -282,7 +282,7 @@ func TestClaimAndUnclaimTask(t *testing.T) {
 		Key      uint64 `json:"key"`
 		Assignee string `json:"assignee"`
 	}
-	if err := json.Unmarshal(body, &afterUnclaim); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &afterUnclaim); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	found := false
@@ -398,7 +398,7 @@ func TestUserTaskLane(t *testing.T) {
 		Lane      string   `json:"lane"`
 		LanePath  []string `json:"lanePath"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil {
 		t.Fatalf("decode tasks: %v (%s)", err, body)
 	}
 	if len(tasks) != 1 {

@@ -40,12 +40,29 @@ func get(t *testing.T, ts *httptest.Server, path string) []byte {
 	return out
 }
 
+// listRows unwraps a capped listing's envelope down to its rows
+// (ADR-0378). These tests want the rows; the
+// tests that are about paging live in api/.
+func listRows(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &page); err != nil {
+		t.Fatalf("decode listing envelope: %v (%s)", err, body)
+	}
+	if page.Items == nil {
+		t.Fatalf("listing carried no items: %s", body)
+	}
+	return page.Items
+}
+
 func runningInstances(t *testing.T, ts *httptest.Server) int {
 	t.Helper()
 	var insts []struct {
 		State string `json:"state"`
 	}
-	if err := json.Unmarshal(get(t, ts, "/api/v1/instances"), &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, get(t, ts, "/api/v1/instances")), &insts); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	n := 0
@@ -67,7 +84,7 @@ func instanceJobs(t *testing.T, ts *httptest.Server) []activatableJob {
 	var insts []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(get(t, ts, "/api/v1/instances"), &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, get(t, ts, "/api/v1/instances")), &insts); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(insts) == 0 {
@@ -103,9 +120,9 @@ func instanceVariables(t *testing.T, ts *httptest.Server) map[string]any {
 	var insts []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(get(t, ts, "/api/v1/instances?state=all"), &insts); err != nil || len(insts) == 0 {
+	if err := json.Unmarshal(listRows(t, get(t, ts, "/api/v1/instances?state=all")), &insts); err != nil || len(insts) == 0 {
 		// A finished instance is not in the running list; fall back to history.
-		if err := json.Unmarshal(get(t, ts, "/api/v1/instances"), &insts); err != nil {
+		if err := json.Unmarshal(listRows(t, get(t, ts, "/api/v1/instances")), &insts); err != nil {
 			t.Fatalf("decode instances: %v", err)
 		}
 	}
@@ -140,7 +157,7 @@ func openIncidents(t *testing.T, ts *httptest.Server) int {
 	var incidents []struct {
 		Resolved bool `json:"resolved"`
 	}
-	if err := json.Unmarshal(get(t, ts, "/api/v1/incidents"), &incidents); err != nil {
+	if err := json.Unmarshal(listRows(t, get(t, ts, "/api/v1/incidents")), &incidents); err != nil {
 		t.Fatalf("decode incidents: %v", err)
 	}
 	n := 0

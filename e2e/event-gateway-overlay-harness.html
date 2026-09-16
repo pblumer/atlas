@@ -89,6 +89,15 @@
         { key: 900002, processDefKey: DEF, state: "active", createdAt: ns(T + 1000), variables: [] },
       ];
 
+      // page is how every capped list endpoint answers since
+      // ADR-0378: the rows under
+      // .items, beside the count of what is really there. A bare array here would make
+      // the console read undefined rather than a number, so the mock answers in the
+      // shape the server does.
+      const page = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const api = async (method, url) => {
         if (url === "/api/v1/processes") {
           return [{ key: DEF, processId: "race", name: "Antwort oder Timeout", version: 1 }];
@@ -96,9 +105,9 @@
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances?process=")) {
           const state = new URL(url, location.origin).searchParams.get("state");
-          return state === "finished" ? [] : instances;
+          return page(state === "finished" ? [] : instances);
         }
-        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
+        if (url.startsWith("/api/v1/tasks")) return page([]);  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return {
             instances: 2, finished: 1, tokens: 4,
@@ -141,8 +150,8 @@
           return [{ key: PLAIN, processId: "plain", name: "Geradeaus", version: 1 }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return PLAIN_XML;
-        if (url.startsWith("/api/v1/instances?process=")) return [];
-        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
+        if (url.startsWith("/api/v1/instances?process=")) return page([]);
+        if (url.startsWith("/api/v1/tasks")) return page([]);  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           return { instances: 1, finished: 0, tokens: 1, incidents: [], incidentsTruncated: false, elements: PLAIN_ELEMENTS };
         }

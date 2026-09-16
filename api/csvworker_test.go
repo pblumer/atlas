@@ -78,7 +78,7 @@ func TestCSVConnectorServiceTask(t *testing.T) {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(instances) != 1 {
@@ -189,7 +189,7 @@ func TestCSVImportServiceTask(t *testing.T) {
 	var instances []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &instances); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &instances); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	if len(instances) != 1 {

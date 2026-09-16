@@ -4188,7 +4188,7 @@ type taskResp struct {
 // returns per call, so the inbox loads even when a definition has parked hundreds of
 // thousands of instances on a user task (the reported flood): the scan stops at the
 // cap instead of enriching and shipping every job. Raise per request with ?limit= (up
-// to the max); a capped page is flagged with X-Tasks-Truncated.
+// to the max); a capped page says so in the response's `truncated`.
 const (
 	maxTaskListDefault = 500
 	maxTaskListMax     = 5000
@@ -4220,8 +4220,8 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ?before= is the newest-first pagination cursor: the job key handed back as
-	// X-Tasks-Next-Cursor on the previous (truncated) page. Absent, the scan starts
-	// from the newest task.
+	// `nextCursor` on the previous (truncated) page. Absent, the scan starts from the
+	// newest task.
 	var before uint64
 	if v := strings.TrimSpace(q.Get("before")); v != "" {
 		n, err := strconv.ParseUint(v, 10, 64)
@@ -4269,13 +4269,20 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
+	// The page and its cap in one object
+	// (ADR-0378). The cap used to ride in
+	// X-Tasks-Truncated, which a caller had to know to read: the console's own sidebar
+	// did not, and counted the rows of this page as the size of the inbox.
+	//
+	// The total is a floor on a capped page, and deliberately: counting every open task
+	// is the folder-count walk, measured at ~108 ms against ~1.6 ms for serving this
+	// page at 6 000 instances. GET /api/v1/task-folders/counts is the endpoint that
+	// pays for it, and the one to ask when the number itself is what you need.
+	page := httpapi.PageOf(tasks, truncated)
 	if truncated {
-		// Signal a capped page and hand back the cursor for the next (older) page, so a
-		// client can page through or narrow rather than assume it received every task.
-		w.Header().Set("X-Tasks-Truncated", "true")
-		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))
 	}
-	httpapi.JSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, page)
 }
 
 // listTasksForInstance writes one process instance's open user tasks, resolved
@@ -4320,10 +4327,7 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, raw string, limit i
 		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
-	if truncated {
-		w.Header().Set("X-Tasks-Truncated", "true")
-	}
-	httpapi.JSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(tasks, truncated))
 }
 
 // enrichTask turns a user-task job into the response row the inbox and the
@@ -4972,10 +4976,14 @@ func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list incidents: "+scanErr.Error())
 		return
 	}
-	if truncated {
-		w.Header().Set("X-Incidents-Truncated", "true")
-	}
-	httpapi.JSON(w, http.StatusOK, map[string]any{"incidents": list})
+	// One shape for every capped listing, so a client learns it once. This answered
+	// with {"incidents": [...]} — an object, but its own object, with the cap in a
+	// header beside it that the console's instance search never read
+	// (ADR-0378).
+	//
+	// The total is a floor on a capped page: counting every match means walking the
+	// whole incident family, which is what GET /api/v1/incidents/summary is for.
+	httpapi.JSON(w, http.StatusOK, httpapi.PageOf(list, truncated))
 }
 
 func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {

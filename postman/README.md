@@ -196,8 +196,9 @@ curl -s -X POST $BASE/api/v1/processes/$KEY/instances \
   -H 'Content-Type: application/json' \
   -d '{"variables":{"orderId":"A-1001","amount":4200}}'
 
-# Work the task
-TASK=$(curl -s $BASE/api/v1/tasks | python3 -c 'import sys,json;print(json.load(sys.stdin)[0]["key"])')
+# Work the task. The listing answers {items, total, totalExact, truncated, nextCursor} —
+# the rows are under "items", because a bare array cannot say it is only a page.
+TASK=$(curl -s $BASE/api/v1/tasks | python3 -c 'import sys,json;print(json.load(sys.stdin)["items"][0]["key"])')
 curl -s -X POST $BASE/api/v1/tasks/$TASK/complete \
   -H 'Content-Type: application/json' \
   -d '{"variables":{"approved":true,"score":7}}'

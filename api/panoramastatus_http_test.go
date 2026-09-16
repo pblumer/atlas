@@ -138,7 +138,7 @@ func TestMeshReportsParkedWorkAsDegradedAndAttributesIt(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("list tasks: %v (status=%d body=%s)", err, code, body)
 	}
 	if code, body = doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/jobs/%d/fail", tasks[0].Key),
@@ -293,7 +293,7 @@ func TestMeshDatesTheOldestParkedIncident(t *testing.T) {
 		var tasks []struct {
 			Key uint64 `json:"key"`
 		}
-		if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) == 0 {
+		if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) == 0 {
 			t.Fatalf("list tasks: %v (status=%d body=%s)", err, code, body)
 		}
 		if code, body := doReq(t, ts, http.MethodPost,

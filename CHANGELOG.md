@@ -119,6 +119,121 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The approver is picked, and picked differently depending on the kind.** This was
+  the last typed identifier on the catalogue screen and the one that cost the most,
+  because nothing reports a wrong value: an approval whose approver matches nobody is
+  created, reaches no inbox, and simply waits. The first person to notice is whoever is
+  waiting for the laptop.
+
+  A named person is now chosen from the accounts list and stored as a **username**,
+  because that is what an assignee is matched against. A group is chosen from the
+  directory and stored as its **id**, because candidate groups are matched against ids
+  first — so a group renamed afterwards keeps its approver. Neither is a preference;
+  each is what matches at the other end.
+
+  The two kinds that resolve without an approver — no approval, and the orderer's
+  superior — now show no field at all instead of one labelled "empty otherwise", and
+  switching to them **clears** an approver already there. Left behind, it rode along in
+  a rule with no use for it, indistinguishable to the next reader from a rule that
+  meant it.
+- **The accounts and groups screen shows the ids it asks you to type.** Catalogue
+  sharing used to ask for `usr_…` or a group id, with a hint saying to read it from
+  Console → Organization — a screen that showed names only, because the id lived in a
+  markup attribute meant for a click handler. The hint pointed at a place that did not
+  have the answer. The pickers removed most of the need; the rest is here, because an
+  id is what every scope grant and every audit line is written in.
+- **A catalogue's people are chosen from a list instead of typed as an id.** The
+  catalogue screen already refused free text where it mattered — a product binds a
+  process from what is deployed, because a product naming a process nobody wrote is an
+  order that fails while somebody waits for a laptop. Every field about *people* was
+  the exception, and each asked for an opaque id from memory.
+
+  It was not only inconvenient. The audience field's placeholder read `kunde-a, kunde-b`
+  — names — while the server compares those entries against **group ids**. Following the
+  placeholder produced a catalogue that reaches nobody, and nothing said so: an
+  unreachable catalogue looks exactly like one nobody has filled in yet. The sharing
+  form's hint, meanwhile, said to read the id from Console → Organization — a screen that
+  shows group names and not their ids.
+
+  The audience is now a list of groups to tick, and sharing is one choice carrying both
+  halves of a grant, so "one account" can no longer stand in front of a group id. The
+  audience offers **groups only**, because that is what the server compares; the sharing
+  list offers both. Two lists on one page showing different sets is not an
+  inconsistency — it is the truth about two different questions.
+
+  A group the directory has lost keeps its place, ticked. A list of boxes has a property
+  a text field does not: not drawing a value and unticking it save the same thing, so
+  without this, deleting a group would make the next save of an unrelated field quietly
+  drop an audience. And where the directory cannot be read, both controls come back as
+  the old id field and say why — a picker with no options and no explanation is worse
+  than the input it replaced, because it looks like an answer to a question it never
+  asked.
+- **The product form is filled in the order a product is thought about.** It answers two
+  questions to two different readers and used to interleave them: a name, a heading and a
+  price are what somebody browsing the catalogue meets, while the approval, the processes
+  and the target-system references are what happens after the basket. The fields
+  alternated between the two four times down a single column, so answering either
+  question meant reading past the other.
+
+  Two sections now — *what the catalogue shows*, then *how an order is handled* — in two
+  columns, reflowing to one at the same width as the console's other two-column layout.
+  Fields that carry an explanation keep the full width; prose in a half column is a
+  column of syllables. No colour is spelled out, so the form follows a theme change like
+  everything else on the page.
+
+  The administrative half also answers a question the form has no field for: **who else
+  may maintain this product**. A product carries no deputy of its own — it is referenced
+  by several catalogues and maintained through its home one, so a stand-in is an editor
+  of that catalogue. The form names the people who already may, and says where that is
+  changed, rather than leaving a considered absence to read as an oversight.
+- **The portal's catalogue tab is called the catalogue.** "Katalog durchsuchen" described
+  an activity where its two neighbours name a place — "Meine Aufträge", "Meine
+  Leistungen". In a row of three, one verb phrase among two nouns reads as a different
+  kind of control, and the tab does not browse anything: it shows the catalogue.
+- **Breaking: the capped list endpoints answer with `{items, total, totalExact,
+  truncated, nextCursor}` instead of a bare array.** Affected:
+  `GET /api/v1/tasks` (global, `?processInstance=` and `?folder=`),
+  `GET /api/v1/instances`, `GET /api/v1/instances/search`, `GET /api/v1/incidents`,
+  `GET /api/v1/approvals` and `GET /api/v1/audit`. The `X-*-Truncated` and
+  `X-*-Next-Cursor` response headers are gone with it, and `GET /api/v1/incidents` no
+  longer wraps its rows in `{"incidents": […]}`. Any client reading these six endpoints
+  has to be changed; there is no compatibility mode and no versioned alias.
+
+  The previous record moved five wrong numbers onto the thing that owns them. It did not
+  take the wrong number out of reach: on a bare array, `response.length` exists, is a
+  number, and is the size of the page rather than of the population — and what the
+  response knew about itself lived in headers, which the cheap call drops. That is not a
+  theory about how the five defects happened; the MCP server held two builders and a
+  client method whose only job was to fold an array and its truncation header back into
+  one object, because an agent cannot use a list that will not say whether it is
+  complete.
+
+  On the envelope, `response.length` is `undefined` and `response.map` throws. Both are
+  loud where a short count is silent. `total` says how many there are and `totalExact`
+  says whether that is a count or a floor, so a caller is never left to assume the
+  flattering one: the instances listing is exact where a maintained counter answers the
+  query (one definition's live or finished half, the engine's live half) and a floor
+  where none does (both halves of the whole engine, or a filter to one element).
+  `items` is never `null`, so an empty listing does not need a guard.
+
+  The uncapped listings — `/api/v1/processes`, `/api/v1/users`, and the per-instance
+  sub-resources such as `…/instances/{key}/jobs` — still answer with arrays, because
+  their length *is* their population. A fourth guard in
+  `api/pagecount_internal_test.go` now asks each capped listing over HTTP and refuses a
+  body that is an array or that cannot say whether the cap bit, so the two sets cannot
+  quietly drift; a fifth reads the published Postman collection, which nothing else here
+  runs and which people copy from. The Console's audit log, which had no browser test at
+  all, gets one — a windowed log now says how many changes there are rather than
+  rendering the window as the whole history.
+
+  Tests in `worker/` and `conformance/` read these listings too, and were converted with
+  everything else. The conformance gallery page is generated from a template in
+  `conformance/gallery_test.go`; run `go test ./conformance -update` after touching it.
+  The Postman collection and its README walkthrough were updated as well — that `curl`
+  line is meant to be copied, and it was teaching `json.load(…)[0]["key"]`. The Golden
+  Path now asserts the envelope rather than only the status code.
+  (ADR-0378)
+
 - **The info panel is reachable from every column of the catalogue, not only from
   services.** This was not a missing feature but an inconsistency inside one page.
   The panel already worked for a bundle: picking one out of the search opens it, and
@@ -220,6 +335,30 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue could say a part was integral and optional at the same time.** The
+  release keeps *what a product is made of* apart from *what is offered alongside it*,
+  because they mean opposite things to a basket: an inclusion is ordered as a
+  consequence of ordering the whole, and an option is an offer. Nothing stopped one
+  pair of products from carrying both kinds of link, and such a pair landed in both
+  lists — the same part ordered without asking and offered as a choice, on one screen.
+
+  It needed no mistake to produce. Importing an ArchiMate model merges links by
+  **adding** them, deliberately, because an import is not a synchronisation. So
+  redrawing an integral part as an optional one in the model and importing again left
+  the catalogue holding both, with the old link the one nobody remembers. Publishing
+  now refuses it and names the pair rather than picking one: there is no honest rule
+  for which of the two an author meant.
+- **The console showed three borders that were never drawn.** A style rule reading a
+  colour name that nothing defines is not a rule with a default — the whole declaration
+  is invalid and the browser discards it. Three of them read a name defined only in an
+  unrelated demo page, so the token legend lost its divider and the profile-picture
+  field lost both of its borders. Missing hairlines read as a design that never had
+  any, which is why nobody reported it. A test now refuses the whole class.
+- **The console said a group membership takes effect at the next sign-in.** It has
+  applied from the member's next request since that was made live. A stale claim about
+  a delay is worse than no claim: an administrator waits for it, and tells a colleague
+  to sign out and back in for nothing.
+
 - **Two maintainers adding a product to the same catalogue, and one of them erased
   the other.** A catalogue's patch is partial, so it cannot clear a field nobody
   mentioned. What it could still lose is a list: `items`, `edges` and `members` are
@@ -244,7 +383,6 @@ _Changed_ / _Removed_ for each version.
   revision would be a path whose changes a stale caller overwrites in silence, and it
   would be found by somebody losing work. The patch, the appearance and the ArchiMate
   import are each named in a test, so a seventh writer has to be added deliberately.
-
 - **CI failed a change on a slow runner rather than on a defect, for the second time.**
   The race-detector step carries a per-package timeout because the `api` package needs
   most of it on its own. At Go's 10-minute default that step once passed at 526s and

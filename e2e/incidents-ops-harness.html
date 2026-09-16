@@ -130,6 +130,15 @@
         tokens: [{ elementId: s.elementId, elementInstanceKey: s.elementInstanceKey, tokenId: "1", state: "active" }],
       }));
 
+      // page is how every capped list endpoint answers since
+      // ADR-0378: the rows under
+      // .items, beside the count of what is really there. A bare array here would make
+      // the console read undefined rather than a number, so the mock answers in the
+      // shape the server does.
+      const page = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const api = async (method, url, body) => {
         if (method === "PATCH") {
           const c = url.match(/\/connectors\/([\w-]+)$/);
@@ -176,8 +185,8 @@
           // index, so the stub answers per half. Both instances here are active, so
           // the finished half is empty.
           const state = new URL(url, location.origin).searchParams.get("state");
-          if (state === "finished") return [];
-          return instances;
+          if (state === "finished") return page([]);
+          return page(instances);
         }
         if (url.startsWith("/api/v1/instances/search")) {
           const q = new URL(url, location.origin).searchParams.get("q") || "";
@@ -185,16 +194,16 @@
           // through that instance's element index, so it is right for an instance
           // whichever page of the server's incident list it would have landed on
           // (ADR-0365).
-          return instances
+          return page(instances
             .filter((r) =>
               String(r.key) === q.trim() ||
               (r.variables || []).some((v) => `${v.name}=${v.value}`.toLowerCase().includes(q.toLowerCase())))
             .map((r) => ({
               ...r,
               incidents: incidents.filter((i) => i.processInstanceKey === String(r.key)).length,
-            }));
+            })));
         }
-        if (url.startsWith("/api/v1/tasks")) return [];  // global page or ?processInstance=
+        if (url.startsWith("/api/v1/tasks")) return page([]);  // global page or ?processInstance=
         if (url.includes("/runtime")) {
           // The overlay carries the incidents (ADR-0150): scoped to one instance when the
           // caller asks for one, which is how the live view isolates a selection and how

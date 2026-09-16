@@ -61,8 +61,14 @@ type Principal struct {
 	Roles    []string
 	// GroupIDs are the ids of the groups the user belongs to, snapshotted at login
 	// like Roles, so a scope's group grant resolves as a pure check against this
-	// slice without a store read (ADR-0180). A membership change
-	// takes effect on the user's next login.
+	// slice without a store read (ADR-0180).
+	//
+	// The snapshot is kept current rather than left to expire: adding or removing a
+	// member pushes the change into that account's live sessions (ADR-0185), so it
+	// applies from their next request. This comment said "takes effect on the user's
+	// next login" long after that stopped being true, which is the worse kind of
+	// stale documentation — it describes a delay an administrator would then wait
+	// for, and tell a colleague to sign out and in again for no reason.
 	GroupIDs []string
 	// Scope confines a principal authenticated by a machine credential to a named
 	// set of operations, whatever its roles would otherwise permit. Empty for a
@@ -125,4 +131,94 @@ func WithPrincipal(ctx context.Context, p *Principal) context.Context {
 func PrincipalFrom(ctx context.Context) *Principal {
 	p, _ := ctx.Value(principalCtxKey{}).(*Principal)
 	return p
+}
+
+// Page is what a *capped* listing answers with: the rows it could fit, and the facts
+// about the population those rows came out of
+// (ADR-0378).
+//
+// A bare `[]T` cannot carry those facts, and that is not a cosmetic problem. Five
+// times in this codebase a caller took such an array, counted its rows, and rendered
+// the count as a fact about the population — and every one of those survived review,
+// because while the population fits inside the page the two numbers agree. They stop
+// agreeing exactly when the number starts to matter, and because every capped listing
+// here is *ordered*, what falls off is a contiguous slice rather than a sample: a
+// whole class of subject goes missing together and the count reads zero, not low.
+//
+// The guards in api/pagecount_internal_test.go catch three shapes of that mistake in
+// the console's text. This closes the class instead: `response.length` on a Page is
+// `undefined`, `page.items.length` is visibly the page, and `page.total` is the short
+// way to the number — so the wrong answer stops being the one within reach.
+//
+// Only capped listings take this shape. A design-time listing — deployed processes,
+// forms, projects — is bounded by what somebody authored, has no cap to report, and
+// stays a bare array: a wrapper there would carry `truncated: false` and a `total`
+// equal to `len(items)` forever, which is ceremony rather than information.
+type Page[T any] struct {
+	// Items are the rows this response could carry. Never nil: an empty page
+	// serializes as `[]` rather than `null`, because every client iterates it.
+	Items []T `json:"items"`
+	// Total is how many there are. Read TotalExact before believing it.
+	Total int `json:"total"`
+	// TotalExact says whether Total is the population or merely what this request saw.
+	// It is not a hedge. Some totals are a maintained counter — the instance listing's,
+	// which is a point read (ADR-0080/0083) — or a walk the request was making anyway,
+	// as the grant audit already holds every event it filters. Others would cost a walk
+	// of seventy times what serving the page costs: measured at 108 ms against 1.6 ms
+	// for the open-task listing at 6 000 instances. Paying that on every inbox load, for
+	// a number most callers do not read, is the wrong trade; claiming the number anyway
+	// would be the original defect wearing a new field name.
+	//
+	// False therefore means: Total is a floor, this endpoint cannot cheaply do better,
+	// and the endpoint that *can* is named in this listing's API description.
+	TotalExact bool `json:"totalExact"`
+	// Truncated says the cap bit: there are rows this response left out. It is about
+	// the rows and says nothing about Total, which may be exact on a truncated page —
+	// that is the normal case for instances, where the counter knows the population
+	// and the page holds a thousand of it.
+	Truncated bool `json:"truncated"`
+	// NextCursor continues the listing where this page stopped, for the listings that
+	// page. Empty when there is no more, and on the listings that do not page at all.
+	NextCursor string `json:"nextCursor,omitempty"`
+}
+
+// PageOf returns a Page whose total is its own row count, exact exactly when the cap
+// did not bite.
+//
+// That conditional is the whole of it, and it is worth stating because it is the step
+// every one of the defects behind this type skipped: an **un-truncated** page holds the
+// whole population, so counting its rows is counting the thing — free and exact. Only a
+// truncated page is a slice, and only there is the count a floor. Most listings need
+// nothing more than this; [Rows] is for the few that can do better than a floor when
+// truncated, because a maintained counter already knows the answer.
+func PageOf[T any](items []T, truncated bool) Page[T] {
+	return Page[T]{Items: nonNil(items), Total: len(items), TotalExact: !truncated, Truncated: truncated}
+}
+
+// Rows returns a Page whose total comes from something that knows it — a maintained
+// counter, or a walk the request was making anyway — so it stays exact even on a
+// truncated page.
+func Rows[T any](items []T, total int, truncated bool) Page[T] {
+	return Page[T]{Items: nonNil(items), Total: total, TotalExact: true, Truncated: truncated}
+}
+
+// FloorRows returns a Page whose total is a floor whether or not the cap bit — for a
+// listing that cannot even count what it returned as the population, because it
+// filtered rows out after reading them.
+func FloorRows[T any](items []T, seen int, truncated bool) Page[T] {
+	return Page[T]{Items: nonNil(items), Total: seen, Truncated: truncated}
+}
+
+// WithCursor returns p carrying the cursor that continues it.
+func (p Page[T]) WithCursor(cursor string) Page[T] {
+	p.NextCursor = cursor
+	return p
+}
+
+// nonNil keeps an empty page an empty JSON array rather than null.
+func nonNil[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+	return items
 }

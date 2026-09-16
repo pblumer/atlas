@@ -231,9 +231,9 @@ async function api(path, options) {
 
 async function load() {
   state.error = '';
-  const { body, headers } = await api('/api/v1/approvals');
-  state.approvals = body || [];
-  state.truncated = headers.get('X-Tasks-Truncated') === 'true';
+  const { body } = await api('/api/v1/approvals');
+  state.approvals = (body && body.items) || [];
+  state.truncated = !!(body && body.truncated);
 
   // A link from a notification names one approval. That is the arrival this page
   // is built for: one decision, already open, in the right colours.

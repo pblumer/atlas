@@ -232,11 +232,16 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 		httpapi.Error(w, http.StatusInternalServerError, "list tasks: "+scanErr.Error())
 		return
 	}
-	if full || budgetHit {
-		w.Header().Set("X-Tasks-Truncated", "true")
-		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+	// Same shape and same reasoning as the unfiltered listing
+	// (ADR-0378). The exact
+	// count for this folder is what GET /api/v1/task-folders/counts answers; here the
+	// total is the page unless the page is everything.
+	capped := full || budgetHit
+	page := httpapi.PageOf(tasks, capped)
+	if capped {
+		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))
 	}
-	httpapi.JSON(w, http.StatusOK, tasks)
+	httpapi.JSON(w, http.StatusOK, page)
 }
 
 // taskFolderOptions fills the editor's value listboxes from what is actually

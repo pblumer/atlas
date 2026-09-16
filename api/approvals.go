@@ -137,11 +137,14 @@ func (s *Server) handleListApprovals(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "read approvals: "+readErr.Error())
 		return
 	}
+	// A page whose scan budget did not bite holds every approval addressed to this
+	// caller, so its total is exact; one that hit the budget reports a floor and the
+	// cursor to continue with (ADR-0378).
+	page := httpapi.PageOf(out, budgetHit)
 	if budgetHit {
-		w.Header().Set("X-Tasks-Truncated", "true")
-		w.Header().Set("X-Tasks-Next-Cursor", strconv.FormatUint(nextCursor, 10))
+		page = page.WithCursor(strconv.FormatUint(nextCursor, 10))
 	}
-	httpapi.JSON(w, http.StatusOK, out)
+	httpapi.JSON(w, http.StatusOK, page)
 }
 
 // holdsApproval is the listing's filter: a task addressed to this caller. It is

@@ -7,6 +7,13 @@
 // against a mocked /api/v1.
 import { test, expect } from "@playwright/test";
 
+// listing is how every capped list endpoint answers since
+// ADR-0378: the rows under
+// .items, beside the count of what is really there and whether the cap bit.
+const listing = (items, extra = {}) => ({
+  items, total: items.length, totalExact: true, truncated: false, ...extra,
+});
+
 // The Process tab is a 360px canvas inside the detail pane; give it a window that fits
 // the pane and the diagram without scrolling.
 test.use({ viewport: { width: 1280, height: 900 } });
@@ -107,7 +114,7 @@ function installMock(page) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
-    if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: TASKS });
+    if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: listing(TASKS) });
     let m = path.match(/\/instances\/(\d+)\/timeline$/);
     if (m) return route.fulfill({ json: TIMELINES[m[1]] || {} });
     m = path.match(/\/instances\/(\d+)\/variables$/);

@@ -8,15 +8,18 @@ import (
 	"testing"
 )
 
-// incidentsPage mirrors the atlas_list_incidents envelope: the endpoint's
-// {incidents:[…]} body folded together with its truncation header.
+// incidentsPage is the atlas_list_incidents response, which is the server's own
+// listing envelope passed through: the rows under items, beside what the server says
+// about the population they came out of. The tool used to fold a {incidents:[…]} body
+// and a truncation header into this shape itself.
 type incidentsPage struct {
 	Incidents []struct {
 		ElementInstanceKey uint64 `json:"elementInstanceKey"`
 		ProcessInstanceKey uint64 `json:"processInstanceKey"`
 		JobKey             uint64 `json:"jobKey"`
 		Message            string `json:"message"`
-	} `json:"incidents"`
+	} `json:"items"`
+	Total     int  `json:"total"`
 	Truncated bool `json:"truncated"`
 }
 

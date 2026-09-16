@@ -95,7 +95,7 @@ func TestStoredDeploymentSurvivesANewValidationRule(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("list instances: status=%d body=%s", code, body)
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 || insts[0].ProcessID != "stale-gate" || insts[0].State != "completed" {
@@ -180,7 +180,7 @@ func TestStoredDmnModelSurvivesANewDiagnostic(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("list instances: status=%d body=%s", code, body)
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 || insts[0].State != "completed" {

@@ -76,7 +76,7 @@ func TestJobTypesAreDistinctAcrossDefinitions(t *testing.T) {
 			Key       uint64 `json:"key"`
 			ProcessID string `json:"processId"`
 		}
-		if err := json.Unmarshal(body, &insts); err != nil {
+		if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 			t.Fatalf("decode instances: %v (%s)", err, body)
 		}
 		for _, in := range insts {

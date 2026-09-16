@@ -173,7 +173,7 @@ func TestUserTaskCarriesItsDocumentation(t *testing.T) {
 		t.Fatalf("list tasks: status=%d body=%s", code, body)
 	}
 	var tasks []taskRow
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	if tasks[0].Documentation != wantDoc {
@@ -204,7 +204,7 @@ func TestUserTaskCarriesItsDocumentation(t *testing.T) {
 		t.Fatalf("list tasks: status=%d body=%s", code, body)
 	}
 	tasks = nil
-	if err := json.Unmarshal(body, &tasks); err != nil || len(tasks) != 1 {
+	if err := json.Unmarshal(listRows(t, body), &tasks); err != nil || len(tasks) != 1 {
 		t.Fatalf("expected 1 task, got %v (%s)", err, body)
 	}
 	if tasks[0].ElementID != "sign" {
