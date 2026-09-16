@@ -197,6 +197,16 @@ var (
 	// worker process Atlas launched itself (ADR-0157 step 7).
 	WorkerSupervisorStarted = newEvent("worker.supervised_started")
 	WorkerSupervisorFailed  = newEvent("worker.supervise_failed")
+	// WorkerBreakerOpen and WorkerBreakerClosed report a circuit breaker holding a
+	// failing target's jobs back, and letting them go again (ADR-0340).
+	//
+	// These are the line an operator alerts on. A breaker turns an outage from a flood
+	// of incidents into *silence* — work that simply does not happen — and silence is
+	// the one failure mode nothing else surfaces, which is why the record makes
+	// visibility part of the decision rather than a follow-up. Open is a warning: an
+	// integration has stopped and somebody should know why.
+	WorkerBreakerOpen   = newEvent("worker.breaker_open")
+	WorkerBreakerClosed = newEvent("worker.breaker_closed")
 	// ADMockEnabled is an AD worker announcing that it serves the Active Directory
 	// worker against a directory in its own memory rather than a real one
 	// (ADR-0181). It is a warning rather than an info because

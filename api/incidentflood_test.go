@@ -456,15 +456,20 @@ func TestIncidentSummaryCarriesWorkerContext(t *testing.T) {
 	}
 	// Nothing is configured under that name, so every instance parks on the same task
 	// with the same cause — the flood this whole surface exists for.
-	for i := 0; i < 3; i++ {
+	//
+	// Two instances, not more: three distinct instances failing in a row is what trips
+	// the circuit breaker (ADR-0340), after which the rest of a flood is *held* rather
+	// than parked, and this test is about what a group says, not about how large one
+	// gets. TestABreakerStopsAFloodAtItsSource covers the interaction itself.
+	for i := 0; i < 2; i++ {
 		if code, body := doReq(t, ts, http.MethodPost, fmt.Sprintf("/api/v1/processes/%d/instances", deploy.Key), "{}", "application/json"); code != http.StatusOK {
 			t.Fatalf("create instance: status=%d body=%s", code, body)
 		}
 	}
 
 	s := incidentSummaryQuery(t, ts, "")
-	if len(s.Groups) != 1 || s.Groups[0].Count != 3 {
-		t.Fatalf("groups = %+v, want one cause of 3", s.Groups)
+	if len(s.Groups) != 1 || s.Groups[0].Count != 2 {
+		t.Fatalf("groups = %+v, want one cause of 2", s.Groups)
 	}
 	g := s.Groups[0]
 	if g.Connector != "Patrick Blumer" || g.ConnectorKind != "mail" {
@@ -487,8 +492,8 @@ func TestIncidentSummaryCarriesWorkerContext(t *testing.T) {
 		t.Errorf("after configuring: groups = %+v, want the configured record named", s.Groups)
 	}
 	res := resolveIncidents(t, ts, fmt.Sprintf(`{"processDefKey":%d,"elementId":"send"}`, deploy.Key))
-	if res.Resolved != 3 {
-		t.Fatalf("resolve the cause = %+v, want all 3", res)
+	if res.Resolved != 2 {
+		t.Fatalf("resolve the cause = %+v, want both", res)
 	}
 	if got := listIncidents(t, ts); len(got) != 0 {
 		t.Errorf("after the fix and the bulk resolve: %d incidents remain (%+v)", len(got), got)
