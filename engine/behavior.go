@@ -34,6 +34,7 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTProcessInstance, model.IntentTerminating):           handleProcessInstanceTerminating,
 		handlerKey(model.VTProcessInstance, model.IntentPurging):               handleProcessInstancePurging,
 		handlerKey(model.VTProcessMigration, model.IntentMigrating):            handleProcessMigrating,
+		handlerKey(model.VTProcessInstance, model.IntentForking):               handleProcessInstanceForking,
 		handlerKey(model.VTVariableIndex, model.IntentVariableReindex):         handleVariableReindex,
 		handlerKey(model.VTProcessInstance, model.IntentConditionRecheck):      handleConditionRecheck,
 		handlerKey(model.VTElementInstance, model.IntentActivating):            handleElementActivating,
@@ -134,10 +135,33 @@ func (p *Processor) registerBehaviors() {
 
 // --- command handlers ---
 
+// instanceSeed is everything a new process instance is built from beyond its own key:
+// the record it starts life with, the variables and data objects it is seeded with, and
+// the elements it starts at.
+//
+// It exists because an instance is created in two ways now — a creation command, and a
+// fork continuing another instance's work (ADR-0389) — and
+// both must emit the *identical* events. An instance built by a second code path would
+// be an instance recovery rebuilds differently from the one that ran.
+type instanceSeed struct {
+	// Instance is the record the creation writes: the definition key, plus whichever of
+	// CorrelationKey, ParentElementInstanceKey and PredecessorInstanceKey applies.
+	Instance model.ProcessInstanceValue
+	// Vars are seeded under the instance scope before any element runs; each one's
+	// ScopeKey is rewritten to the new instance.
+	Vars []model.VariableValue
+	// StartElements names the elements to seed a token at, or nil for the process's own
+	// entry points (see startElementsFor).
+	StartElements []int32
+	// DataObjects are values carried in from an instance being continued, by name. A
+	// declared object not named here is seeded the way every ordinary creation seeds
+	// one: its declared initial state, and no value.
+	DataObjects map[string]model.DataObjectValue
+}
+
 // handleProcessInstanceActivating creates the process instance and activates
 // each start event.
 func handleProcessInstanceActivating(c *ProcessingContext) {
-	defKey := c.cmd.Value.process.ProcessDefKey
 	// A child creation names the call activity that will resume when it finishes.
 	// If that element instance is already gone, the caller was cancelled between
 	// scheduling this command and running it, and starting the child now would
@@ -153,7 +177,20 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 			return
 		}
 	}
-	piKey := c.NewKey()
+	activateInstance(c, c.NewKey(), instanceSeed{
+		Instance:      c.cmd.Value.process,
+		Vars:          c.cmd.StartVars,
+		StartElements: c.cmd.StartElements,
+	})
+}
+
+// activateInstance writes one process instance into existence: its record, its TTL
+// expiry timer, its seed variables and data objects, a token at each element it starts
+// at, and its root-scope event subprocesses. It is the only path that does so — a
+// creation command and a fork both come through here — so whatever an instance is, it
+// is the same thing however it was started.
+func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
+	defKey := seed.Instance.ProcessDefKey
 	cp := c.process(defKey)
 
 	// If the definition carries an instance TTL, schedule its self-cleaning expiry
@@ -169,12 +206,10 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// The correlation key (empty for a timer or API start) rides in on the create
 	// command so the instance records which message key it began with (ADR-0020);
 	// CreatedAt is stamped from the event timestamp in applyToState.
-	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, model.ProcessInstanceValue{
-		ProcessDefKey:            defKey,
-		CorrelationKey:           c.cmd.Value.process.CorrelationKey,
-		ParentElementInstanceKey: c.cmd.Value.process.ParentElementInstanceKey,
-		ExpiryDueDate:            expiryDue,
-	})
+	activated := seed.Instance
+	activated.State = model.PIActive
+	activated.ExpiryDueDate = expiryDue
+	c.AppendProcessInstanceEvent(piKey, model.IntentActivated, activated)
 	if expiryDue > 0 {
 		// An expiry timer carries no owning element instance (ElementInstanceKey 0) — the
 		// shape handleTimerTriggered dispatches to instance termination (ADR-0085).
@@ -187,8 +222,8 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	}
 
 	// Seed the instance's start variables under its scope before any element runs.
-	for i := range c.cmd.StartVars {
-		v := c.cmd.StartVars[i]
+	for i := range seed.Vars {
+		v := seed.Vars[i]
 		v.ScopeKey = piKey
 		c.AppendVariableEvent(model.IntentVariableCreated, v)
 	}
@@ -198,15 +233,27 @@ func handleProcessInstanceActivating(c *ProcessingContext) {
 	// values in a later slice). Like the start variables, this is deterministic
 	// state mutation from already-decided data, so it replays identically (ADR-0053).
 	for _, d := range cp.DataObjects() {
-		c.AppendDataObjectEvent(model.IntentDataObjectCreated, model.DataObjectValue{
+		obj := model.DataObjectValue{
 			ScopeKey: piKey,
 			Name:     cp.Intern(d.Name),
 			State:    cp.Intern(d.InitialState),
 			Kind:     model.VarNull,
-		})
+		}
+		// A fork carries the value and data state the instance it continues had reached
+		// (ADR-0389). Resetting an object to its declared
+		// initial state would be the one piece of that instance's work silently thrown
+		// away — and the declared state is still the answer for an object the
+		// predecessor never wrote, because the map simply does not name it.
+		if carried, ok := seed.DataObjects[obj.Name]; ok {
+			obj.Kind, obj.Text, obj.Bool = carried.Kind, carried.Text, carried.Bool
+			if carried.State != "" {
+				obj.State = carried.State
+			}
+		}
+		c.AppendDataObjectEvent(model.IntentDataObjectCreated, obj)
 	}
 
-	for _, startID := range startElementsFor(cp, c.cmd.StartElements) {
+	for _, startID := range startElementsFor(cp, seed.StartElements) {
 		node := cp.Node(startID)
 		key := c.NewKey()
 		c.AppendElementCommand(key, model.IntentActivating, model.ElementInstanceValue{
@@ -287,12 +334,25 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 	if pi == nil {
 		return
 	}
+	terminateInstance(c, piKey, pi, 0)
+}
+
+// terminateInstance is that teardown, with one addition: successor is the instance
+// continuing this one's work when the termination is a fork
+// (ADR-0389), and 0 for every ordinary cancellation. It is
+// written onto the terminal event, so the history record still names where the work
+// went — which is what keeps a forked-away instance distinguishable from a cancelled
+// one, both of which are PITerminated.
+func terminateInstance(c *ProcessingContext, piKey uint64, pi *model.ProcessInstanceValue, successor uint64) {
 	cancelExpiryTimer(c, piKey, pi.ExpiryDueDate)
 	// A terminated instance is a finished one: schedule its history purge like a
 	// completed instance does (ADR-0146), so an instance ended by its TTL, by a bulk
 	// cancel, or by an operator is retained for the same declared time.
 	terminated := *pi
 	terminated.PurgeDueDate = historyPurgeDue(c, terminated.ProcessDefKey)
+	if successor != 0 {
+		terminated.SuccessorInstanceKey = successor
+	}
 	c.ForEachElementInstance(piKey, func(elKey uint64) {
 		if ei := c.GetElementInstance(elKey); ei != nil {
 			terminateChildInstance(c, elKey, ei.BpmnElementType)

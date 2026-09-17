@@ -474,6 +474,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0386](0386-a-decision-result-keeps-its-declared-type.md) | A decision result keeps the type the model declares for it | Accepted | Landed |
 | [0387](0387-the-catalogue-against-the-standards-boundary.md) | The catalogue keeps its own model, and answers to TMF620 at the boundary | Proposed | Not started |
 | [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted | Landed |
+| [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
+| [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
+| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
 
 ## The two states of a record
 

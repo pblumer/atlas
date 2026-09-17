@@ -415,6 +415,22 @@ const (
 	// every prior intent keeps its numeric value on the log.
 	IntentVariableElementSet
 
+	// IntentForking is a command-only intent (never persisted as an event), like
+	// IntentMigrating: an operator directs the processor to end a running instance and
+	// continue its work in a *new* instance of another deployed version, at resume
+	// points they named (ADR-0389). It is the answer to the
+	// migration ADR-0162's validator has to refuse — a token whose element the target
+	// version no longer has cannot be rebound, but the instance's data and the decision
+	// about where to pick it up again can still cross.
+	//
+	// Its handler re-checks what the API validated and then emits only events that
+	// already exist: the successor's IntentActivated (carrying PredecessorInstanceKey),
+	// the predecessor's IntentTerminated (carrying SuccessorInstanceKey), and an
+	// operator action on each. Because commands are not replayed (invariant I6), its
+	// numeric value never reaches the log. Appended at the end so every prior intent
+	// keeps its numeric value.
+	IntentForking
+
 	// IntentEntitlementGranted and IntentEntitlementRevoked record that somebody
 	// started or stopped holding a catalogue item
 	// (ADR-0312).
@@ -524,6 +540,8 @@ func (i Intent) String() string {
 		return "VariableIndexed"
 	case IntentVariableElementSet:
 		return "VariableElementSet"
+	case IntentForking:
+		return "Forking"
 	default:
 		return "Intent(?)"
 	}

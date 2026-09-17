@@ -390,6 +390,39 @@ type timelineStep struct {
 	// the version the instance left, and only the boundary explains why. Absent on
 	// every ordinary step; present only with Action "migrate".
 	Migration *migrationView `json:"migration,omitempty"`
+	// Fork is the other step that is not an element activation: the point at which this
+	// instance's work left for a new instance of another version, or arrived from an
+	// older one (ADR-0389). A replay that simply stopped
+	// mid-diagram reads as a defect and one that starts mid-diagram reads as a ghost;
+	// this row is what makes each of them a decision somebody made, with a reason.
+	// Absent on every ordinary step; present only with Action "fork".
+	Fork *forkView `json:"fork,omitempty"`
+}
+
+// forkView renders one end of a fork on the replay timeline: which instance the work
+// went to or came from, the version it is running there, and who decided it. Direction
+// is "out" on the instance that was ended and "in" on the one continuing it — the two
+// halves are separate records on separate instances, so a reader never has to work out
+// which side of the link they are on.
+type forkView struct {
+	Direction   string `json:"direction"`
+	InstanceKey uint64 `json:"instanceKey,omitempty"`
+	Version     int32  `json:"version,omitempty"`
+	Actor       string `json:"actor,omitempty"`
+	Reason      string `json:"reason"`
+	At          int64  `json:"at"`
+}
+
+// forkRow is one fork as read off the operator-action log, before the instance it links
+// to is resolved: the record says which way the work went and why, and the instance's
+// own Predecessor/Successor field says where — one link per direction, so the pair is
+// unambiguous without the record carrying a key.
+type forkRow struct {
+	pos    uint64
+	at     int64
+	kind   model.OperatorActionKind
+	actor  string
+	reason string
 }
 
 // migrationView renders one migration on the replay timeline (ADR-0162): which version
@@ -470,6 +503,12 @@ type instanceTimelineResp struct {
 	// ignores this still gets correct per-step element ids; one that honours it can say
 	// why a step names an element the diagram does not contain.
 	Migrated bool `json:"migrated,omitempty"`
+	// PredecessorInstanceKey and SuccessorInstanceKey are the two ends of a fork
+	// (ADR-0389). A replay that stops mid-diagram is not a
+	// defect when the instance was forked away: the rest of the story is in the
+	// instance named here, under the version that runs it.
+	PredecessorInstanceKey uint64 `json:"predecessorInstanceKey,omitempty"`
+	SuccessorInstanceKey   uint64 `json:"successorInstanceKey,omitempty"`
 	// VariableAttribution says this instance's history records *which element* wrote each
 	// variable (ADR-0219), so a step's `writes` is the
 	// element's own production rather than a guess. It is false for an instance that ran
@@ -496,6 +535,13 @@ type instanceResp struct {
 	// (ADR-0115) and exists only in the archive. It cannot be opened, cancelled or
 	// migrated, and what it reports is what the log recorded, not what is true now.
 	Archived bool `json:"archived,omitempty"`
+	// PredecessorInstanceKey and SuccessorInstanceKey are the two ends of a fork
+	// (ADR-0389): the instance this one continues, and the
+	// one continuing it. A terminated row carrying a successor ended because its work
+	// moved to another version, not because somebody cancelled it — which is the one
+	// thing the lifecycle state cannot say on its own, since both are "terminated".
+	PredecessorInstanceKey uint64 `json:"predecessorInstanceKey,omitempty"`
+	SuccessorInstanceKey   uint64 `json:"successorInstanceKey,omitempty"`
 	// Incidents is how many of this instance's tokens are parked, counted through the
 	// instance's own element index — exact, and bounded by the tokens that instance
 	// holds rather than by anything the rest of the engine is doing.
@@ -2034,6 +2080,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 		manualByElement := map[uint64]manualActionView{}
 		var migrations []migrationBoundary
 		var migrationRows []migrationRow
+		var forkRows []forkRow
 		if scanErr == nil {
 			scanErr = s.store.OperatorActionHistory(key, func(ts int64, pos uint64, v *model.OperatorActionValue) error {
 				if v.Kind == model.OperatorActionMigrate {
@@ -2041,6 +2088,14 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 					migrationRows = append(migrationRows, migrationRow{
 						pos: pos, at: ts, from: v.FromProcessDefKey, actor: v.Actor, reason: v.Reason,
 					})
+					return nil
+				}
+				// A fork is instance-wide like a migration, and deliberately *not* a
+				// version boundary: the predecessor ran only its own version, and the
+				// successor only the new one, so neither instance's element indices are
+				// ever read through two graphs (ADR-0389).
+				if v.Kind == model.OperatorActionForkedTo || v.Kind == model.OperatorActionForkedFrom {
+					forkRows = append(forkRows, forkRow{pos: pos, at: ts, kind: v.Kind, actor: v.Actor, reason: v.Reason})
 					return nil
 				}
 				if v.ElementInstanceKey != 0 {
@@ -2063,6 +2118,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 			return nil
 		})
 		resp.Migrated = ver.migrated()
+		resp.PredecessorInstanceKey, resp.SuccessorInstanceKey = pi.PredecessorInstanceKey, pi.SuccessorInstanceKey
 		// childByParent was built off the loop above; nil means this instance's
 		// definitions call no other process, so no step can carry a drill-in link.
 		// Variable snapshots are scope-aware: the process-instance (root) scope plus
@@ -2448,7 +2504,35 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				},
 			})
 		}
-		if len(migrationRows) > 0 {
+		for _, f := range forkRows {
+			other, direction := pi.SuccessorInstanceKey, "out"
+			if f.kind == model.OperatorActionForkedFrom {
+				other, direction = pi.PredecessorInstanceKey, "in"
+			}
+			ver := int32(0)
+			if other != 0 {
+				if o, ok, err := s.store.ProcessInstance(other); err == nil && ok {
+					// The linked instance's version, not this one's: what a reader wants
+					// to know is what the work is running on now (or what it ran on
+					// before), and the instance beside them already says their own.
+					if dd, found := s.deployments[o.ProcessDefKey]; found {
+						ver = dd.Version
+					}
+				}
+			}
+			resp.Steps = append(resp.Steps, timelineStep{
+				At:        f.at,
+				Position:  f.pos,
+				Type:      "fork",
+				Action:    "fork",
+				Variables: []variableView{},
+				Fork: &forkView{
+					Direction: direction, InstanceKey: other, Version: ver,
+					Actor: f.actor, Reason: f.reason, At: f.at,
+				},
+			})
+		}
+		if len(migrationRows) > 0 || len(forkRows) > 0 {
 			sort.Slice(resp.Steps, func(i, j int) bool { return resp.Steps[i].Position < resp.Steps[j].Position })
 		}
 
