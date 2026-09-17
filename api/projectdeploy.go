@@ -309,7 +309,7 @@ type resolvedModel struct {
 	// aliases are the further names those decisions answer to — a decision's FEEL
 	// identifier where it differs from the name it is published under. Matching a
 	// task's decisionId reads them; nothing recorded does
-	// (ADR-draft-a-decision-is-addressed-by-both-of-its-names).
+	// (ADR-0385).
 	aliases []string
 	xml     []byte
 }

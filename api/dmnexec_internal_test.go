@@ -227,7 +227,7 @@ func TestCoverModelsPicksCoveringModels(t *testing.T) {
 	// A task naming a decision by its FEEL identifier rather than by the label the
 	// model publishes is covered by that model: the gate refuses exactly what the
 	// registry would fail to resolve, and the registry resolves both
-	// (ADR-draft-a-decision-is-addressed-by-both-of-its-names).
+	// (ADR-0385).
 	aliased := []resolvedModel{{decisions: []string{"Kunden-Risiko"}, aliases: []string{"risiko"}, xml: []byte("<leaf/>")}}
 	if xmls, ok := coverModels(aliased, []string{"risiko"}); !ok || len(xmls) != 1 || string(xmls[0]) != "<leaf/>" {
 		t.Fatalf("coverModels([risiko]) = (%v, %v), want [<leaf/>]", xmls, ok)

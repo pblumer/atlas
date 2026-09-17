@@ -19,7 +19,7 @@
   nicht über die Element-id. Trägt der decisionId keinen dieser beiden Namen,
   findet der Deploy die Entscheidung nicht und weist die Applikation zurück.
   Name und Bezeichner dürfen voneinander abweichen; ein Name muss also kein
-  FEEL-Bezeichner sein (ADR-draft-a-decision-is-addressed-by-both-of-its-names).
+  FEEL-Bezeichner sein (ADR-0385).
 
   Der interessante Teil ist die Ausgabe `runden`: eine FEEL-Liste. Der Prozess
   iteriert mit einer Multi-Instance-Call-Activity darüber, also bestimmt DIESE

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision is addressed by both of its names
+# ADR-0385: A decision is addressed by both of its names
 
 - **Status:** Accepted
 - **Implementation:** Landed

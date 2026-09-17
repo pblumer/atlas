@@ -1,4 +1,4 @@
-# ADR-DRAFT: A decision result keeps the type the model declares for it
+# ADR-0386: A decision result keeps the type the model declares for it
 
 - **Status:** Accepted
 - **Implementation:** Landed
@@ -152,7 +152,7 @@ on record a number unquoted.
   `value.Number`.
 - Bad: **it does not exist to take.** Measured against the newest temis there is
   (`v0.0.0-20260911201220`, which this repository now pins — see
-  ADR-draft-a-decision-is-addressed-by-both-of-its-names): `fromValue` still
+  ADR-0385): `fromValue` still
   renders a FEEL number as a decimal string, and an evaluated output still arrives
   as a Go `string`. The bump did not fix this defect, so the choice here is not
   between option 1 and a bump — it is between option 1 and leaving it standing.

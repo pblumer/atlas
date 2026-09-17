@@ -29,7 +29,7 @@ import (
 // endpoint, and the retained evaluation record (ADR-0066) — so they cannot come
 // to disagree about what a result is.
 //
-// See ADR-draft-a-decision-result-keeps-its-declared-type.
+// See ADR-0386.
 
 // feelNumber is the canonical type name DMN and FEEL give the number type. temis
 // canonicalizes the model's spelling (`feel:number` and a bare `number` both

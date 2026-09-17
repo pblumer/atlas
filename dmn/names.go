@@ -15,7 +15,7 @@ import tdmn "github.com/pblumer/temis/dmn"
 // temis binds, keys and indexes by the second (`RefName`), and resolves a decision
 // by either. Atlas therefore publishes the first and accepts both: an already
 // deployed task that names the label keeps evaluating, and a model authored
-// against the identifier resolves too (ADR-draft-a-decision-is-addressed-by-both-of-its-names).
+// against the identifier resolves too (ADR-0385).
 
 // decisionNames splits the evaluable decisions of a compiled model into the name
 // Atlas publishes for each — its label — and the additional names they answer to,

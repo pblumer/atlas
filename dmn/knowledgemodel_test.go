@@ -150,7 +150,7 @@ func numEq(got any, want float64) bool {
 	switch n := got.(type) {
 	case json.Number:
 		// What a decision's number arrives as now: the exact decimal, tagged so
-		// nothing downstream has to guess it is one (ADR-draft-a-decision-result-keeps-its-declared-type).
+		// nothing downstream has to guess it is one (ADR-0386).
 		f, err := n.Float64()
 		return err == nil && f == want
 	case string:
