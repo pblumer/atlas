@@ -389,6 +389,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **"Meine Aufträge" showed principal ids where it meant people.** The Person column
+  printed `usr_703f410b40336d21476152fb`. Nothing was wrong with the record — an
+  order names people by principal id and by nothing else, because a name copied into
+  a record outlives the reason for holding it (ADR-0314) — but that decision leaves
+  the other half to the screen: a name is resolved when the screen is rendered, and
+  the table was not resolving. It reads the directory once per load and names the
+  person; where nothing knows the id, the id is still shown, because an empty cell
+  reads as a broken column rather than as an unresolved one. The column's filter
+  searches both, so a pasted id still finds its row.
+
 - **One position in the portal carried two different level names.** The catalogue
   screen and the basket both label a position Bundle, Marktleistung or Service, and
   Atlas has no such typing — the level is derived from the containment graph. It was

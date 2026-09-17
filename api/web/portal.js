@@ -378,6 +378,17 @@ const state = {
   // ends, and a catalogue that marked from orders would stop marking on the
   // ninetieth day (ADR-0312).
   held: new Map(),
+  // principals is the directory as it was read, and directory is the same thing as
+  // principalId -> name.
+  //
+  // An order names people by id and by nothing else, because a name copied into a
+  // record outlives the reason for holding it (ADR-0314).
+  // The same decision leaves the other half to the screen: a name is resolved when
+  // the screen is rendered. This is that resolution, read once per load rather
+  // than per row — and read once for both readers of it, the column and the
+  // recipient picker, which were otherwise two calls for one list.
+  principals: [],
+  directory: new Map(),
   chosen: new Set(),
   busy: false,
   error: '',
@@ -661,6 +672,18 @@ async function load() {
     const favs = await api('/api/v1/portal/favourites');
     state.favourites = new Set((favs && favs.itemIds) || []);
   } catch { /* and nobody has marked anything */ }
+  // The directory, for the columns that show who an order is for. Any
+  // authenticated caller may read it (ADR-0073), and a
+  // reader who is nobody cannot — so a failure leaves the map empty and every row
+  // falls back to the id, which is what those rows showed before.
+  try {
+    state.principals = (await api('/api/v1/principals')) || [];
+    state.directory = new Map(state.principals.map((p) => [p.id, p.name]));
+  } catch {
+    // No directory, no names — the ids still say who.
+    state.principals = [];
+    state.directory = new Map();
+  }
   await loadWhoIAm();
   render();
 }
@@ -706,16 +729,14 @@ async function loadWhoIAm() {
   state.mayOrderForOthers = state.canOrder &&
     (!me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin'));
   if (!state.mayOrderForOthers) return;
-  try {
-    const all = await api('/api/v1/principals');
-    // Users only. A group cannot receive an order: an entitlement is held by a
-    // person, and offering a team would produce a recipient the server refuses.
-    state.people = (all || []).filter((e) => e.type === 'user');
-  } catch {
-    // The field still takes a typed id. A picker that could not load is a
-    // convenience missing, not a screen broken.
-    state.people = [];
-  }
+  // From the directory the load already read, rather than a second call for the
+  // same list. Users only: a group cannot receive an order, because an entitlement
+  // is held by a person, and offering a team would produce a recipient the server
+  // refuses.
+  //
+  // An empty directory leaves the field taking a typed id. A picker that could not
+  // load is a convenience missing, not a screen broken.
+  state.people = state.principals.filter((e) => e.type === 'user');
 }
 
 // products returns what a person picks from: the items nothing else includes.
@@ -1639,6 +1660,17 @@ async function cancel(order) {
 // the arrangement that needs no legend: what a field filters is the thing it is
 // sitting on.
 
+// personName is who a principal id belongs to, or the id where nothing knows.
+//
+// The fallback is the point. A deleted account, a directory that would not load, a
+// recipient from before this tenancy — the row still has to say who, and the id is
+// the honest answer to "the name is no longer known". An empty cell would read as
+// the column being broken.
+function personName(id) {
+  if (!id) return '';
+  return state.directory.get(id) || id;
+}
+
 // matchesFilters reports whether one order survives the column searches. Case
 // blind and substring, because somebody typing "gen" into a status field means
 // "genehmigt" and should not have to know how it is spelled internally.
@@ -1647,7 +1679,9 @@ function matchesFilters(o) {
   const like = (hay, needle) => !needle
     || String(hay || '').toLowerCase().includes(needle.toLowerCase());
   const placed = new Date(o.createdAt / 1e6).toLocaleDateString(locale);
-  return like(o.recipient, f.person)
+  // The name the column shows *and* the id behind it: somebody who pasted an id
+  // meant to find that row, and somebody who typed a name meant the same.
+  return (like(personName(o.recipient), f.person) || like(o.recipient, f.person))
     && like(placed, f.date)
     && like(o.id, f.order)
     && like(t(deriveStatus(o)), f.status)
@@ -1693,7 +1727,7 @@ function orderRowBodies() {
     // order carries no organisation. The note under the table says so once,
     // rather than each row implying the data went missing.
     el('td', { class: 'muted' }, ''),
-    el('td', {}, o.recipient || ''),
+    el('td', {}, personName(o.recipient)),
     el('td', {}, new Date(o.createdAt / 1e6).toLocaleDateString(locale)),
     el('td', {}, o.id),
     el('td', {},
