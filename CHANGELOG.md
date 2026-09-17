@@ -14,16 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **An order can be followed into the process fulfilling it.** "Meine Aufträge"
+- **Every position carries its own way into the process working on it.** "Meine Aufträge"
   already listed each position and what it was doing, out of the order's own
   record, and that stays the answer for every reader. A reader who may open an
   instance — the operator role, which is what every route that finds or opens one
   requires — now also gets a link into the running instance, looked up when it is
-  pressed rather than resolved for every row. It is narrowed to the fulfilment
-  process, because every provisioning sub-process carries the order id too and the
-  first hit would be one position's process wearing the order's name. An instance
-  that history retention has already removed is said rather than followed: a link
-  to nothing reads as the console having broken.
+  pressed rather than resolved for every row.
+
+  The order's link is narrowed to the fulfilment process, because every provisioning
+  sub-process carries the order id too and the first hit would be one position's
+  process wearing the order's name. **Each position carries a link of its own**, and
+  it is found by the position's id rather than the order's: the search answers with
+  only the variables that matched the query, so a search for the order returns every
+  instance it started, each carrying `orderId` and nothing else, with nothing left on
+  the page to tell them apart by. That matters because "the order is running" and
+  "this line is waiting on an approval" are different answers, and only the second is
+  what somebody reading their own order wants.
+
+  There is deliberately no fallback to the product id: it matches instances from every
+  order that ever carried that product, and the answer cannot be narrowed by the
+  order. A position whose instance is not found — history retention removes one long
+  before the order it fulfilled — is said rather than approximated.
 
 - **One product may be ordered in two shapes at once.** The catalogue describes the
   same service pulled in twice in different variants as a conflict the orderer

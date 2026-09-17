@@ -59,6 +59,7 @@ const STRINGS = {
     'status.blocked': 'Blockiert',
     'order.running': 'In Arbeit',
     'proc.open': 'Prozess ansehen',
+    'proc.openLine': 'Prozessschritt',
     'proc.none': 'Zu diesem Auftrag läuft keine Prozessinstanz mehr — sie wurde von der Aufbewahrung entfernt.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
@@ -189,6 +190,7 @@ const STRINGS = {
     'status.blocked': 'Blocked',
     'order.running': 'In progress',
     'proc.open': 'View the process',
+    'proc.openLine': 'Process step',
     'proc.none': 'No process instance is left for this order — retention has removed it.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
@@ -1589,12 +1591,34 @@ async function mountConfigForms() {
 // An instance that is gone is the ordinary late case, not an error: history
 // retention deletes one long before the order it fulfilled is deleted. Said rather
 // than followed, because a link to nothing reads as the console having broken.
-async function followProcess(order) {
+async function followProcess(order, line) {
   state.error = '';
+  // Two different questions, and they are answered by two different instances.
+  //
+  // Without a line: the order's own fulfilment orchestration, which says the order
+  // is running and nothing about which of four positions is waiting on an approval
+  // and which is being provisioned.
+  //
+  // With one: the process working on *that* position. It is found by the position's
+  // own id and by nothing else, because the search answers with only the variables
+  // that matched the query — a search for the order returns every instance it
+  // started, each carrying `orderId` and nothing else, so there would be nothing
+  // left on the page to tell them apart by. `positionId` is what the fulfilment
+  // model passes for exactly this, and it names one instance
+  // (ADR-draft-order-position-key).
+  //
+  // There is deliberately no fallback to the product id. It matches instances from
+  // every order that ever carried that product, and the answer carries only the
+  // variable that matched, so the order cannot be checked from it — opening one of
+  // those would be the defect the position key exists to prevent, one screen
+  // further out. A position whose instance is not found is said, not approximated.
+  const query = line
+    ? `positionId=${lineKey(line)}`
+    : `orderId=${order.id}`;
   try {
-    const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(`orderId=${order.id}`)}`);
-    const hit = ((page && page.items) || [])
-      .find((i) => i.processId === 'atlas-auftrag-erfuellung');
+    const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(query)}`);
+    const hits = (page && page.items) || [];
+    const hit = line ? hits[0] : hits.find((i) => i.processId === 'atlas-auftrag-erfuellung');
     if (!hit) {
       state.error = t('proc.none');
       render();
@@ -1845,6 +1869,18 @@ function orderRowBodies() {
             disabled: state.busy,
             onclick: () => withdrawLine(o, l),
           }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
+          : null,
+        // Where this position stands. On the position and not only on the order,
+        // because the order's process says "running" and this one says which step
+        // this line is sitting on — which is the question somebody reading their
+        // own order actually has.
+        state.mayFollowProcess
+          ? el('button', {
+            class: 'linkish',
+            title: t('proc.openLine'),
+            disabled: state.busy,
+            onclick: () => followProcess(o, l),
+          }, t('proc.openLine'))
           : null,
         correctable(l)
           ? el('button', {
