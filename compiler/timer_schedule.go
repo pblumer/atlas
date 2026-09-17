@@ -187,7 +187,7 @@ func (s TimerSchedule) NextDue(now int64) (int64, bool) {
 // must be present. A field is a FEEL expression when it begins with '=' and its
 // body is not itself a literal; a literal always wins, so '=PT1H' and 'PT1H' are
 // the same fixed schedule (ADR-0055).
-func parseTimerSchedule(def *xmlTimerEventDefinition) (TimerSchedule, error) {
+func parseTimerSchedule(g *feelGate, def *xmlTimerEventDefinition) (TimerSchedule, error) {
 	dur := strings.TrimSpace(def.TimeDuration)
 	date := strings.TrimSpace(def.TimeDate)
 	cycle := strings.TrimSpace(def.TimeCycle)
@@ -203,11 +203,11 @@ func parseTimerSchedule(def *xmlTimerEventDefinition) (TimerSchedule, error) {
 	case set > 1:
 		return TimerSchedule{}, fmt.Errorf("timer definition sets more than one of timeDuration/timeDate/timeCycle")
 	case dur != "":
-		return parseDurationField(dur)
+		return parseDurationField(g, dur)
 	case date != "":
-		return parseDateField(date)
+		return parseDateField(g, date)
 	default:
-		return parseCycleField(cycle)
+		return parseCycleField(g, cycle)
 	}
 }
 
@@ -223,14 +223,14 @@ func splitFeel(s string) (body string, isFeel bool) {
 
 // parseDurationField parses a <timeDuration>: an ISO-8601 duration literal, or —
 // when marked with '=' and not a literal — a FEEL expression (ADR-0055).
-func parseDurationField(s string) (TimerSchedule, error) {
+func parseDurationField(g *feelGate, s string) (TimerSchedule, error) {
 	body, isFeel := splitFeel(s)
 	if nanos, err := parseISO8601Duration(body); err == nil {
 		return TimerSchedule{Kind: TimerDuration, BaseNanos: nanos}, nil
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	e, err := compileFEEL(body)
+	e, err := g.compileFEEL(body)
 	if err != nil {
 		return TimerSchedule{}, fmt.Errorf("timeDuration FEEL expression: %w", err)
 	}
@@ -238,14 +238,14 @@ func parseDurationField(s string) (TimerSchedule, error) {
 }
 
 // parseDateField parses a <timeDate>: an RFC3339 literal, or a FEEL expression.
-func parseDateField(s string) (TimerSchedule, error) {
+func parseDateField(g *feelGate, s string) (TimerSchedule, error) {
 	body, isFeel := splitFeel(s)
 	if sched, err := parseTimeDate(body); err == nil {
 		return sched, nil
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	e, err := compileFEEL(body)
+	e, err := g.compileFEEL(body)
 	if err != nil {
 		return TimerSchedule{}, fmt.Errorf("timeDate FEEL expression: %w", err)
 	}
@@ -255,14 +255,14 @@ func parseDateField(s string) (TimerSchedule, error) {
 // parseCycleField parses a <timeCycle>: a literal repeating interval or cron, or —
 // when marked with '=' and not a literal — a FEEL expression that resolves to one
 // at runtime (ADR-0056).
-func parseCycleField(s string) (TimerSchedule, error) {
+func parseCycleField(g *feelGate, s string) (TimerSchedule, error) {
 	body, isFeel := splitFeel(s)
 	if sched, err := parseTimeCycle(body); err == nil {
 		return sched, nil
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	e, err := compileFEEL(body)
+	e, err := g.compileFEEL(body)
 	if err != nil {
 		return TimerSchedule{}, fmt.Errorf("timeCycle FEEL expression: %w", err)
 	}

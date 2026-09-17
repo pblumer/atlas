@@ -55,7 +55,7 @@ func normalizeHTTPMethod(m string) (string, error) {
 // incomplete row the author hasn't filled in). A duplicated name is an error, so a
 // silent last-wins collision can't hide a modeling mistake. kind names the field
 // for the error message ("header" / "query parameter").
-func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
+func httpKVList(g *feelGate, taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 	if len(kvs) == 0 {
 		return nil, nil
 	}
@@ -70,7 +70,7 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 			return nil, fmt.Errorf("compiler: rest task %q has a duplicate %s %q", taskID, kind, name)
 		}
 		seen[name] = true
-		val, err := restValue(taskID, kind+" "+name, kv.Value)
+		val, err := restValue(g, taskID, kind+" "+name, kv.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -84,8 +84,8 @@ func httpKVList(taskID, kind string, kvs []xmlHTTPKV) ([]RestKV, error) {
 // expression compiled once at deploy time (invariant I5) and evaluated over the
 // instance's variables at call time; otherwise it is a literal used verbatim. what
 // names the field for error messages.
-func restValue(taskID, what, raw string) (RestExpr, error) {
-	return connectorValue(taskID, "rest worker", what, raw)
+func restValue(g *feelGate, taskID, what, raw string) (RestExpr, error) {
+	return connectorValue(g, taskID, "rest worker", what, raw)
 }
 
 // connectorValue is the shared literal-or-FEEL toggle for the HTTP-based workers
@@ -93,7 +93,7 @@ func restValue(taskID, what, raw string) (RestExpr, error) {
 // deploy time (invariant I5) and evaluated over the instance's variables at call
 // time; otherwise it is a literal used verbatim. kind names the worker for
 // diagnostics ("rest worker"/"scim worker") and what names the field.
-func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
+func connectorValue(g *feelGate, taskID, kind, what, raw string) (RestExpr, error) {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "=") {
 		return RestExpr{Literal: raw}, nil
@@ -102,7 +102,7 @@ func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	if text == "" {
 		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
 	}
-	e, err := compileFEEL(text)
+	e, err := g.compileFEEL(text)
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: %s task %q: %s: %w", kind, taskID, what, err)
 	}
@@ -188,7 +188,8 @@ func Parse(key uint64, version int32, r io.Reader) (*CompiledProcess, error) {
 	if len(defs.Processes) == 0 {
 		return nil, fmt.Errorf("compiler: no <process> element in definitions")
 	}
-	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams)
+	g := strictFEEL // a deploy: a call that can only be null is refused (ADR-0388)
+	return compileProcess(key, version, defs.Processes[0], buildMessageResolver(defs, g), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams, g)
 }
 
 // Deployable is one executable process compiled from a model, plus the display
@@ -214,7 +215,8 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 	if err != nil {
 		return nil, err
 	}
-	resolve := buildMessageResolver(defs)
+	g := strictFEEL // a deploy: a call that can only be null is refused (ADR-0388)
+	resolve := buildMessageResolver(defs, g)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
 	resolveEsc := buildEscalationResolver(defs)
@@ -228,7 +230,7 @@ func ParseAll(baseKey uint64, version int32, r io.Reader) ([]Deployable, error) 
 		if len(proc.StartEvents) == 0 {
 			continue // black-box pool: nothing to run
 		}
-		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams)
+		cp, err := compileProcess(baseKey+uint64(len(out)), version, proc, resolve, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams, g)
 		if err != nil {
 			return nil, err
 		}
@@ -283,20 +285,31 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 	if err != nil {
 		return nil, nil, err
 	}
+	// The FEEL-call gate follows the same split as the validation gate, and for the
+	// same reason: a call this build cannot bind is refused where a deploy can act on
+	// it, and kept — as the null it has always evaluated to — where the definition is
+	// already deployed and running (ADR-0388,
+	// ADR-draft-a-rule-added-later-is-a-gate-on-deploy).
+	g := strictFEEL
+	if !gated {
+		g = tolerantFEEL()
+	}
 	for _, proc := range defs.Processes {
 		if proc.Id != processId {
 			continue
 		}
-		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams)
+		cp, err := compileProcess(key, version, proc, buildMessageResolver(defs, g), buildSignalResolver(defs), buildErrorResolver(defs), buildEscalationResolver(defs), buildOperationResolver(defs), buildItemTypeResolver(defs), buildDataStoreResolver(defs), docs, agentParams, g)
 		if err == nil {
-			return cp, nil, nil
+			// A tolerant gate may have kept something today's compiler refuses; that is
+			// drift to report, not a reason to withhold the definition.
+			return cp, g.problems(), nil
 		}
 		// Only the gate refused it: stage 5 runs on a process that is already built,
 		// so this is the same definition the deploy of its day produced. Everything
 		// else stopped before there was a process, and is an error on both paths.
 		var ve *ValidationError
 		if !gated && errors.As(err, &ve) && ve.Process != nil {
-			return ve.Process, ve.Problems, nil
+			return ve.Process, append(g.problems(), ve.Problems...), nil
 		}
 		return nil, nil, err
 	}
@@ -450,7 +463,7 @@ func participantNames(defs xmlDefinitions) map[string]string {
 // returns a resolver from a messageRef to the message's name and its compiled
 // correlation-key expression. An empty correlation key compiles to nil, which
 // evaluates to "" — matching only publishes with an empty key.
-func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) (string, *expr.Compiled, error) {
+func buildMessageResolver(defs xmlDefinitions, g *feelGate) func(ownerId, messageRef string) (string, *expr.Compiled, error) {
 	messages := make(map[string]xmlMessage, len(defs.Messages))
 	for _, m := range defs.Messages {
 		if m.Id != "" {
@@ -467,7 +480,7 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 		}
 		var keyExpr *expr.Compiled
 		if text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(m.Subscription.CorrelationKey), "=")); text != "" {
-			ce, err := compileFEEL(text)
+			ce, err := g.compileFEEL(text)
 			if err != nil {
 				return "", nil, fmt.Errorf("compiler: message %q correlationKey: %w", messageRef, err)
 			}
@@ -582,8 +595,9 @@ func buildEscalationResolver(defs xmlDefinitions) func(ownerId, escalationRef st
 // resolveError (shared across a collaboration's processes). docs is the model-wide
 // element-id → <bpmn:documentation> index (elementDocumentation), likewise shared: it is
 // keyed by BPMN element id, and this process only ever looks up its own.
-func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string, agentParams map[string][]xmlAgentParam) (*CompiledProcess, error) {
+func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage func(ownerId, messageRef string) (string, *expr.Compiled, error), resolveSignal func(ownerId, signalRef string) (string, error), resolveError func(ownerId, errorRef string) (string, error), resolveEscalation func(ownerId, escalationRef string) (string, error), resolveOperation func(ownerId, operationRef string) (string, error), resolveItemType func(string) string, resolveDataStore func(ref, ownName string) string, docs map[string]string, agentParams map[string][]xmlAgentParam, g *feelGate) (*CompiledProcess, error) {
 	b := NewBuilder(key, proc.Id, version)
+	b.setFeelGate(g)
 	b.SetDocumentation(docs[proc.Id]) // the process's own prose; "" interns to -1 (ADR-0025)
 	// The tool-parameter declarations, translated out of the parse layer's types so the
 	// builder never sees an XML struct. Build reads them when it binds an agent-driven
@@ -834,7 +848,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				if from == "" {
 					continue
 				}
-				ce, err := compileFEEL(from)
+				ce, err := g.compileFEEL(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
 					return
@@ -877,7 +891,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
-				ce, err := compileFEEL(from)
+				ce, err := g.compileFEEL(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err))
 					return
@@ -900,7 +914,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text == "" {
 			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
 		}
-		e, err := compileFEEL(text)
+		e, err := g.compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
 		}
@@ -985,7 +999,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text == "" {
 			return nil, nil
 		}
-		e, err := compileFEEL(text)
+		e, err := g.compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: loop %s on %q: %w", what, ownerId, err)
 		}
@@ -3084,7 +3098,7 @@ func decisionInputs(in []xmlDecisionInput) (map[string]any, error) {
 // evaluation time; target names the decision input it feeds. A leading '=' (the
 // Zeebe expression marker) is trimmed. An empty target or an uncompilable source
 // fails the deploy, exactly like a bad script-task expression.
-func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionInputMapping, error) {
+func decisionInputMappings(g *feelGate, taskID string, in []xmlZeebeIOMapInput) ([]DecisionInputMapping, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
@@ -3097,7 +3111,7 @@ func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionIn
 		if text == "" {
 			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
 		}
-		e, err := compileFEEL(text)
+		e, err := g.compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
 		}

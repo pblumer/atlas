@@ -487,6 +487,12 @@ type Builder struct {
 	bpmnProcessId string
 	version       int32
 
+	// feel decides what this compile does with a FEEL call that can only ever be
+	// null: refuse it, as a deploy does, or keep it and report it, as a reload does
+	// (see feelcalls.go). nil means strict, so a Builder assembled directly — in a
+	// test, or by a caller building a process by hand — behaves like a deploy.
+	feel *feelGate
+
 	nodes              []CompiledNode
 	flows              []CompiledFlow
 	serviceTasks       []ServiceTaskDetail
@@ -566,6 +572,19 @@ func NewBuilder(key uint64, bpmnProcessId string, version int32) *Builder {
 	}
 	return b
 }
+
+// gate is the FEEL-call gate this compile runs under, defaulting to strict so a
+// Builder that nobody handed one behaves like a deploy (see feelcalls.go).
+func (b *Builder) gate() *feelGate {
+	if b.feel == nil {
+		return strictFEEL
+	}
+	return b.feel
+}
+
+// setFeelGate is how a parse hands the Builder the gate it compiles under. Only
+// compileProcess calls it; every other Builder keeps the strict default.
+func (b *Builder) setFeelGate(g *feelGate) { b.feel = g }
 
 // agentParamSpec is one <atlas:agentParam> as authored, before it is validated and
 // interned into an AgentParam. It is a plain data struct so the builder never handles the
@@ -2148,7 +2167,15 @@ func (b *Builder) AddUserTask(name string, assignee, candidateGroups Assignment,
 //
 // what names the attribute for the error message; taskID names the task. An empty
 // value is an absent assignment, not an empty expression.
+//
+// It compiles strictly, as a deploy does. The compile path calls [assign] with the
+// gate its own parse carries, so a reload keeps a stored expression the build that
+// stored it kept (see feelcalls.go).
 func Assign(taskID, what, raw string) (Assignment, error) {
+	return assign(strictFEEL, taskID, what, raw)
+}
+
+func assign(g *feelGate, taskID, what, raw string) (Assignment, error) {
 	trimmed := strings.TrimSpace(raw)
 	if !strings.HasPrefix(trimmed, "=") {
 		return Assignment{Literal: raw}, nil
@@ -2157,7 +2184,7 @@ func Assign(taskID, what, raw string) (Assignment, error) {
 	if text == "" {
 		return Assignment{}, fmt.Errorf("compiler: user task %q has an empty FEEL expression for %s", taskID, what)
 	}
-	e, err := compileFEEL(text)
+	e, err := g.compileFEEL(text)
 	if err != nil {
 		return Assignment{}, fmt.Errorf("compiler: user task %q: %s: %w", taskID, what, err)
 	}

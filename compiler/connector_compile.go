@@ -275,7 +275,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	// '=') so one process can serve more than one tenant, resolving the name from its
 	// own variables at call time. This is entra-only: the kind is worker-only, so no
 	// deploy-time credential lookup keys off a fixed name (ADR-0172).
-	connectorExpr, err := connectorValue(st.Id, "entra worker", "connector", cn.Connector)
+	connectorExpr, err := connectorValue(b.gate(), st.Id, "entra worker", "connector", cn.Connector)
 	if err != nil {
 		return 0, err
 	}
@@ -304,7 +304,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
 		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update and create-channel)", st.Id, op)
 	}
-	attrs, err := entraAttributesExpr(st.Id, cn.Attributes)
+	attrs, err := entraAttributesExpr(b.gate(), st.Id, cn.Attributes)
 	if err != nil {
 		return 0, err
 	}
@@ -331,27 +331,27 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if err != nil {
 		return 0, err
 	}
-	userID, err := connectorValue(st.Id, "entra worker", "userId", cn.UserID)
+	userID, err := connectorValue(b.gate(), st.Id, "entra worker", "userId", cn.UserID)
 	if err != nil {
 		return 0, err
 	}
-	groupID, err := connectorValue(st.Id, "entra worker", "groupId", cn.GroupID)
+	groupID, err := connectorValue(b.gate(), st.Id, "entra worker", "groupId", cn.GroupID)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "entra worker", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(b.gate(), st.Id, "entra worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "entra worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "entra worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	search, err := connectorValue(st.Id, "entra worker", "search", cn.Search)
+	search, err := connectorValue(b.gate(), st.Id, "entra worker", "search", cn.Search)
 	if err != nil {
 		return 0, err
 	}
-	deltaLink, err := connectorValue(st.Id, "entra worker", "deltaLink", cn.DeltaLink)
+	deltaLink, err := connectorValue(b.gate(), st.Id, "entra worker", "deltaLink", cn.DeltaLink)
 	if err != nil {
 		return 0, err
 	}
@@ -732,35 +732,35 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if spec.needsNewDN && strings.TrimSpace(cn.NewDN) == "" {
 		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a newDN (the entry's new distinguished name)", st.Id, op)
 	}
-	url, err := connectorValue(st.Id, "ad worker", "url", cn.URL)
+	url, err := connectorValue(b.gate(), st.Id, "ad worker", "url", cn.URL)
 	if err != nil {
 		return 0, err
 	}
-	bindDN, err := connectorValue(st.Id, "ad worker", "bindDN", cn.BindDN)
+	bindDN, err := connectorValue(b.gate(), st.Id, "ad worker", "bindDN", cn.BindDN)
 	if err != nil {
 		return 0, err
 	}
-	dn, err := connectorValue(st.Id, "ad worker", "dn", cn.DN)
+	dn, err := connectorValue(b.gate(), st.Id, "ad worker", "dn", cn.DN)
 	if err != nil {
 		return 0, err
 	}
-	newDN, err := connectorValue(st.Id, "ad worker", "newDN", cn.NewDN)
+	newDN, err := connectorValue(b.gate(), st.Id, "ad worker", "newDN", cn.NewDN)
 	if err != nil {
 		return 0, err
 	}
-	baseDN, err := connectorValue(st.Id, "ad worker", "baseDN", cn.BaseDN)
+	baseDN, err := connectorValue(b.gate(), st.Id, "ad worker", "baseDN", cn.BaseDN)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "ad worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "ad worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	memberDN, err := connectorValue(st.Id, "ad worker", "memberDN", cn.MemberDN)
+	memberDN, err := connectorValue(b.gate(), st.Id, "ad worker", "memberDN", cn.MemberDN)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "ad worker", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(b.gate(), st.Id, "ad worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
@@ -865,15 +865,15 @@ func compileSoapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if !soapVersions[version] {
 		return 0, fmt.Errorf("compiler: soap task %q has an unknown soapVersion %q (want 1.1 or 1.2)", st.Id, cn.Version)
 	}
-	endpoint, err := connectorValue(st.Id, "soap worker", "endpoint", cn.Endpoint)
+	endpoint, err := connectorValue(b.gate(), st.Id, "soap worker", "endpoint", cn.Endpoint)
 	if err != nil {
 		return 0, err
 	}
-	action, err := connectorValue(st.Id, "soap worker", "soapAction", cn.Action)
+	action, err := connectorValue(b.gate(), st.Id, "soap worker", "soapAction", cn.Action)
 	if err != nil {
 		return 0, err
 	}
-	body, err := connectorValue(st.Id, "soap worker", "body", cn.Body)
+	body, err := connectorValue(b.gate(), st.Id, "soap worker", "body", cn.Body)
 	if err != nil {
 		return 0, err
 	}
@@ -976,27 +976,27 @@ func compileLdapConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if err != nil {
 		return 0, err
 	}
-	url, err := connectorValue(st.Id, "ldap worker", "url", cn.URL)
+	url, err := connectorValue(b.gate(), st.Id, "ldap worker", "url", cn.URL)
 	if err != nil {
 		return 0, err
 	}
-	bindDN, err := connectorValue(st.Id, "ldap worker", "bindDN", cn.BindDN)
+	bindDN, err := connectorValue(b.gate(), st.Id, "ldap worker", "bindDN", cn.BindDN)
 	if err != nil {
 		return 0, err
 	}
-	dn, err := connectorValue(st.Id, "ldap worker", "dn", cn.DN)
+	dn, err := connectorValue(b.gate(), st.Id, "ldap worker", "dn", cn.DN)
 	if err != nil {
 		return 0, err
 	}
-	baseDN, err := connectorValue(st.Id, "ldap worker", "baseDN", cn.BaseDN)
+	baseDN, err := connectorValue(b.gate(), st.Id, "ldap worker", "baseDN", cn.BaseDN)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "ldap worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "ldap worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
-	newPassword, err := connectorValue(st.Id, "ldap worker", "newPassword", cn.NewPassword)
+	newPassword, err := connectorValue(b.gate(), st.Id, "ldap worker", "newPassword", cn.NewPassword)
 	if err != nil {
 		return 0, err
 	}
@@ -1091,19 +1091,19 @@ func compileScimConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, fmt.Errorf("compiler: scim task %q operation %q needs a resourceId", st.Id, op)
 		}
 	}
-	baseURL, err := connectorValue(st.Id, "scim worker", "baseUrl", cn.BaseUrl)
+	baseURL, err := connectorValue(b.gate(), st.Id, "scim worker", "baseUrl", cn.BaseUrl)
 	if err != nil {
 		return 0, err
 	}
-	resource, err := connectorValue(st.Id, "scim worker", "resource", cn.Resource)
+	resource, err := connectorValue(b.gate(), st.Id, "scim worker", "resource", cn.Resource)
 	if err != nil {
 		return 0, err
 	}
-	resourceID, err := connectorValue(st.Id, "scim worker", "resourceId", cn.ResourceId)
+	resourceID, err := connectorValue(b.gate(), st.Id, "scim worker", "resourceId", cn.ResourceId)
 	if err != nil {
 		return 0, err
 	}
-	filter, err := connectorValue(st.Id, "scim worker", "filter", cn.Filter)
+	filter, err := connectorValue(b.gate(), st.Id, "scim worker", "filter", cn.Filter)
 	if err != nil {
 		return 0, err
 	}
@@ -1222,15 +1222,15 @@ func compileRestConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if err != nil {
 		return 0, fmt.Errorf("compiler: rest task %q: %w", st.Id, err)
 	}
-	url, err := restValue(st.Id, "url", cn.Url)
+	url, err := restValue(b.gate(), st.Id, "url", cn.Url)
 	if err != nil {
 		return 0, err
 	}
-	headers, err := httpKVList(st.Id, "header", cn.Headers)
+	headers, err := httpKVList(b.gate(), st.Id, "header", cn.Headers)
 	if err != nil {
 		return 0, err
 	}
-	query, err := httpKVList(st.Id, "query parameter", cn.QueryParams)
+	query, err := httpKVList(b.gate(), st.Id, "query parameter", cn.QueryParams)
 	if err != nil {
 		return 0, err
 	}
@@ -1262,31 +1262,31 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if strings.TrimSpace(cn.To) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a to recipient", st.Id)
 	}
-	to, err := restValue(st.Id, "to", cn.To)
+	to, err := restValue(b.gate(), st.Id, "to", cn.To)
 	if err != nil {
 		return 0, err
 	}
-	cc, err := restValue(st.Id, "cc", cn.Cc)
+	cc, err := restValue(b.gate(), st.Id, "cc", cn.Cc)
 	if err != nil {
 		return 0, err
 	}
-	bcc, err := restValue(st.Id, "bcc", cn.Bcc)
+	bcc, err := restValue(b.gate(), st.Id, "bcc", cn.Bcc)
 	if err != nil {
 		return 0, err
 	}
-	from, err := restValue(st.Id, "from", cn.From)
+	from, err := restValue(b.gate(), st.Id, "from", cn.From)
 	if err != nil {
 		return 0, err
 	}
-	subject, err := restValue(st.Id, "subject", cn.Subject)
+	subject, err := restValue(b.gate(), st.Id, "subject", cn.Subject)
 	if err != nil {
 		return 0, err
 	}
-	body, err := restValue(st.Id, "body", cn.Body)
+	body, err := restValue(b.gate(), st.Id, "body", cn.Body)
 	if err != nil {
 		return 0, err
 	}
-	bodyHTML, err := restValue(st.Id, "bodyHtml", cn.BodyHtml)
+	bodyHTML, err := restValue(b.gate(), st.Id, "bodyHtml", cn.BodyHtml)
 	if err != nil {
 		return 0, err
 	}
@@ -1323,23 +1323,23 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if (op == "create" || op == "set-password") && strings.TrimSpace(cn.Password) == "" {
 		return 0, fmt.Errorf("compiler: user task %q (%s) needs a password", st.Id, op)
 	}
-	username, err := restValue(st.Id, "username", cn.Username)
+	username, err := restValue(b.gate(), st.Id, "username", cn.Username)
 	if err != nil {
 		return 0, err
 	}
-	email, err := restValue(st.Id, "email", cn.Email)
+	email, err := restValue(b.gate(), st.Id, "email", cn.Email)
 	if err != nil {
 		return 0, err
 	}
-	displayName, err := restValue(st.Id, "displayName", cn.DisplayName)
+	displayName, err := restValue(b.gate(), st.Id, "displayName", cn.DisplayName)
 	if err != nil {
 		return 0, err
 	}
-	roles, err := restValue(st.Id, "roles", cn.Roles)
+	roles, err := restValue(b.gate(), st.Id, "roles", cn.Roles)
 	if err != nil {
 		return 0, err
 	}
-	password, err := restValue(st.Id, "password", cn.Password)
+	password, err := restValue(b.gate(), st.Id, "password", cn.Password)
 	if err != nil {
 		return 0, err
 	}
@@ -1370,15 +1370,15 @@ func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32
 	if strings.TrimSpace(cn.List) == "" {
 		return 0, fmt.Errorf("compiler: sharepoint task %q needs a list", st.Id)
 	}
-	site, err := restValue(st.Id, "site", cn.Site)
+	site, err := restValue(b.gate(), st.Id, "site", cn.Site)
 	if err != nil {
 		return 0, err
 	}
-	list, err := restValue(st.Id, "list", cn.List)
+	list, err := restValue(b.gate(), st.Id, "list", cn.List)
 	if err != nil {
 		return 0, err
 	}
-	fields, err := httpKVList(st.Id, "item field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "item field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1405,11 +1405,11 @@ func compileRemedyConnectorTask(b *Builder, st xmlServiceTask, retries int32) (i
 	if strings.TrimSpace(cn.Form) == "" {
 		return 0, fmt.Errorf("compiler: remedy task %q needs a form", st.Id)
 	}
-	form, err := restValue(st.Id, "form", cn.Form)
+	form, err := restValue(b.gate(), st.Id, "form", cn.Form)
 	if err != nil {
 		return 0, err
 	}
-	fields, err := httpKVList(st.Id, "field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1483,13 +1483,13 @@ func compileWebScrapeConnectorTask(b *Builder, st xmlServiceTask, retries int32)
 			return 0, fmt.Errorf("compiler: webscrape task %q format %q does not use absoluteLinks; a feed's link is already absolute", st.Id, format.String())
 		}
 	}
-	url, err := restValue(st.Id, "url", cn.Url)
+	url, err := restValue(b.gate(), st.Id, "url", cn.Url)
 	if err != nil {
 		return 0, err
 	}
 	var selector RestExpr
 	if format == WebScrapeFormatHTML {
-		selector, err = restValue(st.Id, "selector", cn.Selector)
+		selector, err = restValue(b.gate(), st.Id, "selector", cn.Selector)
 		if err != nil {
 			return 0, err
 		}
@@ -1705,7 +1705,7 @@ func compileDiscordConnectorTask(b *Builder, st xmlServiceTask, retries int32) (
 	if len(cn.Fields) > 0 && !spec.takesFields {
 		return 0, fmt.Errorf("compiler: discord task %q operation %q has no request body, so it does not use discordField values; remove them rather than leaving values the worker ignores", st.Id, op)
 	}
-	fields, err := httpKVList(st.Id, "discord field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "discord field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1740,7 +1740,7 @@ func compileDiscordConnectorTask(b *Builder, st xmlServiceTask, retries int32) (
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "discord worker", v.what, v.raw)
+		val, err := connectorValue(b.gate(), st.Id, "discord worker", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -1903,7 +1903,7 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if len(cn.Fields) > 0 && !spec.takesFields {
 		return 0, fmt.Errorf("compiler: jira task %q operation %q does not use jiraField values; remove them rather than leaving values the worker ignores", st.Id, op)
 	}
-	fields, err := httpKVList(st.Id, "jira field", cn.Fields)
+	fields, err := httpKVList(b.gate(), st.Id, "jira field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
@@ -1946,7 +1946,7 @@ func compileJiraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "jira worker", v.what, v.raw)
+		val, err := connectorValue(b.gate(), st.Id, "jira worker", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -2132,7 +2132,7 @@ func compileGoogleSheetsConnectorTask(b *Builder, st xmlServiceTask, retries int
 		if strings.TrimSpace(v.raw) == "" {
 			continue
 		}
-		val, err := connectorValue(st.Id, "google sheets", v.what, v.raw)
+		val, err := connectorValue(b.gate(), st.Id, "google sheets", v.what, v.raw)
 		if err != nil {
 			return 0, err
 		}
@@ -2264,7 +2264,7 @@ func compileAgentConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 				st.Id, unsupported.attr, unsupported.instead)
 		}
 	}
-	prompt, err := connectorValue(st.Id, "ai", "prompt", cn.Prompt)
+	prompt, err := connectorValue(b.gate(), st.Id, "ai", "prompt", cn.Prompt)
 	if err != nil {
 		return 0, err
 	}
