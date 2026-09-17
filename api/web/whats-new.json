@@ -38,6 +38,27 @@
       }
     },
     {
+      "id": "how-long-the-single-writer-is-held-is-now-a-metric",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now measure the pause that makes the interface feel stuck",
+        "de": "Die Pause, die sich als hängende Oberfläche anfühlt, ist jetzt messbar"
+      },
+      "summary": {
+        "en": "Atlas does one thing at a time where it changes state, and everything else — including a request that only wants to read — waits its turn. So a single slow turn is not one slow request, it is the whole server standing still, and nothing measured it: the existing counters describe what the engine processed, not how long somebody waited to be let in. Two figures now go to your metrics endpoint: how long each turn occupied the server, and how long callers queued before theirs began. The first says what caused a pause, the second says whether anyone felt it. There is nothing to switch on and no cost when you collect no metrics.",
+        "de": "Atlas tut an der Stelle, an der es seinen Zustand ändert, immer nur eines zur Zeit — alles andere wartet, auch eine Anfrage, die bloss lesen will. Ein einzelner langsamer Durchlauf ist damit keine langsame Anfrage, sondern ein Stillstand des ganzen Servers, und gemessen hat das bisher nichts: Die vorhandenen Zähler beschreiben, was die Engine verarbeitet hat, nicht wie lange jemand auf Einlass gewartet hat. Zwei Werte gehen nun an Ihren Metrik-Endpunkt: wie lange jeder Durchlauf den Server belegte und wie lange Aufrufer davor in der Schlange standen. Der erste nennt die Ursache einer Pause, der zweite sagt, ob sie jemand gespürt hat. Es gibt nichts einzuschalten, und wer keine Metriken erhebt, zahlt nichts dafür."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
       "id": "a-standing-list-of-the-approval-rules-that-reach-nobody",
       "version": "Unreleased",
       "date": null,
@@ -225,24 +246,6 @@
       "summary": {
         "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
         "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-product-form-is-filled-in-the-order-a-product-is-thought",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The product form is filled in the order a product is thought about.",
-        "de": "The product form is filled in the order a product is thought about."
-      },
-      "summary": {
-        "en": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket.",
-        "de": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket."
       },
       "link": {
         "label": "Changelog",
