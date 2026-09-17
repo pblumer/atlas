@@ -388,12 +388,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// portalBaseUrl is what a notification's link is built on. It is the
 		// operator's configured origin or empty; a model that finds it empty says
 		// where to go instead of printing a link nobody can follow.
-		if err := s.wake(PlacedMessage, out.ID, map[string]string{
-			"orderId":       out.ID,
-			"orderer":       out.Orderer,
-			"recipient":     out.Recipient,
-			"portalBaseUrl": s.portalBase(),
-		}); err != nil {
+		if err := s.wake(PlacedMessage, out.ID, PlacedVariables(out, s.portalBase())); err != nil {
 			httpapi.Error(w, http.StatusInternalServerError,
 				"the order was placed, but fulfilment could not be started: "+err.Error())
 			return
@@ -401,6 +396,32 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		httpapi.JSON(w, http.StatusCreated, out)
 	}
 }
+
+// PlacedVariables is what the fulfilment orchestration is started with.
+//
+// One function rather than a literal at the call site, because there is a second
+// caller: the repair that starts an orchestration again for an order whose own one
+// was lost or could never work (api/fulfilmentrepair.go). Two literals would be two
+// payloads, and the one that drifted would produce an orchestration that runs and
+// quietly does nothing — which is exactly the defect this list was widened for.
+//
+// portalBaseUrl is what a notification's link is built on: the operator's configured
+// origin or empty. A model that finds it empty says where to go instead of printing
+// a link nobody can follow.
+func PlacedVariables(o Order, portalBase string) map[string]string {
+	return map[string]string{
+		"orderId":       o.ID,
+		"orderer":       o.Orderer,
+		"recipient":     o.Recipient,
+		"portalBaseUrl": portalBase,
+	}
+}
+
+// FulfilmentProcess is the id of the model that works an order
+// (api/systemprocesses/auftrag-erfuellung.bpmn). Named here so the Go side has one
+// spelling of it; the model carries its own, and the two are held together by the
+// tests that start it.
+const FulfilmentProcess = "atlas-auftrag-erfuellung"
 
 // unresolvedVariant reports what is wrong with the variants this order names, or
 // "" when nothing is.
