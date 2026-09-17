@@ -67,6 +67,27 @@
       }
     },
     {
+      "id": "the-state-store-is-configured-for-the-size-it-has-grown-to-n",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The state store is set up for the size it has actually reached",
+        "de": "Der Datenspeicher ist auf die Grösse eingestellt, die er tatsächlich erreicht hat"
+      },
+      "summary": {
+        "en": "Atlas kept its state in a store running on its library's out-of-the-box settings: an 8 MB read cache and a single housekeeping thread. Those fit a store of a few thousand entries. On one holding millions they send every lookup to disk and let the housekeeping fall behind until writes are held back — which is felt as the server pausing. The server now sizes its own store for the job and you can adjust it: --state-cache-mb (64 by default) and --state-memtable-mb (16). Worth knowing before you upgrade: that is roughly 96 MB of memory the server did not use before, and both accept 0 to go back to the old behaviour.",
+        "de": "Atlas hielt seinen Zustand in einem Speicher, der auf den Voreinstellungen seiner Bibliothek lief: 8 MB Lesepuffer und ein einziger Aufräum-Thread. Das passt zu einem Speicher mit ein paar tausend Einträgen. Bei Millionen führt es dazu, dass jeder Zugriff auf die Platte geht und das Aufräumen so weit zurückfällt, bis Schreibvorgänge gebremst werden — spürbar als Aussetzer des Servers. Der Server stellt seinen Speicher nun passend ein, und Sie können nachjustieren: --state-cache-mb (Vorgabe 64) und --state-memtable-mb (16). Vor dem Upgrade zu wissen: Das sind rund 96 MB Arbeitsspeicher, die der Server vorher nicht belegte; mit 0 kehren beide zum alten Verhalten zurück."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
       "id": "the-approver-is-picked-and-picked-differently-depending-on-t",
       "version": "Unreleased",
       "date": null,
@@ -211,63 +232,31 @@
       }
     },
     {
-      "id": "a-google-sheets-task-whose-spreadsheet-resolved-to-nothing-n",
+      "id": "the-server-froze-for-seconds-at-a-time-on-a-cadence-once-its",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A Google Sheets task missing its spreadsheet now names the empty value",
-        "de": "Eine Google-Sheets-Aufgabe ohne Tabelle benennt jetzt den leeren Wert"
+        "en": "The server no longer freezes for seconds at a time once its store grows",
+        "de": "Der Server setzt nicht mehr für Sekunden aus, sobald sein Datenbestand wächst"
       },
       "summary": {
-        "en": "A task usually takes its spreadsheet from a variable — the id, or the URL you pasted out of the browser. Start an instance without that variable and the value is empty, and Atlas used to ask Google about a spreadsheet with no id at all. Google answered \"Requested entity was not found\", which reads as though somebody had deleted the file and sent you looking for a spreadsheet that was exactly where you left it. The incident now names the operation and the value that came up empty, so the search starts at the instance's variables. The same check covers everything an operation needs: the spreadsheet, the sheet, the range, the title, and the rows to write.",
-        "de": "Eine Aufgabe bezieht ihre Tabelle meist aus einer Variablen — der Id oder der aus dem Browser kopierten URL. Startet eine Instanz ohne diese Variable, ist der Wert leer, und Atlas fragte Google bisher nach einer Tabelle ganz ohne Id. Google antwortete mit \"Requested entity was not found\", was klingt, als habe jemand die Datei gelöscht, und schickte Sie auf die Suche nach einer Tabelle, die unverändert an ihrem Platz lag. Der Incident benennt jetzt die Operation und den Wert, der leer aufgelöst wurde, sodass die Suche bei den Variablen der Instanz beginnt. Dieselbe Prüfung deckt alles ab, was eine Operation braucht: Tabelle, Blatt, Bereich, Titel und die zu schreibenden Zeilen."
+        "en": "On a server holding tens of thousands of running instances, every list in the Console would stop for seconds at a stretch, on a regular beat, and then the whole backlog arrived at once. Three pieces of housekeeping had quietly grown with the data and were doing their reading in the one place where the engine can only do one thing at a time — so while they read, nothing else was served, not even a request that only wanted to look. They now read alongside the engine instead of in front of it, and the count of running instances comes from a running tally rather than from walking every one of them. Nothing about the answers changed; the waiting did.",
+        "de": "Auf einem Server mit Zehntausenden laufenden Instanzen blieb in der Konsole regelmässig jede Liste für Sekunden stehen, und danach traf alles auf einmal ein. Drei Aufräumarbeiten waren unbemerkt mit dem Datenbestand mitgewachsen und lasen dabei an der einen Stelle, an der die Engine nur eines zur Zeit tun kann — solange sie lasen, wurde nichts anderes bedient, nicht einmal eine Anfrage, die bloss schauen wollte. Sie lesen jetzt neben der Engine statt vor ihr, und die Zahl der laufenden Instanzen kommt aus einer mitgeführten Zählung statt aus dem Durchgehen aller. An den Antworten hat sich nichts geändert, am Warten schon."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Workers",
         "Operations"
-      ]
-    },
-    {
-      "id": "a-task-folder-edited-twice-in-quick-succession-no-longer-kee",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A task folder edited twice in a row no longer shows the old filter",
-        "de": "Ein zweimal hintereinander bearbeiteter Aufgabenordner zeigt nicht mehr den alten Filter"
-      },
-      "summary": {
-        "en": "A folder in your task sidebar holds a rule — which processes, which states, whose tasks — and Atlas works out the rule once and remembers the answer rather than redoing it on every refresh. It remembered the answer under the time the folder was last saved, counted in thousandths of a second. Two saves inside the same thousandth therefore looked like the same folder, and the second edit was served the first one's answer: the folder kept filtering by the rule you had just replaced, until something else happened to clear the memory. Nobody clicking can save twice that fast, but anything calling Atlas can — a script, an integration, an assistant. The answer is now remembered under the rule itself rather than under a clock, so a changed rule always means a fresh answer and an unchanged one is never recomputed for nothing.",
-        "de": "Ein Ordner in Ihrer Aufgabenleiste enthält eine Regel — welche Prozesse, welche Zustände, wessen Aufgaben — und Atlas wertet diese Regel einmal aus und merkt sich das Ergebnis, statt es bei jeder Aktualisierung neu zu berechnen. Gemerkt wurde das Ergebnis unter dem Zeitpunkt der letzten Speicherung, gezählt in Tausendstelsekunden. Zwei Speicherungen innerhalb derselben Tausendstelsekunde sahen deshalb wie derselbe Ordner aus, und die zweite Bearbeitung erhielt das Ergebnis der ersten: Der Ordner filterte weiter nach der Regel, die Sie soeben ersetzt hatten — so lange, bis der Speicher zufällig anderweitig geleert wurde. Von Hand lässt sich nicht so schnell zweimal speichern, über eine Schnittstelle aber schon: ein Skript, eine Integration, ein Assistent. Das Ergebnis wird nun unter der Regel selbst gemerkt statt unter einer Uhr. Eine geänderte Regel bedeutet damit immer eine neue Auswertung, eine unveränderte wird nie unnötig neu berechnet."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Tasks"
       ],
-      "tutorial": {
-        "en": [
-          "Open Tasks and edit one of your folders' rules.",
-          "The list re-filters by the rule you just saved, however quickly the edit followed the last one."
-        ],
-        "de": [
-          "«Tasks» öffnen und die Regel eines Ihrer Ordner bearbeiten.",
-          "Die Liste filtert nach der soeben gespeicherten Regel — unabhängig davon, wie schnell die Bearbeitung auf die vorige folgte."
-        ]
-      },
       "try": {
         "label": {
-          "en": "Open Tasks",
-          "de": "Tasks öffnen"
+          "en": "Open Operations",
+          "de": "Operations öffnen"
         },
-        "route": "#/tasks"
+        "route": "#/operations"
       }
     }
   ]

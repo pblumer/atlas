@@ -48,64 +48,109 @@ const DirBase = "checkpoints"
 // be written somewhere recovery does not look (ADR-0131).
 func Dir(dataDir string) string { return filepath.Join(dataDir, DirBase) }
 
-// Publish creates a checkpoint under root and publishes it atomically (ADR-0131).
+// Staged is a checkpoint whose snapshot has been taken but which is not yet
+// published. It exists to split the publication into its two very different halves
+// (ADR-0131).
 //
-// snapshot is called with a fresh, non-existent temporary directory path that it must
-// create and populate with the state snapshot (state.Store.Snapshot does exactly
-// this). Publish then records a checksum of that content in the manifest, writes and
-// fsyncs the manifest, fsyncs the directory, and finally **renames** it to its
-// published name and fsyncs root. The rename is the publication point: a crash before
-// it leaves only a `tmp-` directory, which List ignores and the next attempt clears,
-// so a checkpoint directory is never half-published.
+// Taking the snapshot needs the writer stopped: only between batches do the store's
+// applied position and the state it holds agree exactly, which is what makes the
+// recorded position describe the snapshotted state (invariant I3). Everything after
+// it does not. Once [Stage] returns, the staged directory is a set of hard links to
+// immutable SST files under a `tmp-` name nothing else looks at, so checksumming it,
+// writing the manifest and renaming it into place can run with the engine free.
 //
-// Publishing at a position that is already published is a no-op, so a retry after a
-// crash between the rename and the caller's bookkeeping is safe.
+// The split is not cosmetic. The checksum reads **every byte of the state store**, so
+// on a store of any size it is by far the longest step — running it inside the
+// single-writer turn stops command processing, and with it every request in the API,
+// for as long as the read takes. That is the shape [Prune] was already kept out of the
+// writer's way for; this keeps the much larger reader out of it too.
+type Staged struct {
+	root  string
+	tmp   string
+	final string
+	m     *Manifest
+	// published marks a position that already had a checkpoint when it was staged: no
+	// snapshot was taken and there is nothing to commit, so Commit answers with the
+	// existing path rather than re-reading a state it did not write.
+	published bool
+}
+
+// AppliedPosition is the log position this checkpoint captures.
+func (s *Staged) AppliedPosition() uint64 { return s.m.AppliedPosition }
+
+// Stage snapshots the state under a temporary directory and returns the staged
+// checkpoint for [Staged.Commit] to publish.
 //
-// m.StateChecksum is filled in by Publish; the caller sets the rest.
-func Publish(root string, m *Manifest, snapshot func(dir string) error) (path string, err error) {
+// **It must run on the partition's single-writer goroutine** — that is the whole
+// reason it is a separate call. snapshot is given a fresh, non-existent directory
+// path that it must create and populate (state.Store.Snapshot does exactly this).
+//
+// Staging at a position that already has a published checkpoint takes no snapshot at
+// all; the returned Staged commits to the existing path.
+func Stage(root string, m *Manifest, snapshot func(dir string) error) (*Staged, error) {
 	if err := m.Validate(); err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
-	final := filepath.Join(root, DirName(m.AppliedPosition))
-	if _, err := os.Stat(final); err == nil {
-		return final, nil // already published at this position
+	s := &Staged{
+		root:  root,
+		final: filepath.Join(root, DirName(m.AppliedPosition)),
+		tmp:   filepath.Join(root, tempPrefix+DirName(m.AppliedPosition)),
+		m:     m,
 	}
-
+	if _, err := os.Stat(s.final); err == nil {
+		s.published = true
+		return s, nil
+	}
 	// Clear any leftover from a previously crashed attempt at this position, then let
 	// snapshot create the directory (Pebble's Checkpoint requires a fresh path).
-	tmp := filepath.Join(root, tempPrefix+DirName(m.AppliedPosition))
-	if err := os.RemoveAll(tmp); err != nil {
-		return "", err
+	if err := os.RemoveAll(s.tmp); err != nil {
+		return nil, err
 	}
-	// From here on the attempt is all-or-nothing: any failure removes the temporary
-	// directory, so a partially-built checkpoint is never left behind for the next
-	// publish (or a human) to mistake for work in progress. Nothing is published until
-	// the rename below, so an abandoned attempt is invisible either way.
+	if err := snapshot(s.tmp); err != nil {
+		// Nothing is published until Commit renames, so an abandoned attempt is
+		// invisible either way — but it must not be left on disk for the next pass.
+		_ = os.RemoveAll(s.tmp)
+		return nil, err
+	}
+	return s, nil
+}
+
+// Commit checksums the staged state, records it in the manifest, and **renames** the
+// directory to its published name, fsyncing the directory and then root.
+//
+// It runs with the writer free: everything it touches was fixed by [Stage]. The rename
+// is the publication point — a crash before it leaves only a `tmp-` directory, which
+// [List] ignores and the next attempt clears, so a checkpoint directory is never
+// half-published. Any failure removes the temporary directory rather than leaving a
+// partially-built checkpoint for the next publish (or a human) to mistake for work in
+// progress.
+//
+// m.StateChecksum is filled in here; the caller sets the rest.
+func (s *Staged) Commit() (path string, err error) {
+	if s.published {
+		return s.final, nil // already published at this position
+	}
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(tmp)
+			_ = os.RemoveAll(s.tmp)
 		}
 	}()
-
-	if err = snapshot(tmp); err != nil {
-		return "", err
-	}
-	sum, err := ChecksumDir(tmp)
+	sum, err := checksumDir(s.tmp)
 	if err != nil {
 		return "", err
 	}
-	m.StateChecksum = sum
-	blob, err := m.Marshal()
+	s.m.StateChecksum = sum
+	blob, err := s.m.Marshal()
 	if err != nil {
 		return "", err
 	}
-	if err = writeFileSync(filepath.Join(tmp, ManifestName), blob); err != nil {
+	if err = writeFileSync(filepath.Join(s.tmp, ManifestName), blob); err != nil {
 		return "", err
 	}
-	if err = fsyncDir(tmp); err != nil {
+	if err = fsyncDir(s.tmp); err != nil {
 		return "", err
 	}
 	// The rename publishes the checkpoint; the parent fsync makes the rename itself
@@ -113,13 +158,42 @@ func Publish(root string, m *Manifest, snapshot func(dir string) error) (path st
 	// checkpoint is already visible but not provably durable, so the error is
 	// reported: a retry finds it published and returns success, and if a crash did
 	// lose it the retry republishes instead.
-	if err = renameDir(tmp, final); err != nil {
+	if err = renameDir(s.tmp, s.final); err != nil {
 		return "", err
 	}
-	if err = fsyncDir(root); err != nil {
+	if err = fsyncDir(s.root); err != nil {
 		return "", err
 	}
-	return final, nil
+	return s.final, nil
+}
+
+// Abandon discards a staged checkpoint without publishing it, for a caller that
+// staged and then could not go on (a shutdown, a failed pass). It is safe to call on
+// a Staged that found its position already published, where it does nothing.
+func (s *Staged) Abandon() error {
+	if s.published {
+		return nil
+	}
+	return os.RemoveAll(s.tmp)
+}
+
+// Publish stages a checkpoint and commits it in one call (ADR-0131).
+//
+// Both halves run wherever the caller is, so this is for callers that have no writer
+// to keep free — tests, and synchronous embedding. **The server does not use it**: it
+// stages on the run loop and commits off it, because [Staged.Commit] reads the whole
+// state store and would otherwise do so with the engine stopped.
+//
+// Publishing at a position that is already published is a no-op, so a retry after a
+// crash between the rename and the caller's bookkeeping is safe.
+//
+// m.StateChecksum is filled in by Publish; the caller sets the rest.
+func Publish(root string, m *Manifest, snapshot func(dir string) error) (string, error) {
+	staged, err := Stage(root, m, snapshot)
+	if err != nil {
+		return "", err
+	}
+	return staged.Commit()
 }
 
 // The durability syscalls Publish depends on, as variables so tests can exercise the
@@ -129,6 +203,11 @@ func Publish(root string, m *Manifest, snapshot func(dir string) error) (path st
 var (
 	fsyncDir  = syncDir
 	renameDir = os.Rename
+	// checksumDir is the whole-state read Commit does. It is a seam for the same
+	// reason as the two above, and for one more: a test can count the calls, which is
+	// how "Stage reads nothing, Commit reads everything" is asserted as structure
+	// rather than observed as a race.
+	checksumDir = ChecksumDir
 )
 
 // List returns the applied positions of the checkpoints published under root, in
