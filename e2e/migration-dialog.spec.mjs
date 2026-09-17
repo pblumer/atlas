@@ -73,6 +73,63 @@ test("a migratable instance shows what would move, and needs a reason before it 
   expect(page.__errors, "page errors").toEqual([]);
 });
 
+test("a refused rebinding offers the fork, and it needs somewhere to resume", async ({ page }) => {
+  await page.locator("#mig-bad").click();
+  const modal = page.locator(".mig-modal");
+  const fork = modal.locator(".mig-fork");
+
+  // The refusal comes with its next step rather than a dead end, and the section is not
+  // dimmed: there is no rebinding to prefer over it here.
+  await expect(fork).toBeVisible();
+  await expect(fork).not.toHaveClass(/alt/);
+  await expect(fork).toContainText("continue in a new instance");
+  // What it costs is stated before anything is committed — in particular the work in
+  // flight, which a fork cannot carry.
+  await expect(fork).toContainText("3 variables");
+  await expect(fork).toContainText("1 job");
+  // Nothing is proposed, because the parked token's element is not in the target version.
+  await expect(fork).toContainText("no element of the same id");
+
+  const forkBtn = modal.locator("[data-mig-fork]");
+  await expect(forkBtn).toBeVisible();
+  await expect(forkBtn).toBeDisabled();
+  await modal.locator("#mig-reason").fill("v2 replaced the task this token sits on");
+  await expect(forkBtn, "a reason alone is not enough: the fork needs somewhere to resume").toBeDisabled();
+
+  await fork.locator('input[type=checkbox][value="review_v2"]').check();
+  await expect(forkBtn).toBeEnabled();
+  await forkBtn.click();
+
+  const calls = await page.evaluate(() => window.__calls.map((c) => c.method + " " + c.url));
+  expect(calls).toEqual([
+    "POST /api/v1/instances/5002/migrate/plan",
+    "POST /api/v1/instances/5002/migrate/fork",
+  ]);
+  const sent = await page.evaluate(() => window.__calls[1].body);
+  expect(sent.resume).toEqual(["review_v2"]);
+  expect(sent.reason).toBe("v2 replaced the task this token sits on");
+
+  // The successor is named, because that is where the work is now.
+  const toast = await page.evaluate(() => window.__toast);
+  expect(toast.kind).toBe("ok");
+  expect(toast.msg).toContain("5003");
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
+test("a migratable instance shows the fork as the dimmed alternative", async ({ page }) => {
+  await page.locator("#mig-ok").click();
+  const modal = page.locator(".mig-modal");
+  const fork = modal.locator(".mig-fork");
+
+  // Offered, but visibly the second answer: rebinding keeps the instance's work, and an
+  // operator who can do that should not be invited to end it.
+  await expect(fork).toBeVisible();
+  await expect(fork).toHaveClass(/alt/);
+  // Its proposal is already ticked, so the one-click case stays one click.
+  await expect(fork.locator('input[type=checkbox][value="review_v2"]')).toBeChecked();
+  expect(page.__errors, "page errors").toEqual([]);
+});
+
 test("changing the target re-reads the plan for that target", async ({ page }) => {
   await page.locator("#mig-ok").click();
   const modal = page.locator(".mig-modal");

@@ -10141,6 +10141,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (inst.correlationKey) {
       bits.push(metaItem("correlationKey", `<code>${esc(inst.correlationKey)}</code>`, "The message correlation key this instance started with"));
     }
+    // A forked instance's work is in another instance, and an operator reading this one
+    // needs to be able to get there (ADR-draft-forked-instance-migration). It matters
+    // most on the predecessor: "terminated" on its own reads as somebody cancelling it,
+    // where the truth is that its work moved to another version.
+    if (inst.successorInstanceKey) {
+      bits.push(metaItem("continued as",
+        `<a class="replay-link" href="#/operations/i/${inst.successorInstanceKey}">${esc(String(inst.successorInstanceKey))}</a>`,
+        "This instance was ended and its work continued in a new instance of another version"));
+    }
+    if (inst.predecessorInstanceKey) {
+      bits.push(metaItem("continues",
+        `<a class="replay-link" href="#/operations/i/${inst.predecessorInstanceKey}">${esc(String(inst.predecessorInstanceKey))}</a>`,
+        "This instance continues the work of an instance that ran an earlier version"));
+    }
     return bits.length ? `<div class="vp-meta">${bits.join("")}</div>` : "";
   };
 
@@ -11478,6 +11492,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <div id="m-inc-wrap" hidden><label>Incidents</label><span class="pill err" id="m-inc"><span class="dot"></span><b id="m-inc-n">0</b></span></div>
         </div>
         <div style="flex:1"></div>
+        <a class="btn neutral" id="rp-forklink" hidden></a>
         <button class="btn neutral" id="rp-migrate" hidden title="Move this instance to another deployed version of its process">&#8644; Migrate&hellip;</button>
         <a class="btn neutral" id="rp-live" title="Open this instance's live view">Live view</a>
         <a class="btn neutral" id="rp-instances" href="#/operations" title="Back to this process's instances">&larr; Instances</a>
@@ -11561,6 +11576,22 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than all the way to the top-level Instances list (still one click away in the
   // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
   root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
+  // A forked instance's story spans two keys (ADR-draft-forked-instance-migration): this
+  // replay ends where the work left, or begins where it arrived. Either way the rest of
+  // it is one click away — without the link, an instance that stops mid-diagram reads as
+  // a defect, and one that starts mid-diagram reads as a ghost.
+  const forkLink = root.querySelector("#rp-forklink");
+  if (tl.successorInstanceKey) {
+    forkLink.hidden = false;
+    forkLink.href = `#/operations/i/${tl.successorInstanceKey}`;
+    forkLink.textContent = `Continued as ${tl.successorInstanceKey} \u2192`;
+    forkLink.title = "This instance was ended and its work continued in a new instance of another version";
+  } else if (tl.predecessorInstanceKey) {
+    forkLink.hidden = false;
+    forkLink.href = `#/operations/i/${tl.predecessorInstanceKey}`;
+    forkLink.textContent = `\u2190 Continues ${tl.predecessorInstanceKey}`;
+    forkLink.title = "This instance continues the work of an instance that ran an earlier version";
+  }
   // Migrating is offered only where it means something: an instance still running has
   // tokens to rebind, a finished one has none, and the button would be an invitation to
   // an action the engine would refuse (ADR-0162).
@@ -11696,6 +11727,16 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   };
 
   function stepLabel(s) {
+    if (s && s.action === "fork") {
+      // Both directions in one label, because the row has to say which way the work went
+      // without the reader having to know which instance they have open.
+      const f = s.fork || {};
+      const where = f.instanceKey ? ` ${f.instanceKey}` : "";
+      const ver = f.version ? ` (v${f.version})` : "";
+      return f.direction === "in"
+        ? `Continues instance${where}${ver}`
+        : `Continued as instance${where}${ver}`;
+    }
     if (s && s.action === "migrate") {
       const m = s.migration || {};
       // Name both ends the way an operator reads a process — by version — and fall back
@@ -12029,6 +12070,38 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     </div>`;
   }
 
+  // forkDetail is the Details panel for a fork row: where this instance's work went, or
+  // where it came from, and why somebody decided that
+  // (ADR-draft-forked-instance-migration). It says plainly what a fork costs, because
+  // the consequence is easy to misread in both directions — the predecessor looks
+  // cancelled, and the successor looks like it started in the middle of the diagram.
+  function forkDetail(s) {
+    const f = s.fork || {};
+    const who = f.actor ? esc(f.actor) : "an operator";
+    const other = f.instanceKey
+      ? `<a href="#/operations/i/${esc(String(f.instanceKey))}">${esc(String(f.instanceKey))}</a>${
+        f.version ? ` <span class="hint">(version ${esc(String(f.version))})</span>` : ""}`
+      : `<span class="hint">no longer available</span>`;
+    const out = f.direction !== "in";
+    return `<dl class="ops-props">
+      <dt>Event</dt><dd>${out ? "Continued in a new instance" : "Continues an earlier instance"}</dd>
+      <dt>${out ? "Continued as" : "Continues"}</dt><dd>${other}</dd>
+      <dt>Date</dt><dd>${esc(fmtDateTime(f.at || s.at))}</dd>
+      <dt>By</dt><dd>${who}</dd>
+    </dl>
+    <div class="ops-mig">
+      <h4>&#8599; The work moved to another instance</h4>
+      <p>${out
+    ? `This instance's tokens could not be carried onto the newer version, so it was ended here and its
+         work continued in the instance above, with its variables and data objects. Everything it already did
+         stays on this instance, exactly as it ran — and its open jobs, tasks and incidents ended with it.`
+    : `This instance did not start at a start event: it continues the work of the instance above, which ran an
+         earlier version and could not be moved onto this one. Its variables and data objects came across; its
+         earlier steps are on that instance.`}</p>
+      <p class="ops-mig-reason">${esc(f.reason || "")}</p>
+    </div>`;
+  }
+
   // renderDetail fills the Details tab for the selected element instance (or the
   // process instance when nothing is selected), mirroring Operate's element panel.
   function renderDetail() {
@@ -12037,6 +12110,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     // below — the first of which treats "no element instance" as "nothing selected".
     if (selMig >= 0 && steps[selMig] && steps[selMig].migration) {
       detailEl.innerHTML = migrationDetail(steps[selMig]);
+      return;
+    }
+    if (selMig >= 0 && steps[selMig] && steps[selMig].fork) {
+      detailEl.innerHTML = forkDetail(steps[selMig]);
       return;
     }
     if (!selEik) {
@@ -13303,6 +13380,17 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <span class="ops-htime">${esc(fmtClock(s.at))}</span>
         </div>`;
       }
+      if (s.action === "fork") {
+        // Drawn like the migration rule: the work does not continue below this row, it
+        // continues in another instance — which is the one thing the row exists to say
+        // (ADR-draft-forked-instance-migration).
+        return `<div class="ops-hrow mig fork" data-i="${i}" data-eik="0"
+            title="${esc((s.fork && s.fork.reason) || "Forked to another instance")}">
+          <span class="ops-hicon mig">&#8599;</span>
+          <span class="ops-hname">${esc(stepLabel(s))}</span>
+          <span class="ops-htime">${esc(fmtClock(s.at))}</span>
+        </div>`;
+      }
       const done = s.endAt > 0;
       const inc = incidentByEik(s.elementInstanceKey);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
@@ -13330,7 +13418,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       pause();
       if (i < 0) { selectElement("", 0); return; }
       const s = steps[i];
-      if (s.action === "migrate") {
+      if (s.action === "migrate" || s.action === "fork") {
         // It names no element, so there is nothing to select on the diagram and nothing
         // to animate — but the playhead still moves, so the surrounding steps read in
         // the order they happened.

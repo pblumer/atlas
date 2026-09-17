@@ -2,6 +2,34 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-model-fix-now-reaches-an-instance-even-when-its-tokens-can",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An instance can continue in a new instance when it cannot be moved as it is",
+        "de": "Eine Instanz kann in einer neuen Instanz weiterlaufen, wenn sie sich nicht verschieben lässt"
+      },
+      "summary": {
+        "en": "Moving a running instance onto a corrected version keeps everything it has done — but only where each of its tokens still sits on an element the new version has, of the same kind and in the same place. Where it does not, the move is refused, and until now that was the end of the road: cancel the instance and start again by hand. Now you can continue it in a new instance instead. The old one ends where it is, a new instance of the corrected version picks the work up at the elements you tick — proposed for you wherever the element ids survived the edit — and the variables and data objects come with it. Both instances link to each other, so the old replay says where the work went and the new one says where it came from. Open jobs, tasks and incidents end with the old instance, and the dialog says exactly what that costs before you confirm.",
+        "de": "Eine laufende Instanz auf eine korrigierte Version zu verschieben, erhält alles bereits Geleistete — aber nur, solange jedes Token auf einem Element sitzt, das die neue Version ebenfalls hat, in derselben Art und an derselben Stelle. Sonst wird der Wechsel abgelehnt, und damit war der Weg bisher zu Ende: Instanz abbrechen und von Hand neu starten. Neu lässt sie sich stattdessen in einer neuen Instanz fortführen. Die alte endet an Ort und Stelle, eine neue Instanz der korrigierten Version nimmt die Arbeit an den Elementen auf, die man auswählt — vorgeschlagen überall dort, wo die Element-IDs die Änderung überlebt haben —, und Variablen wie Datenobjekte wandern mit. Beide Instanzen sind gegenseitig verlinkt: Der alte Verlauf zeigt, wohin die Arbeit ging, der neue, woher sie kam. Offene Jobs, Aufgaben und Incidents enden mit der alten Instanz; der Dialog benennt vor der Bestätigung genau, was das kostet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "every-position-carries-its-own-way-into-the-process-working-",
       "version": "Unreleased",
       "date": null,
@@ -228,24 +256,6 @@
       "summary": {
         "en": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits.",
         "de": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-accounts-and-groups-screen-shows-the-ids-it-asks-you-to-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The accounts and groups screen shows the ids it asks you to type.",
-        "de": "The accounts and groups screen shows the ids it asks you to type."
-      },
-      "summary": {
-        "en": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler.",
-        "de": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler."
       },
       "link": {
         "label": "Changelog",

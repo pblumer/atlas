@@ -656,6 +656,34 @@ func (p *Processor) MigrateInstance(v model.ProcessMigrationValue, actor, reason
 	})
 }
 
+// ForkInstance enqueues the fork of a running instance onto another deployed version of
+// its process (ADR-draft-forked-instance-migration): the instance is ended where it is
+// and its work continues in a *new* instance of that version, seeded at the resume
+// elements given, carrying its root-scope variables and data objects, with each record
+// naming the other.
+//
+// It is what an operator reaches for when [ValidateMigration] refused a rebinding — a
+// token on an element the target version no longer has cannot be carried across, but the
+// instance's data and a decision about where the work picks up again can. resume names
+// elements by their index in the *target* version; the caller resolves them from BPMN
+// ids, because no model string belongs in the log (invariant I5).
+//
+// The caller validates first — it holds both compiled processes — and the handler
+// re-checks on the run loop, because the instance is free to move in between. A fork
+// that no longer holds is dropped; the caller's refusal is the one an operator reads.
+// Call RunUntilIdle to process it.
+func (p *Processor) ForkInstance(piKey, targetDefKey uint64, resume []int32, actor, reason string) {
+	p.queue = append(p.queue, Command{
+		Key:           piKey,
+		ValueType:     model.VTProcessInstance,
+		Intent:        model.IntentForking,
+		Value:         inflightValue{process: model.ProcessInstanceValue{ProcessDefKey: targetDefKey}},
+		StartElements: resume,
+		Actor:         actor,
+		Reason:        reason,
+	})
+}
+
 // ReindexInstanceVariables enqueues a repair of one instance's variable-index
 // membership: the handler compares the instance's root-scope variables against what its
 // own process declares searchable (ADR-0244) and emits a membership event for each one
