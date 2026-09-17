@@ -376,10 +376,20 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// correlation key and nothing else, so both arrived null and every notice
 		// the fulfilment ever sent would have been addressed to nobody.
 		//
+		// orderId is on that list for the same reason and was missed by that
+		// correction. It is not covered by the correlation key: a message *start*
+		// event's key is evaluated from the payload, so `=orderId` over a payload
+		// without it resolves to nothing — the instance recorded no key and the
+		// variable the whole model reads was never written. Nothing failed, because
+		// FEEL propagates null: the first request was built as "/api/v1/orders/" +
+		// null + "/next" and the orchestration asked for nothing, forever, with no
+		// incident for anybody to find.
+		//
 		// portalBaseUrl is what a notification's link is built on. It is the
 		// operator's configured origin or empty; a model that finds it empty says
 		// where to go instead of printing a link nobody can follow.
 		if err := s.wake(PlacedMessage, out.ID, map[string]string{
+			"orderId":       out.ID,
 			"orderer":       out.Orderer,
 			"recipient":     out.Recipient,
 			"portalBaseUrl": s.portalBase(),
