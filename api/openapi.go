@@ -377,7 +377,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Migration result", tObject())}},
 		{"POST", "/api/v1/instances/{key}/migrate/fork", s.handleForkInstance, apiOp{
-			summary: "Continue a running instance in a NEW instance of another version: the instance is ended where it is, the successor starts at the resume elements named (or proposed from where its tokens are), carrying its variables and data objects, and each record names the other. In-flight jobs and tasks end with the predecessor. Refused with 409 and the same plan when it does not hold; a reason is required (admin-only when auth is on, ADR-draft-forked-instance-migration)", tag: "Instances", role: RoleAdmin,
+			summary: "Continue a running instance in a NEW instance of another version: the instance is ended where it is, the successor starts at the resume elements named (or proposed from where its tokens are), carrying its variables and data objects, and each record names the other. In-flight jobs and tasks end with the predecessor. Refused with 409 and the same plan when it does not hold; a reason is required (admin-only when auth is on, ADR-0389)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, reason, and the element ids to resume at", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "reason": tString(), "resume": tArray(),
 			}, "targetProcessDefKey", "reason")),

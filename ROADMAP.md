@@ -986,7 +986,7 @@ What it takes to run this for real.
   ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md)).
   **ADR-0162 is complete.**
 - ✅ **Forked instance migration**
-  ([ADR-draft-forked-instance-migration](docs/adr/draft-forked-instance-migration.md)):
+  ([ADR-0389](docs/adr/0389-forked-instance-migration.md)):
   the answer to the refusal ADR-0162's validator is designed to give. Where a token
   cannot be rebound — its element is gone from the target version, or is a different kind
   of element there — the instance is ended where it is and its work **continues in a new

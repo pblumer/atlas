@@ -51,7 +51,7 @@ type migrationPlanResp struct {
 	Migratable bool `json:"migratable"`
 	// Fork is what would happen instead if this instance were forked onto the same
 	// target: ended where it is, and continued in a new instance of that version
-	// (ADR-draft-forked-instance-migration). It rides on the same answer because the
+	// (ADR-0389). It rides on the same answer because the
 	// question an operator has when a rebinding is refused is "then what?", and a
 	// refusal with no next step is what sent them back to cancel-and-restart. Absent
 	// only when the plan could not be built far enough to ask.
@@ -68,7 +68,7 @@ type migrationRequest struct {
 	Reason              string          `json:"reason"`
 	Mapping             []migrationPair `json:"mapping"`
 	// Resume names where a *fork* would pick the work up again, by element id in the
-	// target version (ADR-draft-forked-instance-migration). It is ignored by the
+	// target version (ADR-0389). It is ignored by the
 	// in-place endpoints and empty means "propose them from where the tokens are now",
 	// which is what the dialog opens with.
 	Resume []string `json:"resume,omitempty"`

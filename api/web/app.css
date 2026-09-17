@@ -588,7 +588,7 @@ textarea::placeholder {
 .mig-moved { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
 .mig-err { color: var(--warn); }
 
-/* The fork alternative (ADR-draft-forked-instance-migration). It sits below the in-place
+/* The fork alternative (ADR-0389). It sits below the in-place
    plan and reads as the second answer to the same question, not as a second dialog: the
    rebinding is what an operator wants whenever it holds, and a fork ends the instance it
    continues. Dimmed while the rebinding is still on the table, for exactly that reason. */
@@ -613,7 +613,7 @@ textarea::placeholder {
 .ops-hrow.mig .ops-hname { font-style: italic; }
 /* A fork row is the same kind of rule as a migration — the story does not continue below
    it — but it is a different fact: the work left for another instance rather than
-   carrying on here under a new version (ADR-draft-forked-instance-migration). */
+   carrying on here under a new version (ADR-0389). */
 .ops-hrow.mig.fork { border-top-style: dashed; border-bottom-style: dashed; }
 .ops-hicon.mig { color: var(--accent); }
 .ops-mig {

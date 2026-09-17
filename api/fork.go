@@ -22,7 +22,7 @@ type forkParked struct {
 }
 
 // forkPlanResp answers "if this instance cannot be rebound, where would it continue?"
-// (ADR-draft-forked-instance-migration). Like the migration plan it writes nothing, and
+// (ADR-0389). Like the migration plan it writes nothing, and
 // it is also what the fork endpoint returns when it refuses — so the two surfaces cannot
 // disagree about what is wrong.
 type forkPlanResp struct {
@@ -225,7 +225,7 @@ func (s *Server) planFork(piKey, targetDefKey uint64, resume []string) (forkPlan
 
 // handleForkInstance ends a running instance and continues its work in a new instance of
 // another version of its process, at the resume points the request names
-// (ADR-draft-forked-instance-migration).
+// (ADR-0389).
 //
 // It is the operator's next step after [Server.handleMigrateInstance] has refused, and
 // it is a different operation rather than a fallback: in-flight jobs end with the

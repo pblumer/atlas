@@ -10142,7 +10142,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       bits.push(metaItem("correlationKey", `<code>${esc(inst.correlationKey)}</code>`, "The message correlation key this instance started with"));
     }
     // A forked instance's work is in another instance, and an operator reading this one
-    // needs to be able to get there (ADR-draft-forked-instance-migration). It matters
+    // needs to be able to get there (ADR-0389). It matters
     // most on the predecessor: "terminated" on its own reads as somebody cancelling it,
     // where the truth is that its work moved to another version.
     if (inst.successorInstanceKey) {
@@ -11576,7 +11576,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   // rather than all the way to the top-level Instances list (still one click away in the
   // nav bar). Deep-linking straight to a replay lands there too, on the instance's process.
   root.querySelector("#rp-instances").href = `#/operations/p/${tl.processDefKey}`;
-  // A forked instance's story spans two keys (ADR-draft-forked-instance-migration): this
+  // A forked instance's story spans two keys (ADR-0389): this
   // replay ends where the work left, or begins where it arrived. Either way the rest of
   // it is one click away — without the link, an instance that stops mid-diagram reads as
   // a defect, and one that starts mid-diagram reads as a ghost.
@@ -12072,7 +12072,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
 
   // forkDetail is the Details panel for a fork row: where this instance's work went, or
   // where it came from, and why somebody decided that
-  // (ADR-draft-forked-instance-migration). It says plainly what a fork costs, because
+  // (ADR-0389). It says plainly what a fork costs, because
   // the consequence is easy to misread in both directions — the predecessor looks
   // cancelled, and the successor looks like it started in the middle of the diagram.
   function forkDetail(s) {
@@ -13383,7 +13383,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       if (s.action === "fork") {
         // Drawn like the migration rule: the work does not continue below this row, it
         // continues in another instance — which is the one thing the row exists to say
-        // (ADR-draft-forked-instance-migration).
+        // (ADR-0389).
         return `<div class="ops-hrow mig fork" data-i="${i}" data-eik="0"
             title="${esc((s.fork && s.fork.reason) || "Forked to another instance")}">
           <span class="ops-hicon mig">&#8599;</span>

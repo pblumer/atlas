@@ -62,7 +62,7 @@ func forkTargetShapes(t testing.TB) (cp *compiler.CompiledProcess, ids map[strin
 	}
 }
 
-// TestValidateForkRefusesResumePointsThatCannotRun is the gate ADR-draft-forked-instance-migration
+// TestValidateForkRefusesResumePointsThatCannotRun is the gate ADR-0389
 // puts in front of the command: a resume point that cannot honestly seed an execution is
 // refused *before* the predecessor is terminated, because afterwards there is nothing to
 // go back to.

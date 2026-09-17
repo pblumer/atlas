@@ -91,7 +91,7 @@ export function forkSummary(fork) {
 // again, and what it would cost. It is shown beside the in-place plan rather than
 // instead of it, because the two are different operations and the cheaper one is almost
 // always right — a fork is what is left when the rebinding cannot hold
-// (ADR-draft-forked-instance-migration).
+// (ADR-0389).
 export function forkHTML(fork) {
   if (!fork) return "";
   const s = forkSummary(fork);

@@ -657,7 +657,7 @@ func (p *Processor) MigrateInstance(v model.ProcessMigrationValue, actor, reason
 }
 
 // ForkInstance enqueues the fork of a running instance onto another deployed version of
-// its process (ADR-draft-forked-instance-migration): the instance is ended where it is
+// its process (ADR-0389): the instance is ended where it is
 // and its work continues in a *new* instance of that version, seeded at the resume
 // elements given, carrying its root-scope variables and data objects, with each record
 // naming the other.

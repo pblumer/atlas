@@ -140,7 +140,7 @@ func (p *Processor) registerBehaviors() {
 // the elements it starts at.
 //
 // It exists because an instance is created in two ways now — a creation command, and a
-// fork continuing another instance's work (ADR-draft-forked-instance-migration) — and
+// fork continuing another instance's work (ADR-0389) — and
 // both must emit the *identical* events. An instance built by a second code path would
 // be an instance recovery rebuilds differently from the one that ran.
 type instanceSeed struct {
@@ -240,7 +240,7 @@ func activateInstance(c *ProcessingContext, piKey uint64, seed instanceSeed) {
 			Kind:     model.VarNull,
 		}
 		// A fork carries the value and data state the instance it continues had reached
-		// (ADR-draft-forked-instance-migration). Resetting an object to its declared
+		// (ADR-0389). Resetting an object to its declared
 		// initial state would be the one piece of that instance's work silently thrown
 		// away — and the declared state is still the answer for an object the
 		// predecessor never wrote, because the map simply does not name it.
@@ -339,7 +339,7 @@ func handleProcessInstanceTerminating(c *ProcessingContext) {
 
 // terminateInstance is that teardown, with one addition: successor is the instance
 // continuing this one's work when the termination is a fork
-// (ADR-draft-forked-instance-migration), and 0 for every ordinary cancellation. It is
+// (ADR-0389), and 0 for every ordinary cancellation. It is
 // written onto the terminal event, so the history record still names where the work
 // went — which is what keeps a forked-away instance distinguishable from a cancelled
 // one, both of which are PITerminated.

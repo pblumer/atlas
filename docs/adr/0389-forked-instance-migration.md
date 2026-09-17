@@ -1,4 +1,4 @@
-# ADR-DRAFT: Forked instance migration
+# ADR-0389: Forked instance migration
 
 - **Status:** Accepted
 - **Implementation:** Landed

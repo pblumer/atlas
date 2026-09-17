@@ -965,7 +965,7 @@ func runtimeTools() []Tool {
 				"call atlas_migration_plan first and read its 'fork' block before using this. A 'reason' is " +
 				"required and recorded as an operator action on both instances. Refused (409) with the same " +
 				"fork plan when it does not hold, writing nothing. Returns the plan plus " +
-				"'successorInstanceKey' (ADR-draft-forked-instance-migration).",
+				"'successorInstanceKey' (ADR-0389).",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -1081,7 +1081,7 @@ func migrationMappingSchema() map[string]any {
 // version, which is the only element identity a human controls. Optional everywhere —
 // omitting it asks the server for the proposal derived from where the tokens are now,
 // which is right whenever the ids survived the edit
-// (ADR-draft-forked-instance-migration).
+// (ADR-0389).
 func forkResumeSchema() map[string]any {
 	return map[string]any{
 		"type": "array",
@@ -1113,7 +1113,7 @@ func migrationBody(args map[string]any, withReason bool) ([]byte, error) {
 	}
 	// Resume points ride on the same body: the plan endpoint answers both readings of
 	// "move this instance to that version" at once, and the fork endpoint takes them as
-	// where the successor starts (ADR-draft-forked-instance-migration).
+	// where the successor starts (ADR-0389).
 	if raw, ok := args["resume"]; ok && raw != nil {
 		body["resume"] = raw
 	}

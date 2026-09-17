@@ -10,7 +10,7 @@ import (
 // ValidateFork reports every reason an instance cannot be forked onto the target
 // version at the given resume points: ended where it is, and continued as a new
 // instance of `to` starting at those elements
-// (ADR-draft-forked-instance-migration).
+// (ADR-0389).
 //
 // A fork is what an operator reaches for when [ValidateMigration] has refused — the
 // token sits on an element the target version no longer has, or has as something else,
@@ -137,7 +137,7 @@ func incomingCount(cp *compiler.CompiledProcess, target int32) int {
 
 // handleProcessInstanceForking ends a running instance and continues its work in a new
 // instance of another deployed version, at the resume points the command carries
-// (ADR-draft-forked-instance-migration).
+// (ADR-0389).
 //
 // Like a migration, the API has already validated and refused; this re-runs the same
 // check on the run loop, because between that answer and this command the instance is

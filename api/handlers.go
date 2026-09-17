@@ -392,7 +392,7 @@ type timelineStep struct {
 	Migration *migrationView `json:"migration,omitempty"`
 	// Fork is the other step that is not an element activation: the point at which this
 	// instance's work left for a new instance of another version, or arrived from an
-	// older one (ADR-draft-forked-instance-migration). A replay that simply stopped
+	// older one (ADR-0389). A replay that simply stopped
 	// mid-diagram reads as a defect and one that starts mid-diagram reads as a ghost;
 	// this row is what makes each of them a decision somebody made, with a reason.
 	// Absent on every ordinary step; present only with Action "fork".
@@ -504,7 +504,7 @@ type instanceTimelineResp struct {
 	// why a step names an element the diagram does not contain.
 	Migrated bool `json:"migrated,omitempty"`
 	// PredecessorInstanceKey and SuccessorInstanceKey are the two ends of a fork
-	// (ADR-draft-forked-instance-migration). A replay that stops mid-diagram is not a
+	// (ADR-0389). A replay that stops mid-diagram is not a
 	// defect when the instance was forked away: the rest of the story is in the
 	// instance named here, under the version that runs it.
 	PredecessorInstanceKey uint64 `json:"predecessorInstanceKey,omitempty"`
@@ -536,7 +536,7 @@ type instanceResp struct {
 	// migrated, and what it reports is what the log recorded, not what is true now.
 	Archived bool `json:"archived,omitempty"`
 	// PredecessorInstanceKey and SuccessorInstanceKey are the two ends of a fork
-	// (ADR-draft-forked-instance-migration): the instance this one continues, and the
+	// (ADR-0389): the instance this one continues, and the
 	// one continuing it. A terminated row carrying a successor ended because its work
 	// moved to another version, not because somebody cancelled it — which is the one
 	// thing the lifecycle state cannot say on its own, since both are "terminated".
@@ -2084,7 +2084,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				// A fork is instance-wide like a migration, and deliberately *not* a
 				// version boundary: the predecessor ran only its own version, and the
 				// successor only the new one, so neither instance's element indices are
-				// ever read through two graphs (ADR-draft-forked-instance-migration).
+				// ever read through two graphs (ADR-0389).
 				if v.Kind == model.OperatorActionForkedTo || v.Kind == model.OperatorActionForkedFrom {
 					forkRows = append(forkRows, forkRow{pos: pos, at: ts, kind: v.Kind, actor: v.Actor, reason: v.Reason})
 					return nil

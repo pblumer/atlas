@@ -336,7 +336,7 @@ type ProcessInstanceValue struct {
 	// PredecessorInstanceKey is the instance this one continues: a fork migration ends
 	// an instance whose tokens cannot be rebound onto another version and starts this
 	// one in that version at operator-named resume points, carrying the data across
-	// (ADR-draft-forked-instance-migration). 0 for every instance that began on its own.
+	// (ADR-0389). 0 for every instance that began on its own.
 	//
 	// It is the successor's half of a link both records carry, so either instance
 	// answers "where did this come from" and "where did this go" without a scan.
@@ -345,7 +345,7 @@ type ProcessInstanceValue struct {
 	// event of a forked-away instance, so the history record still names where the work
 	// went. 0 for every instance that ended on its own account — which is what keeps a
 	// forked predecessor distinguishable from an ordinary cancellation, both of which
-	// are PITerminated (ADR-draft-forked-instance-migration).
+	// are PITerminated (ADR-0389).
 	SuccessorInstanceKey uint64
 }
 
@@ -413,7 +413,7 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	// The two fork links are the newest appended fields: a record written before them
 	// ends after the purge due date and leaves both zero — an instance that neither
 	// continues another nor was continued by one
-	// (ADR-draft-forked-instance-migration).
+	// (ADR-0389).
 	if len(tail) >= 40 {
 		v.PredecessorInstanceKey = binary.LittleEndian.Uint64(tail[32:])
 	}
@@ -817,7 +817,7 @@ const (
 	// OperatorActionForkedTo is written on the instance an operator forked *away from*:
 	// its tokens could not be rebound onto the target version, so it was terminated and
 	// its work continued in a new instance of that version
-	// (ADR-draft-forked-instance-migration). Which instance that is, is on the record —
+	// (ADR-0389). Which instance that is, is on the record —
 	// SuccessorInstanceKey — so this kind carries only who ended it and why.
 	OperatorActionForkedTo
 	// OperatorActionForkedFrom is the same fork seen from the successor: the instance
