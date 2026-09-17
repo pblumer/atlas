@@ -364,6 +364,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **One position in the portal carried two different level names.** The catalogue
+  screen and the basket both label a position Bundle, Marktleistung or Service, and
+  Atlas has no such typing — the level is derived from the containment graph. It was
+  derived twice, differently: the cascade used depth, the basket used whether a part
+  came with the whole. The direct part of a package was a Marktleistung in one half
+  of the screen and a Service in the other. Underneath that, every product nothing
+  contained was called a bundle, so a single product with nothing inside it was
+  announced as something made of other things.
+
+  One rule now decides the level and all three views read it — the catalogue, the
+  basket and what a person already holds, which was a third derivation again: a root with parts is a
+  bundle, a root without them is an offering, a direct part of a root is an
+  offering, and anything deeper is a service. Whether a position can be taken out is
+  answered per row by the control it carries, which is the different question the
+  basket had been answering with the level. Display only — no stored release, API or
+  order in flight is affected, because the level has never been written down
+  (ADR-draft-portal-level-names).
+
 - **An order never said which shape of a product was ordered.** A variant is one
   orderable shape — a colour, a licence tier — and the catalogue has carried them from
   the start. Nothing ever wrote one down: the order line had the field, the fulfilment

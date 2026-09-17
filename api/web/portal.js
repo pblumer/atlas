@@ -497,6 +497,56 @@ const state = {
 // says so, rather than inventing a grouping: a column filled with a guess is
 // worse than one that explains what it is waiting for.
 
+// parentIn names the item that directly contains this one, or "" for a root.
+//
+// Both kinds of containment count. Whether something can be taken out of the whole
+// is a different question from whether it sits inside it, and this one is about
+// where it sits.
+function parentIn(rel, child) {
+  for (const [whole, parts] of Object.entries((rel || {}).includes || {})) {
+    if ((parts || []).includes(child)) return whole;
+  }
+  for (const [whole, parts] of Object.entries((rel || {}).options || {})) {
+    if ((parts || []).includes(child)) return whole;
+  }
+  return '';
+}
+
+// levelOf says what one position is called, and it is the only thing that does
+// (ADR-draft-portal-level-names).
+//
+// Atlas has no Bundle/Marktleistung/Service typing: an item is an item, and the
+// hierarchy is the containment graph. So the level is read off position in that
+// graph — once, here, rather than once per view. The cascade used depth and the
+// basket used *kind*, so the direct part of a bundle was a Marktleistung in one
+// column and a Service in the other: one position, two names, on one screen.
+//
+// A root that contains nothing is not a bundle. A bundle is a thing made of other
+// things, and announcing a single product as one says something untrue about it
+// in the one word the column has. It is an offering — what the catalogue's own
+// vocabulary calls a thing that is offered on its own.
+//
+// Depth beyond the third level keeps the third name. The screen has three columns
+// and a deeper graph has to land somewhere; calling it a service is true of it,
+// and inventing a fourth word for a shape nobody has drawn would not be.
+function levelOf(rel, id) {
+  const r = rel || {};
+  const hasParts = ((r.includes || {})[id] || []).length > 0
+    || ((r.options || {})[id] || []).length > 0;
+  // Depth from the one walk that already knows how to do it, cycles and all. A
+  // second traversal written here would be a second place for "how deep is this"
+  // to be answered, which is the shape of the defect this rule exists to remove.
+  const d = depthOf(r, id);
+  if (d === 0) return hasParts ? 'bundle' : 'offering';
+  return d === 1 ? 'offering' : 'service';
+}
+
+// levelName is that answer in the reader's language, and the same word the column
+// heads carry — which is the whole point of there being one rule.
+function levelName(rel, id) {
+  return t(`col.${levelOf(rel, id)}`);
+}
+
 // partsOf returns what an item directly carries, integral parts first.
 //
 // The two kinds stay apart, because they mean opposite things to a basket: an
@@ -1050,15 +1100,7 @@ function renderSearch(rel, by) {
 // parentOf resolves which bundle and which offering an item sits under, so a hit
 // can open the cascade where the thing actually is.
 function parentOf(rel, id) {
-  const up = (child) => {
-    for (const [whole, parts] of Object.entries(rel.includes || {})) {
-      if ((parts || []).includes(child)) return whole;
-    }
-    for (const [whole, parts] of Object.entries(rel.options || {})) {
-      if ((parts || []).includes(child)) return whole;
-    }
-    return '';
-  };
+  const up = (child) => parentIn(rel, child);
   const first = up(id);
   if (!first) return {};
   const second = up(first);
@@ -1118,7 +1160,16 @@ function renderCatalogue() {
         state.offering = '';
         render();
       },
-      trail: el('span', {}, starButton(b.id), ' ', toggle(rel, b.id, false), ' ', infoButton(b.id)),
+      // The column holds every product nothing contains, and not all of them are
+      // bundles: one with no parts is an offering, and it says so rather than
+      // being announced in the column head's word. The alternative was to move it
+      // to another column, which would have made the first column no longer the
+      // place a person starts.
+      trail: el('span', {},
+        levelOf(rel, b.id) !== 'bundle'
+          ? el('span', { class: 'muted', style: 'font-size:12px' }, `${levelName(rel, b.id)} `)
+          : null,
+        starButton(b.id), ' ', toggle(rel, b.id, false), ' ', infoButton(b.id)),
     })));
 
   const offeringCol = el('div', { class: 'col' },
@@ -1236,42 +1287,55 @@ function renderBasket() {
   };
   for (const id of state.basket) add(id, false);
 
-  // And what those products offer beside themselves.
+  // And what those products offer beside themselves, that nobody has taken.
   //
   // An aggregation is an offer, not a consequence, so it is never pulled in — it
-  // is listed here unticked and taken deliberately (ADR-0312).
+  // is listed unticked and taken deliberately (ADR-0312).
   // It is listed *here* and not only in the column it hangs under because the
   // basket is the screen where somebody decides what they are actually asking
   // for: an offer reachable only by navigating back to a column they have left is
-  // an offer they will not see.
+  // an offer they will not see. Taking one moves it into its level column, where
+  // it is a position like any other.
   const offers = [];
   const offered = new Set();
   for (const x of shown) {
     for (const id of (rel.options || {})[x.id] || []) {
-      if (offered.has(id) || !by[id]) continue;
+      if (offered.has(id) || seen.has(id) || !by[id]) continue;
       offered.add(id);
       offers.push(id);
     }
   }
 
+  // The columns are the three levels, read from the one rule that decides them.
+  //
+  // They were "what was chosen" and "what came with it" — which is a different
+  // question wearing the level names: whether a position can be taken out is
+  // answered per row by its control, and where it sits is answered here. Reading
+  // one off the other is what made the direct part of a bundle a Marktleistung in
+  // the cascade and a Service here.
+  const row = (x) => cell({
+    text: textOf((by[x.id] || {}).texts, x.id),
+    lead: x.integral
+      ? el('button', { class: 'sq', disabled: 'disabled', title: t('note.included') }, '\u2212')
+      : el('button', {
+        class: 'sq',
+        'aria-label': t('act.discard'),
+        onclick: () => { state.basket.delete(x.id); render(); },
+      }, 'X'),
+    trail: infoButton(x.id),
+  });
+  const atLevel = (level) => shown.filter((x) => levelOf(rel, x.id) === level).map(row);
+
   const cols = el('div', { class: 'cascade' },
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.bundle')),
-      shown.filter((x) => !x.integral && !offered.has(x.id)).map((x) => cell({
-        text: textOf((by[x.id] || {}).texts, x.id),
-        trail: el('button', {
-          class: 'sq',
-          'aria-label': t('act.discard'),
-          onclick: () => { state.basket.delete(x.id); render(); },
-        }, 'X'),
-      }))),
+      atLevel('bundle')),
+    el('div', { class: 'col' },
+      el('div', { class: 'colhead' }, t('col.offering')),
+      atLevel('offering')),
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.service')),
-      shown.filter((x) => x.integral).map((x) => cell({
-        text: textOf((by[x.id] || {}).texts, x.id),
-        lead: el('button', { class: 'sq', disabled: 'disabled', title: t('note.included') }, '\u2212'),
-        trail: infoButton(x.id),
-      }))),
+      atLevel('service')),
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.options')),
       offers.map((id) => cell({
@@ -1283,9 +1347,11 @@ function renderBasket() {
           (by[id] || {}).price
             ? el('span', { class: 'muted', style: 'font-size:12px' }, `${by[id].price} `)
             : null,
+          // The level it will sit under once it is taken, so the same position is
+          // called the same thing before and after the decision.
+          el('span', { class: 'muted', style: 'font-size:12px' }, `${levelName(rel, id)} `),
           infoButton(id)),
-      }))),
-    el('div', { class: 'col' }));
+      }))));
 
   // The forms below the basket rather than beside each row: a form is taller than a
   // row and an integral part asks its own questions, so a column that had to hold
@@ -1852,13 +1918,11 @@ function renderServices() {
     });
   };
 
-  // Laid out across the same four levels the catalogue uses, so somebody reading
-  // what they hold sees it in the shape they ordered it in. The last column
-  // carries everything at depth two or deeper: a decomposition may go further
-  // than four levels, and pushing the rest off the screen would hide rights.
-  const at = (want) => ids.filter((id) => (want === 2
-    ? depthOf(rel, id) >= 2
-    : depthOf(rel, id) === want));
+  // Laid out across the same levels the catalogue and the basket use, from the same
+  // rule, so somebody reading what they hold sees it under the name they ordered it
+  // under. This was a third derivation of the level, and it disagreed with the
+  // other two about a product that has no parts.
+  const at = (level) => ids.filter((id) => levelOf(rel, id) === level);
 
   return el('div', {},
     el('div', { class: 'cascade' },
@@ -1872,13 +1936,13 @@ function renderServices() {
           .map((c) => cell({ text: c || t('cat.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.bundle')),
-        at(0).map(row)),
+        at('bundle').map(row)),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
-        at(1).map(row)),
+        at('offering').map(row)),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.service')),
-        at(2).map(row))),
+        at('service').map(row))),
     state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null);
 }
 
