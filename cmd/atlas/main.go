@@ -259,6 +259,16 @@ func runServe(args []string) error {
 	// truth and a missing or unusable checkpoint just means a full replay — so unlike
 	// the exporter and retention there is nothing here to opt into.
 	checkpointInterval := fs.Duration("checkpoint-interval", 5*time.Minute, "how often to snapshot applied state so a restart replays only the log past it (ADR-0131); 0 disables checkpointing")
+	stateCacheMB := fs.Int("state-cache-mb", envIntOr("ATLAS_STATE_CACHE_MB", 64),
+		"block cache for the state store, in MiB. Pebble's own default is 8, which is far too "+
+			"small once the store holds millions of keys: a scan that should be served from memory "+
+			"goes to disk and evicts everything else on the way through. 0 leaves Pebble's default")
+	stateMemtableMB := fs.Int("state-memtable-mb", envIntOr("ATLAS_STATE_MEMTABLE_MB", 16),
+		"write buffer for the state store, in MiB. Pebble's own default is 4 and it stops writes "+
+			"at two unflushed buffers, so a default store has 8 MiB of headroom before a write "+
+			"stall — which stalls the run loop, and with it every request. A larger buffer means "+
+			"recovery replays a longer log suffix after a crash; it costs recovery time, never "+
+			"durability (ADR-0005). 0 leaves Pebble's default")
 	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
@@ -327,6 +337,7 @@ func runServe(args []string) error {
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
 	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch}
+	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
 		ServiceName: envOr("OTEL_SERVICE_NAME", "atlas"),
@@ -354,7 +365,7 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, logging.Format(*logFormat), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -431,7 +442,24 @@ type retentionConfig struct {
 	batch    int
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+// storeConfig is how much memory the state store may use, in MiB. Both are resident
+// for the life of the process, so they are flags rather than constants: the defaults
+// suit a server holding a real workload, and a small deployment turns them down.
+type storeConfig struct {
+	cacheMB    int
+	memtableMB int
+}
+
+// options renders the config as the state package's open options. A zero or negative
+// value passes through as "leave Pebble's default", so unsetting a flag is meaningful.
+func (c storeConfig) options() []state.Option {
+	return []state.Option{
+		state.WithBlockCacheBytes(int64(c.cacheMB) << 20),
+		state.WithMemtableBytes(int64(c.memtableMB) << 20),
+	}
+}
+
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn bool, logFormat logging.Format, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -534,7 +562,11 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 			"no state store found; seeded it from the newest verified checkpoint so the compacted log's prefix is not needed")
 	}
 
-	store, err := state.Open(filepath.Join(dataDir, "state"))
+	// The engine's own store is the one that grows without bound, and the only one this
+	// process keeps for its whole life, so it is the one that gets the memory. Every
+	// other store here — a Playground session's, a conformance replay's — is short-lived
+	// and takes the package defaults.
+	store, err := state.Open(filepath.Join(dataDir, "state"), storeCfg.options()...)
 	if err != nil {
 		return err
 	}

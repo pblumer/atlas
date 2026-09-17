@@ -1,0 +1,20 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "The server no longer freezes for seconds at a time once its store grows",
+    "de": "Der Server setzt nicht mehr für Sekunden aus, sobald sein Datenbestand wächst"
+  },
+  "summary": {
+    "en": "On a server holding tens of thousands of running instances, every list in the Console would stop for seconds at a stretch, on a regular beat, and then the whole backlog arrived at once. Three pieces of housekeeping had quietly grown with the data and were doing their reading in the one place where the engine can only do one thing at a time — so while they read, nothing else was served, not even a request that only wanted to look. They now read alongside the engine instead of in front of it, and the count of running instances comes from a running tally rather than from walking every one of them. Nothing about the answers changed; the waiting did.",
+    "de": "Auf einem Server mit Zehntausenden laufenden Instanzen blieb in der Konsole regelmässig jede Liste für Sekunden stehen, und danach traf alles auf einmal ein. Drei Aufräumarbeiten waren unbemerkt mit dem Datenbestand mitgewachsen und lasen dabei an der einen Stelle, an der die Engine nur eines zur Zeit tun kann — solange sie lasen, wurde nichts anderes bedient, nicht einmal eine Anfrage, die bloss schauen wollte. Sie lesen jetzt neben der Engine statt vor ihr, und die Zahl der laufenden Instanzen kommt aus einer mitgeführten Zählung statt aus dem Durchgehen aller. An den Antworten hat sich nichts geändert, am Warten schon."
+  },
+  "try": {
+    "label": {
+      "en": "Open Operations",
+      "de": "Operations öffnen"
+    },
+    "route": "#/operations"
+  }
+}

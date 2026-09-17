@@ -42,6 +42,18 @@ type Service struct {
 	// [limits.Default]; the server overwrites them with its own once it has read
 	// the environment.
 	Limits limits.Limits
+
+	// Approvers resolves an approval rule's reference to somebody, for the report
+	// in approverreport.go. It is a settable field for the reason Limits is: the
+	// accounts and the groups belong to the server, which builds this service
+	// before it has them.
+	//
+	// Nil is a real state and not a bug — a Service built by a test that does not
+	// care about approvals has none — so the report refuses rather than guessing.
+	// Both guesses are available and both are worse than a refusal: every
+	// reference unresolvable reports the whole catalogue as broken, and every one
+	// resolvable reports a clean estate nobody checked.
+	Approvers ApproverLookup
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).

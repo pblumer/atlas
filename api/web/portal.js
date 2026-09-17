@@ -68,6 +68,7 @@ const STRINGS = {
     'col.category': 'Kategorie',
     'col.bundle': 'Bundle',
     'col.offering': 'Marktleistung',
+    'col.options': 'Optional',
     'col.service': 'Service',
     'act.back': '< zurück',
     'act.discard': 'Auftrag löschen',
@@ -118,11 +119,16 @@ const STRINGS = {
     'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
+    'variant.label': 'Ausführung',
+    'variant.none': 'Bitte wählen',
+    'variant.missing': 'Bitte wählen Sie zuerst für jede Position eine Ausführung.',
     'info.title': 'Angaben zum Service',
     'info.id': 'Kennung',
     'info.approval': 'Genehmigung',
     'info.none': 'keine',
     'info.repeatable': 'Mehrfach beziehbar',
+    'info.includes': 'Fest enthalten',
+    'info.options': 'Optional wählbar',
     'info.yes': 'ja',
     'info.no': 'nein',
     'services.none': 'Sie beziehen zurzeit keine Leistungen.',
@@ -189,6 +195,7 @@ const STRINGS = {
     'col.category': 'Category',
     'col.bundle': 'Bundle',
     'col.offering': 'Offering',
+    'col.options': 'Optional',
     'col.service': 'Service',
     'act.back': '< back',
     'act.discard': 'Discard order',
@@ -237,11 +244,16 @@ const STRINGS = {
     'tbl.noMatch': 'No order matches the search.',
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
+    'variant.label': 'Version',
+    'variant.none': 'Please choose',
+    'variant.missing': 'Choose a version for every line before ordering.',
     'info.title': 'About this service',
     'info.id': 'Identifier',
     'info.approval': 'Approval',
     'info.none': 'none',
     'info.repeatable': 'May be held more than once',
+    'info.includes': 'Always included',
+    'info.options': 'Optional',
     'info.yes': 'yes',
     'info.no': 'no',
     'services.none': 'You currently hold no services.',
@@ -384,6 +396,15 @@ const state = {
   // card's button was pressed, so two bundles were two orders, two approvals and
   // two provisioning runs for one decision somebody made once.
   basket: new Set(),
+  // variants is which shape of each product was chosen, as itemId -> variantId.
+  //
+  // Kept beside the basket rather than on the basket entry, because the product
+  // that carries variants is usually not the one that was clicked: somebody orders
+  // a bundle and the colour belongs to the phone inside it. Nothing is answered in
+  // advance — variants are unordered on purpose, so there is no first one to fall
+  // back on, and a pre-selected colour would be shipped to everybody who did not
+  // look.
+  variants: {},
   // inBasket is whether the basket screen is showing instead of the cascade. Not
   // a fourth nav entry: the mockups make it the next step of the same screen,
   // reached and left by the action row.
@@ -475,6 +496,56 @@ const state = {
 // Kategorie has no source at all. It is rendered as the catalogue itself and
 // says so, rather than inventing a grouping: a column filled with a guess is
 // worse than one that explains what it is waiting for.
+
+// parentIn names the item that directly contains this one, or "" for a root.
+//
+// Both kinds of containment count. Whether something can be taken out of the whole
+// is a different question from whether it sits inside it, and this one is about
+// where it sits.
+function parentIn(rel, child) {
+  for (const [whole, parts] of Object.entries((rel || {}).includes || {})) {
+    if ((parts || []).includes(child)) return whole;
+  }
+  for (const [whole, parts] of Object.entries((rel || {}).options || {})) {
+    if ((parts || []).includes(child)) return whole;
+  }
+  return '';
+}
+
+// levelOf says what one position is called, and it is the only thing that does
+// (ADR-0383).
+//
+// Atlas has no Bundle/Marktleistung/Service typing: an item is an item, and the
+// hierarchy is the containment graph. So the level is read off position in that
+// graph — once, here, rather than once per view. The cascade used depth and the
+// basket used *kind*, so the direct part of a bundle was a Marktleistung in one
+// column and a Service in the other: one position, two names, on one screen.
+//
+// A root that contains nothing is not a bundle. A bundle is a thing made of other
+// things, and announcing a single product as one says something untrue about it
+// in the one word the column has. It is an offering — what the catalogue's own
+// vocabulary calls a thing that is offered on its own.
+//
+// Depth beyond the third level keeps the third name. The screen has three columns
+// and a deeper graph has to land somewhere; calling it a service is true of it,
+// and inventing a fourth word for a shape nobody has drawn would not be.
+function levelOf(rel, id) {
+  const r = rel || {};
+  const hasParts = ((r.includes || {})[id] || []).length > 0
+    || ((r.options || {})[id] || []).length > 0;
+  // Depth from the one walk that already knows how to do it, cycles and all. A
+  // second traversal written here would be a second place for "how deep is this"
+  // to be answered, which is the shape of the defect this rule exists to remove.
+  const d = depthOf(r, id);
+  if (d === 0) return hasParts ? 'bundle' : 'offering';
+  return d === 1 ? 'offering' : 'service';
+}
+
+// levelName is that answer in the reader's language, and the same word the column
+// heads carry — which is the whole point of there being one rule.
+function levelName(rel, id) {
+  return t(`col.${levelOf(rel, id)}`);
+}
 
 // partsOf returns what an item directly carries, integral parts first.
 //
@@ -703,6 +774,13 @@ async function order() {
     };
     for (const id of state.basket) add(id);
     const config = answersFor(rel, chosen);
+    // Only for what is actually being ordered. A choice left over from a product
+    // that was taken out again would be refused by the server as an answer about
+    // something the order does not carry — correctly, and for nothing.
+    const variants = {};
+    for (const c of chosen) {
+      if (state.variants[c.id]) variants[c.id] = state.variants[c.id];
+    }
 
     await api('/api/v1/orders', {
       method: 'POST',
@@ -712,11 +790,13 @@ async function order() {
         items: [...state.basket],
         ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
         ...(Object.keys(config).length ? { config } : {}),
+        ...(Object.keys(variants).length ? { variants } : {}),
       }),
     });
     state.basket.clear();
     state.chosen.clear();
     state.config = {};
+    state.variants = {};
     state.configError = '';
     state.inBasket = false;
     state.view = 'orders';
@@ -843,9 +923,19 @@ function infoButton(id) {
 // infoPanel is what the "i" opens: what the catalogue actually knows about a
 // service. It says nothing the release does not carry — a panel that padded
 // itself out with invented detail would be worse than no panel.
-function infoPanel(item) {
+function infoPanel(rel, item) {
   const kind = item.approval && item.approval.kind && item.approval.kind !== 'none'
     ? item.approval.kind : t('info.none');
+  // What the product carries, in two groups that are never merged: one is a
+  // consequence of ordering it and cannot be dropped, the other an offer standing
+  // beside it (ADR-0312). A single list would tell
+  // somebody they are buying three phone cases.
+  //
+  // This is not the panel branching on which column was clicked — a product with
+  // no parts simply has two empty lists and shows neither line. It reads the same
+  // two fields for everything, which is why the panel stays one thing.
+  const carried = namesOf(rel, (((rel || {}).includes || {})[item.id]) || []);
+  const offered = namesOf(rel, (((rel || {}).options || {})[item.id]) || []);
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
@@ -858,7 +948,21 @@ function infoPanel(item) {
     el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
     el('p', { class: 'muted' },
       `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
+    carried.length
+      ? el('p', { class: 'muted' }, `${t('info.includes')}: ${carried.join(', ')}`) : null,
+    offered.length
+      ? el('p', { class: 'muted' }, `${t('info.options')}: ${offered.join(', ')}`) : null,
     heldPill(item));
+}
+
+// namesOf turns part ids into the names the catalogue wrote for them.
+//
+// An id the release does not carry is dropped rather than printed raw: this is
+// read by somebody deciding what to order, and `iphone-18-huelle-clear` in a list
+// of names reads as the page having broken.
+function namesOf(rel, ids) {
+  const by = itemsById(rel || {});
+  return (ids || []).filter((id) => by[id]).map((id) => textOf(by[id].texts, id));
 }
 
 // star marks or unmarks one product.
@@ -996,15 +1100,7 @@ function renderSearch(rel, by) {
 // parentOf resolves which bundle and which offering an item sits under, so a hit
 // can open the cascade where the thing actually is.
 function parentOf(rel, id) {
-  const up = (child) => {
-    for (const [whole, parts] of Object.entries(rel.includes || {})) {
-      if ((parts || []).includes(child)) return whole;
-    }
-    for (const [whole, parts] of Object.entries(rel.options || {})) {
-      if ((parts || []).includes(child)) return whole;
-    }
-    return '';
-  };
+  const up = (child) => parentIn(rel, child);
   const first = up(id);
   if (!first) return {};
   const second = up(first);
@@ -1064,7 +1160,16 @@ function renderCatalogue() {
         state.offering = '';
         render();
       },
-      trail: el('span', {}, starButton(b.id), ' ', toggle(rel, b.id, false), ' ', infoButton(b.id)),
+      // The column holds every product nothing contains, and not all of them are
+      // bundles: one with no parts is an offering, and it says so rather than
+      // being announced in the column head's word. The alternative was to move it
+      // to another column, which would have made the first column no longer the
+      // place a person starts.
+      trail: el('span', {},
+        levelOf(rel, b.id) !== 'bundle'
+          ? el('span', { class: 'muted', style: 'font-size:12px' }, `${levelName(rel, b.id)} `)
+          : null,
+        starButton(b.id), ' ', toggle(rel, b.id, false), ' ', infoButton(b.id)),
     })));
 
   const offeringCol = el('div', { class: 'col' },
@@ -1101,7 +1206,7 @@ function renderCatalogue() {
     ? [renderSearch(rel, by)]
     : [el('div', { class: 'cascade' }, category, bundleCol, offeringCol, serviceCol),
       state.info && by[state.info]
-        ? el('div', { style: 'margin-top:16px' }, infoPanel(by[state.info])) : null]);
+        ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null]);
   catalogueBody = body;
   catalogueBodyNode = el('div', {}, body());
 
@@ -1137,6 +1242,31 @@ function repaintCatalogueBody() {
   paint(catalogueBodyNode, catalogueBody());
 }
 
+// variantsMissing lists the basket's lines that still have no shape chosen.
+//
+// It walks the same expansion the basket draws, because the product carrying the
+// variants is frequently an integral part nobody clicked: ordering a bundle is
+// ordering the phone inside it, and the colour is still the orderer's to name.
+//
+// Held on the page as well as at the server. The server refuses such an order —
+// it must, since the basket is one caller of a route anybody may call — but a
+// round trip that comes back 400 loses the reader's place to tell them something
+// they could be told without leaving it.
+function variantsMissing() {
+  const rel = state.release || {};
+  const by = itemsById(rel);
+  const seen = new Set();
+  const out = [];
+  const walk = (id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (((by[id] || {}).variants || []).length && !state.variants[id]) out.push(id);
+    for (const p of (rel.includes || {})[id] || []) walk(p);
+  };
+  for (const id of state.basket) walk(id);
+  return out;
+}
+
 // renderBasket is the second step of the same screen: what has been chosen,
 // before anybody is asked to approve it.
 function renderBasket() {
@@ -1157,33 +1287,104 @@ function renderBasket() {
   };
   for (const id of state.basket) add(id, false);
 
+  // And what those products offer beside themselves, that nobody has taken.
+  //
+  // An aggregation is an offer, not a consequence, so it is never pulled in — it
+  // is listed unticked and taken deliberately (ADR-0312).
+  // It is listed *here* and not only in the column it hangs under because the
+  // basket is the screen where somebody decides what they are actually asking
+  // for: an offer reachable only by navigating back to a column they have left is
+  // an offer they will not see. Taking one moves it into its level column, where
+  // it is a position like any other.
+  const offers = [];
+  const offered = new Set();
+  for (const x of shown) {
+    for (const id of (rel.options || {})[x.id] || []) {
+      if (offered.has(id) || seen.has(id) || !by[id]) continue;
+      offered.add(id);
+      offers.push(id);
+    }
+  }
+
+  // The columns are the three levels, read from the one rule that decides them.
+  //
+  // They were "what was chosen" and "what came with it" — which is a different
+  // question wearing the level names: whether a position can be taken out is
+  // answered per row by its control, and where it sits is answered here. Reading
+  // one off the other is what made the direct part of a bundle a Marktleistung in
+  // the cascade and a Service here.
+  const row = (x) => cell({
+    text: textOf((by[x.id] || {}).texts, x.id),
+    lead: x.integral
+      ? el('button', { class: 'sq', disabled: 'disabled', title: t('note.included') }, '\u2212')
+      : el('button', {
+        class: 'sq',
+        'aria-label': t('act.discard'),
+        onclick: () => { state.basket.delete(x.id); render(); },
+      }, 'X'),
+    trail: infoButton(x.id),
+  });
+  const atLevel = (level) => shown.filter((x) => levelOf(rel, x.id) === level).map(row);
+
   const cols = el('div', { class: 'cascade' },
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.bundle')),
-      shown.filter((x) => !x.integral).map((x) => cell({
-        text: textOf((by[x.id] || {}).texts, x.id),
-        trail: el('button', {
-          class: 'sq',
-          'aria-label': t('act.discard'),
-          onclick: () => { state.basket.delete(x.id); render(); },
-        }, 'X'),
-      }))),
+      atLevel('bundle')),
+    el('div', { class: 'col' },
+      el('div', { class: 'colhead' }, t('col.offering')),
+      atLevel('offering')),
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.service')),
-      shown.filter((x) => x.integral).map((x) => cell({
-        text: textOf((by[x.id] || {}).texts, x.id),
-        lead: el('button', { class: 'sq', disabled: 'disabled', title: t('note.included') }, '\u2212'),
-        trail: infoButton(x.id),
-      }))),
-    el('div', { class: 'col' }), el('div', { class: 'col' }));
+      atLevel('service')),
+    el('div', { class: 'col' },
+      el('div', { class: 'colhead' }, t('col.options')),
+      offers.map((id) => cell({
+        text: textOf((by[id] || {}).texts, id),
+        // The same control the cascade uses, so a tick means one thing on the
+        // whole page: it adds to the basket, and a second press takes it out.
+        lead: toggle(rel, id, false),
+        trail: el('span', {},
+          (by[id] || {}).price
+            ? el('span', { class: 'muted', style: 'font-size:12px' }, `${by[id].price} `)
+            : null,
+          // The level it will sit under once it is taken, so the same position is
+          // called the same thing before and after the decision.
+          el('span', { class: 'muted', style: 'font-size:12px' }, `${levelName(rel, id)} `),
+          infoButton(id)),
+      }))));
 
   // The forms below the basket rather than beside each row: a form is taller than a
   // row and an integral part asks its own questions, so a column that had to hold
   // both would put the cascade and a text field in the same width.
   const asking = shown.filter((x) => configFormOf(rel, x.id));
 
+  // And which shape of each line was ordered, where the product comes in more than
+  // one. Below the columns for the same reason, and above the forms because it is
+  // the question that decides what the thing *is* rather than how it is set up.
+  //
+  // Nothing is selected when the list is drawn: variants are unordered on purpose,
+  // so there is no first one to fall back on, and a colour chosen by the page is a
+  // colour nobody chose.
+  const choosing = shown.filter((x) => ((by[x.id] || {}).variants || []).length);
+
   return el('div', {},
     cols,
+    choosing.length
+      ? el('div', { style: 'margin-top:18px' }, choosing.map((x) => el('div', { class: 'card cfg' },
+        el('h3', {}, `${t('variant.label')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
+        el('select', {
+          'aria-label': `${t('variant.label')}: ${textOf((by[x.id] || {}).texts, x.id)}`,
+          onchange: (e) => { state.variants[x.id] = e.target.value; render(); },
+        },
+        el('option', {
+          value: '',
+          ...(state.variants[x.id] ? {} : { selected: 'selected' }),
+        }, t('variant.none')),
+        ((by[x.id] || {}).variants || []).map((v) => el('option', {
+          value: v.id,
+          ...(state.variants[x.id] === v.id ? { selected: 'selected' } : {}),
+        }, textOf(v.texts, v.id)))))))
+      : null,
     asking.length
       ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },
         el('h3', {}, `${t('cfg.title')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
@@ -1717,13 +1918,11 @@ function renderServices() {
     });
   };
 
-  // Laid out across the same four levels the catalogue uses, so somebody reading
-  // what they hold sees it in the shape they ordered it in. The last column
-  // carries everything at depth two or deeper: a decomposition may go further
-  // than four levels, and pushing the rest off the screen would hide rights.
-  const at = (want) => ids.filter((id) => (want === 2
-    ? depthOf(rel, id) >= 2
-    : depthOf(rel, id) === want));
+  // Laid out across the same levels the catalogue and the basket use, from the same
+  // rule, so somebody reading what they hold sees it under the name they ordered it
+  // under. This was a third derivation of the level, and it disagreed with the
+  // other two about a product that has no parts.
+  const at = (level) => ids.filter((id) => levelOf(rel, id) === level);
 
   return el('div', {},
     el('div', { class: 'cascade' },
@@ -1737,14 +1936,14 @@ function renderServices() {
           .map((c) => cell({ text: c || t('cat.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.bundle')),
-        at(0).map(row)),
+        at('bundle').map(row)),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
-        at(1).map(row)),
+        at('offering').map(row)),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.service')),
-        at(2).map(row))),
-    state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(by[state.info])) : null);
+        at('service').map(row))),
+    state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null);
 }
 
 // The brand mark, and the order it is looked for in: the catalogue's own, then
@@ -1985,11 +2184,17 @@ function renderActions() {
     // absent with a reason beside it teaches them what the mode is.
     state.canOrder
       ? (state.inBasket
-        ? el('button', {
-          class: 'primary',
-          disabled: !count || state.busy,
-          onclick: order,
-        }, state.busy ? t('portal.ordering') : t('act.place'))
+        ? el('span', {},
+          // Said rather than left to be discovered: a button that is disabled
+          // without a sentence beside it reads as the page being broken.
+          variantsMissing().length
+            ? el('span', { class: 'muted', style: 'margin-right:8px' }, t('variant.missing'))
+            : null,
+          el('button', {
+            class: 'primary',
+            disabled: !count || state.busy || variantsMissing().length > 0,
+            onclick: order,
+          }, state.busy ? t('portal.ordering') : t('act.place')))
         : el('button', {
           class: 'primary',
           disabled: !count,

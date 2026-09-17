@@ -169,6 +169,16 @@ type placeReq struct {
 	// Recipient is who the products are for, defaulting to the orderer. They
 	// differ when an integration manager orders for somebody assigned to them.
 	Recipient string `json:"recipient,omitempty"`
+	// Variants names the shape of each ordered product that has more than one,
+	// keyed by item id.
+	//
+	// Keyed by item and not a field on a line, because the caller does not send
+	// lines: it sends what it chose, and an integral part carrying variants is
+	// never named in Items at all. It is a separate field rather than a reserved
+	// key inside Config because a variant is not an answer to a form — it is part
+	// of what was ordered, it is checked against the catalogue, and it is read by
+	// provisioning whether or not the product has a form.
+	Variants map[string]string `json:"variants,omitempty"`
 	// Config carries the answers to each product's configuration form, keyed by
 	// item id and then by the form's own field key
 	// (ADR-0358).
@@ -321,10 +331,16 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		if stray = s.strayAnswers(rel, ordered, req.Config); stray != "" {
 			return
 		}
+		// And which shape of each product was chosen. Checked here for the same
+		// reason and against the same expanded list: the product carrying the
+		// variants is usually an integral part, so the orderer never named it.
+		if stray = unresolvedVariant(rel, ordered, req.Variants); stray != "" {
+			return
+		}
 
 		out = Order{
 			ID: id, ReleaseID: rel.ID, Orderer: p.UserID, Recipient: recipient,
-			Lines:     linesFor(rel, ordered, has, req.Config),
+			Lines:     linesFor(rel, ordered, has, req.Config, req.Variants),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
 			CreatedAt: s.now(),
@@ -374,6 +390,81 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// unresolvedVariant reports what is wrong with the variants this order names, or
+// "" when nothing is.
+//
+// Three things are wrong, and they are three different mistakes:
+//
+//   - a product in the order that offers variants and was given none. The order
+//     would be stored, provisioned, and reach the target system saying "a phone"
+//     — which is not a thing anybody can hand over. There is no default, and
+//     picking the first would be the ordering the catalogue deliberately does not
+//     have (see catalog.Variant).
+//   - a variant the product does not offer. Stored, it would reach provisioning as
+//     a string that looks like an answer and names nothing.
+//   - a variant for a product that offers none, or that this order does not carry.
+//     Almost always a stale basket, and the honest answer is to say so rather than
+//     to drop it silently.
+//
+// Checked against the expanded order rather than against what the caller asked
+// for, because the product carrying the variants is frequently an integral part:
+// somebody orders a bundle and the colour belongs to the phone inside it.
+func unresolvedVariant(rel catalog.Release, ordered []string,
+	chosen map[string]string) string {
+
+	carried := make(map[string]catalog.Item, len(ordered))
+	for _, id := range ordered {
+		for _, it := range rel.Items {
+			if it.ID == id {
+				carried[id] = it
+				break
+			}
+		}
+	}
+	// Sorted throughout, so one bad basket is refused with one sentence every time.
+	named := make([]string, 0, len(chosen))
+	for id := range chosen {
+		named = append(named, id)
+	}
+	sort.Strings(named)
+	for _, id := range named {
+		it, inOrder := carried[id]
+		switch {
+		case !inOrder:
+			return fmt.Sprintf("the order names a variant for %q, which is not in it. "+
+				"Remove it or order the product it belongs to", id)
+		case len(it.Variants) == 0:
+			return fmt.Sprintf("%q comes in one shape and the order names a variant "+
+				"for it. Nothing would read it, so it is refused rather than stored", id)
+		case !offersVariant(it, chosen[id]):
+			return fmt.Sprintf("%q does not come in %q", id, chosen[id])
+		}
+	}
+	missing := make([]string, 0, len(ordered))
+	for _, id := range ordered {
+		if it, ok := carried[id]; ok && len(it.Variants) > 0 && chosen[id] == "" {
+			missing = append(missing, id)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		return fmt.Sprintf("%q comes in more than one shape and the order does not say "+
+			"which. An order that does not name the variant cannot be provisioned",
+			missing[0])
+	}
+	return ""
+}
+
+// offersVariant reports whether an item carries the named variant.
+func offersVariant(it catalog.Item, id string) bool {
+	for _, v := range it.Variants {
+		if v.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // linesFor turns the resolved product ids into lines, each carrying the processes
 // its product is bound to as the release froze them.
 //
@@ -387,7 +478,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 // Skipped also counts as satisfied, so a line that requires this one is not left
 // waiting for something nobody is going to provision.
 func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
-	config map[string]map[string]string) []Line {
+	config map[string]map[string]string, variants map[string]string) []Line {
 	bound := make(map[string]catalog.Item, len(rel.Items))
 	for _, it := range rel.Items {
 		bound[it.ID] = it
@@ -425,6 +516,7 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 			Price:      it.Price,
 			ConfigForm: it.ConfigForm,
 			Config:     copyAnswers(config[id]),
+			VariantID:  variants[id],
 			Integral:   carried[id],
 			Includes:   partsOf(rel, id, inOrder),
 			Approval: Approval{

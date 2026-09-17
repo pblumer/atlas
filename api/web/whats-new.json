@@ -2,6 +2,45 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "how-long-the-single-writer-is-held-is-now-a-metric",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now measure the pause that makes the interface feel stuck",
+        "de": "Die Pause, die sich als hängende Oberfläche anfühlt, ist jetzt messbar"
+      },
+      "summary": {
+        "en": "Atlas does one thing at a time where it changes state, and everything else — including a request that only wants to read — waits its turn. So a single slow turn is not one slow request, it is the whole server standing still, and nothing measured it: the existing counters describe what the engine processed, not how long somebody waited to be let in. Two figures now go to your metrics endpoint: how long each turn occupied the server, and how long callers queued before theirs began. The first says what caused a pause, the second says whether anyone felt it. There is nothing to switch on and no cost when you collect no metrics.",
+        "de": "Atlas tut an der Stelle, an der es seinen Zustand ändert, immer nur eines zur Zeit — alles andere wartet, auch eine Anfrage, die bloss lesen will. Ein einzelner langsamer Durchlauf ist damit keine langsame Anfrage, sondern ein Stillstand des ganzen Servers, und gemessen hat das bisher nichts: Die vorhandenen Zähler beschreiben, was die Engine verarbeitet hat, nicht wie lange jemand auf Einlass gewartet hat. Zwei Werte gehen nun an Ihren Metrik-Endpunkt: wie lange jeder Durchlauf den Server belegte und wie lange Aufrufer davor in der Schlange standen. Der erste nennt die Ursache einer Pause, der zweite sagt, ob sie jemand gespürt hat. Es gibt nichts einzuschalten, und wer keine Metriken erhebt, zahlt nichts dafür."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
+      "id": "a-standing-list-of-the-approval-rules-that-reach-nobody",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A standing list of the approval rules that reach nobody.",
+        "de": "A standing list of the approval rules that reach nobody."
+      },
+      "summary": {
+        "en": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name.",
+        "de": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "an-outage-now-stops-at-the-worker-instead-of-at-every-token",
       "version": "Unreleased",
       "date": null,
@@ -65,6 +104,45 @@
         },
         "route": "#/console/ai-access"
       }
+    },
+    {
+      "id": "the-catalogue-screen-wears-the-console-s-buttons",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The catalogue screen wears the console's buttons.",
+        "de": "The catalogue screen wears the console's buttons."
+      },
+      "summary": {
+        "en": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three.",
+        "de": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-state-store-is-configured-for-the-size-it-has-grown-to-n",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The state store is set up for the size it has actually reached",
+        "de": "Der Datenspeicher ist auf die Grösse eingestellt, die er tatsächlich erreicht hat"
+      },
+      "summary": {
+        "en": "Atlas kept its state in a store running on its library's out-of-the-box settings: an 8 MB read cache and a single housekeeping thread. Those fit a store of a few thousand entries. On one holding millions they send every lookup to disk and let the housekeeping fall behind until writes are held back — which is felt as the server pausing. The server now sizes its own store for the job and you can adjust it: --state-cache-mb (64 by default) and --state-memtable-mb (16). Worth knowing before you upgrade: that is roughly 96 MB of memory the server did not use before, and both accept 0 to go back to the old behaviour.",
+        "de": "Atlas hielt seinen Zustand in einem Speicher, der auf den Voreinstellungen seiner Bibliothek lief: 8 MB Lesepuffer und ein einziger Aufräum-Thread. Das passt zu einem Speicher mit ein paar tausend Einträgen. Bei Millionen führt es dazu, dass jeder Zugriff auf die Platte geht und das Aufräumen so weit zurückfällt, bis Schreibvorgänge gebremst werden — spürbar als Aussetzer des Servers. Der Server stellt seinen Speicher nun passend ein, und Sie können nachjustieren: --state-cache-mb (Vorgabe 64) und --state-memtable-mb (16). Vor dem Upgrade zu wissen: Das sind rund 96 MB Arbeitsspeicher, die der Server vorher nicht belegte; mit 0 kehren beide zum alten Verhalten zurück."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
     },
     {
       "id": "the-approver-is-picked-and-picked-differently-depending-on-t",
@@ -173,93 +251,6 @@
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
-    },
-    {
-      "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The feed generator is Go, so the Go checks stop needing Node.",
-        "de": "The feed generator is Go, so the Go checks stop needing Node."
-      },
-      "summary": {
-        "en": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless.",
-        "de": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless."
-      },
-      "link": {
-        "label": "ADR-0012",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
-      }
-    },
-    {
-      "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The portal's corner names whoever the order is for, and the help moved to the end of the row.",
-        "de": "The portal's corner names whoever the order is for, and the help moved to the end of the row."
-      },
-      "summary": {
-        "en": "The corner said \"mich selbst\" to everybody.",
-        "de": "The corner said \"mich selbst\" to everybody."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-decision-whose-name-is-not-a-feel-identifier-is-deployable",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision may be called what it is called again",
-        "de": "Eine Entscheidung darf wieder heissen, wie sie heisst"
-      },
-      "summary": {
-        "en": "A DMN decision has two names: the label you read on the diagram, and the identifier other expressions reference. They are allowed to differ, and in models written elsewhere they often do. Atlas refused such a model on deploy with \"unknown variable\", which named the symptom and not the cause — so a decision in a chain had to be named like an identifier, and Kunden-Risiko or Decision A were out. Now both names work, everywhere a decision is addressed, and a decision already deployed keeps running under the name it was deployed with.",
-        "de": "Eine DMN-Entscheidung hat zwei Namen: die Beschriftung im Diagramm und den Bezeichner, über den andere Ausdrücke sie ansprechen. Sie dürfen sich unterscheiden, und in anderswo erstellten Modellen tun sie es häufig. Atlas wies ein solches Modell beim Deploy mit \"unknown variable\" zurück — eine Meldung, die das Symptom nennt und nicht die Ursache. Eine Entscheidung in einer Kette musste deshalb wie ein Bezeichner heissen; Kunden-Risiko oder Decision A waren ausgeschlossen. Jetzt greifen beide Namen, überall wo eine Entscheidung angesprochen wird, und eine bereits deployte Entscheidung läuft unter dem Namen weiter, mit dem sie deployt wurde."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Modeler"
-      ],
-      "try": {
-        "label": {
-          "en": "Open the decisions",
-          "de": "Entscheidungen öffnen"
-        },
-        "route": "#/console/decisions"
-      }
-    },
-    {
-      "id": "a-decision-that-returns-a-number-wrote-its-result-as-a-strin",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A decision's number arrives as a number",
-        "de": "Die Zahl einer Entscheidung kommt als Zahl an"
-      },
-      "summary": {
-        "en": "A business rule task whose decision returned an amount stored it as text. A gateway comparing that variable to a number then matched nothing, silently: no incident, no diagnostic, the token simply took the default path. The model's own type declaration now decides — a result declared a number is stored as a number, to the last decimal place — while a string that merely looks like a number, such as a policy number or a postcode beginning with zero, is left exactly as it is.",
-        "de": "Ein Business-Rule-Task, dessen Entscheidung einen Betrag lieferte, legte ihn als Text ab. Ein Gateway, das diese Variable mit einer Zahl vergleicht, traf daraufhin nichts — ohne Incident, ohne Hinweis: Das Token nahm einfach den Standardpfad. Jetzt entscheidet die Typdeklaration des Modells: Ein als Zahl deklariertes Ergebnis wird als Zahl gespeichert, auf die letzte Dezimalstelle genau. Eine Zeichenkette, die nur wie eine Zahl aussieht — eine Policennummer, eine Postleitzahl mit führender Null —, bleibt unverändert."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Decisions",
-        "Processes"
-      ]
     }
   ]
 }
