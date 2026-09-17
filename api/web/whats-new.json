@@ -211,6 +211,28 @@
       }
     },
     {
+      "id": "a-google-sheets-task-whose-spreadsheet-resolved-to-nothing-n",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A Google Sheets task missing its spreadsheet now names the empty value",
+        "de": "Eine Google-Sheets-Aufgabe ohne Tabelle benennt jetzt den leeren Wert"
+      },
+      "summary": {
+        "en": "A task usually takes its spreadsheet from a variable — the id, or the URL you pasted out of the browser. Start an instance without that variable and the value is empty, and Atlas used to ask Google about a spreadsheet with no id at all. Google answered \"Requested entity was not found\", which reads as though somebody had deleted the file and sent you looking for a spreadsheet that was exactly where you left it. The incident now names the operation and the value that came up empty, so the search starts at the instance's variables. The same check covers everything an operation needs: the spreadsheet, the sheet, the range, the title, and the rows to write.",
+        "de": "Eine Aufgabe bezieht ihre Tabelle meist aus einer Variablen — der Id oder der aus dem Browser kopierten URL. Startet eine Instanz ohne diese Variable, ist der Wert leer, und Atlas fragte Google bisher nach einer Tabelle ganz ohne Id. Google antwortete mit \"Requested entity was not found\", was klingt, als habe jemand die Datei gelöscht, und schickte Sie auf die Suche nach einer Tabelle, die unverändert an ihrem Platz lag. Der Incident benennt jetzt die Operation und den Wert, der leer aufgelöst wurde, sodass die Suche bei den Variablen der Instanz beginnt. Dieselbe Prüfung deckt alles ab, was eine Operation braucht: Tabelle, Blatt, Bereich, Titel und die zu schreibenden Zeilen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Workers",
+        "Operations"
+      ]
+    },
+    {
       "id": "a-task-folder-edited-twice-in-quick-succession-no-longer-kee",
       "version": "Unreleased",
       "date": null,
@@ -246,24 +268,6 @@
           "de": "Tasks öffnen"
         },
         "route": "#/tasks"
-      }
-    },
-    {
-      "id": "a-catalogue-could-say-a-part-was-integral-and-optional-at-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A catalogue could say a part was integral and optional at the same time.",
-        "de": "A catalogue could say a part was integral and optional at the same time."
-      },
-      "summary": {
-        "en": "The release keeps what a product is made of apart from what is offered alongside it, because they mean opposite things to a basket: an inclusion is ordered as a consequence of ordering the whole, and an option is an offer.",
-        "de": "The release keeps what a product is made of apart from what is offered alongside it, because they mean opposite things to a basket: an inclusion is ordered as a consequence of ordering the whole, and an option is an offer."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]
