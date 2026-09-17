@@ -279,7 +279,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs_only == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Paired with the per-package limit on the Test step below: that limit names the
+    # package it stopped, this cap only keeps a hang off a runner for the six-hour
+    # default. Raised from 20 with the limit, so the limit is always the one that fires.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -320,10 +323,31 @@ jobs:
             exit 1
           fi
 
-      # No -race and no -timeout: without the detector the api package is minutes rather
-      # than a quarter of an hour, and Go's default per-package limit is ample again.
+      # A per-package limit and a job cap, the same pairing as the race step above: the
+      # limit names the package, the cap only stops a hang.
+      #
+      # This step ran with neither, on the reasoning that without the race detector api
+      # is minutes rather than a quarter of an hour and Go's 10-minute default is ample
+      # again. The margin was thinner than that reads:
+      #
+      #   - api without -race measures ~180s on a developer machine.
+      #   - On 2026-09-16 this step failed at `FAIL api 600.055s` — Go's default — on a
+      #     pull request whose whole diff was six lines of Markdown under docs/adr.
+      #   - A re-run of that same commit the next morning passed, with the whole
+      #     `go test ./...` taking about five minutes. The cause was the runner, not the
+      #     tree.
+      #
+      # That is the runner variance the race step documents at length: two to six times
+      # slower across packages a diff never touched. 20m clears a sixfold slowdown of the
+      # measured 180s, and the job's 30-minute cap keeps the same gap above it that 45m
+      # and 60m keep above there, so the per-package limit fires first and says which
+      # package rather than the cap killing the job and saying nothing.
+      #
+      # A docs-only change cannot make api slower, so every failure this prevents was
+      # going to be diagnosed from scratch by whoever hit it. It buys headroom and does
+      # not fix the cause — api is most of what this step measures here too, issue #1001.
       - name: Test
-        run: go test ./...
+        run: go test -timeout=20m ./...
 
   e2e:
     name: e2e · token simulation

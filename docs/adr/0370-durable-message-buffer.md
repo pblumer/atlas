@@ -1,9 +1,58 @@
 # ADR-0370: A published message waits for its subscriber
 
-- **Status:** Proposed
+- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; amended 2026-09-17 — expiry at an entry point that states a commitment is a breach rather than a silent outcome; see the amendment notes below)
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
+
+> **Amendment (2026-09-16): this is a local fix first, and it has to earn its place as
+> one.** The record below argues the buffer mainly from the cross-node need, because
+> that is the need that makes it unavoidable. The delivery order is the other way
+> round: the buffer is built **before** anything can send to it from another node, and
+> is justified on its own.
+>
+> Two consequences follow, and both bind the first slice:
+>
+> - **The only writer is a local publish that declares a TTL.** The inbound peer
+>   endpoint belongs to [ADR-0372](0372-peer-message-delivery-worker.md) and is not in
+>   this slice. So the slice is worth building only if the opt-in fix for the
+>   publish-before-subscribe race is worth it *by itself* — and that is the claim it
+>   has to demonstrate, on a model that today has to be shaped around the race and
+>   afterwards does not.
+> - **"A message can arrive from the past" is the behaviour under test**, not a side
+>   effect noted in passing. The first failing test states it directly: publish with a
+>   TTL, subscribe afterwards, correlate exactly once. Because this adds a column
+>   family, the recovery test comes with it and is written up front
+>   ([ADR-0018](0018-test-driven-development.md)) — process, restart, replay, assert
+>   the buffer and its dedup window rebuild identically.
+>
+> Nothing in the decision changes. TTL still defaults to 0, so ADR-0020's no-op stands
+> for every deployed model, and the cross-node case still consumes the same buffer
+> when ADR-0372 is built.
+
+> **Amendment (2026-09-17): expiry is silent only where nothing was promised.** This
+> record decided that a buffered message expiring unconsumed is an ordinary outcome and
+> not an incident, because a fan-out nobody consumed would otherwise flood the incident
+> list ([ADR-0337](0337-incident-floods.md)). That stands wherever nothing was promised,
+> which is the default.
+>
+> [ADR-0373](0373-published-process-interface.md) now lets an entry point state a
+> **commitment** — a duration within which an accepted message will be correlated. Where
+> one is stated, expiry at that entry point is a **breach of it**, and the decision below
+> reads differently in exactly two places:
+>
+> - the incident this record declines to raise is raised after all, in the domain that
+>   made the promise. ADR-0337 still governs it, but as a bound on volume rather than as
+>   a reason for silence: breaches are rate-limited and aggregated per interface and per
+>   peer, because a rule that lets a remote sender open incidents here is otherwise a
+>   denial of service against this domain's operations view.
+> - `expiresAt` stops being only a cleanup deadline. It is the durable evidence that lets
+>   a breach which happened while this node was down be reconstructed on recovery rather
+>   than lost, and that lets a window which passed unobserved be recorded as
+>   **unmeasured** rather than as met.
+>
+> Nothing changes for an entry point without a commitment. TTL still defaults to 0 for a
+> locally published message, so ADR-0020's no-op stands for every deployed model.
 
 ## Context and problem statement
 

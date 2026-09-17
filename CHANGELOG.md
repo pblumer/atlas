@@ -184,6 +184,27 @@ _Changed_ / _Removed_ for each version.
   a different size, on a page where every other screen draws the accent-filled one. It
   only reads as wrong beside the Modeler, and the two are never on screen together,
   which is why nobody reported it.
+
+- **The state store is configured for the size it has grown to, not for Pebble's
+  defaults.** It was opened with only a merger set, which left an 8 MB block cache, a
+  4 MB write buffer that stops writes at two unflushed, and a single compaction
+  goroutine — sensible for an embedded store of a few thousand keys, and the reason a
+  store holding millions sends scans to disk and turns a compaction backlog into a write
+  stall, which stalls the run loop that issued it.
+
+  `state.Open` now takes options. Compaction concurrency is raised for every store, since
+  it costs CPU and an idle store starts none; the block cache (`--state-cache-mb`,
+  default 64) and write buffer (`--state-memtable-mb`, default 16) are set by the server
+  for its own long-lived store only, because a process may hold several — the Playground
+  opens one per session — and resident memory would multiply. Both accept 0 to fall back
+  to Pebble's default.
+
+  The write buffer's trade-off, stated because it is real: a larger one means the store
+  trails the log further after a crash, so recovery replays a longer suffix. That costs
+  recovery time and never durability — the WAL's fsync is the durability point (ADR-0005)
+  — and the checkpoint cadence bounds how long the suffix gets. The sizes themselves are
+  reasoned rather than measured against a production store; the record carries that as an
+  open question, and the flags exist so the answer can be corrected without a rebuild.
 - **The approver is picked, and picked differently depending on the kind.** This was
   the last typed identifier on the catalogue screen and the one that cost the most,
   because nothing reports a wrong value: an approval whose approver matches nobody is
@@ -498,6 +519,69 @@ _Changed_ / _Removed_ for each version.
 
   Nothing about the workaround is needed any more, and nothing published under it has
   to be redone: the refusal happened before anything was written.
+
+- **The server froze for seconds at a time, on a cadence, once its store grew.** Every
+  list in the Console stopped, everything the browser already had stayed responsive, and
+  after some seconds the whole backlog arrived at once. Nothing in the code had changed;
+  the store had — to ~50.000 active instances carrying ~200.000 tokens, over 2.000.000
+  finished instances of history behind them.
+
+  Three pieces of work grew with that store, and all three ran on the run loop, which is
+  the single writer *and* the gate every request passes through — an off-loop reader
+  still takes a loop turn to open its view, so holding the writer holds everything.
+
+  The checkpoint was the cadence. `checkpoint.Publish` checksums the snapshot it takes,
+  which means reading every SST file in the store, and it did that inside the `do()` turn
+  that took the snapshot. Measured at 735 MB/s with a warm page cache — 2,9 s for a 2 GB
+  store, linear from there — on the default five-minute interval. WAL compaction did the
+  same read again, through `checkpoint.Verify`, in a turn whose own comment called it
+  "bounded work — a few unlinks and one directory fsync". And `readStats` counted active
+  instances and live tokens by walking their column families: 48,9 ms at that population,
+  paid by `GET /api/v1/stats` — which the incident badge polls every five seconds for one
+  field — and by seven write paths that report the counts back in their response,
+  including `POST /api/v1/messages`, so a message-driven model paid it per message.
+
+  Only the snapshot needs the writer stopped; once taken it is hard links to immutable
+  files under a name nothing else looks at. So `Publish` splits into `Stage` and
+  `Staged.Commit`, `CompactLog` into `CompactionCut` and `CompactLogAt`, and the counts
+  come from the maintained ADR-0080 counters — 1,2 ms, and rising by half where the scan
+  rises elevenfold. Both single calls remain for tests and synchronous embedding. The
+  incident count stays a scan on purpose: an incident leaves state two ways, so a
+  maintained number would drift where a scan cannot.
+
+  What that costs, stated because it is real: a scan cannot be wrong, a counter can. If
+  any write ever put one of those records without its counter beside it, the number would
+  drift silently. `applyToState` is the only place either is written and it puts the two
+  in one `firstErr`, and `TestStatsReadFromCountersAgreeWithTheScan` holds the readings
+  against each other — but the guarantee is now maintenance rather than construction.
+
+  Two tests hold the line rather than a convention —
+  `TestCheckpointCommitRunsWithTheRunLoopFree` and
+  `TestCompactionVerificationRunsWithTheRunLoopFree` ask the loop whether it is free at
+  the moment each read begins — and two benchmarks keep the numbers above honest
+  (`BenchmarkChecksumDirBySize`, `BenchmarkStatsAtProductionSize`).
+  See `docs/adr/0382-whole-store-reads-leave-the-writer.md`.
+
+- **A Google Sheets task whose spreadsheet resolved to nothing now says so, instead of
+  asking Google about no spreadsheet at all.** A model addresses a spreadsheet by a value
+  it may author as FEEL — `spreadsheet="=tabelle"` is the ordinary shape, with the id or
+  the pasted browser URL arriving as a start variable. An instance started without that
+  variable resolves it to FEEL null, and a null value resolves to the empty string, as it
+  does for every Worker Type. In an optional value that is exactly right and means "leave
+  it out".
+
+  In a required one it meant the worker called `/v4/spreadsheets//values/A1:C1` and
+  reported what Google answers for that: **HTTP 404, "Requested entity was not found"** —
+  the message for a file somebody deleted. It sent its operator to look at a spreadsheet
+  that was exactly where they had left it, and nothing had been refused at deploy,
+  because the attribute *was* there; what was missing was the instance's variable.
+
+  The Worker Instance now refuses such a job before the call and names the operation and
+  the attribute that came up empty. The check reads the same operation table the compiler
+  and the properties panel do, so it covers every value an operation needs — the
+  spreadsheet, the sheet, the range, the title, the rows to write — and an operation added
+  to that table cannot be forgotten in it. The job's fate is unchanged (pending, retried,
+  then an incident); what changed is that the incident names the fix.
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two
