@@ -1,4 +1,4 @@
-# ADR-DRAFT: A commitment is checked against what the process actually does
+# ADR-0380: A commitment is checked against what the process actually does
 
 - **Status:** Proposed
 - **Implementation:** Not started
