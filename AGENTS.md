@@ -65,7 +65,7 @@ They are JS, not Go, so they are a separate CI job and are not part of the Go co
 cd e2e && npm ci && npx playwright install chromium && npm test
 ```
 
-**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause.
+**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause. **If you touched `CHANGELOG.md`, add `make whats-new` to that list and commit the regenerated `api/web/whats-new.json`** — the Console's What's New feed is generated from the changelog and committed (ADR-0012 keeps the UI buildless), so a new bullet without a re-run fails CI on a check none of the four commands above covers. While you are there, give the entry curated DE/EN prose in `scripts/whats-new/overrides/<id>.json`; without it the feed shows your English changelog wording to German readers, which is what the override directory exists to prevent.
 
 ## Repository layout
 
