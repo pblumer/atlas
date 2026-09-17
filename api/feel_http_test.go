@@ -3,6 +3,8 @@ package api_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -48,6 +50,82 @@ func TestValidateFeel(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidateFeelRefusesACallThatCanOnlyBeNull is the case this route got most
+// wrong (ADR-0388). The other FEEL surfaces stayed silent about such a call; this
+// one answered `{"ok": true}` — so somebody who asked exactly the right question
+// was told the wrong answer, and had a reason to stop looking. `is defined` is a
+// Camunda extension and the commonest way in; Atlas speaks standard FEEL.
+func TestValidateFeelRefusesACallThatCanOnlyBeNull(t *testing.T) {
+	ts := newTestServer(t)
+	cases := []struct {
+		name       string
+		expression string
+		wantSaid   []string
+	}{
+		// The message has to name the standard equivalent, or the author's next guess
+		// is another function from the same foreign dialect.
+		{"foreign dialect", "is defined(kunde.geburtsdatum)", []string{"is defined", "x != null"}},
+		{"foreign name for something we have", `put(c, "k", 1)`, []string{"put", "context put"}},
+		{"a typo", "strng length(name)", []string{"strng length"}},
+		{"a real function, wrong arity", "date()", []string{"date", "0 arguments"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := validateFeel(t, ts, tc.expression)
+			if resp.OK {
+				t.Fatalf("%q was certified valid", tc.expression)
+			}
+			for _, want := range tc.wantSaid {
+				if !strings.Contains(resp.Error, want) {
+					t.Errorf("error does not mention %q:\n%s", want, resp.Error)
+				}
+			}
+		})
+	}
+}
+
+// The refusal has to let the fix through, and it has to leave alone everything a
+// reading cannot resolve — a callee the expression binds itself, or a variable the
+// author will supply. A route that refused those would block expressions that run.
+func TestValidateFeelStillAcceptsWhatWorks(t *testing.T) {
+	ts := newTestServer(t)
+	for _, src := range []string{
+		"kunde.geburtsdatum != null", // the correction the message asks for
+		"count(items) > 0",           // an ordinary built-in
+		"for f in fs return f(1)",    // a callee the expression binds
+		"function(g) g(1)",           // a parameter
+		`date(from: "2026-09-17")`,   // a named call, which the engine binds
+		"some x in xs satisfies upper case(x) = \"A\"",
+	} {
+		if resp := validateFeel(t, ts, src); !resp.OK {
+			t.Errorf("%q was refused: %s", src, resp.Error)
+		}
+	}
+}
+
+// feelValidateResp is what the route answers.
+type feelValidateResp struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+}
+
+func validateFeel(t *testing.T, ts *httptest.Server, expression string) feelValidateResp {
+	t.Helper()
+	req, err := json.Marshal(map[string]string{"expression": expression})
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/feel/validate", string(req), "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	var resp feelValidateResp
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("unmarshal %s: %v", body, err)
+	}
+	return resp
 }
 
 // TestValidateFeelBadRequest rejects a malformed request body (not the FEEL, the

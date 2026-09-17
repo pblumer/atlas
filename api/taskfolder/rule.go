@@ -388,6 +388,18 @@ func Compile(r Rule) (*Matcher, error) {
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
+	// No call check here, deliberately (ADR-0388,
+	// ADR-0392). A call this
+	// build can only answer with null compiles cleanly, and a folder rule built on
+	// one would filter nothing while reading as "no tasks match" — but no such rule
+	// can be built: the expression is generated from [Catalog], and every value in
+	// it is either a string literal this package escapes, an integer, or a duration
+	// held to a pattern. Nothing a caller sends becomes a call.
+	//
+	// The property belongs to the catalogue rather than to this line, so it is
+	// pinned where a new operator would break it, in TestCatalogIsSelfConsistent — a
+	// guard that fails the build beats one that refuses a person's rule for a
+	// mistake they did not make.
 	c, err := expr.CompileAuto(r.FEEL())
 	if err != nil {
 		return nil, fmt.Errorf("the rule does not compile: %w", err)
