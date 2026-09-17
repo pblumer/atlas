@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A standing list of the approval rules that reach nobody.** An approval rule names
+  an approver, and what that name has to be differs by kind: a named person becomes a
+  task's assignee, matched against a username, and a group becomes its candidate
+  groups, matched against a group id or name. **Neither is checked when the rule is
+  written, and neither failure is reported when it fires.** The approval is created, it
+  lands in nobody's inbox, and the order waits without saying why — the first person to
+  notice is whoever is waiting for the laptop.
+
+  The catalogue listing now carries the list: which products name an approver that
+  resolves to nobody, what each names, why it reaches nobody, and a link to the
+  catalogue where it is corrected. Scoped to the products you may maintain, because it
+  names people.
+
+  It deliberately stays quiet about three things, so that what it does say is worth
+  reading: a rule that still reaches somebody (candidate groups are a list, and one
+  live entry is enough), a kind that names an approval process directly (there is
+  nothing to check it against), and a leftover reference beside a kind that needs none
+  (untidy, not broken).
+
+  Where the server cannot read accounts or groups at all, it refuses and the page says
+  so. The two available guesses are both worse: every rule reported as broken, or a
+  clean estate nobody checked — and the second is the one somebody wants to believe.
 - **An outage now stops at the worker instead of at every token.** A worker whose target
   stopped answering did not fail once. It failed once **per instance that reached its
   task**: each failure spent a retry, each exhausted budget parked a token behind its own
@@ -119,6 +141,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue screen wears the console's buttons.** It had a button vocabulary of
+  its own — `primary` on the eight actions that commit something, `linkish` on the five
+  that remove a row, nothing at all on five more — and the stylesheet declares none of
+  the three. All eighteen rendered as the browser's default button, grey and square and
+  a different size, on a page where every other screen draws the accent-filled one. It
+  only reads as wrong beside the Modeler, and the two are never on screen together,
+  which is why nobody reported it.
 - **The approver is picked, and picked differently depending on the kind.** This was
   the last typed identifier on the catalogue screen and the one that cost the most,
   because nothing reports a wrong value: an approval whose approver matches nobody is

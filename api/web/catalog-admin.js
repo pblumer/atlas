@@ -90,12 +90,16 @@ function textOf(texts, langs, fallback) {
 
 export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   let cats = [];
+  let report = null;
   // null means the directory could not be read, which is different from an empty
   // one: the first degrades to typed ids, the second says there are no groups yet.
   let dir = null;
   try {
     cats = (await api("GET", "/api/v1/catalogs")) || [];
     dir = await api("GET", "/api/v1/principals").catch(() => null);
+    // Which approval rules reach nobody. null is "could not be read", which the
+    // card below says out loud rather than rendering as "nothing is wrong".
+    report = await api("GET", "/api/v1/catalog-products/approver-report").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
     throw e;
@@ -139,7 +143,9 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
         ${audienceField(dir, [])}
         <button class="btn" type="submit">Create</button>
       </form>
-    </div>`;
+    </div>
+
+    ${approverCard(report)}`;
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -163,6 +169,55 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
 }
 
 const list = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boolean);
+
+// approverCard is the standing list of approval rules that reach nobody.
+//
+// An approval rule's reference becomes a task's assignee or its candidate groups,
+// and neither is checked when the rule is written nor reported when it fires: the
+// approval is created, lands in nobody's inbox, and the order waits. The picker in
+// the product form stops new ones being written; it shows a broken rule only to
+// somebody who happens to open that product, and a rule written last year is
+// exactly the one nobody opens.
+//
+// Three states, and the third is the reason this is a card rather than a line:
+//
+//   - problems, listed with what each names and why it reaches nobody;
+//   - none, said as "none of the N I looked at" — an empty list with no count
+//     reads as "nothing was checked", which is the answer somebody wants to see;
+//   - unreadable, said out loud. The server refuses rather than guessing when it
+//     cannot resolve accounts and groups, and the page must not turn that refusal
+//     into a clean bill of health.
+function approverCard(report) {
+  if (report === null) {
+    return `<div class="card" style="margin-top:18px; max-width:860px">
+      <h3 style="margin:0 0 6px">Approvers</h3>
+      <p class="muted" style="margin:0">This report could not be read, so nothing here says
+        whether any approval rule reaches somebody.</p></div>`;
+  }
+  const problems = report.problems || [];
+  const checked = report.checked || 0;
+  if (!problems.length) {
+    return `<div class="card" style="margin-top:18px; max-width:860px">
+      <h3 style="margin:0 0 6px">Approvers</h3>
+      <p class="muted" style="margin:0">Every approval rule reaches somebody
+        &mdash; ${checked} product${checked === 1 ? "" : "s"} checked.</p></div>`;
+  }
+  const rows = problems.map((p) => `<tr>
+    <td><code>${esc(p.itemId)}</code></td>
+    <td><a href="#/catalog/c/${encodeURIComponent(p.homeCatalog)}">${esc(p.homeCatalog)}</a></td>
+    <td>${esc(p.kind)}</td>
+    <td>${p.ref ? `<code>${esc(p.ref)}</code>` : "<span class='muted'>—</span>"}</td>
+    <td>${esc(p.why)}</td></tr>`).join("");
+  return `<div class="card" style="margin-top:18px; max-width:860px">
+    <h3 style="margin:0 0 6px">Approvers that reach nobody</h3>
+    <p class="muted" style="max-width:62ch; margin:0 0 10px">${problems.length} of ${checked}
+      products name an approver that resolves to nobody. The approval is still created when one
+      is ordered; it lands in no inbox, and the order waits without saying why. Correct each in
+      its home catalogue.</p>
+    <table class="table">
+      <thead><tr><th>Product</th><th>Home</th><th>Kind</th><th>Names</th><th>Why</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+}
 
 // ---------- Who, picked rather than typed ----------
 //
