@@ -13,8 +13,9 @@ import (
 // it at startup; an unset value simply records no version.
 var BuildVersion string
 
-// Checkpoint writes a recovery checkpoint of the currently applied state under root
-// and returns the applied log position it captures (ADR-0131).
+// StageCheckpoint snapshots the currently applied state under root and returns the
+// staged checkpoint, which the caller publishes with [checkpoint.Staged.Commit]
+// (ADR-0131).
 //
 // It **must be called on the partition's single-writer goroutine, between batches**
 // (invariant I3). That is what makes the checkpoint's consistency boundary exact: no
@@ -22,34 +23,53 @@ var BuildVersion string
 // position the snapshotted state contains. Calling it concurrently with the run loop
 // would produce a snapshot at a fuzzy position — the failure ADR-0131 rejects.
 //
+// Commit, by contrast, must **not** be called there. It reads every byte of the
+// snapshot to checksum it, so committing on the writer stops command processing for
+// as long as that read takes — which grows with the store and, on a large one, is
+// seconds. Staging here and committing off the loop is the whole reason the two are
+// separate calls; see [checkpoint.Staged].
+//
 // It is purely additive to durability (invariant I2): a checkpoint is an optimization
 // that lets a later recovery replay only the WAL suffix past its applied position.
 // Nothing here writes to the log, mutates state, or acknowledges anything, so a failed
 // or absent checkpoint costs only a slower recovery, never correctness — the caller
 // may log the error and retry on the next cadence.
-//
-// Restoring from a checkpoint, and deleting the WAL segments it makes redundant, are
-// the later ADR-0131 slices; this only produces one.
-func (p *Processor) Checkpoint(root string) (uint64, error) {
+func (p *Processor) StageCheckpoint(root string) (*checkpoint.Staged, error) {
 	applied, err := p.store.LastAppliedPosition()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	m := &checkpoint.Manifest{
 		Partition:       p.partition,
 		AppliedPosition: applied,
 		// p.position is the highest position assigned so far; it is >= applied by
-		// construction, and Publish validates that rather than silently correcting it.
+		// construction, and the manifest's own validation checks that rather than
+		// silently correcting it.
 		HighestPosition: p.position,
 		KeyCounter:      p.keygen.counter,
 		CreatedUnixNano: p.clock.Now(),
 		AtlasVersion:    BuildVersion,
 		Deployments:     p.deploymentRefs(),
 	}
-	if _, err := checkpoint.Publish(root, m, p.store.Snapshot); err != nil {
+	return checkpoint.Stage(root, m, p.store.Snapshot)
+}
+
+// Checkpoint stages and publishes a checkpoint in one call, returning the applied log
+// position it captures.
+//
+// Both halves run on the calling goroutine, so this is for callers with no writer to
+// keep free — tests, and synchronous embedding. **The server uses
+// [Processor.StageCheckpoint]** and commits the result off the run loop, because the
+// commit reads the whole state store.
+func (p *Processor) Checkpoint(root string) (uint64, error) {
+	staged, err := p.StageCheckpoint(root)
+	if err != nil {
 		return 0, err
 	}
-	return applied, nil
+	if _, err := staged.Commit(); err != nil {
+		return 0, err
+	}
+	return staged.AppliedPosition(), nil
 }
 
 // deploymentRefs lists the definitions registered with this processor, ordered by key
@@ -147,8 +167,14 @@ func (p *Processor) checkpointSeed(root string, lastApplied uint64) (after, high
 	return 0, 0, 0
 }
 
-// CompactLog deletes the WAL segments no longer needed for recovery and returns how
-// many were removed (ADR-0131). It must be called on the single-writer goroutine.
+// CompactLog resolves the compaction cut and deletes the WAL segments no longer needed
+// for recovery in one call, returning how many were removed (ADR-0131). Both halves run
+// on the calling goroutine, so this is for callers with no writer to keep free — tests,
+// and synchronous embedding.
+//
+// **The server splits it**, into [Processor.CompactionCut] off the run loop and
+// [Processor.CompactLogAt] on it, because resolving the cut verifies checkpoints and
+// verifying one reads every byte of its state files.
 //
 // A segment is removed only when it lies entirely at or below the **compaction cut**,
 // which is the minimum of:
@@ -172,22 +198,34 @@ func (p *Processor) checkpointSeed(root string, lastApplied uint64) (after, high
 // checked. Compaction is an optimization like the checkpoint itself: skipping it costs
 // disk, never correctness.
 func (p *Processor) CompactLog(checkpointRoot string, consumerLimits []uint64) (int, error) {
-	cut, err := p.compactionCut(checkpointRoot, consumerLimits)
-	if err != nil || cut == 0 {
-		return 0, err
-	}
-	return p.log.Compact(cut, recordPosition)
-}
-
-// compactionCut resolves the highest position that is provably redundant, or zero when
-// nothing may be deleted.
-func (p *Processor) compactionCut(root string, consumerLimits []uint64) (uint64, error) {
-	if root == "" {
-		return 0, nil
-	}
 	lastApplied, err := p.store.LastAppliedPosition()
 	if err != nil {
 		return 0, err
+	}
+	cut, err := p.CompactionCut(checkpointRoot, lastApplied, consumerLimits)
+	if err != nil || cut == 0 {
+		return 0, err
+	}
+	return p.CompactLogAt(cut)
+}
+
+// CompactionCut resolves the cut [Processor.CompactLogAt] may delete up to, or zero
+// when nothing may be deleted. See [Processor.CompactLog] for what decides it.
+//
+// **It may run off the single-writer goroutine, and on a large store it should.**
+// Resolving the cut verifies checkpoints, and verifying one reads every byte of its
+// state files — the same whole-store read that made the checkpoint itself too
+// expensive to publish on the writer. Nothing it touches is loop-owned: the partition
+// is fixed at construction, and everything else is the checkpoint directory.
+//
+// lastApplied is passed in rather than read here for exactly that reason — it is the
+// one loop-owned value the decision needs, so the caller reads it on the writer and
+// resolves the cut off it. A value that has gone stale in between can only make the
+// cut more conservative: it is used to reject checkpoints *ahead* of the store, and a
+// store that has since advanced was never at risk from one it already covers.
+func (p *Processor) CompactionCut(root string, lastApplied uint64, consumerLimits []uint64) (uint64, error) {
+	if root == "" {
+		return 0, nil
 	}
 	positions, err := checkpoint.List(root)
 	if err != nil {
@@ -211,4 +249,18 @@ func (p *Processor) compactionCut(root string, consumerLimits []uint64) (uint64,
 		}
 	}
 	return cut, nil
+}
+
+// CompactLogAt deletes the WAL segments lying entirely at or below cut and returns how
+// many went. A zero cut deletes nothing.
+//
+// **It must be called on the single-writer goroutine**: the log belongs to the writer,
+// which may be rolling a segment at the same moment (invariant I3). Unlike resolving
+// the cut, this really is the bounded work the old single call claimed to be — a few
+// unlinks and one directory fsync, for segments already proven redundant.
+func (p *Processor) CompactLogAt(cut uint64) (int, error) {
+	if cut == 0 {
+		return 0, nil
+	}
+	return p.log.Compact(cut, recordPosition)
 }

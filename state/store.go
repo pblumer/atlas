@@ -37,6 +37,8 @@ type Store struct {
 	queries
 
 	db *pebble.DB
+	// tuning is what Open was asked for, kept so it can be reported and tested.
+	tuning Tuning
 	// freeBatch caches one indexed batch for reuse across transactions. The
 	// store is single-writer (invariant I3), so at most one transaction is live
 	// at a time and a single cached batch suffices — this keeps NewTransaction
@@ -45,15 +47,30 @@ type Store struct {
 }
 
 // Open opens (creating if needed) the state store rooted at dir.
-func Open(dir string) (*Store, error) {
+//
+// Options tune the storage engine; see [Tuning] for what each one is for and why
+// Pebble's own default is wrong once a store holds millions of keys. With none, the
+// store gets [defaultTuning].
+func Open(dir string, opts ...Option) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	db, err := pebble.Open(dir, &pebble.Options{Merger: counterMerger})
+	tuning := defaultTuning()
+	for _, opt := range opts {
+		opt(&tuning)
+	}
+	popts, cache := tuning.pebbleOptions()
+	db, err := pebble.Open(dir, popts)
+	if cache != nil {
+		// Pebble took its own reference during the open, so this one is done — the DB
+		// keeps the cache alive, and closing the store releases it. Dropping it on the
+		// error path too is what keeps a failed open from leaking the whole cache.
+		cache.Unref()
+	}
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{queries: queries{r: db}, db: db}
+	s := &Store{queries: queries{r: db}, db: db, tuning: tuning}
 	// The runtime aggregate counters (ADR-0080) are derived state added after the
 	// fact. A live store persists across restarts and replays only the tail, so the
 	// counters would read zero for instances that already exist. Seed them once from
