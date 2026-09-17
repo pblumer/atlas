@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An order can be followed into the process fulfilling it.** "Meine Aufträge"
+  already listed each position and what it was doing, out of the order's own
+  record, and that stays the answer for every reader. A reader who may open an
+  instance — the operator role, which is what every route that finds or opens one
+  requires — now also gets a link into the running instance, looked up when it is
+  pressed rather than resolved for every row. It is narrowed to the fulfilment
+  process, because every provisioning sub-process carries the order id too and the
+  first hit would be one position's process wearing the order's name. An instance
+  that history retention has already removed is said rather than followed: a link
+  to nothing reads as the console having broken.
+
 - **One product may be ordered in two shapes at once.** The catalogue describes the
   same service pulled in twice in different variants as a conflict the orderer
   resolves, and keeping both is a resolution — a black phone and a silver one. It

@@ -58,6 +58,8 @@ const STRINGS = {
     'status.abandoned': 'Aufgegeben',
     'status.blocked': 'Blockiert',
     'order.running': 'In Arbeit',
+    'proc.open': 'Prozess ansehen',
+    'proc.none': 'Zu diesem Auftrag läuft keine Prozessinstanz mehr — sie wurde von der Aufbewahrung entfernt.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -186,6 +188,8 @@ const STRINGS = {
     'status.abandoned': 'Given up on',
     'status.blocked': 'Blocked',
     'order.running': 'In progress',
+    'proc.open': 'View the process',
+    'proc.none': 'No process instance is left for this order — retention has removed it.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -482,6 +486,11 @@ const state = {
   // not use is worse than no field, because it looks like a permission that
   // failed rather than one they never had.
   mayOrderForOthers: false,
+  // mayFollowProcess is whether this reader may open the instance fulfilling an
+  // order. It is an operations surface — every route that finds or opens an
+  // instance is operator-only — so the link is offered to whoever may follow it
+  // and to nobody else.
+  mayFollowProcess: false,
   // config holds what somebody filled in per product, keyed by item id and then by
   // the form's own field key (ADR-0358).
   //
@@ -728,6 +737,11 @@ async function loadWhoIAm() {
   // would be a field whose every use ends in a refusal.
   state.mayOrderForOthers = state.canOrder &&
     (!me.authEnabled || roles.some((r) => r === 'operator' || r === 'admin'));
+  // Whether the instance view is reachable at all. Not tied to canOrder: somebody
+  // may follow an order they did not place, and a reader with no identity in an
+  // unenforced deployment may follow anything the server will answer.
+  state.mayFollowProcess = !me.authEnabled ||
+    roles.some((r) => r === 'operator' || r === 'admin');
   if (!state.mayOrderForOthers) return;
   // From the directory the load already read, rather than a second call for the
   // same list. Users only: a group cannot receive an order, because an entitlement
@@ -1562,6 +1576,37 @@ async function mountConfigForms() {
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
 // carries its lines, and its standing is computed from them so the two cannot
 // disagree. Doing it here keeps that property — a stored status could.
+// followProcess opens the instance fulfilling one order.
+//
+// Looked up when the link is pressed rather than resolved for every row: finding
+// an instance is a search, and a table of thirty orders would be thirty searches
+// to draw a column most readers never use.
+//
+// Narrowed to the fulfilment process by name. Every provisioning sub-process is
+// started with the order id too, so a search that took the first hit would open
+// one position's process and call it the order.
+//
+// An instance that is gone is the ordinary late case, not an error: history
+// retention deletes one long before the order it fulfilled is deleted. Said rather
+// than followed, because a link to nothing reads as the console having broken.
+async function followProcess(order) {
+  state.error = '';
+  try {
+    const page = await api(`/api/v1/instances/search?q=${encodeURIComponent(`orderId=${order.id}`)}`);
+    const hit = ((page && page.items) || [])
+      .find((i) => i.processId === 'atlas-auftrag-erfuellung');
+    if (!hit) {
+      state.error = t('proc.none');
+      render();
+      return;
+    }
+    window.location.href = `/index.html#/operations/i/${hit.key}`;
+  } catch (e) {
+    state.error = `${t('portal.failed')} ${e.message}`;
+    render();
+  }
+}
+
 // lineKey is what one position is called, mirroring the server's own rule
 // (ADR-draft-order-position-key): the
 // product, and the shape of it where one was chosen.
@@ -1766,6 +1811,17 @@ function orderRowBodies() {
           disabled: state.busy,
           onclick: () => cancel(o),
         }, 'X')
+        : null,
+      // Offered to whoever may follow it. An ordinary orderer reads the positions
+      // below instead, which is the same question answered out of the order's own
+      // record and without an operations surface.
+      state.mayFollowProcess
+        ? el('button', {
+          class: 'linkish',
+          title: t('proc.open'),
+          disabled: state.busy,
+          onclick: () => followProcess(o),
+        }, t('proc.open'))
         : null),
     el('td', {},
       t(deriveStatus(o)),
