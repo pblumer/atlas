@@ -233,6 +233,11 @@ type Server struct {
 	// the loop (ADR-0266), so the result has no reason to travel back onto it — see
 	// api/runtimeincidents.go.
 	runtimeIncidents runtimeIncidentCache
+	// elementNames is the BPMN id → name map of each deployed definition, parsed
+	// from the stored document on first use — see api/portalprogress.go. Guarded by
+	// its own mutex for the reason above: the parse grows with the document, and the
+	// loop's only part in it is handing over the bytes.
+	elementNames elementNameCache
 	// jobTypes is the engine-wide job-type table (ADR-0007/0157). Compiled processes
 	// are resolved through it at deploy and on reload so a job type index means the
 	// same thing in every definition; it also turns an index on a job back into a name.

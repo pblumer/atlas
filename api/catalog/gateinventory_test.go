@@ -47,6 +47,12 @@ type handlerGate struct {
 	contentType string
 	body        string
 	id          bool
+	// product says the path id names a *product* rather than a catalogue, so the
+	// fixture makes one under the catalogue and passes its id. Without it a
+	// product handler would be asked about an id that is no product at all, and
+	// would answer 404 because nothing is there — which looks exactly like the
+	// gate refusing and proves nothing about it.
+	product bool
 	// why explains an ungated handler. Empty for gated ones.
 	why string
 }
@@ -79,6 +85,15 @@ var catalogGates = []handlerGate{
 	{name: "HandleSetLogo", kind: gated, want: http.StatusNotFound, method: "PUT",
 		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true},
 	{name: "HandleDeleteLogo", kind: gated, want: http.StatusNotFound, method: "DELETE", id: true},
+	// A product's picture, gated on the product's home catalogue. The bytes are a
+	// real PNG for the reason the logo's are: what the outsider must meet is the
+	// gate and not the format check.
+	{name: "HandleGetPicture", kind: gated, want: http.StatusNotFound, method: "GET",
+		id: true, product: true},
+	{name: "HandleSetPicture", kind: gated, want: http.StatusNotFound, method: "PUT",
+		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true, product: true},
+	{name: "HandleDeletePicture", kind: gated, want: http.StatusNotFound, method: "DELETE",
+		id: true, product: true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
 }
@@ -144,12 +159,19 @@ func TestEveryGatedHandlerRefusesAnOutsider(t *testing.T) {
 			if body != "" {
 				body = strings.ReplaceAll(body, "CAT", cat.ID)
 			}
+			// The object the path names. A product handler is asked about a product
+			// that exists and belongs to this catalogue, so the 404 it answers with is
+			// the gate's and not the absence of the thing.
+			object := cat.ID
+			if g.product {
+				object = makeItem(t, s, user("usr_owner"), cat.ID)
+			}
 			outsider := &httpapi.Principal{UserID: "usr_out", Roles: []string{"productmanager"},
 				GroupIDs: []string{"grp_elsewhere"}}
 
 			var rec = asTyped(t, h, outsider, g.method, g.contentType, body)
 			if g.id {
-				rec = asTyped(t, h, outsider, g.method, g.contentType, body, "id", cat.ID)
+				rec = asTyped(t, h, outsider, g.method, g.contentType, body, "id", object)
 			}
 			if rec.Code != g.want {
 				t.Fatalf("%s gave an outsider %d (%s), want %d",
@@ -170,4 +192,24 @@ func TestEveryUngatedHandlerSaysWhy(t *testing.T) {
 			t.Errorf("%s is gated but carries an exemption reason", g.name)
 		}
 	}
+}
+
+// makeItem saves one product under the given catalogue and returns its id.
+func makeItem(t *testing.T, s *Service, owner *httpapi.Principal, catalogID string) string {
+	t.Helper()
+	rec := as(t, s.HandleSaveItem, owner, "POST",
+		`{"id":"prd_gate","homeCatalog":"`+catalogID+`","state":"active",`+
+			`"texts":{"de":"Produkt"},"approval":{"kind":"none"},`+
+			`"provisionProcess":"p","deprovisionProcess":"d"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save product = %d (%s)", rec.Code, rec.Body)
+	}
+	// And a picture on it, because the read gate is only provable against a product
+	// that has one: asked about a product with no picture, a handler with no gate at
+	// all answers the same 404 as one that refused the caller.
+	rec = asTyped(t, s.HandleSetPicture, owner, "PUT", "image/png", onePNG, "id", "prd_gate")
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("set picture = %d (%s)", rec.Code, rec.Body)
+	}
+	return "prd_gate"
 }

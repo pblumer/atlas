@@ -42,6 +42,87 @@
       }
     },
     {
+      "id": "a-product-can-carry-a-picture",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Put a picture on a product",
+        "de": "Ein Bild am Produkt hinterlegen"
+      },
+      "summary": {
+        "en": "A catalogue read as a list of names, which is fine for a person who already knows what they are ordering and no help at all to everybody else. A product now carries a picture — a photograph of the thing or the vendor's logo — chosen in the product editor and shown in the portal when somebody opens the product. PNG, JPEG and SVG, served back exactly as uploaded: nothing is resized or re-encoded, because a catalogue that re-encodes your picture has decided your product looks near enough. It is visible to everybody a catalogue offering the product is for, not only to the person who maintains it, which matters because the same product is often offered by several catalogues to different audiences. And it is deliberately not frozen into a release: a better photograph of the same laptop is not a different laptop, so it appears on orders already placed instead of a stale copy being kept for them.",
+        "de": "Ein Katalog las sich als Liste von Namen — für jemanden, der ohnehin weiss, was er bestellt, in Ordnung, für alle anderen keine Hilfe. Ein Produkt trägt jetzt ein Bild: eine Aufnahme der Sache oder das Logo des Herstellers, im Produkteditor gewählt und im Portal sichtbar, sobald jemand das Produkt öffnet. PNG, JPEG und SVG, unverändert ausgeliefert: Es wird nichts skaliert und nichts neu codiert, denn ein Katalog, der Ihr Bild neu codiert, hat entschieden, dass Ihr Produkt ungefähr so aussieht. Sichtbar ist es für alle, an die sich ein Katalog mit diesem Produkt richtet, nicht nur für die Person, die es pflegt — das zählt, weil dasselbe Produkt oft in mehreren Katalogen für verschiedene Zielgruppen steht. Und es wird bewusst nicht in eine Freigabe eingefroren: Eine bessere Aufnahme desselben Notebooks ist kein anderes Notebook, also erscheint sie auch an bereits erteilten Bestellungen, statt dort eine veraltete Kopie zu halten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue, pick a catalogue and open one of its products.",
+          "Under \"What the catalogue shows\", choose a file beside Picture — PNG, JPEG or SVG.",
+          "Save. The picture is stored as a second step, so a product the server refuses never acquires one.",
+          "Open the portal, find the product and press the \"i\" beside it: the picture is at the top of the panel.",
+          "To take it away, open the product again and tick \"Remove the picture this product has\", then save.",
+          "A product with no picture shows none — no gap and no broken-image icon, because that is the ordinary case."
+        ],
+        "de": [
+          "Katalog öffnen, einen Katalog wählen und eines seiner Produkte öffnen.",
+          "Unter „What the catalogue shows\" bei „Picture\" eine Datei wählen — PNG, JPEG oder SVG.",
+          "Speichern. Das Bild wird als zweiter Schritt abgelegt, damit ein vom Server abgelehntes Produkt nie eines erhält.",
+          "Portal öffnen, das Produkt suchen und daneben auf „i\" drücken: Das Bild steht zuoberst im Feld.",
+          "Zum Entfernen das Produkt erneut öffnen, „Remove the picture this product has\" ankreuzen und speichern.",
+          "Ein Produkt ohne Bild zeigt keines — keine Lücke und kein Platzhaltersymbol, denn das ist der Normalfall."
+        ]
+      }
+    },
+    {
+      "id": "where-your-own-position-stands-without-an-operations-surface",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See which step your order is waiting on",
+        "de": "Sehen, an welchem Schritt die eigene Bestellung wartet"
+      },
+      "summary": {
+        "en": "\"Meine Aufträge\" told you a position was running. It did not tell you what it was running *on* — whether somebody's approval is sitting in a manager's inbox or whether the account is being created right now. Each position now has a \"Where is this?\" button, and the answer is the step the process is standing on, by the name the model gives it. It is for the person whose order it is, not only for operators: the link that existed leads into the engine console, which shows everything that instance holds, including data belonging to other people's orders where a process carries both. So this is a separate, much narrower answer — the step, and nothing else. Somebody else's order is answered the same way an order you may not read is answered anywhere in Atlas: as if it were not there. The page asks when you press, not when it loads, because finding the process means looking through what is running, and a table of ten orders should not pay that forty times over to fill a line most readers never open.",
+        "de": "„Meine Aufträge\" sagte bisher, dass eine Position läuft. Es sagte nicht, woran sie läuft — ob eine Genehmigung im Postfach einer Vorgesetzten liegt oder ob das Konto gerade angelegt wird. Jede Position hat jetzt eine Schaltfläche „Wo steht das?\", und die Antwort ist der Schritt, auf dem der Prozess steht, mit dem Namen, den das Modell ihm gibt. Sie ist für die Person gedacht, der die Bestellung gehört, nicht nur für den Betrieb: Der bisherige Link führt in die Engine-Konsole, und die zeigt alles, was diese Instanz hält — auch Daten aus fremden Bestellungen, wenn ein Prozess beide trägt. Deshalb gibt es hier eine eigene, viel engere Antwort: den Schritt und sonst nichts. Eine fremde Bestellung wird so beantwortet, wie in Atlas jede Bestellung beantwortet wird, die man nicht lesen darf — als gäbe es sie nicht. Gefragt wird beim Druck auf die Schaltfläche, nicht beim Laden der Seite: Den Prozess zu finden heisst, das Laufende durchzusehen, und eine Tabelle mit zehn Bestellungen soll das nicht vierzig Mal bezahlen, um eine Zeile zu füllen, die die meisten nie aufschlagen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Portal",
+        "Orders",
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal and order something whose product asks for an approval.",
+          "Switch to \"Meine Aufträge\" and find the position in the order you just placed.",
+          "Press \"Where is this?\" beside it.",
+          "The step appears next to the button — the approval task's own name while somebody is deciding, the provisioning step once they have.",
+          "Press it again later: the answer is fetched fresh each time, because that is the one thing on the page that moves while it is open.",
+          "A position nothing is working on says so: before its turn comes, and after it is finished, there is no process to stand anywhere."
+        ],
+        "de": [
+          "Portal öffnen und etwas bestellen, dessen Produkt eine Genehmigung verlangt.",
+          "Auf „Meine Aufträge\" wechseln und die Position der eben aufgegebenen Bestellung suchen.",
+          "Daneben „Wo steht das?\" drücken.",
+          "Der Schritt erscheint neben der Schaltfläche — der Name der Genehmigungsaufgabe, solange jemand entscheidet, danach der Provisionierungsschritt.",
+          "Später erneut drücken: Die Antwort wird jedes Mal neu geholt, denn sie ist das Einzige auf der Seite, das sich ändert, während sie offen ist.",
+          "Eine Position, an der nichts arbeitet, sagt das auch: vor ihrer Reihe und nach ihrem Abschluss steht kein Prozess irgendwo."
+        ]
+      }
+    },
+    {
       "id": "a-model-fix-now-reaches-an-instance-even-when-its-tokens-can",
       "version": "Unreleased",
       "date": null,
@@ -239,42 +320,6 @@
       "summary": {
         "en": "A bundle is offered as a Marktleistung: it holds the orchestration process, and the services behind it hold their own provisioning and deprovisioning — a service may stand behind several Marktleistungen, included or optional, always with the same processes.",
         "de": "A bundle is offered as a Marktleistung: it holds the orchestration process, and the services behind it hold their own provisioning and deprovisioning — a service may stand behind several Marktleistungen, included or optional, always with the same processes."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "approvals-moved-under-tasks-and-the-inbox-says-which-of-its-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "Approvals moved under Tasks, and the inbox says which of its rows decide an order.",
-        "de": "Approvals moved under Tasks, and the inbox says which of its rows decide an order."
-      },
-      "summary": {
-        "en": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today.",
-        "de": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-catalogue-screen-wears-the-console-s-buttons",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The catalogue screen wears the console's buttons.",
-        "de": "The catalogue screen wears the console's buttons."
-      },
-      "summary": {
-        "en": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three.",
-        "de": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three."
       },
       "link": {
         "label": "Changelog",

@@ -47,6 +47,54 @@ _Changed_ / _Removed_ for each version.
   The standalone approval page stays: it is what an approval notification links to,
   and somebody arriving from a mail has no inbox to arrive in.
 
+- **A product can carry a picture.** A catalogue row was a name and a price, and
+  somebody choosing between two phones was choosing between two names. A product now
+  has a picture — a photograph of the thing or the vendor's mark, PNG, JPEG or SVG —
+  uploaded in the product editor and shown in the portal when the product is opened.
+
+  It is stored the way a catalogue's brand mark is: a file beside the stores, keyed by
+  the product, with **no flag on the record saying one exists**. The file is the fact,
+  and a second copy of that fact is a second copy to be wrong after a restore that
+  brought the JSON and not the image. What was uploaded is what is served — no
+  resizing and no re-encoding, because a server that re-encodes somebody's picture
+  decides their product looks near enough.
+
+  Who may see it is the question the portal actually asks: **does any catalogue this
+  person may read offer this product**, and not "may they read its home catalogue".
+  A product is referenced by catalogues rather than owned by one, so a customer of one
+  catalogue legitimately orders a product whose home is another — gated on the home
+  alone, that customer would see a name and no picture. Changing it stays with
+  whoever maintains the product: somebody who may not rename it may not re-illustrate
+  it either.
+
+  **A release does not freeze it.** A release freezes what was promised — the product,
+  its variants, the approval rule, the ceiling, the price. A picture is how a thing is
+  shown and not what was agreed, so a better photograph of the same laptop appears on
+  orders already placed rather than a second picture being kept for them.
+
+- **Where your own position stands, without an operations surface.** A position in
+  "Meine Aufträge" now answers *which step* it is sitting on — "Genehmigen",
+  "Provisionierung starten" — to whoever the order belongs to, and not only to a
+  reader holding the operator role.
+
+  The link that existed leads into the console, and the console shows the whole
+  engine state of that instance, variables included. Widening it would have handed
+  out an operations surface to answer a question about one line, so the orderer is
+  answered by a route of their own instead:
+  `GET /api/v1/portal/orders/{id}/lines/{position}/progress`, gated on **owning the
+  order** rather than on a role. Somebody else's order answers 404 and not 403 —
+  whether it exists is not something this confirms — and no process variable leaves
+  through it: the caller already knows their own order, and the route says *where*,
+  not *what*.
+
+  The server finds the instance by the two variables the fulfilment model passes,
+  `orderId` **and** `positionId`, and by both: the order id alone also matches the
+  order's own orchestration, and a position key alone is unique only inside one
+  order. Only live instances are walked, which bounds the cost by the work in
+  flight rather than by everything the store has ever run — and a finished instance
+  has no step to report. The step is the name the model gives the element, read from
+  the deployed document, falling back to its BPMN id where it is unnamed.
+
 - **A model fix now reaches an instance even when its tokens cannot be carried across.**
   Migrating a running instance onto a corrected version rebinds it in place and keeps
   everything it has done — but only where every token's element still exists in the new
@@ -588,6 +636,55 @@ _Changed_ / _Removed_ for each version.
   about the reader rather than about what they are reading.
 
 ### Fixed
+
+- **The fulfilment orchestration never learned which order it was working on.** Its
+  model documents `orderId` as a start variable, builds every request from it
+  (`"/api/v1/orders/" + orderId + "/next"`) and correlates the message that wakes it
+  on it. The wake passed it as the message's **correlation key** only — and a message
+  *start* event's key is evaluated from the payload, so `=orderId` over a payload
+  without it resolved to nothing: the instance recorded no key, and the variable the
+  model reads was never written.
+
+  Nothing failed, which is the part worth knowing. FEEL propagates null, so the first
+  service task was activated with `path = null`: the orchestration asked its REST
+  worker for nothing, was never woken by a settled line, and the order sat at
+  "Wartet" with no incident for anybody to find.
+
+  Deploying the fix does not repair an instance that is already running — the
+  variable it needed was never there to write. **`POST /api/v1/orders/fulfilment/repair`**
+  (operator) ends the orchestrations that name no order, or name one this server no
+  longer holds, and starts one again for every open order left without one. Both
+  halves together: ending alone leaves the order where it was, and starting alone
+  would put a second orchestration beside a healthy one, where both would ask what may
+  start and both would start it. It is idempotent, and `?dryRun=true` reports what it
+  would do and changes nothing — which is what to run first.
+
+- **An approval of a product ordered twice vanished from the approver's inbox.** What
+  makes a task an approval is the order behind it: the instance names a line, and the
+  order agrees that this process decides that line. Naming the line is what the
+  position key changed — a process passes `positionId` beside `itemId`, because
+  "phone" is two lines when somebody ordered a black one and a silver one. The reader
+  was written for that and the collection was not: `positionId` was read out of a map
+  that gathered every other variable, so the fallback to the product always fired.
+  For an order carrying one position of a product that fallback is right, which is why
+  nothing showed; for a product ordered twice it resolves to nothing — correctly,
+  because the product names two lines — and the task was then not recognised as an
+  approval at all, in the inbox, on the approval page, or in the escalation lookup.
+
+- **A product's name in the basket wrapped one letter per line.** The optional column
+  read "Schutzhü / lle / transpare / nt" beside a price that had all the width. Two
+  decisions made it together, and each was enough on its own: the price and the level
+  were built into the row's *trail* — the slot that carries its controls, and
+  therefore promises never to give width back — and the name was set to
+  `overflow-wrap:anywhere`, which lets a box shrink below its longest word, so there
+  was no floor under it to stop at.
+
+  A row now has three slots with one rule between them: `lead` and `trail` carry
+  controls, `meta` carries text about the row, and text shrinks. The price, the level
+  a position will sit at and the "found under" line of a search result moved into
+  `meta`, which renders under the name and wraps; the name itself keeps its longest
+  word as a floor. The search results carried their "found under" line in the trail
+  for the same reason and moved with it.
 
 - **An expression calling a function that does not exist no longer deploys clean and answers
   null.** The FEEL engine compiles a call to a name it does not know into a constant null,
