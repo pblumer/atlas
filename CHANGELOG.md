@@ -14,6 +14,34 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **How long the single writer is held is now a metric.** Two histograms,
+  `atlas_runloop_turn_held_seconds` and `atlas_runloop_turn_wait_seconds`, pushed from
+  the run loop itself.
+
+  The run loop is the one duration in Atlas that is about the whole server rather than
+  one request: it is the single writer, and it is the gate every request passes
+  through — a read-only one included, since opening a consistent view takes a turn
+  (ADR-0239). A turn that runs long does not slow one caller down, it stops everything,
+  and until now nothing measured it. The batch counters do not: a batch is work the
+  processor did, while a turn is work somebody dispatched, and the two that hurt most —
+  publishing a checkpoint, resolving a compaction cut — are not batches at all. That is
+  exactly how they held the writer for seconds without a number anywhere saying so
+  (ADR-0382).
+
+  Both halves are reported because they answer different questions. `held` is the
+  cause: how long a closure occupied the writer, which is the number a fix like ADR-0382
+  moves. `wait` is the effect: how long a caller queued before its closure even started,
+  which is what a person experiences as the interface hanging. A server can have one
+  long turn and nobody notices; it can have many medium ones and a queue nobody gets
+  through. `held` alone cannot tell those apart.
+
+  Buckets run from 100µs to about 13 seconds — wider at the top than the fsync
+  histograms beside them, because a turn is the whole server standing still and the
+  range has to reach the failures worth alerting on rather than saturate at the first
+  one. `Ping` is deliberately not counted: its closure is empty, so counting it would
+  fill the histogram with work nobody performed. An uninstrumented loop reports nothing
+  and does not even read the clock.
+
 - **A standing list of the approval rules that reach nobody.** An approval rule names
   an approver, and what that name has to be differs by kind: a named person becomes a
   task's assignee, matched against a username, and a group becomes its candidate
