@@ -584,6 +584,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A stored process definition could stop the server from starting.** The compiler
+  recently learned to refuse a FEEL call to a function this build does not have — a
+  call that can only ever evaluate to null, so it cannot be doing what its author
+  meant. The rule is right at a deploy. It was not right at a *restart*: it ran while
+  the process was still being built, which is before the point where a reload can tell
+  "this model would be refused today" apart from "there is nothing here to bring back".
+
+  So a definition deployed months ago, under a build that had no such rule, made the
+  new build exit during startup. The supervisor restarted it; it exited again. Every
+  other definition and every running instance sat behind the one record that would not
+  load, and the only way in — the API that could replace the model — needs a server
+  that is up.
+
+  A rule the compiler gains later decides whether a model may be **deployed**, never
+  whether it may be **loaded**. A deploy still refuses the call, with the same message
+  naming the task and the function. A reload now compiles the expression exactly as the
+  build that stored it did — the engine answers the unknown call with null, which is
+  what that definition has been doing all along — and logs
+  `deployment.reloaded_with_problems` naming the deployment and the expression to fix.
+  The server starts.
+
 - **The fulfilment orchestration never learned which order it was working on.** Its
   model documents `orderId` as a start variable, builds every request from it
   (`"/api/v1/orders/" + orderId + "/next"`) and correlates the message that wakes it

@@ -126,6 +126,14 @@ const (
 	// unknown flow reference, a bad FEEL expression) — the pool named nothing the
 	// graph checks could inspect, so its error is surfaced as one Problem instead.
 	RuleCompile = "compile"
+	// RuleNullCall marks a stored definition brought back across a reload although
+	// it calls a FEEL function this build does not have (ADR-0388). The call keeps
+	// compiling to the constant null it has always been, because that is what the
+	// definition has been running as; the record is how the operator is told to fix
+	// the model, instead of the server refusing to start
+	// (ADR-draft-a-rule-added-later-is-a-gate-on-deploy). A deploy never raises it —
+	// there the same fault is a refusal.
+	RuleNullCall = "feel.null-call"
 )
 
 // Problem is one structured validation finding on a compiled process, shaped for
@@ -235,7 +243,9 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 	if err != nil {
 		return []Problem{{Severity: SeverityError, Rule: RuleParse, Message: err.Error()}}, nil
 	}
-	resolveMsg := buildMessageResolver(defs)
+	// A dry run answers "would this deploy", so it compiles as a deploy does.
+	g := strictFEEL
+	resolveMsg := buildMessageResolver(defs, g)
 	resolveSig := buildSignalResolver(defs)
 	resolveErr := buildErrorResolver(defs)
 	resolveEsc := buildEscalationResolver(defs)
@@ -251,7 +261,7 @@ func ValidateModel(r io.Reader) ([]Problem, error) {
 		// The key is irrelevant to a dry run — the compiled process is inspected and
 		// discarded, never registered — so a per-pool ordinal keeps it deterministic
 		// without touching the server's key counter.
-		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams)
+		cp, cerr := compileProcess(uint64(executable), 1, proc, resolveMsg, resolveSig, resolveErr, resolveEsc, resolveOp, resolveItem, resolveStore, docs, agentParams, g)
 		executable++
 		if cerr != nil {
 			// A graph-level failure carries its element-anchored Problems; hand them

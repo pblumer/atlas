@@ -1,6 +1,6 @@
 # ADR-0388: A call that can only be null is refused at deploy
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-17 — the refusal is a deploy gate, not a condition for loading a stored definition; see the amendment note below)
 - **Implementation:** Landed
 - **Date:** 2026-09-17
 - **Deciders:** Patrick Blumer
@@ -105,7 +105,8 @@ nothing here: the syntax error is the real fault and the compiler already report
   path, so it is visible while editing and not only on deploy.
 - **Negative / trade-offs accepted:** a model that deploys today and contains such a call
   will stop deploying. That is the intent — it cannot ever have worked — but it is a
-  behaviour change for somebody whose broken call sits on a path nobody walks.
+  behaviour change for somebody whose broken call sits on a path nobody walks. What this
+  record did *not* consider is the model that was already deployed: see the amendment below.
 - **Negative:** the refusal is a compile error, so it has no element anchor of its own in the
   panel. The message carries the element id because the caller wraps it, which is enough to
   find it and less than an anchored Problem would be.
@@ -142,8 +143,30 @@ nothing here: the syntax error is the real fault and the compiler already report
   silence, not the list. Whether to implement them is a separate decision with its own
   record.
 
+## Amendment (2026-09-17): the refusal does not reach a stored definition
+
+This record weighed the cost as "a model that deploys today will stop deploying". It missed
+the model that was deployed *yesterday*. `compileFEEL` runs in the build stage, so its
+refusal reached `parseNamed` as a plain error rather than as the `ValidationError` carrying a
+compiled process that the reload path knows how to take apart
+(ADR-0177). A stored deployment with one such call
+therefore made the server exit during startup, be restarted, and exit again — with every
+other definition and every running instance unreachable behind it. That happened in
+production, on a probe model calling `get keys(...)`.
+
+The rule is unchanged and still refuses the deploy with the same message. What changed is
+that the compile now carries a gate: a deploy refuses, a reload compiles the expression the
+way the build that stored it did — the engine binds the unknown callee to null, as it always
+has — and reports the fault as a `feel.null-call` Problem beside the process, which
+`loadDeployments` logs as `deployment.reloaded_with_problems`. See
+[ADR-draft-a-rule-added-later-is-a-gate-on-deploy](draft-a-rule-added-later-is-a-gate-on-deploy.md),
+which states the general form: a rule the compiler gains after a definition was stored is a
+gate on deploying it, never a condition for loading it, whatever stage it lives in.
+
 ## Links
 
+- amended by [ADR-draft-a-rule-added-later-is-a-gate-on-deploy](draft-a-rule-added-later-is-a-gate-on-deploy.md) — the reload split this record's placement bypassed
+- relates to [ADR-0177](0177-reload-skips-the-deploy-gate.md) — the gate/reload split
 - relates to [ADR-0008](0008-feel-expression-strategy.md) — compiling expressions once, at
   deploy, which is the moment this refusal uses
 - relates to [ADR-0015](0015-reuse-feel-engine.md) — the engine this leaves alone

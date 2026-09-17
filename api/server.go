@@ -2692,11 +2692,16 @@ func (s *Server) loadDeployments() error {
 func (s *Server) restoreDeployment(rec persistedDeployment) error {
 	// Recompile exactly the process this record represents (a collaboration's
 	// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
-	// without the deploy-time validation gate
-	// (ADR-0177). This definition passed the gate
-	// that existed when it was deployed and its instances have been running under
-	// it since; a rule added to the compiler afterwards is a reason to tell the
-	// operator, not to refuse to start. The model on disk did not change.
+	// without the rules that gate a *deploy*
+	// (ADR-0177, ADR-draft-a-rule-added-later-is-a-gate-on-deploy). This definition
+	// passed the gate that existed when it was deployed and its instances have been
+	// running under it since; a rule added to the compiler afterwards is a reason to
+	// tell the operator, not to refuse to start. The model on disk did not change.
+	//
+	// That is every such rule, not only stage 5's: refusing a FEEL call this build
+	// can only answer with null (ADR-0388) is raised while the process is still
+	// being built, and it took a server into a crash loop before the reload carried
+	// its own gate too.
 	cp, problems, err := compiler.ReloadNamed(rec.Key, rec.Version, bytes.NewReader([]byte(rec.XML)), rec.ProcessID)
 	if err != nil {
 		// A stored model that no longer compiles *at all* is still a hard,
@@ -2710,7 +2715,7 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 		// and the next deploy of it will be refused. Named per deployment so the
 		// operator can go straight to the model that needs fixing.
 		logging.Warn(logging.DeploymentReloadedWithProblems,
-			"a deployed definition would no longer pass validation; it was restored and keeps running — fix the model and deploy it again",
+			"a deployed definition would no longer be accepted at deploy; it was restored and keeps running exactly as it did — fix the model and deploy it again",
 			slog.Uint64("deploymentKey", rec.Key),
 			slog.String("processId", rec.ProcessID),
 			slog.Int64("version", int64(rec.Version)),

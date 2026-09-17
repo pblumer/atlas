@@ -77,24 +77,24 @@ func TestBusinessRuleTaskParsesIOMapping(t *testing.T) {
 // expression.
 func TestBusinessRuleTaskIOMappingErrors(t *testing.T) {
 	t.Run("empty target", func(t *testing.T) {
-		if _, err := decisionInputMappings("decide", []xmlZeebeIOMapInput{{Source: "= x"}}); err == nil {
+		if _, err := decisionInputMappings(strictFEEL, "decide", []xmlZeebeIOMapInput{{Source: "= x"}}); err == nil {
 			t.Fatal("input mapping with empty target: got nil error, want an error")
 		}
 	})
 	t.Run("empty source", func(t *testing.T) {
-		if _, err := decisionInputMappings("decide", []xmlZeebeIOMapInput{{Target: "Season", Source: " = "}}); err == nil {
+		if _, err := decisionInputMappings(strictFEEL, "decide", []xmlZeebeIOMapInput{{Target: "Season", Source: " = "}}); err == nil {
 			t.Fatal("input mapping with empty source: got nil error, want an error")
 		}
 	})
 	t.Run("uncompilable source", func(t *testing.T) {
-		if _, err := decisionInputMappings("decide", []xmlZeebeIOMapInput{{Target: "Season", Source: "= 1 +"}}); err == nil {
+		if _, err := decisionInputMappings(strictFEEL, "decide", []xmlZeebeIOMapInput{{Target: "Season", Source: "= 1 +"}}); err == nil {
 			t.Fatal("input mapping with a bad source: got nil error, want an error")
 		}
 	})
 	t.Run("no mappings yields nil", func(t *testing.T) {
-		m, err := decisionInputMappings("decide", nil)
+		m, err := decisionInputMappings(strictFEEL, "decide", nil)
 		if err != nil || m != nil {
-			t.Fatalf("decisionInputMappings(nil) = %v, %v, want nil, nil", m, err)
+			t.Fatalf("decisionInputMappings(strictFEEL, nil) = %v, %v, want nil, nil", m, err)
 		}
 	})
 }
