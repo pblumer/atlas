@@ -129,6 +129,12 @@
   .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;
           border-bottom:1px solid var(--border); }
   .cell .label { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; font-size:14px; }
+  /* What a row carries at its right edge, and the two declarations that keep it on
+     one line. Each icon already refuses to shrink; the trail around them did not,
+     and its contents were inline boxes — so a narrow column wrapped them and one
+     row read as two. A flex row does not wrap by default, and 0 0 auto stops the
+     trail giving up width the icons cannot give up. */
+  .cell .trail { flex:0 0 auto; display:flex; align-items:center; gap:4px; }
   /* A cell that leads somewhere is the whole label, not a separate chevron: the
      mockups make the name itself the way into the next column. */
   button.label { background:none; border:0; padding:0; font:inherit; text-align:left;

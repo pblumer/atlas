@@ -185,9 +185,18 @@ func (s *Server) moveApproval(w http.ResponseWriter, r *http.Request,
 		// The recorded assignment, or a first one made from the task's own
 		// assignee. Lazily, because until something moves an approval the task is
 		// the whole truth and a copy here would be a second one.
-		a, have := ord.AssignmentFor(item)
+		// The assignment is recorded against the position, so two approvals of one
+		// product do not overwrite each other's escalation history. It is the item
+		// id wherever the order carries one position of the product, so nothing
+		// stored before this changes meaning.
+		position, resolveErr := order.ResolveLine(ord, item)
+		if resolveErr != nil {
+			saveErr = resolveErr
+			return
+		}
+		a, have := ord.AssignmentFor(position)
 		if !have {
-			a = order.Assign(item, task.Assignee, at)
+			a = order.Assign(position, task.Assignee, at)
 		}
 		moved, moveErr = move(a, at)
 		if moveErr != nil {
@@ -240,20 +249,27 @@ func (s *Server) moveApproval(w http.ResponseWriter, r *http.Request,
 // grows with is not this order's. An escalation is rare — one per deadline per
 // pending approval — so paying a scan for it is the right trade against keeping an
 // index of something that is almost always empty.
-func (s *Server) approvalTaskOf(orderID, itemID string) (taskResp, bool, error) {
+func (s *Server) approvalTaskOf(orderID, ref string) (taskResp, bool, error) {
 	var (
 		found taskResp
 		ok    bool
+		// The approvals whose product is the one named, where the caller named a
+		// product rather than a position. Collected rather than taken, because one
+		// of two phones is not the phone.
+		byProduct []taskResp
 	)
 	_, err := s.visitOpenTasks(0, false, func(_ uint64, tr taskResp, _ taskfolder.Task) bool {
 		var stop bool
 		readErr := s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
 			a, isApproval, err := s.approvalOf(rv, tr)
-			if err != nil || !isApproval {
+			if err != nil || !isApproval || a.OrderID != orderID {
 				return err
 			}
-			if a.OrderID == orderID && a.ItemID == itemID {
+			switch {
+			case a.PositionID == ref:
 				found, ok, stop = tr, true, true
+			case a.ItemID == ref:
+				byProduct = append(byProduct, tr)
 			}
 			return nil
 		})
@@ -262,7 +278,18 @@ func (s *Server) approvalTaskOf(orderID, itemID string) (taskResp, bool, error) 
 		}
 		return !stop
 	})
-	return found, ok, err
+	if err != nil || ok {
+		return found, ok, err
+	}
+	// Exactly one approval for the product named is that approval — which is every
+	// order placed before a product could be ordered in two shapes at once. Two is
+	// answered as "no such approval" rather than by moving one of them: naming the
+	// product does not say which phone's approval is meant
+	// (ADR-0384).
+	if len(byProduct) == 1 {
+		return byProduct[0], true, nil
+	}
+	return taskResp{}, false, nil
 }
 
 // assignApprovalTask puts the task in the new holder's inbox. It is the claim path

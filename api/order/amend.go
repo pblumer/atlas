@@ -118,25 +118,32 @@ func AmendAnswers(l Line, answers map[string]string, by string, at int64, reason
 // And the schedule is recomputed. A withdrawn line is a root cause like a refused
 // one, and anything waiting on it is waiting for nothing; skipping that pass
 // leaves a line blocked forever behind something that will never arrive.
-func CancelLine(o Order, itemID, by string, at int64, reason string) (Order, error) {
+func CancelLine(o Order, ref, by string, at int64, reason string) (Order, error) {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return o, err
+	}
 	idx := -1
 	for i := range o.Lines {
-		if o.Lines[i].ItemID == itemID {
+		if o.Lines[i].Key() == key {
 			idx = i
 			break
 		}
 	}
 	if idx < 0 {
-		return o, fmt.Errorf("order %s carries no line for %s", o.ID, itemID)
+		return o, fmt.Errorf("order %s carries no line for %s", o.ID, key)
 	}
+	// What carries a part is asked about the *product*: an edge runs between two
+	// catalogue items, and it says nothing about which shape of one was ordered.
+	itemID := o.Lines[idx].ItemID
 	if o.Lines[idx].Integral {
 		if whole := carriers(o, itemID); len(whole) > 0 {
 			return o, fmt.Errorf("order: %s is part of %s and is not ordered on its own, "+
 				"so it cannot be taken back on its own — withdraw what carries it",
-				itemID, join(whole))
+				key, join(whole))
 		}
 		return o, fmt.Errorf("order: %s was not ordered on its own and cannot be taken "+
-			"back on its own", itemID)
+			"back on its own", key)
 	}
 	next, err := Cancel(o.Lines[idx], by, at, reason)
 	if err != nil {

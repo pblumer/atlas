@@ -66,7 +66,7 @@ Schreibt: bereit (Liste von Positionen).</bpmn:documentation>
     </bpmn:exclusiveGateway>
 
     <bpmn:serviceTask id="Starten" name="Provisionierung starten">
-      <bpmn:documentation>POST /api/v1/instances, einmal je startbereiter Position, parallel. Startet den Prozess, an den die Position gebunden ist, und gibt ihm orderId und itemId mit — damit er sein Ergebnis am Ende selbst melden kann.
+      <bpmn:documentation>POST /api/v1/instances, einmal je startbereiter Position, parallel. Startet den Prozess, an den die Position gebunden ist, und gibt ihm orderId, itemId und positionId mit — damit er sein Ergebnis am Ende selbst melden kann. itemId nennt das Produkt, positionId die Position: wurde dasselbe Produkt in zwei Ausfuehrungen bestellt, unterscheidet nur die positionId die beiden Zeilen.
 
 Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden.
 
@@ -81,7 +81,7 @@ Beide Prozessnamen kommen aus der Antwort von /next, nicht aus dem Katalog. Eing
           <zeebe:header key="path" value="/api/v1/instances" />
         </zeebe:taskHeaders>
         <zeebe:ioMapping>
-          <zeebe:input source="={processId: if position.approvalProcess = &#34;&#34; then position.provisionProcess else position.approvalProcess, variables: {orderId: orderId, itemId: position.itemId, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref}}" target="body" />
+          <zeebe:input source="={processId: if position.approvalProcess = &#34;&#34; then position.provisionProcess else position.approvalProcess, variables: {orderId: orderId, itemId: position.itemId, positionId: position.id, variantId: position.variantId, recipient: recipient, orderer: orderer, provisionProcess: position.provisionProcess, approvalRef: position.approval.ref}}" target="body" />
         </zeebe:ioMapping>
       </bpmn:extensionElements>
       <bpmn:incoming>F_Gw_Starten</bpmn:incoming>

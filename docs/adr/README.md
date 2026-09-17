@@ -454,17 +454,25 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
 | [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
 | [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
-| [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Proposed | Not started |
-| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Proposed | Not started |
+| [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Accepted | Not started |
+| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Not started |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
-| [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Proposed | Not started |
-| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Proposed | Not started |
+| [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Accepted | Not started |
+| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Accepted | Not started |
 | [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
 | [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
 | [0377](0377-portal-without-identity.md) | With nobody to be, the portal shows a catalogue and refuses an order | Accepted | Landed |
 | [0378](0378-a-capped-listing-answers-with-a-page.md) | A capped listing answers with a page, not with an array | Accepted | Landed |
 | [0379](0379-dmn-version-follows-the-document.md) | A DMN document's own namespace decides which DMN version reads and writes it | Accepted | Landed |
+| [0380](0380-a-commitment-is-checked-against-what-the-process-does.md) | A commitment is checked against what the process actually does | Proposed | Not started |
+| [0381](0381-a-problem-aggregates-incidents.md) | A problem is an aggregation over incidents, not a BPMN element | Proposed | Not started |
+| [0382](0382-whole-store-reads-leave-the-writer.md) | Whole-store reads leave the writer, and the store is sized for what it holds | Accepted | Landed |
+| [0383](0383-portal-level-names.md) | A position's level is read from the graph once, and a root with no parts is not a bundle | Accepted | Landed |
+| [0384](0384-order-position-key.md) | A position is a product and the shape of it, and it says so in its own key | Accepted | Landed |
+| [0385](0385-a-decision-is-addressed-by-both-of-its-names.md) | A decision is addressed by both of its names | Accepted | Landed |
+| [0386](0386-a-decision-result-keeps-its-declared-type.md) | A decision result keeps the type the model declares for it | Accepted | Landed |
+| [0387](0387-the-catalogue-against-the-standards-boundary.md) | The catalogue keeps its own model, and answers to TMF620 at the boundary | Proposed | Not started |
 
 ## The two states of a record
 

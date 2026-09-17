@@ -17,7 +17,13 @@ type ValidationResult struct {
 	Valid     bool     // the resolved model compiled without errors in temis
 	ModelName string   // the DMN <definitions name>, when resolved
 	Decisions []string // decision names the model exposes, when valid
-	Message   string   // human-readable reason when unresolved or invalid
+	// Aliases lists the further names those decisions answer to — a decision's FEEL
+	// identifier (its <variable name>) wherever it differs from the name above.
+	// Matching a business rule task's decisionId reads both; a listing and a
+	// deployment record read Decisions alone, so a decision is published under one
+	// name and one only (names.go).
+	Aliases []string
+	Message string // human-readable reason when unresolved or invalid
 }
 
 // Validator resolves DMN references and validates them against temis. It owns a
@@ -54,12 +60,13 @@ func (v *Validator) Validate(ctx context.Context, modelRef string) (ValidationRe
 	if diags.HasErrors() {
 		return ValidationResult{Resolved: true, Message: formatDiagnostics(diags)}, nil
 	}
-	idx := defs.Index()
+	names, aliases := decisionNames(defs)
 	return ValidationResult{
 		Resolved:  true,
 		Valid:     true,
 		ModelName: defs.ModelName(),
-		Decisions: idx.Decisions,
+		Decisions: names,
+		Aliases:   aliases,
 	}, nil
 }
 
@@ -127,7 +134,14 @@ func describeDecisions(defs *tdmn.Definitions) []DecisionInfo {
 		var inputs []DecisionField
 		for _, m := range g.Nodes { // model order → stable UI
 			if m.Type == "inputData" && feeding[m.ID] {
-				inputs = append(inputs, DecisionField{Name: m.Name, Type: m.DataType})
+				// The identifier the evaluation binds the value under, which is the input's
+				// <variable name> where it declares one and its label otherwise. The label
+				// alone would have the picker prefill a key temis does not read (names.go).
+				inName := m.VarName
+				if inName == "" {
+					inName = m.Name
+				}
+				inputs = append(inputs, DecisionField{Name: inName, Type: m.DataType})
 			}
 		}
 		outName := n.VarName
@@ -174,8 +188,8 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 	if diags.HasErrors() {
 		return ValidationResult{Resolved: true, Message: formatDiagnostics(diags)}
 	}
-	idx := defs.Index()
-	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: idx.Decisions}
+	names, aliases := decisionNames(defs)
+	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: names, Aliases: aliases}
 }
 
 // formatDiagnostics renders the error-severity diagnostics into one line for the

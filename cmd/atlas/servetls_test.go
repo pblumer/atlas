@@ -201,7 +201,7 @@ func serveForTest(ctx context.Context, addr, dataDir string, tlsCfg tlsConfig) e
 		oauthConfig{}, tlsCfg,
 		false, // vault
 		false, // userProvisioning
-		nil, time.Second, script.SandboxOff, opensearch.Config{}, promquery.Config{}, retentionConfig{},
+		nil, time.Second, script.SandboxOff, opensearch.Config{}, promquery.Config{}, retentionConfig{}, storeConfig{},
 		0, 0, false,
 		false, // metrics
 		logging.FormatText, tracing.Config{}, superviseFlag{}, nil, nil,

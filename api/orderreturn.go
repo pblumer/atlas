@@ -100,16 +100,26 @@ func (s *Server) handleReturnLine(w http.ResponseWriter, r *http.Request) {
 // the order and the line it is about, the variant that was chosen, and who holds
 // it. The process reports its outcome back through the same endpoint a
 // provisioning does.
-func (s *Server) startReturn(process, orderID, itemID string, o order.Order) error {
-	variant := ""
+func (s *Server) startReturn(process, orderID, ref string, o order.Order) error {
+	position, err := order.ResolveLine(o, ref)
+	if err != nil {
+		return err
+	}
+	var line order.Line
 	for _, l := range o.Lines {
-		if l.ItemID == itemID {
-			variant = l.VariantID
+		if l.Key() == position {
+			line = l
 			break
 		}
 	}
+	variant := line.VariantID
+	// itemId names the product, because that is what a deprovisioning process
+	// revokes. positionId names the position, because that is what it reports the
+	// outcome against — and where one product was ordered in two shapes, only the
+	// second can say which of them came back (ADR-0384).
 	vars := []model.VariableValue{
-		{Name: "itemId", Kind: model.VarString, Text: itemID},
+		{Name: "itemId", Kind: model.VarString, Text: line.ItemID},
+		{Name: "positionId", Kind: model.VarString, Text: position},
 		{Name: "orderId", Kind: model.VarString, Text: orderID},
 		{Name: "recipient", Kind: model.VarString, Text: o.Recipient},
 	}

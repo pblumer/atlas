@@ -51,7 +51,7 @@ That's the whole setup. No SQL schema to migrate, no broker to provision, no sid
 - <img src="docs/brand/icons/tokens.svg" width="18" height="18" align="absmiddle" alt=""> **See every token.** A live view of all running instances on the diagram, plus a step-by-step replay of any single instance with per-step variable snapshots.
 - <img src="docs/brand/icons/human.svg" width="18" height="18" align="absmiddle" alt=""> **Human work included.** User tasks with real forms, claim/assign, candidate groups, and public start links — a Tasks app, not just an API.
 - <img src="docs/brand/icons/decisions.svg" width="18" height="18" align="absmiddle" alt=""> **Decisions as tables.** DMN business rule tasks with an embedded decision-table editor, and every evaluation recorded with its inputs, outputs and rule trace.
-- <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 123 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
+- <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 124 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
 
 ## Take the tour
 
@@ -128,7 +128,7 @@ Coverage is a **checkable claim, not a vibe**: the [conformance suite](conforman
 atlas mcp --server http://localhost:8080          # --token, or ATLAS_TOKEN, when the server requires a login
 ```
 
-Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 123 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, the business-architecture registry that says what a process is *for*, and the self-service portal's product catalogue. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
+Atlas ships a [Model Context Protocol](https://modelcontextprotocol.io) adapter over its own HTTP API ([ADR-0016](docs/adr/0016-mcp-server-over-http-api.md)): 124 tools covering projects and drafts, BPMN and DMN deployment, instance lifecycle, task claiming and completion, incident resolution, runtime inspection, the business-architecture registry that says what a process is *for*, and the self-service portal's product catalogue. An agent can author a process, deploy it, start it, work its user tasks and read back the timeline — through exactly the surface a human uses. The Modeler also carries an in-canvas AI copilot ([ADR-0032](docs/adr/0032-modeler-ai-copilot.md)), and processes can call an agent as a task ([ADR-0117](docs/adr/0117-ai-agent-task.md)).
 
 ## Running it for real
 
@@ -156,6 +156,7 @@ Backup and restore, including whole-instance snapshots ([ADR-0107](docs/adr/0107
 - **[Postman onboarding kit](postman/)** — import the collection + environment and drive the HTTP API (deploy, run instances, work user tasks) in five minutes
 - **[n8n comparison](docs/comparisons/n8n.md)** — where integration automation and durable BPMN orchestration differ, and how they can work together
 - **[MIM comparison](docs/comparisons/mim.md)** — Microsoft Identity Manager's connector surface mapped to Atlas Worker Types, and the gaps that remain
+- **[Catalogue standards](docs/comparisons/catalogue-standards.md)** — the catalogue, order, and inventory models mapped onto TM Forum's TMF620/622/637, the Open Service Broker API, and open-source identity governance: what corresponds, where Atlas differs on purpose, and what was examined and found inapplicable
 - **[Deploying Atlas](deploy/)** — the container image ([`Dockerfile`](Dockerfile)) and a [Helm chart](deploy/helm/atlas) for running the server on Kubernetes
 - **[Compliance](docs/compliance/)** — the Swiss federal **ISDS-Konzept** (P042-Hi01) answered for Atlas, in German, plus the product gaps a Bund deployment would have to close
 - **[Roadmap](ROADMAP.md)** — where this is going · **[Changelog](CHANGELOG.md)** — what changed in each release

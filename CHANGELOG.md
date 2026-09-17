@@ -14,6 +14,103 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every position carries its own way into the process working on it.** "Meine Aufträge"
+  already listed each position and what it was doing, out of the order's own
+  record, and that stays the answer for every reader. A reader who may open an
+  instance — the operator role, which is what every route that finds or opens one
+  requires — now also gets a link into the running instance, looked up when it is
+  pressed rather than resolved for every row.
+
+  The order's link is narrowed to the fulfilment process, because every provisioning
+  sub-process carries the order id too and the first hit would be one position's
+  process wearing the order's name. **Each position carries a link of its own**, and
+  it is found by the position's id rather than the order's: the search answers with
+  only the variables that matched the query, so a search for the order returns every
+  instance it started, each carrying `orderId` and nothing else, with nothing left on
+  the page to tell them apart by. That matters because "the order is running" and
+  "this line is waiting on an approval" are different answers, and only the second is
+  what somebody reading their own order wants.
+
+  There is deliberately no fallback to the product id: it matches instances from every
+  order that ever carried that product, and the answer cannot be narrowed by the
+  order. A position whose instance is not found — history retention removes one long
+  before the order it fulfilled — is said rather than approximated.
+
+- **One product may be ordered in two shapes at once.** The catalogue describes the
+  same service pulled in twice in different variants as a conflict the orderer
+  resolves, and keeping both is a resolution — a black phone and a silver one. It
+  was not expressible: a line was identified by its product, so two of them
+  collapsed in every map the order builds and an outcome reported for one landed on
+  whichever came first.
+
+  A position is now identified by its product **and** the shape of it —
+  `itemId#variantId`, and plainly `itemId` where there is no variant, so no order is
+  migrated, no record gains a field, and a process built against `/lines/{itemId}`
+  keeps working. Where an order carries two positions of one product, naming the
+  product is **refused** with both position names rather than applied to one of
+  them. `POST /api/v1/orders` takes one entry per position in `variants`; a second
+  entry is refused unless the catalogue says the product may be held more than once,
+  and two entries of the same shape are refused outright, because two identical
+  positions cannot be told apart and this catalogue has no quantities. The fulfilment
+  process passes `positionId` beside `itemId`, and `/next` names each position
+  (ADR-0384).
+
+  **One limit, named rather than left to be found:** the inventory still records one
+  hold per person and product, so somebody who orders two shapes is provisioned
+  twice, correctly, and recorded as holding one. That is how a repeated order has
+  always been recorded; making the entitlement identity carry the variant is an
+  engine change with its own replay consequences.
+
+- **How long the single writer is held is now a metric.** Two histograms,
+  `atlas_runloop_turn_held_seconds` and `atlas_runloop_turn_wait_seconds`, pushed from
+  the run loop itself.
+
+  The run loop is the one duration in Atlas that is about the whole server rather than
+  one request: it is the single writer, and it is the gate every request passes
+  through — a read-only one included, since opening a consistent view takes a turn
+  (ADR-0239). A turn that runs long does not slow one caller down, it stops everything,
+  and until now nothing measured it. The batch counters do not: a batch is work the
+  processor did, while a turn is work somebody dispatched, and the two that hurt most —
+  publishing a checkpoint, resolving a compaction cut — are not batches at all. That is
+  exactly how they held the writer for seconds without a number anywhere saying so
+  (ADR-0382).
+
+  Both halves are reported because they answer different questions. `held` is the
+  cause: how long a closure occupied the writer, which is the number a fix like ADR-0382
+  moves. `wait` is the effect: how long a caller queued before its closure even started,
+  which is what a person experiences as the interface hanging. A server can have one
+  long turn and nobody notices; it can have many medium ones and a queue nobody gets
+  through. `held` alone cannot tell those apart.
+
+  Buckets run from 100µs to about 13 seconds — wider at the top than the fsync
+  histograms beside them, because a turn is the whole server standing still and the
+  range has to reach the failures worth alerting on rather than saturate at the first
+  one. `Ping` is deliberately not counted: its closure is empty, so counting it would
+  fill the histogram with work nobody performed. An uninstrumented loop reports nothing
+  and does not even read the clock.
+
+- **A standing list of the approval rules that reach nobody.** An approval rule names
+  an approver, and what that name has to be differs by kind: a named person becomes a
+  task's assignee, matched against a username, and a group becomes its candidate
+  groups, matched against a group id or name. **Neither is checked when the rule is
+  written, and neither failure is reported when it fires.** The approval is created, it
+  lands in nobody's inbox, and the order waits without saying why — the first person to
+  notice is whoever is waiting for the laptop.
+
+  The catalogue listing now carries the list: which products name an approver that
+  resolves to nobody, what each names, why it reaches nobody, and a link to the
+  catalogue where it is corrected. Scoped to the products you may maintain, because it
+  names people.
+
+  It deliberately stays quiet about three things, so that what it does say is worth
+  reading: a rule that still reaches somebody (candidate groups are a list, and one
+  live entry is enough), a kind that names an approval process directly (there is
+  nothing to check it against), and a leftover reference beside a kind that needs none
+  (untidy, not broken).
+
+  Where the server cannot read accounts or groups at all, it refuses and the page says
+  so. The two available guesses are both worse: every rule reported as broken, or a
+  clean estate nobody checked — and the second is the one somebody wants to believe.
 - **An outage now stops at the worker instead of at every token.** A worker whose target
   stopped answering did not fail once. It failed once **per instance that reached its
   task**: each failure spent a retry, each exhausted budget parked a token behind its own
@@ -119,6 +216,80 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is
+  no Bundle level.** A bundle is offered as a *Marktleistung*: it holds the
+  orchestration process, and the services behind it hold their own provisioning and
+  deprovisioning — a service may stand behind several Marktleistungen, included or
+  optional, always with the same processes.
+
+  So the Bundle level had nothing to name. Every root is a Marktleistung, with or
+  without parts, and everything behind one is a service however deep it sits; the
+  level rule is now depth and nothing else. This withdraws the *answer* the previous
+  rule gave, not the rule that there is one: a catalogue that has to decide per
+  product which of two words describes it gets that wrong for every product somebody
+  adds a part to later, and nothing downstream needed the distinction — an order, a
+  release and a provisioning call name items, not levels.
+
+  The vacated column holds the **product group**, a second heading a product writes
+  on itself beside its category. It is a string with the costs ADR-0360 states and
+  accepts, and the chain is therefore a *display* chain: the group has no record and
+  no category of its own, so the relation is read off the products carrying both. A
+  group whose products sit in two categories appears under both, and a group with no
+  products does not exist — neither is an error state, because nothing claims a group
+  belongs to one category.
+
+  The cascade stops deriving a level altogether: its columns are the levels. The
+  basket and the list of what somebody holds still derive one, because they hold a
+  set of positions with no layout to read it off. ADR-0383 carries the amendment.
+
+- **Approvals moved under Tasks, and the inbox says which of its rows decide an
+  order.** Approvals was advertised as an application beside Modeler and Operations,
+  and it was empty for almost everybody who saw it — there is no approver role to
+  gate on, because a product names a person, a group, or the orderer's superior, so
+  anybody signed in may hold an approval tomorrow without holding one today.
+
+  It was also, already, in the inbox. An approval is an ordinary engine user task,
+  the task list does not filter those out, and the inbox never knew the word — so
+  the same decision sat in two places and neither said it was the same thing. The
+  entry now sits under Tasks, where Access review already sits for the same reason,
+  and an inbox row that decides an order carries a chip saying so and leading to
+  where it is decided. The link names the order line rather than the task, because
+  that is what the approvals page takes: a task key does not exist until the task
+  activates, and it changes when the task is reassigned, while the order and the
+  product do not.
+
+  The page itself is unchanged and still opens in its own window — a sub-navigation
+  entry rendered as a plain link would have replaced the console in the same tab,
+  which is the behaviour the drawer's `separate` flag exists to avoid.
+
+- **The catalogue screen wears the console's buttons.** It had a button vocabulary of
+  its own — `primary` on the eight actions that commit something, `linkish` on the five
+  that remove a row, nothing at all on five more — and the stylesheet declares none of
+  the three. All eighteen rendered as the browser's default button, grey and square and
+  a different size, on a page where every other screen draws the accent-filled one. It
+  only reads as wrong beside the Modeler, and the two are never on screen together,
+  which is why nobody reported it.
+
+- **The state store is configured for the size it has grown to, not for Pebble's
+  defaults.** It was opened with only a merger set, which left an 8 MB block cache, a
+  4 MB write buffer that stops writes at two unflushed, and a single compaction
+  goroutine — sensible for an embedded store of a few thousand keys, and the reason a
+  store holding millions sends scans to disk and turns a compaction backlog into a write
+  stall, which stalls the run loop that issued it.
+
+  `state.Open` now takes options. Compaction concurrency is raised for every store, since
+  it costs CPU and an idle store starts none; the block cache (`--state-cache-mb`,
+  default 64) and write buffer (`--state-memtable-mb`, default 16) are set by the server
+  for its own long-lived store only, because a process may hold several — the Playground
+  opens one per session — and resident memory would multiply. Both accept 0 to fall back
+  to Pebble's default.
+
+  The write buffer's trade-off, stated because it is real: a larger one means the store
+  trails the log further after a crash, so recovery replays a longer suffix. That costs
+  recovery time and never durability — the WAL's fsync is the durability point (ADR-0005)
+  — and the checkpoint cadence bounds how long the suffix gets. The sizes themselves are
+  reasoned rather than measured against a production store; the record carries that as an
+  open question, and the flags exist so the answer can be corrected without a rebuild.
 - **The approver is picked, and picked differently depending on the kind.** This was
   the last typed identifier on the catalogue screen and the one that cost the most,
   because nothing reports a wrong value: an approval whose approver matches nobody is
@@ -374,6 +545,221 @@ _Changed_ / _Removed_ for each version.
   It was found by the refusal above rather than by a reader, on the first run of the test
   suite after that check existed — which is the argument for the check, made by the
   repository's own documentation.
+
+- **A decision whose name is not a FEEL identifier is deployable again.** Per DMN a
+  decision has two names: the label on the diagram (`name`) and the FEEL identifier its
+  result is bound to (`<variable name>`), and they need not be the same string. The DMN
+  engine Atlas pinned bound a required decision under its *label*, so a model valid per
+  the specification — `Decision A` declaring `<variable name="alpha"/>`, `Decision B`
+  reading `alpha * 10` — was refused at deploy time with `unknown variable "alpha"`: a
+  message naming the symptom and not the cause. The only way through was to name every
+  decision in a chain like a FEEL identifier, which rules out `Kunden-Risiko` and
+  `Decision A` alike. A model authored in the temis Modeler, in Camunda or by hand was
+  rejected on arrival, and trying it before deploying reproduced the same refusal, so
+  nothing distinguished an Atlas limitation from a modelling error.
+
+  The engine now binds by the identifier, as DMN says, and **Atlas accepts both names
+  everywhere a decision is addressed** — the registry's version pointers, the model a
+  business rule task resolves to, the try-a-decision membership check and the deploy
+  gate's coverage report. A task deployed under the label keeps evaluating; one naming
+  the identifier resolves too. A decision is still *published* under exactly one name,
+  its label, so a deployment record, a version count and a listing read as before.
+  Inputs get the same treatment: an input whose label differs from the identifier it
+  binds is accepted under either, so a task that recorded its input keys before the
+  distinction existed still finds them. Measured across every model on the reference
+  installation: none is affected, and the DRD that prompted this now deploys and
+  evaluates.
+
+- **A decision that returns a number wrote its result as a string.** The decision engine
+  hands a FEEL number back as its exact decimal string — deliberately, so an amount is
+  not rounded on the way out — and Atlas stored it as what it saw: text. A sequence-flow
+  condition comparing that variable to a number is then a FEEL type mismatch, which
+  evaluates to `null`, which is not `true`, so the token took the **default flow** with
+  no incident, no diagnostic and no trace entry. The process simply routed the wrong way,
+  and an instance's variables read `{"alter": 19, "praemie": "1250"}` — the two from a
+  form numbers, the one from a decision a string.
+
+  **The model's own type declarations now decide**, and nothing else: a result the model
+  declares `number` is stored as a number, exactly, without reparsing or rounding. A
+  string that merely looks like a decimal is left alone, so a policy number, an article
+  code and `"0800"` keep their leading zeros and their type. It holds for a decision
+  table's output columns, a boxed context's entries and every element of a `COLLECT`
+  list. An output the model leaves untyped stays a string — the honest answer, since
+  guessing would trade a visible wrong type for an invisible wrong value.
+
+- **The icons at the end of a catalogue row broke onto a second line.** Each of them
+  already refused to shrink, but they sat in a plain `<span>` carrying no rule at
+  all: a flex item that may shrink, holding inline boxes that wrap inside it. The
+  cascade is four columns across, so in a narrow one the star, the ± and the "i"
+  wrapped and a single row read as two.
+
+  The row's cell now wraps whatever trails it, in one place rather than at each of
+  the seven callers — a rule applied per caller is a rule the next caller forgets.
+  The wrapper is a flex row that does not shrink, which is the whole fix: a flex row
+  does not wrap by default, and the icons cannot give up width.
+
+- **A catalogue could offer a product nobody had created, and only said so much
+  later.** The write that introduced the dangling id answered 200; the refusal
+  appeared at the next publish, as `unknown item <id>`, against a catalogue the
+  person had stopped thinking about. Two symptoms of one fact, with nothing on
+  screen connecting them: publishing refused an id that looked like a product, and
+  the product behind that id read as `revision: 0` — a stored product always carries
+  at least revision 1, because the save that creates one sets it, so zero means the
+  record was never written at all.
+
+  The catalogue's own screens already assumed the rule, rendering such a row as
+  "offered but not defined — publishing will refuse this"; a rule a screen explains
+  and a route does not enforce holds until somebody uses the API. Offering a product
+  that does not exist is now refused where it is written, naming the id. Only what a
+  write *adds* is checked, so a catalogue already carrying bad ids stays repairable —
+  otherwise the only way out of the mistake would be the mistake. The check is
+  existence and not visibility: a product is referenced by several catalogues and
+  edited through exactly one.
+
+- **"Meine Aufträge" showed principal ids where it meant people.** The Person column
+  printed `usr_703f410b40336d21476152fb`. Nothing was wrong with the record — an
+  order names people by principal id and by nothing else, because a name copied into
+  a record outlives the reason for holding it (ADR-0314) — but that decision leaves
+  the other half to the screen: a name is resolved when the screen is rendered, and
+  the table was not resolving. It reads the directory once per load and names the
+  person; where nothing knows the id, the id is still shown, because an empty cell
+  reads as a broken column rather than as an unresolved one. The column's filter
+  searches both, so a pasted id still finds its row.
+
+- **One position in the portal carried two different level names.** The catalogue
+  screen and the basket both label a position Bundle, Marktleistung or Service, and
+  Atlas has no such typing — the level is derived from the containment graph. It was
+  derived twice, differently: the cascade used depth, the basket used whether a part
+  came with the whole. The direct part of a package was a Marktleistung in one half
+  of the screen and a Service in the other. Underneath that, every product nothing
+  contained was called a bundle, so a single product with nothing inside it was
+  announced as something made of other things.
+
+  One rule now decides the level and all three views read it — the catalogue, the
+  basket and what a person already holds, which was a third derivation again: a root with parts is a
+  bundle, a root without them is an offering, a direct part of a root is an
+  offering, and anything deeper is a service. Whether a position can be taken out is
+  answered per row by the control it carries, which is the different question the
+  basket had been answering with the level. Display only — no stored release, API or
+  order in flight is affected, because the level has never been written down
+  (ADR-0383).
+
+- **An order never said which shape of a product was ordered.** A variant is one
+  orderable shape — a colour, a licence tier — and the catalogue has carried them from
+  the start. Nothing ever wrote one down: the order line had the field, the fulfilment
+  process passed `position.variantId` to provisioning, and it arrived empty for every
+  order ever placed, because the basket never asked and `POST /api/v1/orders` had
+  nowhere to put the answer. Provisioning was told to hand over a phone and not which
+  one.
+
+  The basket now asks, for every line that comes in more than one shape, including the
+  ones that arrived as integral parts of a bundle and were never named by the orderer.
+  Nothing is pre-selected: variants are unordered on purpose, so there is no first one
+  to fall back on. Ordering waits until every open choice is made, and the server
+  refuses an order that leaves one open, names a shape the product does not come in,
+  or names one for a product that comes in a single shape — a rule the page keeps and
+  the server does not is not a rule. `POST /api/v1/orders` takes a new optional
+  **`variants`** object, keyed by item id and holding one shape per position; a body
+  without it is unchanged for every product that has no variants.
+
+- **The portal showed what a product comes with and not what it is offered with.**
+  A release carries two kinds of containment: a composition arrives with the whole and
+  cannot be dropped, an aggregation is an offer standing beside it. The cascade drew
+  both. The info panel named neither, and the basket pulled in compositions and
+  stopped — so the offers hanging under a bundle were reachable only from the column
+  the bundle happens to open, and only until the reader navigated away.
+
+  The panel now lists both groups, kept apart, and the basket carries an Optional
+  column holding every offer the chosen products make: unticked, each with its price
+  and its "i", and ticked through the same control the cascade uses. Nothing about the
+  stored release or the order contract moves — a ticked option is an ordinary id in
+  the basket, so the placed order carries the bundle, its integral parts and the
+  options actually chosen, each as its own line with its own provisioning process.
+
+- **A catalogue could only be published while every other catalogue was empty.**
+  Publishing validates one catalogue, and it is handed every catalogue — because a
+  rank has to be unique across the set, and a tie can only be seen against somebody
+  else. It was handed only **that one catalogue's** products, though, and it then
+  resolved *every* catalogue's product references against that single list. Each of
+  the others came back "unknown item", and the publish was refused.
+
+  The two messages are why it read as a contradiction rather than as a defect:
+  publishing *Informatik* blamed the other catalogue's products, publishing the other
+  blamed *Informatik*'s, and neither message named the catalogue anybody had asked to
+  publish. There was no order in which both could succeed, and no way to read the pair
+  as anything but the product disagreeing with itself.
+
+  A publish now says which catalogue it is for. The rank check still looks at the whole
+  set; the product references are resolved for the subject alone. A publish that does
+  **not** say — which is unambiguous for one catalogue and for no other number — is
+  refused rather than guessed at, because the guess is precisely the defect above.
+
+  Nothing about the workaround is needed any more, and nothing published under it has
+  to be redone: the refusal happened before anything was written.
+
+- **The server froze for seconds at a time, on a cadence, once its store grew.** Every
+  list in the Console stopped, everything the browser already had stayed responsive, and
+  after some seconds the whole backlog arrived at once. Nothing in the code had changed;
+  the store had — to ~50.000 active instances carrying ~200.000 tokens, over 2.000.000
+  finished instances of history behind them.
+
+  Three pieces of work grew with that store, and all three ran on the run loop, which is
+  the single writer *and* the gate every request passes through — an off-loop reader
+  still takes a loop turn to open its view, so holding the writer holds everything.
+
+  The checkpoint was the cadence. `checkpoint.Publish` checksums the snapshot it takes,
+  which means reading every SST file in the store, and it did that inside the `do()` turn
+  that took the snapshot. Measured at 735 MB/s with a warm page cache — 2,9 s for a 2 GB
+  store, linear from there — on the default five-minute interval. WAL compaction did the
+  same read again, through `checkpoint.Verify`, in a turn whose own comment called it
+  "bounded work — a few unlinks and one directory fsync". And `readStats` counted active
+  instances and live tokens by walking their column families: 48,9 ms at that population,
+  paid by `GET /api/v1/stats` — which the incident badge polls every five seconds for one
+  field — and by seven write paths that report the counts back in their response,
+  including `POST /api/v1/messages`, so a message-driven model paid it per message.
+
+  Only the snapshot needs the writer stopped; once taken it is hard links to immutable
+  files under a name nothing else looks at. So `Publish` splits into `Stage` and
+  `Staged.Commit`, `CompactLog` into `CompactionCut` and `CompactLogAt`, and the counts
+  come from the maintained ADR-0080 counters — 1,2 ms, and rising by half where the scan
+  rises elevenfold. Both single calls remain for tests and synchronous embedding. The
+  incident count stays a scan on purpose: an incident leaves state two ways, so a
+  maintained number would drift where a scan cannot.
+
+  What that costs, stated because it is real: a scan cannot be wrong, a counter can. If
+  any write ever put one of those records without its counter beside it, the number would
+  drift silently. `applyToState` is the only place either is written and it puts the two
+  in one `firstErr`, and `TestStatsReadFromCountersAgreeWithTheScan` holds the readings
+  against each other — but the guarantee is now maintenance rather than construction.
+
+  Two tests hold the line rather than a convention —
+  `TestCheckpointCommitRunsWithTheRunLoopFree` and
+  `TestCompactionVerificationRunsWithTheRunLoopFree` ask the loop whether it is free at
+  the moment each read begins — and two benchmarks keep the numbers above honest
+  (`BenchmarkChecksumDirBySize`, `BenchmarkStatsAtProductionSize`).
+  See `docs/adr/0382-whole-store-reads-leave-the-writer.md`.
+
+- **A Google Sheets task whose spreadsheet resolved to nothing now says so, instead of
+  asking Google about no spreadsheet at all.** A model addresses a spreadsheet by a value
+  it may author as FEEL — `spreadsheet="=tabelle"` is the ordinary shape, with the id or
+  the pasted browser URL arriving as a start variable. An instance started without that
+  variable resolves it to FEEL null, and a null value resolves to the empty string, as it
+  does for every Worker Type. In an optional value that is exactly right and means "leave
+  it out".
+
+  In a required one it meant the worker called `/v4/spreadsheets//values/A1:C1` and
+  reported what Google answers for that: **HTTP 404, "Requested entity was not found"** —
+  the message for a file somebody deleted. It sent its operator to look at a spreadsheet
+  that was exactly where they had left it, and nothing had been refused at deploy,
+  because the attribute *was* there; what was missing was the instance's variable.
+
+  The Worker Instance now refuses such a job before the call and names the operation and
+  the attribute that came up empty. The check reads the same operation table the compiler
+  and the properties panel do, so it covers every value an operation needs — the
+  spreadsheet, the sheet, the range, the title, the rows to write — and an operation added
+  to that table cannot be forgotten in it. The job's fate is unchanged (pending, retried,
+  then an incident); what changed is that the incident names the fix.
+
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two

@@ -65,7 +65,7 @@ They are JS, not Go, so they are a separate CI job and are not part of the Go co
 cd e2e && npm ci && npx playwright install chromium && npm test
 ```
 
-**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause.
+**Definition of done for any code change:** `go build ./...`, `go test -race -timeout=45m ./...`, `go vet ./...` all pass, and `gofmt -l .` is empty. Do not report a task complete until these are green. A `panic: test timed out` from `api` without `-timeout` is that missing flag, not a finding — re-run it with the flag before you go looking for a cause. **If you touched `CHANGELOG.md`, add `make whats-new` to that list and commit the regenerated `api/web/whats-new.json`** — the Console's What's New feed is generated from the changelog and committed (ADR-0012 keeps the UI buildless), so a new bullet without a re-run fails CI on a check none of the four commands above covers. While you are there, give the entry curated DE/EN prose in `scripts/whats-new/overrides/<id>.json`; without it the feed shows your English changelog wording to German readers, which is what the override directory exists to prevent.
 
 ## Repository layout
 
@@ -212,6 +212,8 @@ numbers (`docs/adr/number.go`, `make adr-number`).
 
 - **`applyToState` is special.** It is called both live and on recovery. Side effects (notifications, network, time reads) must *not* live here — only deterministic state mutation. Put side effects in the processor's post-fsync phase.
 - **A query that can grow with the instance population does not belong on the run loop.** `Server.do` gives its closure the engine's single writer for as long as it runs, so a scan dispatched onto it stops command processing for every other request. Use `Server.readOffLoop`: it takes a `state.ReadView` and the deployment metadata on the loop, then runs the scan with the loop free (ADR-0080, ADR-0239). Better still, check whether the answer is already a maintained counter or an index.
+
+- **Nor does anything else that grows with the data — it is not only queries.** The same `Server.do` closure that must not hold a scan must not hold a whole-store read either, and those hide in work nobody calls a query: publishing a checkpoint checksums every SST file in the store, and resolving the WAL compaction cut verifies checkpoints, which is that read again. Both sat on the loop behind comments calling them bounded, and on a store of a few GB they froze the entire API for seconds at a time, on a cadence (ADR-0382). Before you dispatch onto the loop, ask what the closure's cost is a function of. If the answer is anything that grows — instances, tokens, history, bytes on disk — only the part that genuinely needs the writer stopped goes on it, and the rest runs after. Note that this is why a *read-only* request can hang too: `readOffLoop` still takes a loop turn to open its view, so a held writer holds every request, not just the writing ones.
 - **Followup commands vs. events.** Emitting an event mutates state now and is persisted now. Scheduling a followup command defers work to the next batch. Don't confuse them; see `ProcessingContext` in [`processor.md`](docs/architecture/processor.md).
 - **Element IDs are integer indices**, not strings, everywhere in engine code. Strings are interned at compile time. Don't reintroduce string handling on the hot path.
 - **Keys encode the partition** in their high bits. Don't invent keys by hand; use the key generator.
@@ -288,6 +290,7 @@ Do not rewrite the author of commits that are already on `main`.
 | See what to build next | [`ROADMAP.md`](ROADMAP.md) |
 | Look up a term | [`docs/architecture/glossary.md`](docs/architecture/glossary.md) |
 | Understand business capabilities and value streams | [`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md) |
+| Know how the catalogue relates to TMF620 and the other standards | [`docs/comparisons/catalogue-standards.md`](docs/comparisons/catalogue-standards.md) |
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
 | Set or overwrite a running instance's variables | `POST /api/v1/instances/{key}/variables` — [ADR-0095](docs/adr/0095-external-variable-modification.md) |
 | See who overrode an instance's variables (the audit trail) | `GET /api/v1/instances/{key}/variable-audit` — [ADR-0098](docs/adr/0098-external-variable-modification-audit.md) |

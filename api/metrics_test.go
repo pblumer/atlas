@@ -703,3 +703,33 @@ func TestLeaseAndIncidentMetrics(t *testing.T) {
 		t.Errorf("open incidents = %v after one job exhausted its retries, want 1", got)
 	}
 }
+
+// TestRunLoopTurnsAreReported: the single writer's own latency reaches the exposition.
+//
+// It is the one duration in Atlas that is about the whole server rather than one
+// request — the loop is the writer *and* the gate every request passes through — and
+// nothing else measures it. The batch counters do not: the two turns that hurt most,
+// publishing a checkpoint and resolving a compaction cut, are not batches at all.
+func TestRunLoopTurnsAreReported(t *testing.T) {
+	dir := t.TempDir()
+	h := newCompactionHarness(t, dir)
+	h.deploy()
+	h.create(3)
+
+	exposition := scrape(t, h)
+	held := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_count")
+	waited := sampleValue(t, exposition, "atlas_runloop_turn_wait_seconds_count")
+	if held == 0 || waited == 0 {
+		t.Fatalf("held=%v waited=%v turns observed after real work, want both non-zero", held, waited)
+	}
+	// Every turn has both halves, so the two histograms count the same turns. A drift
+	// would mean one of them is being fed from somewhere the other is not.
+	if held != waited {
+		t.Errorf("held count %v and wait count %v disagree; each turn must report both", held, waited)
+	}
+	// The sums are durations, so they are non-negative — and held is real work, so on a
+	// server that just deployed and started three instances it cannot be exactly zero.
+	if sum := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_sum"); sum <= 0 {
+		t.Errorf("held seconds sum = %v, want a positive total", sum)
+	}
+}

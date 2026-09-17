@@ -267,6 +267,22 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_catalog_approver_report",
+			Description: "Which of the products you maintain name an approver that reaches " +
+				"nobody. An approval rule's reference becomes a task's assignee (a named " +
+				"person, matched by username) or its candidate groups (a group, matched by id " +
+				"or name); neither is checked when the rule is written, and neither failure is " +
+				"reported when it fires — the approval is created, lands in no inbox, and the " +
+				"order waits. Run this before publishing: a rule that reaches nobody is not a " +
+				"publish error, so nothing else will tell you. It stays silent about a rule " +
+				"that still reaches somebody, about a kind that names an approval process " +
+				"directly, and about a leftover reference beside a kind that needs none.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/catalog-products/approver-report"))
+			},
+		},
+		{
 			Name: "atlas_save_catalog_product",
 			Description: "Create or change one product or service. THIS IS A FULL REPLACE: every " +
 				"field you leave out is CLEARED, including translations, variants, keywords, " +

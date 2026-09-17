@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Operations"
+  ],
+  "title": {
+    "en": "The state store is set up for the size it has actually reached",
+    "de": "Der Datenspeicher ist auf die Grösse eingestellt, die er tatsächlich erreicht hat"
+  },
+  "summary": {
+    "en": "Atlas kept its state in a store running on its library's out-of-the-box settings: an 8 MB read cache and a single housekeeping thread. Those fit a store of a few thousand entries. On one holding millions they send every lookup to disk and let the housekeeping fall behind until writes are held back — which is felt as the server pausing. The server now sizes its own store for the job and you can adjust it: --state-cache-mb (64 by default) and --state-memtable-mb (16). Worth knowing before you upgrade: that is roughly 96 MB of memory the server did not use before, and both accept 0 to go back to the old behaviour.",
+    "de": "Atlas hielt seinen Zustand in einem Speicher, der auf den Voreinstellungen seiner Bibliothek lief: 8 MB Lesepuffer und ein einziger Aufräum-Thread. Das passt zu einem Speicher mit ein paar tausend Einträgen. Bei Millionen führt es dazu, dass jeder Zugriff auf die Platte geht und das Aufräumen so weit zurückfällt, bis Schreibvorgänge gebremst werden — spürbar als Aussetzer des Servers. Der Server stellt seinen Speicher nun passend ein, und Sie können nachjustieren: --state-cache-mb (Vorgabe 64) und --state-memtable-mb (16). Vor dem Upgrade zu wissen: Das sind rund 96 MB Arbeitsspeicher, die der Server vorher nicht belegte; mit 0 kehren beide zum alten Verhalten zurück."
+  }
+}

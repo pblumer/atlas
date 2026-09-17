@@ -2,6 +2,81 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "every-position-carries-its-own-way-into-the-process-working-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Every position carries its own way into the process working on it.",
+        "de": "Every position carries its own way into the process working on it."
+      },
+      "summary": {
+        "en": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader.",
+        "de": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "one-product-may-be-ordered-in-two-shapes-at-once",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One product may be ordered in two shapes at once.",
+        "de": "One product may be ordered in two shapes at once."
+      },
+      "summary": {
+        "en": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one.",
+        "de": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "how-long-the-single-writer-is-held-is-now-a-metric",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "You can now measure the pause that makes the interface feel stuck",
+        "de": "Die Pause, die sich als hängende Oberfläche anfühlt, ist jetzt messbar"
+      },
+      "summary": {
+        "en": "Atlas does one thing at a time where it changes state, and everything else — including a request that only wants to read — waits its turn. So a single slow turn is not one slow request, it is the whole server standing still, and nothing measured it: the existing counters describe what the engine processed, not how long somebody waited to be let in. Two figures now go to your metrics endpoint: how long each turn occupied the server, and how long callers queued before theirs began. The first says what caused a pause, the second says whether anyone felt it. There is nothing to switch on and no cost when you collect no metrics.",
+        "de": "Atlas tut an der Stelle, an der es seinen Zustand ändert, immer nur eines zur Zeit — alles andere wartet, auch eine Anfrage, die bloss lesen will. Ein einzelner langsamer Durchlauf ist damit keine langsame Anfrage, sondern ein Stillstand des ganzen Servers, und gemessen hat das bisher nichts: Die vorhandenen Zähler beschreiben, was die Engine verarbeitet hat, nicht wie lange jemand auf Einlass gewartet hat. Zwei Werte gehen nun an Ihren Metrik-Endpunkt: wie lange jeder Durchlauf den Server belegte und wie lange Aufrufer davor in der Schlange standen. Der erste nennt die Ursache einer Pause, der zweite sagt, ob sie jemand gespürt hat. Es gibt nichts einzuschalten, und wer keine Metriken erhebt, zahlt nichts dafür."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
+      "id": "a-standing-list-of-the-approval-rules-that-reach-nobody",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A standing list of the approval rules that reach nobody.",
+        "de": "A standing list of the approval rules that reach nobody."
+      },
+      "summary": {
+        "en": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name.",
+        "de": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "an-outage-now-stops-at-the-worker-instead-of-at-every-token",
       "version": "Unreleased",
       "date": null,
@@ -67,6 +142,81 @@
       }
     },
     {
+      "id": "the-catalogue-reads-kategorie-produktgruppe-produkt-services",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is no Bundle level.",
+        "de": "The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is no Bundle level."
+      },
+      "summary": {
+        "en": "A bundle is offered as a Marktleistung: it holds the orchestration process, and the services behind it hold their own provisioning and deprovisioning — a service may stand behind several Marktleistungen, included or optional, always with the same processes.",
+        "de": "A bundle is offered as a Marktleistung: it holds the orchestration process, and the services behind it hold their own provisioning and deprovisioning — a service may stand behind several Marktleistungen, included or optional, always with the same processes."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "approvals-moved-under-tasks-and-the-inbox-says-which-of-its-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Approvals moved under Tasks, and the inbox says which of its rows decide an order.",
+        "de": "Approvals moved under Tasks, and the inbox says which of its rows decide an order."
+      },
+      "summary": {
+        "en": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today.",
+        "de": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-catalogue-screen-wears-the-console-s-buttons",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The catalogue screen wears the console's buttons.",
+        "de": "The catalogue screen wears the console's buttons."
+      },
+      "summary": {
+        "en": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three.",
+        "de": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "the-state-store-is-configured-for-the-size-it-has-grown-to-n",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The state store is set up for the size it has actually reached",
+        "de": "Der Datenspeicher ist auf die Grösse eingestellt, die er tatsächlich erreicht hat"
+      },
+      "summary": {
+        "en": "Atlas kept its state in a store running on its library's out-of-the-box settings: an 8 MB read cache and a single housekeeping thread. Those fit a store of a few thousand entries. On one holding millions they send every lookup to disk and let the housekeeping fall behind until writes are held back — which is felt as the server pausing. The server now sizes its own store for the job and you can adjust it: --state-cache-mb (64 by default) and --state-memtable-mb (16). Worth knowing before you upgrade: that is roughly 96 MB of memory the server did not use before, and both accept 0 to go back to the old behaviour.",
+        "de": "Atlas hielt seinen Zustand in einem Speicher, der auf den Voreinstellungen seiner Bibliothek lief: 8 MB Lesepuffer und ein einziger Aufräum-Thread. Das passt zu einem Speicher mit ein paar tausend Einträgen. Bei Millionen führt es dazu, dass jeder Zugriff auf die Platte geht und das Aufräumen so weit zurückfällt, bis Schreibvorgänge gebremst werden — spürbar als Aussetzer des Servers. Der Server stellt seinen Speicher nun passend ein, und Sie können nachjustieren: --state-cache-mb (Vorgabe 64) und --state-memtable-mb (16). Vor dem Upgrade zu wissen: Das sind rund 96 MB Arbeitsspeicher, die der Server vorher nicht belegte; mit 0 kehren beide zum alten Verhalten zurück."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ]
+    },
+    {
       "id": "the-approver-is-picked-and-picked-differently-depending-on-t",
       "version": "Unreleased",
       "date": null,
@@ -101,170 +251,6 @@
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
-    },
-    {
-      "id": "a-catalogue-s-people-are-chosen-from-a-list-instead-of-typed",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A catalogue's people are chosen from a list instead of typed as an id.",
-        "de": "A catalogue's people are chosen from a list instead of typed as an id."
-      },
-      "summary": {
-        "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
-        "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-product-form-is-filled-in-the-order-a-product-is-thought",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The product form is filled in the order a product is thought about.",
-        "de": "The product form is filled in the order a product is thought about."
-      },
-      "summary": {
-        "en": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket.",
-        "de": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-portal-s-catalogue-tab-is-called-the-catalogue",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The portal's catalogue tab is called the catalogue.",
-        "de": "The portal's catalogue tab is called the catalogue."
-      },
-      "summary": {
-        "en": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\".",
-        "de": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\"."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
-        "de": "The info panel is reachable from every column of the catalogue, not only from services."
-      },
-      "summary": {
-        "en": "This was not a missing feature but an inconsistency inside one page.",
-        "de": "This was not a missing feature but an inconsistency inside one page."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The feed generator is Go, so the Go checks stop needing Node.",
-        "de": "The feed generator is Go, so the Go checks stop needing Node."
-      },
-      "summary": {
-        "en": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless.",
-        "de": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless."
-      },
-      "link": {
-        "label": "ADR-0012",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
-      }
-    },
-    {
-      "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The portal's corner names whoever the order is for, and the help moved to the end of the row.",
-        "de": "The portal's corner names whoever the order is for, and the help moved to the end of the row."
-      },
-      "summary": {
-        "en": "The corner said \"mich selbst\" to everybody.",
-        "de": "The corner said \"mich selbst\" to everybody."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "an-expression-calling-a-function-that-does-not-exist-no-long",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A misspelled or foreign function is now refused, not silently null",
-        "de": "Falsch geschriebene oder fremde Funktionen werden abgelehnt statt still zu null"
-      },
-      "summary": {
-        "en": "An expression calling a function Atlas does not have used to deploy without a word and evaluate to null at run time — no error, no warning, nothing in the Problems panel. A gateway reading that null takes its default branch, so a process quietly does the wrong thing and nobody is told. The commonest way in is a function from Camunda's dialect, such as is defined(), but a plain typo did exactly the same. A deploy now refuses such a call and says how to write it instead — is defined becomes x != null, put becomes context put. The same refusal catches a real function called with the wrong number of arguments, like date() with none.",
-        "de": "Ein Ausdruck, der eine Funktion aufruft, die es in Atlas nicht gibt, wurde bisher kommentarlos deployt und ergab zur Laufzeit null — kein Fehler, keine Warnung, nichts in der Problems-Anzeige. Ein Gateway, das dieses null liest, nimmt den Default-Zweig: Der Prozess tut still das Falsche, und niemand erfährt davon. Am häufigsten passiert das mit Funktionen aus Camundas Dialekt wie is defined(), ein simpler Tippfehler hatte aber genau dieselbe Wirkung. Der Deploy lehnt solche Aufrufe jetzt ab und sagt, wie man es stattdessen schreibt — aus is defined wird x != null, aus put wird context put. Dieselbe Prüfung erfasst auch echte Funktionen mit falscher Argumentzahl, etwa date() ohne Argument."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Modeler"
-      ],
-      "tutorial": {
-        "en": [
-          "Open a process in the Modeler and write a condition or script expression calling a function that does not exist, for example = is defined(x).",
-          "The Problems panel names the element, the call, and the standard way to write the same thing.",
-          "Correct it — = x != null — and the model deploys.",
-          "Decisions are unaffected: DMN requires an expression to stay evaluable, so a decision still answers null. The refusal belongs to the deploy."
-        ],
-        "de": [
-          "Einen Prozess im Modeler öffnen und in einer Bedingung oder einem Skript eine Funktion aufrufen, die es nicht gibt, etwa = is defined(x).",
-          "Die Problems-Anzeige nennt das Element, den Aufruf und die standardkonforme Schreibweise.",
-          "Korrigieren — = x != null — und das Modell lässt sich deployen.",
-          "Entscheidungen sind nicht betroffen: DMN verlangt, dass ein Ausdruck auswertbar bleibt, eine Entscheidung ergibt also weiterhin null. Abgelehnt wird beim Deploy."
-        ]
-      }
-    },
-    {
-      "id": "the-handbook-s-compute-a-value-recipe-taught-an-expression-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The handbook's \"compute a value\" recipe now computes one",
-        "de": "Das Handbuch-Rezept „einen Wert berechnen\" berechnet jetzt einen"
-      },
-      "summary": {
-        "en": "The recipe's script read = round(gross / 1.19, 2). FEEL has no round — it has decimal, round up, round down, round half up and round half down — so the expression evaluated to null and the recipe's result variable came out empty for every reader who pressed its Try it button. It now uses decimal, which is what the recipe meant. It was found by the new refusal for calls that can only ever be null, on the first run of the test suite after that check existed.",
-        "de": "Das Skript des Rezepts lautete = round(gross / 1.19, 2). FEEL kennt kein round — es gibt decimal, round up, round down, round half up und round half down —, der Ausdruck ergab also null, und die Ergebnisvariable blieb bei jedem Leser leer, der auf „Ausprobieren\" drückte. Jetzt steht dort decimal, was das Rezept meinte. Gefunden hat es die neue Ablehnung von Aufrufen, die nur null ergeben können, beim ersten Lauf der Testsuite nach dieser Prüfung."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Handbuch"
-      ]
     }
   ]
 }

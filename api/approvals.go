@@ -42,17 +42,34 @@ import (
 // called.
 const approvalOrderVar = "orderId"
 
+// firstNonEmpty is the first of two strings that says something.
+//
+// Used where a process variable may or may not have been set and the order knows
+// the answer anyway: a process started before positions had names carries no
+// variant, and the line it decides does.
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
 // approvalResp is one open approval: the task, what it decides, and how the
 // catalogue it belongs to looks.
 type approvalResp struct {
 	Task taskResp `json:"task"`
 	// OrderID and ItemID name the line this approval decides; Recipient and Orderer
 	// are principal ids, never names — see ADR-0314.
-	OrderID   string `json:"orderId"`
-	ItemID    string `json:"itemId"`
-	VariantID string `json:"variantId,omitempty"`
-	Recipient string `json:"recipient,omitempty"`
-	Orderer   string `json:"orderer,omitempty"`
+	OrderID string `json:"orderId"`
+	ItemID  string `json:"itemId"`
+	// PositionID names the position rather than the product. It is the item id
+	// wherever the order carries one position of it, which is every order placed
+	// before a product could be ordered in two shapes at once
+	// (ADR-0384).
+	PositionID string `json:"positionId,omitempty"`
+	VariantID  string `json:"variantId,omitempty"`
+	Recipient  string `json:"recipient,omitempty"`
+	Orderer    string `json:"orderer,omitempty"`
 	// Texts is the ordered product's name per language, as the release froze it. An
 	// approver deciding "vpn-zugang" is reading an id; this is the same product in
 	// words somebody chose.
@@ -182,7 +199,8 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 		}
 		return nil
 	})
-	if err != nil || vars[approvalOrderVar] == "" || vars["itemId"] == "" {
+	if err != nil || vars[approvalOrderVar] == "" ||
+		(vars["itemId"] == "" && vars["positionId"] == "") {
 		return approvalResp{}, false, err
 	}
 
@@ -190,11 +208,21 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 	if err != nil || !ok {
 		return approvalResp{}, false, err
 	}
+	// The position first, where the process names one. A process started before
+	// positions had names passes only itemId, and that still resolves for every
+	// order carrying one position of the product — which is every order that could
+	// have been placed then.
+	ref := vars["positionId"]
+	if ref == "" {
+		ref = vars["itemId"]
+	}
 	var line order.Line
-	for _, l := range ord.Lines {
-		if l.ItemID == vars["itemId"] {
-			line = l
-			break
+	if key, resolveErr := order.ResolveLine(ord, ref); resolveErr == nil {
+		for _, l := range ord.Lines {
+			if l.Key() == key {
+				line = l
+				break
+			}
 		}
 	}
 	// The order has to agree that this process decides this line. Without that an
@@ -205,10 +233,11 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 	}
 
 	a := approvalResp{
-		Task: tr, OrderID: ord.ID, ItemID: line.ItemID, VariantID: vars["variantId"],
+		Task: tr, OrderID: ord.ID, ItemID: line.ItemID, PositionID: line.Key(),
+		VariantID: firstNonEmpty(vars["variantId"], line.VariantID),
 		Recipient: vars["recipient"], Orderer: vars["orderer"], Price: line.Price,
 	}
-	if as, ok := ord.AssignmentFor(line.ItemID); ok {
+	if as, ok := ord.AssignmentFor(line.Key()); ok {
 		a.Assignment = &as
 	}
 	rel, ok, err := s.catalogStore.Release(ord.ReleaseID)

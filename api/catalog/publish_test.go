@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -238,6 +239,7 @@ func TestEveryDeclaredLanguageIsTranslated(t *testing.T) {
 // coin toss dressed as a rule.
 func TestRankTieIsRefused(t *testing.T) {
 	in := Input{
+		CatalogID: "a",
 		Catalogs: []Catalog{
 			{ID: "a", Rank: 5, Languages: []string{"de"}},
 			{ID: "b", Rank: 5, Languages: []string{"de"}},
@@ -349,6 +351,7 @@ func TestPublishReportsEveryProblemAtOnce(t *testing.T) {
 // the same order, so a reviewer diffing two attempts sees what changed.
 func TestProblemsAreDeterministic(t *testing.T) {
 	in := Input{
+		CatalogID: "a",
 		Catalogs: []Catalog{
 			{ID: "b", Rank: 2, Languages: []string{"de", "fr"}, Items: []string{"x", "y"}},
 			{ID: "a", Rank: 1, Languages: []string{"de"}, Items: []string{"ghost"}},
@@ -384,6 +387,7 @@ func TestEmptyCatalogPublishes(t *testing.T) {
 // several products and several catalogues; the fulfilment sequence names it once.
 func TestItemInSeveralCatalogsIsOrderedOnce(t *testing.T) {
 	in := Input{
+		CatalogID: "a",
 		Catalogs: []Catalog{
 			{ID: "a", Rank: 1, Languages: []string{"de"}, Items: []string{"shared", "x"}},
 			{ID: "b", Rank: 2, Languages: []string{"de"}, Items: []string{"shared", "y"}},
@@ -681,4 +685,89 @@ func TestTheTwoKindsAreFineOnDifferentPairs(t *testing.T) {
 		t.Errorf("a bundle with one integral part and one option was not published as such: "+
 			"includes=%v options=%v", rel.Includes, rel.Options)
 	}
+}
+
+// TestAnotherCataloguesProductsDoNotBlockThisOne.
+//
+// The defect this reproduces made the product unusable at the second catalogue.
+// [Store.InputFor] passes every catalogue (a rank is unique across the set) but
+// only *this* catalogue's items, and checkCatalogs resolved every catalogue's item
+// references against that one list. So each of the others came back "unknown
+// item", and a catalogue could be published only while every other catalogue was
+// empty.
+//
+// The two messages it produced are the reason it read as a contradiction rather
+// than as a bug: publishing A blamed B, publishing B blamed A, and neither named
+// the catalogue the caller had asked to publish.
+//
+// End to end through the handler, because the defect was in the seam between the
+// store's input and the checker's reading of it — either one alone looks right.
+func TestAnotherCataloguesProductsDoNotBlockThisOne(t *testing.T) {
+	s := serviceWithAdmin(t)
+	a := makeCatalog(t, s, user("usr_a"))
+	b := makeCatalog(t, s, user("usr_a"))
+	as(t, s.HandleUpdateCatalog, user("usr_a"), "PATCH", `{"rank":2}`, "id", b.ID)
+	as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("laptop", a.ID))
+	as(t, s.HandleSaveItem, user("usr_a"), "POST", productBody("mailbox", b.ID))
+	as(t, s.HandleUpdateCatalog, user("usr_a"), "PATCH", `{"items":["laptop"]}`, "id", a.ID)
+	as(t, s.HandleUpdateCatalog, user("usr_a"), "PATCH", `{"items":["mailbox"]}`, "id", b.ID)
+
+	// Both ways round, because the symmetry is the whole shape of the defect: one
+	// of the two would have passed by accident if the other catalogue were empty.
+	for _, c := range []struct {
+		name string
+		id   string
+	}{{"A while B carries a product", a.ID}, {"B while A carries a product", b.ID}} {
+		t.Run(c.name, func(t *testing.T) {
+			rec := as(t, s.HandlePublish, user("usr_a"), "POST", "", "id", c.id)
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("publish = %d, want 201; another catalogue's products are not this "+
+					"catalogue's problem: %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+// TestThisCataloguesOwnUnknownProductIsStillRefused.
+//
+// The half that must not be lost with the fix. Scoping the check to the subject is
+// right; scoping it away would publish a catalogue naming a product that does not
+// exist, which is an empty tile in a shop.
+func TestThisCataloguesOwnUnknownProductIsStillRefused(t *testing.T) {
+	in := Input{
+		CatalogID: "a",
+		Catalogs: []Catalog{
+			{ID: "a", Rank: 1, Languages: []string{"de"}, Items: []string{"ghost"}},
+			{ID: "b", Rank: 2, Languages: []string{"de"}, Items: []string{"real"}},
+		},
+		Items: []Item{},
+	}
+	_, problems := Publish(in)
+	contains(t, problems, "unknown item ghost")
+	for _, p := range problems {
+		if strings.Contains(p.Message, "real") {
+			t.Errorf("the other catalogue's product was judged too: %v", p)
+		}
+	}
+}
+
+// TestAPublishThatDoesNotSayWhatItIsForIsRefused.
+//
+// An unnamed subject is read as "every catalogue here is the subject", which is
+// true of one and false of any other number. Refusing the ambiguous case is what
+// stops the reading from being a guess — and a guess here is the defect above,
+// re-entered by the next caller who forgets the field.
+func TestAPublishThatDoesNotSayWhatItIsForIsRefused(t *testing.T) {
+	two := []Catalog{{ID: "a", Rank: 1, Languages: []string{"de"}}, {ID: "b", Rank: 2, Languages: []string{"de"}}}
+	_, problems := Publish(Input{Catalogs: two})
+	contains(t, problems, "does not say which")
+
+	// One catalogue is not ambiguous: there is nothing else it could be for, and
+	// refusing it would break every caller that has only ever had one.
+	if _, problems := Publish(Input{Catalogs: two[:1]}); len(problems) != 0 {
+		t.Errorf("a single catalogue needs no subject named: %v", problems)
+	}
+	// A subject that is not in the input is a caller error, not an empty catalogue.
+	_, problems = Publish(Input{CatalogID: "gone", Catalogs: two})
+	contains(t, problems, "is not in this input")
 }

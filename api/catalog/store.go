@@ -138,5 +138,9 @@ func (s *Store) InputFor(catalogID string, edges []Edge) (Input, bool, error) {
 	}
 	sort.Slice(carried, func(a, b int) bool { return carried[a].ID < carried[b].ID })
 
-	return Input{Catalogs: all, Items: carried, Edges: edges}, true, nil
+	// The subject is named, and the rest of the set travels for the rank check
+	// alone. Before it was named, every other catalogue's products were resolved
+	// against this catalogue's item list — so each came back "unknown item", and a
+	// catalogue could be published only while every other one was empty.
+	return Input{CatalogID: catalogID, Catalogs: all, Items: carried, Edges: edges}, true, nil
 }
