@@ -523,7 +523,7 @@ const state = {
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
   // progress is where each position's process stands, keyed "<orderId>|<position>"
-  // (ADR-draft-position-progress).
+  // (ADR-0390).
   //
   // Per position and not per order, because the order's own orchestration says
   // "running" and this says which step *this* line is sitting on — which is the
@@ -1114,7 +1114,7 @@ function infoPanel(rel, item) {
 }
 
 // productPicture is the product as it looks, where the catalogue has a picture of
-// it (ADR-draft-product-picture).
+// it (ADR-0391).
 //
 // Asked for by rendering it and not by asking first whether one exists. A product
 // without a picture is the ordinary case and answers 404, which is the browser's
@@ -1788,7 +1788,7 @@ async function followProcess(order, line) {
 // --- Where one position stands ----------------------------------------------
 //
 // The other half of the link above, and the half that is not an operator's
-// (ADR-draft-position-progress). Following the
+// (ADR-0390). Following the
 // instance means the console, and the console shows the whole engine state of that
 // instance — including variables belonging to somebody else's order where a process
 // holds them. So the orderer is answered by a route of their own, gated on owning

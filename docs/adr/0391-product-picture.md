@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product is shown, and its picture is not part of what was promised
+# ADR-0391: A product is shown, and its picture is not part of what was promised
 
 - **Status:** Accepted
 - **Implementation:** Landed

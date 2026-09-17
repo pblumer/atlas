@@ -18,7 +18,7 @@ import (
 )
 
 // Where one position stands, answered to the person whose position it is
-// (ADR-draft-position-progress).
+// (ADR-0390).
 //
 // A position carries a link into the process working on it, and that link is an
 // operator's: every route that finds or opens an instance is RoleOperator, and the

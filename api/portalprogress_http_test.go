@@ -12,7 +12,7 @@ import (
 )
 
 // Where somebody's own position stands, without an operations surface
-// (ADR-draft-position-progress).
+// (ADR-0390).
 //
 // A position already carries a link into the process working on it, and that link
 // is an operator's: every route that finds or opens an instance is RoleOperator,

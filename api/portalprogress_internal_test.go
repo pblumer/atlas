@@ -6,7 +6,7 @@ import (
 )
 
 // The step, to the person whose position it is
-// (ADR-draft-position-progress).
+// (ADR-0390).
 //
 // The portal already offered a way into the process working on a position, and it
 // was an operator's: following it lands in the console, which shows the whole

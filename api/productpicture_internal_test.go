@@ -6,7 +6,7 @@ import (
 )
 
 // A product is shown, not only named
-// (ADR-draft-product-picture).
+// (ADR-0391).
 //
 // A catalogue row is a name and a price, and somebody choosing between two phones
 // is choosing between two names. The picture is what a shop has that a list does
