@@ -506,6 +506,44 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **"Test expression" no longer certifies an expression that cannot work.** A BPMN deploy
+  already refuses a call this build can only ever answer with null — an unknown function
+  name, or a built-in called with an argument count its signature cannot take. Four other
+  places compiled FEEL without asking, and each already refused an expression that failed to
+  *parse*, at the point somebody wrote it. Only this one class of fault walked through a gate
+  that was already standing.
+
+  The worst of them did not merely stay silent. `POST /api/v1/feel/validate` — the route the
+  Modeler's expression fields call while you type, and whose entire purpose is to say whether
+  an expression is valid — answered **valid** for `is defined(x)`. Somebody who asked exactly
+  the right question was told the wrong answer, which is worse than never having been asked:
+  a "no" leaves you looking, a "yes" gives you a reason to stop. It now answers no, and names
+  the standard way to write the same thing.
+
+  The quietest of them was an **inbound worker's correlation key**. A key that evaluates to
+  null correlates an incoming message to nothing, so events arrive, the sender gets its 2xx,
+  the worker reports healthy, and no instance is ever woken — with nothing to see anywhere.
+  It is now refused at registration, where a syntax error already was, because by the time an
+  event arrives there is nobody left to tell. The same holds when an existing subscription's
+  key is edited.
+
+  **Playground rules** say it too, for `when` and for `then` alike: such a rule compiles,
+  then selects no case or fails every one, and the verdict is reached for a reason that has
+  nothing to do with the run.
+
+  **Task-folder rules turned out not to need it**, against the expectation that opened this:
+  a folder rule's expression is generated from a closed catalogue, and every value reaching
+  it is an escaped string, a bounded integer or a duration held to a pattern, so no text a
+  caller sends can become a call. Typing `is defined(x)` into a folder's name field looks for
+  tasks called that, which is what it says. What is real there is a property of the
+  catalogue, and it is now pinned in the test that already holds every advertised
+  field/operator pair against the generator — where an operator added later would break the
+  build rather than a person's folder.
+
+  `POST /api/v1/feel/evaluate` is deliberately untouched: if the expression yields null, null
+  is the honest answer and the one the engine really gives. The engine is untouched too — a
+  DMN decision still answers null, as the specification requires.
+
 - **An expression calling a function that does not exist no longer deploys clean and answers
   null.** The FEEL engine compiles a call to a name it does not know into a constant null,
   deliberately: DMN requires a decision to stay executable, and Atlas evaluates decisions

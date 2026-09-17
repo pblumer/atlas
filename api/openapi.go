@@ -189,7 +189,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		{"POST", "/api/v1/feel/validate", s.handleValidateFeel, apiOp{
-			summary: "Validate a FEEL expression compiles", tag: "FEEL", role: RoleModeler,
+			summary: "Validate a FEEL expression: that it compiles, and that every call in it is one this build can make", tag: "FEEL", role: RoleModeler,
 			req: jsonBody("FEEL expression", schemaObj(map[string]any{"expression": tString()}, "expression")),
 			resp: jsonBody("Validation result", schemaObj(map[string]any{
 				"ok": tBool(), "error": tString(),

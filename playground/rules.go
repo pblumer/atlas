@@ -116,10 +116,23 @@ func compileRules(rules []Rule) ([]compiledRule, error) {
 		}
 		c := compiledRule{rule: r}
 		var err error
+		// A call this build can only ever answer with null compiles cleanly, because
+		// the engine keeps invocation total for DMN's sake (ADR-0388) — so a rule
+		// built on one compiles, matches nothing, and reads as a run that failed the
+		// expectation rather than as a rule that cannot work. The playground is where
+		// somebody is trying the dialect out, which is exactly when being told beats
+		// a verdict arrived at for the wrong reason
+		// (ADR-draft-the-same-refusal-at-every-door-that-already-refuses).
 		if strings.TrimSpace(r.When) != "" {
+			if err := expr.CheckCallsError(r.When); err != nil {
+				return nil, fmt.Errorf("playground: rule %d selects cases with %q, which cannot work: %w", i+1, r.When, err)
+			}
 			if c.when, err = expr.CompileAuto(r.When); err != nil {
 				return nil, fmt.Errorf("playground: rule %d selects cases with %q, which is not an expression: %w", i+1, r.When, err)
 			}
+		}
+		if err := expr.CheckCallsError(r.Then); err != nil {
+			return nil, fmt.Errorf("playground: rule %d expects %q, which cannot work: %w", i+1, r.Then, err)
 		}
 		if c.then, err = expr.CompileAuto(r.Then); err != nil {
 			return nil, fmt.Errorf("playground: rule %d expects %q, which is not an expression: %w", i+1, r.Then, err)
