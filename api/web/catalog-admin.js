@@ -137,7 +137,7 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
           placeholder="de, fr"></label>
         <label class="field">Rank<input name="rank" type="number" value="${cats.length + 1}" required></label>
         ${audienceField(dir, [])}
-        <button class="primary" type="submit">Create</button>
+        <button class="btn" type="submit">Create</button>
       </form>
     </div>`;
 
@@ -364,7 +364,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
         <p class="muted" style="margin:0 0 10px">${(cat.groups || []).length
     ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
     : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
-        <button class="primary" type="submit">Save</button>
+        <button class="btn" type="submit">Save</button>
       </form>
     </div>
 
@@ -380,8 +380,8 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
     <div class="row" style="margin-top:10px">
-      <button class="primary" data-act="new-product">New product</button>
-      ${items.length > offered.length ? `<button data-act="add-existing">Offer an existing product</button>` : ""}
+      <button class="btn" data-act="new-product">New product</button>
+      ${items.length > offered.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
     </div>
     <div class="product-editor"></div>
 
@@ -399,7 +399,7 @@ export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, en
     <p class="muted" style="max-width:62ch">Publishing freezes everything above into a release.
       An order names one release and is immune to every edit made afterwards, which is why a
       catalogue can be reworked while approvals are still pending.</p>
-    <div class="row"><button class="primary" data-act="publish">Publish</button></div>
+    <div class="row"><button class="btn" data-act="publish">Publish</button></div>
     <div class="publish-report"></div>
     ${releases.length ? `<table class="table" style="margin-top:12px">
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
@@ -415,7 +415,7 @@ function productRow(it, iid, langs) {
   if (!it) {
     return `<tr><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
       publishing will refuse this</td>
-      <td><button data-act="drop" data-id="${esc(iid)}" class="linkish">remove</button></td></tr>`;
+      <td><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
   }
   const ap = it.approval || {};
   const kind = APPROVAL_KINDS.find((k) => k.id === ap.kind) || APPROVAL_KINDS[0];
@@ -424,8 +424,8 @@ function productRow(it, iid, langs) {
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
     <td>${esc(it.provisionProcess || "—")}</td>
-    <td><button data-act="edit" data-id="${esc(it.id)}" class="linkish">edit</button>
-      <button data-act="drop" data-id="${esc(it.id)}" class="linkish">remove</button></td>
+    <td><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
+      <button class="btn ghost danger" data-act="drop" data-id="${esc(it.id)}">remove</button></td>
   </tr>`;
 }
 
@@ -435,7 +435,7 @@ function edgeTable(edges, byID, langs) {
     return `<tr><td>${esc(textOf((byID[e.from] || {}).texts, langs, e.from))}</td>
       <td class="muted">${esc(k ? k.name : e.kind)}</td>
       <td>${esc(textOf((byID[e.to] || {}).texts, langs, e.to))}</td>
-      <td><button class="linkish" data-act="unedge" data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}">remove</button></td></tr>`;
+      <td><button class="btn ghost danger" data-act="unedge" data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}">remove</button></td></tr>`;
   }).join("");
   const structure = rows("composition") + rows("aggregation");
   const precedence = rows("requires");
@@ -458,7 +458,7 @@ function edgeForm(offered, byID, langs) {
       ${EDGE_KINDS.map((k) => `<option value="${k.id}" title="${esc(k.what)}">${esc(k.name)} — ${esc(k.what)}</option>`).join("")}
     </select></label>
     <label class="field">To<select name="to">${opts}</select></label>
-    <button class="primary" type="submit">Add</button>
+    <button class="btn" type="submit">Add</button>
   </form>`;
 }
 
@@ -530,9 +530,9 @@ function appearanceCard(cat, me, enforced) {
     theme.typeface === f.id ? " selected" : ""}>${esc(f.name)} — ${esc(f.what)}</option>`).join("")}
         </select></label>
         <div class="row">
-          <button class="primary" type="submit">Save appearance</button>
+          <button class="btn" type="submit">Save appearance</button>
           ${accent || theme.typeface
-    ? `<button type="button" data-act="theme-clear">Wear the instance's</button>` : ""}
+    ? `<button class="btn neutral" type="button" data-act="theme-clear">Wear the instance's</button>` : ""}
         </div>
       </form>
     </div>
@@ -547,8 +547,8 @@ function appearanceCard(cat, me, enforced) {
       <div class="row">
         <input type="file" class="logo-file" accept="image/png,image/svg+xml"
           aria-label="Choose a brand mark">
-        <button type="button" data-act="logo-upload">Upload</button>
-        <button type="button" data-act="logo-remove">Remove</button>
+        <button class="btn neutral" type="button" data-act="logo-upload">Upload</button>
+        <button class="btn ghost danger" type="button" data-act="logo-remove">Remove</button>
       </div>
     </div>`;
 }
@@ -579,7 +579,7 @@ function sharingCard(cat, me, enforced, dir) {
       <td>${esc(nameOfPrincipal(dir, ref.id || ""))}
         <div class="muted"><code>${esc(ref.id || "")}</code></div></td>
       <td>${esc(r ? r.name : m.role)}</td>
-      <td>${can ? `<button class="linkish" data-act="unshare"
+      <td>${can ? `<button class="btn ghost danger" data-act="unshare"
         data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
   }).join("");
 
@@ -601,7 +601,7 @@ function sharingCard(cat, me, enforced, dir) {
       <label class="field">May<select name="role">
         ${MEMBER_ROLES.map((r) => `<option value="${r.id}">${esc(r.name)} — ${esc(r.what)}</option>`).join("")}
       </select></label>
-      <button class="primary" type="submit">Add</button>
+      <button class="btn" type="submit">Add</button>
     </form>`
     : `<p class="muted">You maintain this catalogue but do not own it, so who else may is
       the owner's to change.</p>`}`;
@@ -710,8 +710,8 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
           placeholder="ad:CN=VPN-Users">${esc(targetLines(v.targets))}</textarea></label>
       ${maintainersNote(cat, dir)}
       <div class="row">
-        <button class="primary" type="submit">Save</button>
-        <button type="button" data-act="cancel-product">Cancel</button>
+        <button class="btn" type="submit">Save</button>
+        <button class="btn neutral" type="button" data-act="cancel-product">Cancel</button>
       </div>
     </form>
   </div>`;
