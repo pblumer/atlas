@@ -3,7 +3,7 @@
 This document maps Atlas's catalogue, order and inventory models onto the external
 standards that cover the same ground, and lists the standards examined and found
 inapplicable. It exists because
-[the record on the catalogue and the standards boundary](../adr/draft-the-catalogue-against-the-standards-boundary.md)
+[the record on the catalogue and the standards boundary](../adr/0387-the-catalogue-against-the-standards-boundary.md)
 committed to it: the catalogue was built without the comparison, and a design whose
 prior art is unnamed cannot be told apart from one that never looked.
 

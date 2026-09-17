@@ -1,4 +1,4 @@
-# ADR-DRAFT: The catalogue keeps its own model, and answers to TMF620 at the boundary
+# ADR-0387: The catalogue keeps its own model, and answers to TMF620 at the boundary
 
 - **Status:** Proposed
 - **Implementation:** Not started
