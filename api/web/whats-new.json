@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "an-order-can-be-followed-into-the-process-fulfilling-it",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An order can be followed into the process fulfilling it.",
+        "de": "An order can be followed into the process fulfilling it."
+      },
+      "summary": {
+        "en": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader.",
+        "de": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "one-product-may-be-ordered-in-two-shapes-at-once",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One product may be ordered in two shapes at once.",
+        "de": "One product may be ordered in two shapes at once."
+      },
+      "summary": {
+        "en": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one.",
+        "de": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "a-standing-list-of-the-approval-rules-that-reach-nobody",
       "version": "Unreleased",
       "date": null,
@@ -211,42 +247,6 @@
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
-        "de": "The info panel is reachable from every column of the catalogue, not only from services."
-      },
-      "summary": {
-        "en": "This was not a missing feature but an inconsistency inside one page.",
-        "de": "This was not a missing feature but an inconsistency inside one page."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-feed-generator-is-go-so-the-go-checks-stop-needing-node",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The feed generator is Go, so the Go checks stop needing Node.",
-        "de": "The feed generator is Go, so the Go checks stop needing Node."
-      },
-      "summary": {
-        "en": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless.",
-        "de": "The Console's \"What's New\" feed is generated from CHANGELOG.md and committed, because ADR-0012 keeps the web UI buildless."
-      },
-      "link": {
-        "label": "ADR-0012",
-        "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
       }
     }
   ]
