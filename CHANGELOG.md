@@ -335,6 +335,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A Google Sheets task whose spreadsheet resolved to nothing now says so, instead of
+  asking Google about no spreadsheet at all.** A model addresses a spreadsheet by a value
+  it may author as FEEL — `spreadsheet="=tabelle"` is the ordinary shape, with the id or
+  the pasted browser URL arriving as a start variable. An instance started without that
+  variable resolves it to FEEL null, and a null value resolves to the empty string, as it
+  does for every Worker Type. In an optional value that is exactly right and means "leave
+  it out".
+
+  In a required one it meant the worker called `/v4/spreadsheets//values/A1:C1` and
+  reported what Google answers for that: **HTTP 404, "Requested entity was not found"** —
+  the message for a file somebody deleted. It sent its operator to look at a spreadsheet
+  that was exactly where they had left it, and nothing had been refused at deploy,
+  because the attribute *was* there; what was missing was the instance's variable.
+
+  The Worker Instance now refuses such a job before the call and names the operation and
+  the attribute that came up empty. The check reads the same operation table the compiler
+  and the properties panel do, so it covers every value an operation needs — the
+  spreadsheet, the sheet, the range, the title, the rows to write — and an operation added
+  to that table cannot be forgotten in it. The job's fate is unchanged (pending, retried,
+  then an incident); what changed is that the incident names the fix.
+
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two

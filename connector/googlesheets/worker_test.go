@@ -246,18 +246,117 @@ func TestResolveWithoutDetail(t *testing.T) {
 }
 
 // TestHandlerUnevaluableExpressionResolvesEmpty: a FEEL expression that cannot be
-// evaluated resolves to empty rather than failing the job, matching the engine's
-// null-propagating contract — the rule the REST, SharePoint and Jira workers follow.
+// evaluated resolves to empty rather than failing *at the evaluation*, matching the
+// engine's null-propagating contract — the rule the REST, SharePoint and Jira workers
+// follow. The value here is optional, which is where that contract keeps its whole
+// meaning: no folder is what create-spreadsheet does without one. What an empty value
+// costs is decided one step later, by whether the operation needs it — see
+// TestRunRefusesAValueTheInstanceDidNotSupply.
 func TestHandlerUnevaluableExpressionResolvesEmpty(t *testing.T) {
 	rd, lookup := workerFixture(t,
-		`<atlas:googleSheetsConnector connector="acme" operation="clear-range" spreadsheet="=zahl + 1" range="A2:F"/>`,
+		`<atlas:googleSheetsConnector connector="acme" operation="create-spreadsheet" title="Anträge" folder="=zahl + 1"/>`,
 		model.VariableValue{Name: "zahl", Kind: model.VarString, Text: "nicht zahl"},
 	)
-	client := &recordingClient{}
+	client := &recordingClient{result: map[string]any{"spreadsheetId": "1B"}}
 	if _, err := gs.Handler(rd, lookup, registered(client))(job.Job{Key: 1, ElementInstanceKey: 42}); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
-	if client.reqs[0].Spreadsheet != "" {
-		t.Errorf("spreadsheet = %q, want empty for an expression that cannot be evaluated", client.reqs[0].Spreadsheet)
+	if client.reqs[0].Folder != "" {
+		t.Errorf("folder = %q, want empty for an expression that cannot be evaluated", client.reqs[0].Folder)
+	}
+}
+
+// TestRunRefusesAValueTheInstanceDidNotSupply: the operation needs a value, the
+// authored expression read a variable the instance does not carry, and the resolved
+// job therefore holds an empty one. Sending it anyway is what produced the failure
+// this check exists for — Google answering "Requested entity was not found" for a
+// spreadsheet that is exactly where its owner left it, because the id in the URL was
+// the empty string. The worker names the attribute that came up empty instead, and the
+// job keeps its ordinary fate: pending, retried, then an incident carrying this
+// message (ADR-0061).
+func TestRunRefusesAValueTheInstanceDidNotSupply(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		job  gs.Job
+		attr string
+	}{
+		{"write-range without a spreadsheet",
+			gs.Job{Worker: "acme", Operation: "write-range", Range: "A1:C1", Values: [][]any{{"Antragsnummer"}}}, "spreadsheet"},
+		{"read-range without a range",
+			gs.Job{Worker: "acme", Operation: "read-range", Spreadsheet: "1B", ResultVariable: "zeilen"}, "range"},
+		{"clear-range with a range of blanks",
+			gs.Job{Worker: "acme", Operation: "clear-range", Spreadsheet: "1B", Range: "   "}, "range"},
+		{"add-sheet without a sheet",
+			gs.Job{Worker: "acme", Operation: "add-sheet", Spreadsheet: "1B"}, "sheet"},
+		{"create-spreadsheet without a title",
+			gs.Job{Worker: "acme", Operation: "create-spreadsheet"}, "title"},
+		{"append-row without values",
+			gs.Job{Worker: "acme", Operation: "append-row", Spreadsheet: "1B", Range: "A:C"}, "values"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &recordingClient{}
+			_, err := gs.Run(t.Context(), tc.job, registered(client))
+			if err == nil {
+				t.Fatal("want an error naming the empty value, got nil")
+			}
+			// "the task's <attr>", not the bare attribute: "range" is a substring of
+			// read-range and clear-range, so the loose form would pass on a message
+			// that never named the value at all.
+			if !strings.Contains(err.Error(), "the task's "+tc.attr) || !strings.Contains(err.Error(), tc.job.Operation) {
+				t.Errorf("error %q should name the operation and the %s that came up empty", err, tc.attr)
+			}
+			if len(client.reqs) != 0 {
+				t.Errorf("made %d calls for a value the instance never supplied; want none", len(client.reqs))
+			}
+		})
+	}
+}
+
+// TestRunAllowsAnEmptyOptionalValue: only what the operation *needs* is refused. A
+// folder the model left to FEEL, and FEEL answered with null, still means what
+// create-spreadsheet means without one — the credential's own root.
+func TestRunAllowsAnEmptyOptionalValue(t *testing.T) {
+	client := &recordingClient{result: map[string]any{"spreadsheetId": "1B"}}
+	if _, err := gs.Run(t.Context(), gs.Job{Worker: "acme", Operation: "create-spreadsheet", Title: "Anträge"}, registered(client)); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(client.reqs) != 1 {
+		t.Fatalf("requests = %d, want the call to go out", len(client.reqs))
+	}
+}
+
+// TestRunLeavesAnUnknownOperationToTheClient: the check reads the same Ops table the
+// compiler does, so an operation that is not in it has no required values to judge.
+// The client refuses those with the list of the ones it implements, and a second
+// message for the same fault would only hide the useful one.
+func TestRunLeavesAnUnknownOperationToTheClient(t *testing.T) {
+	client := &recordingClient{}
+	if _, err := gs.Run(t.Context(), gs.Job{Worker: "acme", Operation: "kaffee-kochen"}, registered(client)); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(client.reqs) != 1 {
+		t.Errorf("requests = %d, want the unknown operation to reach the client that names them", len(client.reqs))
+	}
+}
+
+// TestHandlerRefusesAMissingStartVariable is the reported failure end to end: a
+// process whose spreadsheet is a start variable, started without it. The variable
+// resolves to FEEL null and the value to empty, and what used to reach Google was
+// /v4/spreadsheets//values/A1:C1 — a 404 that sent its operator looking for a
+// spreadsheet nobody had deleted.
+func TestHandlerRefusesAMissingStartVariable(t *testing.T) {
+	rd, lookup := workerFixture(t,
+		`<atlas:googleSheetsConnector connector="acme" operation="write-range" spreadsheet="=tabelle"
+		    range="A1:C1" values="=[[&quot;Antragsnummer&quot;]]"/>`)
+	client := &recordingClient{}
+	_, err := gs.Handler(rd, lookup, registered(client))(job.Job{Key: 1, ElementInstanceKey: 42})
+	if err == nil {
+		t.Fatal("a spreadsheet that resolved empty: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "spreadsheet") {
+		t.Errorf("error %q should name the attribute that came up empty", err)
+	}
+	if len(client.reqs) != 0 {
+		t.Errorf("made %d calls without a spreadsheet id; want none", len(client.reqs))
 	}
 }
