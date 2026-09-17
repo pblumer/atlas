@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/pblumer/atlas/expr"
 )
 
 // entraAttributesExpr compiles an inline attributes JSON template into a single FEEL
@@ -37,7 +35,7 @@ func entraAttributesExpr(taskID, raw string) (RestExpr, error) {
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes: %w", taskID, err)
 	}
-	e, err := expr.CompileAuto(feel)
+	e, err := compileFEEL(feel)
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes did not compile (a value's =expression may be malformed): %w", taskID, err)
 	}

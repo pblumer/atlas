@@ -211,6 +211,41 @@
       }
     },
     {
+      "id": "an-expression-calling-a-function-that-does-not-exist-no-long",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Fixed",
+      "title": {
+        "en": "A misspelled or foreign function is now refused, not silently null",
+        "de": "Falsch geschriebene oder fremde Funktionen werden abgelehnt statt still zu null"
+      },
+      "summary": {
+        "en": "An expression calling a function Atlas does not have used to deploy without a word and evaluate to null at run time — no error, no warning, nothing in the Problems panel. A gateway reading that null takes its default branch, so a process quietly does the wrong thing and nobody is told. The commonest way in is a function from Camunda's dialect, such as is defined(), but a plain typo did exactly the same. A deploy now refuses such a call and says how to write it instead — is defined becomes x != null, put becomes context put. The same refusal catches a real function called with the wrong number of arguments, like date() with none.",
+        "de": "Ein Ausdruck, der eine Funktion aufruft, die es in Atlas nicht gibt, wurde bisher kommentarlos deployt und ergab zur Laufzeit null — kein Fehler, keine Warnung, nichts in der Problems-Anzeige. Ein Gateway, das dieses null liest, nimmt den Default-Zweig: Der Prozess tut still das Falsche, und niemand erfährt davon. Am häufigsten passiert das mit Funktionen aus Camundas Dialekt wie is defined(), ein simpler Tippfehler hatte aber genau dieselbe Wirkung. Der Deploy lehnt solche Aufrufe jetzt ab und sagt, wie man es stattdessen schreibt — aus is defined wird x != null, aus put wird context put. Dieselbe Prüfung erfasst auch echte Funktionen mit falscher Argumentzahl, etwa date() ohne Argument."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Modeler"
+      ],
+      "tutorial": {
+        "en": [
+          "Open a process in the Modeler and write a condition or script expression calling a function that does not exist, for example = is defined(x).",
+          "The Problems panel names the element, the call, and the standard way to write the same thing.",
+          "Correct it — = x != null — and the model deploys.",
+          "Decisions are unaffected: DMN requires an expression to stay evaluable, so a decision still answers null. The refusal belongs to the deploy."
+        ],
+        "de": [
+          "Einen Prozess im Modeler öffnen und in einer Bedingung oder einem Skript eine Funktion aufrufen, die es nicht gibt, etwa = is defined(x).",
+          "Die Problems-Anzeige nennt das Element, den Aufruf und die standardkonforme Schreibweise.",
+          "Korrigieren — = x != null — und das Modell lässt sich deployen.",
+          "Entscheidungen sind nicht betroffen: DMN verlangt, dass ein Ausdruck auswertbar bleibt, eine Entscheidung ergibt also weiterhin null. Abgelehnt wird beim Deploy."
+        ]
+      }
+    },
+    {
       "id": "a-task-folder-edited-twice-in-quick-succession-no-longer-kee",
       "version": "Unreleased",
       "date": null,
@@ -246,24 +281,6 @@
           "de": "Tasks öffnen"
         },
         "route": "#/tasks"
-      }
-    },
-    {
-      "id": "a-catalogue-could-say-a-part-was-integral-and-optional-at-th",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "A catalogue could say a part was integral and optional at the same time.",
-        "de": "A catalogue could say a part was integral and optional at the same time."
-      },
-      "summary": {
-        "en": "The release keeps what a product is made of apart from what is offered alongside it, because they mean opposite things to a basket: an inclusion is ordered as a consequence of ordering the whole, and an option is an offer.",
-        "de": "The release keeps what a product is made of apart from what is offered alongside it, because they mean opposite things to a basket: an inclusion is ordered as a consequence of ordering the whole, and an option is an offer."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     }
   ]

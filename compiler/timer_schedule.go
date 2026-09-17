@@ -230,7 +230,7 @@ func parseDurationField(s string) (TimerSchedule, error) {
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	e, err := expr.CompileAuto(body)
+	e, err := compileFEEL(body)
 	if err != nil {
 		return TimerSchedule{}, fmt.Errorf("timeDuration FEEL expression: %w", err)
 	}
@@ -245,7 +245,7 @@ func parseDateField(s string) (TimerSchedule, error) {
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	e, err := expr.CompileAuto(body)
+	e, err := compileFEEL(body)
 	if err != nil {
 		return TimerSchedule{}, fmt.Errorf("timeDate FEEL expression: %w", err)
 	}
@@ -262,7 +262,7 @@ func parseCycleField(s string) (TimerSchedule, error) {
 	} else if !isFeel {
 		return TimerSchedule{}, err
 	}
-	e, err := expr.CompileAuto(body)
+	e, err := compileFEEL(body)
 	if err != nil {
 		return TimerSchedule{}, fmt.Errorf("timeCycle FEEL expression: %w", err)
 	}
