@@ -432,6 +432,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The icons at the end of a catalogue row broke onto a second line.** Each of them
+  already refused to shrink, but they sat in a plain `<span>` carrying no rule at
+  all: a flex item that may shrink, holding inline boxes that wrap inside it. The
+  cascade is four columns across, so in a narrow one the star, the ± and the "i"
+  wrapped and a single row read as two.
+
+  The row's cell now wraps whatever trails it, in one place rather than at each of
+  the seven callers — a rule applied per caller is a rule the next caller forgets.
+  The wrapper is a flex row that does not shrink, which is the whole fix: a flex row
+  does not wrap by default, and the icons cannot give up width.
+
 - **A catalogue could offer a product nobody had created, and only said so much
   later.** The write that introduced the dangling id answered 200; the refusal
   appeared at the next publish, as `unknown item <id>`, against a catalogue the

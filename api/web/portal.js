@@ -899,6 +899,14 @@ function heldPill(item) {
 // sits at the right edge.
 function cell(opts) {
   const o = opts || {};
+  // The trail is wrapped here rather than by each caller. Every icon in it already
+  // refuses to shrink, but an unstyled span is a flex item that may, and its
+  // contents are inline boxes that wrap inside it — so in a narrow column the star,
+  // the +/- and the "i" broke onto a second line and one row read as two.
+  //
+  // A rule applied per caller is a rule the next caller forgets, and there are
+  // seven of them. Wrapping here means a trail cannot be built without it. The
+  // wrapper takes an array as readily as a node, because el flattens its children.
   return el('div', { class: 'cell' },
     o.lead || null,
     o.onOpen
@@ -907,7 +915,7 @@ function cell(opts) {
         onclick: o.onOpen,
       }, o.text)
       : el('span', { class: 'label' }, o.text),
-    o.trail || null);
+    o.trail ? el('span', { class: 'trail' }, o.trail) : null);
 }
 
 // toggle renders the mockups' square −/+ control.
@@ -1207,11 +1215,12 @@ function renderCatalogue() {
       // being announced in the column head's word. The alternative was to move it
       // to another column, which would have made the first column no longer the
       // place a person starts.
-      trail: el('span', {},
+      trail: [
         levelOf(rel, b.id) !== 'bundle'
-          ? el('span', { class: 'muted', style: 'font-size:12px' }, `${levelName(rel, b.id)} `)
+          ? el('span', { class: 'muted', style: 'font-size:12px' }, levelName(rel, b.id))
           : null,
-        starButton(b.id), ' ', toggle(rel, b.id, false), ' ', infoButton(b.id)),
+        starButton(b.id), toggle(rel, b.id, false), infoButton(b.id),
+      ],
     })));
 
   const offeringCol = el('div', { class: 'col' },
@@ -1223,7 +1232,7 @@ function renderCatalogue() {
         state.offering = state.offering === o.id ? '' : o.id;
         render();
       },
-      trail: el('span', {}, starButton(o.id), ' ', toggle(rel, o.id, o.integral), ' ', infoButton(o.id)),
+      trail: [starButton(o.id), toggle(rel, o.id, o.integral), infoButton(o.id)],
     })));
 
   const serviceCol = el('div', { class: 'col' },
@@ -1231,7 +1240,7 @@ function renderCatalogue() {
     keepFavourites(rel, services).map((sv) => cell({
       text: name(sv.id),
       lead: toggle(rel, sv.id, sv.integral),
-      trail: el('span', {}, starButton(sv.id), ' ', infoButton(sv.id)),
+      trail: [starButton(sv.id), infoButton(sv.id)],
     })));
 
   // Favourites this catalogue does not carry. Counted rather than hidden in
@@ -1409,14 +1418,15 @@ function renderBasket() {
         // The same control the cascade uses, so a tick means one thing on the
         // whole page: it adds to the basket, and a second press takes it out.
         lead: toggle(rel, id, false),
-        trail: el('span', {},
+        trail: [
           (by[id] || {}).price
-            ? el('span', { class: 'muted', style: 'font-size:12px' }, `${by[id].price} `)
+            ? el('span', { class: 'muted', style: 'font-size:12px' }, by[id].price)
             : null,
           // The level it will sit under once it is taken, so the same position is
           // called the same thing before and after the decision.
-          el('span', { class: 'muted', style: 'font-size:12px' }, `${levelName(rel, id)} `),
-          infoButton(id)),
+          el('span', { class: 'muted', style: 'font-size:12px' }, levelName(rel, id)),
+          infoButton(id),
+        ],
       }))));
 
   // The forms below the basket rather than beside each row: a form is taller than a
@@ -2093,7 +2103,7 @@ function renderServices() {
     const can = found && returnable(found.order, found.line);
     return cell({
       text: textOf((by[id] || {}).texts, id),
-      trail: el('span', {},
+      trail: [
         can
           ? el('button', {
             class: 'sq',
@@ -2103,7 +2113,8 @@ function renderServices() {
             onclick: () => giveBack(found.order, found.line),
           }, 'X')
           : null,
-        ' ', infoButton(id)),
+        infoButton(id),
+      ],
     });
   };
 
