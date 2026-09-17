@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -24,9 +25,14 @@ func floodedServer(t *testing.T, n int) (*Server, func(d time.Duration)) {
 	srv, cleanup := newOffLoopServer(t)
 	t.Cleanup(cleanup)
 
-	now := time.Now().UnixNano()
-	srv.breakers.now = func() int64 { return now }
-	advance := func(d time.Duration) { now += int64(d) }
+	// The clock is read on the runner's goroutine, through the breaker's gate, and
+	// moved on the test's, so it has to be atomic: as a plain int64 the two access
+	// it unsynchronized and the race detector reports it — a defect in this helper,
+	// not in the breaker it drives.
+	var now atomic.Int64
+	now.Store(time.Now().UnixNano())
+	srv.breakers.now = now.Load
+	advance := func(d time.Duration) { now.Add(int64(d)) }
 
 	const mailBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
   <process id="notify" isExecutable="true">

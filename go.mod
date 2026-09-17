@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/microsoft/go-mssqldb v1.10.0
 	github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d
-	github.com/pblumer/temis v0.0.0-20260722083752-d4f4af9995bc
+	github.com/pblumer/temis v0.0.0-20260911201220-856ba3df3db5
 	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
 	go.opentelemetry.io/otel v1.45.0

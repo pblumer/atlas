@@ -153,7 +153,7 @@ func (r *Registry) Reload(defKey uint64, dmnXML []byte) (string, error) {
 // and registerDecision so every accepted model is indexed identically.
 func (r *Registry) register(defKey uint64, defs *tdmn.Definitions) {
 	r.definitions[defKey] = append(r.definitions[defKey], defs)
-	for _, id := range defs.Index().Decisions {
+	for _, id := range addressableDecisions(defs) {
 		r.latest[id] = defs
 	}
 }
@@ -205,7 +205,7 @@ func (r *Registry) ReloadDecision(key uint64, dmnXML []byte) (string, error) {
 func (r *Registry) registerDecision(key uint64, defs *tdmn.Definitions) {
 	r.register(key, defs)
 	r.decisionKeys[key] = true
-	for _, id := range defs.Index().Decisions {
+	for _, id := range addressableDecisions(defs) {
 		r.latestDecision[id] = key
 	}
 }
@@ -245,7 +245,7 @@ func (r *Registry) UndeployDecision(key uint64) {
 	r.latestDecision = make(map[string]uint64, len(r.latestDecision))
 	for _, k := range keys {
 		for _, defs := range r.definitions[k] {
-			for _, id := range defs.Index().Decisions {
+			for _, id := range addressableDecisions(defs) {
 				// register's rule: every accepted model, of either kind, moves the legacy
 				// pointer.
 				r.latest[id] = defs
@@ -295,7 +295,7 @@ func (r *Registry) LatestDecisionIDs() map[string]bool {
 // declares its decision when a process bundles several.
 func modelProviding(list []*tdmn.Definitions, decisionId string) *tdmn.Definitions {
 	for _, defs := range list {
-		for _, id := range defs.Index().Decisions {
+		for _, id := range addressableDecisions(defs) {
 			if id == decisionId {
 				return defs
 			}
@@ -397,10 +397,22 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: decision %q in %s: %w", decisionId, where, err)
 	}
-	res, err := dec.Evaluate(ctx, tdmn.Input(in), tdmn.WithTrace())
+	// The DRG nodes carry both of a decision's names and both of an input's, and
+	// both steps around the evaluation read them, so the graph is built once here.
+	nodes := defs.Graph().Nodes
+	// An input the model labels differently from the identifier it binds is
+	// accepted under either spelling, so a task deployed before temis told the two
+	// apart still finds its input (names.go).
+	res, err := dec.Evaluate(ctx, tdmn.Input(aliasedInputs(nodes, in)), tdmn.WithTrace())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: evaluate %q in %s: %w", decisionId, where, err)
 	}
+	// temis returns a FEEL number as its exact decimal string; the model's own
+	// declarations say which of these strings are numbers. Restored here, at the
+	// one point every caller passes through, so the variable a business rule task
+	// writes, the try-a-decision answer and the retained record cannot disagree
+	// (numbers.go).
+	outputs := restoreNumbers(defs, nodes, decisionId, res.Outputs)
 	var trace []byte
 	if res.Trace != nil {
 		// The trace tree carries JSON tags as its wire contract (temis dmn/trace.go);
@@ -410,5 +422,5 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 			trace = b
 		}
 	}
-	return res.Outputs, trace, nil
+	return outputs, trace, nil
 }

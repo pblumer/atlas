@@ -79,7 +79,7 @@ func (v *Validator) Try(ctx context.Context, src []byte, decisionID string, inpu
 	// and the picker use — so "this model does not provide that decision" is one
 	// answer everywhere rather than three.
 	found := false
-	for _, id := range defs.Index().Decisions {
+	for _, id := range addressableDecisions(defs) {
 		if id == decisionID {
 			found = true
 			break
