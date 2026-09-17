@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Workers",
+    "Operations"
+  ],
+  "title": {
+    "en": "A Google Sheets task missing its spreadsheet now names the empty value",
+    "de": "Eine Google-Sheets-Aufgabe ohne Tabelle benennt jetzt den leeren Wert"
+  },
+  "summary": {
+    "en": "A task usually takes its spreadsheet from a variable — the id, or the URL you pasted out of the browser. Start an instance without that variable and the value is empty, and Atlas used to ask Google about a spreadsheet with no id at all. Google answered \"Requested entity was not found\", which reads as though somebody had deleted the file and sent you looking for a spreadsheet that was exactly where you left it. The incident now names the operation and the value that came up empty, so the search starts at the instance's variables. The same check covers everything an operation needs: the spreadsheet, the sheet, the range, the title, and the rows to write.",
+    "de": "Eine Aufgabe bezieht ihre Tabelle meist aus einer Variablen — der Id oder der aus dem Browser kopierten URL. Startet eine Instanz ohne diese Variable, ist der Wert leer, und Atlas fragte Google bisher nach einer Tabelle ganz ohne Id. Google antwortete mit \"Requested entity was not found\", was klingt, als habe jemand die Datei gelöscht, und schickte Sie auf die Suche nach einer Tabelle, die unverändert an ihrem Platz lag. Der Incident benennt jetzt die Operation und den Wert, der leer aufgelöst wurde, sodass die Suche bei den Variablen der Instanz beginnt. Dieselbe Prüfung deckt alles ab, was eine Operation braucht: Tabelle, Blatt, Bereich, Titel und die zu schreibenden Zeilen."
+  }
+}
