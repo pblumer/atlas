@@ -116,7 +116,7 @@ func (s *Server) startReturn(process, orderID, ref string, o order.Order) error 
 	// itemId names the product, because that is what a deprovisioning process
 	// revokes. positionId names the position, because that is what it reports the
 	// outcome against — and where one product was ordered in two shapes, only the
-	// second can say which of them came back (ADR-draft-order-position-key).
+	// second can say which of them came back (ADR-0384).
 	vars := []model.VariableValue{
 		{Name: "itemId", Kind: model.VarString, Text: line.ItemID},
 		{Name: "positionId", Kind: model.VarString, Text: position},

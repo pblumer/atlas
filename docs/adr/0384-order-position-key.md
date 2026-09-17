@@ -1,4 +1,4 @@
-# ADR-DRAFT: A position is a product and the shape of it, and it says so in its own key
+# ADR-0384: A position is a product and the shape of it, and it says so in its own key
 
 - **Status:** Accepted
 - **Implementation:** Landed

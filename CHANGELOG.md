@@ -53,7 +53,7 @@ _Changed_ / _Removed_ for each version.
   and two entries of the same shape are refused outright, because two identical
   positions cannot be told apart and this catalogue has no quantities. The fulfilment
   process passes `positionId` beside `itemId`, and `/next` names each position
-  (ADR-draft-order-position-key).
+  (ADR-0384).
 
   **One limit, named rather than left to be found:** the inventory still records one
   hold per person and product, so somebody who orders two shapes is provisioned

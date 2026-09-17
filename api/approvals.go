@@ -65,7 +65,7 @@ type approvalResp struct {
 	// PositionID names the position rather than the product. It is the item id
 	// wherever the order carries one position of it, which is every order placed
 	// before a product could be ordered in two shapes at once
-	// (ADR-draft-order-position-key).
+	// (ADR-0384).
 	PositionID string `json:"positionId,omitempty"`
 	VariantID  string `json:"variantId,omitempty"`
 	Recipient  string `json:"recipient,omitempty"`

@@ -777,7 +777,7 @@ type readyLine struct {
 	// ID is what this position is called, for a process that has to report an
 	// outcome against it. It is the item id wherever the order carries one position
 	// of the product, so a process built against itemId keeps working
-	// (ADR-draft-order-position-key).
+	// (ADR-0384).
 	ID string `json:"id"`
 	Line
 	// ApprovalProcess is empty for a line that needs no approval, which is how the

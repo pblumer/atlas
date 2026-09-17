@@ -285,7 +285,7 @@ func (s *Server) approvalTaskOf(orderID, ref string) (taskResp, bool, error) {
 	// order placed before a product could be ordered in two shapes at once. Two is
 	// answered as "no such approval" rather than by moving one of them: naming the
 	// product does not say which phone's approval is meant
-	// (ADR-draft-order-position-key).
+	// (ADR-0384).
 	if len(byProduct) == 1 {
 		return byProduct[0], true, nil
 	}

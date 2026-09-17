@@ -127,7 +127,7 @@ func TestACorrectionAndABasketDoNotShareOneSetOfAnswers(t *testing.T) {
 	}
 	panel := src[start : start+strings.Index(src[start:], "\n}")]
 	// By the position and not by the product: two positions of one product are two
-	// corrections (ADR-draft-order-position-key),
+	// corrections (ADR-0384),
 	// and a key naming the product would merge them as surely as it once merged a
 	// correction with a basket.
 	if !strings.Contains(panel, "amendKey(order.id, lineKey(line))") {

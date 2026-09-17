@@ -1615,7 +1615,7 @@ async function followProcess(order, line) {
   // started, each carrying `orderId` and nothing else, so there would be nothing
   // left on the page to tell them apart by. `positionId` is what the fulfilment
   // model passes for exactly this, and it names one instance
-  // (ADR-draft-order-position-key).
+  // (ADR-0384).
   //
   // There is deliberately no fallback to the product id. It matches instances from
   // every order that ever carried that product, and the answer carries only the
@@ -1642,7 +1642,7 @@ async function followProcess(order, line) {
 }
 
 // lineKey is what one position is called, mirroring the server's own rule
-// (ADR-draft-order-position-key): the
+// (ADR-0384): the
 // product, and the shape of it where one was chosen.
 //
 // Written out here rather than read from the order, because a line placed before

@@ -8,7 +8,7 @@ import (
 // The portal addresses a position the way the server does.
 //
 // A line is identified by its product and the shape of it
-// (ADR-draft-order-position-key). The portal
+// (ADR-0384). The portal
 // was still naming the product on every route it built — withdraw, correct,
 // return — and using it as the key of the row being edited. For an order carrying
 // two positions of one product that is ambiguous: the server refuses it, naming
