@@ -170,3 +170,36 @@ func TestListIncidentsNarrowedViaTool(t *testing.T) {
 		t.Errorf("type=nonsense = (%q, isErr=%v), want a refusal naming the type", text, isErr)
 	}
 }
+
+// TestCloseBreakerViaTool covers the one thing an agent can *do* about a target Atlas is
+// holding back (ADR-0340). Reading is already covered — atlas_workers carries the rows —
+// but an agent that has just fixed a worker configuration would otherwise have to wait
+// out a cooldown it cannot see the end of.
+func TestCloseBreakerViaTool(t *testing.T) {
+	atlas := newAtlas(t)
+
+	// Nothing is held, so the honest answer is closed:false rather than an error: a
+	// target that recovered a moment earlier looks exactly like one that was never held,
+	// and an agent retrying on an error would be retrying nothing.
+	text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_close_breaker",
+		map[string]any{"jobType": "io.atlas.mail.send"}))[0]))
+	if isErr {
+		t.Fatalf("close_breaker = %q, want an answer rather than a refusal", text)
+	}
+	if !strings.Contains(text, `"closed":false`) {
+		t.Errorf("close_breaker with nothing held = %q, want closed:false", text)
+	}
+
+	// A job type this engine has never interned is a typo, not a no-op.
+	text, isErr = toolText(t, result(t, run(t, atlas, callTool(2, "atlas_close_breaker",
+		map[string]any{"jobType": "io.atlas.nonsense"}))[0]))
+	if !isErr || !strings.Contains(text, "nonsense") {
+		t.Errorf("unknown job type = (%q, isErr=%v), want a refusal naming it", text, isErr)
+	}
+
+	// And a call naming no target would mean "every breaker on the server".
+	text, isErr = toolText(t, result(t, run(t, atlas, callTool(3, "atlas_close_breaker", map[string]any{}))[0]))
+	if !isErr {
+		t.Errorf("close_breaker with no jobType = %q, want a refusal", text)
+	}
+}

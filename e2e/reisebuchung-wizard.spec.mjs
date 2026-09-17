@@ -22,6 +22,13 @@
 // by TestANewInstanceIsOffTheCappedListingButOnItsOwnDefinitionsPage in api/.
 import { test, expect } from "@playwright/test";
 
+// listing is how every capped list endpoint answers since
+// ADR-0378: the rows under
+// .items, beside the count of what is really there and whether the cap bit.
+const listing = (items, extra = {}) => ({
+  items, total: items.length, totalExact: true, truncated: false, ...extra,
+});
+
 const DEF_KEY = 213;
 const INSTANCE = 281474990452515; // a realistic key: high, and far past the cap
 const TASK_KEY = 77;
@@ -76,17 +83,17 @@ function mock(page, calls) {
     }
     // The capped, oldest-first page of a loaded engine — ours is never on it.
     if (path === "/api/v1/instances") {
-      return route.fulfill({ json: cappedPage, headers: { "X-Instances-Truncated": "true" } });
+      return route.fulfill({ json: listing(cappedPage, { totalExact: false, truncated: true }) });
     }
     if (path === `/api/v1/instances?process=${DEF_KEY}`) {
-      return route.fulfill({ json: started ? [ours()] : [] });
+      return route.fulfill({ json: listing(started ? [ours()] : []) });
     }
     if (path === `/api/v1/instances/search?q=${INSTANCE}`) {
-      return route.fulfill({ json: started ? [ours()] : [] });
+      return route.fulfill({ json: listing(started ? [ours()] : []) });
     }
     if (path === `/api/v1/tasks?processInstance=${INSTANCE}`) {
       return route.fulfill({
-        json: taskOpen
+        json: listing(taskOpen
           ? [{
               key: TASK_KEY,
               processInstanceKey: INSTANCE,
@@ -94,7 +101,7 @@ function mock(page, calls) {
               name: "Reisedaten",
               formId: "reise-start",
             }]
-          : [],
+          : []),
       });
     }
     if (path === "/api/v1/forms/reise-start") {

@@ -14,6 +14,63 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An outage now stops at the worker instead of at every token.** A worker whose target
+  stopped answering did not fail once. It failed once **per instance that reached its
+  task**: each failure spent a retry, each exhausted budget parked a token behind its own
+  incident, and every one of those calls went into a host that was already struggling. An
+  hour of SMTP being down, on a process starting a few thousand instances in that hour, was
+  a few thousand incidents for somebody to clear — and the only thing Atlas could say about
+  a failing integration was a backoff one worker asked for on one job, which cannot express
+  "stop asking, the other end is down".
+
+  A **circuit breaker per Worker** now sits in the dispatch path, on both halves of it: the
+  in-process runner and the external pull. Three consecutive failures from three *distinct*
+  process instances judge a target down, and its jobs stop being handed out. They stay
+  activatable, unleased, with their retry budgets untouched, waiting exactly as they wait
+  for a worker that has not polled yet. One job per cooldown goes out as a probe — ten
+  seconds, doubling to five minutes — and a success closes the breaker, after which the
+  backlog drains by itself with nobody resolving anything.
+
+  The distinctness is the whole trip condition. One instance with a bad record fails its
+  entire retry budget against a perfectly healthy host, and stopping the integration over it
+  would punish every other instance for one bad record; a dead host fails instances that
+  have nothing to do with each other, which no data fault does.
+
+  Nothing about this is durable. Whether a host is reachable right now is not a fact about a
+  process, so a restarted engine starts with no opinion about anybody's target, and no job
+  record grew a field. Holding work back never invents a business outcome either: a held
+  token is not cancelled, completed or failed, and no incident is raised for it — an
+  incident is a fact about a token, and none of these tokens is at fault.
+
+  **Held work is visible, because silence is the one failure mode nothing else surfaces.**
+  A growing queue with no incidents under it used to mean "nobody is serving this"; it can
+  now also mean "Atlas has stopped serving this", and those need telling apart. So
+  Operations → Workers grows a **Held back** card above the queue depths, naming each
+  target, since when it has been held, what it last failed with and when the next attempt
+  is due. **Close now** on the row releases it for an operator who has already fixed the
+  endpoint and will not wait out a cooldown — and if the target is in fact still down, the
+  next three failures simply hold it again, which is why closing is safe to expose and
+  "open this by hand" is not offered at all.
+
+  Every state change is logged as `worker.breaker_open` / `worker.breaker_closed`, and
+  `/metrics` carries `atlas_worker_breakers_open` with the totals
+  `atlas_worker_breaker_trips_total`, `_probes_total` and `_refused_total`. Those are
+  aggregates without labels on purpose: a Worker's name comes from a deployed model, and a
+  metric label carrying one would be a label whose values the data invents — which an
+  estate of a few hundred Workers turns into a few hundred time series. *Which* target is
+  a question for the Workers view, which is how ADR-0142 says a per-thing breakdown should
+  be answered.
+
+  The handbook says all of it under **Operations & incidents**, in both languages,
+  including the warning that matters most: a queue growing without incidents is not
+  evidence that everything is fine.
+
+  An agent sees it too. `atlas_workers` now carries the held rows, and its description
+  says so where it matters: the diagnosis it used to teach — a deep queue with nothing
+  in flight and nobody pulling — is exactly what a held target looks like, and reading
+  one as the other sends an agent after the wrong thing. `atlas_close_breaker` is the
+  one action, for an agent that has just fixed the configuration it was holding on.
+
 - **A product manager maintains the catalogue over MCP.** The portal's catalogue was
   the one substantial surface an agent could not reach. The omission was recorded and
   deliberate — a tool is a public contract, and the catalogue was half-built when the
@@ -83,6 +140,121 @@ _Changed_ / _Removed_ for each version.
   reasoned rather than measured against a production store; the record carries that as an
   open question, and the flags exist so the answer can be corrected without a rebuild.
 
+- **The approver is picked, and picked differently depending on the kind.** This was
+  the last typed identifier on the catalogue screen and the one that cost the most,
+  because nothing reports a wrong value: an approval whose approver matches nobody is
+  created, reaches no inbox, and simply waits. The first person to notice is whoever is
+  waiting for the laptop.
+
+  A named person is now chosen from the accounts list and stored as a **username**,
+  because that is what an assignee is matched against. A group is chosen from the
+  directory and stored as its **id**, because candidate groups are matched against ids
+  first — so a group renamed afterwards keeps its approver. Neither is a preference;
+  each is what matches at the other end.
+
+  The two kinds that resolve without an approver — no approval, and the orderer's
+  superior — now show no field at all instead of one labelled "empty otherwise", and
+  switching to them **clears** an approver already there. Left behind, it rode along in
+  a rule with no use for it, indistinguishable to the next reader from a rule that
+  meant it.
+- **The accounts and groups screen shows the ids it asks you to type.** Catalogue
+  sharing used to ask for `usr_…` or a group id, with a hint saying to read it from
+  Console → Organization — a screen that showed names only, because the id lived in a
+  markup attribute meant for a click handler. The hint pointed at a place that did not
+  have the answer. The pickers removed most of the need; the rest is here, because an
+  id is what every scope grant and every audit line is written in.
+- **A catalogue's people are chosen from a list instead of typed as an id.** The
+  catalogue screen already refused free text where it mattered — a product binds a
+  process from what is deployed, because a product naming a process nobody wrote is an
+  order that fails while somebody waits for a laptop. Every field about *people* was
+  the exception, and each asked for an opaque id from memory.
+
+  It was not only inconvenient. The audience field's placeholder read `kunde-a, kunde-b`
+  — names — while the server compares those entries against **group ids**. Following the
+  placeholder produced a catalogue that reaches nobody, and nothing said so: an
+  unreachable catalogue looks exactly like one nobody has filled in yet. The sharing
+  form's hint, meanwhile, said to read the id from Console → Organization — a screen that
+  shows group names and not their ids.
+
+  The audience is now a list of groups to tick, and sharing is one choice carrying both
+  halves of a grant, so "one account" can no longer stand in front of a group id. The
+  audience offers **groups only**, because that is what the server compares; the sharing
+  list offers both. Two lists on one page showing different sets is not an
+  inconsistency — it is the truth about two different questions.
+
+  A group the directory has lost keeps its place, ticked. A list of boxes has a property
+  a text field does not: not drawing a value and unticking it save the same thing, so
+  without this, deleting a group would make the next save of an unrelated field quietly
+  drop an audience. And where the directory cannot be read, both controls come back as
+  the old id field and say why — a picker with no options and no explanation is worse
+  than the input it replaced, because it looks like an answer to a question it never
+  asked.
+- **The product form is filled in the order a product is thought about.** It answers two
+  questions to two different readers and used to interleave them: a name, a heading and a
+  price are what somebody browsing the catalogue meets, while the approval, the processes
+  and the target-system references are what happens after the basket. The fields
+  alternated between the two four times down a single column, so answering either
+  question meant reading past the other.
+
+  Two sections now — *what the catalogue shows*, then *how an order is handled* — in two
+  columns, reflowing to one at the same width as the console's other two-column layout.
+  Fields that carry an explanation keep the full width; prose in a half column is a
+  column of syllables. No colour is spelled out, so the form follows a theme change like
+  everything else on the page.
+
+  The administrative half also answers a question the form has no field for: **who else
+  may maintain this product**. A product carries no deputy of its own — it is referenced
+  by several catalogues and maintained through its home one, so a stand-in is an editor
+  of that catalogue. The form names the people who already may, and says where that is
+  changed, rather than leaving a considered absence to read as an oversight.
+- **The portal's catalogue tab is called the catalogue.** "Katalog durchsuchen" described
+  an activity where its two neighbours name a place — "Meine Aufträge", "Meine
+  Leistungen". In a row of three, one verb phrase among two nouns reads as a different
+  kind of control, and the tab does not browse anything: it shows the catalogue.
+- **Breaking: the capped list endpoints answer with `{items, total, totalExact,
+  truncated, nextCursor}` instead of a bare array.** Affected:
+  `GET /api/v1/tasks` (global, `?processInstance=` and `?folder=`),
+  `GET /api/v1/instances`, `GET /api/v1/instances/search`, `GET /api/v1/incidents`,
+  `GET /api/v1/approvals` and `GET /api/v1/audit`. The `X-*-Truncated` and
+  `X-*-Next-Cursor` response headers are gone with it, and `GET /api/v1/incidents` no
+  longer wraps its rows in `{"incidents": […]}`. Any client reading these six endpoints
+  has to be changed; there is no compatibility mode and no versioned alias.
+
+  The previous record moved five wrong numbers onto the thing that owns them. It did not
+  take the wrong number out of reach: on a bare array, `response.length` exists, is a
+  number, and is the size of the page rather than of the population — and what the
+  response knew about itself lived in headers, which the cheap call drops. That is not a
+  theory about how the five defects happened; the MCP server held two builders and a
+  client method whose only job was to fold an array and its truncation header back into
+  one object, because an agent cannot use a list that will not say whether it is
+  complete.
+
+  On the envelope, `response.length` is `undefined` and `response.map` throws. Both are
+  loud where a short count is silent. `total` says how many there are and `totalExact`
+  says whether that is a count or a floor, so a caller is never left to assume the
+  flattering one: the instances listing is exact where a maintained counter answers the
+  query (one definition's live or finished half, the engine's live half) and a floor
+  where none does (both halves of the whole engine, or a filter to one element).
+  `items` is never `null`, so an empty listing does not need a guard.
+
+  The uncapped listings — `/api/v1/processes`, `/api/v1/users`, and the per-instance
+  sub-resources such as `…/instances/{key}/jobs` — still answer with arrays, because
+  their length *is* their population. A fourth guard in
+  `api/pagecount_internal_test.go` now asks each capped listing over HTTP and refuses a
+  body that is an array or that cannot say whether the cap bit, so the two sets cannot
+  quietly drift; a fifth reads the published Postman collection, which nothing else here
+  runs and which people copy from. The Console's audit log, which had no browser test at
+  all, gets one — a windowed log now says how many changes there are rather than
+  rendering the window as the whole history.
+
+  Tests in `worker/` and `conformance/` read these listings too, and were converted with
+  everything else. The conformance gallery page is generated from a template in
+  `conformance/gallery_test.go`; run `go test ./conformance -update` after touching it.
+  The Postman collection and its README walkthrough were updated as well — that `curl`
+  line is meant to be copied, and it was teaching `json.load(…)[0]["key"]`. The Golden
+  Path now asserts the envelope rather than only the status code.
+  (ADR-0378)
+
 - **The info panel is reachable from every column of the catalogue, not only from
   services.** This was not a missing feature but an inconsistency inside one page.
   The panel already worked for a bundle: picking one out of the search opens it, and
@@ -128,8 +300,12 @@ _Changed_ / _Removed_ for each version.
   Go's ten-minute default per package. `AGENTS.md` says in as many words that the
   flag is not optional, because the `api` package runs for minutes on its own — and
   the first run on a cold runner proved it, ending in `FAIL api 600.194s`, the
-  default to the millisecond. It carries `-timeout=25m` now, the same figure
-  `make race` and the documented command use, so `make cover` and CI agree.
+  default to the millisecond. It carries `-timeout=25m` now — not the race
+  command's figure, because this pass is the same tests without the detector and `api`
+  under instrumentation measured 198s and 202s, with the third reading (600s) being the
+  default cutting it short rather than its duration. The job's cap is 40 so that limit
+  is the one that fires: Go names the package and prints a goroutine dump, a cap
+  cancels the job with no line saying why.
 
 - **The feed generator is Go, so the Go checks stop needing Node.** The Console's
   "What's New" feed is generated from `CHANGELOG.md` and committed, because ADR-0012
@@ -222,6 +398,72 @@ _Changed_ / _Removed_ for each version.
   (`BenchmarkChecksumDirBySize`, `BenchmarkStatsAtProductionSize`).
   See `docs/adr/draft-whole-store-reads-leave-the-writer.md`.
 
+- **A task folder edited twice in quick succession no longer keeps filtering by its
+  previous rule.** The sidebar compiles each folder's rule once and remembers the
+  result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two
+  saves inside one millisecond therefore shared a key, and the second was served the
+  first's matcher — the folder showed the old filter until something else evicted it.
+
+  Reachable by any caller that edits faster than a person clicks: a script, an API
+  client, an agent over MCP. Measured in the repository's own test for this
+  (`TestMatcherIsRecompiledAfterAnEdit`), which had been passing on the luck of the
+  clock ticking between two writes: **98 failures in 400 runs**.
+
+  The memo is now keyed by the rule itself — specifically the FEEL it compiles to,
+  which is the whole of what the compiler reads. That is correct by construction
+  rather than a finer clock: the same rule always yields the same matcher and a
+  different one never reuses it, whatever a clock does, including a record restored
+  from a backup carrying its original timestamp.
+
+
+- **A catalogue could say a part was integral and optional at the same time.** The
+  release keeps *what a product is made of* apart from *what is offered alongside it*,
+  because they mean opposite things to a basket: an inclusion is ordered as a
+  consequence of ordering the whole, and an option is an offer. Nothing stopped one
+  pair of products from carrying both kinds of link, and such a pair landed in both
+  lists — the same part ordered without asking and offered as a choice, on one screen.
+
+  It needed no mistake to produce. Importing an ArchiMate model merges links by
+  **adding** them, deliberately, because an import is not a synchronisation. So
+  redrawing an integral part as an optional one in the model and importing again left
+  the catalogue holding both, with the old link the one nobody remembers. Publishing
+  now refuses it and names the pair rather than picking one: there is no honest rule
+  for which of the two an author meant.
+- **The console showed three borders that were never drawn.** A style rule reading a
+  colour name that nothing defines is not a rule with a default — the whole declaration
+  is invalid and the browser discards it. Three of them read a name defined only in an
+  unrelated demo page, so the token legend lost its divider and the profile-picture
+  field lost both of its borders. Missing hairlines read as a design that never had
+  any, which is why nobody reported it. A test now refuses the whole class.
+- **The console said a group membership takes effect at the next sign-in.** It has
+  applied from the member's next request since that was made live. A stale claim about
+  a delay is worse than no claim: an administrator waits for it, and tells a colleague
+  to sign out and back in for nothing.
+
+- **Two maintainers adding a product to the same catalogue, and one of them erased
+  the other.** A catalogue's patch is partial, so it cannot clear a field nobody
+  mentioned. What it could still lose is a list: `items`, `edges` and `members` are
+  each replaced whole when sent, and every surface that sends one computes it out of
+  the copy it was rendered from. Adding one product posts every product plus that
+  one.
+
+  So two people adding a product a second apart, and the second write is the first
+  one's disappearance — no error, no trace, and the person who lost the change is the
+  one who did nothing wrong. It is the same shape as the product form's defect one
+  level up, and it survived that fix because a partial patch looks safe.
+
+  A catalogue now carries a `revision`, and a caller may state the one it read. The
+  write is refused as a conflict unless the catalogue is still on it. Stating it stays
+  optional, because a form whose every field is on the screen has no snapshot problem
+  — the caller holding a snapshot is the one that should say so. The Console states it
+  on exactly the six places that rebuild a list and on none of the others, and the MCP
+  tool that changes a catalogue takes it too.
+
+  **Every writer advances it**, which is the part that makes the guard worth having
+  rather than worth believing: a path that changed a catalogue without advancing its
+  revision would be a path whose changes a stale caller overwrites in silence, and it
+  would be found by somebody losing work. The patch, the appearance and the ArchiMate
+  import are each named in a test, so a seventh writer has to be added deliberately.
 - **CI failed a change on a slow runner rather than on a defect, for the second time.**
   The race-detector step carries a per-package timeout because the `api` package needs
   most of it on its own. At Go's 10-minute default that step once passed at 526s and
@@ -231,22 +473,28 @@ _Changed_ / _Removed_ for each version.
   slower across the board, not only there: `engine` 82s → 219s, `conformance` 8s → 45s,
   `mcp` 19s → 48s, `state` 4s → 17s, with nothing in the change touching any of them.
 
-  The limit is 35 minutes, and the job's own cap moves with it. That pairing is the part
-  worth writing down: both bound the same run, so raising the inner one alone would have
-  changed nothing — the job is killed first, and the failure turns from "timed out" into
-  "cancelled" with no line saying why.
+  The limit is 45 minutes, and the job's own cap moves with it to 60. That pairing is the
+  part worth writing down: both bound the same run, so raising the inner one alone would
+  have changed nothing — the job is killed first, and the failure turns from "timed out"
+  into "cancelled" with no line saying why. The inner limit has to fire first, because it
+  is the one that names the package.
+
+  Forty-five and not thirty-five because thirty-five was measured too: the widest pair on
+  one tree is 1352s and 2048s, an hour apart on the same day, and 35 minutes clears the
+  second of those by fifty-two seconds. That is the same coin toss one draw further out.
 
   Nothing is skipped or quarantined: every test still runs, and a hang still ends the job
   inside the cap. **The number buys headroom and does not fix the cause** — the `api`
-  package is about twenty-one minutes of a twenty-nine-minute job under the race
-  detector, and a limit raised twice is a package that wants splitting or parallelising
-  rather than a third raise.
+  package is most of what the step measures, and a limit raised three times is a package
+  that wants splitting or parallelising. That is now #1001, with the measurements, rather
+  than a sentence nobody is accountable for.
 
-  The command is written in six places — the Makefile, the CI workflow, and the three
-  documents that say what "done" means — and a comment asking the next person to change
-  all of them reaches only whoever reads that one file. A test now holds them to one
-  number, because a contributor whose local flag is the older, smaller one reproduces
-  neither failure and is told their change is fine.
+  The command is written across seven files — the Makefile, the CI workflow, and the
+  documents that say what "done" means, including `CONTRIBUTING.md` and the invariants
+  checklist, which were a number behind. A comment asking the next person to change all
+  of them reaches only whoever reads that one file, so a test now holds them to one
+  number: a contributor whose local flag is the older, smaller one reproduces neither
+  failure and is told their change is fine.
 - **With authentication off, the portal could never find a catalogue at all.**
   Atlas's documented development and demo mode is `--auth=false`. Which catalogue
   somebody sees is resolved from the groups they carry — so with no principal there
@@ -282,6 +530,32 @@ _Changed_ / _Removed_ for each version.
   and the favourites answer about an account and refuse a caller with none, which is
   right of them; the portal now treats a missing per-account list as a list missing
   rather than as a catalogue missing.
+
+- **Editing a product in the Console silently cleared five of its fields.** Saving a
+  product replaces it — the record that arrives is the record that is stored — and the
+  catalogue's product form does not render every field a product has. It has no control
+  for variants, for the orderable window, for the search keywords, for the groups
+  eligible to receive the product, or for the ceiling on how long the right may last.
+  It built its body out of the controls it does have, so correcting a price cleared all
+  five, and moved the creation date to today.
+
+  Nothing said so, which is what made it worth finding rather than merely fixing: the
+  save succeeded, the page reloaded, and everything the form shows looked right. The
+  fields it dropped are exactly the ones it never displays, so the damage was invisible
+  on the screen that caused it and turned up later — in a portal that stopped offering
+  a product to the group that was eligible for it, or a search that stopped finding one
+  by the word everybody uses.
+
+  The form now starts from the stored product and lays its own fields over it. Texts
+  are merged the same way and for the same reason one level down: a product is shared
+  between catalogues, the form renders one box per language *this* catalogue declares,
+  and a text in a language it does not declare belongs to a catalogue that does.
+  Emptying a box that is rendered still clears that text.
+
+  It also carries the product's `revision` now, so a colleague's edit in between is
+  refused rather than overwritten. A person has no revision to state, so the refusal is
+  translated where it is shown: nothing was saved, the page shows the other version,
+  open the product again and reapply the change.
 - **A JavaScript script task could not start under the strict sandbox.** Node's bundled
   OpenSSL opens `/etc/ssl/openssl.cnf` before it will execute a line, and the strict
   profile's allowlist named `/etc/ssl/certs` but not that file — so node exited 13 with

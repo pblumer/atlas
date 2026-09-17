@@ -1,6 +1,6 @@
 # ADR-0369: Addressing and the envelope for a message that leaves the node
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers

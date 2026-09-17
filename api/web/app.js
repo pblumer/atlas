@@ -61,8 +61,12 @@ const superseded = (gen) => gen !== navGen;
 
 // ---------- API ----------
 // apiRaw is the fetch wrapper that also returns the response headers, for the few
-// endpoints whose headers carry pagination signals (X-Tasks-Truncated /
-// X-Tasks-Next-Cursor). Most callers want just the body — see api().
+// endpoints that say something in one. Pagination is no longer among them: a capped
+// listing carries its cap, its total and its cursor in the body
+// (ADR-0378), so the
+// remaining header readers are about other things — X-Archive-State, which says the
+// rows describe instances history retention has deleted. Most callers want just the
+// body — see api().
 export async function apiRaw(method, path, body, isXML) {
   const opts = { method };
   if (body !== undefined) {
@@ -1519,7 +1523,7 @@ async function viewConsoleAudit() {
           <button class="btn neutral" id="audit-refresh" title="Reload the audit log">Refresh</button>
         </div>
       </div>
-      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first. The 200 most recent are shown.</p>
+      <p class="muted">Access-control changes across every application — shares, revokes, visibility changes, and ownership transfers — newest first.</p>
       <div id="audit-out">loading…</div>
     </div>`;
 
@@ -1549,9 +1553,9 @@ async function viewConsoleAudit() {
 
   const out = document.getElementById("audit-out");
   const load = async (action) => {
-    let events;
+    let page;
     try {
-      events = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
+      page = await api("GET", "/api/v1/audit" + (action ? "?action=" + encodeURIComponent(action) : ""));
     } catch (e) {
       if (superseded(gen)) return;
       if (/admin/i.test(e.message)) {
@@ -1562,10 +1566,17 @@ async function viewConsoleAudit() {
       return;
     }
     if (superseded(gen)) return;
-    if (!events || !events.length) {
+    const events = (page && page.items) || [];
+    if (!events.length) {
       out.innerHTML = `<p class="muted">No access-control changes recorded yet.</p>`;
       return;
     }
+    // The endpoint counts every match and then returns a window of it, so this total is
+    // the number of changes rather than the number on screen
+    // (ADR-0378).
+    const cut = page.truncated
+      ? `<p class="muted small">Showing the newest ${events.length} of ${page.total}. Narrow by action, or ask for more with ?limit=.</p>`
+      : "";
     const rows = events.map((e) => `
       <tr>
         <td class="muted small" style="white-space:nowrap">${esc(fmtTime(e.at))}</td>
@@ -1574,7 +1585,7 @@ async function viewConsoleAudit() {
         <td>${detail(e)}</td>
         <td>${esc(e.actorName || e.actorId || "—")}</td>
       </tr>`).join("");
-    out.innerHTML = `
+    out.innerHTML = `${cut}
       <table class="table" data-dt-key="audit">
         <thead><tr><th>When</th><th>Action</th><th>Application</th><th>Change</th><th>By</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1731,7 +1742,7 @@ function userForm(u) {
 // account to hang it on until the create has returned an id.
 function avatarField(u) {
   const src = `/api/v1/users/${encodeURIComponent(u.id)}/avatar`;
-  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--line); margin-top:14px; padding-top:12px">
+  return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever Atlas names
       them — a task list, an approval, the portal's recipient picker. PNG or JPEG.
@@ -1740,7 +1751,7 @@ function avatarField(u) {
     : ""}</p>
     <div class="row" style="align-items:center">
       <img class="user-avatar-preview" src="${esc(src)}" alt=""
-        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--line)" hidden>
+        style="width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--border)" hidden>
       <span class="user-avatar-none muted" style="font-size:12px" hidden>No picture.</span>
       <input type="file" class="avatar-file" accept="image/png,image/jpeg" aria-label="Choose a picture">
       <button class="btn ghost" type="button" data-avact="upload">Upload</button>
@@ -2315,7 +2326,8 @@ async function viewConsoleOrg() {
     : "");
   const userRow = (u) => `<tr data-id="${esc(u.id)}">
       <td>${userFace(u)}<span class="chip">${esc(u.username)}</span>${
-        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}</td>
+        me && u.id === me.id ? ' <span class="muted" style="font-size:12px">(you)</span>' : ""}
+        <div class="muted" style="font-size:12px; margin-top:4px"><code>${esc(u.id)}</code></div></td>
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
@@ -2377,6 +2389,7 @@ async function viewConsoleOrg() {
       : `<div class="muted" style="font-size:12px; margin-top:8px">Every user is a member.</div>`;
     return `<tr data-id="${esc(g.id)}">
       <td><span class="chip">${esc(g.name)}</span>
+        <div class="muted" style="font-size:12px; margin-top:4px"><code>${esc(g.id)}</code></div>
         <div style="margin-top:6px">${chips}</div>
         ${addCtl}</td>
       <td style="text-align:right; white-space:nowrap; vertical-align:top">
@@ -2391,7 +2404,7 @@ async function viewConsoleOrg() {
       </div>
       <p class="muted" style="padding:0 18px; margin:6px 0 12px">A named set of users. Share a project
       with a group and every member gets that role (ADR-0180). A membership change
-      takes effect on the member's next sign-in.</p>
+      applies from that member's next request — they do not have to sign out and in.</p>
       <table data-dt-key="groups">
         <thead><tr><th>Group</th><th></th></tr></thead>
         <tbody id="group-rows">${groups.map(groupRow).join("")
@@ -5675,9 +5688,10 @@ async function viewInstances() {
     varClear.hidden = false;
     varPanel.hidden = false;
     varPanel.innerHTML = `<div class="card"><div class="empty">Searching…</div></div>`;
-    let rows;
+    let rows, page;
     try {
-      rows = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+      page = await api("GET", "/api/v1/instances/search?q=" + encodeURIComponent(q));
+      rows = (page && page.items) || [];
     } catch (e) {
       varPanel.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`;
       return;
@@ -5716,14 +5730,22 @@ async function viewInstances() {
         <td style="text-align:right"><a class="replay-link" href="#/operations/i/${r.key}">&#9654; Replay</a></td>
       </tr>`;
     }).join("");
-    const capped = rows.length >= 200 ? ' <span class="muted">(showing first 200)</span>' : "";
+    // The server says whether it cut the result. This used to be inferred from
+    // receiving exactly 200 rows, which cannot tell a search that found 200 from one
+    // that found more (ADR-0378) — and the
+    // difference matters here, because a cut result means the instance being looked for
+    // may be among the ones not shown.
+    const cut = !!(page && page.truncated);
+    const matched = cut
+      ? `the first ${rows.length} of more`
+      : `${rows.length} instance${rows.length === 1 ? "" : "s"}`;
     // The server answers a bare instance key as a point read; everything else is
     // still a content scan. Say which, so the cost of what was just run is visible
     // rather than implied.
     const byKey = /^\d+$/.test(q) && rows.length === 1 && String(rows[0].key) === q;
     const how = byKey ? "exact instance key" : "full scan";
     varPanel.innerHTML = `
-      <p class="muted" style="font-size:12px;margin:0 2px 8px">${rows.length} instance${rows.length === 1 ? "" : "s"} matched${capped} · ${how}</p>
+      <p class="muted" style="font-size:12px;margin:0 2px 8px">${matched} matched${cut ? " — narrow the query to see the rest" : ""} · ${how}</p>
       <div class="card" style="padding:0">
         <table class="var-results" data-dt-key="instance-search">
           <thead><tr><th>Process</th><th>Version</th><th>State</th><th>Started</th><th>Matched variable(s)</th><th></th></tr></thead>
@@ -6186,12 +6208,14 @@ async function viewIncidents() {
   // a flood is the cause table above, not ten thousand rows in the DOM.
   const loadRows = async () => {
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/incidents" + scopeQuery());
-      current = (data && data.incidents) || [];
+      const page = await api("GET", "/api/v1/incidents" + scopeQuery());
+      current = (page && page.items) || [];
       // A selection only means anything for rows that are still on the page.
       const onPage = new Set(current.map((r) => String(r.elementInstanceKey)));
       for (const key of [...picked]) if (!onPage.has(key)) picked.delete(key);
-      const capped = headers.get("X-Incidents-Truncated") === "true";
+      // The cap is on the response now, not in a header a reader had to know about
+      // (ADR-0378).
+      const capped = !!(page && page.truncated);
       rowsTitle.textContent = scope
         ? `${scope.elementId || "Element #" + scope.elementIndex} · ${scope.processId || scope.processDefKey}${capped ? ` — first ${current.length} of ${scope.count}` : ` — ${current.length}`}`
         : capped ? `Incidents — the first ${current.length}` : `Incidents — ${current.length}`;
@@ -6319,12 +6343,14 @@ async function viewWorkers() {
       against it is the state worth catching here &mdash; counters cover this run of the server, while the
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-collisions" hidden></div>
+    <div class="card wk-card" id="wk-breakers" hidden></div>
     <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
 
   const types = document.getElementById("wk-types");
+  const breakers = document.getElementById("wk-breakers");
   const workers = document.getElementById("wk-workers");
   const collisions = document.getElementById("wk-collisions");
   const gaps = document.getElementById("wk-gaps");
@@ -6342,6 +6368,17 @@ async function viewWorkers() {
     if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
     if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
     return new Date(ns / 1e6).toLocaleString();
+  };
+  // When the engine will next try a held target. "Now" rather than a negative age: a
+  // probe that is due goes out on the next round, and a row reading "-3s ago" would make
+  // an operator wonder what went wrong when nothing has.
+  const fmtNext = (ns) => {
+    if (!ns) return "\u2014";
+    const secs = Math.round((ns / 1e6 - Date.now()) / 1000);
+    if (secs <= 0) return "now";
+    if (secs < 60) return `in ${secs}s`;
+    if (secs < 3600) return `in ${Math.round(secs / 60)}m`;
+    return `in ${Math.round(secs / 3600)}h`;
   };
   // Past this a worker has almost certainly stopped rather than paused: the default
   // lease is five minutes, so anything beyond it has let its work go back on offer.
@@ -6662,6 +6699,55 @@ async function viewWorkers() {
     } else {
       collisions.hidden = true;
       collisions.innerHTML = "";
+    }
+
+    // Targets whose jobs are being held back (ADR-0340). This card sits above the queue
+    // depths on purpose: a deep queue with a breaker over it and a deep queue nobody is
+    // serving look identical in the type table, and only one of them means the engine has
+    // decided to stop. Without this row, an outage that used to announce itself as a flood
+    // of incidents announces itself as nothing at all.
+    const held = (data && data.breakers) || [];
+    if (held.length) {
+      breakers.hidden = false;
+      breakers.innerHTML = `
+        <div class="wk-head"><b>Held back</b>
+          <span class="muted small">${held.length} target${held.length === 1 ? "" : "s"}</span></div>
+        <table class="no-enhance">
+          <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
+            <th>Last failure</th><th></th></tr></thead>
+          <tbody>${held.map((b) => `<tr class="wk-stuck">
+            <td><b>${esc(b.connector || b.jobType)}</b>${b.state === "probing"
+              ? ` <span class="pill-kv" title="One job is out right now, testing whether the target has recovered">probing</span>` : ""}</td>
+            <td><span class="pill-kv">${esc(b.jobType)}</span></td>
+            <td>${esc(fmtSeen(b.trippedAt))}</td>
+            <td>${esc(fmtNext(b.probeAt))}</td>
+            <td class="muted">${esc(b.reason || "\u2014")}</td>
+            <td><button class="btn neutral sm" data-close-breaker="${esc(b.jobType)}"
+              data-close-connector="${esc(b.connector || "")}"
+              title="Stop holding this target's jobs back now, without waiting for the next attempt">Close now</button></td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="wk-note">Atlas judged these targets down &mdash; three instances in a row failed against
+          each &mdash; and stopped handing out their jobs. The held work is <b>waiting, not failed</b>: no
+          retry has been spent on it and no incident raised, and it goes out by itself as soon as a target
+          answers again. One job per attempt is sent through to test that. Fix the endpoint and press
+          <b>Close now</b> if you would rather not wait; if the target is still down, the next three
+          failures simply hold it again.</p>`;
+      for (const b of breakers.querySelectorAll("[data-close-breaker]")) {
+        b.onclick = async () => {
+          b.disabled = true;
+          try {
+            await api("POST", "/api/v1/workers/breakers/close", {
+              jobType: b.dataset.closeBreaker, connector: b.dataset.closeConnector,
+            });
+            toast("Released " + (b.dataset.closeConnector || b.dataset.closeBreaker));
+          } catch (e) { toast(e.message, "err"); }
+          setTimeout(load, 400);
+        };
+      }
+    } else {
+      breakers.hidden = true;
+      breakers.innerHTML = "";
     }
 
     // Workers nothing can serve. This is the gap handing a credential to a Worker
@@ -8147,12 +8233,15 @@ async function viewTasks(preselectKey) {
 
   async function load() {
     try {
-      // The list is capped and newest-first; a capped page flags X-Tasks-Truncated and
-      // hands back X-Tasks-Next-Cursor for paging to older tasks (see loadOlder).
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks");
-      state.tasks = data;
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      // The list is capped and newest-first; the response says so in `truncated` and
+      // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
+      // off the body rather than a header is the point: a header is a thing a caller
+      // has to know to ask for, and this one went unread for years
+      // (ADR-0378).
+      const page = await api("GET", "/api/v1/tasks");
+      state.tasks = (page && page.items) || [];
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       // A deep-linked task (…/tasks/t/{key}, e.g. from the Operations live view) can
       // sit outside the capped task-list page during a flood. Rather than silently
       // dropping the selection — which left the form unreachable — fetch that one task
@@ -8197,11 +8286,11 @@ async function viewTasks(preselectKey) {
     const q = "/api/v1/tasks?before=" + encodeURIComponent(state.nextCursor) +
       (saved ? "&folder=" + encodeURIComponent(saved.id) : "");
     try {
-      const { data, headers } = await apiRaw("GET", q);
+      const page = await api("GET", q);
       const seen = new Set(into.map((t) => t.key));
-      for (const t of data) if (!seen.has(t.key)) into.push(t);
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      for (const t of (page && page.items) || []) if (!seen.has(t.key)) into.push(t);
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       into.sort(taskOrder);
       renderAll();
     } catch (e) {
@@ -8276,11 +8365,11 @@ async function viewTasks(preselectKey) {
     const saved = savedFolder();
     if (!saved) { state.filtered = null; renderAll(); return; }
     try {
-      const { data, headers } = await apiRaw("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
+      const page = await api("GET", "/api/v1/tasks?folder=" + encodeURIComponent(saved.id) +
         (authOn || !state.me ? "" : "&me=" + encodeURIComponent(state.me)));
-      state.filtered = data;
-      state.truncated = headers.get("X-Tasks-Truncated") === "true";
-      state.nextCursor = headers.get("X-Tasks-Next-Cursor") || null;
+      state.filtered = (page && page.items) || [];
+      state.truncated = !!(page && page.truncated);
+      state.nextCursor = (page && page.nextCursor) || null;
       renderAll();
     } catch (e) {
       state.filtered = [];
@@ -9194,8 +9283,10 @@ async function viewFormEditor(formId, projectId, generateFor) {
 
 async function viewLive(key, instance) {
   const mod = await import("./editor.js");
-  // apiRaw rides along because the live view pages its instance list through the
-  // X-Instances-Next-Cursor header, which the body-only helper cannot see.
+  // apiRaw rides along for X-Archive-State on the panel's instance search: the rows
+  // it marks are answered from the exported log rather than this store, and that is a
+  // header. Pagination is not — it is in the body now
+  // (ADR-0378).
   await mod.mountLive(view, { api, apiRaw, toast, key, instance });
 }
 

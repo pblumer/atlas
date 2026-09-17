@@ -6884,6 +6884,63 @@ atlas worker --connector mssql</code></pre>
           exactly that spot. Nothing is lost while you investigate.</p>
       </div>
 
+      <h3 id="zurueckgehalten" data-l="de">Wenn Atlas Arbeit zurückhält</h3><h3 data-l="en">When Atlas holds work back</h3>
+      <p data-l="de">Fällt ein Zielsystem aus – ein SMTP-Host antwortet nicht mehr, eine REST-Schnittstelle ist
+        weg –, dann scheitert nicht <i>ein</i> Job, sondern <b>einer pro Instanz</b>, die die Aufgabe erreicht.
+        Früher hiess das: jeder Token verbrauchte sein Retry-Budget und parkte auf einem eigenen Incident, und
+        eine Stunde Ausfall in einem gut laufenden Prozess ergab Tausende davon.</p>
+      <p data-l="en">When a target system fails – an SMTP host stops answering, a REST endpoint disappears – it is
+        not <i>one</i> job that fails but <b>one per instance</b> that reaches the task. That used to mean every
+        token spent its retry budget and parked on an incident of its own, so an hour of downtime in a busy
+        process produced thousands of them.</p>
+      <p data-l="de">Atlas erkennt das jetzt: scheitern <b>drei verschiedene Instanzen hintereinander</b> gegen
+        dasselbe Ziel, gilt es als nicht erreichbar und Atlas <b>gibt dessen Jobs nicht mehr aus</b>. Alle zehn
+        Sekunden – dann alle zwanzig, vierzig, bis maximal fünf Minuten – geht genau <b>ein</b> Job als Test
+        durch. Sobald der durchkommt, läuft der ganze Rückstau von selbst weiter.</p>
+      <p data-l="en">Atlas now notices: when <b>three different instances fail in a row</b> against the same
+        target, it is judged unreachable and Atlas <b>stops handing out its jobs</b>. Every ten seconds – then
+        twenty, forty, up to five minutes – exactly <b>one</b> job goes through as a test. As soon as that one
+        succeeds, the whole backlog carries on by itself.</p>
+      <p data-l="de">Zurückgehaltene Arbeit <b>wartet, sie ist nicht gescheitert</b>: kein Retry wurde dafür
+        verbraucht, kein Incident erzeugt, nichts abgebrochen. Genau deshalb musst du hinsehen können – und dafür
+        gibt es in <a href="/#/operations/workers">Operations → Workers</a> die Karte <b>Held back</b>. Sie nennt
+        das Ziel, seit wann es zurückgehalten wird, woran es zuletzt scheiterte und wann der nächste Versuch
+        läuft.</p>
+      <p data-l="en">Held work is <b>waiting, not failed</b>: no retry was spent on it, no incident raised, nothing
+        cancelled. That is exactly why you need to be able to see it – and the <b>Held back</b> card in
+        <a href="/#/operations/workers">Operations → Workers</a> is where. It names the target, since when it has
+        been held, what it last failed with, and when the next attempt is due.</p>
+      <div class="note warn">
+        <span class="lbl" data-l="de">Achtung</span><span class="lbl" data-l="en">Careful</span>
+        <p data-l="de" style="margin:.3em 0 0">Eine wachsende Warteschlange <b>ohne</b> Incidents heisst nicht,
+          dass alles in Ordnung ist. Genau so sieht ein zurückgehaltenes Ziel aus. Sieh in <b>Held back</b> nach,
+          bevor du eine stille Queue für ein Worker-Problem hältst.</p>
+        <p data-l="en" style="margin:.3em 0 0">A growing queue <b>without</b> incidents does not mean everything
+          is fine. That is exactly what a held target looks like. Check <b>Held back</b> before reading a quiet
+          queue as a worker problem.</p>
+      </div>
+      <p data-l="de">Was du tun kannst: repariere den Endpunkt – mehr ist nicht nötig, Atlas merkt es beim
+        nächsten Test von allein. Willst du nicht warten, drückst du in der Zeile <b>Close now</b>; ist das Ziel
+        noch immer nicht erreichbar, halten die nächsten drei Fehlschläge es einfach wieder an. Umgekehrt geht
+        nicht: ein Ziel von Hand für tot zu erklären, gibt es nicht – das entscheidet die Engine aus dem, was die
+        Worker melden.</p>
+      <p data-l="en">What you can do: fix the endpoint – that is all, Atlas notices by itself on the next test. If
+        you would rather not wait, press <b>Close now</b> on the row; if the target is still unreachable the next
+        three failures simply hold it again. The opposite does not exist: there is no way to declare a target dead
+        by hand – the engine draws that conclusion from what the workers report.</p>
+      <p data-l="de">Zum Alarmieren: jeder Zustandswechsel steht im Log als
+        <code>worker.breaker_open</code> beziehungsweise <code>worker.breaker_closed</code>, und
+        <code>/metrics</code> führt <code>atlas_worker_breakers_open</code> (wie viele Ziele gerade
+        zurückgehalten werden) sowie die Summen <code>atlas_worker_breaker_trips_total</code> und
+        <code>atlas_worker_breaker_probes_total</code>. <i>Welches</i> Ziel es ist, beantwortet die Workers-Ansicht
+        – ein Metrik-Label mit dem Worker-Namen wäre pro Modell erfindbar und würde das Scrape-Ziel sprengen.</p>
+      <p data-l="en">For alerting: every state change is logged as <code>worker.breaker_open</code> or
+        <code>worker.breaker_closed</code>, and <code>/metrics</code> carries
+        <code>atlas_worker_breakers_open</code> (how many targets are currently held) plus the totals
+        <code>atlas_worker_breaker_trips_total</code> and <code>atlas_worker_breaker_probes_total</code>.
+        <i>Which</i> target is answered by the Workers view – a metric label carrying a Worker's name would be
+        invented per model and would blow up the scrape target.</p>
+
       <h3 data-l="de">Atlas installieren &amp; betreiben</h3><h3 data-l="en">Installing &amp; operating Atlas</h3>
       <p data-l="de">Atlas ist <b>ein einziges, in sich geschlossenes Binary</b> – keine Datenbank, kein Broker,
         keine Laufzeit-Abhängigkeiten. Engine, HTTP-API und diese ganze Oberfläche stecken darin. Herunterladen,

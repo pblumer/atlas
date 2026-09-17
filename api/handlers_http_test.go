@@ -49,7 +49,7 @@ func TestActiveInstanceReportsCreatedAt(t *testing.T) {
 		CreatedAt   int64  `json:"createdAt"`
 		CompletedAt int64  `json:"completedAt"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 {
@@ -206,7 +206,7 @@ func TestRuntimeFilterByInstance(t *testing.T) {
 	var insts []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 2 {
@@ -370,7 +370,7 @@ func TestRuntimeVisitHistoryByInstance(t *testing.T) {
 	var insts []struct {
 		Key uint64 `json:"key"`
 	}
-	if err := json.Unmarshal(ilist, &insts); err != nil || len(insts) != 2 {
+	if err := json.Unmarshal(listRows(t, ilist), &insts); err != nil || len(insts) != 2 {
 		t.Fatalf("decode instances: %v (%s)", err, ilist)
 	}
 
@@ -446,7 +446,7 @@ func TestCreateInstanceWithVariables(t *testing.T) {
 			Kind  string `json:"kind"`
 		} `json:"variables"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode instances: %v (%s)", err, body)
 	}
 	if len(insts) != 1 {
@@ -491,7 +491,7 @@ func TestCreateInstanceWithJSONVariable(t *testing.T) {
 			Kind  string `json:"kind"`
 		} `json:"variables"`
 	}
-	if err := json.Unmarshal(body, &insts); err != nil {
+	if err := json.Unmarshal(listRows(t, body), &insts); err != nil {
 		t.Fatalf("decode: %v (%s)", err, body)
 	}
 	if len(insts) != 1 || len(insts[0].Variables) != 1 {

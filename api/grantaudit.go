@@ -113,6 +113,7 @@ func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		out     []globalAuditView
+		matched int
 		loadErr error
 	)
 	s.do(func() {
@@ -138,9 +139,13 @@ func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 			if actionFilter != "" && ev.Action != actionFilter {
 				continue
 			}
-			out = append(out, globalAuditView{grantAudit: ev, ApplicationName: names[ev.ApplicationID]})
-			if len(out) >= limit {
-				break
+			// Counted past the limit rather than stopped at it. The events are already
+			// in memory — LoadAll read them above — so the break this replaces saved a
+			// slice append and cost the caller the one thing it could not work out for
+			// itself: how many matches there are (ADR-0365).
+			matched++
+			if len(out) < limit {
+				out = append(out, globalAuditView{grantAudit: ev, ApplicationName: names[ev.ApplicationID]})
 			}
 		}
 	})
@@ -148,5 +153,7 @@ func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "list audit: "+loadErr.Error())
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, out)
+	// This listing said nothing at all about its cap until now: a caller that received
+	// exactly `limit` rows had no way to tell a complete answer from a cut one.
+	httpapi.JSON(w, http.StatusOK, httpapi.Rows(out, matched, matched > len(out)))
 }

@@ -1,6 +1,6 @@
 # ADR-0373: A process publishes an interface, not its model
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
@@ -30,6 +30,10 @@ Two failures follow from having nothing:
 2. **The publisher cannot change anything.** With no stated contract, every element
    id, message name and payload field is potentially load-bearing for somebody, so
    nothing can be refactored safely.
+3. **Nothing says when.** ADR-0372 settles that *accepted* means the envelope is
+   durably buffered, and ADR-0370 lets it expire there in silence. Between those two
+   truthful statements sits a message that was accepted, never processed, and never
+   reported — the silent delivery this epic exists to end, moved one layer down.
 
 There is also a real temptation to answer this by publishing the *process model*.
 That is what the white-box idea suggests, and it is the wrong unit: a model is large,
@@ -49,6 +53,9 @@ logic) that the publisher has not agreed to disclose.
   interface list would drift from the deployment within a week.
 - **Reuse the design-time store shape.** `sidecar.NewStore` plus a service package
   (ADR-0147), not more `Server` methods.
+- **A promise needs an owner and a bound.** A time commitment is worth nothing if
+  nobody owns its breach, and it is dangerous if a peer can trigger an unbounded
+  number of them.
 
 ## Considered options
 
@@ -75,7 +82,9 @@ A design-time record on the publishing node holding:
 - the **returns**: errors (ADR-0089), escalations (ADR-0125) and reply messages the
   publisher promises may come back, which is what a consumer needs in order to model
   a boundary event rather than discover the failure mode in production;
-- the **terminal outcomes** an instance can reach.
+- the **terminal outcomes** an instance can reach;
+- optionally, a **commitment** per entry point — by when an accepted message will be
+  correlated, and to whom that is promised (below).
 
 The entry points and returns are **derived** from the deployed definition, the way
 ADR-0301 derives its model. The publisher's act is to *publish* a derived contract
@@ -116,24 +125,104 @@ versions, and a consumer bound to a deprecated version is told at deploy rather 
 at 3am. Deactivating the underlying definition (ADR-0119) makes the interface
 unavailable without deleting the contract, so the consumer's binding stays legible.
 
+### The commitment: what an entry point promises, and by when
+
+An entry point may state a **commitment**: a duration within which an accepted message
+will be correlated, and a scope — `internal` for an operational level agreement between
+domains of one organisation, `external` for a service level agreement toward a party
+outside it.
+
+**One mechanism, two words.** The engine cannot tell internal from external: that
+depends on who owns the consuming domain, which is an organisational fact no runtime
+holds. The scope is therefore a label carried for reporting and escalation policy, and
+never a second code path. Building an OLA mechanism beside an SLA mechanism is the
+mistake this paragraph exists to prevent.
+
+**Which clock — the load-bearing choice.** Three spans are measurable, and they are
+three different promises:
+
+| span | who can measure it | who can keep it |
+|---|---|---|
+| `issuedAt` → acceptance | the sender | the network and the peer's availability |
+| acceptance → **correlation** | the receiver | the receiving engine, fully |
+| acceptance → business completion | the receiver | nobody — it waits on human work |
+
+A commitment covers **acceptance → correlation**, and nothing else. It is the only span
+the promising engine controls end to end, and it is exactly the gap named in the context
+above: ADR-0372's *accepted* means durably buffered, and without a commitment nothing
+ever says the buffer should have been drained by now.
+
+The third span is what a business reader usually means by an SLA, and no interface can
+honestly promise it — it belongs to the process and is its own commitment, not decided
+here. The first is the sender's to observe and needs no promise from the publisher.
+
+**A breach opens an incident in the promising domain.** The receiver made the promise,
+so the receiver owns the incident (ADR-0061). A consumer never receives an incident in
+its own domain from another domain's breach; it learns that something went wrong the way
+it must anyway — the reply it waits for does not arrive and its own boundary timer fires.
+That keeps every incident list a list about its owner's own promises.
+
+**And it is bounded, because it is remotely triggerable.** Without a bound, a peer that
+sends messages which cannot be correlated opens incidents in this domain at will — a
+denial of service against the operations view, reachable by anyone holding a **send**
+grant. Breaches are therefore rate-limited and aggregated per interface and per peer
+under ADR-0337, and the **send** grant is what a publisher revokes when one peer is the
+cause. This bound is part of the decision, not a hardening step afterwards.
+
+**Who measures, and what happens when the measurer is down.** The receiver measures — so
+when the receiver is down nobody does, which is precisely when a breach is most likely.
+Two rules follow, both cheap now and expensive to retrofit:
+
+- the buffered envelope already carries `expiresAt` durably (ADR-0370), so a breach that
+  occurred during an outage is reconstructable on recovery and is opened then rather
+  than lost;
+- a commitment whose window passed while the node could not observe it is recorded as
+  **unmeasured**, never as met. A register of promises that counts what it could not see
+  as kept is worse than no register, because "nothing was breached" and "nobody was
+  watching" then read alike — the rule ADR-0189 already states for peer observations.
+
+**Stating no commitment is the default, and it changes nothing.** An entry point without
+one makes no promise, and ADR-0370's silent expiry stands exactly as that record decided.
+A commitment is opt-in and per entry point; stating one changes ADR-0370's reading for
+that entry point alone, where expiry becomes a breach rather than an ordinary outcome.
+ADR-0370 is `Accepted`, so that reading needs an amendment **on** that record when this
+one is accepted. It is named here rather than made here.
+
+**Problem management is named and deferred.** Breaches aggregate, and a flood of them is
+a symptom of one cause rather than many — which is what ITIL calls a Problem. That it has
+no BPMN notation is not a gap: an Incident is already a record type in the operations
+model rather than a notation, and a Problem would be an aggregation over incidents with
+its own lifecycle. Worth stating even out of scope: the Atlas-shaped version is that the
+*handling* of a Problem is itself a process, because Atlas runs processes. It gets its
+own record.
+
 ### Consequences
 
 - **Positive:** a consumer binds to something small and stable; a publisher can
   refactor behind it; discovery and authorization stop being tribal knowledge. The
   descriptor is also exactly what the white box needs, so that feature becomes a
-  rendering question rather than a disclosure question.
+  rendering question rather than a disclosure question. A commitment closes the last
+  silent path in the transport half: a message that is accepted and then never
+  processed now has a deadline, an owner and a bound.
 - **Negative / trade-offs accepted:** a new design-time store, a new service package
   and a grant model to administer. Derivation is only as good as the model: an entry
   point whose payload is assembled by FEEL from loosely typed variables will publish a
   shape nobody can rely on, and the descriptor will honestly say so rather than invent
   one. Publishing is also a new obligation on the publisher — an interface nobody
-  maintains is worse than no interface, because it looks authoritative.
+  maintains is worse than no interface, because it looks authoritative. A commitment sharpens that
+  obligation into a measurable one: a publisher who states a duration it cannot hold
+  manufactures incidents for its own domain, and the honest first move is to state
+  none. The **unmeasured** outcome is also a third state operators have to learn,
+  beside met and breached.
 - **Follow-ups / risks to watch:** the **observe** grant and what it may reveal. A
   compatibility check between two contract versions ("is v3 a safe upgrade from v2?"),
   which is what would let a consumer bind to `latest` without holding its breath. And
   whether an interface belongs to a process or to a process application (ADR-0128) —
   the application is the better unit if a domain publishes several related processes,
-  and this record does not foreclose it.
+  and this record does not foreclose it. The **Problem** record named above, and the amendment
+  ADR-0370 needs once this record is accepted. Whether a consumer may see the
+  publisher's breach record at all is the deferred **observe** grant in another guise,
+  and is decided with it rather than here.
 
 ## Pros and cons of the options
 
@@ -162,6 +251,9 @@ unavailable without deleting the contract, so the consumer's binding stays legib
 - payload shapes reference ADR-0230 (process information model)
 - authorizes ADR-0372; bound by
   ADR-0371; rendered by ADR-0374
+- a commitment's breach is an incident per ADR-0061, bounded per ADR-0337, and changes
+  the reading of ADR-0370's silent expiry for the entry points that state one
+- takes its "say what could not be observed" rule from ADR-0189
 - relates to ADR-0029 (public start links — a form for a human, not a contract)
 - relates to ADR-0071 (sharing scopes), ADR-0278 (object authorization), ADR-0184 (grant audit)
 - relates to ADR-0119 (deactivation) and ADR-0130 (deprecating a version)

@@ -156,7 +156,7 @@ func TestManagedConnectorExecutesDecision(t *testing.T) {
 	incidents := func() int {
 		_, b := x.do(http.MethodGet, "/api/v1/incidents", "")
 		var r struct {
-			Incidents []json.RawMessage `json:"incidents"`
+			Incidents []json.RawMessage `json:"items"`
 		}
 		_ = json.Unmarshal(b, &r)
 		return len(r.Incidents)

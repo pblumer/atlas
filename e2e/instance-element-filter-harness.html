@@ -70,17 +70,26 @@
       // Every /api/v1/instances URL the view asked for, oldest first.
       window.__instanceCalls = [];
 
+      // page is how every capped list endpoint answers since
+      // ADR-0378: the rows under
+      // .items, beside the count of what is really there. A bare array here would make
+      // the console read undefined rather than a number, so the mock answers in the
+      // shape the server does.
+      const page = (items, extra = {}) => ({
+        items, total: items.length, totalExact: true, truncated: false, ...extra,
+      });
+
       const instancesFor = (url) => {
         window.__instanceCalls.push(url);
         const q = new URLSearchParams(url.slice(url.indexOf("?") + 1));
         const element = q.get("element");
         const state = q.get("state");
-        if (!element) return state === "finished" ? [] : ALL_ACTIVE;
+        if (!element) return page(state === "finished" ? [] : ALL_ACTIVE);
         // A token lives only in a running instance, so a filtered finished half is empty.
-        if (state === "finished") return [];
-        if (element === "eintritt") return ON_EINTRITT;
-        if (element === "austritt") return ON_AUSTRITT;
-        return [];
+        if (state === "finished") return page([]);
+        if (element === "eintritt") return page(ON_EINTRITT);
+        if (element === "austritt") return page(ON_AUSTRITT);
+        return page([]);
       };
 
       const api = async (method, url) => {
@@ -89,7 +98,7 @@
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances?process=")) return instancesFor(url);
-        if (url.startsWith("/api/v1/tasks")) return [];
+        if (url.startsWith("/api/v1/tasks")) return page([]);
         if (url.includes("/runtime")) {
           return {
             instances: 3, finished: 12, tokens: 3,

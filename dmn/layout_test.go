@@ -80,7 +80,7 @@ func TestADiagramlessModelIsDrawn(t *testing.T) {
 	}
 	for _, want := range []string{
 		`dmnElementRef="id_amount"`, `dmnElementRef="eligibility"`, `dmnElementRef="ir1"`,
-		nsDMNDI, nsDC, nsDI,
+		nsDMNDI13, nsDC, nsDI,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("generated diagram does not contain %q:\n%s", want, got)
@@ -260,5 +260,65 @@ func TestTheLayoutIsDeterministic(t *testing.T) {
 		if got := string(EnsureDiagram([]byte(drgXML))); got != first {
 			t.Fatalf("run %d differs from the first", i+1)
 		}
+	}
+}
+
+// A DMN file carries two independent namespaces — MODEL for the logic and DMNDI for
+// the picture — and dmn-js binds them together: opened as DMN 1.3 it reads DMNDI
+// from .../20191111/DMNDI/, opened as 1.5 from .../20230324/DMNDI/. So a diagram
+// generated in the 1.3 namespace and attached to a 1.5 model is a diagram the
+// editor will not see: the model opens and its layout is silently gone.
+//
+// Measured on the tree that found this: the whole table of DMN models on one
+// installation was 1.3, and the single 1.5 model was the one an author could not
+// open (#994).
+func TestTheGeneratedDiagramUsesTheModelsOwnDMNDINamespace(t *testing.T) {
+	const ns15 = "https://www.omg.org/spec/DMN/20230324/DMNDI/"
+	for _, tc := range []struct {
+		name  string
+		model string // the MODEL namespace the source declares
+		want  string // the DMNDI namespace the generated diagram must use
+	}{
+		{"DMN 1.3", "https://www.omg.org/spec/DMN/20191111/MODEL/", nsDMNDI13},
+		{"DMN 1.5", "https://www.omg.org/spec/DMN/20230324/MODEL/", ns15},
+		// Anything else keeps the behaviour every stored model was written under.
+		{"an unknown namespace falls back", "http://example.invalid/dmn", nsDMNDI13},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := strings.Replace(drgXML, "https://www.omg.org/spec/DMN/20191111/MODEL/", tc.model, 1)
+			got := string(EnsureDiagram([]byte(src)))
+			if !strings.Contains(got, `xmlns:dmndi="`+tc.want+`"`) {
+				t.Errorf("generated diagram does not declare dmndi=%q:\n%s", tc.want, got)
+			}
+			// The two DMNDI namespaces must not both appear: one of them would be the
+			// one dmn-js ignores.
+			other := nsDMNDI13
+			if tc.want == nsDMNDI13 {
+				other = ns15
+			}
+			if strings.Contains(got, other) {
+				t.Errorf("generated diagram also declares the wrong dmndi namespace %q:\n%s", other, got)
+			}
+			// DC and DI are version-independent — the vendored dmn-js binds exactly one
+			// URI for each — so they must not move with the model's version.
+			for _, want := range []string{nsDC, nsDI} {
+				if !strings.Contains(got, want) {
+					t.Errorf("generated diagram does not declare %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+// RegenerateDiagram is the author-triggered Auto-layout, and it writes the same
+// block Ensure does — so it has to make the same namespace choice, or using
+// Auto-layout on a 1.5 model would be the way to lose its diagram.
+func TestAutoLayoutMakesTheSameNamespaceChoice(t *testing.T) {
+	src := strings.Replace(drgXML,
+		"https://www.omg.org/spec/DMN/20191111/MODEL/",
+		"https://www.omg.org/spec/DMN/20230324/MODEL/", 1)
+	got := string(RegenerateDiagram([]byte(src)))
+	if !strings.Contains(got, `xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/"`) {
+		t.Errorf("Auto-layout on a DMN 1.5 model did not use the 1.5 DMNDI namespace:\n%s", got)
 	}
 }

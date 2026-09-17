@@ -425,7 +425,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 | [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
 | [0339](0339-the-definition-key-space-never-goes-backwards.md) | The definition key space never goes backwards | Accepted | Landed |
-| [0340](0340-worker-circuit-breaker.md) | An outage stops at the worker, not at every token | Accepted | Not started |
+| [0340](0340-worker-circuit-breaker.md) | An outage stops at the worker, not at every token | Accepted (amended) | Landed |
 | [0341](0341-access-recertification.md) | Recertification asks whether a right is still justified, and refuses to let silence answer | Accepted | Landed |
 | [0342](0342-conflicting-rights.md) | A conflict is a fact about a pair, and no rule can say which half is wrong | Accepted | Landed |
 | [0343](0343-pending-work.md) | A reminder has to be able to ask about somebody else, and a person must not | Accepted | Landed |
@@ -454,15 +454,17 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
 | [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
 | [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
-| [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Proposed | Not started |
-| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Proposed | Not started |
+| [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Accepted | Not started |
+| [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Not started |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
-| [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Proposed | Not started |
-| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Proposed | Not started |
+| [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Accepted | Not started |
+| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Accepted | Not started |
 | [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
 | [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
 | [0377](0377-portal-without-identity.md) | With nobody to be, the portal shows a catalogue and refuses an order | Accepted | Landed |
+| [0378](0378-a-capped-listing-answers-with-a-page.md) | A capped listing answers with a page, not with an array | Accepted | Landed |
+| [0379](0379-dmn-version-follows-the-document.md) | A DMN document's own namespace decides which DMN version reads and writes it | Accepted | Landed |
 
 ## The two states of a record
 

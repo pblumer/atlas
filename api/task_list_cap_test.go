@@ -8,9 +8,9 @@ import (
 )
 
 // TestListTasksCap proves the task inbox is bounded: with more parked user tasks than
-// the page cap, GET /api/v1/tasks?limit= returns at most that many and flags the page
-// with X-Tasks-Truncated, so the inbox loads even when a definition has hundreds of
-// thousands of instances parked on a user task (the reported flood).
+// the page cap, GET /api/v1/tasks?limit= returns at most that many and says truncated
+// in the body, so the inbox loads even when a definition has hundreds of thousands of
+// instances parked on a user task (the reported flood).
 func TestListTasksCap(t *testing.T) {
 	ts := newTestServer(t)
 
@@ -31,34 +31,26 @@ func TestListTasksCap(t *testing.T) {
 		}
 	}
 
-	// A capped page returns at most ?limit rows and flags truncation.
+	// A capped page returns at most ?limit rows and says so.
 	res, err := http.Get(ts.URL + "/api/v1/tasks?limit=2")
 	if err != nil {
 		t.Fatalf("GET tasks?limit=2: %v", err)
 	}
-	var page []struct {
-		Key uint64 `json:"key"`
-	}
-	_ = json.NewDecoder(res.Body).Decode(&page)
+	page := readPage(t, res)
 	res.Body.Close()
-	if len(page) != 2 {
-		t.Fatalf("capped task page = %d rows, want 2", len(page))
-	}
-	if res.Header.Get("X-Tasks-Truncated") != "true" {
-		t.Fatalf("truncation header = %q, want true", res.Header.Get("X-Tasks-Truncated"))
+	if page.Total != 2 || !page.Truncated {
+		t.Fatalf("capped task page = %d rows truncated=%v, want 2 + true", page.Total, page.Truncated)
 	}
 
-	// The default (uncapped-by-the-caller) page returns all three, no truncation flag.
+	// The default (uncapped-by-the-caller) page returns all three, not truncated.
 	res, err = http.Get(ts.URL + "/api/v1/tasks")
 	if err != nil {
 		t.Fatalf("GET tasks: %v", err)
 	}
-	page = page[:0]
-	_ = json.NewDecoder(res.Body).Decode(&page)
-	gotHeader := res.Header.Get("X-Tasks-Truncated")
+	page = readPage(t, res)
 	res.Body.Close()
-	if len(page) != n || gotHeader != "" {
-		t.Fatalf("default page = %d rows, truncated=%q; want %d rows, no flag", len(page), gotHeader, n)
+	if page.Total != n || page.Truncated {
+		t.Fatalf("default page = %d rows, truncated=%v; want %d rows, not truncated", page.Total, page.Truncated, n)
 	}
 
 	// An over-ceiling limit is clamped, not rejected; a bad limit is a 400.
@@ -71,7 +63,7 @@ func TestListTasksCap(t *testing.T) {
 }
 
 // TestListIncidentsCap proves the incidents list is bounded the same way (a ?limit=
-// cap with an X-Incidents-Truncated flag), so a flood of failures cannot make the
+// cap and a truncated flag in the body), so a flood of failures cannot make the
 // "what's stuck" view unbounded.
 func TestListIncidentsCap(t *testing.T) {
 	ts := newTestServer(t)
@@ -80,10 +72,11 @@ func TestListIncidentsCap(t *testing.T) {
 	if res, err := http.Get(ts.URL + "/api/v1/incidents?limit=10"); err != nil {
 		t.Fatalf("GET incidents: %v", err)
 	} else {
-		clean := res.StatusCode == http.StatusOK && res.Header.Get("X-Incidents-Truncated") == ""
+		ok := res.StatusCode == http.StatusOK
+		empty := readPage(t, res)
 		res.Body.Close()
-		if !clean {
-			t.Fatal("empty incidents: want 200 and no truncation flag")
+		if !ok || empty.Truncated || empty.Total != 0 {
+			t.Fatalf("empty incidents: status=%d total=%d truncated=%v; want 200, 0, false", res.StatusCode, empty.Total, empty.Truncated)
 		}
 	}
 	if code, _ := doReq(t, ts, http.MethodGet, "/api/v1/incidents?limit=0", "", ""); code != http.StatusBadRequest {
@@ -109,7 +102,7 @@ func TestListIncidentsCap(t *testing.T) {
 	var tasks []struct {
 		Key uint64 `json:"key"`
 	}
-	_ = json.Unmarshal(body, &tasks)
+	_ = json.Unmarshal(listRows(t, body), &tasks)
 	if len(tasks) != 2 {
 		t.Fatalf("want 2 parked tasks, got %d", len(tasks))
 	}
@@ -123,13 +116,9 @@ func TestListIncidentsCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET incidents?limit=1: %v", err)
 	}
-	var resp struct {
-		Incidents []json.RawMessage `json:"incidents"`
-	}
-	_ = json.NewDecoder(res.Body).Decode(&resp)
-	gotHeader := res.Header.Get("X-Incidents-Truncated")
+	capped := readPage(t, res)
 	res.Body.Close()
-	if len(resp.Incidents) != 1 || gotHeader != "true" {
-		t.Fatalf("capped incidents = %d rows, truncated=%q; want 1 + true", len(resp.Incidents), gotHeader)
+	if capped.Total != 1 || !capped.Truncated {
+		t.Fatalf("capped incidents = %d rows, truncated=%v; want 1 + true", capped.Total, capped.Truncated)
 	}
 }
