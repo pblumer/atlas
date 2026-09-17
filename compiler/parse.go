@@ -289,7 +289,7 @@ func parseNamed(key uint64, version int32, r io.Reader, processId string, gated 
 	// same reason: a call this build cannot bind is refused where a deploy can act on
 	// it, and kept — as the null it has always evaluated to — where the definition is
 	// already deployed and running (ADR-0388,
-	// ADR-draft-a-rule-added-later-is-a-gate-on-deploy).
+	// ADR-0393).
 	g := strictFEEL
 	if !gated {
 		g = tolerantFEEL()

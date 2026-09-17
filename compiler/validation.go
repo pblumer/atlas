@@ -131,7 +131,7 @@ const (
 	// compiling to the constant null it has always been, because that is what the
 	// definition has been running as; the record is how the operator is told to fix
 	// the model, instead of the server refusing to start
-	// (ADR-draft-a-rule-added-later-is-a-gate-on-deploy). A deploy never raises it —
+	// (ADR-0393). A deploy never raises it —
 	// there the same fault is a refusal.
 	RuleNullCall = "feel.null-call"
 )

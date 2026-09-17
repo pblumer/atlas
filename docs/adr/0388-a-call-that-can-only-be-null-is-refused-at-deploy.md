@@ -157,13 +157,13 @@ that the compile now carries a gate: a deploy refuses, a reload compiles the exp
 way the build that stored it did — the engine binds the unknown callee to null, as it always
 has — and reports the fault as a `feel.null-call` Problem beside the process, which
 `loadDeployments` logs as `deployment.reloaded_with_problems`. See
-[ADR-draft-a-rule-added-later-is-a-gate-on-deploy](draft-a-rule-added-later-is-a-gate-on-deploy.md),
+[ADR-0393](0393-a-rule-added-later-is-a-gate-on-deploy.md),
 which states the general form: a rule the compiler gains after a definition was stored is a
 gate on deploying it, never a condition for loading it, whatever stage it lives in.
 
 ## Links
 
-- amended by [ADR-draft-a-rule-added-later-is-a-gate-on-deploy](draft-a-rule-added-later-is-a-gate-on-deploy.md) — the reload split this record's placement bypassed
+- amended by [ADR-0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) — the reload split this record's placement bypassed
 - relates to [ADR-0177](0177-reload-skips-the-deploy-gate.md) — the gate/reload split
 - relates to [ADR-0008](0008-feel-expression-strategy.md) — compiling expressions once, at
   deploy, which is the moment this refusal uses

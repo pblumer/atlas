@@ -478,6 +478,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
 | [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
 | [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
+| [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 
 ## The two states of a record
 

@@ -2693,7 +2693,7 @@ func (s *Server) restoreDeployment(rec persistedDeployment) error {
 	// Recompile exactly the process this record represents (a collaboration's
 	// XML holds several), keyed as originally assigned (ADR-0019/0022) — and
 	// without the rules that gate a *deploy*
-	// (ADR-0177, ADR-draft-a-rule-added-later-is-a-gate-on-deploy). This definition
+	// (ADR-0177, ADR-0393). This definition
 	// passed the gate that existed when it was deployed and its instances have been
 	// running under it since; a rule added to the compiler afterwards is a reason to
 	// tell the operator, not to refuse to start. The model on disk did not change.

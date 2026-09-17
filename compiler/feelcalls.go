@@ -19,7 +19,7 @@ import (
 // a refusal apart and keep the process out of it. Its refusal therefore reached
 // the reload as a plain error, and a stored model with one misspelled function
 // name stopped a server from booting at all, with every other definition and every
-// running instance unreachable behind it (ADR-draft-a-rule-added-later-is-a-gate-on-deploy).
+// running instance unreachable behind it (ADR-0393).
 //
 // The gate restores the split without moving the rule. The strict gate refuses
 // exactly as before. The tolerant one compiles the expression the way the build

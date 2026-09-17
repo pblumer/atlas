@@ -1,4 +1,4 @@
-# ADR-DRAFT: A rule the compiler gains later is a gate on deploy, whatever stage it lives in
+# ADR-0393: A rule the compiler gains later is a gate on deploy, whatever stage it lives in
 
 - **Status:** Accepted
 - **Implementation:** Landed
