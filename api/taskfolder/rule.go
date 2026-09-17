@@ -389,7 +389,7 @@ func Compile(r Rule) (*Matcher, error) {
 		return nil, err
 	}
 	// No call check here, deliberately (ADR-0388,
-	// ADR-draft-the-same-refusal-at-every-door-that-already-refuses). A call this
+	// ADR-0392). A call this
 	// build can only answer with null compiles cleanly, and a folder rule built on
 	// one would filter nothing while reading as "no tasks match" — but no such rule
 	// can be built: the expression is generated from [Catalog], and every value in

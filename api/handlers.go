@@ -693,7 +693,7 @@ type validateFeelResp struct {
 // (ADR-0388): the engine compiles either into a constant null and says nothing,
 // which is the one answer a route named "validate" must not give. Certifying the
 // expression to somebody who asked exactly the right question is worse than never
-// having been asked (ADR-draft-the-same-refusal-at-every-door-that-already-refuses).
+// having been asked (ADR-0392).
 //
 // It is a pure compile: no state is read or written, so it runs off the
 // single-writer loop (no s.do) and never touches the processor hot path — a

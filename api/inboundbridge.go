@@ -383,7 +383,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 			// repeated here: a subscription stored before that gate existed would be
 			// dropped silently, which is the failure the gate was meant to prevent,
 			// arriving from the other side
-			// (ADR-draft-the-same-refusal-at-every-door-that-already-refuses).
+			// (ADR-0392).
 			if compiled, err = expr.CompileAuto(r.CorrelationKey); err != nil {
 				continue
 			}

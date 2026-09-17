@@ -115,7 +115,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		// correlates every event to nothing: the worker looks healthy, the sender gets
 		// its 2xx, and no instance is ever woken. Refused where a syntax error already
 		// is, because by the time an event arrives there is nobody left to tell
-		// (ADR-draft-the-same-refusal-at-every-door-that-already-refuses).
+		// (ADR-0392).
 		if err := expr.CheckCallsError(corr); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey cannot work: "+err.Error())
 			return

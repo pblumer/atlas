@@ -122,7 +122,7 @@ func compileRules(rules []Rule) ([]compiledRule, error) {
 		// expectation rather than as a rule that cannot work. The playground is where
 		// somebody is trying the dialect out, which is exactly when being told beats
 		// a verdict arrived at for the wrong reason
-		// (ADR-draft-the-same-refusal-at-every-door-that-already-refuses).
+		// (ADR-0392).
 		if strings.TrimSpace(r.When) != "" {
 			if err := expr.CheckCallsError(r.When); err != nil {
 				return nil, fmt.Errorf("playground: rule %d selects cases with %q, which cannot work: %w", i+1, r.When, err)

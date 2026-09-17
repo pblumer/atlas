@@ -105,7 +105,7 @@ nothing here: the syntax error is the real fault and the compiler already report
   panel. The message carries the element id because the caller wraps it, which is enough to
   find it and less than an anchored Problem would be.
 - **Follow-ups / risks to watch:** the other surfaces that compile FEEL, settled since by
-  [ADR-draft-the-same-refusal-at-every-door-that-already-refuses](draft-the-same-refusal-at-every-door-that-already-refuses.md),
+  [ADR-0392](0392-the-same-refusal-at-every-door-that-already-refuses.md),
   which also corrects the reason given here for leaving them — three of them did have a
   moment at which refusing is free, and were already using it. And if the engine ever gains a
   way to register extra functions on the BPMN path, this check has to be told about them or
@@ -146,5 +146,5 @@ nothing here: the syntax error is the real fault and the compiler already report
   deploy, which is the moment this refusal uses
 - relates to [ADR-0015](0015-reuse-feel-engine.md) — the engine this leaves alone
 - relates to [ADR-0026](0026-problems-panel-and-versioned-validation.md) — the panel the refusal surfaces in
-- extended by [ADR-draft-the-same-refusal-at-every-door-that-already-refuses](draft-the-same-refusal-at-every-door-that-already-refuses.md) —
+- extended by [ADR-0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) —
   the same refusal at the other doors that already refuse

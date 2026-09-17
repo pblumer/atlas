@@ -1,4 +1,4 @@
-# ADR-DRAFT: The same refusal at every door that already refuses
+# ADR-0392: The same refusal at every door that already refuses
 
 - **Status:** Accepted
 - **Implementation:** Landed
