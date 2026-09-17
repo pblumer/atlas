@@ -594,9 +594,6 @@ const APPS = [
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
   { id: "portal", name: "Portal", route: "portal.html", on: true, role: "user", separate: true },
-  // The approver's half of the same surface, and a separate page for the same
-  // reason: it answers to a different person. Until now it was reached only
-  // through the link in its notification mail, so an approver who deleted the mail
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
@@ -639,21 +636,10 @@ const TOPNAV = {
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
-    // An approval is a kind of task, not an application. It was advertised beside
-    // Modeler and Operations while already sitting in the inbox as an unlabelled
-    // row — the same decision in two places, with neither saying so.
-    //
-    // Gated at "user" because there is no approver role to gate on: a product names
-    // a person, a group, or the orderer's superior, so anybody signed in may hold an
-    // approval tomorrow without holding one today. Under Tasks that costs nothing —
-    // it is one entry in a list somebody opened on purpose, rather than an
-    // application in everybody's drawer that is empty for almost all of them.
-    //
-    // `separate` for the same reason the drawer uses it: the page carries the
-    // catalogue's brand, loads its own message catalogue, and is not a view of this
-    // app, so it opens in its own window rather than replacing a console somebody
-    // was in the middle of using.
-    { name: "Approvals", route: "genehmigung.html", role: "user", separate: true },
+    // No Approvals entry any more, and no page behind one: an approval is read and
+    // decided in the inbox above (ADR-draft-approval-in-the-inbox).
+    // It was a second place for one decision, and the two had already begun to
+    // differ — one of them enforced a reason on a rejection and the other did not.
     // The second kind of thing addressed to a person
     // (ADR-0341). Not Operations, where reconciliation
     // sits: a finding is repair and the operator's, while this asks a line manager
@@ -7823,11 +7809,12 @@ async function viewTasks(preselectKey) {
         // that is what the approvals page takes and it takes it for a reason of its
         // own — a task key does not exist until the task activates, while the order
         // and the product do, and they survive a reassignment that changes the key.
+        // Marked as what it is, and no longer a link: the decision is in this screen,
+        // and a chip that opened a second surface to take it was the drift this
+        // change removed.
         const ap = state.approvals.get(t.key);
         const approval = ap
-          ? `<a class="chip approval" target="_blank" rel="noopener"
-               href="genehmigung.html?order=${encodeURIComponent(ap.orderId)}&item=${encodeURIComponent(ap.itemId)}"
-               title="Decide this approval">Approval</a>`
+          ? `<span class="chip approval" title="This task decides an order line">Approval</span>`
           : "";
         // And what it decides, on the row itself. Every approval task in an inbox is
         // called "Genehmigen", so the rows were distinguishable only by their job key:
@@ -8124,6 +8111,36 @@ async function viewTasks(preselectKey) {
   // only what is being decided.
   const APPROVAL_FORM = "genehmigung";
 
+  // openLinkedApproval selects the approval a notification's link names.
+  //
+  // The mail names the **order line** and not the task, and deliberately: a task key
+  // does not exist until the task activates, while the order and the product do, and
+  // they survive a reassignment that changes the key. So the line is resolved against
+  // the approvals this person holds — by position first, then by product, which is
+  // what every link sent before a product could be ordered twice carries.
+  //
+  // Once. A link is an arrival, not a filter: re-selecting it after every reload
+  // would drag the person back to it each time they decided something else.
+  let linkOpened = false;
+  function openLinkedApproval() {
+    if (linkOpened) return;
+    linkOpened = true;
+    const q = new URLSearchParams((location.hash.split("?")[1] || ""));
+    const order = q.get("order");
+    const item = q.get("item");
+    if (!order || !item) return;
+    for (const [key, a] of state.approvals) {
+      if (a.orderId === order && (a.positionId === item || a.itemId === item)) {
+        state.selected = key;
+        return;
+      }
+    }
+    // Not held. The ordinary reason is that somebody else decided it, or that it was
+    // withdrawn — so the inbox opens anyway and says why the approval that was linked
+    // is not in front of them. A blank screen would read as the link being broken.
+    toast("That approval is not in your inbox: it may already be decided", "err");
+  }
+
   // decidedHere reports whether this task is an approval this screen answers itself.
   //
   // It is the shipped model and nothing else: `genehmigt` and `begruendung` are that
@@ -8143,6 +8160,17 @@ async function viewTasks(preselectKey) {
     }
     const first = Object.values(texts).find((v) => v);
     return first || a.itemId || "—";
+  }
+
+  // approvalCatalogue is the catalogue the order came from, in a language this reader
+  // has a chance with. Empty where the release's catalogue is gone, which is the one
+  // case the row is simply left out.
+  function approvalCatalogue(a) {
+    const texts = a.catalogTexts || {};
+    for (const tag of [(navigator.language || "en").slice(0, 2), "en", "de"]) {
+      if (texts[tag]) return texts[tag];
+    }
+    return Object.values(texts).find((v) => v) || "";
   }
 
   // approvalSiblings are the other approvals of the same order this person holds.
@@ -8190,6 +8218,7 @@ async function viewTasks(preselectKey) {
         ${row("For", esc(a.recipient))}
         ${row("Ordered by", esc(a.orderer))}
         ${row("Order", `<span class="chip">${esc(a.orderId)}</span>`)}
+        ${row("Catalogue", esc(approvalCatalogue(a)))}
       </div>
       ${decides}
     </div>`;
@@ -8454,6 +8483,7 @@ async function viewTasks(preselectKey) {
       // Before the first paint, so a row is never drawn unmarked and then relabelled
       // under somebody's eyes.
       await loadApprovalKeys();
+      openLinkedApproval();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
       // here. When a saved folder is open, its page and the sidebar badges are part
@@ -8498,6 +8528,11 @@ async function viewTasks(preselectKey) {
             positionId: a.positionId || "", variantId: a.variantId || "",
             recipient: a.recipient || "", orderer: a.orderer || "",
             price: a.price || "", texts: a.texts || {},
+            // Which customer's catalogue this order came from. The page this replaced
+            // said it in the catalogue's own colours; the Console is Atlas's own
+            // surface and wears nobody's brand, so it says it in words instead — an
+            // approver deciding for two customers needs to know which one this is.
+            catalogTexts: a.catalogTexts || {},
           });
         }
       }

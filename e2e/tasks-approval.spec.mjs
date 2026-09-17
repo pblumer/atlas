@@ -41,6 +41,7 @@ const APPROVALS = [
     task: TASKS[0], orderId: "ord_4711", itemId: "phone", positionId: "phone#black",
     variantId: "black", recipient: "usr_rosa", orderer: "usr_max",
     price: "CHF 1'200.–", texts: { de: "Apple iPhone 18 Pro", en: "Apple iPhone 18 Pro" },
+    catalogId: "cat_mobil", catalogTexts: { de: "Mobile Geräte", en: "Mobile devices" },
   },
   {
     task: TASKS[1], orderId: "ord_4711", itemId: "huelle", positionId: "huelle",
@@ -100,6 +101,10 @@ test("an approval says what it decides, in names rather than ids", async ({ page
   await expect(block).toContainText("CHF 1'200.–");
   await expect(block).toContainText("ord_4711");
   await expect(block).toContainText("usr_rosa");
+  // Which customer's catalogue this is. The page this replaced said it in that
+  // catalogue's colours; the Console wears nobody's brand, so it says it in words —
+  // an approver deciding for two customers needs to know which one they are in.
+  await expect(block).toContainText("Mobile devices");
   expect(page.__errors).toEqual([]);
 });
 
@@ -225,5 +230,46 @@ test("an approval on another model keeps the ordinary way to complete it", async
   // the form and its Complete button are still how the task is answered.
   await expect(page.locator("#task-complete")).toBeVisible();
   await expect(page.locator("#task-form")).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+// The link in an approval notification lands on that approval.
+//
+// The mail names the **order line** and not the task: a task key does not exist
+// until the task activates, while the order and the product do, and they survive a
+// reassignment that changes the key. So the inbox resolves the line to the row it
+// holds for it — and says so when it holds none, because an approval somebody else
+// decided in the meantime is the ordinary reason for that, not a broken link.
+test("a notification's link opens the approval it names", async ({ page }) => {
+  await page.goto("/index.html#/tasks?order=ord_4711&item=phone%23black");
+  await expect(page.locator(".tasks-item").first()).toBeVisible({ timeout: 15000 });
+
+  await expect(page.locator(".tasks-detail-head h1")).toBeVisible();
+  const block = page.locator(".tasks-approval");
+  await expect(block).toContainText("Apple iPhone 18 Pro");
+  await expect(block).toContainText("ord_4711");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a link to an approval that is no longer open says so", async ({ page }) => {
+  await page.goto("/index.html#/tasks?order=ord_4711&item=gone");
+  await expect(page.locator(".tasks-item").first()).toBeVisible({ timeout: 15000 });
+
+  // The inbox still opens — it is the right place to be — and the page says why the
+  // approval that was linked is not in front of them.
+  await expect(page.locator("#toast")).toBeVisible();
+  await expect(page.locator(".tasks-approval")).toHaveCount(0);
+  expect(page.__errors).toEqual([]);
+});
+
+// The product named alone still resolves, which is what every link sent before a
+// product could be ordered twice carries.
+test("a link naming the product resolves where the order carries one of it", async ({ page }) => {
+  await page.goto("/index.html#/tasks?order=ord_4711&item=huelle");
+  await expect(page.locator(".tasks-item").first()).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(".tasks-approval")).toContainText("ord_4711");
+  await expect(page.locator(".tasks-detail-head h1")).toBeVisible();
+  await expect(page.locator(".tasks-item.selected")).toHaveCount(1);
+  await expect(page.locator(".tasks-item.selected")).toHaveAttribute("data-key", "102");
   expect(page.__errors).toEqual([]);
 });
