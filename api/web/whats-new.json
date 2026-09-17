@@ -2,6 +2,35 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-business-rule-task-can-call-a-decision-service",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A process can call a decision service, not just a decision",
+        "de": "Ein Prozess kann einen Decision Service aufrufen, nicht nur eine Entscheidung"
+      },
+      "summary": {
+        "en": "A DMN model can publish an interface over part of its decision graph: a decision service says what it returns, what it works out internally, and which decisions it expects the caller to supply instead of computing them. Atlas ignored those interfaces, so the only way in was to call a decision inside the model — which means every caller has to know its internals. A business rule task now names either, and what a service asks for is only what a caller must supply. A decision inside a service stays callable, so nothing already running changes.",
+        "de": "Ein DMN-Modell kann eine Schnittstelle über einen Teil seines Entscheidungsgraphen veröffentlichen: Ein Decision Service benennt, was er zurückgibt, was er intern ermittelt und welche Entscheidungen er nicht selbst berechnet, sondern vom Aufrufer erwartet. Atlas hat solche Schnittstellen ignoriert; der einzige Weg hinein führte über eine Entscheidung im Modell — womit jeder Aufrufer dessen Interna kennen muss. Ein Business-Rule-Task benennt jetzt beides, und ein Service verlangt nur, was ein Aufrufer beisteuern muss. Eine Entscheidung innerhalb eines Service bleibt aufrufbar; an Laufendem ändert sich nichts."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Decisions",
+        "Processes"
+      ],
+      "try": {
+        "label": {
+          "en": "Open the decisions",
+          "de": "Entscheidungen öffnen"
+        },
+        "route": "#/console/decisions"
+      }
+    },
+    {
       "id": "every-position-carries-its-own-way-into-the-process-working-",
       "version": "Unreleased",
       "date": null,
@@ -228,24 +257,6 @@
       "summary": {
         "en": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler.",
         "de": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-catalogue-s-people-are-chosen-from-a-list-instead-of-typed",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A catalogue's people are chosen from a list instead of typed as an id.",
-        "de": "A catalogue's people are chosen from a list instead of typed as an id."
-      },
-      "summary": {
-        "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
-        "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
       },
       "link": {
         "label": "Changelog",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	tdmn "github.com/pblumer/temis/dmn"
@@ -23,7 +24,11 @@ type ValidationResult struct {
 	// deployment record read Decisions alone, so a decision is published under one
 	// name and one only (names.go).
 	Aliases []string
-	Message string // human-readable reason when unresolved or invalid
+	// Services lists the decision services the model publishes — DMN's interface
+	// over part of a DRD, which a business rule task addresses exactly as it
+	// addresses a decision (services.go).
+	Services []string
+	Message  string // human-readable reason when unresolved or invalid
 }
 
 // Validator resolves DMN references and validates them against temis. It owns a
@@ -60,6 +65,9 @@ func (v *Validator) Validate(ctx context.Context, modelRef string) (ValidationRe
 	if diags.HasErrors() {
 		return ValidationResult{Resolved: true, Message: formatDiagnostics(diags)}, nil
 	}
+	if collisions := nameCollisions(defs, xml); len(collisions) > 0 {
+		return ValidationResult{Resolved: true, Message: collisionMessage(collisions)}, nil
+	}
 	names, aliases := decisionNames(defs)
 	return ValidationResult{
 		Resolved:  true,
@@ -67,6 +75,7 @@ func (v *Validator) Validate(ctx context.Context, modelRef string) (ValidationRe
 		ModelName: defs.ModelName(),
 		Decisions: names,
 		Aliases:   aliases,
+		Services:  serviceNames(describeServices(defs, xml)),
 	}, nil
 }
 
@@ -86,6 +95,11 @@ type DecisionInfo struct {
 	Name   string          `json:"name"`
 	Inputs []DecisionField `json:"inputs"`
 	Output DecisionField   `json:"output"`
+	// Service marks a decision service rather than a decision: the same shape,
+	// because a business rule task calls either the same way, but an author choosing
+	// one should see which is the published interface and which is a decision inside
+	// it (services.go).
+	Service bool `json:"service,omitempty"`
 }
 
 // Describe resolves modelRef, compiles it, and returns its model name and the
@@ -188,8 +202,30 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 	if diags.HasErrors() {
 		return ValidationResult{Resolved: true, Message: formatDiagnostics(diags)}
 	}
+	if collisions := nameCollisions(defs, xml); len(collisions) > 0 {
+		return ValidationResult{Resolved: true, Message: collisionMessage(collisions)}
+	}
 	names, aliases := decisionNames(defs)
-	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: names, Aliases: aliases}
+	return ValidationResult{Resolved: true, Valid: true, ModelName: defs.ModelName(), Decisions: names, Aliases: aliases, Services: serviceNames(describeServices(defs, xml))}
+}
+
+// collisionMessage says which names the model gives to more than one thing — a
+// decision and a decision service, or two services. A business rule task carries
+// one string, so such a model has no unambiguous answer for it; it is refused
+// here, at the gate, rather than resolved by a rule nobody wrote down (ADR-draft-a-business-rule-task-can-call-a-decision-service).
+func collisionMessage(names []string) string {
+	return "more than one thing is called " + strings.Join(quoted(names), ", ") +
+		" — a business rule task names one string, so each name has to mean one decision or one decision service"
+}
+
+// quoted renders names for a message, so a name with a space in it still reads as
+// one name.
+func quoted(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = strconv.Quote(n)
+	}
+	return out
 }
 
 // formatDiagnostics renders the error-severity diagnostics into one line for the
