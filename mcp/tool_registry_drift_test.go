@@ -193,6 +193,9 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/catalogs/{id}/logo":                           "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
 	"PUT /api/v1/catalogs/{id}/logo":                           "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
 	"DELETE /api/v1/catalogs/{id}/logo":                        "a brand mark is bytes for a browser; an agent has no use for the image and no business uploading one",
+	"GET /api/v1/catalog-products/{id}/picture":                "a product's picture is bytes for a browser, same as a brand mark; an agent reads the product record instead",
+	"PUT /api/v1/catalog-products/{id}/picture":                "a product's picture is bytes for a browser, same as a brand mark; an agent has no image to upload",
+	"DELETE /api/v1/catalog-products/{id}/picture":             "a product's picture is bytes for a browser, same as a brand mark; removing one is a maintainer's decision about how the catalogue looks",
 	// Ordering, for the same reason. An order is also somebody's own: the handler
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.

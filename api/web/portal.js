@@ -1095,6 +1095,7 @@ function infoPanel(rel, item) {
   const offered = namesOf(rel, (((rel || {}).options || {})[item.id]) || []);
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
+    productPicture(item.id),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
@@ -1110,6 +1111,27 @@ function infoPanel(rel, item) {
     offered.length
       ? el('p', { class: 'muted' }, `${t('info.options')}: ${offered.join(', ')}`) : null,
     heldPill(item));
+}
+
+// productPicture is the product as it looks, where the catalogue has a picture of
+// it (ADR-draft-product-picture).
+//
+// Asked for by rendering it and not by asking first whether one exists. A product
+// without a picture is the ordinary case and answers 404, which is the browser's
+// own cheapest "no" — a probe request per row would double the calls to learn what
+// the image request learns anyway. The element removes itself when the answer is
+// that 404, so a product with no picture leaves no broken-image icon and no gap.
+//
+// No width or height attribute: the catalogue does not resize what was uploaded
+// (a server that re-encodes somebody's picture decides their product looks near
+// enough), so the page bounds it in CSS instead and the image keeps its own shape.
+function productPicture(id) {
+  return el('img', {
+    class: 'picture',
+    src: `/api/v1/catalog-products/${encodeURIComponent(id)}/picture`,
+    alt: '',
+    onerror: (e) => { e.target.remove(); },
+  });
 }
 
 // namesOf turns part ids into the names the catalogue wrote for them.

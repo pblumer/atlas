@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can carry a picture.** A catalogue row was a name and a price, and
+  somebody choosing between two phones was choosing between two names. A product now
+  has a picture — a photograph of the thing or the vendor's mark, PNG, JPEG or SVG —
+  uploaded in the product editor and shown in the portal when the product is opened.
+
+  It is stored the way a catalogue's brand mark is: a file beside the stores, keyed by
+  the product, with **no flag on the record saying one exists**. The file is the fact,
+  and a second copy of that fact is a second copy to be wrong after a restore that
+  brought the JSON and not the image. What was uploaded is what is served — no
+  resizing and no re-encoding, because a server that re-encodes somebody's picture
+  decides their product looks near enough.
+
+  Who may see it is the question the portal actually asks: **does any catalogue this
+  person may read offer this product**, and not "may they read its home catalogue".
+  A product is referenced by catalogues rather than owned by one, so a customer of one
+  catalogue legitimately orders a product whose home is another — gated on the home
+  alone, that customer would see a name and no picture. Changing it stays with
+  whoever maintains the product: somebody who may not rename it may not re-illustrate
+  it either.
+
+  **A release does not freeze it.** A release freezes what was promised — the product,
+  its variants, the approval rule, the ceiling, the price. A picture is how a thing is
+  shown and not what was agreed, so a better photograph of the same laptop appears on
+  orders already placed rather than a second picture being kept for them.
+
 - **Where your own position stands, without an operations surface.** A position in
   "Meine Aufträge" now answers *which step* it is sitting on — "Genehmigen",
   "Provisionierung starten" — to whoever the order belongs to, and not only to a

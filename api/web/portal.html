@@ -144,6 +144,13 @@
      two of those together are wider than a column of this cascade. */
   .cell .meta { font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap;
                 column-gap:8px; row-gap:2px; overflow-wrap:break-word; }
+  /* A product's picture, bounded by the page rather than by the file: what was
+     uploaded is what is served, so the size is decided here. object-fit:contain
+     keeps a logo a logo and a photograph a photograph — a cover crop would cut the
+     top off somebody's product. */
+  .card .picture { display:block; max-width:100%; max-height:200px; width:auto;
+                   margin:0 0 10px; border-radius:8px; object-fit:contain;
+                   background:var(--surface); }
   /* What a row carries at its right edge, and the two declarations that keep it on
      one line. Each icon already refuses to shrink; the trail around them did not,
      and its contents were inline boxes — so a narrow column wrapped them and one

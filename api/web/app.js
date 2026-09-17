@@ -98,6 +98,32 @@ export async function api(method, path, body, isXML) {
   return (await apiRaw(method, path, body, isXML)).data;
 }
 
+// apiBytes sends a file as the request body, under its own media type.
+//
+// Separate from api() rather than a fifth parameter on it: what api() takes is a
+// value to encode, and what this takes is bytes that are already what they are. The
+// server reads the type from the header and validates the bytes against it — an
+// upload mislabelled by a browser is refused there, not here.
+//
+// The failure shape is api()'s, so a caller reports an upload the way it reports
+// everything else.
+export async function apiBytes(method, path, file) {
+  const res = await fetch(path, {
+    method,
+    body: file,
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let data = text;
+    try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
+    const err = new Error((data && data.error) || res.statusText || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.body = data;
+    throw err;
+  }
+}
+
 export function toast(msg, kind) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.className = kind || ""; t.hidden = false;
@@ -9769,7 +9795,7 @@ async function route() {
       // me travels with the context because one card on that page is the owner's
       // alone (ADR-0071): an editor may change the catalogue and not who else can.
       return await viewCatalogDetail({
-        api, toast, view, isSuperseded: () => superseded(gen),
+        api, apiBytes, toast, view, isSuperseded: () => superseded(gen),
         me: AUTH.user, enforced: AUTH.enabled,
       }, decodeURIComponent(cd[1]));
     }
