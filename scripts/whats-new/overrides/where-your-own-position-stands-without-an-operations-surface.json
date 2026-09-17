@@ -1,0 +1,33 @@
+{
+  "tags": [
+    "Portal",
+    "Orders",
+    "Tasks"
+  ],
+  "title": {
+    "en": "See which step your order is waiting on",
+    "de": "Sehen, an welchem Schritt die eigene Bestellung wartet"
+  },
+  "summary": {
+    "en": "\"Meine Aufträge\" told you a position was running. It did not tell you what it was running *on* — whether somebody's approval is sitting in a manager's inbox or whether the account is being created right now. Each position now has a \"Where is this?\" button, and the answer is the step the process is standing on, by the name the model gives it. It is for the person whose order it is, not only for operators: the link that existed leads into the engine console, which shows everything that instance holds, including data belonging to other people's orders where a process carries both. So this is a separate, much narrower answer — the step, and nothing else. Somebody else's order is answered the same way an order you may not read is answered anywhere in Atlas: as if it were not there. The page asks when you press, not when it loads, because finding the process means looking through what is running, and a table of ten orders should not pay that forty times over to fill a line most readers never open.",
+    "de": "„Meine Aufträge\" sagte bisher, dass eine Position läuft. Es sagte nicht, woran sie läuft — ob eine Genehmigung im Postfach einer Vorgesetzten liegt oder ob das Konto gerade angelegt wird. Jede Position hat jetzt eine Schaltfläche „Wo steht das?\", und die Antwort ist der Schritt, auf dem der Prozess steht, mit dem Namen, den das Modell ihm gibt. Sie ist für die Person gedacht, der die Bestellung gehört, nicht nur für den Betrieb: Der bisherige Link führt in die Engine-Konsole, und die zeigt alles, was diese Instanz hält — auch Daten aus fremden Bestellungen, wenn ein Prozess beide trägt. Deshalb gibt es hier eine eigene, viel engere Antwort: den Schritt und sonst nichts. Eine fremde Bestellung wird so beantwortet, wie in Atlas jede Bestellung beantwortet wird, die man nicht lesen darf — als gäbe es sie nicht. Gefragt wird beim Druck auf die Schaltfläche, nicht beim Laden der Seite: Den Prozess zu finden heisst, das Laufende durchzusehen, und eine Tabelle mit zehn Bestellungen soll das nicht vierzig Mal bezahlen, um eine Zeile zu füllen, die die meisten nie aufschlagen."
+  },
+  "tutorial": {
+    "en": [
+      "Open the portal and order something whose product asks for an approval.",
+      "Switch to \"Meine Aufträge\" and find the position in the order you just placed.",
+      "Press \"Where is this?\" beside it.",
+      "The step appears next to the button — the approval task's own name while somebody is deciding, the provisioning step once they have.",
+      "Press it again later: the answer is fetched fresh each time, because that is the one thing on the page that moves while it is open.",
+      "A position nothing is working on says so: before its turn comes, and after it is finished, there is no process to stand anywhere."
+    ],
+    "de": [
+      "Portal öffnen und etwas bestellen, dessen Produkt eine Genehmigung verlangt.",
+      "Auf „Meine Aufträge\" wechseln und die Position der eben aufgegebenen Bestellung suchen.",
+      "Daneben „Wo steht das?\" drücken.",
+      "Der Schritt erscheint neben der Schaltfläche — der Name der Genehmigungsaufgabe, solange jemand entscheidet, danach der Provisionierungsschritt.",
+      "Später erneut drücken: Die Antwort wird jedes Mal neu geholt, denn sie ist das Einzige auf der Seite, das sich ändert, während sie offen ist.",
+      "Eine Position, an der nichts arbeitet, sagt das auch: vor ihrer Reihe und nach ihrem Abschluss steht kein Prozess irgendwo."
+    ]
+  }
+}
