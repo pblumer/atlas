@@ -1067,6 +1067,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/orders/{id}", s.orders.HandleGet, apiOp{
 			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order", tObject())}},
+		{"GET", "/api/v1/portal/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
+			summary: "Where one of your own positions stands: the steps the process working on it is sitting on right now, by the names its model gives them. Gated on owning the order rather than on a role — somebody else's order answers 404, because whether it exists is not something this confirms — and it carries no process variable, because the caller already knows their own order and this says where, not what. A position nothing is running for answers state \"none\"", tag: "Order", role: RoleUser,
+			resp: jsonBody("Where the position's process stands", tObject())}},
 
 		// The two calls an orchestrator makes to drive an order: what may start,
 		// and what came back. Operator work rather than the orderer's — nobody

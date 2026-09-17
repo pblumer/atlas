@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "where-your-own-position-stands-without-an-operations-surface",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Where your own position stands, without an operations surface.",
+        "de": "Where your own position stands, without an operations surface."
+      },
+      "summary": {
+        "en": "A position in \"Meine Aufträge\" now answers which step it is sitting on — \"Genehmigen\", \"Provisionierung starten\" — to whoever the order belongs to, and not only to a reader holding the operator role.",
+        "de": "A position in \"Meine Aufträge\" now answers which step it is sitting on — \"Genehmigen\", \"Provisionierung starten\" — to whoever the order belongs to, and not only to a reader holding the operator role."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "every-position-carries-its-own-way-into-the-process-working-",
       "version": "Unreleased",
       "date": null,
@@ -228,24 +246,6 @@
       "summary": {
         "en": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler.",
         "de": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "a-catalogue-s-people-are-chosen-from-a-list-instead-of-typed",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "A catalogue's people are chosen from a list instead of typed as an id.",
-        "de": "A catalogue's people are chosen from a list instead of typed as an id."
-      },
-      "summary": {
-        "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
-        "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
       },
       "link": {
         "label": "Changelog",

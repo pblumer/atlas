@@ -70,6 +70,10 @@
   .lines { margin:0; padding-left:0; list-style:none; font-size:14px; }
   .lines li { padding:3px 0; border-top:1px solid var(--border); }
   .lines li:first-child { border-top:0; }
+  /* The step a position is sitting on. Read as a statement rather than as a note:
+     it is the answer somebody pressed for, and .muted is what the page uses for
+     what it says without being asked. */
+  .lines .step { font-size:13px; color:var(--text); }
   /* One dot per line status. The three that mean "not provisioned" are deliberately
      different colours: a refusal is a decision, a failure is a defect somebody is
      fixing, and a block is neither — showing them alike would tell a visitor the

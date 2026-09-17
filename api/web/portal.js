@@ -61,6 +61,10 @@ const STRINGS = {
     'proc.open': 'Prozess ansehen',
     'proc.openLine': 'Prozessschritt',
     'proc.none': 'Zu diesem Auftrag läuft keine Prozessinstanz mehr — sie wurde von der Aufbewahrung entfernt.',
+    'proc.where': 'Wo steht das?',
+    'proc.asking': 'Wird abgefragt …',
+    'proc.standing': 'Aktueller Schritt:',
+    'proc.nothingRunning': 'Zu dieser Position läuft gerade kein Prozess.',
     'order.completed': 'Abgeschlossen',
     'order.partial': 'Teilweise erfüllt',
     'order.unfulfilled': 'Nicht erfüllt',
@@ -192,6 +196,10 @@ const STRINGS = {
     'proc.open': 'View the process',
     'proc.openLine': 'Process step',
     'proc.none': 'No process instance is left for this order — retention has removed it.',
+    'proc.where': 'Where is this?',
+    'proc.asking': 'Asking …',
+    'proc.standing': 'Current step:',
+    'proc.nothingRunning': 'Nothing is running for this position right now.',
     'order.completed': 'Completed',
     'order.partial': 'Partly fulfilled',
     'order.unfulfilled': 'Not fulfilled',
@@ -506,6 +514,15 @@ const state = {
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
+  // progress is where each position's process stands, keyed "<orderId>|<position>"
+  // (ADR-draft-position-progress).
+  //
+  // Per position and not per order, because the order's own orchestration says
+  // "running" and this says which step *this* line is sitting on — which is the
+  // question somebody reading their own order actually has. Empty until asked: the
+  // server finds the instance by walking what is running, and a page of ten orders
+  // would be forty walks to fill a line most readers never read.
+  progress: new Map(),
 };
 
 // --- The four levels the mockups draw ---------------------------------------
@@ -1641,6 +1658,58 @@ async function followProcess(order, line) {
   }
 }
 
+// --- Where one position stands ----------------------------------------------
+//
+// The other half of the link above, and the half that is not an operator's
+// (ADR-draft-position-progress). Following the
+// instance means the console, and the console shows the whole engine state of that
+// instance — including variables belonging to somebody else's order where a process
+// holds them. So the orderer is answered by a route of their own, gated on owning
+// the order: which step the position is sitting on, and nothing else.
+
+// askProgress fetches where one position's process is.
+//
+// On a press rather than with the page, for the reason followProcess is: the server
+// finds the instance by walking what is running, and drawing this for every row
+// would pay that walk per position of every order on the page.
+//
+// Pressing again re-asks rather than closing. Where something stands is the one
+// thing on this page that moves while it is open, and a button that toggled a
+// stale answer would show yesterday's step as today's.
+async function askProgress(order, line) {
+  const at = `${order.id}|${lineKey(line)}`;
+  state.error = '';
+  state.progress.set(at, { asking: true });
+  render();
+  try {
+    const got = await api(`/api/v1/portal/orders/${encodeURIComponent(order.id)}`
+      + `/lines/${encodeURIComponent(lineKey(line))}/progress`);
+    state.progress.set(at, { state: got.state, steps: got.steps || [] });
+  } catch (e) {
+    // Nothing kept: a stale answer under a failed ask reads as the answer.
+    state.progress.delete(at);
+    state.error = `${t('portal.failed')} ${e.message}`;
+  }
+  render();
+}
+
+// progressNote is that answer in words, or nothing where it was never asked for.
+//
+// "Nothing is running" is said rather than left blank. It is the ordinary state of
+// most positions for most of an order's life — before the position is reached, and
+// after it is finished — and a button that answered with silence reads as broken.
+function progressNote(order, line) {
+  const got = state.progress.get(`${order.id}|${lineKey(line)}`);
+  if (!got) return null;
+  if (got.asking) return el('span', { class: 'muted' }, ` ${t('proc.asking')}`);
+  if (got.state !== 'active' || !got.steps.length) {
+    return el('span', { class: 'muted' }, ` ${t('proc.nothingRunning')}`);
+  }
+  // Every step, comma-separated: a process that forked is on two at once, and
+  // naming the first would be a coin toss rendered as fact.
+  return el('span', { class: 'step' }, ` ${t('proc.standing')} ${got.steps.join(', ')}`);
+}
+
 // lineKey is what one position is called, mirroring the server's own rule
 // (ADR-0384): the
 // product, and the shape of it where one was chosen.
@@ -1880,10 +1949,19 @@ function orderRowBodies() {
             onclick: () => withdrawLine(o, l),
           }, state.busy ? t('line.withdrawing') : t('line.withdraw'))
           : null,
-        // Where this position stands. On the position and not only on the order,
-        // because the order's process says "running" and this one says which step
-        // this line is sitting on — which is the question somebody reading their
-        // own order actually has.
+        // Where this position stands, to whoever's position it is. No role: the
+        // route behind it is gated on owning the order, which is the same gate
+        // that let this reader see the order at all.
+        el('button', {
+          class: 'linkish',
+          title: t('proc.where'),
+          disabled: state.busy,
+          onclick: () => askProgress(o, l),
+        }, t('proc.where')),
+        progressNote(o, l),
+        // The instance behind it, to whoever may open one. That is an operations
+        // surface — the console shows the whole state of the instance — so it stays
+        // where it was, beside the answer that needs no role.
         state.mayFollowProcess
           ? el('button', {
             class: 'linkish',

@@ -14,6 +14,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Where your own position stands, without an operations surface.** A position in
+  "Meine Aufträge" now answers *which step* it is sitting on — "Genehmigen",
+  "Provisionierung starten" — to whoever the order belongs to, and not only to a
+  reader holding the operator role.
+
+  The link that existed leads into the console, and the console shows the whole
+  engine state of that instance, variables included. Widening it would have handed
+  out an operations surface to answer a question about one line, so the orderer is
+  answered by a route of their own instead:
+  `GET /api/v1/portal/orders/{id}/lines/{position}/progress`, gated on **owning the
+  order** rather than on a role. Somebody else's order answers 404 and not 403 —
+  whether it exists is not something this confirms — and no process variable leaves
+  through it: the caller already knows their own order, and the route says *where*,
+  not *what*.
+
+  The server finds the instance by the two variables the fulfilment model passes,
+  `orderId` **and** `positionId`, and by both: the order id alone also matches the
+  order's own orchestration, and a position key alone is unique only inside one
+  order. Only live instances are walked, which bounds the cost by the work in
+  flight rather than by everything the store has ever run — and a finished instance
+  has no step to report. The step is the name the model gives the element, read from
+  the deployed document, falling back to its BPMN id where it is unnamed.
+
 - **Every position carries its own way into the process working on it.** "Meine Aufträge"
   already listed each position and what it was doing, out of the order's own
   record, and that stays the answer for every reader. A reader who may open an
