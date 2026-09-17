@@ -401,6 +401,12 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	if err != nil {
 		return nil, nil, fmt.Errorf("dmn: evaluate %q in %s: %w", decisionId, where, err)
 	}
+	// temis returns a FEEL number as its exact decimal string; the model's own
+	// declarations say which of these strings are numbers. Restored here, at the
+	// one point every caller passes through, so the variable a business rule task
+	// writes, the try-a-decision answer and the retained record cannot disagree
+	// (numbers.go).
+	outputs := restoreNumbers(defs, decisionId, res.Outputs)
 	var trace []byte
 	if res.Trace != nil {
 		// The trace tree carries JSON tags as its wire contract (temis dmn/trace.go);
@@ -410,5 +416,5 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 			trace = b
 		}
 	}
-	return res.Outputs, trace, nil
+	return outputs, trace, nil
 }
