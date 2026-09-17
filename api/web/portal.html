@@ -132,7 +132,18 @@
              color:var(--muted); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--border); }
   .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;
           border-bottom:1px solid var(--border); }
-  .cell .label { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; font-size:14px; }
+  /* The name and whatever describes the row, as one shrinkable item. break-word and
+     not anywhere: `anywhere` lets a box shrink below its longest word, so a flex
+     sibling that refuses to shrink can take the whole row and the name wraps one
+     letter per line. `break-word` keeps the longest word as the floor and breaks a
+     word only when it truly does not fit. */
+  .cell .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .cell .label { min-width:0; overflow-wrap:break-word; font-size:14px; }
+  /* What the row says about itself — a price, the level it sits at, where a search
+     found it. Under the name rather than beside the controls, and wrapping, because
+     two of those together are wider than a column of this cascade. */
+  .cell .meta { font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap;
+                column-gap:8px; row-gap:2px; overflow-wrap:break-word; }
   /* What a row carries at its right edge, and the two declarations that keep it on
      one line. Each icon already refuses to shrink; the trail around them did not,
      and its contents were inline boxes — so a narrow column wrapped them and one

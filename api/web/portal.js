@@ -916,6 +916,12 @@ function heldPill(item) {
 // sits at the right edge.
 function cell(opts) {
   const o = opts || {};
+  // Three slots and the rule that tells them apart: lead and trail hold controls,
+  // meta holds text about the row. A control has a fixed size and must not shrink;
+  // text has no size of its own and must. Putting text in the trail gave it the
+  // control's promise never to give width back, which is exactly what starved the
+  // name beside it.
+  //
   // The trail is wrapped here rather than by each caller. Every icon in it already
   // refuses to shrink, but an unstyled span is a flex item that may, and its
   // contents are inline boxes that wrap inside it — so in a narrow column the star,
@@ -926,12 +932,21 @@ function cell(opts) {
   // wrapper takes an array as readily as a node, because el flattens its children.
   return el('div', { class: 'cell' },
     o.lead || null,
-    o.onOpen
-      ? el('button', {
-        class: o.open ? 'label on' : 'label',
-        onclick: o.onOpen,
-      }, o.text)
-      : el('span', { class: 'label' }, o.text),
+    // The name, and under it whatever describes the row rather than acts on it.
+    //
+    // They are one flex item and not two, because what may shrink is the pair: a
+    // name and its price are both text about the same thing, and putting the price
+    // beside the trail's icons made it a sibling that refused to give width back.
+    // In a 220px column that left the name a few pixels and it wrapped one letter
+    // per line — a row that read as a vertical alphabet.
+    el('span', { class: 'body' },
+      o.onOpen
+        ? el('button', {
+          class: o.open ? 'label on' : 'label',
+          onclick: o.onOpen,
+        }, o.text)
+        : el('span', { class: 'label' }, o.text),
+      o.meta ? el('span', { class: 'meta' }, o.meta) : null),
     o.trail ? el('span', { class: 'trail' }, o.trail) : null);
 }
 
@@ -1157,8 +1172,8 @@ function renderSearch(rel, by) {
             render();
           },
           lead: starButton(it.id),
-          trail: where
-            ? el('span', { class: 'muted', style: 'font-size:12px' }, `${t('find.where')} ${where}`)
+          meta: where
+            ? el('span', {}, `${t('find.where')} ${where}`)
             : null,
         });
       })));
@@ -1232,12 +1247,10 @@ function renderCatalogue() {
       // being announced in the column head's word. The alternative was to move it
       // to another column, which would have made the first column no longer the
       // place a person starts.
-      trail: [
-        levelOf(rel, b.id) !== 'bundle'
-          ? el('span', { class: 'muted', style: 'font-size:12px' }, levelName(rel, b.id))
-          : null,
-        starButton(b.id), toggle(rel, b.id, false), infoButton(b.id),
-      ],
+      meta: levelOf(rel, b.id) !== 'bundle'
+        ? el('span', {}, levelName(rel, b.id))
+        : null,
+      trail: [starButton(b.id), toggle(rel, b.id, false), infoButton(b.id)],
     })));
 
   const offeringCol = el('div', { class: 'col' },
@@ -1435,15 +1448,13 @@ function renderBasket() {
         // The same control the cascade uses, so a tick means one thing on the
         // whole page: it adds to the basket, and a second press takes it out.
         lead: toggle(rel, id, false),
-        trail: [
-          (by[id] || {}).price
-            ? el('span', { class: 'muted', style: 'font-size:12px' }, by[id].price)
-            : null,
+        meta: [
+          (by[id] || {}).price ? el('span', {}, by[id].price) : null,
           // The level it will sit under once it is taken, so the same position is
           // called the same thing before and after the decision.
-          el('span', { class: 'muted', style: 'font-size:12px' }, levelName(rel, id)),
-          infoButton(id),
+          el('span', {}, levelName(rel, id)),
         ],
+        trail: infoButton(id),
       }))));
 
   // The forms below the basket rather than beside each row: a form is taller than a

@@ -503,6 +503,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A product's name in the basket wrapped one letter per line.** The optional column
+  read "Schutzhü / lle / transpare / nt" beside a price that had all the width. Two
+  decisions made it together, and each was enough on its own: the price and the level
+  were built into the row's *trail* — the slot that carries its controls, and
+  therefore promises never to give width back — and the name was set to
+  `overflow-wrap:anywhere`, which lets a box shrink below its longest word, so there
+  was no floor under it to stop at.
+
+  A row now has three slots with one rule between them: `lead` and `trail` carry
+  controls, `meta` carries text about the row, and text shrinks. The price, the level
+  a position will sit at and the "found under" line of a search result moved into
+  `meta`, which renders under the name and wraps; the name itself keeps its longest
+  word as a floor. The same fix applies to the catalogue's first column and to the
+  search results, which carried text in the trail for the same reason.
+
 - **The icons at the end of a catalogue row broke onto a second line.** Each of them
   already refused to shrink, but they sat in a plain `<span>` carrying no rule at
   all: a flex item that may shrink, holding inline boxes that wrap inside it. The
