@@ -246,42 +246,25 @@
       }
     },
     {
-      "id": "a-task-folder-edited-twice-in-quick-succession-no-longer-kee",
+      "id": "the-handbook-s-compute-a-value-recipe-taught-an-expression-t",
       "version": "Unreleased",
       "date": null,
       "category": "Fixed",
       "title": {
-        "en": "A task folder edited twice in a row no longer shows the old filter",
-        "de": "Ein zweimal hintereinander bearbeiteter Aufgabenordner zeigt nicht mehr den alten Filter"
+        "en": "The handbook's \"compute a value\" recipe now computes one",
+        "de": "Das Handbuch-Rezept „einen Wert berechnen\" berechnet jetzt einen"
       },
       "summary": {
-        "en": "A folder in your task sidebar holds a rule — which processes, which states, whose tasks — and Atlas works out the rule once and remembers the answer rather than redoing it on every refresh. It remembered the answer under the time the folder was last saved, counted in thousandths of a second. Two saves inside the same thousandth therefore looked like the same folder, and the second edit was served the first one's answer: the folder kept filtering by the rule you had just replaced, until something else happened to clear the memory. Nobody clicking can save twice that fast, but anything calling Atlas can — a script, an integration, an assistant. The answer is now remembered under the rule itself rather than under a clock, so a changed rule always means a fresh answer and an unchanged one is never recomputed for nothing.",
-        "de": "Ein Ordner in Ihrer Aufgabenleiste enthält eine Regel — welche Prozesse, welche Zustände, wessen Aufgaben — und Atlas wertet diese Regel einmal aus und merkt sich das Ergebnis, statt es bei jeder Aktualisierung neu zu berechnen. Gemerkt wurde das Ergebnis unter dem Zeitpunkt der letzten Speicherung, gezählt in Tausendstelsekunden. Zwei Speicherungen innerhalb derselben Tausendstelsekunde sahen deshalb wie derselbe Ordner aus, und die zweite Bearbeitung erhielt das Ergebnis der ersten: Der Ordner filterte weiter nach der Regel, die Sie soeben ersetzt hatten — so lange, bis der Speicher zufällig anderweitig geleert wurde. Von Hand lässt sich nicht so schnell zweimal speichern, über eine Schnittstelle aber schon: ein Skript, eine Integration, ein Assistent. Das Ergebnis wird nun unter der Regel selbst gemerkt statt unter einer Uhr. Eine geänderte Regel bedeutet damit immer eine neue Auswertung, eine unveränderte wird nie unnötig neu berechnet."
+        "en": "The recipe's script read = round(gross / 1.19, 2). FEEL has no round — it has decimal, round up, round down, round half up and round half down — so the expression evaluated to null and the recipe's result variable came out empty for every reader who pressed its Try it button. It now uses decimal, which is what the recipe meant. It was found by the new refusal for calls that can only ever be null, on the first run of the test suite after that check existed.",
+        "de": "Das Skript des Rezepts lautete = round(gross / 1.19, 2). FEEL kennt kein round — es gibt decimal, round up, round down, round half up und round half down —, der Ausdruck ergab also null, und die Ergebnisvariable blieb bei jedem Leser leer, der auf „Ausprobieren\" drückte. Jetzt steht dort decimal, was das Rezept meinte. Gefunden hat es die neue Ablehnung von Aufrufen, die nur null ergeben können, beim ersten Lauf der Testsuite nach dieser Prüfung."
       },
       "link": {
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       },
       "tags": [
-        "Tasks"
-      ],
-      "tutorial": {
-        "en": [
-          "Open Tasks and edit one of your folders' rules.",
-          "The list re-filters by the rule you just saved, however quickly the edit followed the last one."
-        ],
-        "de": [
-          "«Tasks» öffnen und die Regel eines Ihrer Ordner bearbeiten.",
-          "Die Liste filtert nach der soeben gespeicherten Regel — unabhängig davon, wie schnell die Bearbeitung auf die vorige folgte."
-        ]
-      },
-      "try": {
-        "label": {
-          "en": "Open Tasks",
-          "de": "Tasks öffnen"
-        },
-        "route": "#/tasks"
-      }
+        "Handbuch"
+      ]
     }
   ]
 }

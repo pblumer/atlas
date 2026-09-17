@@ -364,6 +364,16 @@ _Changed_ / _Removed_ for each version.
   key, a declared variable — is left alone, because a false refusal blocks a model that works
   while a missed one only leaves the old behaviour in place.
 
+- **The handbook's "compute a value" recipe taught an expression that always answered null.**
+  `= round(gross / 1.19, 2)` — except FEEL has no `round`. It has `decimal`, `round up`,
+  `round down`, `round half up` and `round half down`, and a call to a name none of them
+  matches evaluates to null. The recipe deployed, its ▶ button worked, and `net` came out
+  empty for every reader who pressed it. Now `decimal(gross / 1.19, 2)`, which is what the
+  recipe meant.
+
+  It was found by the refusal above rather than by a reader, on the first run of the test
+  suite after that check existed — which is the argument for the check, made by the
+  repository's own documentation.
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two

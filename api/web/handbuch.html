@@ -1019,7 +1019,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;scriptTask id=&quot;net&quot; name=&quot;Netto&quot;&gt;
       &lt;extensionElements&gt;
-        &lt;zeebe:script expression=&quot;= round(gross / 1.19, 2)&quot; resultVariable=&quot;net&quot;/&gt;
+        &lt;zeebe:script expression=&quot;= decimal(gross / 1.19, 2)&quot; resultVariable=&quot;net&quot;/&gt;
       &lt;/extensionElements&gt;
     &lt;/scriptTask&gt;
     &lt;endEvent id=&quot;end&quot;/&gt;
