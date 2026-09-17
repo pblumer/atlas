@@ -30,17 +30,21 @@ import (
 // account before the laptop that needs it; giving back runs the other way, and an
 // account revoked under a laptop that still uses it leaves the laptop working
 // until somebody notices, or not working for a reason nobody connects to this.
-func Returnable(o Order, itemID string) error {
+func Returnable(o Order, ref string) error {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return err
+	}
 	var line Line
 	found := false
 	for _, l := range o.Lines {
-		if l.ItemID == itemID {
+		if l.Key() == key {
 			line, found = l, true
 			break
 		}
 	}
 	if !found {
-		return fmt.Errorf("order %s carries no line for %s", o.ID, itemID)
+		return fmt.Errorf("order %s carries no line for %s", o.ID, key)
 	}
 	// Narrower than Held on purpose. A line already on its way back must not be
 	// asked for twice — two revocations racing against one target system is how a
@@ -49,17 +53,19 @@ func Returnable(o Order, itemID string) error {
 	if line.Status != StatusDone && line.Status != StatusReturnFailed {
 		switch line.Status {
 		case StatusReturning:
-			return fmt.Errorf("order: line %s is already going back", itemID)
+			return fmt.Errorf("order: line %s is already going back", key)
 		default:
-			return fmt.Errorf("order: line %s is %s and is not held by anybody", itemID, line.Status)
+			return fmt.Errorf("order: line %s is %s and is not held by anybody", key, line.Status)
 		}
 	}
 	if line.DeprovisionProcess == "" {
-		return fmt.Errorf("order: line %s names no process to revoke it with", itemID)
+		return fmt.Errorf("order: line %s names no process to revoke it with", key)
 	}
-	if blockers := stillNeeding(o, itemID); len(blockers) > 0 {
+	// Dependencies are between products, so this asks about the product this
+	// position is of.
+	if blockers := stillNeeding(o, line.ItemID); len(blockers) > 0 {
 		return fmt.Errorf("order: line %s is still needed by %v, which %s held",
-			itemID, blockers, plural(len(blockers)))
+			key, blockers, plural(len(blockers)))
 	}
 	return nil
 }
@@ -102,17 +108,21 @@ func plural(n int) string {
 //
 // by may be empty where nothing identified the caller — single-user mode has no
 // principals — and an empty actor is recorded as empty rather than as a guess.
-func Returning(o Order, itemID string, at int64, by string) (Order, error) {
-	if err := Returnable(o, itemID); err != nil {
+func Returning(o Order, ref string, at int64, by string) (Order, error) {
+	if err := Returnable(o, ref); err != nil {
+		return o, err
+	}
+	key, err := ResolveLine(o, ref)
+	if err != nil {
 		return o, err
 	}
 	if at == 0 {
-		return o, fmt.Errorf("order: returning line %s needs the moment it happened", itemID)
+		return o, fmt.Errorf("order: returning line %s needs the moment it happened", key)
 	}
 	lines := make([]Line, len(o.Lines))
 	copy(lines, o.Lines)
 	for i := range lines {
-		if lines[i].ItemID == itemID {
+		if lines[i].Key() == key {
 			lines[i].Status, lines[i].ReturnedBy = StatusReturning, by
 			break
 		}
@@ -129,9 +139,13 @@ func Returning(o Order, itemID string, at int64, by string) (Order, error) {
 // it. It reads it from the order rather than from the catalogue, because what was
 // granted is what has to be revoked — a product whose deprovisioning was changed
 // afterwards must not revoke an older grant by the newer rules.
-func ReturnProcessOf(o Order, itemID string) string {
+func ReturnProcessOf(o Order, ref string) string {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return ""
+	}
 	for _, l := range o.Lines {
-		if l.ItemID == itemID {
+		if l.Key() == key {
 			return l.DeprovisionProcess
 		}
 	}

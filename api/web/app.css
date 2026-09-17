@@ -440,6 +440,11 @@ textarea::placeholder {
    a form id retyped but not yet saved — the rename is real once Save runs. */
 .field input.id-taken,
 .field input[type="text"].id-taken,
+/* A task row that decides an order. It is a link, not a label: the row says what
+   it is and the chip is the way to where it is decided. Coloured with the accent
+   rather than a state colour — an approval waiting is not a warning, it is work. */
+.chip.approval { border-color: var(--accent); color: var(--accent-hover); text-decoration: none; }
+.chip.approval:hover { background: var(--accent-soft, var(--bg)); }
 .chip.id-taken { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 .field input.id-taken:focus,
 .field input[type="text"].id-taken:focus { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.18); }

@@ -469,6 +469,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0381](0381-a-problem-aggregates-incidents.md) | A problem is an aggregation over incidents, not a BPMN element | Proposed | Not started |
 | [0382](0382-whole-store-reads-leave-the-writer.md) | Whole-store reads leave the writer, and the store is sized for what it holds | Accepted | Landed |
 | [0383](0383-portal-level-names.md) | A position's level is read from the graph once, and a root with no parts is not a bundle | Accepted | Landed |
+| [0384](0384-order-position-key.md) | A position is a product and the shape of it, and it says so in its own key | Accepted | Landed |
 
 ## The two states of a record
 

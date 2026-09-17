@@ -14,6 +14,53 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Every position carries its own way into the process working on it.** "Meine Aufträge"
+  already listed each position and what it was doing, out of the order's own
+  record, and that stays the answer for every reader. A reader who may open an
+  instance — the operator role, which is what every route that finds or opens one
+  requires — now also gets a link into the running instance, looked up when it is
+  pressed rather than resolved for every row.
+
+  The order's link is narrowed to the fulfilment process, because every provisioning
+  sub-process carries the order id too and the first hit would be one position's
+  process wearing the order's name. **Each position carries a link of its own**, and
+  it is found by the position's id rather than the order's: the search answers with
+  only the variables that matched the query, so a search for the order returns every
+  instance it started, each carrying `orderId` and nothing else, with nothing left on
+  the page to tell them apart by. That matters because "the order is running" and
+  "this line is waiting on an approval" are different answers, and only the second is
+  what somebody reading their own order wants.
+
+  There is deliberately no fallback to the product id: it matches instances from every
+  order that ever carried that product, and the answer cannot be narrowed by the
+  order. A position whose instance is not found — history retention removes one long
+  before the order it fulfilled — is said rather than approximated.
+
+- **One product may be ordered in two shapes at once.** The catalogue describes the
+  same service pulled in twice in different variants as a conflict the orderer
+  resolves, and keeping both is a resolution — a black phone and a silver one. It
+  was not expressible: a line was identified by its product, so two of them
+  collapsed in every map the order builds and an outcome reported for one landed on
+  whichever came first.
+
+  A position is now identified by its product **and** the shape of it —
+  `itemId#variantId`, and plainly `itemId` where there is no variant, so no order is
+  migrated, no record gains a field, and a process built against `/lines/{itemId}`
+  keeps working. Where an order carries two positions of one product, naming the
+  product is **refused** with both position names rather than applied to one of
+  them. `POST /api/v1/orders` takes one entry per position in `variants`; a second
+  entry is refused unless the catalogue says the product may be held more than once,
+  and two entries of the same shape are refused outright, because two identical
+  positions cannot be told apart and this catalogue has no quantities. The fulfilment
+  process passes `positionId` beside `itemId`, and `/next` names each position
+  (ADR-0384).
+
+  **One limit, named rather than left to be found:** the inventory still records one
+  hold per person and product, so somebody who orders two shapes is provisioned
+  twice, correctly, and recorded as holding one. That is how a repeated order has
+  always been recorded; making the entitlement identity carry the variant is an
+  engine change with its own replay consequences.
+
 - **How long the single writer is held is now a metric.** Two histograms,
   `atlas_runloop_turn_held_seconds` and `atlas_runloop_turn_wait_seconds`, pushed from
   the run loop itself.
@@ -168,6 +215,26 @@ _Changed_ / _Removed_ for each version.
   stale.
 
 ### Changed
+
+- **Approvals moved under Tasks, and the inbox says which of its rows decide an
+  order.** Approvals was advertised as an application beside Modeler and Operations,
+  and it was empty for almost everybody who saw it — there is no approver role to
+  gate on, because a product names a person, a group, or the orderer's superior, so
+  anybody signed in may hold an approval tomorrow without holding one today.
+
+  It was also, already, in the inbox. An approval is an ordinary engine user task,
+  the task list does not filter those out, and the inbox never knew the word — so
+  the same decision sat in two places and neither said it was the same thing. The
+  entry now sits under Tasks, where Access review already sits for the same reason,
+  and an inbox row that decides an order carries a chip saying so and leading to
+  where it is decided. The link names the order line rather than the task, because
+  that is what the approvals page takes: a task key does not exist until the task
+  activates, and it changes when the task is reassigned, while the order and the
+  product do not.
+
+  The page itself is unchanged and still opens in its own window — a sub-navigation
+  entry rendered as a plain link would have replaced the console in the same tab,
+  which is the behaviour the drawer's `separate` flag exists to avoid.
 
 - **The catalogue screen wears the console's buttons.** It had a button vocabulary of
   its own — `primary` on the eight actions that commit something, `linkish` on the five
@@ -454,6 +521,44 @@ _Changed_ / _Removed_ for each version.
   list. An output the model leaves untyped stays a string — the honest answer, since
   guessing would trade a visible wrong type for an invisible wrong value.
 
+- **The icons at the end of a catalogue row broke onto a second line.** Each of them
+  already refused to shrink, but they sat in a plain `<span>` carrying no rule at
+  all: a flex item that may shrink, holding inline boxes that wrap inside it. The
+  cascade is four columns across, so in a narrow one the star, the ± and the "i"
+  wrapped and a single row read as two.
+
+  The row's cell now wraps whatever trails it, in one place rather than at each of
+  the seven callers — a rule applied per caller is a rule the next caller forgets.
+  The wrapper is a flex row that does not shrink, which is the whole fix: a flex row
+  does not wrap by default, and the icons cannot give up width.
+
+- **A catalogue could offer a product nobody had created, and only said so much
+  later.** The write that introduced the dangling id answered 200; the refusal
+  appeared at the next publish, as `unknown item <id>`, against a catalogue the
+  person had stopped thinking about. Two symptoms of one fact, with nothing on
+  screen connecting them: publishing refused an id that looked like a product, and
+  the product behind that id read as `revision: 0` — a stored product always carries
+  at least revision 1, because the save that creates one sets it, so zero means the
+  record was never written at all.
+
+  The catalogue's own screens already assumed the rule, rendering such a row as
+  "offered but not defined — publishing will refuse this"; a rule a screen explains
+  and a route does not enforce holds until somebody uses the API. Offering a product
+  that does not exist is now refused where it is written, naming the id. Only what a
+  write *adds* is checked, so a catalogue already carrying bad ids stays repairable —
+  otherwise the only way out of the mistake would be the mistake. The check is
+  existence and not visibility: a product is referenced by several catalogues and
+  edited through exactly one.
+
+- **"Meine Aufträge" showed principal ids where it meant people.** The Person column
+  printed `usr_703f410b40336d21476152fb`. Nothing was wrong with the record — an
+  order names people by principal id and by nothing else, because a name copied into
+  a record outlives the reason for holding it (ADR-0314) — but that decision leaves
+  the other half to the screen: a name is resolved when the screen is rendered, and
+  the table was not resolving. It reads the directory once per load and names the
+  person; where nothing knows the id, the id is still shown, because an empty cell
+  reads as a broken column rather than as an unresolved one. The column's filter
+  searches both, so a pasted id still finds its row.
 
 - **One position in the portal carried two different level names.** The catalogue
   screen and the basket both label a position Bundle, Marktleistung or Service, and
@@ -488,8 +593,8 @@ _Changed_ / _Removed_ for each version.
   refuses an order that leaves one open, names a shape the product does not come in,
   or names one for a product that comes in a single shape — a rule the page keeps and
   the server does not is not a rule. `POST /api/v1/orders` takes a new optional
-  **`variants`** object, keyed by item id; a body without it is unchanged for every
-  product that has no variants.
+  **`variants`** object, keyed by item id and holding one shape per position; a body
+  without it is unchanged for every product that has no variants.
 
 - **The portal showed what a product comes with and not what it is offered with.**
   A release carries two kinds of containment: a composition arrives with the whole and

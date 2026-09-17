@@ -292,6 +292,7 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		allowed     bool
 		mayNotShare bool
 		stale       bool
+		unknownItem string
 		loadErr     error
 	)
 	s.loop.Do(func() {
@@ -326,6 +327,46 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 			got.Languages = in.Languages
 		}
 		if in.Items != nil {
+			// A catalogue cannot offer a product nobody has created. It could, and
+			// the consequence arrived a long way from the cause: this write answered
+			// 200 and the refusal appeared at the next publish, as "unknown item" —
+			// against a catalogue the person had stopped thinking about, for an id
+			// whose product reads as revision 0 because a stored product always
+			// carries at least 1.
+			//
+			// Checked for existence and not for visibility. A product is referenced
+			// by several catalogues and edited through exactly one, so refusing an
+			// id whose home is elsewhere would forbid the sharing the model is built
+			// around — and it would conceal nothing either way, since the caller
+			// supplied the id.
+			//
+			// This does not move the proof out of publish (I5); publish still makes
+			// it. It makes the same one earlier, where the mistake is still in front
+			// of whoever made it.
+			// Only what this write *adds*. A catalogue that already carries a
+			// dangling id from before this rule has to stay repairable, and the
+			// repair is a write of the list without it — which would be refused by
+			// its own other damage if every entry were checked. Removing one of two
+			// bad ids would then be impossible, and the only way out of a mistake
+			// would be the one the rule is meant to prevent.
+			had := make(map[string]bool, len(got.Items))
+			for _, id := range got.Items {
+				had[id] = true
+			}
+			for _, id := range in.Items {
+				if had[id] {
+					continue
+				}
+				_, exists, e := s.store.Item(id)
+				if e != nil {
+					loadErr = e
+					return
+				}
+				if !exists {
+					unknownItem = id
+					return
+				}
+			}
 			got.Items = in.Items
 		}
 		if in.Groups != nil {
@@ -364,6 +405,12 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		// the catalogue and may not change who else can.
 		httpapi.Error(w, http.StatusForbidden,
 			"changing who maintains catalogue "+id+" is the owner's; an editor may change the catalogue but not its member list")
+	case unknownItem != "":
+		httpapi.Error(w, http.StatusBadRequest,
+			"catalogue "+id+" cannot offer "+unknownItem+" because no such product exists. "+
+				"Create the product first, then offer it — a catalogue that offered it "+
+				"anyway would be refused at its next publish, as \"unknown item\", a long "+
+				"way from here")
 	default:
 		httpapi.JSON(w, http.StatusOK, got)
 	}

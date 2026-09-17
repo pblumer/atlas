@@ -597,14 +597,6 @@ const APPS = [
   // The approver's half of the same surface, and a separate page for the same
   // reason: it answers to a different person. Until now it was reached only
   // through the link in its notification mail, so an approver who deleted the mail
-  // had no way back to a decision somebody is waiting on.
-  //
-  // Gated at "user" because there is no approver role to gate on: a product names
-  // a person, a group, or the orderer's superior, so anybody signed in may hold an
-  // approval tomorrow without holding one today. The entry is therefore shown to
-  // everybody and is empty for most, which is the honest cost of having no role to
-  // ask: a count on it would fix that, and nothing here keeps one yet.
-  { id: "approvals", name: "Approvals", route: "genehmigung.html", on: true, role: "user", separate: true },
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
@@ -647,6 +639,21 @@ const TOPNAV = {
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
+    // An approval is a kind of task, not an application. It was advertised beside
+    // Modeler and Operations while already sitting in the inbox as an unlabelled
+    // row — the same decision in two places, with neither saying so.
+    //
+    // Gated at "user" because there is no approver role to gate on: a product names
+    // a person, a group, or the orderer's superior, so anybody signed in may hold an
+    // approval tomorrow without holding one today. Under Tasks that costs nothing —
+    // it is one entry in a list somebody opened on purpose, rather than an
+    // application in everybody's drawer that is empty for almost all of them.
+    //
+    // `separate` for the same reason the drawer uses it: the page carries the
+    // catalogue's brand, loads its own message catalogue, and is not a view of this
+    // app, so it opens in its own window rather than replacing a console somebody
+    // was in the middle of using.
+    { name: "Approvals", route: "genehmigung.html", role: "user", separate: true },
     // The second kind of thing addressed to a person
     // (ADR-0341). Not Operations, where reconciliation
     // sits: a finding is repair and the operator's, while this asks a line manager
@@ -1118,7 +1125,12 @@ function setChrome(appId, route) {
   paintApps();
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => mayUse(t.role)).map((t) =>
-    `<a href="${t.route}" class="${t.route === route ? "active" : ""}">${t.name}` +
+    // A `separate` entry is a page of its own and opens in one, exactly as the
+    // drawer opens it. Rendered as a plain link it would replace the console in the
+    // same tab, which is the behaviour the note above APPS argues against: the only
+    // way back is one small link, and somebody in the middle of something loses it.
+    `<a href="${t.route}"${t.separate ? ` target="_blank" rel="noopener"` : ""} ` +
+    `class="${t.route === route ? "active" : ""}">${t.name}` +
     (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
   ).join("");
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
@@ -7556,6 +7568,13 @@ async function viewTasks(preselectKey) {
     picked: new Set(), // job keys ticked for a bulk action
     truncated: false, // the server returned a capped page (more tasks exist)
     nextCursor: null, // job key to pass as ?before= for the next (older) page
+    // Which of these rows decide an order, as job key -> {orderId, itemId}.
+    //
+    // An approval is an ordinary user task and the list does not filter those out,
+    // so they were already here — rendered like every other row, saying nothing
+    // about the product, the price or the person waiting. This is the inbox
+    // learning which of its own rows those are.
+    approvals: new Map(),
   };
 
   // SORTS are the orderings the toolbar offers over the visible tasks. "smart" is
@@ -7796,11 +7815,26 @@ async function viewTasks(preselectKey) {
         // with its full path (see renderDetail), where it was already more useful
         // than a truncated leaf name here.
         const id = `<span class="tasks-item-id" title="Job-Key ${t.key}">#${t.key}</span>`;
+        // A row that decides an order says so, and says where it is decided.
+        //
+        // It linked nowhere and was labelled nothing: the same decision also sat
+        // behind a menu entry of its own, and neither place said it was the same
+        // thing. The link names the **order line** rather than this task, because
+        // that is what the approvals page takes and it takes it for a reason of its
+        // own — a task key does not exist until the task activates, while the order
+        // and the product do, and they survive a reassignment that changes the key.
+        const ap = state.approvals.get(t.key);
+        const approval = ap
+          ? `<a class="chip approval" target="_blank" rel="noopener"
+               href="genehmigung.html?order=${encodeURIComponent(ap.orderId)}&item=${encodeURIComponent(ap.itemId)}"
+               title="Decide this approval">Approval</a>`
+          : "";
         return `<li class="tasks-item${sel}${picked ? " picked" : ""}" data-key="${t.key}">
           ${cb}
           <div class="tasks-item-body">
             <div class="tasks-item-top">
               <span class="tasks-item-title">${hi}${esc(taskTitle(t))}</span>
+              ${approval}
               <span class="chip" title="${esc(t.processId || "")}">${esc(t.processId || "")}</span>
             </div>
             <div class="tasks-item-sub muted">
@@ -8255,6 +8289,9 @@ async function viewTasks(preselectKey) {
         }
       }
       state.tasks.sort(taskOrder);
+      // Before the first paint, so a row is never drawn unmarked and then relabelled
+      // under somebody's eyes.
+      await loadApprovalKeys();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
       // here. When a saved folder is open, its page and the sidebar badges are part
@@ -8270,6 +8307,32 @@ async function viewTasks(preselectKey) {
       if (state.folders.length || state.truncated) await refreshCounts();
     } catch (e) {
       listEl.innerHTML = `<li class="tasks-empty err">Failed to load tasks: ${esc(e.message)}</li>`;
+    }
+  }
+
+  // loadApprovalKeys asks which of the open tasks decide an order.
+  //
+  // Keyed by job key, which both lists carry: /api/v1/tasks returns it as `key`, and
+  // /api/v1/approvals returns the same task object inside each entry. So the two are
+  // joined on the page without the server changing.
+  //
+  // Guarded, and that is not defensive habit. This is an addition to a screen that
+  // worked without it: a reader who holds no approvals, a route that answers
+  // unexpectedly, a server mid-restart — none of that is the inbox failing, and none
+  // of it may take the inbox down. A failure leaves the map empty and every row
+  // renders exactly as it did before.
+  async function loadApprovalKeys() {
+    try {
+      const page = await api("GET", "/api/v1/approvals");
+      const next = new Map();
+      for (const a of (page && page.items) || []) {
+        if (a && a.task && a.task.key != null) {
+          next.set(a.task.key, { orderId: a.orderId || "", itemId: a.itemId || "" });
+        }
+      }
+      state.approvals = next;
+    } catch {
+      state.approvals = new Map();
     }
   }
 

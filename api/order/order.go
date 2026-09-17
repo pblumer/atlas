@@ -7,6 +7,11 @@
 // approval is pending cannot change what was ordered.
 package order
 
+import (
+	"fmt"
+	"strings"
+)
+
 // LineStatus is where one ordered position stands.
 //
 // The three ways a line can fail to be provisioned are deliberately three values
@@ -278,6 +283,64 @@ type Line struct {
 	ReturnedBy string `json:"returnedBy,omitempty"`
 	DecidedAt  int64  `json:"decidedAt,omitempty"`
 	Reason     string `json:"reason,omitempty"`
+}
+
+// Key is what identifies this line inside its order.
+//
+// A line was identified by its item id, which held for exactly as long as one
+// product could appear in an order once. The catalogue's own rule is that the same
+// service pulled in twice in different variants is a conflict the orderer resolves
+// (ADR-0312), and resolving it by keeping both is
+// the case an item id cannot express: two lines with the same id collapse in every
+// map the order builds, and an outcome reported for one lands on whichever came
+// first.
+//
+// Derived rather than stored, and identical to the item id where there is no
+// variant. That is the whole compatibility story: no order is migrated, no record
+// gains a field, and a fulfilment process built against /lines/{itemId} keeps
+// working for every product that is not ordered twice.
+//
+// The separator is "#" because it cannot appear in an item id — ids are minted or
+// authored as path-safe names — so a key can always be split back into the two
+// things it joins.
+func (l Line) Key() string {
+	if l.VariantID == "" {
+		return l.ItemID
+	}
+	return l.ItemID + "#" + l.VariantID
+}
+
+// ResolveLine turns what a caller named into the key of exactly one line.
+//
+// A caller may name a position outright, or name the product — which is what
+// every process built before a product could be ordered twice does, and what
+// stays unambiguous for every order that carries one position of it. Both are
+// answered, and the case that cannot be answered is refused rather than guessed:
+// naming a product an order carries twice would otherwise record an outcome
+// against whichever line the walk reached first, and the two are a black phone
+// and a silver one.
+func ResolveLine(o Order, ref string) (string, error) {
+	for _, l := range o.Lines {
+		if l.Key() == ref {
+			return ref, nil
+		}
+	}
+	var hits []string
+	for _, l := range o.Lines {
+		if l.ItemID == ref {
+			hits = append(hits, l.Key())
+		}
+	}
+	switch len(hits) {
+	case 0:
+		return "", fmt.Errorf("order %s carries no line for %s", o.ID, ref)
+	case 1:
+		return hits[0], nil
+	default:
+		return "", fmt.Errorf("order %s carries %d positions of %s and this names the "+
+			"product rather than one of them — name %s", o.ID, len(hits), ref,
+			strings.Join(hits, " or "))
+	}
 }
 
 // Terminal reports whether this line has finished moving.

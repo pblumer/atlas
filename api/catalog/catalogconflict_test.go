@@ -43,11 +43,25 @@ func TestACatalogueStartsAtRevisionOne(t *testing.T) {
 	}
 }
 
+// offerable creates a product in this catalogue so the catalogue may offer it.
+func offerable(t *testing.T, s *Service, home, id string) {
+	t.Helper()
+	rec := saveItem(t, s, `{"id":"`+id+`","homeCatalog":"`+home+`","state":"active",`+
+		`"texts":{"de":"`+id+`"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create %s = %d (%s), want 200", id, rec.Code, rec.Body)
+	}
+}
+
 // TestPatchingStatingTheRevisionReadSucceedsAndAdvancesIt is the ordinary
 // read-modify-write.
 func TestPatchingStatingTheRevisionReadSucceedsAndAdvancesIt(t *testing.T) {
 	s := newService(t)
 	id := homeCatalog(t, s)
+	// The product exists before the catalogue offers it: a catalogue cannot offer
+	// one nobody has created. The revision is what this test is about, and the item
+	// list is only the field it moves.
+	offerable(t, s, id, "vpn")
 
 	rec := patchCatalog(t, s, id, `{"items":["vpn"],"revision":1}`)
 	if rec.Code != http.StatusOK {
@@ -67,8 +81,14 @@ func TestPatchingStatingTheRevisionReadSucceedsAndAdvancesIt(t *testing.T) {
 func TestPatchingWithAStaleRevisionIsRefused(t *testing.T) {
 	s := newService(t)
 	id := homeCatalog(t, s)
+	offerable(t, s, id, "vpn")
 
-	// Both read revision 1. The first one's write lands.
+	// Both read revision 1. The first one's write lands. The second names a product
+	// that does not exist and is still answered 409 rather than 400, because the
+	// precondition is checked before anything is applied — which is the point: a
+	// caller whose snapshot has moved learns that first, and does not have to fix an
+	// unrelated complaint about a list it is not going to write.
+	//
 	if rec := patchCatalog(t, s, id, `{"items":["vpn"],"revision":1}`); rec.Code != http.StatusOK {
 		t.Fatalf("first patch = %d (%s), want 200", rec.Code, rec.Body)
 	}

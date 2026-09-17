@@ -386,12 +386,18 @@ func TestBothPortalSurfacesAreReachableFromTheMenu(t *testing.T) {
 	// The approver's half, which had the same gap for longer and worse: it was
 	// reached only through the link in its notification mail, so an approver who
 	// deleted the mail had no way back to a decision somebody was waiting on.
-	if !strings.Contains(apps, `route: "genehmigung.html"`) {
+	//
+	// Searched across the whole navigation rather than in the drawer alone. What
+	// this guard is about is that the page can be **reached**, and the entry has
+	// since moved from the drawer into the Tasks sub-navigation, where it belongs:
+	// an approval is a kind of task, not an application. Pinning the drawer would
+	// have made this fail for a move that keeps every word of the reason above true.
+	if !strings.Contains(src, `route: "genehmigung.html"`) {
 		t.Error("no menu entry leads to the approvals page. Its only other way in is " +
 			"the link in a notification mail, and a decision nobody can reach is an " +
 			"order that waits forever")
 	}
-	if strings.Contains(apps, `route: "#/genehmigung`) || strings.Contains(apps, `route: "#/approvals`) {
+	if strings.Contains(src, `route: "#/genehmigung`) || strings.Contains(src, `route: "#/approvals`) {
 		t.Error("the approvals entry uses a hash route; like the portal it is a page " +
 			"of its own and not a view of this app")
 	}
@@ -439,7 +445,13 @@ func TestThePortalSurfacesOpenInTheirOwnWindow(t *testing.T) {
 	src := readWeb(t, "app.js")
 	apps := jsListIn(t, src, "const APPS = [", "\n];")
 
-	for _, id := range []string{"portal", "approvals"} {
+	// The portal alone, since approvals stopped being an application: an approval is
+	// a kind of task, and its entry moved into the Tasks sub-navigation. The same
+	// promise is made for it there — see
+	// TestASeparatePageUnderTasksStillOpensInItsOwnWindow, which checks both the
+	// entry's flag and the sub-navigation honouring it, because that renderer had no
+	// notion of `separate` until the entry arrived.
+	for _, id := range []string{"portal"} {
 		var entry string
 		for _, line := range strings.Split(apps, "\n") {
 			if strings.Contains(line, `id: "`+id+`"`) {
