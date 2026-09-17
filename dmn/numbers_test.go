@@ -257,9 +257,11 @@ func TestTheTypeLookupAcceptsEveryNameTheEvaluationDoes(t *testing.T) {
 	if err != nil || diags.HasErrors() {
 		t.Fatalf("compile: %v %v", err, diags)
 	}
-	// The id and the name attribute both name the same decision, so both must
-	// produce the same variable.
-	for _, addr := range []string{"d_pol", "Policy Premium"} {
+	// The id, the label and the FEEL identifier all name the same decision, and
+	// temis resolves all three, so all three must produce the same variable — the
+	// identifier is what the model index answers with since #992's bump, so a type
+	// lookup that missed it would leave exactly the common case a string.
+	for _, addr := range []string{"d_pol", "Policy Premium", "premium"} {
 		t.Run(addr, func(t *testing.T) {
 			out, _, err := evalDecision(context.Background(), defs, addr, map[string]any{"x": 4.0}, "the by-variable model")
 			if err != nil {

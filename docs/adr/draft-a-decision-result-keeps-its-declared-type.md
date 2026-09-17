@@ -150,11 +150,12 @@ on record a number unquoted.
   no change at all (measured: `expr.FromJSON` already maps `json.Number`).
 - Good: it is where the knowledge actually lives — temis knows it held a
   `value.Number`.
-- Bad: **it does not exist to take.** Measured against the newest temis available
-  (`v0.0.0-20260911201220`, seven weeks past the pin): `fromValue` still renders a
-  FEEL number as a decimal string, and an evaluated output still arrives as a Go
-  `string`. Upgrading would not fix this defect, so the choice here is not between
-  option 1 and a bump — it is between option 1 and leaving the defect standing.
+- Bad: **it does not exist to take.** Measured against the newest temis there is
+  (`v0.0.0-20260911201220`, which this repository now pins — see
+  ADR-draft-a-decision-is-addressed-by-both-of-its-names): `fromValue` still
+  renders a FEEL number as a decimal string, and an evaluated output still arrives
+  as a Go `string`. The bump did not fix this defect, so the choice here is not
+  between option 1 and a bump — it is between option 1 and leaving it standing.
 - This stays the better *destination*, and it is upstream work, not a version to
   pick up. If temis ever carries the type out, this record's machinery becomes
   redundant and should be removed rather than kept alongside it.

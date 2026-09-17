@@ -122,8 +122,8 @@ github.com/microsoft/go-mssqldb v1.10.0 h1:pHEt+Qz6YFPWqREq10mqSE524QQo+/QremwTC
 github.com/microsoft/go-mssqldb v1.10.0/go.mod h1:mnG7lGa9iYJbzJqGCXyuQCegStKMr3kogDLD6+bmggg=
 github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d h1:RhlvDs1nToqucX5KO3qgLskgLeQQPYCpzYy/TF6I3H0=
 github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d/go.mod h1:eayWuvmoZV7Cx/0P9ObYJzkcMuh+GBm1t4S+uwa7OuM=
-github.com/pblumer/temis v0.0.0-20260722083752-d4f4af9995bc h1:7hXhPUjgM6KzzFhHNDp+dWIigTS0lXcdEDHWD3p3Auo=
-github.com/pblumer/temis v0.0.0-20260722083752-d4f4af9995bc/go.mod h1:8Gvq9moVJ/vP7pBlff9jcEGMEIqdNlESusjN1rFwGiE=
+github.com/pblumer/temis v0.0.0-20260911201220-856ba3df3db5 h1:rkspYyOeMlGwJDXkpUYcbmHqxDJZAWFDfVDurOvjtf4=
+github.com/pblumer/temis v0.0.0-20260911201220-856ba3df3db5/go.mod h1:qr7dZ7IXjEqbGucEGVi9rCR9lLq06sZ2049ILMPjWss=
 github.com/pingcap/errors v0.11.4 h1:lFuQV/oaUMGcD2tqt+01ROSmJs75VG1ToEOkZIZ4nE4=
 github.com/pingcap/errors v0.11.4/go.mod h1:Oi8TUi2kEtXXLMJk9l1cGmz20kV3TaQ0usTwv5KuLY8=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=

@@ -335,6 +335,48 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision whose name is not a FEEL identifier is deployable again.** Per DMN a
+  decision has two names: the label on the diagram (`name`) and the FEEL identifier its
+  result is bound to (`<variable name>`), and they need not be the same string. The DMN
+  engine Atlas pinned bound a required decision under its *label*, so a model valid per
+  the specification — `Decision A` declaring `<variable name="alpha"/>`, `Decision B`
+  reading `alpha * 10` — was refused at deploy time with `unknown variable "alpha"`: a
+  message naming the symptom and not the cause. The only way through was to name every
+  decision in a chain like a FEEL identifier, which rules out `Kunden-Risiko` and
+  `Decision A` alike. A model authored in the temis Modeler, in Camunda or by hand was
+  rejected on arrival, and trying it before deploying reproduced the same refusal, so
+  nothing distinguished an Atlas limitation from a modelling error.
+
+  The engine now binds by the identifier, as DMN says, and **Atlas accepts both names
+  everywhere a decision is addressed** — the registry's version pointers, the model a
+  business rule task resolves to, the try-a-decision membership check and the deploy
+  gate's coverage report. A task deployed under the label keeps evaluating; one naming
+  the identifier resolves too. A decision is still *published* under exactly one name,
+  its label, so a deployment record, a version count and a listing read as before.
+  Inputs get the same treatment: an input whose label differs from the identifier it
+  binds is accepted under either, so a task that recorded its input keys before the
+  distinction existed still finds them. Measured across every model on the reference
+  installation: none is affected, and the DRD that prompted this now deploys and
+  evaluates.
+
+- **A decision that returns a number wrote its result as a string.** The decision engine
+  hands a FEEL number back as its exact decimal string — deliberately, so an amount is
+  not rounded on the way out — and Atlas stored it as what it saw: text. A sequence-flow
+  condition comparing that variable to a number is then a FEEL type mismatch, which
+  evaluates to `null`, which is not `true`, so the token took the **default flow** with
+  no incident, no diagnostic and no trace entry. The process simply routed the wrong way,
+  and an instance's variables read `{"alter": 19, "praemie": "1250"}` — the two from a
+  form numbers, the one from a decision a string.
+
+  **The model's own type declarations now decide**, and nothing else: a result the model
+  declares `number` is stored as a number, exactly, without reparsing or rounding. A
+  string that merely looks like a decimal is left alone, so a policy number, an article
+  code and `"0800"` keep their leading zeros and their type. It holds for a decision
+  table's output columns, a boxed context's entries and every element of a `COLLECT`
+  list. An output the model leaves untyped stays a string — the honest answer, since
+  guessing would trade a visible wrong type for an invisible wrong value.
+
+
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two

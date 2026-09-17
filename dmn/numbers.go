@@ -50,14 +50,14 @@ const feelNumber = "number"
 //     is a context keyed by column name;
 //   - a boxed context's entries cover its members, and its result cell covers the
 //     case where the context evaluates to that cell's value instead.
-func declaredNumbers(defs *tdmn.Definitions, decisionId string) (whole bool, members map[string]bool) {
+func declaredNumbers(defs *tdmn.Definitions, nodes []tdmn.GraphNode, decisionId string) (whole bool, members map[string]bool) {
 	members = map[string]bool{}
-	for _, n := range defs.Graph().Nodes {
+	for _, n := range nodes {
 		// Every name the evaluation accepts, this accepts: temis resolves a decision
-		// by its id or its name, so matching fewer of them would mean the decision
-		// evaluates while its declared type is not found, and the number quietly
-		// stays a string.
-		if n.Type == "decision" && (n.ID == decisionId || n.Name == decisionId) {
+		// by its id, its label or its FEEL identifier, so matching fewer of them would
+		// mean the decision evaluates while its declared type is not found, and the
+		// number quietly stays a string.
+		if n.Type == "decision" && (n.ID == decisionId || n.Name == decisionId || n.VarName == decisionId) {
 			whole = n.DataType == feelNumber
 			break
 		}
@@ -96,11 +96,11 @@ func declaredNumbers(defs *tdmn.Definitions, decisionId string) (whole bool, mem
 // It is deliberately shallow: it converts the result, the elements of a list
 // result, and the members of a structured one. A number nested deeper than that
 // keeps its string, which is stated rather than papered over — see the ADR.
-func restoreNumbers(defs *tdmn.Definitions, decisionId string, outputs map[string]any) map[string]any {
+func restoreNumbers(defs *tdmn.Definitions, nodes []tdmn.GraphNode, decisionId string, outputs map[string]any) map[string]any {
 	if len(outputs) == 0 {
 		return outputs
 	}
-	whole, members := declaredNumbers(defs, decisionId)
+	whole, members := declaredNumbers(defs, nodes, decisionId)
 	if !whole && len(members) == 0 {
 		return outputs // nothing is declared a number; there is nothing to restore
 	}

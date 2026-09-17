@@ -173,6 +173,7 @@ func (s *Server) deployApplicationBundle(r *http.Request, id string) bundleOutco
 				modelRef:   rec.ModelRef,
 				modelName:  res.ModelName,
 				decisions:  res.Decisions,
+				aliases:    res.Aliases,
 				xml:        xml,
 			})
 		}
@@ -305,7 +306,12 @@ type resolvedModel struct {
 	modelRef   string
 	modelName  string
 	decisions  []string
-	xml        []byte
+	// aliases are the further names those decisions answer to — a decision's FEEL
+	// identifier where it differs from the name it is published under. Matching a
+	// task's decisionId reads them; nothing recorded does
+	// (ADR-draft-a-decision-is-addressed-by-both-of-its-names).
+	aliases []string
+	xml     []byte
 }
 
 // decisionDeployments turns the application's resolved DMN references into the
@@ -402,7 +408,7 @@ func (s *Server) dmnForDeployBody(ctx context.Context, body []byte, refs []dmnRe
 		if err != nil {
 			return nil, "", err
 		}
-		models = append(models, resolvedModel{decisions: res.Decisions, xml: xml})
+		models = append(models, resolvedModel{decisions: res.Decisions, aliases: res.Aliases, xml: xml})
 	}
 	xmls, missing := coverModelsReport(models, needed)
 	if refuse := decisionCoverage(missing, bundleBoundDecisions(deployables), deployed); refuse != "" {
@@ -437,7 +443,14 @@ func coverModels(models []resolvedModel, needed []string) ([][]byte, bool) {
 func coverModelsReport(models []resolvedModel, needed []string) ([][]byte, []string) {
 	provider := map[string]int{} // decision id → index of the model that provides it
 	for i, m := range models {
+		// Both spellings a decision answers to, so the gate refuses exactly what the
+		// registry would fail to resolve — no more and no less.
 		for _, d := range m.decisions {
+			if _, ok := provider[d]; !ok {
+				provider[d] = i
+			}
+		}
+		for _, d := range m.aliases {
 			if _, ok := provider[d]; !ok {
 				provider[d] = i
 			}
