@@ -39,7 +39,7 @@ func compileMockupTask(b *Builder, st xmlServiceTask) (int32, error) {
 		if resultVar == "" {
 			return 0, fmt.Errorf("compiler: mockup task %q has a result expression but no result variable", st.Id)
 		}
-		compiled, err = expr.CompileAuto(exprText)
+		compiled, err = compileFEEL(exprText)
 		if err != nil {
 			return 0, fmt.Errorf("compiler: mockup task %q result expression: %w", st.Id, err)
 		}

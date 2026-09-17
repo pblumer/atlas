@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "Handbuch"
+  ],
+  "title": {
+    "en": "The handbook's \"compute a value\" recipe now computes one",
+    "de": "Das Handbuch-Rezept „einen Wert berechnen\" berechnet jetzt einen"
+  },
+  "summary": {
+    "en": "The recipe's script read = round(gross / 1.19, 2). FEEL has no round — it has decimal, round up, round down, round half up and round half down — so the expression evaluated to null and the recipe's result variable came out empty for every reader who pressed its Try it button. It now uses decimal, which is what the recipe meant. It was found by the new refusal for calls that can only ever be null, on the first run of the test suite after that check existed.",
+    "de": "Das Skript des Rezepts lautete = round(gross / 1.19, 2). FEEL kennt kein round — es gibt decimal, round up, round down, round half up und round half down —, der Ausdruck ergab also null, und die Ergebnisvariable blieb bei jedem Leser leer, der auf „Ausprobieren\" drückte. Jetzt steht dort decimal, was das Rezept meinte. Gefunden hat es die neue Ablehnung von Aufrufen, die nur null ergeben können, beim ersten Lauf der Testsuite nach dieser Prüfung."
+  }
+}

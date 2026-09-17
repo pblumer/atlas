@@ -472,6 +472,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0384](0384-order-position-key.md) | A position is a product and the shape of it, and it says so in its own key | Accepted | Landed |
 | [0385](0385-a-decision-is-addressed-by-both-of-its-names.md) | A decision is addressed by both of its names | Accepted | Landed |
 | [0386](0386-a-decision-result-keeps-its-declared-type.md) | A decision result keeps the type the model declares for it | Accepted | Landed |
+| [0387](0387-the-catalogue-against-the-standards-boundary.md) | The catalogue keeps its own model, and answers to TMF620 at the boundary | Proposed | Not started |
+| [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted | Landed |
 
 ## The two states of a record
 

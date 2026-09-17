@@ -69,7 +69,9 @@ const STRINGS = {
     'nav.services': 'Meine Leistungen',
     'nav.help': 'Hilfe',
     'col.category': 'Kategorie',
-    'col.bundle': 'Bundle',
+    'col.group': 'Produktgruppe',
+    'group.all': 'Alle Gruppen',
+    'group.none': 'Ohne Gruppe',
     'col.offering': 'Marktleistung',
     'col.options': 'Optional',
     'col.service': 'Service',
@@ -200,7 +202,9 @@ const STRINGS = {
     'nav.services': 'My services',
     'nav.help': 'Help',
     'col.category': 'Category',
-    'col.bundle': 'Bundle',
+    'col.group': 'Product group',
+    'group.all': 'All groups',
+    'group.none': 'No group',
     'col.offering': 'Offering',
     'col.options': 'Optional',
     'col.service': 'Service',
@@ -404,11 +408,15 @@ const state = {
 
   // view is which of the three the nav is on.
   view: 'catalog',
-  // bundle and offering are where the cascade stands. A column shows nothing
-  // until the one to its left is chosen, which is what makes it a cascade rather
-  // than four lists — and it is *selection* rather than filtering, because a
-  // decomposition read at four levels is read one branch at a time.
-  bundle: '',
+  // group and offering are where the cascade stands. A column shows nothing until
+  // the one to its left is chosen, which is what makes it a cascade rather than
+  // four lists — and it is *selection* rather than filtering, because a
+  // decomposition is read one branch at a time.
+  //
+  // group is null for "every group", the way category is, because it is an
+  // attribute and every heading is a legitimate answer. offering is the empty
+  // string because it names a product, and "no product chosen" is not one.
+  group: null,
   offering: '',
   // basket is every item id chosen so far, across products. It is the whole
   // reason this is a two-step order now: the previous page ordered the moment a
@@ -556,15 +564,19 @@ function parentIn(rel, child) {
 // and a deeper graph has to land somewhere; calling it a service is true of it,
 // and inventing a fourth word for a shape nobody has drawn would not be.
 function levelOf(rel, id) {
-  const r = rel || {};
-  const hasParts = ((r.includes || {})[id] || []).length > 0
-    || ((r.options || {})[id] || []).length > 0;
   // Depth from the one walk that already knows how to do it, cycles and all. A
   // second traversal written here would be a second place for "how deep is this"
   // to be answered, which is the shape of the defect this rule exists to remove.
-  const d = depthOf(r, id);
-  if (d === 0) return hasParts ? 'bundle' : 'offering';
-  return d === 1 ? 'offering' : 'service';
+  //
+  // Two levels, not three. A bundle is offered as a Marktleistung — it holds the
+  // orchestration, and the services behind it hold their own provisioning — so a
+  // root is a Marktleistung whether or not it carries parts, and everything behind
+  // one is a service however deep it sits. The Bundle level is not answered
+  // differently, it is gone: asking whether something is a bundle or an offering
+  // was the question that announced a single product as something made of other
+  // things, and there is no third word for a service two edges down that would be
+  // truer than "service".
+  return depthOf(rel || {}, id) === 0 ? 'offering' : 'service';
 }
 
 // levelName is that answer in the reader's language, and the same word the column
@@ -609,16 +621,79 @@ function categoriesOf(release) {
 
 // inCategory reports whether a top-level product belongs under the heading now
 // selected. null is every heading, which is what the portal opens on.
+// groupsOf is every product group named by the products under the heading now
+// open, and the bucket for the ones that name none.
+//
+// Narrowed by the category on purpose. A group has no record and therefore no
+// category of its own — the product carries both strings and the chain is
+// assembled per product. Built from every product in the catalogue instead, the
+// column would offer groups under a heading that holds none of their products.
+//
+// The consequence, which is a property and not a fault: a group whose products sit
+// in two categories appears under both. Nothing is contradicted, because nothing
+// anywhere claims a group belongs to one.
+//
+// Sorted alphabetically and bucketed like the categories above, for the reasons
+// given there: there is nothing on a string to sort by, and hiding the ungrouped
+// products would lose them.
+function groupsOf(release) {
+  const named = new Set();
+  let ungrouped = false;
+  for (const it of products(release).filter(inCategory)) {
+    const g = (it.productGroup || '').trim();
+    if (g) named.add(g); else ungrouped = true;
+  }
+  const out = [...named].sort((a, b) => a.localeCompare(b, locale));
+  if (ungrouped) out.push('');
+  return out;
+}
+
+// inGroup reports whether a product belongs under the group now selected. null is
+// every group, which is what the portal opens on.
+function inGroup(item) {
+  if (state.group === null) return true;
+  return (item.productGroup || '').trim() === state.group;
+}
+
 function inCategory(item) {
   if (state.category === null) return true;
   return (item.category || '').trim() === state.category;
 }
 
 function levelsOf(release) {
-  const bundles = products(release).filter(inCategory).map((i) => ({ id: i.id, integral: false }));
-  const offerings = state.bundle ? partsOf(release, state.bundle) : [];
-  const services = state.offering ? partsOf(release, state.offering) : [];
-  return { bundles, offerings, services };
+  const offerings = products(release).filter(inCategory).filter(inGroup)
+    .map((i) => ({ id: i.id, integral: false }));
+  // Everything behind the chosen product, however deep, rather than one level of
+  // it. A Marktleistung holds the orchestration and the services behind it hold
+  // their own provisioning, so a service two edges down is a service like any
+  // other — and the level that used to sit between them is what made one position
+  // carry two names.
+  const services = state.offering ? descendantsOf(release, state.offering) : [];
+  return { offerings, services };
+}
+
+// descendantsOf is everything one product carries, at any depth, integral parts
+// first and each kept apart by how it arrived.
+//
+// Depth-first and cycle-safe. A part reached twice — included by the whole and
+// offered beside it, or shared by two branches — is listed once, as it was first
+// reached: an entry that appeared twice would be two rows for one service, and
+// ticking either would be the same position.
+function descendantsOf(release, id) {
+  const out = [];
+  const seen = new Set([id]);
+  const walk = (at, integral) => {
+    for (const part of partsOf(release, at)) {
+      if (seen.has(part.id)) continue;
+      seen.add(part.id);
+      // Integral only all the way down: a service included by something that was
+      // itself an offer is only in the order if that offer was taken.
+      out.push({ id: part.id, integral: integral && part.integral });
+      walk(part.id, integral && part.integral);
+    }
+  };
+  walk(id, true);
+  return out;
 }
 
 // carriedBy reports whether choosing this whole already brings the part, at any
@@ -1133,9 +1208,14 @@ function renderSearch(rel, by) {
           // ordering it from a list that does not show what it comes with.
           onOpen: () => {
             state.query = '';
-            const parent = parentOf(rel, it.id);
-            state.bundle = parent.bundle || it.id;
-            state.offering = parent.offering || '';
+            // The product it belongs to, and the two headings that product writes
+            // on itself — a hit opened under the wrong heading would be a cascade
+            // showing a column its own selection excludes.
+            const root = rootOf(rel, it.id);
+            const item = by[root] || {};
+            state.category = (item.category || '').trim();
+            state.group = (item.productGroup || '').trim();
+            state.offering = root;
             state.info = it.id;
             render();
           },
@@ -1147,15 +1227,21 @@ function renderSearch(rel, by) {
       })));
 }
 
-// parentOf resolves which bundle and which offering an item sits under, so a hit
-// can open the cascade where the thing actually is.
-function parentOf(rel, id) {
-  const up = (child) => parentIn(rel, child);
-  const first = up(id);
-  if (!first) return {};
-  const second = up(first);
-  if (!second) return { bundle: first };
-  return { bundle: second, offering: first };
+// rootOf is the product an item belongs to — itself, where nothing contains it.
+//
+// Walks all the way up rather than one or two steps: the cascade's third column is
+// the product and its fourth is everything behind that product at any depth, so a
+// hit three edges down still opens under the product it is part of. Cycle-safe,
+// because a release is authored and a cycle is a thing somebody can draw.
+function rootOf(rel, id) {
+  const seen = new Set();
+  let at = id;
+  for (;;) {
+    const up = parentIn(rel, at);
+    if (!up || seen.has(up)) return at;
+    seen.add(up);
+    at = up;
+  }
 }
 
 function renderCatalogue() {
@@ -1170,59 +1256,63 @@ function renderCatalogue() {
 
   const rel = state.release;
   const by = itemsById(rel);
-  const { bundles, offerings, services } = levelsOf(rel);
+  const { offerings, services } = levelsOf(rel);
   const name = (id) => textOf((by[id] || {}).texts, id);
 
   // Kategorie. The headings the products themselves carry
   // (ADR-0360), with "all" above them so
-  // the column is never a dead end. It was the catalogue's own name and a note
-  // saying the data had no category; it has one now.
+  // the column is never a dead end.
   const headings = categoriesOf(rel);
-  const pick = (value) => () => {
-    state.category = state.category === value ? null : value;
-    // A heading the open bundle does not belong to would leave two columns showing
-    // something the first no longer selects.
-    state.bundle = '';
-    state.offering = '';
+  // Choosing anywhere in the chain clears everything to its right: a column still
+  // showing what the one before it no longer selects is a screen contradicting
+  // itself.
+  const clearBelow = (level) => {
+    if (level <= 0) state.group = null;
+    if (level <= 1) state.offering = '';
     state.info = '';
-    render();
   };
   const category = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.category')),
     cell({
       text: t('cat.all'),
       open: state.category === null,
-      onOpen: () => { state.category = null; state.bundle = ''; state.offering = ''; render(); },
+      onOpen: () => { state.category = null; clearBelow(0); render(); },
     }),
     headings.map((h) => cell({
       text: h || t('cat.none'),
       open: state.category === h,
-      onOpen: pick(h),
-    })));
-
-  const bundleCol = el('div', { class: 'col' },
-    el('div', { class: 'colhead' }, t('col.bundle')),
-    keepFavourites(rel, bundles).map((b) => cell({
-      text: name(b.id),
-      open: state.bundle === b.id,
       onOpen: () => {
-        state.bundle = state.bundle === b.id ? '' : b.id;
-        state.offering = '';
+        state.category = state.category === h ? null : h;
+        clearBelow(0);
         render();
       },
-      // The column holds every product nothing contains, and not all of them are
-      // bundles: one with no parts is an offering, and it says so rather than
-      // being announced in the column head's word. The alternative was to move it
-      // to another column, which would have made the first column no longer the
-      // place a person starts.
-      trail: [
-        levelOf(rel, b.id) !== 'bundle'
-          ? el('span', { class: 'muted', style: 'font-size:12px' }, levelName(rel, b.id))
-          : null,
-        starButton(b.id), toggle(rel, b.id, false), infoButton(b.id),
-      ],
     })));
 
+  // Produktgruppe, in the column the Bundle level used to hold. It is an attribute
+  // the product writes on itself, like the heading to its left — so this column is
+  // read off the products under that heading and not off the containment graph,
+  // which is what the two columns to the right are read off.
+  const groups = groupsOf(rel);
+  const groupCol = el('div', { class: 'col' },
+    el('div', { class: 'colhead' }, t('col.group')),
+    cell({
+      text: t('group.all'),
+      open: state.group === null,
+      onOpen: () => { state.group = null; clearBelow(1); render(); },
+    }),
+    groups.map((g) => cell({
+      text: g || t('group.none'),
+      open: state.group === g,
+      onOpen: () => {
+        state.group = state.group === g ? null : g;
+        clearBelow(1);
+        render();
+      },
+    })));
+
+  // Produkt — the Marktleistung. Every root is one, with or without parts: it is
+  // what holds the orchestration, and what stands behind it are the services that
+  // are actually provisioned.
   const offeringCol = el('div', { class: 'col' },
     el('div', { class: 'colhead' }, t('col.offering')),
     keepFavourites(rel, offerings).map((o) => cell({
@@ -1230,6 +1320,7 @@ function renderCatalogue() {
       open: state.offering === o.id,
       onOpen: () => {
         state.offering = state.offering === o.id ? '' : o.id;
+        state.info = '';
         render();
       },
       trail: [starButton(o.id), toggle(rel, o.id, o.integral), infoButton(o.id)],
@@ -1255,7 +1346,7 @@ function renderCatalogue() {
   // for the same reason.
   const body = () => (state.query.trim() !== ''
     ? [renderSearch(rel, by)]
-    : [el('div', { class: 'cascade' }, category, bundleCol, offeringCol, serviceCol),
+    : [el('div', { class: 'cascade' }, category, groupCol, offeringCol, serviceCol),
       state.info && by[state.info]
         ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null]);
   catalogueBody = body;
@@ -1402,15 +1493,16 @@ function renderBasket() {
   const atLevel = (level) => shown.filter((x) => levelOf(rel, x.id) === level).map(row);
 
   const cols = el('div', { class: 'cascade' },
-    el('div', { class: 'col' },
-      el('div', { class: 'colhead' }, t('col.bundle')),
-      atLevel('bundle')),
+    // Two levels, matching the cascade: a product and the services behind it. The
+    // third column the basket used to have was the Bundle level, and it is gone —
+    // a root is a Marktleistung whether or not it carries parts.
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.offering')),
       atLevel('offering')),
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.service')),
       atLevel('service')),
+    el('div', { class: 'col' }),
     el('div', { class: 'col' },
       el('div', { class: 'colhead' }, t('col.options')),
       offers.map((id) => cell({
@@ -2134,9 +2226,13 @@ function renderServices() {
         [...new Set(ids.map((id) => ((by[id] || {}).category || '').trim()))]
           .sort((a, b) => a.localeCompare(b, locale))
           .map((c) => cell({ text: c || t('cat.none') }))),
+      // The product group beside the heading, read off what this person holds for
+      // the same reason the heading is: this screen answers "what do I have".
       el('div', { class: 'col' },
-        el('div', { class: 'colhead' }, t('col.bundle')),
-        at('bundle').map(row)),
+        el('div', { class: 'colhead' }, t('col.group')),
+        [...new Set(ids.map((id) => ((by[id] || {}).productGroup || '').trim()))]
+          .sort((a, b) => a.localeCompare(b, locale))
+          .map((g) => cell({ text: g || t('group.none') }))),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.offering')),
         at('offering').map(row)),

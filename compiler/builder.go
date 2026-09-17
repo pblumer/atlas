@@ -2157,7 +2157,7 @@ func Assign(taskID, what, raw string) (Assignment, error) {
 	if text == "" {
 		return Assignment{}, fmt.Errorf("compiler: user task %q has an empty FEEL expression for %s", taskID, what)
 	}
-	e, err := expr.CompileAuto(text)
+	e, err := compileFEEL(text)
 	if err != nil {
 		return Assignment{}, fmt.Errorf("compiler: user task %q: %s: %w", taskID, what, err)
 	}

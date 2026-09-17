@@ -102,7 +102,7 @@ func connectorValue(taskID, kind, what, raw string) (RestExpr, error) {
 	if text == "" {
 		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an empty FEEL expression for %s", kind, taskID, what)
 	}
-	e, err := expr.CompileAuto(text)
+	e, err := compileFEEL(text)
 	if err != nil {
 		return RestExpr{}, fmt.Errorf("compiler: %s task %q: %s: %w", kind, taskID, what, err)
 	}
@@ -467,7 +467,7 @@ func buildMessageResolver(defs xmlDefinitions) func(ownerId, messageRef string) 
 		}
 		var keyExpr *expr.Compiled
 		if text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(m.Subscription.CorrelationKey), "=")); text != "" {
-			ce, err := expr.CompileAuto(text)
+			ce, err := compileFEEL(text)
 			if err != nil {
 				return "", nil, fmt.Errorf("compiler: message %q correlationKey: %w", messageRef, err)
 			}
@@ -834,7 +834,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 				if from == "" {
 					continue
 				}
-				ce, err := expr.CompileAuto(from)
+				ce, err := compileFEEL(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data output association on %q assignment: %w", ownerId, err))
 					return
@@ -877,7 +877,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 			}
 			var valExpr *expr.Compiled
 			if from := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Assignment.From), "=")); from != "" {
-				ce, err := expr.CompileAuto(from)
+				ce, err := compileFEEL(from)
 				if err != nil {
 					keepWire(fmt.Errorf("compiler: data input association on %q assignment: %w", ownerId, err))
 					return
@@ -900,7 +900,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text == "" {
 			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q has no source expression", ownerId, dir, target)
 		}
-		e, err := expr.CompileAuto(text)
+		e, err := compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: task %q ioMapping %s for %q: %w", ownerId, dir, target, err)
 		}
@@ -985,7 +985,7 @@ func compileProcess(key uint64, version int32, proc xmlProcess, resolveMessage f
 		if text == "" {
 			return nil, nil
 		}
-		e, err := expr.CompileAuto(text)
+		e, err := compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: loop %s on %q: %w", what, ownerId, err)
 		}
@@ -3097,7 +3097,7 @@ func decisionInputMappings(taskID string, in []xmlZeebeIOMapInput) ([]DecisionIn
 		if text == "" {
 			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q has no source expression", taskID, im.Target)
 		}
-		e, err := expr.CompileAuto(text)
+		e, err := compileFEEL(text)
 		if err != nil {
 			return nil, fmt.Errorf("compiler: business rule task %q input mapping for %q: %w", taskID, im.Target, err)
 		}
