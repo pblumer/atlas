@@ -10,7 +10,7 @@ import (
 )
 
 // Calls this build cannot make
-// (ADR-draft-a-call-that-can-only-be-null-is-refused-at-deploy).
+// (ADR-0388).
 //
 // The FEEL engine compiles a call to a name it does not know into a constant
 // null, and does so deliberately: DMN requires a decision to stay executable, so

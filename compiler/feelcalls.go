@@ -4,7 +4,7 @@ import "github.com/pblumer/atlas/expr"
 
 // compileFEEL compiles one of a model's FEEL expressions and refuses it when it
 // contains a call this build can only ever answer with null
-// (ADR-draft-a-call-that-can-only-be-null-is-refused-at-deploy).
+// (ADR-0388).
 //
 // Every expression a BPMN model carries goes through here rather than through
 // expr.CompileAuto directly, so the refusal is one decision in one place instead

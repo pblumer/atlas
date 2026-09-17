@@ -1,4 +1,4 @@
-# ADR-DRAFT: A call that can only be null is refused at deploy
+# ADR-0388: A call that can only be null is refused at deploy
 
 - **Status:** Accepted
 - **Implementation:** Landed
