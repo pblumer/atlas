@@ -4,11 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-09-17
 - **Deciders:** Patrick Blumer
-- **Open question:** whether the same refusal belongs on the surfaces that compile FEEL
-  outside a BPMN deploy — task-folder rules, the inbound bridges, the playground. The
-  reasoning carries; what does not carry is the moment, since none of them has a deploy at
-  which refusing is free. Left as it is rather than guessed at.
-- **Question checked:** 2026-09
 
 ## Context and problem statement
 
@@ -109,9 +104,12 @@ nothing here: the syntax error is the real fault and the compiler already report
 - **Negative:** the refusal is a compile error, so it has no element anchor of its own in the
   panel. The message carries the element id because the caller wraps it, which is enough to
   find it and less than an anchored Problem would be.
-- **Follow-ups / risks to watch:** the surfaces named in the open question above. And if the
-  engine ever gains a way to register extra functions on the BPMN path, this check has to be
-  told about them or it will refuse a call that works.
+- **Follow-ups / risks to watch:** the other surfaces that compile FEEL, settled since by
+  [ADR-draft-the-same-refusal-at-every-door-that-already-refuses](draft-the-same-refusal-at-every-door-that-already-refuses.md),
+  which also corrects the reason given here for leaving them — three of them did have a
+  moment at which refusing is free, and were already using it. And if the engine ever gains a
+  way to register extra functions on the BPMN path, this check has to be told about them or
+  it will refuse a call that works.
 
 ## Pros and cons of the options
 
@@ -148,3 +146,5 @@ nothing here: the syntax error is the real fault and the compiler already report
   deploy, which is the moment this refusal uses
 - relates to [ADR-0015](0015-reuse-feel-engine.md) — the engine this leaves alone
 - relates to [ADR-0026](0026-problems-panel-and-versioned-validation.md) — the panel the refusal surfaces in
+- extended by [ADR-draft-the-same-refusal-at-every-door-that-already-refuses](draft-the-same-refusal-at-every-door-that-already-refuses.md) —
+  the same refusal at the other doors that already refuse

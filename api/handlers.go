@@ -688,7 +688,12 @@ type validateFeelResp struct {
 // handleValidateFeel compiles a FEEL expression with the same engine deployment
 // uses, so the Modeler can flag syntax/type errors as they're typed instead of
 // only at deploy time. Unknown identifiers are allowed (they're process
-// variables, discovered via CompileAuto) — only genuine parse/type errors fail.
+// variables, discovered via CompileAuto) — but an unknown *function* is not, and
+// neither is a built-in called with an argument count its signature cannot take
+// (ADR-0388): the engine compiles either into a constant null and says nothing,
+// which is the one answer a route named "validate" must not give. Certifying the
+// expression to somebody who asked exactly the right question is worse than never
+// having been asked (ADR-draft-the-same-refusal-at-every-door-that-already-refuses).
 //
 // It is a pure compile: no state is read or written, so it runs off the
 // single-writer loop (no s.do) and never touches the processor hot path — a
@@ -707,6 +712,10 @@ func (s *Server) handleValidateFeel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := expr.CompileAuto(req.Expression); err != nil {
+		httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
+		return
+	}
+	if err := expr.CheckCallsError(req.Expression); err != nil {
 		httpapi.JSON(w, http.StatusOK, validateFeelResp{OK: false, Error: err.Error()})
 		return
 	}
