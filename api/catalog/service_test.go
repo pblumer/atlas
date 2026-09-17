@@ -245,6 +245,10 @@ func TestUpdatingAnUnknownCatalogueIs404(t *testing.T) {
 func TestUpdateChangesEveryEditableField(t *testing.T) {
 	s := newService(t)
 	cat := decode[Catalog](t, do(t, s.HandleCreateCatalog, "POST", "/x", `{"rank":1}`))
+	// The product exists first: a catalogue cannot offer one nobody has created.
+	// The edge may name "b", which nothing creates — edges are validated at publish,
+	// where a dangling one is a problem with a name, and not at every list write.
+	offerable(t, s, cat.ID, "a")
 
 	rec := do(t, s.HandleUpdateCatalog, "PATCH", "/x",
 		`{"rank":7,"texts":{"de":"Neu"},"languages":["de","fr"],`+

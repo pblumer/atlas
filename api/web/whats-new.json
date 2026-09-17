@@ -2,6 +2,42 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "every-position-carries-its-own-way-into-the-process-working-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Every position carries its own way into the process working on it.",
+        "de": "Every position carries its own way into the process working on it."
+      },
+      "summary": {
+        "en": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader.",
+        "de": "\"Meine Aufträge\" already listed each position and what it was doing, out of the order's own record, and that stays the answer for every reader."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
+      "id": "one-product-may-be-ordered-in-two-shapes-at-once",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "One product may be ordered in two shapes at once.",
+        "de": "One product may be ordered in two shapes at once."
+      },
+      "summary": {
+        "en": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one.",
+        "de": "The catalogue describes the same service pulled in twice in different variants as a conflict the orderer resolves, and keeping both is a resolution — a black phone and a silver one."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "how-long-the-single-writer-is-held-is-now-a-metric",
       "version": "Unreleased",
       "date": null,
@@ -106,6 +142,24 @@
       }
     },
     {
+      "id": "approvals-moved-under-tasks-and-the-inbox-says-which-of-its-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Approvals moved under Tasks, and the inbox says which of its rows decide an order.",
+        "de": "Approvals moved under Tasks, and the inbox says which of its rows decide an order."
+      },
+      "summary": {
+        "en": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today.",
+        "de": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-catalogue-screen-wears-the-console-s-buttons",
       "version": "Unreleased",
       "date": null,
@@ -192,60 +246,6 @@
       "summary": {
         "en": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop.",
         "de": "The catalogue screen already refused free text where it mattered — a product binds a process from what is deployed, because a product naming a process nobody wrote is an order that fails while somebody waits for a laptop."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-product-form-is-filled-in-the-order-a-product-is-thought",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The product form is filled in the order a product is thought about.",
-        "de": "The product form is filled in the order a product is thought about."
-      },
-      "summary": {
-        "en": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket.",
-        "de": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-portal-s-catalogue-tab-is-called-the-catalogue",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The portal's catalogue tab is called the catalogue.",
-        "de": "The portal's catalogue tab is called the catalogue."
-      },
-      "summary": {
-        "en": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\".",
-        "de": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\"."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-info-panel-is-reachable-from-every-column-of-the-catalog",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The info panel is reachable from every column of the catalogue, not only from services.",
-        "de": "The info panel is reachable from every column of the catalogue, not only from services."
-      },
-      "summary": {
-        "en": "This was not a missing feature but an inconsistency inside one page.",
-        "de": "This was not a missing feature but an inconsistency inside one page."
       },
       "link": {
         "label": "Changelog",

@@ -26,15 +26,19 @@ import (
 // silence is the one answer it must not give.
 func webRegion(t *testing.T, src, from, to string) string {
 	t.Helper()
+	// The source is named by what was searched for rather than by a file name. This
+	// helper started out reading portal.js and said so; it now reads app.js and
+	// portal.html too, and a message naming the wrong file sends whoever reads it
+	// into the wrong one.
 	start := strings.Index(src, from)
 	if start < 0 {
-		t.Fatalf("portal.js no longer contains %q; this guard has lost its subject "+
-			"and would otherwise pass without checking anything", from)
+		t.Fatalf("the guarded source no longer contains %q; this guard has lost its "+
+			"subject and would otherwise pass without checking anything", from)
 	}
 	end := strings.Index(src[start:], to)
 	if end < 0 {
-		t.Fatalf("portal.js no longer contains %q after %q; this guard has lost its "+
-			"subject and would otherwise pass without checking anything", to, from)
+		t.Fatalf("the guarded source no longer contains %q after %q; this guard has "+
+			"lost its subject and would otherwise pass without checking anything", to, from)
 	}
 	return src[start : start+end]
 }

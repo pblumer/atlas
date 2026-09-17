@@ -169,8 +169,10 @@ type placeReq struct {
 	// Recipient is who the products are for, defaulting to the orderer. They
 	// differ when an integration manager orders for somebody assigned to them.
 	Recipient string `json:"recipient,omitempty"`
-	// Variants names the shape of each ordered product that has more than one,
-	// keyed by item id.
+	// Variants names the shapes of each ordered product that has more than one,
+	// keyed by item id. One entry is one position: naming two is ordering the
+	// product twice, which the catalogue allows exactly where it says the product
+	// may be held more than once.
 	//
 	// Keyed by item and not a field on a line, because the caller does not send
 	// lines: it sends what it chose, and an integral part carrying variants is
@@ -178,7 +180,7 @@ type placeReq struct {
 	// key inside Config because a variant is not an answer to a form — it is part
 	// of what was ordered, it is checked against the catalogue, and it is read by
 	// provisioning whether or not the product has a form.
-	Variants map[string]string `json:"variants,omitempty"`
+	Variants map[string][]string `json:"variants,omitempty"`
 	// Config carries the answers to each product's configuration form, keyed by
 	// item id and then by the form's own field key
 	// (ADR-0358).
@@ -410,7 +412,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 // for, because the product carrying the variants is frequently an integral part:
 // somebody orders a bundle and the colour belongs to the phone inside it.
 func unresolvedVariant(rel catalog.Release, ordered []string,
-	chosen map[string]string) string {
+	chosen map[string][]string) string {
 
 	carried := make(map[string]catalog.Item, len(ordered))
 	for _, id := range ordered {
@@ -429,6 +431,7 @@ func unresolvedVariant(rel catalog.Release, ordered []string,
 	sort.Strings(named)
 	for _, id := range named {
 		it, inOrder := carried[id]
+		shapes := chosen[id]
 		switch {
 		case !inOrder:
 			return fmt.Sprintf("the order names a variant for %q, which is not in it. "+
@@ -436,13 +439,29 @@ func unresolvedVariant(rel catalog.Release, ordered []string,
 		case len(it.Variants) == 0:
 			return fmt.Sprintf("%q comes in one shape and the order names a variant "+
 				"for it. Nothing would read it, so it is refused rather than stored", id)
-		case !offersVariant(it, chosen[id]):
-			return fmt.Sprintf("%q does not come in %q", id, chosen[id])
+		case len(shapes) > 1 && !it.MultipleAllowed:
+			return fmt.Sprintf("%q may be held once and the order asks for %d of them. "+
+				"Order one shape of it, or say in the catalogue that it may be held more "+
+				"than once", id, len(shapes))
+		}
+		seen := map[string]bool{}
+		for _, v := range shapes {
+			switch {
+			case !offersVariant(it, v):
+				return fmt.Sprintf("%q does not come in %q", id, v)
+			case seen[v]:
+				// Two identical positions could not be told apart afterwards, and
+				// "two black phones" is a quantity — which this catalogue does not
+				// have. Refused rather than quietly merged into one.
+				return fmt.Sprintf("the order asks for %q in %q twice, and two positions "+
+					"of one shape cannot be told apart", id, v)
+			}
+			seen[v] = true
 		}
 	}
 	missing := make([]string, 0, len(ordered))
 	for _, id := range ordered {
-		if it, ok := carried[id]; ok && len(it.Variants) > 0 && chosen[id] == "" {
+		if it, ok := carried[id]; ok && len(it.Variants) > 0 && len(chosen[id]) == 0 {
 			missing = append(missing, id)
 		}
 	}
@@ -478,7 +497,7 @@ func offersVariant(it catalog.Item, id string) bool {
 // Skipped also counts as satisfied, so a line that requires this one is not left
 // waiting for something nobody is going to provision.
 func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
-	config map[string]map[string]string, variants map[string]string) []Line {
+	config map[string]map[string]string, variants map[string][]string) []Line {
 	bound := make(map[string]catalog.Item, len(rel.Items))
 	for _, it := range rel.Items {
 		bound[it.ID] = it
@@ -499,30 +518,39 @@ func linesFor(rel catalog.Release, ordered []string, held map[string]bool,
 			}
 		}
 	}
-	out := make([]Line, len(ordered))
-	for i, id := range ordered {
+	out := make([]Line, 0, len(ordered))
+	for _, id := range ordered {
 		it := bound[id]
 		status := StatusPending
 		if held[id] && !it.MultipleAllowed {
 			status = StatusSkipped
 		}
-		out[i] = Line{ItemID: id, Status: status,
-			ProvisionProcess:   it.ProvisionProcess,
-			DeprovisionProcess: it.DeprovisionProcess,
-			MaxDays:            it.MaxDays,
-			// The form's id travels with the line beside the answers, so a reader of
-			// the order months later knows which set of questions these answers were
-			// given to — the answers alone are a map of keys nobody can interpret.
-			Price:      it.Price,
-			ConfigForm: it.ConfigForm,
-			Config:     copyAnswers(config[id]),
-			VariantID:  variants[id],
-			Integral:   carried[id],
-			Includes:   partsOf(rel, id, inOrder),
-			Approval: Approval{
-				Kind: string(it.Approval.Kind),
-				Ref:  it.Approval.Ref,
-			}}
+		// One line per shape that was asked for, and one line where no shape was:
+		// a position is a product *and* the shape of it, and a product with no
+		// variants has exactly one shape — the unnamed one.
+		shapes := append([]string(nil), variants[id]...)
+		sort.Strings(shapes)
+		if len(shapes) == 0 {
+			shapes = []string{""}
+		}
+		for _, shape := range shapes {
+			out = append(out, Line{ItemID: id, VariantID: shape, Status: status,
+				ProvisionProcess:   it.ProvisionProcess,
+				DeprovisionProcess: it.DeprovisionProcess,
+				MaxDays:            it.MaxDays,
+				// The form's id travels with the line beside the answers, so a reader of
+				// the order months later knows which set of questions these answers were
+				// given to — the answers alone are a map of keys nobody can interpret.
+				Price:      it.Price,
+				ConfigForm: it.ConfigForm,
+				Config:     copyAnswers(config[id]),
+				Integral:   carried[id],
+				Includes:   partsOf(rel, id, inOrder),
+				Approval: Approval{
+					Kind: string(it.Approval.Kind),
+					Ref:  it.Approval.Ref,
+				}})
+		}
 	}
 	return out
 }
@@ -733,7 +761,7 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 		ready := Ready(got)
 		out := make([]readyLine, 0, len(ready))
 		for _, l := range ready {
-			out = append(out, readyLine{Line: l, ApprovalProcess: l.ApprovalProcess()})
+			out = append(out, readyLine{ID: l.Key(), Line: l, ApprovalProcess: l.ApprovalProcess()})
 		}
 		httpapi.JSON(w, http.StatusOK, out)
 	}
@@ -746,6 +774,11 @@ func (s *Service) HandleNext(w http.ResponseWriter, r *http.Request) {
 // now — see [Line.ApprovalProcess]. Embedding flattens the JSON, so the
 // fulfilment model reads one object with one more field and not a nested one.
 type readyLine struct {
+	// ID is what this position is called, for a process that has to report an
+	// outcome against it. It is the item id wherever the order carries one position
+	// of the product, so a process built against itemId keeps working
+	// (ADR-draft-order-position-key).
+	ID string `json:"id"`
 	Line
 	// ApprovalProcess is empty for a line that needs no approval, which is how the
 	// model tells the two apart. It is written unconditionally, without omitempty:
@@ -836,19 +869,26 @@ func (s *Service) HandleReport(w http.ResponseWriter, r *http.Request) {
 // than by listing the ones it ignores: a status added later has to be considered
 // here on purpose, and a switch that fell through a default would quietly decide
 // for it.
-func (s *Service) recordInventory(o Order, itemID string, status LineStatus) error {
+func (s *Service) recordInventory(o Order, ref string, status LineStatus) error {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return err
+	}
+	// The right is about the product and the shape of it, so both are read off the
+	// position rather than taken from what the caller named: a caller may name a
+	// product where the order carries one position of it, and the grant still has
+	// to say which variant was handed over.
+	var line Line
+	for _, l := range o.Lines {
+		if l.Key() == key {
+			line = l
+			break
+		}
+	}
+	itemID := line.ItemID
 	switch status {
 	case StatusDone:
-		var (
-			variant string
-			maxDays int
-		)
-		for _, l := range o.Lines {
-			if l.ItemID == itemID {
-				variant, maxDays = l.VariantID, l.MaxDays
-				break
-			}
-		}
+		variant, maxDays := line.VariantID, line.MaxDays
 		// The end, computed here because this is where the release's ceiling and
 		// the moment the right began are both in hand. Zero days is a right that
 		// does not end, and stays the ordinary case.
@@ -867,14 +907,7 @@ func (s *Service) recordInventory(o Order, itemID string, status LineStatus) err
 		// return, carried on the line since then — what completed it is a
 		// deprovisioning process, and naming that as the decider would attribute a
 		// decision to a robot.
-		var by string
-		for _, l := range o.Lines {
-			if l.ItemID == itemID {
-				by = l.ReturnedBy
-				break
-			}
-		}
-		return s.revoke(o.Recipient, itemID, o.UpdatedAt, by)
+		return s.revoke(o.Recipient, itemID, o.UpdatedAt, line.ReturnedBy)
 	}
 	return nil
 }
