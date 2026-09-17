@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Decisions",
+    "Processes"
+  ],
+  "title": {
+    "en": "A decision's number arrives as a number",
+    "de": "Die Zahl einer Entscheidung kommt als Zahl an"
+  },
+  "summary": {
+    "en": "A business rule task whose decision returned an amount stored it as text. A gateway comparing that variable to a number then matched nothing, silently: no incident, no diagnostic, the token simply took the default path. The model's own type declaration now decides — a result declared a number is stored as a number, to the last decimal place — while a string that merely looks like a number, such as a policy number or a postcode beginning with zero, is left exactly as it is.",
+    "de": "Ein Business-Rule-Task, dessen Entscheidung einen Betrag lieferte, legte ihn als Text ab. Ein Gateway, das diese Variable mit einer Zahl vergleicht, traf daraufhin nichts — ohne Incident, ohne Hinweis: Das Token nahm einfach den Standardpfad. Jetzt entscheidet die Typdeklaration des Modells: Ein als Zahl deklariertes Ergebnis wird als Zahl gespeichert, auf die letzte Dezimalstelle genau. Eine Zeichenkette, die nur wie eine Zahl aussieht — eine Policennummer, eine Postleitzahl mit führender Null —, bleibt unverändert."
+  }
+}

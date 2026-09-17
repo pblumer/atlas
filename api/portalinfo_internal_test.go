@@ -25,8 +25,14 @@ import (
 // else.
 func TestEveryColumnOfTheCascadeOpensWhatItHolds(t *testing.T) {
 	src := readWeb(t, "portal.js")
+	// The two columns that hold products. The two to their left hold headings —
+	// a category and a product group are strings a product writes on itself, not
+	// things with a price or an approval rule, so there is nothing for a panel to
+	// open about them.
+	//
+	// The bundle column is gone with the level: a bundle is offered as a
+	// Marktleistung, so the products column is the offering column.
 	for _, col := range []struct{ name, from, to string }{
-		{"bundle", "const bundleCol = ", "const offeringCol = "},
 		{"offering", "const offeringCol = ", "const serviceCol = "},
 		{"service", "const serviceCol = ", "\n  // Favourites this catalogue does not carry"},
 	} {

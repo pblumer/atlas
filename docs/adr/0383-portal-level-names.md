@@ -1,8 +1,49 @@
 # ADR-0383: A position's level is read from the graph once, and a root with no parts is not a bundle
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-09-17 — the Bundle level is withdrawn)
 - **Implementation:** Landed
 - **Date:** 2026-09-17
+
+## Amendment, 2026-09-17: there is no Bundle level
+
+**The first half of this record stands and the second is withdrawn.** One function
+decides the level and every view reads it — that was the defect worth fixing and it
+stays fixed. What is withdrawn is the answer that function gave.
+
+A bundle is offered as a **Marktleistung**. It holds the orchestration process; the
+services behind it hold their own provisioning and deprovisioning, and a service may
+stand behind several Marktleistungen, included or optional, always with the same
+processes. So there is nothing for a Bundle level to name: every root is a
+Marktleistung, with or without parts, and everything behind one is a service however
+deep it sits.
+
+```
+levelOf(release, id) = depth(id) == 0 ? offering : service
+```
+
+That is the whole rule now. It reads depth and nothing else — not the kind of edge,
+not whether the product has parts, not how it was reached.
+
+**Why this is better than the rule it replaces, and not merely different.** The
+original decision here fixed a real defect by answering a question: is this root a
+bundle or an offering? The answer was correct and the question was the problem. A
+catalogue that has to decide, per product, which of two words describes it will get
+that decision wrong for every product somebody adds a part to later. Withdrawing the
+level removes the question instead of answering it, and nothing downstream needed
+the distinction: the order, the release and every provisioning call name items, not
+levels.
+
+**The cascade absorbs the vacated column.** It reads Kategorie › Produktgruppe ›
+Produkt › Services. The two upper columns are attributes a product writes on itself;
+the two lower ones are read off the containment graph. The cascade therefore stops
+calling `levelOf` at all — its columns *are* the levels, and asking it to re-derive
+what it just laid out would be the second answer this record exists to prevent. The
+basket and the list of what somebody holds still ask, because they hold a set of
+positions with no layout to read a level off.
+
+**What the alternatives section below says about a stored level still holds**, and
+applies to the product group as well: it is a string the product writes on itself,
+with the costs ADR-0360 states and accepts.
 
 ## Context
 

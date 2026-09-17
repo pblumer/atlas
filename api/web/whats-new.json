@@ -183,6 +183,24 @@
       }
     },
     {
+      "id": "the-catalogue-reads-kategorie-produktgruppe-produkt-services",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is no Bundle level.",
+        "de": "The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is no Bundle level."
+      },
+      "summary": {
+        "en": "A bundle is offered as a Marktleistung: it holds the orchestration process, and the services behind it hold their own provisioning and deprovisioning — a service may stand behind several Marktleistungen, included or optional, always with the same processes.",
+        "de": "A bundle is offered as a Marktleistung: it holds the orchestration process, and the services behind it hold their own provisioning and deprovisioning — a service may stand behind several Marktleistungen, included or optional, always with the same processes."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "approvals-moved-under-tasks-and-the-inbox-says-which-of-its-",
       "version": "Unreleased",
       "date": null,
@@ -251,24 +269,6 @@
       "summary": {
         "en": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits.",
         "de": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-accounts-and-groups-screen-shows-the-ids-it-asks-you-to-",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The accounts and groups screen shows the ids it asks you to type.",
-        "de": "The accounts and groups screen shows the ids it asks you to type."
-      },
-      "summary": {
-        "en": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler.",
-        "de": "Catalogue sharing used to ask for usr… or a group id, with a hint saying to read it from Console → Organization — a screen that showed names only, because the id lived in a markup attribute meant for a click handler."
       },
       "link": {
         "label": "Changelog",

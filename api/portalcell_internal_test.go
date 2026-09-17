@@ -70,11 +70,19 @@ func TestTheRowHasSomewhereToPutIt(t *testing.T) {
 		t.Error("the meta slot is rendered and unstyled, so it inherits the row's own " +
 			"size and reads as a second name")
 	}
-	// And three callers actually use it — the ones whose columns showed the defect.
+	// And the two rows that carry text actually use it, each named by the region it
+	// is drawn in rather than by a count: a count says nothing about *which* caller
+	// stopped, and a column that loses its text legitimately — as the first one did
+	// when it stopped holding products — would fail a count for being correct.
 	src := readWeb(t, "portal.js")
-	if n := strings.Count(src, "meta:"); n < 3 {
-		t.Errorf("%d rows pass a meta; the price, the level and the search's \"where\" "+
-			"are three, so at least one is back in the controls", n)
+	for _, view := range []struct{ name, from, to string }{
+		{"a search result, which says where it found the product", "function renderSearch(", "\n}"},
+		{"the basket's optional column, which says a price and a level", "function renderBasket(", "\n}"},
+	} {
+		if !strings.Contains(webRegion(t, src, view.from, view.to), "meta:") {
+			t.Errorf("%s puts its text somewhere other than meta, which leaves only the "+
+				"controls to put it in", view.name)
+		}
 	}
 }
 

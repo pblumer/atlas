@@ -2,6 +2,7 @@ package dmn_test
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"testing"
 
@@ -147,6 +148,11 @@ func (f fileResolver) Resolve(context.Context, string) ([]byte, error) { return 
 // decision doing its own arithmetic answers the same way.
 func numEq(got any, want float64) bool {
 	switch n := got.(type) {
+	case json.Number:
+		// What a decision's number arrives as now: the exact decimal, tagged so
+		// nothing downstream has to guess it is one (ADR-0386).
+		f, err := n.Float64()
+		return err == nil && f == want
 	case string:
 		f, err := strconv.ParseFloat(n, 64)
 		return err == nil && f == want

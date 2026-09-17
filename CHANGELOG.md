@@ -239,6 +239,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is
+  no Bundle level.** A bundle is offered as a *Marktleistung*: it holds the
+  orchestration process, and the services behind it hold their own provisioning and
+  deprovisioning — a service may stand behind several Marktleistungen, included or
+  optional, always with the same processes.
+
+  So the Bundle level had nothing to name. Every root is a Marktleistung, with or
+  without parts, and everything behind one is a service however deep it sits; the
+  level rule is now depth and nothing else. This withdraws the *answer* the previous
+  rule gave, not the rule that there is one: a catalogue that has to decide per
+  product which of two words describes it gets that wrong for every product somebody
+  adds a part to later, and nothing downstream needed the distinction — an order, a
+  release and a provisioning call name items, not levels.
+
+  The vacated column holds the **product group**, a second heading a product writes
+  on itself beside its category. It is a string with the costs ADR-0360 states and
+  accepts, and the chain is therefore a *display* chain: the group has no record and
+  no category of its own, so the relation is read off the products carrying both. A
+  group whose products sit in two categories appears under both, and a group with no
+  products does not exist — neither is an error state, because nothing claims a group
+  belongs to one category.
+
+  The cascade stops deriving a level altogether: its columns are the levels. The
+  basket and the list of what somebody holds still derive one, because they hold a
+  set of positions with no layout to read it off. ADR-0383 carries the amendment.
+
 - **Approvals moved under Tasks, and the inbox says which of its rows decide an
   order.** Approvals was advertised as an application beside Modeler and Operations,
   and it was empty for almost everybody who saw it — there is no approver role to
@@ -515,8 +541,49 @@ _Changed_ / _Removed_ for each version.
   controls, `meta` carries text about the row, and text shrinks. The price, the level
   a position will sit at and the "found under" line of a search result moved into
   `meta`, which renders under the name and wraps; the name itself keeps its longest
-  word as a floor. The same fix applies to the catalogue's first column and to the
-  search results, which carried text in the trail for the same reason.
+  word as a floor. The search results carried their "found under" line in the trail
+  for the same reason and moved with it.
+
+- **A decision whose name is not a FEEL identifier is deployable again.** Per DMN a
+  decision has two names: the label on the diagram (`name`) and the FEEL identifier its
+  result is bound to (`<variable name>`), and they need not be the same string. The DMN
+  engine Atlas pinned bound a required decision under its *label*, so a model valid per
+  the specification — `Decision A` declaring `<variable name="alpha"/>`, `Decision B`
+  reading `alpha * 10` — was refused at deploy time with `unknown variable "alpha"`: a
+  message naming the symptom and not the cause. The only way through was to name every
+  decision in a chain like a FEEL identifier, which rules out `Kunden-Risiko` and
+  `Decision A` alike. A model authored in the temis Modeler, in Camunda or by hand was
+  rejected on arrival, and trying it before deploying reproduced the same refusal, so
+  nothing distinguished an Atlas limitation from a modelling error.
+
+  The engine now binds by the identifier, as DMN says, and **Atlas accepts both names
+  everywhere a decision is addressed** — the registry's version pointers, the model a
+  business rule task resolves to, the try-a-decision membership check and the deploy
+  gate's coverage report. A task deployed under the label keeps evaluating; one naming
+  the identifier resolves too. A decision is still *published* under exactly one name,
+  its label, so a deployment record, a version count and a listing read as before.
+  Inputs get the same treatment: an input whose label differs from the identifier it
+  binds is accepted under either, so a task that recorded its input keys before the
+  distinction existed still finds them. Measured across every model on the reference
+  installation: none is affected, and the DRD that prompted this now deploys and
+  evaluates.
+
+- **A decision that returns a number wrote its result as a string.** The decision engine
+  hands a FEEL number back as its exact decimal string — deliberately, so an amount is
+  not rounded on the way out — and Atlas stored it as what it saw: text. A sequence-flow
+  condition comparing that variable to a number is then a FEEL type mismatch, which
+  evaluates to `null`, which is not `true`, so the token took the **default flow** with
+  no incident, no diagnostic and no trace entry. The process simply routed the wrong way,
+  and an instance's variables read `{"alter": 19, "praemie": "1250"}` — the two from a
+  form numbers, the one from a decision a string.
+
+  **The model's own type declarations now decide**, and nothing else: a result the model
+  declares `number` is stored as a number, exactly, without reparsing or rounding. A
+  string that merely looks like a decimal is left alone, so a policy number, an article
+  code and `"0800"` keep their leading zeros and their type. It holds for a decision
+  table's output columns, a boxed context's entries and every element of a `COLLECT`
+  list. An output the model leaves untyped stays a string — the honest answer, since
+  guessing would trade a visible wrong type for an invisible wrong value.
 
 - **The icons at the end of a catalogue row broke onto a second line.** Each of them
   already refused to shrink, but they sat in a plain `<span>` carrying no rule at

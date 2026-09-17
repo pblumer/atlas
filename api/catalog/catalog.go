@@ -304,6 +304,22 @@ type Item struct {
 	// If any of those turns out to matter, the answer is the entity, and this field
 	// is what it would be migrated from.
 	Category string `json:"category,omitempty"`
+	// ProductGroup is the group this product sits in, one level below its category:
+	// the portal's cascade reads Kategorie > Produktgruppe > Produkt > Services.
+	//
+	// A string on the product, exactly like [Item.Category] above, and for the same
+	// reasons — see the paragraph there, which applies word for word. What is worth
+	// adding is what the pairing means, because "a chain" sounds like more than this
+	// is: the group has no record and therefore **no category of its own**. The
+	// product carries both strings and the chain is assembled per product — this
+	// product is in category X, group Y — so the group→category relation is only
+	// ever read off the products that carry both.
+	//
+	// Two consequences, and neither is an error state. A group whose products sit
+	// in two categories appears under both, because nothing anywhere claims a group
+	// belongs to one. And a group with no products does not exist, exactly as a
+	// category with none does not.
+	ProductGroup string `json:"productGroup,omitempty"`
 	// Revision is optimistic concurrency, the same field and the same rule the
 	// capability map uses: a write that states a revision is refused when the
 	// stored record has moved past it, rather than silently overwriting somebody

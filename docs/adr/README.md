@@ -470,6 +470,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0382](0382-whole-store-reads-leave-the-writer.md) | Whole-store reads leave the writer, and the store is sized for what it holds | Accepted | Landed |
 | [0383](0383-portal-level-names.md) | A position's level is read from the graph once, and a root with no parts is not a bundle | Accepted | Landed |
 | [0384](0384-order-position-key.md) | A position is a product and the shape of it, and it says so in its own key | Accepted | Landed |
+| [0385](0385-a-decision-is-addressed-by-both-of-its-names.md) | A decision is addressed by both of its names | Accepted | Landed |
+| [0386](0386-a-decision-result-keeps-its-declared-type.md) | A decision result keeps the type the model declares for it | Accepted | Landed |
+| [0387](0387-the-catalogue-against-the-standards-boundary.md) | The catalogue keeps its own model, and answers to TMF620 at the boundary | Proposed | Not started |
 
 ## The two states of a record
 

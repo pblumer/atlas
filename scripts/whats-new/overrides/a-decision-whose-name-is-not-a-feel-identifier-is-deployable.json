@@ -1,0 +1,21 @@
+{
+  "tags": [
+    "Decisions",
+    "Modeler"
+  ],
+  "title": {
+    "en": "A decision may be called what it is called again",
+    "de": "Eine Entscheidung darf wieder heissen, wie sie heisst"
+  },
+  "summary": {
+    "en": "A DMN decision has two names: the label you read on the diagram, and the identifier other expressions reference. They are allowed to differ, and in models written elsewhere they often do. Atlas refused such a model on deploy with \"unknown variable\", which named the symptom and not the cause — so a decision in a chain had to be named like an identifier, and Kunden-Risiko or Decision A were out. Now both names work, everywhere a decision is addressed, and a decision already deployed keeps running under the name it was deployed with.",
+    "de": "Eine DMN-Entscheidung hat zwei Namen: die Beschriftung im Diagramm und den Bezeichner, über den andere Ausdrücke sie ansprechen. Sie dürfen sich unterscheiden, und in anderswo erstellten Modellen tun sie es häufig. Atlas wies ein solches Modell beim Deploy mit \"unknown variable\" zurück — eine Meldung, die das Symptom nennt und nicht die Ursache. Eine Entscheidung in einer Kette musste deshalb wie ein Bezeichner heissen; Kunden-Risiko oder Decision A waren ausgeschlossen. Jetzt greifen beide Namen, überall wo eine Entscheidung angesprochen wird, und eine bereits deployte Entscheidung läuft unter dem Namen weiter, mit dem sie deployt wurde."
+  },
+  "try": {
+    "label": {
+      "en": "Open the decisions",
+      "de": "Entscheidungen öffnen"
+    },
+    "route": "#/console/decisions"
+  }
+}
