@@ -29,7 +29,7 @@ func compileCondition(id, raw string) (*expr.Compiled, error) {
 	if cond == "" {
 		return nil, fmt.Errorf("compiler: conditional event %q has no condition", id)
 	}
-	ce, err := expr.CompileAuto(cond)
+	ce, err := compileFEEL(cond)
 	if err != nil {
 		return nil, fmt.Errorf("compiler: conditional event %q condition: %w", id, err)
 	}
@@ -311,7 +311,7 @@ func registerScope(
 		// FEEL is compiled once, at deploy time (ADR-0008/0015). CompileAuto
 		// discovers the process variables the expression reads; a syntax or type
 		// error fails here — i.e. fails deploy.
-		e, err := expr.CompileAuto(text)
+		e, err := compileFEEL(text)
 		if err != nil {
 			return fmt.Errorf("compiler: script task %q: %w", st.Id, err)
 		}
@@ -664,7 +664,7 @@ func registerScope(
 				d.ResultCollection = b.intern(rc)
 			}
 			if re := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ag.ResultElement), "=")); re != "" {
-				ce, err := expr.CompileAuto(re)
+				ce, err := compileFEEL(re)
 				if err != nil {
 					return fmt.Errorf("compiler: agent-driven ad-hoc subprocess %q resultElement: %w", ah.Id, err)
 				}
@@ -672,7 +672,7 @@ func registerScope(
 			}
 		}
 		if cond := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ah.CompletionCondition), "=")); cond != "" {
-			ce, err := expr.CompileAuto(cond)
+			ce, err := compileFEEL(cond)
 			if err != nil {
 				return fmt.Errorf("compiler: ad-hoc subprocess %q completion condition: %w", ah.Id, err)
 			}
@@ -986,7 +986,7 @@ func connectScope(b *Builder, ids map[string]int32, c *xmlFlowContent) error {
 		flowIdx[f.Id] = fid
 		if cond := strings.TrimSpace(f.Condition); cond != "" {
 			cond = strings.TrimSpace(strings.TrimPrefix(cond, "=")) // FEEL condition, '=' prefix per Zeebe
-			ce, err := expr.CompileAuto(cond)
+			ce, err := compileFEEL(cond)
 			if err != nil {
 				return fmt.Errorf("compiler: flow %q condition: %w", f.Id, err)
 			}

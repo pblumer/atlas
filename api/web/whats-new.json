@@ -83,6 +83,34 @@
       }
     },
     {
+      "id": "a-model-fix-now-reaches-an-instance-even-when-its-tokens-can",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "An instance can continue in a new instance when it cannot be moved as it is",
+        "de": "Eine Instanz kann in einer neuen Instanz weiterlaufen, wenn sie sich nicht verschieben lässt"
+      },
+      "summary": {
+        "en": "Moving a running instance onto a corrected version keeps everything it has done — but only where each of its tokens still sits on an element the new version has, of the same kind and in the same place. Where it does not, the move is refused, and until now that was the end of the road: cancel the instance and start again by hand. Now you can continue it in a new instance instead. The old one ends where it is, a new instance of the corrected version picks the work up at the elements you tick — proposed for you wherever the element ids survived the edit — and the variables and data objects come with it. Both instances link to each other, so the old replay says where the work went and the new one says where it came from. Open jobs, tasks and incidents end with the old instance, and the dialog says exactly what that costs before you confirm.",
+        "de": "Eine laufende Instanz auf eine korrigierte Version zu verschieben, erhält alles bereits Geleistete — aber nur, solange jedes Token auf einem Element sitzt, das die neue Version ebenfalls hat, in derselben Art und an derselben Stelle. Sonst wird der Wechsel abgelehnt, und damit war der Weg bisher zu Ende: Instanz abbrechen und von Hand neu starten. Neu lässt sie sich stattdessen in einer neuen Instanz fortführen. Die alte endet an Ort und Stelle, eine neue Instanz der korrigierten Version nimmt die Arbeit an den Elementen auf, die man auswählt — vorgeschlagen überall dort, wo die Element-IDs die Änderung überlebt haben —, und Variablen wie Datenobjekte wandern mit. Beide Instanzen sind gegenseitig verlinkt: Der alte Verlauf zeigt, wohin die Arbeit ging, der neue, woher sie kam. Offene Jobs, Aufgaben und Incidents enden mit der alten Instanz; der Dialog benennt vor der Bestätigung genau, was das kostet."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Operations"
+      ],
+      "try": {
+        "label": {
+          "en": "Open Operations",
+          "de": "Operations öffnen"
+        },
+        "route": "#/operations"
+      }
+    },
+    {
       "id": "every-position-carries-its-own-way-into-the-process-working-",
       "version": "Unreleased",
       "date": null,
@@ -275,27 +303,6 @@
         "label": "Changelog",
         "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
-    },
-    {
-      "id": "the-state-store-is-configured-for-the-size-it-has-grown-to-n",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The state store is set up for the size it has actually reached",
-        "de": "Der Datenspeicher ist auf die Grösse eingestellt, die er tatsächlich erreicht hat"
-      },
-      "summary": {
-        "en": "Atlas kept its state in a store running on its library's out-of-the-box settings: an 8 MB read cache and a single housekeeping thread. Those fit a store of a few thousand entries. On one holding millions they send every lookup to disk and let the housekeeping fall behind until writes are held back — which is felt as the server pausing. The server now sizes its own store for the job and you can adjust it: --state-cache-mb (64 by default) and --state-memtable-mb (16). Worth knowing before you upgrade: that is roughly 96 MB of memory the server did not use before, and both accept 0 to go back to the old behaviour.",
-        "de": "Atlas hielt seinen Zustand in einem Speicher, der auf den Voreinstellungen seiner Bibliothek lief: 8 MB Lesepuffer und ein einziger Aufräum-Thread. Das passt zu einem Speicher mit ein paar tausend Einträgen. Bei Millionen führt es dazu, dass jeder Zugriff auf die Platte geht und das Aufräumen so weit zurückfällt, bis Schreibvorgänge gebremst werden — spürbar als Aussetzer des Servers. Der Server stellt seinen Speicher nun passend ein, und Sie können nachjustieren: --state-cache-mb (Vorgabe 64) und --state-memtable-mb (16). Vor dem Upgrade zu wissen: Das sind rund 96 MB Arbeitsspeicher, die der Server vorher nicht belegte; mit 0 kehren beide zum alten Verhalten zurück."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
     }
   ]
 }

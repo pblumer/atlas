@@ -62,6 +62,36 @@ _Changed_ / _Removed_ for each version.
   has no step to report. The step is the name the model gives the element, read from
   the deployed document, falling back to its BPMN id where it is unnamed.
 
+- **A model fix now reaches an instance even when its tokens cannot be carried across.**
+  Migrating a running instance onto a corrected version rebinds it in place and keeps
+  everything it has done — but only where every token's element still exists in the new
+  version, as the same kind of element, in the same scope. That refusal is deliberate: a
+  token left on an element that means something else corrupts an instance in a way no
+  later fix repairs. Until now it was also the end of the road, and the operator was back
+  to cancelling the instance and re-entering its data by hand — in precisely the case
+  where the fix matters most, because a model that was genuinely restructured is the one
+  whose elements moved.
+
+  An instance can now be **continued in a new instance** of the target version instead.
+  The instance is ended where it is, a successor of the new version starts at the elements
+  you name — proposed from where its tokens are now, whenever the ids survived the edit —
+  and its variables and data objects come across with it. Both records name the other, so
+  the old replay says "continued as …" and the new one says "continues …", and each is one
+  click from the other. Nothing already done is undone, and the old instance stays
+  readable exactly as it ran.
+
+  It is a different operation from a migration, not a fallback the server takes on its
+  own: work in flight — open jobs, user tasks, incidents, armed timers and subscriptions —
+  ends with the instance it belonged to, and the dialog says so, with the counts, before
+  anything is written. The migration dialog plans both readings of "move this instance to
+  that version" in one call and shows the fork below the rebinding, dimmed while the
+  rebinding is still on the table. A reason is required and recorded on both instances.
+  Refused before anything is written when there is nowhere to resume, when a resume point
+  could not run on its own (a boundary event, an event subprocess, a joining gateway, an
+  element inside a subprocess), and for a call activity's child, whose caller waits on the
+  instance being ended. New: `POST /api/v1/instances/{key}/migrate/fork` and the
+  `atlas_fork_instance` MCP tool; `…/migrate/plan` now answers both.
+
 - **Every position carries its own way into the process working on it.** "Meine Aufträge"
   already listed each position and what it was doing, out of the order's own
   record, and that stays the answer for every reader. A reader who may open an
@@ -603,6 +633,46 @@ _Changed_ / _Removed_ for each version.
   word as a floor. The search results carried their "found under" line in the trail
   for the same reason and moved with it.
 
+- **An expression calling a function that does not exist no longer deploys clean and answers
+  null.** The FEEL engine compiles a call to a name it does not know into a constant null,
+  deliberately: DMN requires a decision to stay executable, and Atlas evaluates decisions
+  through that same engine. For a BPMN model it produced a defect with no visible surface
+  anywhere. `= is defined(kunde.geburtsdatum)` deployed without a word, evaluated to null —
+  without even reading `kunde`, so the null carried no trace of where it came from — and a
+  gateway condition on that null took its default flow. Three steps, nothing said, and a
+  customer set INACTIV who should have been ACTIVE.
+
+  `is defined` is a Camunda extension and one of the first things somebody arriving from
+  there writes, but the dialect is not what made it a defect: a misspelling produced the
+  identical silence, and more often. Nor was the silence consistent — `get or else` and
+  `last day of month` *did* fail, because `else` and `of` are FEEL keywords, so whether you
+  were told depended on whether the missing name happened to collide with one.
+
+  A BPMN deploy now refuses a call it can only ever answer with null, and says how to write
+  it instead: *`is defined` is not a FEEL function — write `x != null`*, *`put` is another
+  engine's name for `context put`, which this build has*. The same refusal covers a built-in
+  called with an argument count its signature cannot take, which is the other half of the
+  same silence — `date()` with no argument binds to null exactly as an unknown name does.
+
+  The engine is untouched: a DMN decision evaluated through it still answers null, as the
+  specification requires and the conformance suite pins. The refusal belongs to the deploy,
+  which is the one moment where the model is not running and its author is looking at it.
+
+  It errs quiet. A callee that could hold a function — a parameter, an iterator, a context
+  key, a declared variable — is left alone, because a false refusal blocks a model that works
+  while a missed one only leaves the old behaviour in place.
+
+- **The handbook's "compute a value" recipe taught an expression that always answered null.**
+  `= round(gross / 1.19, 2)` — except FEEL has no `round`. It has `decimal`, `round up`,
+  `round down`, `round half up` and `round half down`, and a call to a name none of them
+  matches evaluates to null. The recipe deployed, its ▶ button worked, and `net` came out
+  empty for every reader who pressed it. Now `decimal(gross / 1.19, 2)`, which is what the
+  recipe meant.
+
+  It was found by the refusal above rather than by a reader, on the first run of the test
+  suite after that check existed — which is the argument for the check, made by the
+  repository's own documentation.
+
 - **A decision whose name is not a FEEL identifier is deployable again.** Per DMN a
   decision has two names: the label on the diagram (`name`) and the FEEL identifier its
   result is bound to (`<variable name>`), and they need not be the same string. The DMN
@@ -816,6 +886,7 @@ _Changed_ / _Removed_ for each version.
   spreadsheet, the sheet, the range, the title, the rows to write — and an operation added
   to that table cannot be forgotten in it. The job's fate is unchanged (pending, retried,
   then an incident); what changed is that the incident names the fix.
+
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two

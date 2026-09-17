@@ -596,6 +596,20 @@ textarea::placeholder {
 .mig-moved { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
 .mig-err { color: var(--warn); }
 
+/* The fork alternative (ADR-0389). It sits below the in-place
+   plan and reads as the second answer to the same question, not as a second dialog: the
+   rebinding is what an operator wants whenever it holds, and a fork ends the instance it
+   continues. Dimmed while the rebinding is still on the table, for exactly that reason. */
+.mig-fork {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  border: 1px dashed var(--border); background: var(--surface-2, var(--surface));
+}
+.mig-fork.alt { opacity: 0.72; }
+.mig-fork h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+.mig-resume { margin: 6px 0 0; max-height: 132px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.mig-resume-opt { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.mig-resume-opt input { margin: 0; }
+
 /* The migration boundary on the replay history (ADR-0162): the steps above it and below
    it ran on different versions of the process, so it is drawn as a rule across the list
    rather than as another element row — a reader scanning the column should not be able
@@ -605,6 +619,10 @@ textarea::placeholder {
   background: var(--accent-soft);
 }
 .ops-hrow.mig .ops-hname { font-style: italic; }
+/* A fork row is the same kind of rule as a migration — the story does not continue below
+   it — but it is a different fact: the work left for another instance rather than
+   carrying on here under a new version (ADR-0389). */
+.ops-hrow.mig.fork { border-top-style: dashed; border-bottom-style: dashed; }
 .ops-hicon.mig { color: var(--accent); }
 .ops-mig {
   margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;

@@ -366,8 +366,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
 			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances", role: RoleAdmin,
-			req: jsonBody("Target version and optional element-id overrides", schemaObj(map[string]any{
-				"targetProcessDefKey": tInteger(), "mapping": tArray(),
+			req: jsonBody("Target version, optional element-id overrides, and optional fork resume points", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "mapping": tArray(), "resume": tArray(),
 			}, "targetProcessDefKey")),
 			resp: jsonBody("Migration plan", tObject())}},
 		{"POST", "/api/v1/instances/{key}/migrate", s.handleMigrateInstance, apiOp{
@@ -376,6 +376,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"targetProcessDefKey": tInteger(), "reason": tString(), "mapping": tArray(),
 			}, "targetProcessDefKey", "reason")),
 			resp: jsonBody("Migration result", tObject())}},
+		{"POST", "/api/v1/instances/{key}/migrate/fork", s.handleForkInstance, apiOp{
+			summary: "Continue a running instance in a NEW instance of another version: the instance is ended where it is, the successor starts at the resume elements named (or proposed from where its tokens are), carrying its variables and data objects, and each record names the other. In-flight jobs and tasks end with the predecessor. Refused with 409 and the same plan when it does not hold; a reason is required (admin-only when auth is on, ADR-0389)", tag: "Instances", role: RoleAdmin,
+			req: jsonBody("Target version, reason, and the element ids to resume at", schemaObj(map[string]any{
+				"targetProcessDefKey": tInteger(), "reason": tString(), "resume": tArray(),
+			}, "targetProcessDefKey", "reason")),
+			resp: jsonBody("Fork result", tObject())}},
 		{"POST", "/api/v1/processes/{key}/migrate-instances", s.handleMigrateInstancesOfProcess, apiOp{
 			summary: "Migrate a bounded batch of a definition's running instances to another version (?limit=, default 500, max 5000); each instance is its own event, so a refusal does not roll back the rest — repeat while the response reports remaining=true (ADR-0162)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, reason, and optional element-id overrides", schemaObj(map[string]any{
