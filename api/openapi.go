@@ -1055,9 +1055,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		// was pending. Reading is confined to your own orders by the handler, not by
 		// the role: an order somebody else placed is not yours to see.
 		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
-			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
+			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of. A product that comes in more than one shape must be given one in variants, keyed by item id — including where it arrived as an integral part and was never named in items", tag: "Order", role: RoleUser,
 			req: jsonBody("Order", schemaObj(map[string]any{
 				"releaseId": tString(), "items": tArray(), "recipient": tString(),
+				"variants": tObject(),
 			}, "releaseId", "items")),
 			resp: jsonBody("The placed order", tObject())}},
 		{"GET", "/api/v1/orders", s.orders.HandleList, apiOp{

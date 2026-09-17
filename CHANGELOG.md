@@ -364,6 +364,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The portal showed what a product comes with and not what it is offered with.**
+  A release carries two kinds of containment: a composition arrives with the whole and
+  cannot be dropped, an aggregation is an offer standing beside it. The cascade drew
+  both. The info panel named neither, and the basket pulled in compositions and
+  stopped — so the offers hanging under a bundle were reachable only from the column
+  the bundle happens to open, and only until the reader navigated away.
+
+  The panel now lists both groups, kept apart, and the basket carries an Optional
+  column holding every offer the chosen products make: unticked, each with its price
+  and its "i", and ticked through the same control the cascade uses. Nothing about the
+  stored release or the order contract moves — a ticked option is an ordinary id in
+  the basket, so the placed order carries the bundle, its integral parts and the
+  options actually chosen, each as its own line with its own provisioning process.
+
 - **A catalogue could only be published while every other catalogue was empty.**
   Publishing validates one catalogue, and it is handed every catalogue — because a
   rank has to be unique across the set, and a tie can only be seen against somebody
