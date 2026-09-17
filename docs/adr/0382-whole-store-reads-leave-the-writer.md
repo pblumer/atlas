@@ -1,4 +1,4 @@
-# ADR-DRAFT: Whole-store reads leave the writer, and the store is sized for what it holds
+# ADR-0382: Whole-store reads leave the writer, and the store is sized for what it holds
 
 - **Status:** Accepted
 - **Implementation:** Landed

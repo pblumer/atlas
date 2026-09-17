@@ -251,7 +251,7 @@ func TestStatsAndIncidentsDuringShutdown(t *testing.T) {
 // it is ordered before the view, so it is visible in it.
 //
 // The write has to maintain the per-definition counter beside the record, because that
-// is what the count is read from now (ADR-draft-whole-store-reads-leave-the-writer) and
+// is what the count is read from now (ADR-0382) and
 // because it is what writing an instance *means*: applyToState puts the two in one
 // firstErr, so no event can produce one without the other. A raw PutProcessInstance on
 // its own would set up a state the engine cannot reach, and assert against it.

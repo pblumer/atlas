@@ -9,7 +9,7 @@ import (
 )
 
 // BenchmarkChecksumDirBySize is the evidence behind splitting Publish into Stage and
-// Commit (ADR-draft-whole-store-reads-leave-the-writer).
+// Commit (ADR-0382).
 //
 // ChecksumDir reads every file in the checkpoint, which is every SST file in the state
 // store, so its cost is the store's size and nothing else. That is the number that

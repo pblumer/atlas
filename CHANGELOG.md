@@ -396,7 +396,7 @@ _Changed_ / _Removed_ for each version.
   `TestCompactionVerificationRunsWithTheRunLoopFree` ask the loop whether it is free at
   the moment each read begins — and two benchmarks keep the numbers above honest
   (`BenchmarkChecksumDirBySize`, `BenchmarkStatsAtProductionSize`).
-  See `docs/adr/draft-whole-store-reads-leave-the-writer.md`.
+  See `docs/adr/0382-whole-store-reads-leave-the-writer.md`.
 
 - **A Google Sheets task whose spreadsheet resolved to nothing now says so, instead of
   asking Google about no spreadsheet at all.** A model addresses a spreadsheet by a value

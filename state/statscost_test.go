@@ -8,7 +8,7 @@ import (
 )
 
 // BenchmarkStatsAtProductionSize is the evidence behind readStats reading the
-// maintained counters (ADR-draft-whole-store-reads-leave-the-writer) rather than
+// maintained counters (ADR-0382) rather than
 // walking the runtime families for the same answer.
 //
 // Two populations, one shape: the second is the size a real server reached — ~50.000

@@ -467,6 +467,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0379](0379-dmn-version-follows-the-document.md) | A DMN document's own namespace decides which DMN version reads and writes it | Accepted | Landed |
 | [0380](0380-a-commitment-is-checked-against-what-the-process-does.md) | A commitment is checked against what the process actually does | Proposed | Not started |
 | [0381](0381-a-problem-aggregates-incidents.md) | A problem is an aggregation over incidents, not a BPMN element | Proposed | Not started |
+| [0382](0382-whole-store-reads-leave-the-writer.md) | Whole-store reads leave the writer, and the store is sized for what it holds | Accepted | Landed |
 
 ## The two states of a record
 
