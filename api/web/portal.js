@@ -120,7 +120,8 @@ const STRINGS = {
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
     'variant.label': 'Ausführung',
-    'variant.none': 'Bitte wählen',
+    'variant.many': 'Mehrere Ausführungen möglich — jede angekreuzte ist eine eigene Position.',
+    'variant.one': 'Genau eine Ausführung wählen.',
     'variant.missing': 'Bitte wählen Sie zuerst für jede Position eine Ausführung.',
     'info.title': 'Angaben zum Service',
     'info.id': 'Kennung',
@@ -245,7 +246,8 @@ const STRINGS = {
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
     'variant.label': 'Version',
-    'variant.none': 'Please choose',
+    'variant.many': 'More than one version may be taken — each tick is its own position.',
+    'variant.one': 'Choose exactly one version.',
     'variant.missing': 'Choose a version for every line before ordering.',
     'info.title': 'About this service',
     'info.id': 'Identifier',
@@ -396,14 +398,16 @@ const state = {
   // card's button was pressed, so two bundles were two orders, two approvals and
   // two provisioning runs for one decision somebody made once.
   basket: new Set(),
-  // variants is which shape of each product was chosen, as itemId -> variantId.
+  // variants is which shapes of each product were chosen, as itemId -> [variantId].
   //
   // Kept beside the basket rather than on the basket entry, because the product
   // that carries variants is usually not the one that was clicked: somebody orders
   // a bundle and the colour belongs to the phone inside it. Nothing is answered in
   // advance — variants are unordered on purpose, so there is no first one to fall
   // back on, and a pre-selected colour would be shipped to everybody who did not
-  // look.
+  // look. A list rather than a single answer, because the catalogue's own rule is
+  // that the same product in two shapes is something the orderer may keep both of,
+  // where the product says it may be held more than once.
   variants: {},
   // inBasket is whether the basket screen is showing instead of the cascade. Not
   // a fourth nav entry: the mockups make it the next step of the same screen,
@@ -779,7 +783,8 @@ async function order() {
     // something the order does not carry — correctly, and for nothing.
     const variants = {};
     for (const c of chosen) {
-      if (state.variants[c.id]) variants[c.id] = state.variants[c.id];
+      const taken = state.variants[c.id] || [];
+      if (taken.length) variants[c.id] = [...taken];
     }
 
     await api('/api/v1/orders', {
@@ -1242,6 +1247,28 @@ function repaintCatalogueBody() {
   paint(catalogueBodyNode, catalogueBody());
 }
 
+// pickShape takes or gives back one shape of one product.
+//
+// Where the catalogue says the product may be held more than once, a second tick
+// is a second position rather than a change of mind — which is the case an answer
+// per product could not hold. Where it may not, the tick moves: two positions of
+// something nobody may hold twice is an order that cannot be satisfied, and the
+// server refuses it, so offering it here would be offering a mistake.
+function pickShape(id, variant, multiple) {
+  const chosen = state.variants[id] || [];
+  const at = chosen.indexOf(variant);
+  if (at >= 0) {
+    chosen.splice(at, 1);
+  } else if (multiple) {
+    chosen.push(variant);
+  } else {
+    chosen.length = 0;
+    chosen.push(variant);
+  }
+  state.variants[id] = chosen;
+  render();
+}
+
 // variantsMissing lists the basket's lines that still have no shape chosen.
 //
 // It walks the same expansion the basket draws, because the product carrying the
@@ -1260,7 +1287,9 @@ function variantsMissing() {
   const walk = (id) => {
     if (seen.has(id)) return;
     seen.add(id);
-    if (((by[id] || {}).variants || []).length && !state.variants[id]) out.push(id);
+    if (((by[id] || {}).variants || []).length && !(state.variants[id] || []).length) {
+      out.push(id);
+    }
     for (const p of (rel.includes || {})[id] || []) walk(p);
   };
   for (const id of state.basket) walk(id);
@@ -1370,20 +1399,27 @@ function renderBasket() {
   return el('div', {},
     cols,
     choosing.length
-      ? el('div', { style: 'margin-top:18px' }, choosing.map((x) => el('div', { class: 'card cfg' },
-        el('h3', {}, `${t('variant.label')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
-        el('select', {
-          'aria-label': `${t('variant.label')}: ${textOf((by[x.id] || {}).texts, x.id)}`,
-          onchange: (e) => { state.variants[x.id] = e.target.value; render(); },
-        },
-        el('option', {
-          value: '',
-          ...(state.variants[x.id] ? {} : { selected: 'selected' }),
-        }, t('variant.none')),
-        ((by[x.id] || {}).variants || []).map((v) => el('option', {
-          value: v.id,
-          ...(state.variants[x.id] === v.id ? { selected: 'selected' } : {}),
-        }, textOf(v.texts, v.id)))))))
+      ? el('div', { style: 'margin-top:18px' }, choosing.map((x) => {
+        const item = by[x.id] || {};
+        const taken = state.variants[x.id] || [];
+        // How many may be ticked is the catalogue's statement and not this
+        // screen's: multipleAllowed already says whether somebody may hold the
+        // product more than once, and a second rule here would be a second answer
+        // to one question.
+        const multiple = !!item.multipleAllowed;
+        return el('div', { class: 'card cfg' },
+          el('h3', {}, `${t('variant.label')}: ${textOf(item.texts, x.id)}`),
+          el('p', { class: 'note' }, t(multiple ? 'variant.many' : 'variant.one')),
+          el('div', {}, (item.variants || []).map((v) => el('label',
+            { style: 'display:inline-block;margin-right:14px' },
+            el('input', {
+              type: multiple ? 'checkbox' : 'radio',
+              name: `variant-${x.id}`,
+              ...(taken.includes(v.id) ? { checked: 'checked' } : {}),
+              onchange: () => pickShape(x.id, v.id, multiple),
+            }),
+            ' ', textOf(v.texts, v.id)))));
+      }))
       : null,
     asking.length
       ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },

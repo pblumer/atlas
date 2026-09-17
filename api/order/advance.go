@@ -24,9 +24,21 @@ import (
 // A line already running or finished is not offered again, which is what lets an
 // orchestrator ask after every single result rather than tracking rounds itself.
 func Next(o Order) []string {
-	status := make(map[string]LineStatus, len(o.Lines))
+	// Preconditions name *products*, because that is what the release knows: an
+	// edge runs between two catalogue items and has nothing to say about how many
+	// positions of one were ordered. So a product is satisfied when every position
+	// of it is. A map holding one status per product would keep whichever line came
+	// last and let a dependant start while the other phone was still pending.
+	satisfied := make(map[string]bool, len(o.Lines))
+	carried := make(map[string]bool, len(o.Lines))
 	for _, l := range o.Lines {
-		status[l.ItemID] = l.Status
+		if !carried[l.ItemID] {
+			carried[l.ItemID] = true
+			satisfied[l.ItemID] = true
+		}
+		if !l.Status.Satisfied() {
+			satisfied[l.ItemID] = false
+		}
 	}
 
 	var ready []string
@@ -38,13 +50,13 @@ func Next(o Order) []string {
 		for _, need := range o.Requires[l.ItemID] {
 			// A precondition this order does not carry is not waited for: whether
 			// the recipient already holds it is the provisioning process's question.
-			if s, carried := status[need]; carried && !s.Satisfied() {
+			if carried[need] && !satisfied[need] {
 				blocked = true
 				break
 			}
 		}
 		if !blocked {
-			ready = append(ready, l.ItemID)
+			ready = append(ready, l.Key())
 		}
 	}
 	sort.Strings(ready)
@@ -59,7 +71,7 @@ func Next(o Order) []string {
 // [Reject] and [Abandon]; blocked is derived and never set directly. Accepting
 // them here would be a second way to reach a status whose whole point is that it
 // has exactly one.
-func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
+func Apply(o Order, ref string, status LineStatus, at int64) (Order, error) {
 	switch status {
 	case StatusDone, StatusSkipped, StatusFailed, StatusRunning, StatusReturned, StatusReturnFailed:
 	default:
@@ -71,11 +83,15 @@ func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
 		return o, fmt.Errorf("order: recording a line's outcome needs the moment it happened")
 	}
 
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return o, err
+	}
 	found := false
 	lines := make([]Line, len(o.Lines))
 	copy(lines, o.Lines)
 	for i := range lines {
-		if lines[i].ItemID != itemID {
+		if lines[i].Key() != key {
 			continue
 		}
 		// A return is reported only by the revocation that was asked for. Without
@@ -83,14 +99,14 @@ func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
 		// somebody holds and record it as given back, with nothing having run.
 		if (status == StatusReturned || status == StatusReturnFailed) && lines[i].Status != StatusReturning {
 			return o, fmt.Errorf("order: line %s is %s, so nothing is giving it back",
-				itemID, lines[i].Status)
+				key, lines[i].Status)
 		}
 		lines[i].Status = status
 		found = true
 		break
 	}
 	if !found {
-		return o, fmt.Errorf("order %s carries no line for %s", o.ID, itemID)
+		return o, fmt.Errorf("order %s carries no line for %s", o.ID, key)
 	}
 
 	o.Lines = Propagate(lines, o.Requires)
@@ -107,14 +123,14 @@ func Apply(o Order, itemID string, status LineStatus, at int64) (Order, error) {
 // screen wants; Ready is the same answer with the detail a machine needs to do
 // something about it.
 func Ready(o Order) []Line {
-	ids := Next(o)
-	byID := make(map[string]Line, len(o.Lines))
+	keys := Next(o)
+	byKey := make(map[string]Line, len(o.Lines))
 	for _, l := range o.Lines {
-		byID[l.ItemID] = l
+		byKey[l.Key()] = l
 	}
-	out := make([]Line, 0, len(ids))
-	for _, id := range ids {
-		out = append(out, byID[id])
+	out := make([]Line, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, byKey[key])
 	}
 	return out
 }

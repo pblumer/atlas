@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **One product may be ordered in two shapes at once.** The catalogue describes the
+  same service pulled in twice in different variants as a conflict the orderer
+  resolves, and keeping both is a resolution — a black phone and a silver one. It
+  was not expressible: a line was identified by its product, so two of them
+  collapsed in every map the order builds and an outcome reported for one landed on
+  whichever came first.
+
+  A position is now identified by its product **and** the shape of it —
+  `itemId#variantId`, and plainly `itemId` where there is no variant, so no order is
+  migrated, no record gains a field, and a process built against `/lines/{itemId}`
+  keeps working. Where an order carries two positions of one product, naming the
+  product is **refused** with both position names rather than applied to one of
+  them. `POST /api/v1/orders` takes one entry per position in `variants`; a second
+  entry is refused unless the catalogue says the product may be held more than once,
+  and two entries of the same shape are refused outright, because two identical
+  positions cannot be told apart and this catalogue has no quantities. The fulfilment
+  process passes `positionId` beside `itemId`, and `/next` names each position
+  (ADR-draft-order-position-key).
+
+  **One limit, named rather than left to be found:** the inventory still records one
+  hold per person and product, so somebody who orders two shapes is provisioned
+  twice, correctly, and recorded as holding one. That is how a repeated order has
+  always been recorded; making the entitlement identity carry the variant is an
+  engine change with its own replay consequences.
+
 - **A standing list of the approval rules that reach nobody.** An approval rule names
   an approver, and what that name has to be differs by kind: a named person becomes a
   task's assignee, matched against a username, and a group becomes its candidate
@@ -397,8 +422,8 @@ _Changed_ / _Removed_ for each version.
   refuses an order that leaves one open, names a shape the product does not come in,
   or names one for a product that comes in a single shape — a rule the page keeps and
   the server does not is not a rule. `POST /api/v1/orders` takes a new optional
-  **`variants`** object, keyed by item id; a body without it is unchanged for every
-  product that has no variants.
+  **`variants`** object, keyed by item id and holding one shape per position; a body
+  without it is unchanged for every product that has no variants.
 
 - **The portal showed what a product comes with and not what it is offered with.**
   A release carries two kinds of containment: a composition arrives with the whole and

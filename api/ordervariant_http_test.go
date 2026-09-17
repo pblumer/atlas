@@ -110,7 +110,7 @@ func TestTheOrderRecordsTheVariantThatWasChosen(t *testing.T) {
 	rel := aVariantCatalogue(t, ts, admin)
 
 	code, body := cReq(t, admin, ts, "POST", "/api/v1/orders",
-		`{"releaseId":"`+rel+`","items":["paket"],"variants":{"phone":"burgundy"}}`)
+		`{"releaseId":"`+rel+`","items":["paket"],"variants":{"phone":["burgundy"]}}`)
 	if code != http.StatusCreated {
 		t.Fatalf("place the order = %d (%s), want 201", code, body)
 	}
@@ -165,9 +165,9 @@ func TestAVariantTheProductDoesNotOfferIsRefused(t *testing.T) {
 
 	for _, bad := range []struct{ name, body string }{
 		{"a variant the product does not have",
-			`{"releaseId":"` + rel + `","items":["paket"],"variants":{"phone":"pink"}}`},
+			`{"releaseId":"` + rel + `","items":["paket"],"variants":{"phone":["pink"]}}`},
 		{"a variant for a product that has none",
-			`{"releaseId":"` + rel + `","items":["paket"],"variants":{"phone":"black","huelle":"black"}}`},
+			`{"releaseId":"` + rel + `","items":["paket"],"variants":{"phone":["black"],"huelle":["black"]}}`},
 	} {
 		code, body := cReq(t, admin, ts, "POST", "/api/v1/orders", bad.body)
 		if code != http.StatusBadRequest {
