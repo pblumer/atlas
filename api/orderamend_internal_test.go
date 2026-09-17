@@ -126,7 +126,11 @@ func TestACorrectionAndABasketDoNotShareOneSetOfAnswers(t *testing.T) {
 			"nothing and says so instead")
 	}
 	panel := src[start : start+strings.Index(src[start:], "\n}")]
-	if !strings.Contains(panel, "amendKey(order.id, line.itemId)") {
+	// By the position and not by the product: two positions of one product are two
+	// corrections (ADR-draft-order-position-key),
+	// and a key naming the product would merge them as surely as it once merged a
+	// correction with a basket.
+	if !strings.Contains(panel, "amendKey(order.id, lineKey(line))") {
 		t.Error("the correction panel does not key its answers by order and position, so " +
 			"a correction and a basket for the same product would share one set")
 	}

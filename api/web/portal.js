@@ -1562,6 +1562,33 @@ async function mountConfigForms() {
 // deriveStatus mirrors the server's own rule rather than asking for it: an order
 // carries its lines, and its standing is computed from them so the two cannot
 // disagree. Doing it here keeps that property — a stored status could.
+// lineKey is what one position is called, mirroring the server's own rule
+// (ADR-draft-order-position-key): the
+// product, and the shape of it where one was chosen.
+//
+// Written out here rather than read from the order, because a line placed before
+// positions had names carries no key of its own and the rule reproduces it exactly.
+// A page that approximated it would offer routes the server refuses, which is how
+// a reader learns to distrust a screen.
+function lineKey(line) {
+  return line.variantId ? `${line.itemId}#${line.variantId}` : line.itemId;
+}
+
+// lineLabel is that position in words: the product as the catalogue names it, and
+// the shape beside it where the product comes in more than one.
+//
+// Falls back to the ids, and for the reason the person column does: a product
+// withdrawn from the catalogue, or an order against a release this reader's
+// catalogue no longer carries, still has to say what was ordered.
+function lineLabel(line) {
+  const by = itemsById(state.release || {});
+  const item = by[line.itemId];
+  const name = item ? textOf(item.texts, line.itemId) : line.itemId;
+  if (!line.variantId) return name;
+  const shape = (item && (item.variants || []).find((v) => v.id === line.variantId));
+  return `${name} — ${shape ? textOf(shape.texts, line.variantId) : line.variantId}`;
+}
+
 function deriveStatus(order) {
   const lines = order.lines || [];
   let provisioned = 0;
@@ -1621,7 +1648,7 @@ async function giveBack(order, line) {
   state.error = '';
   render();
   try {
-    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/return`,
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(lineKey(line))}/return`,
       { method: 'POST' });
     state.busy = false;
     await load();
@@ -1744,7 +1771,7 @@ function orderRowBodies() {
       t(deriveStatus(o)),
       el('ul', { class: 'lines' }, (o.lines || []).map((l) => el('li', {},
         el('span', { class: `dot ${l.status}` }),
-        ' ', l.itemId, ' \u2014 ', t(`status.${l.status}`),
+        ' ', lineLabel(l), ' \u2014 ', t(`status.${l.status}`),
         l.blockedBy && l.blockedBy.length
           ? el('span', { class: 'muted' }, ` (${t('portal.blockedBy')}: ${l.blockedBy.join(', ')})`) : null,
         l.reason ? el('span', { class: 'muted' }, ` (${t('portal.reason')}: ${l.reason})`) : null,
@@ -1769,7 +1796,7 @@ function orderRowBodies() {
             disabled: state.busy,
             onclick: () => {
               harvest();
-              state.editing = state.editing === `${o.id}|${l.itemId}` ? '' : `${o.id}|${l.itemId}`;
+              state.editing = state.editing === `${o.id}|${lineKey(l)}` ? '' : `${o.id}|${lineKey(l)}`;
               state.configError = '';
               render();
             },
@@ -1808,7 +1835,7 @@ async function withdrawLine(order, line) {
   state.error = '';
   render();
   try {
-    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/cancel`,
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(lineKey(line))}/cancel`,
       { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     await load();
   } catch (e) {
@@ -1820,7 +1847,7 @@ async function withdrawLine(order, line) {
 }
 
 async function saveDetails(order, line) {
-  const key = amendKey(order.id, line.itemId);
+  const key = amendKey(order.id, lineKey(line));
   const form = mounted.get(key);
   if (form) {
     const { errors } = form.submit();
@@ -1836,7 +1863,7 @@ async function saveDetails(order, line) {
   state.configError = '';
   render();
   try {
-    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(line.itemId)}/details`,
+    await api(`/api/v1/orders/${encodeURIComponent(order.id)}/lines/${encodeURIComponent(lineKey(line))}/details`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1855,8 +1882,8 @@ async function saveDetails(order, line) {
 
 // detailsPanel is the correction, open under the position it belongs to.
 function detailsPanel(order, line) {
-  const key = amendKey(order.id, line.itemId);
-  if (state.editing !== `${order.id}|${line.itemId}`) return null;
+  const key = amendKey(order.id, lineKey(line));
+  if (state.editing !== `${order.id}|${lineKey(line)}`) return null;
   // Seeded from what the order carries, so the form opens on what was answered
   // rather than empty — a correction is an edit, not a second filling-in.
   if (!state.config[key]) state.config[key] = { ...(line.config || {}) };
