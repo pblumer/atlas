@@ -121,6 +121,24 @@
       }
     },
     {
+      "id": "approvals-moved-under-tasks-and-the-inbox-says-which-of-its-",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "Approvals moved under Tasks, and the inbox says which of its rows decide an order.",
+        "de": "Approvals moved under Tasks, and the inbox says which of its rows decide an order."
+      },
+      "summary": {
+        "en": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today.",
+        "de": "Approvals was advertised as an application beside Modeler and Operations, and it was empty for almost everybody who saw it — there is no approver role to gate on, because a product names a person, a group, or the orderer's superior, so anybody signed in may hold an approval tomorrow without holding one today."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "the-catalogue-screen-wears-the-console-s-buttons",
       "version": "Unreleased",
       "date": null,
@@ -225,24 +243,6 @@
       "summary": {
         "en": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket.",
         "de": "It answers two questions to two different readers and used to interleave them: a name, a heading and a price are what somebody browsing the catalogue meets, while the approval, the processes and the target-system references are what happens after the basket."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-portal-s-catalogue-tab-is-called-the-catalogue",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The portal's catalogue tab is called the catalogue.",
-        "de": "The portal's catalogue tab is called the catalogue."
-      },
-      "summary": {
-        "en": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\".",
-        "de": "\"Katalog durchsuchen\" described an activity where its two neighbours name a place — \"Meine Aufträge\", \"Meine Leistungen\"."
       },
       "link": {
         "label": "Changelog",

@@ -188,6 +188,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Approvals moved under Tasks, and the inbox says which of its rows decide an
+  order.** Approvals was advertised as an application beside Modeler and Operations,
+  and it was empty for almost everybody who saw it — there is no approver role to
+  gate on, because a product names a person, a group, or the orderer's superior, so
+  anybody signed in may hold an approval tomorrow without holding one today.
+
+  It was also, already, in the inbox. An approval is an ordinary engine user task,
+  the task list does not filter those out, and the inbox never knew the word — so
+  the same decision sat in two places and neither said it was the same thing. The
+  entry now sits under Tasks, where Access review already sits for the same reason,
+  and an inbox row that decides an order carries a chip saying so and leading to
+  where it is decided. The link names the order line rather than the task, because
+  that is what the approvals page takes: a task key does not exist until the task
+  activates, and it changes when the task is reassigned, while the order and the
+  product do not.
+
+  The page itself is unchanged and still opens in its own window — a sub-navigation
+  entry rendered as a plain link would have replaced the console in the same tab,
+  which is the behaviour the drawer's `separate` flag exists to avoid.
+
 - **The catalogue screen wears the console's buttons.** It had a button vocabulary of
   its own — `primary` on the eight actions that commit something, `linkish` on the five
   that remove a row, nothing at all on five more — and the stylesheet declares none of
