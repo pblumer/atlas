@@ -49,9 +49,26 @@ func (p Problem) String() string {
 // produces the same release and the same problems, which is what lets a release be
 // diffed and a refusal be reproduced.
 type Input struct {
-	Catalogs []Catalog
-	Items    []Item
-	Edges    []Edge
+	// CatalogID names the catalogue this publish is *of*. Everything computed
+	// below — the schedule, the structure, the standing lists — is that one
+	// catalogue's, and [Items] and [Edges] are its own.
+	//
+	// The other catalogues are here for one question, and only one: a rank is
+	// unique across the set, so a tie can only be seen against everybody else. It
+	// was easy to miss that the rest of the set is not the subject, and missing it
+	// cost a real defect — every other catalogue's products were resolved against
+	// *this* catalogue's item list, so every one of them came back "unknown item",
+	// and a catalogue could be published only while every other catalogue was
+	// empty. Publishing A blamed B, publishing B blamed A, and neither message
+	// named the catalogue the caller had asked to publish.
+	//
+	// Empty means "there is no other catalogue to be", which is true of a single
+	// one and of nothing else — see [Publish], which refuses the ambiguous case
+	// rather than picking a reading.
+	CatalogID string
+	Catalogs  []Catalog
+	Items     []Item
+	Edges     []Edge
 }
 
 // Release is a frozen, published catalogue: what may be ordered, in what order it
@@ -128,6 +145,7 @@ func Publish(in Input) (Release, []Problem) {
 		byID[it.ID] = it
 	}
 
+	checkSubject(in, add)
 	checkCatalogs(in, byID, add)
 	checkItems(in, add)
 	checkEdges(in, byID, add)
@@ -202,6 +220,14 @@ func incompatibilities(in Input) map[string][]string {
 
 // checkCatalogs holds what a catalogue owes independently of its items: a unique
 // rank, and item references that resolve.
+//
+// The two halves reach different distances, and that is the whole of it. **Rank is
+// a property of the set**: a tie can only be seen against everybody else, so every
+// catalogue in the input is walked. **An item reference is a property of one
+// catalogue**, and it can only be resolved against the items that catalogue was
+// published with — which are the only items [Input] carries. Asking the same
+// question of the others resolved their products against this one's list and
+// reported every one of them as unknown.
 func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 	seenRank := map[int]string{}
 	cats := append([]Catalog(nil), in.Catalogs...)
@@ -217,6 +243,9 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 			seenRank[c.Rank] = c.ID
 		}
 
+		if in.CatalogID != "" && c.ID != in.CatalogID {
+			continue
+		}
 		for _, id := range c.Items {
 			it, known := byID[id]
 			if !known {
@@ -231,6 +260,31 @@ func checkCatalogs(in Input, byID map[string]Item, add func(Problem)) {
 			}
 		}
 	}
+}
+
+// checkSubject holds that the input says which catalogue it is for whenever that
+// question has more than one answer.
+//
+// An unnamed subject is read as "every catalogue here is the subject", which is
+// true of a single one and false of any other number. Refusing the ambiguous case
+// is what keeps the reading from being a guess — and a guess here is the defect
+// this field exists to end, re-entered by the next caller who forgets the field.
+func checkSubject(in Input, add func(Problem)) {
+	if in.CatalogID == "" {
+		if len(in.Catalogs) > 1 {
+			add(Problem{Message: "this publish does not say which of the " +
+				fmt.Sprint(len(in.Catalogs)) +
+				" catalogues it is for, so it cannot tell which items it should resolve"})
+		}
+		return
+	}
+	for _, c := range in.Catalogs {
+		if c.ID == in.CatalogID {
+			return
+		}
+	}
+	add(Problem{Catalog: in.CatalogID,
+		Message: "is the catalogue being published and is not in this input"})
 }
 
 // checkItems holds what an item owes to be orderable at all.

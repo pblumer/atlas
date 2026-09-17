@@ -364,6 +364,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue could only be published while every other catalogue was empty.**
+  Publishing validates one catalogue, and it is handed every catalogue — because a
+  rank has to be unique across the set, and a tie can only be seen against somebody
+  else. It was handed only **that one catalogue's** products, though, and it then
+  resolved *every* catalogue's product references against that single list. Each of
+  the others came back "unknown item", and the publish was refused.
+
+  The two messages are why it read as a contradiction rather than as a defect:
+  publishing *Informatik* blamed the other catalogue's products, publishing the other
+  blamed *Informatik*'s, and neither message named the catalogue anybody had asked to
+  publish. There was no order in which both could succeed, and no way to read the pair
+  as anything but the product disagreeing with itself.
+
+  A publish now says which catalogue it is for. The rank check still looks at the whole
+  set; the product references are resolved for the subject alone. A publish that does
+  **not** say — which is unambiguous for one catalogue and for no other number — is
+  refused rather than guessed at, because the guess is precisely the defect above.
+
+  Nothing about the workaround is needed any more, and nothing published under it has
+  to be redone: the refusal happened before anything was written.
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two
