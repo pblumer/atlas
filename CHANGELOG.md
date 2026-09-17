@@ -216,6 +216,32 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue reads Kategorie › Produktgruppe › Produkt › Services, and there is
+  no Bundle level.** A bundle is offered as a *Marktleistung*: it holds the
+  orchestration process, and the services behind it hold their own provisioning and
+  deprovisioning — a service may stand behind several Marktleistungen, included or
+  optional, always with the same processes.
+
+  So the Bundle level had nothing to name. Every root is a Marktleistung, with or
+  without parts, and everything behind one is a service however deep it sits; the
+  level rule is now depth and nothing else. This withdraws the *answer* the previous
+  rule gave, not the rule that there is one: a catalogue that has to decide per
+  product which of two words describes it gets that wrong for every product somebody
+  adds a part to later, and nothing downstream needed the distinction — an order, a
+  release and a provisioning call name items, not levels.
+
+  The vacated column holds the **product group**, a second heading a product writes
+  on itself beside its category. It is a string with the costs ADR-0360 states and
+  accepts, and the chain is therefore a *display* chain: the group has no record and
+  no category of its own, so the relation is read off the products carrying both. A
+  group whose products sit in two categories appears under both, and a group with no
+  products does not exist — neither is an error state, because nothing claims a group
+  belongs to one category.
+
+  The cascade stops deriving a level altogether: its columns are the levels. The
+  basket and the list of what somebody holds still derive one, because they hold a
+  set of positions with no layout to read it off. ADR-0383 carries the amendment.
+
 - **Approvals moved under Tasks, and the inbox says which of its rows decide an
   order.** Approvals was advertised as an application beside Modeler and Operations,
   and it was empty for almost everybody who saw it — there is no approver role to

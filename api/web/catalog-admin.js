@@ -713,6 +713,20 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
         <datalist id="known-categories">${
   [...new Set(items.map((i) => (i.category || "").trim()).filter(Boolean))].sort()
     .map((c) => `<option value="${esc(c)}"></option>`).join("")}</datalist></label>
+      <label class="field wide">Product group
+        <span class="muted" style="display:block; margin:2px 0 6px">One level below the
+          category, and the portal reads the two as a chain: <b>Kategorie &rsaquo;
+          Produktgruppe &rsaquo; Produkt &rsaquo; Services</b>. A string like the heading
+          above, with the same costs &mdash; no ordering of its own, no translation, two
+          spellings are two groups. The group has no record and therefore no category of
+          its own: the chain is assembled from the products that carry both, so a group
+          whose products sit in two categories appears under both. Leave it empty and the
+          product sits under the portal's group for those that carry none.</span>
+        <input name="productGroup" value="${esc(v.productGroup || "")}" autocomplete="off"
+          list="known-groups" placeholder="Mobile Geräte">
+        <datalist id="known-groups">${
+  [...new Set(items.map((i) => (i.productGroup || "").trim()).filter(Boolean))].sort()
+    .map((g) => `<option value="${esc(g)}"></option>`).join("")}</datalist></label>
       <label class="field wide">Cost
         <span class="muted" style="display:block; margin:2px 0 6px">Written as you want it
           read — <code>CHF 1'200.&ndash;</code>, <code>49.&ndash; / Monat</code>,
@@ -1177,6 +1191,7 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
         id: pid, homeCatalog: id, state: f.get("state"), texts,
         approval: approvalFrom(f),
         category: String(f.get("category") || "").trim(),
+        productGroup: String(f.get("productGroup") || "").trim(),
         price: String(f.get("price") || "").trim(),
         configForm: f.get("configForm") || "",
         provisionProcess: f.get("provisionProcess") || "",

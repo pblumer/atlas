@@ -20,13 +20,18 @@ import (
 // TestOneRuleNamesTheLevel.
 func TestOneRuleNamesTheLevel(t *testing.T) {
 	src := readWeb(t, "portal.js")
+	// The two views that *derive* a level. The cascade is no longer one of them, and
+	// that is the point rather than a gap: its columns are the levels — the third
+	// holds the products, the fourth everything behind the one chosen — so a row's
+	// position says what it is and nothing has to be worked out per row. Asking it
+	// to call levelOf anyway would be asking it to re-derive what it just laid out.
+	//
+	// The other two get a set of positions with no layout to read the level off, so
+	// they ask, and they ask the same function.
 	for _, view := range []struct{ name, from, to string }{
-		{"the cascade", "function renderCatalogue(", "\n// What a keystroke redraws"},
 		{"the basket", "function renderBasket(", "\n// --- What a product needs"},
-		// The third view, and the one that made "both" the wrong word: what
-		// somebody holds is laid out across the same three columns, and it was
-		// reading depth for itself. It agreed with the cascade everywhere except
-		// the root with no parts — which is exactly the case this rule changed.
+		// The view that made "both" the wrong word: what somebody holds was laid out
+		// across the same columns and was reading depth for itself.
 		{"what the person holds", "function renderServices(", "\n// The brand mark"},
 	} {
 		if !strings.Contains(webRegion(t, src, view.from, view.to), "levelOf(") {
@@ -45,24 +50,30 @@ func TestOneRuleNamesTheLevel(t *testing.T) {
 	}
 }
 
-// TestAProductWithNoPartsIsNotABundle.
+// TestTheLevelIsReadOffDepthAndNothingElse.
 //
-// The second half of the same defect: every item nothing contained landed under
-// BUNDLE, so a single product with nothing inside it was announced as a bundle.
-// A bundle is a thing made of other things. Something with no parts and no parent
-// is an offering — the level the catalogue's own vocabulary gives to a thing that
-// is offered on its own.
-func TestAProductWithNoPartsIsNotABundle(t *testing.T) {
+// This replaces TestAProductWithNoPartsIsNotABundle, and the replacement is the
+// point rather than a retreat. That guard pinned `hasParts ? 'bundle' : 'offering'`
+// — the rule that decided whether a root was a bundle. There is no Bundle level any
+// more: a bundle is offered as a Marktleistung, so every root is one and what
+// stands behind it are services. The case that guard protected (a single product
+// announced as something made of other things) cannot occur, because the word it
+// was announced with is gone. TestNothingIsCalledABundleAnyMore pins that.
+//
+// What still needs pinning is that the level is depth and nothing else — not the
+// kind of edge, not whether the product has parts, not how it was reached.
+func TestTheLevelIsReadOffDepthAndNothingElse(t *testing.T) {
 	body := webRegion(t, readWeb(t, "portal.js"), "function levelOf(", "\n}")
-	if !strings.Contains(body, "hasParts ? 'bundle' : 'offering'") {
-		t.Error("a product with no parent and no parts is still called a bundle, so a " +
-			"single product is announced as something made of other things")
+	if !strings.Contains(body, "depthOf(") {
+		t.Error("the level is worked out without asking how deep the position sits, " +
+			"which is the one thing it is")
 	}
-	// The rule reads both kinds of containment. An aggregation is as much a part as
-	// a composition where the question is what something is made of.
-	for _, field := range []string{"includes", "options"} {
-		if !strings.Contains(body, field) {
-			t.Errorf("the level rule never reads %q, so half the graph decides nothing", field)
+	for _, field := range []string{"includes", "options", "integral"} {
+		if strings.Contains(body, field) {
+			t.Errorf("the level rule reads %q. Whether a part comes with the whole or "+
+				"is offered beside it is a different question from where it sits, and "+
+				"answering the second with the first is what gave one position two "+
+				"names", field)
 		}
 	}
 }

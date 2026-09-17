@@ -98,7 +98,7 @@ func TestTheColumnNoLongerSaysTheDataIsMissing(t *testing.T) {
 	// Read the column's own construction, not the file: the same two labels are
 	// spelled again in the services view, so a file-wide search stays green when
 	// the column stops using them.
-	col := webRegion(t, src, "const headings = categoriesOf(rel);", "const bundleCol")
+	col := webRegion(t, src, "const headings = categoriesOf(rel);", "const groupCol")
 	if !strings.Contains(col, "t('cat.all')") {
 		t.Error("the column has no row that clears the selection, so a heading opened " +
 			"by accident cannot be closed again")
