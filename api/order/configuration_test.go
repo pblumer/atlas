@@ -255,7 +255,7 @@ func TestMoreAnswersThanOneLineMayCarryAreRefused(t *testing.T) {
 func TestTheOrderDoesNotShareTheRequestsMap(t *testing.T) {
 	sent := map[string]string{"kostenstelle": "4711"}
 	lines := linesFor(asking(t), []string{"laptop"}, nil,
-		map[string]map[string]string{"laptop": sent})
+		map[string]map[string]string{"laptop": sent}, nil)
 	sent["kostenstelle"] = "geändert"
 	if lines[0].Config["kostenstelle"] != "4711" {
 		t.Error("the line shares the request's map, so editing it reaches into the order")

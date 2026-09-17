@@ -954,6 +954,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalog-products", s.catalogs.HandleListItems, apiOp{
 			summary: "Every product and service a catalogue may offer", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Products", tArray())}},
+		{"GET", "/api/v1/catalog-products/approver-report", s.catalogs.HandleApproverReport, apiOp{
+			summary: "Which products name an approver that reaches nobody. An approval rule's reference becomes a task's assignee (`fixed`, matched against a username) or its candidate groups (`role`, matched against a group id or name), and neither is checked when the rule is written nor reported when it fires — the approval is created, lands in nobody's inbox, and the order waits. Scoped to the products you may maintain, because it names people. It deliberately leaves out a rule that still reaches somebody (candidate groups are a list and one live entry is enough), a kind that names a process directly (there is nothing to check it against), and a leftover reference beside a kind that needs none (untidy, not broken). 503 when this server cannot read accounts or groups at all, because the two available guesses — everything broken, everything fine — are both worse than saying so", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The approver report", tObject())}},
 		{"GET", "/api/v1/catalog-products/{id}/usage", s.handleProductUsage, apiOp{
 			summary: "Where one product is used, read backwards out of the same edges the release froze: which catalogues offer it, which wholes carry it and whether integrally or optionally, what it needs, **what needs it**, what it may never be held with, and how many people hold it by origin. The reverse question is the one a maintainer cannot ask anywhere else — a product manager about to retire a service, rebind its provisioning or move it between catalogues has no other way to find out what they are about to break. Merged across catalogues, because a service does not belong to one: the same product carried by two catalogues is one thing somebody is about to change. Holders are counted and never listed — a list of the people holding one service is the inventory filtered to the interesting part",
 			tag:     "Catalogue", role: RoleProductManager,
@@ -1052,9 +1055,10 @@ func (s *Server) apiRoutes() []apiRoute {
 		// was pending. Reading is confined to your own orders by the handler, not by
 		// the role: an order somebody else placed is not yours to see.
 		{"POST", "/api/v1/orders", s.orders.HandlePlace, apiOp{
-			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of", tag: "Order", role: RoleUser,
+			summary: "Place an order against one catalogue release: the chosen products plus everything they are made of. A product that comes in more than one shape must be given one in variants, keyed by item id — including where it arrived as an integral part and was never named in items", tag: "Order", role: RoleUser,
 			req: jsonBody("Order", schemaObj(map[string]any{
 				"releaseId": tString(), "items": tArray(), "recipient": tString(),
+				"variants": tObject(),
 			}, "releaseId", "items")),
 			resp: jsonBody("The placed order", tObject())}},
 		{"GET", "/api/v1/orders", s.orders.HandleList, apiOp{

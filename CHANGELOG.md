@@ -14,6 +14,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A standing list of the approval rules that reach nobody.** An approval rule names
+  an approver, and what that name has to be differs by kind: a named person becomes a
+  task's assignee, matched against a username, and a group becomes its candidate
+  groups, matched against a group id or name. **Neither is checked when the rule is
+  written, and neither failure is reported when it fires.** The approval is created, it
+  lands in nobody's inbox, and the order waits without saying why — the first person to
+  notice is whoever is waiting for the laptop.
+
+  The catalogue listing now carries the list: which products name an approver that
+  resolves to nobody, what each names, why it reaches nobody, and a link to the
+  catalogue where it is corrected. Scoped to the products you may maintain, because it
+  names people.
+
+  It deliberately stays quiet about three things, so that what it does say is worth
+  reading: a rule that still reaches somebody (candidate groups are a list, and one
+  live entry is enough), a kind that names an approval process directly (there is
+  nothing to check it against), and a leftover reference beside a kind that needs none
+  (untidy, not broken).
+
+  Where the server cannot read accounts or groups at all, it refuses and the page says
+  so. The two available guesses are both worse: every rule reported as broken, or a
+  clean estate nobody checked — and the second is the one somebody wants to believe.
 - **An outage now stops at the worker instead of at every token.** A worker whose target
   stopped answering did not fail once. It failed once **per instance that reached its
   task**: each failure spent a retry, each exhausted budget parked a token behind its own
@@ -119,6 +141,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue screen wears the console's buttons.** It had a button vocabulary of
+  its own — `primary` on the eight actions that commit something, `linkish` on the five
+  that remove a row, nothing at all on five more — and the stylesheet declares none of
+  the three. All eighteen rendered as the browser's default button, grey and square and
+  a different size, on a page where every other screen draws the accent-filled one. It
+  only reads as wrong beside the Modeler, and the two are never on screen together,
+  which is why nobody reported it.
+
 - **The state store is configured for the size it has grown to, not for Pebble's
   defaults.** It was opened with only a merger set, which left an 8 MB block cache, a
   4 MB write buffer that stops writes at two unflushed, and a single compaction
@@ -139,7 +169,6 @@ _Changed_ / _Removed_ for each version.
   — and the checkpoint cadence bounds how long the suffix gets. The sizes themselves are
   reasoned rather than measured against a production store; the record carries that as an
   open question, and the flags exist so the answer can be corrected without a rebuild.
-
 - **The approver is picked, and picked differently depending on the kind.** This was
   the last typed identifier on the catalogue screen and the one that cost the most,
   because nothing reports a wrong value: an approval whose approver matches nobody is
@@ -356,6 +385,77 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **One position in the portal carried two different level names.** The catalogue
+  screen and the basket both label a position Bundle, Marktleistung or Service, and
+  Atlas has no such typing — the level is derived from the containment graph. It was
+  derived twice, differently: the cascade used depth, the basket used whether a part
+  came with the whole. The direct part of a package was a Marktleistung in one half
+  of the screen and a Service in the other. Underneath that, every product nothing
+  contained was called a bundle, so a single product with nothing inside it was
+  announced as something made of other things.
+
+  One rule now decides the level and all three views read it — the catalogue, the
+  basket and what a person already holds, which was a third derivation again: a root with parts is a
+  bundle, a root without them is an offering, a direct part of a root is an
+  offering, and anything deeper is a service. Whether a position can be taken out is
+  answered per row by the control it carries, which is the different question the
+  basket had been answering with the level. Display only — no stored release, API or
+  order in flight is affected, because the level has never been written down
+  (ADR-draft-portal-level-names).
+
+- **An order never said which shape of a product was ordered.** A variant is one
+  orderable shape — a colour, a licence tier — and the catalogue has carried them from
+  the start. Nothing ever wrote one down: the order line had the field, the fulfilment
+  process passed `position.variantId` to provisioning, and it arrived empty for every
+  order ever placed, because the basket never asked and `POST /api/v1/orders` had
+  nowhere to put the answer. Provisioning was told to hand over a phone and not which
+  one.
+
+  The basket now asks, for every line that comes in more than one shape, including the
+  ones that arrived as integral parts of a bundle and were never named by the orderer.
+  Nothing is pre-selected: variants are unordered on purpose, so there is no first one
+  to fall back on. Ordering waits until every open choice is made, and the server
+  refuses an order that leaves one open, names a shape the product does not come in,
+  or names one for a product that comes in a single shape — a rule the page keeps and
+  the server does not is not a rule. `POST /api/v1/orders` takes a new optional
+  **`variants`** object, keyed by item id; a body without it is unchanged for every
+  product that has no variants.
+
+- **The portal showed what a product comes with and not what it is offered with.**
+  A release carries two kinds of containment: a composition arrives with the whole and
+  cannot be dropped, an aggregation is an offer standing beside it. The cascade drew
+  both. The info panel named neither, and the basket pulled in compositions and
+  stopped — so the offers hanging under a bundle were reachable only from the column
+  the bundle happens to open, and only until the reader navigated away.
+
+  The panel now lists both groups, kept apart, and the basket carries an Optional
+  column holding every offer the chosen products make: unticked, each with its price
+  and its "i", and ticked through the same control the cascade uses. Nothing about the
+  stored release or the order contract moves — a ticked option is an ordinary id in
+  the basket, so the placed order carries the bundle, its integral parts and the
+  options actually chosen, each as its own line with its own provisioning process.
+
+- **A catalogue could only be published while every other catalogue was empty.**
+  Publishing validates one catalogue, and it is handed every catalogue — because a
+  rank has to be unique across the set, and a tie can only be seen against somebody
+  else. It was handed only **that one catalogue's** products, though, and it then
+  resolved *every* catalogue's product references against that single list. Each of
+  the others came back "unknown item", and the publish was refused.
+
+  The two messages are why it read as a contradiction rather than as a defect:
+  publishing *Informatik* blamed the other catalogue's products, publishing the other
+  blamed *Informatik*'s, and neither message named the catalogue anybody had asked to
+  publish. There was no order in which both could succeed, and no way to read the pair
+  as anything but the product disagreeing with itself.
+
+  A publish now says which catalogue it is for. The rank check still looks at the whole
+  set; the product references are resolved for the subject alone. A publish that does
+  **not** say — which is unambiguous for one catalogue and for no other number — is
+  refused rather than guessed at, because the guess is precisely the defect above.
+
+  Nothing about the workaround is needed any more, and nothing published under it has
+  to be redone: the refusal happened before anything was written.
+
 - **The server froze for seconds at a time, on a cadence, once its store grew.** Every
   list in the Console stopped, everything the browser already had stayed responsive, and
   after some seconds the whole backlog arrived at once. Nothing in the code had changed;
@@ -418,7 +518,6 @@ _Changed_ / _Removed_ for each version.
   spreadsheet, the sheet, the range, the title, the rows to write — and an operation added
   to that table cannot be forgotten in it. The job's fate is unchanged (pending, retried,
   then an incident); what changed is that the incident names the fix.
-
 - **A task folder edited twice in quick succession no longer keeps filtering by its
   previous rule.** The sidebar compiles each folder's rule once and remembers the
   result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two

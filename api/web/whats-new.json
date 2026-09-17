@@ -2,6 +2,24 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-standing-list-of-the-approval-rules-that-reach-nobody",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "A standing list of the approval rules that reach nobody.",
+        "de": "A standing list of the approval rules that reach nobody."
+      },
+      "summary": {
+        "en": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name.",
+        "de": "An approval rule names an approver, and what that name has to be differs by kind: a named person becomes a task's assignee, matched against a username, and a group becomes its candidate groups, matched against a group id or name."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      }
+    },
+    {
       "id": "an-outage-now-stops-at-the-worker-instead-of-at-every-token",
       "version": "Unreleased",
       "date": null,
@@ -64,6 +82,24 @@
           "de": "AI access öffnen"
         },
         "route": "#/console/ai-access"
+      }
+    },
+    {
+      "id": "the-catalogue-screen-wears-the-console-s-buttons",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Changed",
+      "title": {
+        "en": "The catalogue screen wears the console's buttons.",
+        "de": "The catalogue screen wears the console's buttons."
+      },
+      "summary": {
+        "en": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three.",
+        "de": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
       }
     },
     {
@@ -211,52 +247,6 @@
       "link": {
         "label": "ADR-0012",
         "url": "https://github.com/pblumer/atlas/blob/main/docs/adr/0012-web-ui-app-shell.md"
-      }
-    },
-    {
-      "id": "the-portal-s-corner-names-whoever-the-order-is-for-and-the-h",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The portal's corner names whoever the order is for, and the help moved to the end of the row.",
-        "de": "The portal's corner names whoever the order is for, and the help moved to the end of the row."
-      },
-      "summary": {
-        "en": "The corner said \"mich selbst\" to everybody.",
-        "de": "The corner said \"mich selbst\" to everybody."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-server-froze-for-seconds-at-a-time-on-a-cadence-once-its",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Fixed",
-      "title": {
-        "en": "The server no longer freezes for seconds at a time once its store grows",
-        "de": "Der Server setzt nicht mehr für Sekunden aus, sobald sein Datenbestand wächst"
-      },
-      "summary": {
-        "en": "On a server holding tens of thousands of running instances, every list in the Console would stop for seconds at a stretch, on a regular beat, and then the whole backlog arrived at once. Three pieces of housekeeping had quietly grown with the data and were doing their reading in the one place where the engine can only do one thing at a time — so while they read, nothing else was served, not even a request that only wanted to look. They now read alongside the engine instead of in front of it, and the count of running instances comes from a running tally rather than from walking every one of them. Nothing about the answers changed; the waiting did.",
-        "de": "Auf einem Server mit Zehntausenden laufenden Instanzen blieb in der Konsole regelmässig jede Liste für Sekunden stehen, und danach traf alles auf einmal ein. Drei Aufräumarbeiten waren unbemerkt mit dem Datenbestand mitgewachsen und lasen dabei an der einen Stelle, an der die Engine nur eines zur Zeit tun kann — solange sie lasen, wurde nichts anderes bedient, nicht einmal eine Anfrage, die bloss schauen wollte. Sie lesen jetzt neben der Engine statt vor ihr, und die Zahl der laufenden Instanzen kommt aus einer mitgeführten Zählung statt aus dem Durchgehen aller. An den Antworten hat sich nichts geändert, am Warten schon."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ],
-      "try": {
-        "label": {
-          "en": "Open Operations",
-          "de": "Operations öffnen"
-        },
-        "route": "#/operations"
       }
     }
   ]
