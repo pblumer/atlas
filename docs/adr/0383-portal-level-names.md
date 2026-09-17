@@ -1,4 +1,4 @@
-# ADR-DRAFT: A position's level is read from the graph once, and a root with no parts is not a bundle
+# ADR-0383: A position's level is read from the graph once, and a root with no parts is not a bundle
 
 - **Status:** Accepted
 - **Implementation:** Landed

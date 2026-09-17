@@ -401,7 +401,7 @@ _Changed_ / _Removed_ for each version.
   answered per row by the control it carries, which is the different question the
   basket had been answering with the level. Display only — no stored release, API or
   order in flight is affected, because the level has never been written down
-  (ADR-draft-portal-level-names).
+  (ADR-0383).
 
 - **An order never said which shape of a product was ordered.** A variant is one
   orderable shape — a colour, a licence tier — and the catalogue has carried them from

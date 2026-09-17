@@ -513,7 +513,7 @@ function parentIn(rel, child) {
 }
 
 // levelOf says what one position is called, and it is the only thing that does
-// (ADR-draft-portal-level-names).
+// (ADR-0383).
 //
 // Atlas has no Bundle/Marktleistung/Service typing: an item is an item, and the
 // hierarchy is the containment graph. So the level is read off position in that
