@@ -52,6 +52,7 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/instances/{key}/variables",
 	"POST /api/v1/instances/{key}/migrate/plan",
 	"POST /api/v1/instances/{key}/migrate",
+	"POST /api/v1/instances/{key}/migrate/fork",
 	"POST /api/v1/processes/{key}/migrate-instances",
 	// The repair that rides beside the migration: a bounded run of variable-index
 	// membership corrections over a definition's instances (ADR-0244). It changes no
