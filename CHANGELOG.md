@@ -584,6 +584,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **"No process instance is left for this order" named a cause it could not know.** It
+  said retention had removed the instance. That is one of three reasons the portal
+  finds none, and the least likely of them: an order whose fulfilment never started has
+  no instance to remove, and that is what somebody reads this about on the day they
+  ordered — which is exactly what the defect below produced for every order on an
+  installation. The message now says what it knows: none has started yet, it has
+  finished, or retention removed it. The order and one position are also told apart,
+  because the order's orchestration and a position's own process are two different
+  absences.
+
 - **The fulfilment orchestration never learned which order it was working on.** Its
   model documents `orderId` as a start variable, builds every request from it
   (`"/api/v1/orders/" + orderId + "/next"`) and correlates the message that wakes it
