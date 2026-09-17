@@ -400,6 +400,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue could offer a product nobody had created, and only said so much
+  later.** The write that introduced the dangling id answered 200; the refusal
+  appeared at the next publish, as `unknown item <id>`, against a catalogue the
+  person had stopped thinking about. Two symptoms of one fact, with nothing on
+  screen connecting them: publishing refused an id that looked like a product, and
+  the product behind that id read as `revision: 0` — a stored product always carries
+  at least revision 1, because the save that creates one sets it, so zero means the
+  record was never written at all.
+
+  The catalogue's own screens already assumed the rule, rendering such a row as
+  "offered but not defined — publishing will refuse this"; a rule a screen explains
+  and a route does not enforce holds until somebody uses the API. Offering a product
+  that does not exist is now refused where it is written, naming the id. Only what a
+  write *adds* is checked, so a catalogue already carrying bad ids stays repairable —
+  otherwise the only way out of the mistake would be the mistake. The check is
+  existence and not visibility: a product is referenced by several catalogues and
+  edited through exactly one.
+
 - **"Meine Aufträge" showed principal ids where it meant people.** The Person column
   printed `usr_703f410b40336d21476152fb`. Nothing was wrong with the record — an
   order names people by principal id and by nothing else, because a name copied into

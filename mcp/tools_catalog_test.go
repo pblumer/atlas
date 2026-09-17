@@ -265,6 +265,16 @@ func TestUpdatingACatalogueCanStateItsRevision(t *testing.T) {
 	cat := catalogID(t, text)
 	revision := catalogRevision(t, text)
 
+	// The product exists before the catalogue offers it. A catalogue cannot offer a
+	// product nobody has created, and an agent that set the list first would be
+	// refused here rather than at the publish this test never reaches.
+	if text, isErr = callText(t, ts, "atlas_save_catalog_product", map[string]any{
+		"id": "vpn", "homeCatalog": cat, "state": "active",
+		"texts": map[string]any{"de": "VPN-Zugang"}, "approval": map[string]any{"kind": "none"},
+	}); isErr {
+		t.Fatalf("save product = %q", text)
+	}
+
 	// The revision the create answered with is the one a first change states.
 	if text, isErr = callText(t, ts, "atlas_update_catalog", map[string]any{
 		"id": cat, "items": []any{"vpn"}, "revision": revision,
