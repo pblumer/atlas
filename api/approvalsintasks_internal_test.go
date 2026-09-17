@@ -53,6 +53,20 @@ func TestApprovalsIsNotAnApplicationOfItsOwn(t *testing.T) {
 // plain anchor, so moving the entry down there without teaching it the same rule
 // would restore exactly the behaviour that comment argues against.
 func TestASeparatePageUnderTasksStillOpensInItsOwnWindow(t *testing.T) {
+	// The entry says it is a page of its own. This half moved here from
+	// TestThePortalSurfacesOpenInTheirOwnWindow, which made the same promise while
+	// the entry was in the drawer.
+	tasks := webRegion(t, topnavList(t), "  tasks: [", "\n  ],")
+	for _, line := range strings.Split(tasks, "\n") {
+		if strings.Contains(line, `route: "genehmigung.html"`) &&
+			!strings.Contains(line, "separate: true") {
+			t.Error("the approvals entry is not marked separate, so following it replaces " +
+				"the console in the same tab. It is a page of its own — its own brand, " +
+				"its own message catalogue — and unloading Atlas to reach it costs " +
+				"whoever clicked whatever they had open")
+		}
+	}
+
 	body := webRegion(t, readWeb(t, "app.js"), "topnav.innerHTML = ", "syncIncidentBadge(")
 	if !strings.Contains(body, "separate") {
 		t.Error("the sub-navigation renders every entry as a plain link, so a page of " +

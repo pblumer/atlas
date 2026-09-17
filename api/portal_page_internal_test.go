@@ -445,7 +445,13 @@ func TestThePortalSurfacesOpenInTheirOwnWindow(t *testing.T) {
 	src := readWeb(t, "app.js")
 	apps := jsListIn(t, src, "const APPS = [", "\n];")
 
-	for _, id := range []string{"portal", "approvals"} {
+	// The portal alone, since approvals stopped being an application: an approval is
+	// a kind of task, and its entry moved into the Tasks sub-navigation. The same
+	// promise is made for it there — see
+	// TestASeparatePageUnderTasksStillOpensInItsOwnWindow, which checks both the
+	// entry's flag and the sub-navigation honouring it, because that renderer had no
+	// notion of `separate` until the entry arrived.
+	for _, id := range []string{"portal"} {
 		var entry string
 		for _, line := range strings.Split(apps, "\n") {
 			if strings.Contains(line, `id: "`+id+`"`) {
