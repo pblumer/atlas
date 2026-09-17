@@ -364,6 +364,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **An order never said which shape of a product was ordered.** A variant is one
+  orderable shape — a colour, a licence tier — and the catalogue has carried them from
+  the start. Nothing ever wrote one down: the order line had the field, the fulfilment
+  process passed `position.variantId` to provisioning, and it arrived empty for every
+  order ever placed, because the basket never asked and `POST /api/v1/orders` had
+  nowhere to put the answer. Provisioning was told to hand over a phone and not which
+  one.
+
+  The basket now asks, for every line that comes in more than one shape, including the
+  ones that arrived as integral parts of a bundle and were never named by the orderer.
+  Nothing is pre-selected: variants are unordered on purpose, so there is no first one
+  to fall back on. Ordering waits until every open choice is made, and the server
+  refuses an order that leaves one open, names a shape the product does not come in,
+  or names one for a product that comes in a single shape — a rule the page keeps and
+  the server does not is not a rule. `POST /api/v1/orders` takes a new optional
+  **`variants`** object, keyed by item id; a body without it is unchanged for every
+  product that has no variants.
+
 - **The portal showed what a product comes with and not what it is offered with.**
   A release carries two kinds of containment: a composition arrives with the whole and
   cannot be dropped, an aggregation is an offer standing beside it. The cascade drew
