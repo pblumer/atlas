@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -286,8 +287,61 @@ func (s *Server) buildMetrics() error {
 		return err
 	}
 	s.proc.SetMetrics(em)
+	// The single writer's own latency. Attached here rather than when the loop is built
+	// because the registry does not exist yet at that point — and safely, because
+	// SetMetrics stores atomically: the loop is already running and already being
+	// dispatched onto by the time this runs.
+	rm := newRunLoopMetrics()
+	if err := reg.Register(rm.collectors()...); err != nil {
+		return err
+	}
+	s.runLoop.SetMetrics(rm)
 	s.metrics = reg
 	return nil
+}
+
+// runLoopMetrics is the single writer's own latency (see [runloop.Metrics]): two
+// pre-resolved histograms the loop pushes into from its own goroutine.
+//
+// It is separate from engineMetrics because it measures a different thing. A batch is
+// work the processor did; a turn is work *somebody dispatched*, and the turns that hurt
+// most are not batches at all — publishing a checkpoint and resolving a compaction cut
+// are neither, and both once held the writer for seconds
+// (ADR-0382).
+//
+// It satisfies runloop.Metrics structurally, so that package never imports Prometheus.
+type runLoopMetrics struct {
+	held   prometheus.Histogram
+	waited prometheus.Histogram
+}
+
+func newRunLoopMetrics() *runLoopMetrics {
+	histogram := func(name, help string) prometheus.Histogram {
+		return prometheus.NewHistogram(prometheus.HistogramOpts{
+			Namespace: metrics.Namespace, Name: name, Help: help,
+			// 100µs to ~13s. The top matters more here than anywhere else: a turn is
+			// the whole server standing still, so the range has to reach the failures
+			// worth alerting on rather than saturate at the first one.
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18),
+		})
+	}
+	return &runLoopMetrics{
+		held: histogram("runloop_turn_held_seconds",
+			"How long one dispatched closure occupied the single writer. While it is held nothing else is served, read-only requests included (ADR-0239)."),
+		waited: histogram("runloop_turn_wait_seconds",
+			"How long a caller queued before the writer took its closure — the delay a request actually experiences, as opposed to the turn that caused it."),
+	}
+}
+
+func (m *runLoopMetrics) collectors() []prometheus.Collector {
+	return []prometheus.Collector{m.held, m.waited}
+}
+
+// TurnTaken implements runloop.Metrics. It runs on the loop goroutine, inside the very
+// duration the next turn will report, so it does no more than two observations.
+func (m *runLoopMetrics) TurnTaken(waited, held time.Duration) {
+	m.waited.Observe(waited.Seconds())
+	m.held.Observe(held.Seconds())
 }
 
 // handleMetrics serves the Prometheus exposition. It is unauthenticated, like /healthz:
