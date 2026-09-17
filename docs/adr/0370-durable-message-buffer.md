@@ -1,6 +1,6 @@
 # ADR-0370: A published message waits for its subscriber
 
-- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; see the amendment note below)
+- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; amended 2026-09-17 — expiry at an entry point that states a commitment is a breach rather than a silent outcome; see the amendment notes below)
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
@@ -29,6 +29,30 @@
 > Nothing in the decision changes. TTL still defaults to 0, so ADR-0020's no-op stands
 > for every deployed model, and the cross-node case still consumes the same buffer
 > when ADR-0372 is built.
+
+> **Amendment (2026-09-17): expiry is silent only where nothing was promised.** This
+> record decided that a buffered message expiring unconsumed is an ordinary outcome and
+> not an incident, because a fan-out nobody consumed would otherwise flood the incident
+> list ([ADR-0337](0337-incident-floods.md)). That stands wherever nothing was promised,
+> which is the default.
+>
+> [ADR-0373](0373-published-process-interface.md) now lets an entry point state a
+> **commitment** — a duration within which an accepted message will be correlated. Where
+> one is stated, expiry at that entry point is a **breach of it**, and the decision below
+> reads differently in exactly two places:
+>
+> - the incident this record declines to raise is raised after all, in the domain that
+>   made the promise. ADR-0337 still governs it, but as a bound on volume rather than as
+>   a reason for silence: breaches are rate-limited and aggregated per interface and per
+>   peer, because a rule that lets a remote sender open incidents here is otherwise a
+>   denial of service against this domain's operations view.
+> - `expiresAt` stops being only a cleanup deadline. It is the durable evidence that lets
+>   a breach which happened while this node was down be reconstructed on recovery rather
+>   than lost, and that lets a window which passed unobserved be recorded as
+>   **unmeasured** rather than as met.
+>
+> Nothing changes for an entry point without a commitment. TTL still defaults to 0 for a
+> locally published message, so ADR-0020's no-op stands for every deployed model.
 
 ## Context and problem statement
 

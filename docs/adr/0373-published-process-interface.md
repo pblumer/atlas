@@ -1,6 +1,6 @@
 # ADR-0373: A process publishes an interface, not its model
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers

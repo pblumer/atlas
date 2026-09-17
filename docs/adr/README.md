@@ -458,7 +458,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Not started |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
 | [0372](0372-peer-message-delivery-worker.md) | Delivering a message to another node is a worker's job | Accepted | Not started |
-| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Proposed | Not started |
+| [0373](0373-published-process-interface.md) | A process publishes an interface, not its model | Accepted | Not started |
 | [0374](0374-white-box-participant.md) | The white box is a cached contract, not a live look inside | Proposed | Not started |
 | [0375](0375-whats-new-in-go.md) | The feed generator is Go, so the Go checks stop needing Node | Accepted | Landed |
 | [0376](0376-catalogue-maintenance-over-mcp.md) | A product manager maintains the catalogue over MCP | Accepted | Landed |
