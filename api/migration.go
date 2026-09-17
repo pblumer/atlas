@@ -49,6 +49,13 @@ type migrationPlanResp struct {
 	// Migratable is the plain answer, so a caller does not have to interpret an empty
 	// problems array itself.
 	Migratable bool `json:"migratable"`
+	// Fork is what would happen instead if this instance were forked onto the same
+	// target: ended where it is, and continued in a new instance of that version
+	// (ADR-draft-forked-instance-migration). It rides on the same answer because the
+	// question an operator has when a rebinding is refused is "then what?", and a
+	// refusal with no next step is what sent them back to cancel-and-restart. Absent
+	// only when the plan could not be built far enough to ask.
+	Fork *forkPlanResp `json:"fork,omitempty"`
 }
 
 // migrationRequest is the body both endpoints take. Mapping overrides are optional and
@@ -60,6 +67,11 @@ type migrationRequest struct {
 	TargetProcessDefKey uint64          `json:"targetProcessDefKey"`
 	Reason              string          `json:"reason"`
 	Mapping             []migrationPair `json:"mapping"`
+	// Resume names where a *fork* would pick the work up again, by element id in the
+	// target version (ADR-draft-forked-instance-migration). It is ignored by the
+	// in-place endpoints and empty means "propose them from where the tokens are now",
+	// which is what the dialog opens with.
+	Resume []string `json:"resume,omitempty"`
 }
 
 // deriveMigrationMapping builds the element mapping a migration will carry: every
@@ -236,7 +248,23 @@ func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
 		found   bool
 		planErr error
 	)
-	s.do(func() { plan, found, planErr = s.planMigration(key, req.TargetProcessDefKey, req.Mapping) })
+	s.do(func() {
+		plan, found, planErr = s.planMigration(key, req.TargetProcessDefKey, req.Mapping)
+		if planErr != nil || !found {
+			return
+		}
+		// Both readings of "move this instance to that version", from one call. The
+		// dialog shows the rebinding first and the fork below it, and a plan that showed
+		// only the half that failed is what this endpoint exists to stop being.
+		fork, ok, err := s.planFork(key, req.TargetProcessDefKey, req.Resume)
+		if err != nil {
+			planErr = err
+			return
+		}
+		if ok {
+			plan.Fork = &fork
+		}
+	})
 	switch {
 	case planErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "plan migration: "+planErr.Error())

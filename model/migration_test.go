@@ -168,7 +168,7 @@ func TestEveryValueRefusesATruncatedBuffer(t *testing.T) {
 		&ElementInstanceValue{ProcessInstanceKey: 1, ProcessDefKey: 2, ElementId: 3, FlowScopeKey: 4, BpmnElementType: 5, AttachedToKey: 6, TokenID: 7, ParentTokenID: 8, SourceFlowId: 9, MultiInstance: 1, EventGatewayKey: 10},
 		&JobValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, JobType: 3, Retries: 4, Deadline: 5, Assignee: "someone", RetryDueDate: 6, LeaseExpiresAt: 7},
 		&TimerValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, TargetElementId: 3, DueDate: 4, Repetitions: 5, ProcessDefKey: 6, JobKey: 7},
-		&ProcessInstanceValue{ProcessDefKey: 1, State: PIActive, CompletedAt: 2, CreatedAt: 3, CorrelationKey: "k", ParentElementInstanceKey: 4, ExpiryDueDate: 5, CompletedPosition: 6, PurgeDueDate: 7},
+		&ProcessInstanceValue{ProcessDefKey: 1, State: PIActive, CompletedAt: 2, CreatedAt: 3, CorrelationKey: "k", ParentElementInstanceKey: 4, ExpiryDueDate: 5, CompletedPosition: 6, PurgeDueDate: 7, PredecessorInstanceKey: 8, SuccessorInstanceKey: 9},
 		&VariableValue{ScopeKey: 1, Name: "n", Kind: VarString, Text: "t"},
 		&MessageSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, MessageName: "m", CorrelationKey: "c", ProcessDefKey: 3, ElementId: 4},
 		&SignalSubscriptionValue{ProcessInstanceKey: 1, ElementInstanceKey: 2, SignalName: "s", ProcessDefKey: 3, ElementId: 4},

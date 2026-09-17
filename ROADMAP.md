@@ -985,6 +985,19 @@ What it takes to run this for real.
   the searchable variables its target declares
   ([ADR-0295](docs/adr/0295-migration-reindexes-searchable-variables.md)).
   **ADR-0162 is complete.**
+- ✅ **Forked instance migration**
+  ([ADR-draft-forked-instance-migration](docs/adr/draft-forked-instance-migration.md)):
+  the answer to the refusal ADR-0162's validator is designed to give. Where a token
+  cannot be rebound — its element is gone from the target version, or is a different kind
+  of element there — the instance is ended where it is and its work **continues in a new
+  instance** of that version, seeded at resume points an operator names (proposed from
+  where the tokens are now), carrying the root-scope variables and data objects, with
+  each record naming the other. It emits no new durable fact: an instance created and
+  another terminated, plus two appended link fields, so replay needed nothing new.
+  Delivered with the validator that refuses a resume point which cannot seed an execution,
+  `POST /api/v1/instances/{key}/migrate/fork`, the `atlas_fork_instance` MCP tool, the
+  plan endpoint answering both readings at once, the Operations dialog showing the fork
+  below the rebinding, and the two-way link on the replay and the instance card.
 - 🚧 Operator tooling: list/inspect instances, incidents, jobs. **Finding one instance
   among a few hundred thousand** landed
   ([ADR-0241](docs/adr/0241-finding-an-instance.md)): the

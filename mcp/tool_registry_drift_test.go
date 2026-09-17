@@ -109,6 +109,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
 	"atlas_migration_plan":               "POST /api/v1/instances/{key}/migrate/plan",
 	"atlas_migrate_instance":             "POST /api/v1/instances/{key}/migrate",
+	"atlas_fork_instance":                "POST /api/v1/instances/{key}/migrate/fork",
 	"atlas_migrate_instances":            "POST /api/v1/processes/{key}/migrate-instances",
 	"atlas_reindex_instances":            "POST /api/v1/processes/{key}/reindex-instances",
 	"atlas_mail_outbox":                  "GET /api/v1/mail/outbox",

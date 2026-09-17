@@ -294,3 +294,5 @@ Do not rewrite the author of commits that are already on `main`.
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
 | Set or overwrite a running instance's variables | `POST /api/v1/instances/{key}/variables` — [ADR-0095](docs/adr/0095-external-variable-modification.md) |
 | See who overrode an instance's variables (the audit trail) | `GET /api/v1/instances/{key}/variable-audit` — [ADR-0098](docs/adr/0098-external-variable-modification-audit.md) |
+| Move a running instance onto a fixed version of its process | `POST /api/v1/instances/{key}/migrate` — [ADR-0162](docs/adr/0162-process-instance-migration.md) |
+| Continue an instance in a new one when its tokens cannot be rebound | `POST /api/v1/instances/{key}/migrate/fork` — [ADR-draft-forked-instance-migration](docs/adr/draft-forked-instance-migration.md) |
