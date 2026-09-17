@@ -968,6 +968,14 @@ func (s *Server) apiRoutes() []apiRoute {
 			tag:     "Catalogue", role: RoleProductManager,
 			resp: jsonBody("Where the product is used, what depends on it, and how many hold it", tObject())}},
 
+		{"GET", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleGetPicture, apiOp{
+			summary: "A product's picture — a photograph or the vendor's mark — or 404 when it has none, which is the ordinary case the caller falls back from. Readable by anybody a catalogue offering the product is for, and not only by whoever maintains it: a product is referenced by catalogues rather than owned by one, so a customer of one catalogue legitimately orders a product whose home is another. A product nobody may see answers the same 404, because the two must be indistinguishable", tag: "Catalogue", role: RoleUser,
+			resp: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"PUT", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleSetPicture, apiOp{
+			summary: "Store a product's picture from the raw request body (image/png, image/jpeg or image/svg+xml). Set by whoever maintains the product's home catalogue: a picture is part of how the product is offered, and somebody who may not rename it may not re-illustrate it. The bytes are validated as the type they claim and served back under a sandbox policy. Not frozen into a release — a better photograph of the same laptop is not a different laptop", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent,
+			req: &bodySpec{mediaType: "image/png", desc: "The picture (PNG, JPEG or SVG)", schema: map[string]any{"type": "string", "format": "binary"}}}},
+		{"DELETE", "/api/v1/catalog-products/{id}/picture", s.catalogs.HandleDeletePicture, apiOp{
+			summary: "Remove a product's picture, so the portal falls back to showing none. Same gate as setting one", tag: "Catalogue", role: RoleProductManager, status: http.StatusNoContent}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
 			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it, the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an Atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the portal groups it under — a heading and nothing else, with no ordering, no translation and no entity behind it. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
@@ -1073,6 +1081,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/orders/{id}", s.orders.HandleGet, apiOp{
 			summary: "One of your orders, with the status of every line", tag: "Order", role: RoleUser,
 			resp: jsonBody("The order", tObject())}},
+		{"POST", "/api/v1/orders/fulfilment/repair", s.handleRepairFulfilment, apiOp{
+			summary: "End the fulfilment orchestrations that cannot do their work — one that names no order builds every request from nothing — and start one again for every open order left without one. Idempotent: an installation with nothing broken is answered with two empty lists. ?dryRun=true reports what it would do and changes nothing, which is what to run first", tag: "Order", role: RoleOperator,
+			resp: jsonBody("What was ended and what was started again", tObject())}},
+		{"GET", "/api/v1/portal/orders/{id}/lines/{position}/progress", s.handleLineProgress, apiOp{
+			summary: "Where one of your own positions stands: the steps the process working on it is sitting on right now, by the names its model gives them. Gated on owning the order rather than on a role — somebody else's order answers 404, because whether it exists is not something this confirms — and it carries no process variable, because the caller already knows their own order and this says where, not what. A position nothing is running for answers state \"none\"", tag: "Order", role: RoleUser,
+			resp: jsonBody("Where the position's process stands", tObject())}},
 
 		// The two calls an orchestrator makes to drive an order: what may start,
 		// and what came back. Operator work rather than the orderer's — nobody

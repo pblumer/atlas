@@ -266,6 +266,14 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 }
 .product-form > .form-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .product-form > .form-sec-hint { margin: 4px 0 4px; font-size: 12px; color: var(--muted); }
+/* The product's picture in its editor: bounded here rather than by the file, because
+   what was uploaded is what is served. contain and not cover — a crop would cut the
+   top off somebody's product. */
+.product-picture {
+  display: block; max-width: 220px; max-height: 140px; width: auto;
+  margin: 0 0 8px; border: 1px solid var(--border); border-radius: 8px;
+  object-fit: contain; background: var(--surface);
+}
 @media (max-width: 760px) { .product-form { grid-template-columns: 1fr; } }
 
 h1 { font-size: 20px; margin: 0 0 12px; }

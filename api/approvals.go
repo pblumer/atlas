@@ -192,7 +192,12 @@ func (s *Server) approvalOf(rv *state.ReadView, tr taskResp) (approvalResp, bool
 	vars := map[string]string{}
 	err := rv.VisibleVariablesOfScope(tr.ProcessInstanceKey, func(v *model.VariableValue) error {
 		switch v.Name {
-		case approvalOrderVar, "itemId", "variantId", "recipient", "orderer":
+		// positionId among them, and it is the one that was missed: it is read below
+		// as what names the line, and a name collected nowhere is a fallback that
+		// always fires. For a product the order carries twice the fallback resolves
+		// to nothing — correctly, because the product names two lines — and the
+		// approval was then not recognised as an approval at all.
+		case approvalOrderVar, "itemId", "positionId", "variantId", "recipient", "orderer":
 			if s, ok := nativeVar(v).(string); ok {
 				vars[v.Name] = s
 			}

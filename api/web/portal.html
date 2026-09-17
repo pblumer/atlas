@@ -70,6 +70,10 @@
   .lines { margin:0; padding-left:0; list-style:none; font-size:14px; }
   .lines li { padding:3px 0; border-top:1px solid var(--border); }
   .lines li:first-child { border-top:0; }
+  /* The step a position is sitting on. Read as a statement rather than as a note:
+     it is the answer somebody pressed for, and .muted is what the page uses for
+     what it says without being asked. */
+  .lines .step { font-size:13px; color:var(--text); }
   /* One dot per line status. The three that mean "not provisioned" are deliberately
      different colours: a refusal is a decision, a failure is a defect somebody is
      fixing, and a block is neither — showing them alike would tell a visitor the
@@ -128,7 +132,25 @@
              color:var(--muted); font-weight:600; padding:0 0 6px; border-bottom:1px solid var(--border); }
   .cell { display:flex; align-items:flex-start; gap:6px; padding:6px 0;
           border-bottom:1px solid var(--border); }
-  .cell .label { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; font-size:14px; }
+  /* The name and whatever describes the row, as one shrinkable item. break-word and
+     not anywhere: `anywhere` lets a box shrink below its longest word, so a flex
+     sibling that refuses to shrink can take the whole row and the name wraps one
+     letter per line. `break-word` keeps the longest word as the floor and breaks a
+     word only when it truly does not fit. */
+  .cell .body { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .cell .label { min-width:0; overflow-wrap:break-word; font-size:14px; }
+  /* What the row says about itself — a price, the level it sits at, where a search
+     found it. Under the name rather than beside the controls, and wrapping, because
+     two of those together are wider than a column of this cascade. */
+  .cell .meta { font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap;
+                column-gap:8px; row-gap:2px; overflow-wrap:break-word; }
+  /* A product's picture, bounded by the page rather than by the file: what was
+     uploaded is what is served, so the size is decided here. object-fit:contain
+     keeps a logo a logo and a photograph a photograph — a cover crop would cut the
+     top off somebody's product. */
+  .card .picture { display:block; max-width:100%; max-height:200px; width:auto;
+                   margin:0 0 10px; border-radius:8px; object-fit:contain;
+                   background:var(--surface); }
   /* What a row carries at its right edge, and the two declarations that keep it on
      one line. Each icon already refuses to shrink; the trail around them did not,
      and its contents were inline boxes — so a narrow column wrapped them and one

@@ -360,7 +360,7 @@ const parseTargets = (raw) => String(raw || "").split("\n")
 
 // ---------- One catalogue ----------
 
-export async function viewCatalogDetail({ api, toast, view, isSuperseded, me, enforced }, id) {
+export async function viewCatalogDetail({ api, apiBytes, toast, view, isSuperseded, me, enforced }, id) {
   let cat, items, releases, processes, forms, dir, people;
   try {
     [cat, items, releases, processes, forms, dir, people] = await Promise.all([
@@ -679,6 +679,27 @@ function sharingCard(cat, me, enforced, dir) {
 // The palette is the console's own tokens throughout. Nothing here introduces a
 // colour: the sections are separated by --border, their hints are --muted, and a
 // theme change reaches this form because it never spelled a colour out.
+// savePicture puts a chosen picture on the product, or takes the existing one
+// away. Does nothing when the form says nothing about it, which is the ordinary
+// save.
+//
+// A failure here is reported and not raised: the product is saved by the time this
+// runs, and a page that reported "not saved" because an image did not upload would
+// send somebody looking for a change that is in fact stored.
+async function savePicture({ api, apiBytes, toast }, pid, f) {
+  const file = f.get("picture");
+  const path = `/api/v1/catalog-products/${encodeURIComponent(pid)}/picture`;
+  try {
+    if (file && file.size > 0) {
+      await apiBytes("PUT", path, file);
+      return;
+    }
+    if (f.get("dropPicture")) await api("DELETE", path);
+  } catch (err) {
+    toast(`The product was saved, but its picture was not: ${err.message}`, "err");
+  }
+}
+
 function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
   const v = it || { state: "draft", approval: { kind: "none" }, texts: {} };
   const ap = v.approval || {};
@@ -740,6 +761,19 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
+      <div class="field wide">Picture
+        <span class="muted" style="display:block; margin:2px 0 6px">A photograph of the
+          thing or the vendor's mark, shown to whoever is choosing — PNG, JPEG or SVG,
+          served back exactly as uploaded. It is <b>not frozen into a release</b>: a
+          better photograph of the same laptop is not a different laptop, so a new
+          picture appears on old orders too. Most of a catalogue reads as a list of
+          names; this is the one thing that makes it read as a shop.</span>
+        ${it ? `<img class="product-picture" alt=""
+          src="/api/v1/catalog-products/${encodeURIComponent(v.id)}/picture?t=${Date.now()}"
+          onerror="this.remove()">` : ""}
+        <input type="file" name="picture" accept="image/png,image/jpeg,image/svg+xml">
+        ${it ? `<label class="field inline"><input type="checkbox" name="dropPicture">
+          Remove the picture this product has</label>` : ""}</div>
 
       ${section("How an order is handled",
     "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
@@ -1201,6 +1235,11 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
       };
       try {
         await api("POST", "/api/v1/catalog-products", body);
+        // The picture is its own request, because it is bytes and the product is a
+        // record. It follows the save rather than preceding it, so a product that
+        // was refused never acquires a picture — and a picture that fails to upload
+        // is reported on its own, against a product that is already stored.
+        await savePicture({ api, apiBytes, toast }, pid, f);
         // A new product is offered by the catalogue it was created in: creating one
         // that nothing offers is the likeliest way to lose work here.
         //

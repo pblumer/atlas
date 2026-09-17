@@ -2,6 +2,87 @@
   "generatedAt": "2026-09-09",
   "entries": [
     {
+      "id": "a-product-can-carry-a-picture",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "Put a picture on a product",
+        "de": "Ein Bild am Produkt hinterlegen"
+      },
+      "summary": {
+        "en": "A catalogue read as a list of names, which is fine for a person who already knows what they are ordering and no help at all to everybody else. A product now carries a picture — a photograph of the thing or the vendor's logo — chosen in the product editor and shown in the portal when somebody opens the product. PNG, JPEG and SVG, served back exactly as uploaded: nothing is resized or re-encoded, because a catalogue that re-encodes your picture has decided your product looks near enough. It is visible to everybody a catalogue offering the product is for, not only to the person who maintains it, which matters because the same product is often offered by several catalogues to different audiences. And it is deliberately not frozen into a release: a better photograph of the same laptop is not a different laptop, so it appears on orders already placed instead of a stale copy being kept for them.",
+        "de": "Ein Katalog las sich als Liste von Namen — für jemanden, der ohnehin weiss, was er bestellt, in Ordnung, für alle anderen keine Hilfe. Ein Produkt trägt jetzt ein Bild: eine Aufnahme der Sache oder das Logo des Herstellers, im Produkteditor gewählt und im Portal sichtbar, sobald jemand das Produkt öffnet. PNG, JPEG und SVG, unverändert ausgeliefert: Es wird nichts skaliert und nichts neu codiert, denn ein Katalog, der Ihr Bild neu codiert, hat entschieden, dass Ihr Produkt ungefähr so aussieht. Sichtbar ist es für alle, an die sich ein Katalog mit diesem Produkt richtet, nicht nur für die Person, die es pflegt — das zählt, weil dasselbe Produkt oft in mehreren Katalogen für verschiedene Zielgruppen steht. Und es wird bewusst nicht in eine Freigabe eingefroren: Eine bessere Aufnahme desselben Notebooks ist kein anderes Notebook, also erscheint sie auch an bereits erteilten Bestellungen, statt dort eine veraltete Kopie zu halten."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Catalogue",
+        "Portal"
+      ],
+      "tutorial": {
+        "en": [
+          "Open Catalogue, pick a catalogue and open one of its products.",
+          "Under \"What the catalogue shows\", choose a file beside Picture — PNG, JPEG or SVG.",
+          "Save. The picture is stored as a second step, so a product the server refuses never acquires one.",
+          "Open the portal, find the product and press the \"i\" beside it: the picture is at the top of the panel.",
+          "To take it away, open the product again and tick \"Remove the picture this product has\", then save.",
+          "A product with no picture shows none — no gap and no broken-image icon, because that is the ordinary case."
+        ],
+        "de": [
+          "Katalog öffnen, einen Katalog wählen und eines seiner Produkte öffnen.",
+          "Unter „What the catalogue shows\" bei „Picture\" eine Datei wählen — PNG, JPEG oder SVG.",
+          "Speichern. Das Bild wird als zweiter Schritt abgelegt, damit ein vom Server abgelehntes Produkt nie eines erhält.",
+          "Portal öffnen, das Produkt suchen und daneben auf „i\" drücken: Das Bild steht zuoberst im Feld.",
+          "Zum Entfernen das Produkt erneut öffnen, „Remove the picture this product has\" ankreuzen und speichern.",
+          "Ein Produkt ohne Bild zeigt keines — keine Lücke und kein Platzhaltersymbol, denn das ist der Normalfall."
+        ]
+      }
+    },
+    {
+      "id": "where-your-own-position-stands-without-an-operations-surface",
+      "version": "Unreleased",
+      "date": null,
+      "category": "Added",
+      "title": {
+        "en": "See which step your order is waiting on",
+        "de": "Sehen, an welchem Schritt die eigene Bestellung wartet"
+      },
+      "summary": {
+        "en": "\"Meine Aufträge\" told you a position was running. It did not tell you what it was running *on* — whether somebody's approval is sitting in a manager's inbox or whether the account is being created right now. Each position now has a \"Where is this?\" button, and the answer is the step the process is standing on, by the name the model gives it. It is for the person whose order it is, not only for operators: the link that existed leads into the engine console, which shows everything that instance holds, including data belonging to other people's orders where a process carries both. So this is a separate, much narrower answer — the step, and nothing else. Somebody else's order is answered the same way an order you may not read is answered anywhere in Atlas: as if it were not there. The page asks when you press, not when it loads, because finding the process means looking through what is running, and a table of ten orders should not pay that forty times over to fill a line most readers never open.",
+        "de": "„Meine Aufträge\" sagte bisher, dass eine Position läuft. Es sagte nicht, woran sie läuft — ob eine Genehmigung im Postfach einer Vorgesetzten liegt oder ob das Konto gerade angelegt wird. Jede Position hat jetzt eine Schaltfläche „Wo steht das?\", und die Antwort ist der Schritt, auf dem der Prozess steht, mit dem Namen, den das Modell ihm gibt. Sie ist für die Person gedacht, der die Bestellung gehört, nicht nur für den Betrieb: Der bisherige Link führt in die Engine-Konsole, und die zeigt alles, was diese Instanz hält — auch Daten aus fremden Bestellungen, wenn ein Prozess beide trägt. Deshalb gibt es hier eine eigene, viel engere Antwort: den Schritt und sonst nichts. Eine fremde Bestellung wird so beantwortet, wie in Atlas jede Bestellung beantwortet wird, die man nicht lesen darf — als gäbe es sie nicht. Gefragt wird beim Druck auf die Schaltfläche, nicht beim Laden der Seite: Den Prozess zu finden heisst, das Laufende durchzusehen, und eine Tabelle mit zehn Bestellungen soll das nicht vierzig Mal bezahlen, um eine Zeile zu füllen, die die meisten nie aufschlagen."
+      },
+      "link": {
+        "label": "Changelog",
+        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
+      },
+      "tags": [
+        "Portal",
+        "Orders",
+        "Tasks"
+      ],
+      "tutorial": {
+        "en": [
+          "Open the portal and order something whose product asks for an approval.",
+          "Switch to \"Meine Aufträge\" and find the position in the order you just placed.",
+          "Press \"Where is this?\" beside it.",
+          "The step appears next to the button — the approval task's own name while somebody is deciding, the provisioning step once they have.",
+          "Press it again later: the answer is fetched fresh each time, because that is the one thing on the page that moves while it is open.",
+          "A position nothing is working on says so: before its turn comes, and after it is finished, there is no process to stand anywhere."
+        ],
+        "de": [
+          "Portal öffnen und etwas bestellen, dessen Produkt eine Genehmigung verlangt.",
+          "Auf „Meine Aufträge\" wechseln und die Position der eben aufgegebenen Bestellung suchen.",
+          "Daneben „Wo steht das?\" drücken.",
+          "Der Schritt erscheint neben der Schaltfläche — der Name der Genehmigungsaufgabe, solange jemand entscheidet, danach der Provisionierungsschritt.",
+          "Später erneut drücken: Die Antwort wird jedes Mal neu geholt, denn sie ist das Einzige auf der Seite, das sich ändert, während sie offen ist.",
+          "Eine Position, an der nichts arbeitet, sagt das auch: vor ihrer Reihe und nach ihrem Abschluss steht kein Prozess irgendwo."
+        ]
+      }
+    },
+    {
       "id": "a-model-fix-now-reaches-an-instance-even-when-its-tokens-can",
       "version": "Unreleased",
       "date": null,
@@ -217,45 +298,6 @@
       "summary": {
         "en": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three.",
         "de": "It had a button vocabulary of its own — primary on the eight actions that commit something, linkish on the five that remove a row, nothing at all on five more — and the stylesheet declares none of the three."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      }
-    },
-    {
-      "id": "the-state-store-is-configured-for-the-size-it-has-grown-to-n",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The state store is set up for the size it has actually reached",
-        "de": "Der Datenspeicher ist auf die Grösse eingestellt, die er tatsächlich erreicht hat"
-      },
-      "summary": {
-        "en": "Atlas kept its state in a store running on its library's out-of-the-box settings: an 8 MB read cache and a single housekeeping thread. Those fit a store of a few thousand entries. On one holding millions they send every lookup to disk and let the housekeeping fall behind until writes are held back — which is felt as the server pausing. The server now sizes its own store for the job and you can adjust it: --state-cache-mb (64 by default) and --state-memtable-mb (16). Worth knowing before you upgrade: that is roughly 96 MB of memory the server did not use before, and both accept 0 to go back to the old behaviour.",
-        "de": "Atlas hielt seinen Zustand in einem Speicher, der auf den Voreinstellungen seiner Bibliothek lief: 8 MB Lesepuffer und ein einziger Aufräum-Thread. Das passt zu einem Speicher mit ein paar tausend Einträgen. Bei Millionen führt es dazu, dass jeder Zugriff auf die Platte geht und das Aufräumen so weit zurückfällt, bis Schreibvorgänge gebremst werden — spürbar als Aussetzer des Servers. Der Server stellt seinen Speicher nun passend ein, und Sie können nachjustieren: --state-cache-mb (Vorgabe 64) und --state-memtable-mb (16). Vor dem Upgrade zu wissen: Das sind rund 96 MB Arbeitsspeicher, die der Server vorher nicht belegte; mit 0 kehren beide zum alten Verhalten zurück."
-      },
-      "link": {
-        "label": "Changelog",
-        "url": "https://github.com/pblumer/atlas/blob/main/CHANGELOG.md#unreleased"
-      },
-      "tags": [
-        "Operations"
-      ]
-    },
-    {
-      "id": "the-approver-is-picked-and-picked-differently-depending-on-t",
-      "version": "Unreleased",
-      "date": null,
-      "category": "Changed",
-      "title": {
-        "en": "The approver is picked, and picked differently depending on the kind.",
-        "de": "The approver is picked, and picked differently depending on the kind."
-      },
-      "summary": {
-        "en": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits.",
-        "de": "This was the last typed identifier on the catalogue screen and the one that cost the most, because nothing reports a wrong value: an approval whose approver matches nobody is created, reaches no inbox, and simply waits."
       },
       "link": {
         "label": "Changelog",
