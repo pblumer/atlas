@@ -145,16 +145,19 @@ on record a number unquoted.
   visible wrong type for an invisible wrong value, which is strictly worse than
   the defect it fixes.
 
-### Option 3 — Bump temis so it returns `json.Number`
+### Option 3 — Have temis return `json.Number`
 - Good: one line upstream, complete at every nesting depth, and Atlas would need
   no change at all (measured: `expr.FromJSON` already maps `json.Number`).
 - Good: it is where the knowledge actually lives — temis knows it held a
   `value.Number`.
-- Bad: not available. The bump also changes how a decision is addressed and how
-  `Result.Outputs` is keyed, which is an already-deployed-artifact compatibility
-  question (#992), not a dependency chore.
-- This stays the better destination. When #992 is settled, this record's
-  machinery becomes redundant and should be removed rather than kept alongside.
+- Bad: **it does not exist to take.** Measured against the newest temis available
+  (`v0.0.0-20260911201220`, seven weeks past the pin): `fromValue` still renders a
+  FEEL number as a decimal string, and an evaluated output still arrives as a Go
+  `string`. Upgrading would not fix this defect, so the choice here is not between
+  option 1 and a bump — it is between option 1 and leaving the defect standing.
+- This stays the better *destination*, and it is upstream work, not a version to
+  pick up. If temis ever carries the type out, this record's machinery becomes
+  redundant and should be removed rather than kept alongside it.
 
 ### Option 4 — Leave it, document `number(...)`
 - Good: no code.

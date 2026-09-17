@@ -53,7 +53,11 @@ const feelNumber = "number"
 func declaredNumbers(defs *tdmn.Definitions, decisionId string) (whole bool, members map[string]bool) {
 	members = map[string]bool{}
 	for _, n := range defs.Graph().Nodes {
-		if n.Type == "decision" && (n.Name == decisionId || n.ID == decisionId) {
+		// Every name the evaluation accepts, this accepts: temis resolves a decision
+		// by its id or its name, so matching fewer of them would mean the decision
+		// evaluates while its declared type is not found, and the number quietly
+		// stays a string.
+		if n.Type == "decision" && (n.ID == decisionId || n.Name == decisionId) {
 			whole = n.DataType == feelNumber
 			break
 		}

@@ -225,3 +225,50 @@ func TestTheCarrierIsAnExactDecimalAndNotAFloat(t *testing.T) {
 		t.Fatalf("output is %T, want json.Number — a float64 here would round a long decimal", out["amount"])
 	}
 }
+
+// [tdmn.Definitions.Decision] accepts an id or a name, so whatever a caller
+// addresses a decision by, the evaluation resolves. The type lookup that
+// accompanies it has to accept the same, or the two silently disagree: the
+// decision evaluates and its declared type is not found, so the number quietly
+// stays a string — the exact defect this record exists to remove, reintroduced
+// one addressing mode over.
+//
+// A decision's FEEL identifier is its `<variable name>`, which need not equal
+// either. Addressing by *that* is a third mode the pinned temis does not offer at
+// all — measured, `Decision("premium")` answers `no decision "premium"` — so it is
+// not asserted here. It arrives with the version that binds by variable (#992),
+// and the lookup has to grow with it.
+func TestTheTypeLookupAcceptsEveryNameTheEvaluationDoes(t *testing.T) {
+	const byVariableXML = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="byvar" name="byvar" namespace="http://atlas/dmn">
+  <inputData id="id_x" name="x"><variable name="x" typeRef="number"/></inputData>
+  <decision id="d_pol" name="Policy Premium">
+    <variable name="premium" typeRef="number"/>
+    <informationRequirement><requiredInput href="#id_x"/></informationRequirement>
+    <decisionTable id="t_pol" hitPolicy="UNIQUE">
+      <input id="i_pol"><inputExpression id="ie_pol" typeRef="number"><text>x</text></inputExpression></input>
+      <output id="o_pol" name="premium" typeRef="number"/>
+      <rule id="r_pol"><inputEntry id="e_pol"><text>&gt;= 0</text></inputEntry><outputEntry id="x_pol"><text>1250</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>`
+
+	defs, diags, err := tdmn.New().Compile(context.Background(), []byte(byVariableXML))
+	if err != nil || diags.HasErrors() {
+		t.Fatalf("compile: %v %v", err, diags)
+	}
+	// The id and the name attribute both name the same decision, so both must
+	// produce the same variable.
+	for _, addr := range []string{"d_pol", "Policy Premium"} {
+		t.Run(addr, func(t *testing.T) {
+			out, _, err := evalDecision(context.Background(), defs, addr, map[string]any{"x": 4.0}, "the by-variable model")
+			if err != nil {
+				t.Fatalf("evaluate by %q: %v", addr, err)
+			}
+			got := OutputVariable("result", out)
+			if got.Kind != model.VarNumber || got.Text != "1250" {
+				t.Errorf("addressed by %q: kind = %d text = %q, want VarNumber %q", addr, got.Kind, got.Text, "1250")
+			}
+		})
+	}
+}
