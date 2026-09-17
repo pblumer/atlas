@@ -85,9 +85,9 @@ type Service struct {
 	// there is no other route from here to shared state.
 	loop  *runloop.Loop
 	store *Store
-	// compiled memoises one matcher per folder, keyed by the folder's UpdatedAt so
-	// an edit invalidates its own entry without anybody having to remember to. Owned
-	// by the loop.
+	// compiled memoises one matcher per folder, keyed by the rule it was compiled
+	// from, so an edit invalidates its own entry without anybody having to remember
+	// to. Owned by the loop.
 	compiled map[string]cachedMatcher
 	// options supplies the editor's value lists; it reads the deployment registry
 	// and design-time stores, so it is only ever called from inside the loop. It
@@ -108,8 +108,10 @@ type Service struct {
 }
 
 type cachedMatcher struct {
-	at int64
-	m  *Matcher
+	// src is the FEEL the matcher was compiled from, which is the whole of what it
+	// is a function of — see [Service.matcher] for why that, and not a timestamp.
+	src string
+	m   *Matcher
 }
 
 // New builds the task-folder service. options and count are the collaborators the
@@ -502,18 +504,30 @@ func (s *Service) MatcherFor(id string, v User) (Folder, *Matcher, bool, error) 
 }
 
 // matcher returns a folder's compiled rule, compiling it the first time and
-// whenever the folder has changed since. Keyed by UpdatedAt so an edit
-// invalidates its own entry — there is no separate invalidation to forget.
-// Called on the loop, which owns the cache.
+// whenever the rule has changed since. There is no separate invalidation to
+// forget. Called on the loop, which owns the cache.
+//
+// The key is the rule's FEEL, not the folder's UpdatedAt, and that is a fix rather
+// than a preference. UpdatedAt is a wall clock in milliseconds, so two saves inside
+// one millisecond shared a key and the second was served the first's matcher —
+// measured at 98 failures in 400 runs of TestMatcherIsRecompiledAfterAnEdit, a test
+// that had been passing on the luck of the clock ticking between two writes.
+//
+// Keying by the rule is not merely a finer clock: a matcher is a pure function of
+// [Rule.FEEL] — it is the only thing [Compile] reads — so the same FEEL always
+// compiles to the same matcher and a different one never reuses it. That holds
+// whatever a clock does, including a record restored from a backup with its old
+// timestamp, or one whose UpdatedAt a migration left alone.
 func (s *Service) matcher(f Folder) (*Matcher, error) {
-	if c, ok := s.compiled[f.ID]; ok && c.at == f.UpdatedAt {
+	src := f.Rule.FEEL()
+	if c, ok := s.compiled[f.ID]; ok && c.src == src {
 		return c.m, nil
 	}
 	m, err := Compile(f.Rule)
 	if err != nil {
 		return nil, err
 	}
-	s.compiled[f.ID] = cachedMatcher{at: f.UpdatedAt, m: m}
+	s.compiled[f.ID] = cachedMatcher{src: src, m: m}
 	return m, nil
 }
 

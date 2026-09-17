@@ -335,6 +335,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A task folder edited twice in quick succession no longer keeps filtering by its
+  previous rule.** The sidebar compiles each folder's rule once and remembers the
+  result; the memo was keyed by the folder's `updatedAt`, a clock in milliseconds. Two
+  saves inside one millisecond therefore shared a key, and the second was served the
+  first's matcher — the folder showed the old filter until something else evicted it.
+
+  Reachable by any caller that edits faster than a person clicks: a script, an API
+  client, an agent over MCP. Measured in the repository's own test for this
+  (`TestMatcherIsRecompiledAfterAnEdit`), which had been passing on the luck of the
+  clock ticking between two writes: **98 failures in 400 runs**.
+
+  The memo is now keyed by the rule itself — specifically the FEEL it compiles to,
+  which is the whole of what the compiler reads. That is correct by construction
+  rather than a finer clock: the same rule always yields the same matcher and a
+  different one never reuses it, whatever a clock does, including a record restored
+  from a backup carrying its original timestamp.
+
+
 - **A catalogue could say a part was integral and optional at the same time.** The
   release keeps *what a product is made of* apart from *what is offered alongside it*,
   because they mean opposite things to a basket: an inclusion is ordered as a
