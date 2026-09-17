@@ -724,8 +724,15 @@ func TestRunLoopTurnsAreReported(t *testing.T) {
 	}
 	// Every turn has both halves, so the two histograms count the same turns. A drift
 	// would mean one of them is being fed from somewhere the other is not.
-	if held != waited {
-		t.Errorf("held count %v and wait count %v disagree; each turn must report both", held, waited)
+	//
+	// At most one turn apart, not exactly equal: a Prometheus gather walks the two
+	// histograms one after the other, so a turn taken between the two reads is in
+	// one count and not yet in the other. Observed once under the load of the whole
+	// suite (13 against 12), never in ten isolated runs. A histogram that is really
+	// fed from somewhere the other is not drifts without bound, which this still
+	// catches — the work above takes many more turns than one.
+	if diff := held - waited; diff > 1 || diff < -1 {
+		t.Errorf("held count %v and wait count %v disagree by more than the turn in flight; each turn must report both", held, waited)
 	}
 	// The sums are durations, so they are non-negative — and held is real work, so on a
 	// server that just deployed and started three instances it cannot be exactly zero.
