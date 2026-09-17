@@ -111,6 +111,15 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
 			return
 		}
+		// A key that can only ever be null compiles cleanly (ADR-0388) and then
+		// correlates every event to nothing: the worker looks healthy, the sender gets
+		// its 2xx, and no instance is ever woken. Refused where a syntax error already
+		// is, because by the time an event arrives there is nobody left to tell
+		// (ADR-0392).
+		if err := expr.CheckCallsError(corr); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "correlationKey cannot work: "+err.Error())
+			return
+		}
 	}
 	// What the rest of the shape must be depends on the worker's kind, and the kind
 	// is in the store — so it is read before the record is built rather than checked
@@ -262,9 +271,19 @@ func (s *Server) handleUpdateInboundSubscription(w http.ResponseWriter, r *http.
 			return
 		}
 	}
-	if p.CorrelationKey != nil && feelExpr(*p.CorrelationKey) != "" {
-		if _, err := expr.CompileAuto(feelExpr(*p.CorrelationKey)); err != nil {
+	// Both gates, exactly as on create: a key that cannot work must not reach the
+	// store by the edit road either.
+	var corr string
+	if p.CorrelationKey != nil {
+		corr = feelExpr(*p.CorrelationKey)
+	}
+	if corr != "" {
+		if _, err := expr.CompileAuto(corr); err != nil {
 			httpapi.Error(w, http.StatusBadRequest, "correlationKey is not a valid FEEL expression: "+err.Error())
+			return
+		}
+		if err := expr.CheckCallsError(corr); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, "correlationKey cannot work: "+err.Error())
 			return
 		}
 	}

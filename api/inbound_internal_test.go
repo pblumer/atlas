@@ -668,3 +668,63 @@ func TestInboundDueRespectsAWatchsOwnCadence(t *testing.T) {
 		t.Error("a watch was skipped after its cadence had elapsed")
 	}
 }
+
+// TestInboundCorrelationKeyThatCanOnlyBeNullIsRefused holds the correlation key to
+// the same gate a syntax error already meets (ADR-0388). A call this build cannot
+// make compiles cleanly — the engine keeps invocation total for DMN's sake — and
+// the consequence here is the quietest in the product: the key evaluates to null,
+// null correlates to nothing, so events arrive, the sender gets its 2xx, the
+// worker reports healthy, and no instance is ever woken. Registration is the last
+// moment at which there is anybody to tell.
+func TestInboundCorrelationKeyThatCanOnlyBeNullIsRefused(t *testing.T) {
+	srv, _ := newValidateServer(t, WithInboundPollInterval(0))
+	h := srv.Handler()
+	do := func(method, path, body string) (int, []byte) {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	_, cb := do(http.MethodPost, "/api/v1/connectors", `{"name":"ev","kind":"clio","endpoint":"http://x"}`)
+	var conn connector
+	_ = json.Unmarshal(cb, &conn)
+	base := "/api/v1/connectors/" + conn.ID + "/inbound-subscriptions"
+
+	for _, tc := range []struct {
+		name, key, says string
+	}{
+		{"another engine's function", "= is defined(orderId)", "x != null"},
+		{"a typo", "= strng length(orderId)", "strng length"},
+		{"a built-in with the wrong argument count", "= date()", "date"},
+	} {
+		t.Run("create/"+tc.name, func(t *testing.T) {
+			code, b := do(http.MethodPost, base,
+				`{"watchedSubject":"orders/new","messageName":"orderEvent","correlationKey":"`+tc.key+`"}`)
+			if code != http.StatusBadRequest {
+				t.Fatalf("code = %d, want 400 (body %s)", code, b)
+			}
+			if !strings.Contains(string(b), tc.says) {
+				t.Errorf("refusal does not say %q:\n%s", tc.says, b)
+			}
+		})
+	}
+
+	// The fix has to get through, and the patch route is the same gate: a
+	// subscription created with a working key must not be editable into a broken one.
+	code, sb := do(http.MethodPost, base,
+		`{"watchedSubject":"orders/new","messageName":"orderEvent","correlationKey":"= orderId"}`)
+	if code != http.StatusOK {
+		t.Fatalf("a working correlation key was refused: %d %s", code, sb)
+	}
+	var sub inboundSubscription
+	_ = json.Unmarshal(sb, &sub)
+	if code, b := do(http.MethodPatch, "/api/v1/inbound-subscriptions/"+sub.ID,
+		`{"correlationKey":"= is defined(orderId)"}`); code != http.StatusBadRequest {
+		t.Errorf("patch code = %d, want 400 (body %s)", code, b)
+	}
+	if code, b := do(http.MethodPatch, "/api/v1/inbound-subscriptions/"+sub.ID,
+		`{"correlationKey":"= orderId != null"}`); code != http.StatusOK {
+		t.Errorf("the corrected key was refused: %d %s", code, b)
+	}
+}

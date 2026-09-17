@@ -477,6 +477,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
 | [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
+| [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
 
 ## The two states of a record
 
