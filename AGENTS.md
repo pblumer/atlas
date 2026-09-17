@@ -290,6 +290,7 @@ Do not rewrite the author of commits that are already on `main`.
 | See what to build next | [`ROADMAP.md`](ROADMAP.md) |
 | Look up a term | [`docs/architecture/glossary.md`](docs/architecture/glossary.md) |
 | Understand business capabilities and value streams | [`docs/architecture/business-architecture.md`](docs/architecture/business-architecture.md) |
+| Know how the catalogue relates to TMF620 and the other standards | [`docs/comparisons/catalogue-standards.md`](docs/comparisons/catalogue-standards.md) |
 | Check the rules I must not break | [`docs/architecture/invariants.md`](docs/architecture/invariants.md) |
 | Set or overwrite a running instance's variables | `POST /api/v1/instances/{key}/variables` — [ADR-0095](docs/adr/0095-external-variable-modification.md) |
 | See who overrode an instance's variables (the audit trail) | `GET /api/v1/instances/{key}/variable-audit` — [ADR-0098](docs/adr/0098-external-variable-modification-audit.md) |
