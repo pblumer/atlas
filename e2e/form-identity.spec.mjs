@@ -18,6 +18,16 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/form-editor-harness.html");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
   await page.evaluate(() => window.__mountDivergent());
+  // The properties panel is form-js's own, rendered by preact *after* the mount call
+  // returns, so the ID field does not exist yet at this point. An assertion would wait
+  // for it by retrying; a page.evaluate does not, and the one below reaches straight
+  // into the field. Without this the reach reads null under load and throws "Illegal
+  // invocation", which is a failure of the test rather than of the editor.
+  //
+  // Attached rather than visible: the harness deliberately does not lay the panel out
+  // at a size Playwright would call visible, which is why the field is driven through
+  // its native setter below rather than by typing into it.
+  await expect(page.locator("#bio-properties-panel-id")).toBeAttached();
 });
 
 test("a form whose schema id drifted opens showing the id it is really stored under", async ({ page }) => {
