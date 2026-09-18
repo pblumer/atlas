@@ -1,0 +1,33 @@
+{
+  "tags": [
+    "Catalogue"
+  ],
+  "title": {
+    "en": "The product editor opens beside its row",
+    "de": "Der Produkteditor öffnet neben seiner Zeile"
+  },
+  "summary": {
+    "en": "Editing a product used to open the form under the whole product list: with three products that is fine, with forty it meant scrolling past all of them to reach the form, and then reading it with no sight of the row it came from — the id in the first field was the only thing saying which product was open. The list and the editor are now two columns, and the catalogue's page uses the full width of the window to carry them, the way the task inbox does. The form opens on the right, level with the row it was opened from, and that row stays marked while it is open, so the product, its row and its form are on one line across the page. Sorting or filtering the list moves the form with its row rather than leaving it pointing at whatever slid into that place. The kit that says what a product is made of opens in the same place, and a row has one of the two open at a time. The whole catalogue page follows the same shape now: the catalogues beside the one being created, the relations beside the pair being related, the maintainers beside the one being added. The forms themselves are unchanged, and so is the narrow-window layout: the two columns are offered from 1400 pixels up, because below that the list or the kit would be narrower than its own content, and a smaller window gets the stacked page it had.",
+    "de": "Beim Bearbeiten eines Produkts erschien das Formular bisher unterhalb der gesamten Produktliste: bei drei Produkten kein Problem, bei vierzig bedeutete es, an allen vorbeizuscrollen — und das Formular dann ohne Sicht auf die zugehörige Zeile zu lesen; allein die Id im ersten Feld sagte, welches Produkt offen war. Liste und Editor stehen jetzt in zwei Spalten, und die Katalogseite nutzt dafür die volle Fensterbreite — so wie der Aufgaben-Posteingang. Das Formular öffnet rechts, auf der Höhe der Zeile, aus der es geöffnet wurde, und diese Zeile bleibt markiert, solange es offen ist — Produkt, Zeile und Formular liegen auf einer Linie. Wird die Liste sortiert oder gefiltert, wandert das Formular mit seiner Zeile mit, statt auf die Zeile zu zeigen, die nachgerückt ist. Der Baukasten, der sagt, woraus ein Produkt besteht, öffnet an derselben Stelle; je Zeile ist eines von beiden offen. Die ganze Katalogseite folgt jetzt derselben Form: die Kataloge neben dem neu anzulegenden, die Beziehungen neben dem Paar, das verknüpft wird, die Verantwortlichen neben der Person, die hinzukommt. Die Formulare selbst bleiben unverändert, ebenso die Darstellung in schmalen Fenstern: Zwei Spalten gibt es ab 1400 Pixeln, weil darunter Liste oder Baukasten schmaler wären als ihr eigener Inhalt — kleinere Fenster erhalten weiterhin die untereinander gesetzte Ansicht."
+  },
+  "tutorial": {
+    "en": [
+      "Open Catalogue and pick a catalogue with a few products in it.",
+      "The catalogue list itself reads the same way: the catalogues on the left, the one being created on the right.",
+      "Press \"edit\" on a product well down the list.",
+      "The form opens on the right, level with that row, and the row is highlighted while it is open.",
+      "Scroll: the form stays with you and scrolls inside itself, so its Save button is always reachable.",
+      "Sort the list by a column heading, or type in a column filter — the form follows its own row.",
+      "Press Cancel to close it; the list takes the full width back."
+    ],
+    "de": [
+      "Katalog öffnen und einen Katalog mit mehreren Produkten wählen.",
+      "Die Katalogliste selbst liest sich gleich: links die Kataloge, rechts der neu anzulegende.",
+      "Bei einem Produkt weiter unten in der Liste auf „edit\" drücken.",
+      "Das Formular öffnet rechts auf Höhe dieser Zeile; die Zeile ist markiert, solange es offen ist.",
+      "Scrollen: Das Formular bleibt sichtbar und scrollt in sich selbst, die Schaltfläche „Save\" bleibt erreichbar.",
+      "Liste über eine Spaltenüberschrift sortieren oder in einem Spaltenfilter tippen — das Formular folgt seiner Zeile.",
+      "„Cancel\" schliesst es; die Liste erhält die volle Breite zurück."
+    ]
+  }
+}

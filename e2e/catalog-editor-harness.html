@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas catalogue product editor e2e harness</title>
+    <!-- Drives the *real* api/web/catalog-admin.js against a mock `api`, for one
+         question the Go guards cannot reach: where the product editor opens.
+
+         It used to open under the list, which is a scroll of unknown length — the
+         fixture therefore carries enough products that the last row is well below the
+         fold, because a catalogue of three would pass either way and prove nothing. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; background: #fff; }
+      /* No top bar on a harness page, so the panel sticks at the window's own top. */
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <!-- catalog-mode is what app.js puts on the body for this route: the page drops the
+       centred content column, the way the Tasks inbox does. Set here so the harness
+       lays the section out at the width the real page gives it. -->
+  <body class="catalog-mode">
+    <main><div id="view"></div></main>
+    <script type="module">
+      import { viewCatalogDetail, viewCatalogs } from "/catalog-admin.js";
+      const view = document.getElementById("view");
+
+      // Twenty-four: enough that the last rows are well off the fold, and enough that
+      // the list is taller than the editor beside it — the panel can only stick within
+      // the section it belongs to, so a fixture of three would show nothing about it.
+      const ITEMS = Array.from({ length: 24 }, (_, i) => ({
+        id: `p${i + 1}`,
+        texts: { de: `Produkt ${i + 1}`, en: `Product ${i + 1}` },
+        state: i % 3 === 0 ? "draft" : "active",
+        category: "Arbeitsplatz",
+        productGroup: "Mobile Geräte",
+        approval: { kind: "none" },
+        provisionProcess: `proc_demo_${i + 1}`,
+        revision: 1,
+      }));
+
+      // One row carrying real lengths: a bilingual name and a provisioning process id
+      // are what actually decide whether the list survives losing half the page.
+      ITEMS[0] = {
+        ...ITEMS[0], id: "2027-benutzeraccount-intern",
+        texts: { de: "Benutzerkonto intern", en: "Internal User Account" },
+        provisionProcess: "proc_demo_interner_account_prov",
+      };
+
+      const CAT = {
+        id: "c1", texts: { de: "Katalog", en: "Catalogue" }, languages: ["de", "en"],
+        rank: 1, groups: ["grp_all"], items: ITEMS.map((i) => i.id),
+        // One of each of the two graphs, and one maintainer: the relations and the
+        // maintainers are lists beside forms too, and an empty one would let their
+        // column pass without holding anything.
+        edges: [{ from: "p2", kind: "composition", to: "p3" },
+          { from: "p4", kind: "requires", to: "p5" }],
+        members: [{ ref: { type: "user", id: "u2" }, role: "editor" }],
+        ownerId: "u1", revision: 3, theme: {},
+      };
+
+      const api = async (method, url) => {
+        if (/\/catalogs$/.test(url)) return [CAT];
+        if (/approver-report/.test(url)) return { problems: [] };
+        if (/\/catalogs\/[^/]+\/releases/.test(url)) return [];
+        if (/\/catalogs\/[^/]+$/.test(url)) return CAT;
+        if (/\/catalog-products$/.test(url)) return ITEMS;
+        if (/\/processes$/.test(url)) return ITEMS.map((i) => ({ processId: i.provisionProcess }));
+        if (/\/forms$/.test(url)) return [];
+        if (/\/principals$/.test(url)) return [{ id: "grp_all", type: "group", name: "Everybody" },
+          { id: "u1", type: "user", name: "Die Eigentümerin" },
+          { id: "u2", type: "user", name: "Der Vertreter" }];
+        if (/\/users\/assignable$/.test(url)) return [{ username: "arno", name: "Arno" }];
+        return {};
+      };
+
+      // The catalogues themselves, which are the same shape one level up: the list, and
+      // the catalogue being created beside it.
+      window.__mountList = () => viewCatalogs({
+        api, toast: () => {}, view, isSuperseded: () => false,
+      });
+
+      window.__mount = () => viewCatalogDetail({
+        api, apiBytes: async () => new Uint8Array(), toast: () => {}, view,
+        isSuperseded: () => false, me: { id: "u1", roles: ["admin"] }, enforced: false,
+      }, "c1");
+      window.__ready = true;
+    </script>
+  </body>
+</html>

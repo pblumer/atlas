@@ -164,12 +164,15 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
       they reach wins — so two catalogues may not share a rank. A catalogue naming no
       group reaches <b>nobody</b>: the dangerous default is the one where a catalogue
       somebody is still filling is already open to everybody.</p>
-    ${cats.length ? `<table class="table">
-      <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
-      <tbody>${rows}</tbody></table>`
-    : `<div class="empty"><p>No catalogue yet. The one below is the first.</p></div>`}
-
-    <div class="card" style="margin-top:18px; max-width:640px">
+    <div class="cat-cols">
+      <div class="cat-main">
+        ${cats.length ? `<table class="table">
+          <thead><tr><th>Catalogue</th><th>Rank</th><th>Languages</th><th>Products</th><th>Audience</th><th>Changed</th></tr></thead>
+          <tbody>${rows}</tbody></table>`
+    : `<div class="empty"><p>No catalogue yet. The one beside it is the first.</p></div>`}
+      </div>
+      <aside class="cat-side">
+    <div class="card">
       <h3 style="margin:0 0 10px">New catalogue</h3>
       <form class="cat-new">
         <label class="field">Name<input name="name" required autocomplete="off"
@@ -180,6 +183,8 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
         ${audienceField(dir, [])}
         <button class="btn" type="submit">Create</button>
       </form>
+    </div>
+      </aside>
     </div>
 
     ${approverCard(report)}`;
@@ -688,8 +693,17 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     </div>
     <p><a href="#/catalog">← All catalogues</a></p>
 
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <!-- What a catalogue is, and what it looks like: two questions about the catalogue
+         itself rather than about anything in it, so they are read side by side at the
+         top of the page instead of one under the other down the left edge. .grid2 is
+         the console's own two-column pair, so this follows its breakpoint rather than
+         inventing a third. -->
+    <div class="grid2" style="margin:0 0 18px">
+      <section>
       <h3 style="margin:0 0 10px">What this catalogue is</h3>
+      <p class="muted" style="max-width:62ch">Its name, the languages it is offered in,
+        its rank against the other catalogues, and who reaches it.</p>
+      <div class="card">
       <form class="cat-meta">
         ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
           value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
@@ -701,25 +715,36 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
         <button class="btn" type="submit">Save</button>
       </form>
+      </div>
+      </section>
+      <section>${appearanceCard(cat, me, enforced)}</section>
     </div>
-
-    ${appearanceCard(cat, me, enforced)}
 
     <h3>Products</h3>
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
       Everything offered here is orderable once this catalogue is published — a product in
       <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    ${offered.length ? `<table class="table">
-      <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
-      <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table>`
+    <div class="product-cols cat-cols">
+      <div class="product-list cat-main">
+        ${offered.length ? `<div class="product-table"><table class="table">
+          <thead><tr><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
+          <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
     : `<div class="empty"><p>Nothing offered yet.</p></div>`}
 
-    <div class="row" style="margin-top:10px">
-      <button class="btn" data-act="new-product">New product</button>
-      ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+        <div class="row" style="margin-top:10px">
+          <button class="btn" data-act="new-product">New product</button>
+          ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
+        </div>
+      </div>
+      <!-- One column, two panels, and never both at once: editing a product and
+           arranging what it is made of are two questions about the same row, and a
+           row has one answer open at a time. Both keep their own container so the
+           code that fills each one says which it means. -->
+      <aside class="product-side cat-side">
+        <div class="product-editor"></div>
+        <div class="assemble-editor"></div>
+      </aside>
     </div>
-    <div class="product-editor"></div>
-    <div class="assemble-editor"></div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
     <p class="muted" style="max-width:62ch">Three different questions, kept apart.
@@ -730,8 +755,11 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       together — the clerk who may create a supplier must not also approve payments to
       it. Neither right is wrong there; the combination is, and an order that would
       produce it is refused rather than reported afterwards.</p>
-    ${edgeTable(cat.edges || [], byID, langs)}
-    ${offered.length > 1 ? edgeForm(offered, byID, langs) : `<p class="muted">Two products are needed before one can relate to another.</p>`}
+    <div class="cat-cols">
+      <div class="cat-main">${edgeTable(cat.edges || [], byID, langs)}</div>
+      ${offered.length > 1 ? `<aside class="cat-side">${edgeForm(offered, byID, langs)}</aside>`
+    : `<p class="muted">Two products are needed before one can relate to another.</p>`}
+    </div>
 
     ${sharingCard(cat, me, enforced, dir)}
 
@@ -755,7 +783,7 @@ function productRow(it, iid, langs, canAssemble) {
   if (!it) {
     return `<tr><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
       publishing will refuse this</td>
-      <td><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
+      <td class="row-actions"><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
   }
   const ap = it.approval || {};
   const kind = APPROVAL_KINDS.find((k) => k.id === ap.kind) || APPROVAL_KINDS[0];
@@ -764,7 +792,7 @@ function productRow(it, iid, langs, canAssemble) {
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
     <td>${esc(it.provisionProcess || "—")}</td>
-    <td><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
+    <td class="row-actions"><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
       ${canAssemble ? `<button class="btn ghost" data-act="assemble" data-id="${esc(it.id)}">assemble</button>` : ""}
       <button class="btn ghost danger" data-act="drop" data-id="${esc(it.id)}">remove</button></td>
   </tr>`;
@@ -799,14 +827,24 @@ function assembleKit(pid, offered, byID, langs, edges) {
       x.from === pid && x.to === other && STRUCTURE_IDS.includes(x.kind));
     return e ? e.kind : "none";
   };
+  // A cell carries the control and not the word above it. The column says which
+  // answer it is, once, and repeating that in every cell cost the table about 180px
+  // of width — which is the difference between a kit that fits beside the product
+  // list and one that scrolls sideways in it. The name a cell loses on screen it
+  // keeps for a reader who cannot see the column: aria-label names the product and
+  // the answer together, so a radio is never announced as a bare choice, and the
+  // title still explains what the answer means on hover.
   const rows = parts.map((other) => {
     const now = standing(other);
     return `<tr><td>${esc(name(other))}<div class="muted">${esc(other)}</div></td>
       ${STRUCTURE_CHOICES.map((c) => `<td><label class="field inline" title="${esc(c.what)}">
         <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
-  c.id === now ? " checked" : ""}><span>${esc(c.name)}</span></label></td>`).join("")}</tr>`;
+  c.id === now ? " checked" : ""} aria-label="${esc(name(other))}: ${esc(c.name)}"></label></td>`).join("")}</tr>`;
   }).join("");
-  return `<form class="assemble card" data-product="${esc(pid)}" style="margin-top:12px">
+  // No margin spelled here: the card is read in two layouts — beside the list in a
+  // column of its own, and stacked under it on a narrow screen — and an inline style
+  // would win over both, standing the panel twelve pixels off the row it belongs to.
+  return `<form class="assemble card" data-product="${esc(pid)}">
     <h4 style="margin:0 0 4px">What ${esc(name(pid))} is made of</h4>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">Every other product this catalogue
       offers, and where each one stands with respect to this one. <b>Included</b> is ordered
@@ -853,7 +891,7 @@ function edgeTable(edges, byID, langs) {
     return `<tr><td>${name(e.from)}</td>
       <td class="muted">${esc(k ? k.name : e.kind)}</td>
       <td>${name(e.to)}</td>
-      <td><button class="btn ghost danger" data-act="${act}" ${data}>remove</button></td></tr>`;
+      <td class="row-actions"><button class="btn ghost danger" data-act="${act}" ${data}>remove</button></td></tr>`;
   };
   const rows = (kind) => edges.filter((e) => e.kind === kind)
     .map((e) => row(e, "unedge",
@@ -891,7 +929,9 @@ function edgeTable(edges, byID, langs) {
 function edgeForm(offered, byID, langs) {
   const opts = offered.map((i) =>
     `<option value="${esc(i)}">${esc(textOf((byID[i] || {}).texts, langs, i))}</option>`).join("");
-  return `<form class="edge-new card" style="margin-top:12px; max-width:640px">
+  // No width and no margin here: like every form on this page that is read both beside
+  // its list and stacked under it, only the stylesheet knows which layout is in force.
+  return `<form class="edge-new card">
     <h4 style="margin:0 0 10px">Relate two products</h4>
     <label class="field">From<select name="from">${opts}</select></label>
     <label class="field">Relationship<select name="kind">
@@ -942,20 +982,20 @@ function appearanceCard(cat, me, enforced) {
   const logoURL = `/api/v1/catalogs/${encodeURIComponent(cat.id)}/logo`;
 
   if (!mayTheme(me, enforced)) {
-    return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+    return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
       <p class="muted" style="max-width:62ch">${accent || theme.typeface
     ? `Its own appearance: ${esc(accent || "the instance colour")}, ${
       esc(theme.typeface || "the instance typeface")}.`
     : "The instance's own appearance."} Changing it is an administrator's.</p>`;
   }
 
-  return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+  return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
     <p class="muted" style="max-width:62ch">The portal and the approval page paint
       themselves from this, so a customer sees their own brand rather than yours. Leave
       both empty and the catalogue wears the instance's appearance. Setting it is an
       administrator's; an editor may change what the catalogue offers and not whose it
       looks like.</p>
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <div class="card">
       <form class="cat-theme">
         <label class="field">Accent colour
           <span class="row" style="gap:8px; align-items:center">
@@ -1019,7 +1059,7 @@ function sharingCard(cat, me, enforced, dir) {
       <td>${esc(nameOfPrincipal(dir, ref.id || ""))}
         <div class="muted"><code>${esc(ref.id || "")}</code></div></td>
       <td>${esc(r ? r.name : m.role)}</td>
-      <td>${can ? `<button class="btn ghost danger" data-act="unshare"
+      <td class="row-actions">${can ? `<button class="btn ghost danger" data-act="unshare"
         data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
   }).join("");
 
@@ -1031,20 +1071,23 @@ function sharingCard(cat, me, enforced, dir) {
     ? `${esc(nameOfPrincipal(dir, cat.ownerId))} <code>${esc(cat.ownerId)}</code>`
     : "<code>—</code>"}${
       cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>
-    ${members.length ? `<table class="table">
-      <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
-      <tbody>${rows}</tbody></table>`
+    <div class="cat-cols">
+      <div class="cat-main">${members.length ? `<table class="table">
+        <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
+        <tbody>${rows}</tbody></table>`
     : `<p class="muted">Nobody else. Only the owner and administrators maintain it.</p>`}
-    ${can ? `<form class="share-new card" style="margin-top:12px; max-width:640px">
+      </div>
+      ${can ? `<aside class="cat-side"><form class="share-new card">
       <h4 style="margin:0 0 10px">Let somebody else maintain it</h4>
       ${shareWhoField(dir, cat)}
       <label class="field">May<select name="role">
         ${MEMBER_ROLES.map((r) => `<option value="${r.id}">${esc(r.name)} — ${esc(r.what)}</option>`).join("")}
       </select></label>
       <button class="btn" type="submit">Add</button>
-    </form>`
+    </form></aside>`
     : `<p class="muted">You maintain this catalogue but do not own it, so who else may is
-      the owner's to change.</p>`}`;
+      the owner's to change.</p>`}
+    </div>`;
 }
 
 // productForm renders the editor for one product, or for a new one.
@@ -1142,7 +1185,10 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
     </select>`;
   const section = (title, hint) => `<h4 class="form-sec">${esc(title)}</h4>
     <p class="form-sec-hint">${hint}</p>`;
-  return `<div class="card" style="margin:14px 0; max-width:960px">
+  // No width and no margin spelled here: the card is read in two layouts — beside the
+  // list in a column of its own, and stacked under it on a narrow screen — and only
+  // the stylesheet knows which one is in force. An inline style would win over both.
+  return `<div class="card">
     <h3 style="margin:0 0 10px">${it ? "Edit product" : "New product"}</h3>
     <form class="product-form" data-editing="${esc(it ? it.id : "")}">
       ${section("What the catalogue shows",
@@ -1548,6 +1594,115 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   const editor = view.querySelector(".product-editor");
   const assembler = view.querySelector(".assemble-editor");
 
+  // ---- Where the editor panel sits ----
+  //
+  // The panel is a column beside the list (app.css), and it opens level with the row
+  // it was opened from: a product edited from row thirty would otherwise put its form
+  // thirty rows further down the page, which is the scroll this layout exists to
+  // remove. CSS cannot know where a row ended up — the shared table enhancer sorts
+  // and filters the tbody underneath it — so the offset is measured here and handed
+  // over as --editor-top. app.css reads it only where the two columns exist at all;
+  // on a narrow viewport the property is ignored and the panel is stacked under the
+  // list, exactly as it used to be.
+  const cols = view.querySelector(".product-cols");
+  const list = view.querySelector(".product-list");
+  // The column itself, which is what carries the offset: the two panels inside it are
+  // containers and only one of them holds anything at a time.
+  const side = view.querySelector(".product-side");
+  // The row the open panel belongs to, kept so the alignment survives what the list
+  // does afterwards.
+  let anchor = null;
+
+  const open = () => !!(editor.firstChild || assembler.firstChild);
+
+  const align = () => {
+    if (!anchor || !cols || !side || !open()) return;
+    // offsetParent is null for a row a filter has hidden. Measuring against a hidden
+    // row would snap the panel to the top of the list while its product is still
+    // open in it, so the last good offset stands until the row is on screen again.
+    if (anchor.offsetParent === null) return;
+    const top = anchor.getBoundingClientRect().top - cols.getBoundingClientRect().top;
+    side.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
+  };
+  // Sorting a column reorders the rows and a filter hides some: either moves the row
+  // the panel is aligned to, and both arrive as ordinary events on the list. One
+  // frame later the table has been rebuilt, so this re-measures rather than predicts.
+  const realign = () => requestAnimationFrame(align);
+  if (list) {
+    list.addEventListener("click", realign);
+    list.addEventListener("input", realign);
+  }
+  // A viewport change moves the row with no event on the list at all, and a narrow
+  // one takes the second column away entirely. Observed rather than bound to
+  // window.resize so it ends with the view: the element goes when the page is
+  // re-rendered and the observer goes with it, where a window listener would outlive
+  // both and go on measuring nodes nobody can see.
+  if (cols && typeof ResizeObserver === "function") new ResizeObserver(realign).observe(cols);
+
+  // markEditing keeps the highlight on exactly one row: the panel says which product
+  // it is editing, and a second highlight would make that a guess.
+  const markEditing = (row) => {
+    for (const tr of view.querySelectorAll(".product-list tr.editing")) tr.classList.remove("editing");
+    if (row) row.classList.add("editing");
+  };
+
+  // keepInPlace holds the row still while the layout changes under it.
+  //
+  // Opening the panel takes a column off the list, so every cell that was on one line
+  // and is now on two makes the rows above the reader taller — and a row at the
+  // bottom of a long list is then pushed a screenful down by text they are not even
+  // looking at. The panel is level with its row either way (align() measures after
+  // the reflow), but the *page* has moved, which reads as the list jumping away from
+  // the click. Measured before and after, the difference is exactly how far the row
+  // travelled, and scrolling by it puts it back under the cursor. app.css turns the
+  // browser's own scroll anchoring off here so this is the only correction applied
+  // and the two cannot fight over the same pixels.
+  const keepInPlace = (row, wasAt) => {
+    if (!row || wasAt === null || row.offsetParent === null) return;
+    const moved = row.getBoundingClientRect().top - wasAt;
+    if (Math.abs(moved) > 1) window.scrollBy(0, moved);
+  };
+
+  // stacked says the column is not there: below the layout's breakpoint the panel
+  // renders under the list, where nothing is level with anything and the reader has to
+  // be taken to it. Read off the layout rather than from a media query repeated here,
+  // because the breakpoint is app.css's and a second copy of it drifts.
+  const stacked = () => !cols || getComputedStyle(cols).display !== "flex";
+
+  // openPanel puts one panel in the column, empties the other, marks the row the two
+  // belong to and aligns them. One function for the product's form and for the kit,
+  // because they are one act and one place: a row has one answer open at a time, and
+  // a panel carrying the previous product's highlight — or the previous product's
+  // offset — is worse than no highlight at all.
+  const openPanel = (into, html, row) => {
+    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
+    editor.innerHTML = "";
+    assembler.innerHTML = "";
+    into.innerHTML = html;
+    markEditing(row && row.tagName === "TR" ? row : null);
+    anchor = row || null;
+    align();
+    keepInPlace(row, wasAt);
+    // Stacked, the panel is below the list and can be a screen away; beside it, it is
+    // already level with the row that was clicked and scrolling would undo that.
+    if (stacked()) into.scrollIntoView({ block: "nearest" });
+  };
+  const openEditor = (html, row) => { openPanel(editor, html, row); wireProductForm(); };
+  const openAssembler = (html, row) => openPanel(assembler, html, row);
+
+  const closePanel = () => {
+    // Closing gives the width back and reflows the list the same way, so the row is
+    // held still on the way out too.
+    const row = anchor;
+    const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
+    editor.innerHTML = "";
+    assembler.innerHTML = "";
+    side.style.removeProperty("--editor-top");
+    markEditing(null);
+    anchor = null;
+    keepInPlace(row, wasAt);
+  };
+
   view.querySelector(".cat-meta").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1574,24 +1729,25 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     const act = b.dataset.act;
 
     if (act === "new-product") {
-      editor.innerHTML = productForm(null, cat, langs, procIDs, formList, items, dir, people);
-      wireProductForm();
+      // A new product has no row yet, so the panel opens level with the button that
+      // asked for it — which is where the reader is looking.
+      openEditor(productForm(null, cat, langs, procIDs, formList, items, dir, people),
+        b.closest(".row"));
       return;
     }
     if (act === "edit") {
-      editor.innerHTML = productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people);
-      wireProductForm();
+      openEditor(productForm(byID[b.dataset.id], cat, langs, procIDs, formList, items, dir, people),
+        b.closest("tr"));
       return;
     }
-    if (act === "cancel-product") { editor.innerHTML = ""; return; }
+    if (act === "cancel-product") { closePanel(); return; }
 
     if (act === "assemble") {
-      assembler.innerHTML = assembleKit(
-        b.dataset.id, cat.items || [], byID, langs, cat.edges || []);
-      assembler.scrollIntoView({ block: "nearest" });
+      openAssembler(assembleKit(
+        b.dataset.id, cat.items || [], byID, langs, cat.edges || []), b.closest("tr"));
       return;
     }
-    if (act === "assemble-cancel") { assembler.innerHTML = ""; return; }
+    if (act === "assemble-cancel") { closePanel(); return; }
 
     if (act === "assemble-save") {
       const form = assembler.querySelector(".assemble");
