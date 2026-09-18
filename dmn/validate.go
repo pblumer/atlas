@@ -212,7 +212,7 @@ func (v *Validator) ValidateXML(ctx context.Context, xml []byte) ValidationResul
 // collisionMessage says which names the model gives to more than one thing — a
 // decision and a decision service, or two services. A business rule task carries
 // one string, so such a model has no unambiguous answer for it; it is refused
-// here, at the gate, rather than resolved by a rule nobody wrote down (ADR-draft-a-business-rule-task-can-call-a-decision-service).
+// here, at the gate, rather than resolved by a rule nobody wrote down (ADR-0398).
 func collisionMessage(names []string) string {
 	return "more than one thing is called " + strings.Join(quoted(names), ", ") +
 		" — a business rule task names one string, so each name has to mean one decision or one decision service"

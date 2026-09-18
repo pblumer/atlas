@@ -422,7 +422,7 @@ func evalDecision(ctx context.Context, defs *tdmn.Definitions, decisionId string
 	if err != nil {
 		// A decision service is addressed by the same `decisionId` and answers the same
 		// way, so it is tried here rather than at every caller
-		// (ADR-draft-a-business-rule-task-can-call-a-decision-service). A decision is
+		// (ADR-0398). A decision is
 		// preferred only to settle the case the deploy gate refuses — one model giving
 		// the same name to both — for a model that reached the registry some other way,
 		// such as a reload of an older artifact.

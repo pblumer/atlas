@@ -315,7 +315,7 @@ type resolvedModel struct {
 	// services are the decision services the model publishes. A task addresses one
 	// exactly as it addresses a decision, so they are matched alongside — and
 	// recorded alongside, because a service is a published interface in its own
-	// right (ADR-draft-a-business-rule-task-can-call-a-decision-service).
+	// right (ADR-0398).
 	services []string
 	xml      []byte
 }

@@ -12,7 +12,7 @@ import (
 // whose results the *caller* supplies as a boundary, and the input data it takes.
 // What it buys is the one thing a bare decision cannot express — a caller
 // addresses the service and never learns which decision inside computes what, so
-// the inside can be rearranged without breaking anyone (ADR-draft-a-business-rule-task-can-call-a-decision-service).
+// the inside can be rearranged without breaking anyone (ADR-0398).
 //
 // temis compiles and evaluates one completely, honouring the caller-supplied
 // boundary and coercing the declared output type. What it does not do is *list*

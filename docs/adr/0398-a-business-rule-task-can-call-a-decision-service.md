@@ -1,4 +1,4 @@
-# ADR-DRAFT: A business rule task can call a decision service
+# ADR-0398: A business rule task can call a decision service
 
 - **Status:** Accepted
 - **Implementation:** Landed
