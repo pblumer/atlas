@@ -58,7 +58,53 @@ const (
 	// not work. It carries no detail: the reason is in the audit log, where an
 	// operator can read it, and not in a URL the person could be sent by anybody.
 	oidcFailedQuery = "?sso=failed"
+
+	// portalPage is the service portal, the second surface that can start a
+	// federated login (ADR-draft-portal-carries-its-own-sign-in). Named here
+	// because this file decides where a login may end, and that is the same list.
+	portalPage = "/portal.html"
+
+	// oidcReturnCookie carries which of those two pages started this login, so the
+	// callback lands back on it.
+	//
+	// A cookie rather than a field on the pending state, because a login can fail
+	// before there is any state to read — a reply that names a state nobody is
+	// holding, or a provider that came back with an error — and those failures have
+	// to reach the same screen as the successes or somebody is told their sign-in
+	// failed on a page they never opened. Scoped and expired exactly like the state
+	// cookie beside it: a return page outliving its login is a value nothing will
+	// spend.
+	oidcReturnCookie = "atlas_oidc_return"
 )
+
+// oidcReturnPage is where a federated login should land, given what the browser
+// said when it started.
+//
+// An allowlist, and deliberately not a validated path. The value travels through
+// the browser both ways, so anything that could express an arbitrary destination
+// would be an open redirect carrying a login's authority — a link that signs
+// somebody in and drops them, session and all, wherever its author chose. Exactly
+// two pages in Atlas are served before anybody is signed in and can therefore
+// start one of these, so naming them is both sufficient and the whole of the
+// surface. Everything else, including nothing at all, is the Console.
+func oidcReturnPage(raw string) string {
+	if raw == portalPage {
+		return portalPage
+	}
+	return "/"
+}
+
+// oidcReturnFrom reads the page this login started on. It goes through the
+// allowlist on the way out as well as on the way in: the cookie is the server's
+// own, but a browser is not a safe place to keep anything, and this is read back
+// off a request anybody can shape.
+func oidcReturnFrom(r *http.Request) string {
+	c, err := r.Cookie(oidcReturnCookie)
+	if err != nil {
+		return "/"
+	}
+	return oidcReturnPage(c.Value)
+}
 
 // oidcPending is a login in flight: what the callback needs to finish the flow,
 // and nothing that would be worth stealing on its own.
@@ -207,6 +253,15 @@ func (s *Server) handleOIDCStart(w http.ResponseWriter, r *http.Request) {
 		Secure:   r.TLS != nil,
 		MaxAge:   int(oidcLoginWindow.Seconds()),
 	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcReturnCookie,
+		Value:    oidcReturnPage(r.URL.Query().Get("returnTo")),
+		Path:     oidcCallbackPath,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil,
+		MaxAge:   int(oidcLoginWindow.Seconds()),
+	})
 	sep := "?"
 	if strings.Contains(d.AuthorizeURL, "?") {
 		sep = "&"
@@ -278,7 +333,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		auditRefusal(r, logging.AuthLoginFailed, "failed login",
 			slog.String("username", u.Username), slog.String("source", SourceOIDC),
 			slog.String("reason", "account disabled"))
-		http.Redirect(w, r, "/"+oidcFailedQuery, http.StatusFound)
+		http.Redirect(w, r, oidcReturnFrom(r)+oidcFailedQuery, http.StatusFound)
 		return
 	}
 
@@ -302,7 +357,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	audit(r, logging.AuthLogin, "login",
 		slog.String("username", u.Username), slog.String("user_id", u.ID),
 		slog.String("source", SourceOIDC))
-	http.Redirect(w, r, "/", http.StatusFound)
+	http.Redirect(w, r, oidcReturnFrom(r), http.StatusFound)
 }
 
 // verifyOIDCToken checks an ID token, refetching the provider's keys once when it
@@ -562,19 +617,21 @@ func (s *Server) oidcRefuse(w http.ResponseWriter, r *http.Request, what string,
 		attrs = append(attrs, slog.String("error", err.Error()))
 	}
 	auditRefusal(r, logging.AuthLoginFailed, "federated login refused", attrs...)
-	http.Redirect(w, r, "/"+oidcFailedQuery, http.StatusFound)
+	http.Redirect(w, r, oidcReturnFrom(r)+oidcFailedQuery, http.StatusFound)
 }
 
 // clearOIDCStateCookie expires the state cookie: the login it belonged to is over,
 // whichever way it ended.
 func clearOIDCStateCookie(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     oidcStateCookie,
-		Value:    "",
-		Path:     oidcCallbackPath,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
-		MaxAge:   -1,
-	})
+	for _, name := range []string{oidcStateCookie, oidcReturnCookie} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     oidcCallbackPath,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   r.TLS != nil,
+			MaxAge:   -1,
+		})
+	}
 }
