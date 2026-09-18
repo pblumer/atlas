@@ -522,6 +522,44 @@ function eligibleField(dir, chosen) {
 const eligibleFrom = (f) =>
   f.get("eligible-raw") === null ? f.getAll("eligible").map(String) : list(f.get("eligible-raw"));
 
+// The orderable window, as two dates.
+//
+// Nanoseconds in the record and days on the screen, and the conversion is the
+// whole of the care this needs. A window is authored as "from this day until that
+// day" — a product opens on the first of the month, not at 09:17:43 — so a
+// maintainer types dates and the form decides what time of day each one means.
+//
+// **The end is the end of that day.** Somebody who writes 31.10. means the product
+// is orderable on the 31st, and storing midnight would have closed it the moment
+// the 30th ended. That is the off-by-one this pairing exists to prevent, and it is
+// the reason the two sides are not converted by the same rule.
+//
+// UTC on both sides, because the record is the server's own Unix time and a
+// browser's zone is not the server's. The hint says so rather than leaving a
+// maintainer in Zurich to discover it from a product that opened at two in the
+// morning.
+const dayStart = (date) => date ? Date.parse(`${date}T00:00:00Z`) * 1e6 : 0;
+const dayEnd = (date) => date ? Date.parse(`${date}T23:59:59.999Z`) * 1e6 : 0;
+
+// dateOf renders one side back into the box it was typed in. Zero is unbounded and
+// renders as an empty box, which is what an unbounded side means.
+export const dateOf = (ns) => {
+  const n = Number(ns) || 0;
+  return n ? new Date(n / 1e6).toISOString().slice(0, 10) : "";
+};
+
+// lifecycleFrom reads the two boxes back.
+//
+// An omitted side stays zero rather than becoming a date, and the whole object is
+// omitted when neither side is given: a product with `{from: 0, until: 0}` and one
+// with no window at all are the same product, and writing the first would put a
+// field in every record that says nothing.
+const lifecycleFrom = (f) => {
+  const from = dayStart(String(f.get("orderableFrom") || "").trim());
+  const until = dayEnd(String(f.get("orderableUntil") || "").trim());
+  return from || until ? { from, until } : {};
+};
+
 // productBody is what saving the product form posts.
 //
 // A function and not a block inside the submit handler, for the reason
@@ -569,6 +607,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     keywords: list(f.get("keywords")),
     eligible: eligibleFrom(f),
     maxDays: maxDaysFrom(f),
+    lifecycle: lifecycleFrom(f),
     // Merged over what is stored, so a name in a language this catalogue does not
     // declare survives a save made here — the rule the texts above follow.
     variants: parseVariants(f.get("variants"), langs, was.variants),
@@ -1166,6 +1205,23 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people) {
       ${section("How an order is handled",
     "What happens after somebody puts it in the basket. None of it is shown in the catalogue, " +
     "except that an approval is needed at all.")}
+      <label class="field wide">Orderable window
+        <span class="muted" style="display:block; margin:2px 0 6px">The days between
+          which this product may be ordered. Both ends are <b>inclusive</b> and either
+          may be left empty: empty on the left is &ldquo;from whenever it is published&rdquo;,
+          empty on the right is &ldquo;until somebody withdraws it&rdquo;, and empty on both
+          is the ordinary product. The window is what lets a catalogue be
+          <b>published ahead of the date it opens</b> &mdash; the product is visible,
+          and the portal will not put it in a basket before the first day or after the
+          last. An order outside it is <b>refused by the server</b>, not only hidden by
+          the portal. Dates are the server's own (UTC), so a window that matters to the
+          hour is not what this field is for.</span>
+        <div class="row">
+          <label>from <input name="orderableFrom" type="date"
+            value="${esc(dateOf((v.lifecycle || {}).from))}"></label>
+          <label>until <input name="orderableUntil" type="date"
+            value="${esc(dateOf((v.lifecycle || {}).until))}"></label>
+        </div></label>
       <label class="field">State<select name="state">
         ${STATES.map((s) => opt(s.id, v.state || "draft", `${s.name} — ${s.what}`)).join("")}
       </select></label>

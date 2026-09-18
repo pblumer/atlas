@@ -231,6 +231,7 @@ var productFieldControls = map[string]string{
 	"targets":            `name="targets"`,
 	"maxDays":            `name="maxDays"`,
 	"eligible":           `eligibleField(dir, v.eligible)`,
+	"lifecycle":          `name="orderableFrom"`,
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
@@ -240,16 +241,15 @@ var productFieldControls = map[string]string{
 
 // productFieldsWithNoControl are the fields the form deliberately does not ask for,
 // each with the reason it is not an omission.
+//
+// The orderable window used to be the fourth entry, excused because nothing read
+// it: a control would have promised an effect that did not exist. It is enforced
+// at placement now (ADR-draft-enforce-the-orderable-window), so the excuse is gone
+// and so is the entry — which is what the list is for. Everything left is a field
+// no form can ask for, rather than one waiting on a decision.
 var productFieldsWithNoControl = map[string]string{
 	"homeCatalog": "the save states the catalogue being edited; asking would invite " +
 		"somebody to move a product by typing",
-	// The one honest gap, and it is honest because of what it is waiting for:
-	// Item.Lifecycle is read by nothing. Publishing checks that the window does not
-	// end before it begins, and no reader anywhere asks whether today is inside it —
-	// so a control here would promise an effect that does not exist. It gets one when
-	// the window is enforced, and not before.
-	"lifecycle": "nothing enforces the orderable window yet, so a control would " +
-		"promise an effect that does not exist",
 	"revision":  "the precondition is carried from what was read, never typed",
 	"createdAt": "carried from what was read; a replace would otherwise reset it",
 	"updatedAt": "the server stamps it on every write",

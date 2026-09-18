@@ -50,11 +50,13 @@
       <input name="provisionProcess" />
       <input name="deprovisionProcess" />
       <input name="maxDays" type="number" />
+      <input name="orderableFrom" type="date" />
+      <input name="orderableUntil" type="date" />
       <textarea name="targets"></textarea>
     </form>
     <pre id="out"></pre>
     <script type="module">
-      import { productBody, variantLines } from "/catalog-admin.js";
+      import { productBody, variantLines, dateOf } from "/catalog-admin.js";
 
       const form = document.getElementById("f");
       const out = document.getElementById("out");
@@ -101,6 +103,9 @@
 
       // What the textarea is filled with, which is the other half of the round trip.
       window.lines = (variants, langs) => variantLines(variants, langs);
+
+      // And what a date box is filled with, which is the other half of the window's.
+      window.dateBox = (ns) => dateOf(ns);
 
       window.__ready = true;
     </script>

@@ -14,6 +14,42 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product can be offered from a date, until a date — and now that means
+  something.** A catalogue item has carried an orderable window since the catalogue
+  was designed, and nothing ever read it. Publishing checked that the window did not
+  end before it began, which is a sanity check on the pair and not on the present;
+  no reader anywhere asked whether *today* was inside it. So a product with a window
+  was orderable exactly like a product without one, and the Console had no control
+  for it either — which is how it went unnoticed for so long: nobody could fill it
+  in from the screen, so nobody found out it did nothing.
+
+  It is enforced now, where every other rule about a basket is read: an order
+  carrying a product outside its window is **refused by the server**, with the
+  product and the date named and which side of the window the moment fell on. The
+  portal keeps the same window so a basket cannot be filled with something the
+  placement will refuse — shown with a disabled control and the date rather than
+  hidden, because a product that has not opened yet is exactly the case the field
+  exists for, and the one thing somebody wants to know is when.
+
+  Two boundaries decided deliberately. **Both ends are inclusive**, and the editor
+  stores the end of the last day: somebody who writes 31.10. means the product is
+  orderable on the 31st, and storing midnight would have closed it a day early,
+  every time, with nothing about it looking wrong. And the **clock is read once per
+  placement**, so the instant checked against the window is the instant the order
+  records as its creation — read twice, an order placed across a boundary could be
+  refused for a window that had already opened at the moment the order says it was
+  placed.
+
+  An integral part outside its window closes the product carrying it, and the
+  refusal says so rather than naming a part nobody can deselect. The window governs
+  **ordering** and nothing else: a right already held when it closes keeps running,
+  because when a right *ends* is the ceiling beside it.
+
+  **On upgrade:** an installation that filled the field in while it did nothing has
+  products that will now refuse orders outside their dates. That is the correction
+  rather than a regression, and it arrives without warning — worth a look at the
+  windows in your catalogue before this lands.
+
 - **The four fields the portal read and the product editor could not set.** A product
   carries twelve fields the portal acts on and the editor rendered eight. The four it
   did not render were not decoration: the **orderable shapes** are what the basket

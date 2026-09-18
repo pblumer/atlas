@@ -299,10 +299,16 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		empty  bool
 		clash  *conflict
 		barred *ineligible
+		shut   *closed
 		stray  string
 		opErr  error
 	)
 	s.loop.Do(func() {
+		// One reading of the clock for the whole placement: the window below is
+		// checked against the same instant the order records as its creation. Read
+		// twice, a basket placed across a boundary could be refused for a window
+		// that had already opened at the moment the order says it was placed.
+		at := s.now()
 		ordered := rel.Expand(req.Items)
 		if len(ordered) == 0 {
 			// Nothing the release carries was asked for. An order with no lines is
@@ -327,6 +333,13 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		if barred = ineligibleIn(rel, ordered, recipientGroups); barred != nil {
 			return
 		}
+		// And whether it may be ordered at this moment at all. Beside the two above
+		// because it is the third rule of the same kind — what the release says
+		// about this basket — and it is the one nothing used to ask
+		// (ADR-draft-enforce-the-orderable-window).
+		if shut = closedIn(rel, ordered, at); shut != nil {
+			return
+		}
 		// And that the answers belong to this basket. Checked here because it needs
 		// the expanded list: an integral part is ordered without being asked for,
 		// and it may perfectly well carry a form of its own.
@@ -345,7 +358,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 			Lines:     linesFor(rel, ordered, has, req.Config, req.Variants),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
-			CreatedAt: s.now(),
+			CreatedAt: at,
 		}
 		out.UpdatedAt = out.CreatedAt
 		opErr = s.store.Save(out)
@@ -366,6 +379,12 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// recipient is. Telling the two apart is what lets a caller know whether
 		// there is anything to do about it.
 		httpapi.Error(w, http.StatusForbidden, barred.reason())
+	case shut != nil:
+		// 403 for the reason above and one of its own: nothing about the request is
+		// malformed — the very same body is correct the day the window opens — so a
+		// 400 would send whoever reads it looking for a mistake they did not make.
+		// And there is nothing to give back, which is what a 409 would offer.
+		httpapi.Error(w, http.StatusForbidden, shut.reason())
 	default:
 		// Start the fulfilment process for it. Durable first, then the side effect
 		// (I2): the order stands whether or not this succeeds, and a failure here

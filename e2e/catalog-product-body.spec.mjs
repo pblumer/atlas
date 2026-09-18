@@ -70,22 +70,22 @@ test("a control that is rendered can empty its field", async ({ page }) => {
   expect(body.maxDays).toBe(0);
 });
 
-test("the field the form does not render survives the save", async ({ page }) => {
-  // The orderable window has no control, deliberately: nothing enforces it yet, and
-  // a control promising a window that is never checked would be worse than none. So
-  // it has to ride through untouched — the seed-and-overlay rule the body is built
-  // on, and the reason a save cannot be assembled from the controls alone.
+test("the fields the form does not render survive the save", async ({ page }) => {
+  // The seed-and-overlay rule the body is built on, and the reason a save cannot be
+  // assembled from the controls alone. The orderable window used to be the example
+  // here, excused because nothing enforced it; it is enforced at placement now and
+  // has a control, so what is left is the bookkeeping a person never types.
   const stored = {
-    lifecycle: { from: 1735689600000000000, until: 1767225600000000000 },
     createdAt: 1700000000000000000,
     revision: 7,
+    updatedAt: 1700000000000000001,
   };
   const body = await build(page, { "t-de": "Notebook" }, stored);
-  expect(body.lifecycle).toEqual(stored.lifecycle);
   expect(body.createdAt, "a replace would reset the creation date to today")
     .toBe(stored.createdAt);
   expect(body.revision, "the precondition that turns a colleague's edit into a refusal")
     .toBe(7);
+  expect(body.updatedAt).toBe(stored.updatedAt);
 });
 
 test("a shape keeps the name it carries in a language this catalogue does not declare",
@@ -176,4 +176,60 @@ test("the two headings and the price still reach the body", async ({ page }) => 
   expect(body.multipleAllowed).toBe(true);
   expect(body.state).toBe("active");
   expect(body.approval).toEqual({ kind: "role", ref: "grp_it" });
+});
+
+// The orderable window, whose boundary is the part that would go wrong quietly.
+//
+// The record keeps nanoseconds and the form asks for days, so the form decides
+// what time of day each end means. Get the end wrong and a product whose window
+// runs "until the 31st" closes when the 30th ends — a day early, every time, and
+// nothing about it looks like a defect.
+
+test("the window is stored as nanoseconds, and the last day is included whole",
+  async ({ page }) => {
+    const body = await build(page, {
+      orderableFrom: "2026-10-01", orderableUntil: "2026-10-31",
+    });
+    expect(body.lifecycle.from).toBe(Date.parse("2026-10-01T00:00:00Z") * 1e6);
+    // The end of the last day, not its start: somebody who writes 31.10. means the
+    // product is orderable on the 31st.
+    expect(body.lifecycle.until).toBe(Date.parse("2026-10-31T23:59:59.999Z") * 1e6);
+    expect(body.lifecycle.until).toBeGreaterThan(Date.parse("2026-10-31T12:00:00Z") * 1e6);
+  });
+
+test("either side of the window may be left open", async ({ page }) => {
+  const launch = await build(page, { orderableFrom: "2026-10-01", orderableUntil: "" });
+  expect(launch.lifecycle.from).toBeGreaterThan(0);
+  expect(launch.lifecycle.until, "unbounded is zero, not a date").toBe(0);
+
+  const sunset = await build(page, { orderableFrom: "", orderableUntil: "2026-10-31" });
+  expect(sunset.lifecycle.from).toBe(0);
+  expect(sunset.lifecycle.until).toBeGreaterThan(0);
+});
+
+test("clearing both boxes clears the window", async ({ page }) => {
+  // The control is rendered, so it has to be able to empty its field — the rule
+  // every other control on this form follows.
+  const stored = {
+    lifecycle: {
+      from: Date.parse("2026-10-01T00:00:00Z") * 1e6,
+      until: Date.parse("2026-10-31T23:59:59.999Z") * 1e6,
+    },
+  };
+  const body = await build(page, { orderableFrom: "", orderableUntil: "" }, stored);
+  expect(body.lifecycle).toEqual({});
+});
+
+test("the window round-trips through the two date boxes", async ({ page }) => {
+  // Rendered, read back, rendered again. A round trip that moved the end by a day
+  // each time would walk a window backwards over a few edits of unrelated fields.
+  const first = { orderableFrom: "2026-10-01", orderableUntil: "2026-10-31" };
+  const body = await build(page, first);
+  const boxes = await page.evaluate(
+    ([f, u]) => [window.dateBox(f), window.dateBox(u)],
+    [body.lifecycle.from, body.lifecycle.until]);
+  expect(boxes).toEqual([first.orderableFrom, first.orderableUntil]);
+
+  const again = await build(page, { orderableFrom: boxes[0], orderableUntil: boxes[1] });
+  expect(again.lifecycle).toEqual(body.lifecycle);
 });

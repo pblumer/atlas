@@ -129,6 +129,9 @@ const STRINGS = {
     'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
+    'window.later': 'Bestellbar ab',
+    'window.over': 'Nicht mehr bestellbar seit',
+    'window.until': 'Bestellbar bis',
     'variant.label': 'Ausführung',
     'variant.many': 'Mehrere Ausführungen möglich — jede angekreuzte ist eine eigene Position.',
     'variant.one': 'Genau eine Ausführung wählen.',
@@ -265,6 +268,9 @@ const STRINGS = {
     'tbl.noMatch': 'No order matches the search.',
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
+    'window.later': 'Orderable from',
+    'window.over': 'No longer orderable since',
+    'window.until': 'Orderable until',
     'variant.label': 'Version',
     'variant.many': 'More than one version may be taken — each tick is its own position.',
     'variant.one': 'Choose exactly one version.',
@@ -1027,6 +1033,53 @@ function cell(opts) {
     o.trail ? el('span', { class: 'trail' }, o.trail) : null);
 }
 
+// --- When a product may be ordered -------------------------------------------
+//
+// The server is the gate (ADR-draft-enforce-the-orderable-window): a rule enforced
+// only where it is displayed is a rule every other caller walks past. This is the
+// courtesy half — a basket that cannot be submitted is the control-that-fails, and
+// filling one to be refused at the end teaches somebody the page is broken.
+//
+// Shown and disabled rather than hidden, which is the same choice the integral
+// part beside it makes. A product whose window has not opened is exactly the case
+// the field exists for — a catalogue published ahead of the date it opens — so
+// hiding it would remove the one thing somebody wants to know, which is when.
+
+// windowOf reads an item's window, tolerating a release published before the
+// portal read the field.
+function windowOf(item) {
+  const w = (item || {}).lifecycle || {};
+  return { from: Number(w.from) || 0, until: Number(w.until) || 0 };
+}
+
+// orderableNow reports whether this moment is inside the item's window. Both sides
+// are inclusive and zero is unbounded, exactly as the server reads them — two
+// readings of one rule that disagreed would be a portal offering what the order is
+// refused for, which is the failure this pairing exists to prevent.
+function orderableNow(item, at) {
+  const w = windowOf(item);
+  const now = at == null ? Date.now() * 1e6 : at;
+  if (w.from && now < w.from) return false;
+  if (w.until && now > w.until) return false;
+  return true;
+}
+
+// windowNote is what a row says about its own window, or null where there is
+// nothing to say — which is the ordinary product.
+function windowNote(item) {
+  const w = windowOf(item);
+  if (!w.from && !w.until) return null;
+  const day = (ns) => new Date(ns / 1e6).toLocaleDateString(locale);
+  if (!orderableNow(item)) {
+    return w.from && Date.now() * 1e6 < w.from
+      ? `${t('window.later')} ${day(w.from)}`
+      : `${t('window.over')} ${day(w.until)}`;
+  }
+  // Inside the window and about to leave it: the one case where somebody reading
+  // an orderable row still needs the date.
+  return w.until ? `${t('window.until')} ${day(w.until)}` : null;
+}
+
 // toggle renders the mockups' square −/+ control.
 //
 // Integral parts get a disabled "−": they are in, and they cannot be taken out.
@@ -1051,6 +1104,16 @@ function toggle(release, id, integral) {
       class: 'sq', disabled: 'disabled', title: t('note.included'),
       'aria-label': t('note.included'),
     }, '\u2212');
+  }
+  // Outside its window. The title carries the date rather than a bare "no",
+  // because the date is the whole of what somebody does next: come back, or stop
+  // looking.
+  const item = itemsById(release)[id];
+  const shut = windowNote(item);
+  if (!orderableNow(item)) {
+    return el('button', {
+      class: 'sq', disabled: 'disabled', title: shut || '', 'aria-label': shut || '',
+    }, '+');
   }
   return el('button', {
     class: 'sq',
@@ -1112,6 +1175,11 @@ function infoPanel(rel, item) {
       ? el('p', { class: 'muted' }, `${t('info.includes')}: ${carried.join(', ')}`) : null,
     offered.length
       ? el('p', { class: 'muted' }, `${t('info.options')}: ${offered.join(', ')}`) : null,
+    // The window, where there is one. Beside the price and the approval rather
+    // than as a pill, because it is a fact about the product and not about this
+    // person: "orderable until the 31st" is true for everybody reading it.
+    windowNote(item)
+      ? el('p', { class: 'muted' }, windowNote(item)) : null,
     heldPill(item));
 }
 

@@ -124,7 +124,13 @@ func catalogItemProps() map[string]any {
 			"lifecycle, and the day somebody must revoke at scale is the wrong day to find out " +
 			"the process was never written."),
 		"lifecycle": objectProp("The window in which it may be ordered: {from, until} as Unix " +
-			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case."),
+			"nanoseconds. Zero on a side means unbounded there, which is the ordinary case. " +
+			"BOTH ENDS ARE INCLUSIVE AND IT IS ENFORCED: an order placed outside the window is " +
+			"refused with 403, naming the product and the date. It is authored as days — the " +
+			"Console stores the END of the last one, so a product orderable \"until the 31st\" " +
+			"is orderable on the 31st, and a value you compute yourself should do the same. It " +
+			"governs ordering only: a right already held when the window closes keeps running, " +
+			"and when a right ends is `maxDays`."),
 		"variants": arrayProp("The orderable shapes of this product: [{id, texts}] — a laptop's " +
 			"size, a licence tier. UNORDERED on purpose: \"higher\" is meaningful for a tier and " +
 			"meaningless for Windows against Linux, so the basket asks the orderer."),
