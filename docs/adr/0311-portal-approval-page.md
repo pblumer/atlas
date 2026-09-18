@@ -1,6 +1,6 @@
 # ADR-0311: The approver decides on a page of their own, in the customer's colours
 
-- **Status:** Accepted
+- **Status:** Accepted (its page half is withdrawn — see the amendment below)
 - **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
@@ -203,3 +203,21 @@ printing a link nobody can follow.
 - extends [ADR-0079](0079-outbound-mail-connector.md) — a mail recipient may be somebody this server knows rather than an address
 - needs [ADR-0200](0200-mcp-oauth-resource-server.md)'s configured origin — a link has to be one somebody else can follow
 - needs [ADR-0318](0318-user-task-assignment-expressions.md) — without it no shipped approval reaches an approver
+
+## Amendment, 2026-09-17: the page is withdrawn, the call it made is not
+
+The page is gone. What it argued — that the Console is the wrong place for a line
+manager who approves four times a year — was right about the people and wrong about
+what followed, because an approval *is* an ordinary user task and the inbox never
+filtered those out. The rows were always there, so the page did not spare anybody the
+Console; it added a second place to take one decision, and the two drifted over
+whether a rejection needs a reason.
+
+The approval is now read and decided in the inbox, and this record's address survives
+as a forwarding stub for the notifications already sent. See
+[ADR-0394](0394-approval-in-the-inbox.md), which also says
+what is lost: the customer's colours.
+
+**The rest of this record stands**, and is what the inbox reads: one call answers
+everything an approval shows, because the chain behind it — task, order, release,
+catalogue — is one the approver may walk no step of themselves.

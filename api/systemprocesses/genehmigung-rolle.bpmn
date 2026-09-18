@@ -111,7 +111,7 @@ Voraussetzung beim Betreiber: ein Mail-Worker namens &#8222;portal&#8220;.</bpmn
         <atlas:mailConnector connector="portal"
           to="=approvalRef"
           subject="=&#34;Genehmigung n&#246;tig: &#34; + itemId"
-          body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie im Genehmigungsportal dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/genehmigung.html?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
       </bpmn:extensionElements>
       <bpmn:incoming>F_Split_Mail</bpmn:incoming>
       <bpmn:outgoing>F_Mail_Ende</bpmn:outgoing>
@@ -137,7 +137,7 @@ Eine unbeachtete Genehmigung ist die leisere H&#228;lfte des Problems: ein h&#22
         <atlas:mailConnector connector="portal"
           to="=approvalRef"
           subject="=&#34;Erinnerung: Genehmigung n&#246;tig f&#252;r &#34; + itemId"
-          body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie im Genehmigungsportal dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/genehmigung.html?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
+          body="=&#34;Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: &#34; + itemId + &#34;\nAuftrag: &#34; + orderId + &#34;\n\n&#34; + (if portalBaseUrl = null or portalBaseUrl = &#34;&#34; then &#34;Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz.&#34; else portalBaseUrl + &#34;/index.html#/tasks?order=&#34; + orderId + &#34;&amp;item=&#34; + itemId) + &#34;\n\nFreundliche Gr&#252;sse\nIhr Leistungsportal&#34;" />
       </bpmn:extensionElements>
       <bpmn:incoming>F_Erinnerung_Mail</bpmn:incoming>
       <bpmn:outgoing>F_Erinnerung_Ende</bpmn:outgoing>

@@ -1,0 +1,18 @@
+{
+  "tags": ["Catalogue", "Console"],
+  "title": {
+    "en": "A catalogue's existing products are picked from a list, not typed",
+    "de": "Bestehende Produkte werden im Katalog ausgewählt statt eingetippt"
+  },
+  "summary": {
+    "en": "Adding a product a catalogue does not carry yet used to open a browser prompt that printed the candidates as plain text and asked for the product id back: nothing in the list could be clicked, the id had to be typed exactly, and a list longer than a handful of lines was cut off — which hid the products created most recently. It is now the console's pick dialog: a real list, chosen with the pointer, with every product reachable. The button that opens it also appears whenever there is something left to offer, including when the catalogue still names a product that no longer exists.",
+    "de": "Ein Produkt, das der Katalog noch nicht führt, wurde bisher über einen Browser-Dialog hinzugefügt, der die Kandidaten als reinen Text auflistete und die Produkt-ID zurückverlangte: Die Einträge waren nicht anklickbar, die ID musste exakt eingetippt werden, und längere Listen wurden abgeschnitten — wodurch gerade die zuletzt erstellten Produkte fehlten. Neu erscheint der Auswahldialog der Konsole: eine echte Liste, mit der Maus auswählbar, in der jedes Produkt erreichbar ist. Die zugehörige Schaltfläche erscheint zudem immer dann, wenn es noch etwas anzubieten gibt — auch wenn der Katalog noch ein Produkt nennt, das es nicht mehr gibt."
+  },
+  "try": {
+    "label": {
+      "en": "Open the catalogue",
+      "de": "Katalog öffnen"
+    },
+    "route": "#/catalog"
+  }
+}

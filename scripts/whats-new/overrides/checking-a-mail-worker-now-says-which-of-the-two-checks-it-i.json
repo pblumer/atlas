@@ -1,0 +1,18 @@
+{
+  "tags": ["Workers", "Console"],
+  "title": {
+    "en": "A mail worker's check now says which check it is running",
+    "de": "Die Prüfung eines Mail-Workers benennt, welche Prüfung sie ausführt"
+  },
+  "summary": {
+    "en": "Checking a mail worker can do one of two things: connect and authenticate and stop there, or send a real message to a real inbox. The browser prompt that asked for it expressed the harmless one as an empty box — \"leave empty to only check the connection\" — in the same field that means \"mail this address\", so one stray character sent a message nobody asked for. It is now a dialog that names both modes, starts on the connection check, and verifies the address is an address before anything leaves the server.",
+    "de": "Die Prüfung eines Mail-Workers kann zweierlei bedeuten: Verbindung und Anmeldung prüfen und dort aufhören — oder eine echte Nachricht an ein echtes Postfach senden. Der Browser-Dialog, der danach fragte, drückte die harmlose Variante durch ein leeres Feld aus („leer lassen, um nur die Verbindung zu prüfen\"), und zwar in genau dem Feld, das sonst „an diese Adresse senden\" bedeutet; ein einzelnes versehentliches Zeichen löste damit einen Versand aus. Neu benennt ein Dialog beide Varianten, ist auf die Verbindungsprüfung voreingestellt und prüft die Adresse auf Gültigkeit, bevor etwas den Server verlässt."
+  },
+  "try": {
+    "label": {
+      "en": "Open Workers",
+      "de": "Worker öffnen"
+    },
+    "route": "#/console/workers"
+  }
+}

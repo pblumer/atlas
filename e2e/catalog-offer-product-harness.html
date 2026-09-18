@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas catalogue "offer an existing product" e2e harness</title>
+    <!-- Drives the real api/web/catalog-admin.js, rendered the way the console
+         renders it, against the case that was reported: a catalogue offering two
+         products, with four more on the server that it does not offer yet. The
+         picker behind "Offer an existing product" was a window.prompt printing
+         those four as text, so nothing in the list could be clicked and the id had
+         to be typed — and past a handful of lines a browser cuts the body off.
+
+         The server side is a stub `api`, because what is under test is the screen:
+         every GET answers a fixture, and the PATCH that offers the product is
+         recorded rather than sent. The page scaffolding is the test's own, since
+         app.js boots the whole console on import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="view" class="card" style="padding: 18px; max-width: 900px"></div>
+    <pre id="result">—</pre>
+    <pre id="toasts">—</pre>
+    <script type="module">
+      import { viewCatalogDetail } from "/catalog-admin.js";
+
+      const text = (de, en) => ({ de, en });
+
+      // Six products on the server; the catalogue offers the first two. The four
+      // free ones are named so the order they are offered in is visible, and
+      // "Zusatzbildschirm" sorts last by name the way a newly created product does.
+      const PRODUCTS = [
+        { id: "2027-benutzeraccount-intern", texts: text("2027 Benutzeraccount intern", "2027 internal account"), state: "active" },
+        { id: "2027-interner-account", texts: text("2027 Interner Account (U)", "2027 internal account (U)"), state: "active" },
+        { id: "laptop-entwickler", texts: text("Laptop Entwickler", "Developer laptop"), state: "active" },
+        { id: "laptop-standard", texts: text("Laptop Standard", "Standard laptop"), state: "active" },
+        { id: "u-account", texts: text("Benutzerkonto für interne Mitarbeitende", "Account for internal staff"), state: "active" },
+        { id: "zusatzbildschirm", texts: text("Zusatzbildschirm", "Second screen"), state: "draft" },
+      ];
+
+      const CATALOG = {
+        id: "arbeitsplatz",
+        texts: text("Arbeitsplatz", "Workplace"),
+        languages: ["de", "en"],
+        rank: 10,
+        revision: 7,
+        groups: ["alle"],
+        items: ["2027-benutzeraccount-intern", "2027-interner-account"],
+        edges: [],
+        members: [],
+        ownerId: "u-arno",
+      };
+
+      const patches = [];
+      const toasts = [];
+      const result = document.getElementById("result");
+      const toastBox = document.getElementById("toasts");
+
+      const api = async (method, path, body) => {
+        if (method === "PATCH") {
+          patches.push({ path, body });
+          result.textContent = JSON.stringify(patches);
+          // The console reloads the route after a write; here the recorded PATCH is
+          // the whole answer, so the hash change the page makes is harmless.
+          return {};
+        }
+        if (path.startsWith("/api/v1/catalogs/") && path.endsWith("/releases")) return [];
+        if (path.startsWith("/api/v1/catalogs/")) return CATALOG;
+        if (path === "/api/v1/catalog-products") return PRODUCTS;
+        if (path === "/api/v1/processes") return [];
+        if (path === "/api/v1/forms") return [];
+        if (path === "/api/v1/principals") return [{ id: "u-arno", type: "user", name: "Arno" }];
+        if (path === "/api/v1/users/assignable") return [];
+        return null;
+      };
+
+      const toast = (msg, kind) => {
+        toasts.push(kind ? `${kind}: ${msg}` : msg);
+        toastBox.textContent = toasts.join("\n");
+      };
+
+      await viewCatalogDetail({
+        api,
+        apiBytes: async () => ({}),
+        toast,
+        view: document.getElementById("view"),
+        isSuperseded: () => false,
+        me: { username: "arno", roles: ["admin"] },
+        enforced: false,
+      }, CATALOG.id);
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -446,7 +446,7 @@ func outbox(t *testing.T, ts *httptest.Server, c *http.Client) []outboxMail {
 	return out.Messages
 }
 
-func TestTheApproverIsToldWithALinkToTheirOwnPage(t *testing.T) {
+func TestTheApproverIsToldWithALinkToTheirInbox(t *testing.T) {
 	ts, _ := newAuthServerWith(t, "root", "rootpassword", api.WithSystemProcesses(),
 		api.WithExternalURL("https://atlas.example.ch"))
 	admin := newClient(t)
@@ -485,7 +485,12 @@ func TestTheApproverIsToldWithALinkToTheirOwnPage(t *testing.T) {
 	if !strings.Contains(m.Subject, "vpn") {
 		t.Errorf("subject = %q; it should say what is waiting", m.Subject)
 	}
-	want := "https://atlas.example.ch/genehmigung.html?order=ord_4711&item=vpn"
+	// Into the inbox, which is where an approval is read and decided
+	// (ADR-0394). The link
+	// still names the order line and not the task, and for the reason it always did:
+	// a task key does not exist until the task activates, while the order and the
+	// product do, and they survive a reassignment that changes the key.
+	want := "https://atlas.example.ch/index.html#/tasks?order=ord_4711&item=vpn"
 	if !strings.Contains(m.Body, want) {
 		t.Errorf("the mail carries no usable link.\n got: %s\nwant it to contain: %s", m.Body, want)
 	}

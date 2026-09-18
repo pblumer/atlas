@@ -60,7 +60,8 @@ const STRINGS = {
     'order.running': 'In Arbeit',
     'proc.open': 'Prozess ansehen',
     'proc.openLine': 'Prozessschritt',
-    'proc.none': 'Zu diesem Auftrag läuft keine Prozessinstanz mehr — sie wurde von der Aufbewahrung entfernt.',
+    'proc.none': 'Zu dieser Position ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
+    'proc.none.order': 'Zu diesem Auftrag ist keine laufende Prozessinstanz zu finden: Entweder wurde noch keine gestartet, sie ist bereits beendet, oder die Aufbewahrung hat sie entfernt.',
     'proc.where': 'Wo steht das?',
     'proc.asking': 'Wird abgefragt …',
     'proc.standing': 'Aktueller Schritt:',
@@ -197,7 +198,8 @@ const STRINGS = {
     'order.running': 'In progress',
     'proc.open': 'View the process',
     'proc.openLine': 'Process step',
-    'proc.none': 'No process instance is left for this order — retention has removed it.',
+    'proc.none': 'No running process instance was found for this position: either none has started yet, it has already finished, or retention has removed it.',
+    'proc.none.order': 'No running process instance was found for this order: either none has started yet, it has already finished, or retention has removed it.',
     'proc.where': 'Where is this?',
     'proc.asking': 'Asking …',
     'proc.standing': 'Current step:',
@@ -1774,7 +1776,13 @@ async function followProcess(order, line) {
     const hits = (page && page.items) || [];
     const hit = line ? hits[0] : hits.find((i) => i.processId === 'atlas-auftrag-erfuellung');
     if (!hit) {
-      state.error = t('proc.none');
+      // What is known, and not a cause that was guessed. This said the instance had
+      // been removed by retention, which is one of three reasons it is not found and
+      // the least likely of them: an order whose fulfilment never started has no
+      // instance to remove, and that is what somebody reads this message about on the
+      // day they ordered. A page that names a cause it cannot know sends whoever
+      // reads it to look in the wrong place.
+      state.error = t(line ? 'proc.none' : 'proc.none.order');
       render();
       return;
     }
