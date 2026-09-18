@@ -65,6 +65,27 @@ func TestTheCataloguePageDropsTheCentredColumn(t *testing.T) {
 	}
 }
 
+// TestTheCataloguePageTakesTheSharedActionColumn.
+//
+// A full-width table puts a lot of page between the last column of data and the right
+// edge, and a left-aligned action cell leaves its buttons stranded in the middle of
+// it. The console already answers this — td.row-actions, right-aligned and on one
+// line — and the catalogue's three tables take that class rather than aligning by
+// hand, so they keep following it when it changes.
+func TestTheCataloguePageTakesTheSharedActionColumn(t *testing.T) {
+	src := readWeb(t, "catalog-admin.js")
+	if n := strings.Count(src, `<td class="row-actions"`); n < 4 {
+		t.Errorf("only %d action cells take the shared class; the products table, the two "+
+			"relation tables and the member list all end in one", n)
+	}
+	// The class is the whole point: an alignment spelled here is a fourth copy of a
+	// decision the console already made once.
+	form := webRegion(t, src, "function productRow(", "\n}")
+	if strings.Contains(form, "text-align") {
+		t.Error("a product row aligns its own cells instead of taking td.row-actions")
+	}
+}
+
 // TestTheEditorOpensLevelWithItsRow.
 //
 // The offset is the feature, and it cannot be a stylesheet's: the shared table

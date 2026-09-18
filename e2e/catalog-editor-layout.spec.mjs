@@ -151,3 +151,25 @@ test("the panel resists the scroll rather than leaving with it", async ({ page }
   // And it is bounded by the window, so what does not fit scrolls inside the panel.
   expect(after.bottom).toBeLessThanOrEqual(after.height + 1);
 });
+
+test("the row's actions sit at the table's right edge", async ({ page }) => {
+  await open(page, { width: 1600, height: 800 });
+  // The page is full width here, so a left-aligned action cell would leave its buttons
+  // stranded in the middle of the row with the table's edge far to their right.
+  const b = await page.evaluate(() => {
+    const row = document.querySelector(".product-list tbody tr");
+    const cell = row.querySelector("td.row-actions");
+    return {
+      buttons: cell.querySelector("button").getBoundingClientRect().left,
+      last: cell.getBoundingClientRect().right,
+      table: row.closest("table").getBoundingClientRect().right,
+      wrapped: cell.getBoundingClientRect().height,
+      rowHeight: row.getBoundingClientRect().height,
+    };
+  });
+  // Hard against the right of the table, not adrift in the middle of the cell.
+  expect(b.last - b.table).toBeLessThanOrEqual(1);
+  expect(b.last - b.buttons).toBeLessThan(220);
+  // And on one line: two buttons that wrap would make one row taller than the rest.
+  expect(b.wrapped).toBeLessThanOrEqual(b.rowHeight);
+});

@@ -474,7 +474,7 @@ function productRow(it, iid, langs) {
   if (!it) {
     return `<tr><td>${esc(iid)}</td><td colspan="3" class="muted">offered but not defined —
       publishing will refuse this</td>
-      <td><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
+      <td class="row-actions"><button class="btn ghost danger" data-act="drop" data-id="${esc(iid)}">remove</button></td></tr>`;
   }
   const ap = it.approval || {};
   const kind = APPROVAL_KINDS.find((k) => k.id === ap.kind) || APPROVAL_KINDS[0];
@@ -483,7 +483,7 @@ function productRow(it, iid, langs) {
     <td>${esc((STATES.find((s) => s.id === it.state) || {}).name || it.state || "—")}</td>
     <td>${esc(kind.name)}${ap.ref ? ` <span class="muted">(${esc(ap.ref)})</span>` : ""}</td>
     <td>${esc(it.provisionProcess || "—")}</td>
-    <td><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
+    <td class="row-actions"><button class="btn ghost" data-act="edit" data-id="${esc(it.id)}">edit</button>
       <button class="btn ghost danger" data-act="drop" data-id="${esc(it.id)}">remove</button></td>
   </tr>`;
 }
@@ -494,7 +494,7 @@ function edgeTable(edges, byID, langs) {
     return `<tr><td>${esc(textOf((byID[e.from] || {}).texts, langs, e.from))}</td>
       <td class="muted">${esc(k ? k.name : e.kind)}</td>
       <td>${esc(textOf((byID[e.to] || {}).texts, langs, e.to))}</td>
-      <td><button class="btn ghost danger" data-act="unedge" data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}">remove</button></td></tr>`;
+      <td class="row-actions"><button class="btn ghost danger" data-act="unedge" data-edge="${esc(e.from)}|${esc(e.kind)}|${esc(e.to)}">remove</button></td></tr>`;
   }).join("");
   const structure = rows("composition") + rows("aggregation");
   const precedence = rows("requires");
@@ -638,7 +638,7 @@ function sharingCard(cat, me, enforced, dir) {
       <td>${esc(nameOfPrincipal(dir, ref.id || ""))}
         <div class="muted"><code>${esc(ref.id || "")}</code></div></td>
       <td>${esc(r ? r.name : m.role)}</td>
-      <td>${can ? `<button class="btn ghost danger" data-act="unshare"
+      <td class="row-actions">${can ? `<button class="btn ghost danger" data-act="unshare"
         data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
   }).join("");
 

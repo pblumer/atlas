@@ -307,7 +307,9 @@ _Changed_ / _Removed_ for each version.
   column** to carry them, the way the Tasks inbox does — 1120px divides into a table
   of products and a form of about 520px each, and both hold more than that. What is
   prose on the page keeps its own measure, so nothing turns a paragraph into a line
-  across a 2000px screen. The offset is measured in the browser rather than
+  across a 2000px screen, and the tables' action buttons move to the right edge —
+  the console's own rule for an action column, which a full-width table needs and a
+  1120px one could do without. The offset is measured in the browser rather than
   stated in the stylesheet, because the shared table enhancer sorts and filters the
   rows underneath it — sorting the list moves the panel with the row it belongs to.
 
