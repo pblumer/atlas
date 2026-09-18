@@ -22,7 +22,17 @@ import (
 // configured, and returns the server with its breaker's clock under the caller's control.
 func floodedServer(t *testing.T, n int) (*Server, func(d time.Duration)) {
 	t.Helper()
-	srv, cleanup := newOffLoopServer(t)
+	// The timer scheduler is held still for the whole test, and that is not tidiness:
+	// it fires every real second and each tick *drives jobs*. These tests advance a
+	// clock of their own and then count what the engine handed out, so a second
+	// driver running on wall time can send a probe between an advance and the count —
+	// and the test reads that as a probe sent before its cooldown. It failed that way
+	// inside a full suite run and never in isolation, which is the signature: it needs
+	// a machine slow enough for a test cycle to straddle a real second.
+	//
+	// Held rather than driven, because nothing here wants a timer fired: every round
+	// these tests care about is dispatched by their own srv.drive().
+	srv, cleanup := newOffLoopServer(t, withTimerTrigger(make(chan time.Time)))
 	t.Cleanup(cleanup)
 
 	// The clock is read on the runner's goroutine, through the breaker's gate, and

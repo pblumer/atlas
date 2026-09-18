@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/engine"
@@ -704,6 +705,21 @@ func TestLeaseAndIncidentMetrics(t *testing.T) {
 	}
 }
 
+// agreedTurnCounts reads the two turn histograms until their counts agree, and fails
+// on the deadline rather than on the first disagreement.
+//
+// A scrape is itself a run-loop turn — collecting the gauges takes the loop — and the
+// registry gathers the two histograms one after the other, in name order: held before
+// wait. A turn that completes between those two reads is counted by the second and not
+// by the first, so on a server doing anything at all the counts differ by one for as
+// long as it takes to read the next sample. Measured on an idle machine, that was four
+// failures in sixteen runs of a test about something else entirely (#1038).
+//
+// Reading again is the fix, and a tolerance of one would not be: the drift this test
+// exists to catch — one histogram fed from somewhere the other is not — never
+// converges, however often it is read, while the reading artefact converges on the
+// next sample. So the property is kept exactly and the false alarm goes.
+
 // TestRunLoopTurnsAreReported: the single writer's own latency reaches the exposition.
 //
 // It is the one duration in Atlas that is about the whole server rather than one
@@ -716,20 +732,34 @@ func TestRunLoopTurnsAreReported(t *testing.T) {
 	h.deploy()
 	h.create(3)
 
-	exposition := scrape(t, h)
-	held := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_count")
-	waited := sampleValue(t, exposition, "atlas_runloop_turn_wait_seconds_count")
+	// Every turn has both halves, so the two histograms count the same turns. A drift
+	// would mean one of them is being fed from somewhere the other is not — which is
+	// what this reads until it is satisfied, rather than once. See [agreedTurnCounts].
+	held, waited, exposition := agreedTurnCounts(t, h, 5*time.Second)
 	if held == 0 || waited == 0 {
 		t.Fatalf("held=%v waited=%v turns observed after real work, want both non-zero", held, waited)
-	}
-	// Every turn has both halves, so the two histograms count the same turns. A drift
-	// would mean one of them is being fed from somewhere the other is not.
-	if held != waited {
-		t.Errorf("held count %v and wait count %v disagree; each turn must report both", held, waited)
 	}
 	// The sums are durations, so they are non-negative — and held is real work, so on a
 	// server that just deployed and started three instances it cannot be exactly zero.
 	if sum := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_sum"); sum <= 0 {
 		t.Errorf("held seconds sum = %v, want a positive total", sum)
+	}
+}
+
+func agreedTurnCounts(t *testing.T, h *compactionHarness, within time.Duration) (float64, float64, string) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		exposition := scrape(t, h)
+		held := sampleValue(t, exposition, "atlas_runloop_turn_held_seconds_count")
+		waited := sampleValue(t, exposition, "atlas_runloop_turn_wait_seconds_count")
+		if held == waited {
+			return held, waited, exposition
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("held count %v and wait count %v still disagree after %s; each turn must report both",
+				held, waited, within)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
