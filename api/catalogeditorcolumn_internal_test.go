@@ -46,6 +46,25 @@ func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 	}
 }
 
+// TestTheCataloguePageDropsTheCentredColumn.
+//
+// Two columns need a page to put them on. The console's default content column is
+// 1120px wide, which divides into a table of products and a form of about 520px each
+// — both narrower than what they hold. The catalogue's own page therefore drops the
+// centred column the way the Tasks inbox does, and both halves of that are held here:
+// the class app.js puts on the body for this route, and the rule app.css hangs off it.
+// Either one alone is a page that silently goes back to 1120px.
+func TestTheCataloguePageDropsTheCentredColumn(t *testing.T) {
+	js := readWeb(t, "app.js")
+	if !strings.Contains(js, `classList.toggle("catalog-mode", route.startsWith("#/catalog/c/"))`) {
+		t.Error("the catalogue page no longer asks for the wide layout, so its two columns " +
+			"share the default content column")
+	}
+	if !strings.Contains(readWeb(t, "app.css"), ".catalog-mode main { max-width: none; }") {
+		t.Error("nothing acts on catalog-mode any more, so the class is set and ignored")
+	}
+}
+
 // TestTheEditorOpensLevelWithItsRow.
 //
 // The offset is the feature, and it cannot be a stylesheet's: the shared table

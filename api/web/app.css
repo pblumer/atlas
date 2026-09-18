@@ -278,6 +278,15 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 
 /* ---------- The product list and the editor beside it ---------- */
 
+/* The catalogue's own page is a working surface and not a page to read, so it drops
+   the centred content column the way the Tasks inbox does (app.js sets the class on
+   the route). Two columns inside 1120px would give a table of products and a form
+   about 520px each, and both hold more than that. What is *prose* on this page keeps
+   its own measure — the cards and the explanations below the headings state a
+   max-width of their own, so nothing here turns a paragraph into a line across a
+   2000px screen. */
+.catalog-mode main { max-width: none; }
+
 /* The editor used to render *under* the list, which is fine with three products and
    unusable with forty: opening one near the bottom pushed the form below everything,
    so it was read after a long scroll and with no sight of the row it belonged to.
@@ -321,7 +330,12 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
   .product-cols { display: flex; align-items: flex-start; gap: 18px; overflow-anchor: none; }
   .product-cols > .product-list { flex: 1 1 auto; min-width: 0; }
   .product-cols > .product-editor {
-    flex: 0 0 clamp(360px, 42%, 520px);
+    /* A share of the page with both ends held: never under 380px, where the labelled
+       controls start to crowd, and never over 620px, because the form is one column
+       and a text field two thirds of a wide screen across is harder to read, not
+       easier. The list takes everything else, which is what the extra width of this
+       page is for. */
+    flex: 0 0 clamp(380px, 34%, 620px);
     /* Under the top bar rather than behind it: the bar is itself sticky at the top of
        the window, so a panel sticking at the window's own top would slide beneath it
        and lose its first field. Read from --topbar-h rather than repeating the

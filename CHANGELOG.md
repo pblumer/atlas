@@ -303,7 +303,11 @@ _Changed_ / _Removed_ for each version.
 
   The list and the editor are now two columns, and the panel is pushed down to its
   row: the product, its row and its form are on one line across the page, and the row
-  is marked while its form is open. The offset is measured in the browser rather than
+  is marked while its form is open. **The catalogue's page drops the centred content
+  column** to carry them, the way the Tasks inbox does — 1120px divides into a table
+  of products and a form of about 520px each, and both hold more than that. What is
+  prose on the page keeps its own measure, so nothing turns a paragraph into a line
+  across a 2000px screen. The offset is measured in the browser rather than
   stated in the stylesheet, because the shared table enhancer sorts and filters the
   rows underneath it — sorting the list moves the panel with the row it belongs to.
 

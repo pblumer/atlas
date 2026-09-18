@@ -12,11 +12,14 @@
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; background: #fff; }
+      /* No top bar on a harness page, so the panel sticks at the window's own top. */
       :root { --topbar-h: 0px; }
-      main { padding: 22px; max-width: 1120px; margin: 0 auto; }
     </style>
   </head>
-  <body>
+  <!-- catalog-mode is what app.js puts on the body for this route: the page drops the
+       centred content column, the way the Tasks inbox does. Set here so the harness
+       lays the section out at the width the real page gives it. -->
+  <body class="catalog-mode">
     <main><div id="view"></div></main>
     <script type="module">
       import { viewCatalogDetail } from "/catalog-admin.js";
