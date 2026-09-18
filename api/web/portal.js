@@ -1035,7 +1035,7 @@ function cell(opts) {
 
 // --- When a product may be ordered -------------------------------------------
 //
-// The server is the gate (ADR-draft-enforce-the-orderable-window): a rule enforced
+// The server is the gate (ADR-0397): a rule enforced
 // only where it is displayed is a rule every other caller walks past. This is the
 // courtesy half — a basket that cannot be submitted is the control-that-fails, and
 // filling one to be refused at the end teaches somebody the page is broken.

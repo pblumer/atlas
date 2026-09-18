@@ -1,4 +1,4 @@
-# ADR-DRAFT: The orderable window is enforced when an order is placed
+# ADR-0397: The orderable window is enforced when an order is placed
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// When a product may be ordered (ADR-draft-enforce-the-orderable-window).
+// When a product may be ordered (ADR-0397).
 //
 // [catalog.Item.Lifecycle] has carried a window since the catalogue was designed
 // (ADR-0312) and nothing ever read it. Publishing checked that the window did not

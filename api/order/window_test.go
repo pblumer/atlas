@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// When a product may be ordered (ADR-draft-enforce-the-orderable-window).
+// When a product may be ordered (ADR-0397).
 //
 // The field had been in the record since the catalogue was designed and nothing
 // read it. These hold the three things that would let it go back to being a

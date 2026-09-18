@@ -244,7 +244,7 @@ var productFieldControls = map[string]string{
 //
 // The orderable window used to be the fourth entry, excused because nothing read
 // it: a control would have promised an effect that did not exist. It is enforced
-// at placement now (ADR-draft-enforce-the-orderable-window), so the excuse is gone
+// at placement now (ADR-0397), so the excuse is gone
 // and so is the entry — which is what the list is for. Everything left is a field
 // no form can ask for, rather than one waiting on a decision.
 var productFieldsWithNoControl = map[string]string{

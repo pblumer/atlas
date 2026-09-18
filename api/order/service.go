@@ -336,7 +336,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// And whether it may be ordered at this moment at all. Beside the two above
 		// because it is the third rule of the same kind — what the release says
 		// about this basket — and it is the one nothing used to ask
-		// (ADR-draft-enforce-the-orderable-window).
+		// (ADR-0397).
 		if shut = closedIn(rel, ordered, at); shut != nil {
 			return
 		}

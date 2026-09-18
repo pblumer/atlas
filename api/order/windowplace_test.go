@@ -12,7 +12,7 @@ import (
 )
 
 // The window at the door it actually guards
-// (ADR-draft-enforce-the-orderable-window).
+// (ADR-0397).
 //
 // closedIn is checked on its own beside this, and a gate is not a rule: what has
 // to hold is that a real POST is refused, that the refusal is readable, and that
