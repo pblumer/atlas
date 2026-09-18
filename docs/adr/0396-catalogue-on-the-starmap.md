@@ -1,4 +1,4 @@
-# ADR-DRAFT: The service catalogue is drawn on the starmap, as derived fact
+# ADR-0396: The service catalogue is drawn on the starmap, as derived fact
 
 - **Status:** Accepted
 - **Implementation:** Landed
