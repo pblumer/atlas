@@ -4,10 +4,10 @@
 
   Periodische Kontrolle: Ein Pruefer bestaetigt, dass die aktiven Konten noch
   gebraucht werden. Gleiches Muster wie die Aufnahme (Prozess koordiniert,
-  Admin/Pruefer handelt, Mail automatisch). Bei Handlungsbedarf wird die
-  Security/Admin-Gruppe automatisch informiert.
+  Admin/Pruefer handelt, Mail automatisch). Bei Handlungsbedarf geht die Meldung
+  automatisch an die im Start-Formular genannte Adresse (meldung_an).
 
-  Start (Formular rev-start: quartal, umfang, hinweis)
+  Start (Formular rev-start: quartal, umfang, meldung_an, hinweis)
    -> User-Task "Konten pruefen"        (Formular rev-pruefen; ergebnis, bemerkung, betroffene_konten)
    -> (X) Gateway "Handlungsbedarf?"  (default -> ok; ergebnis="handlungsbedarf" -> Meldung)
         [handlungsbedarf] -> Service-Task "Handlungsbedarf melden" (Mail, unten)
@@ -55,8 +55,8 @@
 
     <serviceTask id="melden" name="Handlungsbedarf melden">
       <extensionElements>
-        <atlas:mailConnector connector="Patrick Blumer"
-          to="patrick@blumer.net"
+        <atlas:mailConnector connector="mail"
+          to="=meldung_an"
           subject="Zugriffs-Review: Handlungsbedarf"
           body="=&quot;Der Zugriffs-Review (&quot; + quartal + &quot;) meldet Handlungsbedarf.\n\nBetroffene Konten: &quot; + betroffene_konten + &quot;\n\nBemerkung: &quot; + bemerkung + &quot;&quot;"/>
       </extensionElements>

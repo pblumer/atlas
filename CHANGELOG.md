@@ -534,6 +534,28 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The platform processes name a mail worker, not a person.** The three user
+  management processes Atlas ships with itself — intake, access review, offboarding
+  (ADR-0122) — addressed their mail tasks to a worker named after an individual, and
+  the access review sent its "action required" mail to that person's fixed private
+  address. Both values are embedded in the binary and deployed into the system project
+  of every fresh instance, so a server nobody had configured yet listed a private
+  person's name under **Workers nothing can serve**, and an operator who wanted those
+  mails delivered had to reproduce someone else's name as a configuration key.
+
+  The tasks now name the worker **`mail`** — what the worker is, rather than who first
+  configured one — and the review's recipient is asked for on the start form
+  (`meldung_an`, required, validated as an e-mail address) instead of being frozen into
+  the model, which is what the other two processes already did with their own
+  recipients. Nothing about the mail path itself changed: `connector="…"` is still the
+  attribute (ADR-0203 renamed the vocabulary, not the models), and the portal's
+  approval processes keep their own `portal` worker.
+
+  **For an existing instance:** a mail worker carrying the old name is no longer found
+  — rename it to `mail` under *Console → Workers*. The changed bytes make the next
+  start deploy one new version of each of the three processes; instances already
+  running stay on the version they started on.
+
 - **The product editor opens beside the product list, level with the row it was
   opened from.** It used to render under the table, which is fine with three products
   and unusable with forty: editing a row near the bottom put the form below everything

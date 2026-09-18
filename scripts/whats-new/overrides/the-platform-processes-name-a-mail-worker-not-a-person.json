@@ -1,0 +1,14 @@
+{
+  "tags": [
+    "Workers",
+    "Organization"
+  ],
+  "title": {
+    "en": "The built-in user management processes name a mail worker called \"mail\"",
+    "de": "Die mitgelieferten Benutzerverwaltungs-Prozesse nennen den Mail-Worker \"mail\""
+  },
+  "summary": {
+    "en": "The three processes Atlas ships with itself — user intake, access review, offboarding — send their mails through a worker they name in the model. That name used to be a person's name, embedded in the binary, so every fresh instance listed a stranger under \"Workers nothing can serve\" and every operator had to reproduce that name to get the mails delivered. The worker is now called \"mail\", and the access review asks on its start form who should be told when it finds something, instead of carrying a fixed address in the model. If you configured a mail worker under the old name, rename it to \"mail\" under Console → Workers; the next start deploys one new version of each of the three processes, and instances already running stay on the version they started on.",
+    "de": "Die drei mitgelieferten Prozesse — Benutzeraufnahme, Zugriffs-Review, Offboarding — versenden ihre Mails über einen Worker, den sie im Modell benennen. Dieser Name war bisher der Name einer Person und im Binary eingebettet: Jede frische Instanz führte deshalb eine fremde Person unter „Workers nothing can serve\", und jeder Betreiber musste genau diesen Namen nachbilden, damit die Mails zugestellt wurden. Der Worker heisst jetzt „mail\", und der Zugriffs-Review fragt im Start-Formular ab, wer bei Handlungsbedarf zu informieren ist, statt eine feste Adresse im Modell zu führen. Wer einen Mail-Worker unter dem alten Namen konfiguriert hat, benennt ihn unter Console → Workers in „mail\" um; der nächste Start legt je Prozess eine neue Version an, laufende Instanzen bleiben auf ihrer Version."
+  }
+}

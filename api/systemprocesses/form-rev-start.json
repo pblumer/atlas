@@ -25,6 +25,13 @@
       "validate": { "required": true }
     },
     {
+      "key": "meldung_an",
+      "type": "textfield",
+      "label": "Meldung an (E-Mail)",
+      "description": "An diese Adresse geht die Meldung, wenn der Review Handlungsbedarf ergibt.",
+      "validate": { "required": true, "validationType": "email" }
+    },
+    {
       "key": "hinweis",
       "type": "textarea",
       "label": "Hinweis an den Reviewer"
