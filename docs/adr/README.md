@@ -480,6 +480,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
+| [0395](0395-product-construction-kit.md) | A product's structure is assembled per product, not related pairwise | Accepted | Landed |
 
 ## The two states of a record
 

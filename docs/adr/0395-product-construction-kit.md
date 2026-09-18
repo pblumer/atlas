@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product's structure is assembled per product, not related pairwise
+# ADR-0395: A product's structure is assembled per product, not related pairwise
 
 - **Status:** Accepted
 - **Implementation:** Landed

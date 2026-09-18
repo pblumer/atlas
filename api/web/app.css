@@ -239,7 +239,7 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
 
-/* The construction kit (ADR-draft-product-construction-kit): one row per service,
+/* The construction kit (ADR-0395): one row per service,
    one radio per answer. The cells carry the console's own inline field so the
    control and its word read as one thing, with the field's stacking margin taken
    back out — inside a table the row is the spacing. */
