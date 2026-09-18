@@ -220,6 +220,32 @@
   .cfg h3 { margin:0 0 10px; font-size:15px; }
   .note { color:var(--muted); font-size:12px; margin:10px 0 0; }
 
+  /* --- The sign-in, for a portal that enforces one. ---
+     Narrow and centred, like every sign-in: the form is the only thing on the
+     page, and a field stretched across 1400px reads as a page that lost its
+     layout. Every colour is a token declared above — the operator's brand, since
+     no catalogue is resolved until somebody is signed in. */
+  .signin { max-width:380px; margin:8vh auto; }
+  /* Not the page's h2, which is the uppercase muted rule that labels a section.
+     This is the page's whole heading while it is showing. */
+  .signin .signin-title { font-size:20px; text-transform:none; letter-spacing:normal;
+                          color:var(--text); margin:0 0 6px; font-weight:600; }
+  .signin .field { display:flex; flex-direction:column; gap:4px; margin:14px 0 0;
+                   font-size:13px; color:var(--muted); }
+  .signin .field input { font:inherit; font-size:15px; color:var(--text);
+                         padding:8px 10px; border-radius:8px;
+                         border:1px solid var(--border-strong); background:var(--surface); }
+  .signin button.primary { width:100%; margin-top:16px; padding:9px 14px; }
+  .signin .error { margin:14px 0 0; font-size:13px; }
+  /* A federated login, where one is configured. Above the password form and not
+     beside it: on an installation that federates, the password form is the
+     fallback and not the offer. */
+  .signin .provider { display:block; text-align:center; text-decoration:none;
+                      background:var(--accent); color:var(--accent-ink);
+                      border:1px solid var(--accent); border-radius:8px;
+                      padding:9px 14px; margin-bottom:8px; }
+  .signin .or { text-align:center; margin:0 0 4px; }
+
   @media (max-width:520px) { .cards { grid-template-columns:1fr; } }
 </style>
 </head>

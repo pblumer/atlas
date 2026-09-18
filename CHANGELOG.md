@@ -881,6 +881,44 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The portal asks you to sign in instead of showing you an error.** On an instance
+  started with `--auth`, opening the service portal without a session produced an
+  error line with an HTTP status in it, no catalogue, nothing saying a sign-in was
+  needed and nowhere to give one. The way in was to know that `/index.html` is a
+  different page, that it has a login, and that coming back afterwards would work —
+  knowledge about Atlas' internals, held by exactly the readers this page is not for.
+
+  Every route the portal reads needs a session, and the server answers an anonymous
+  caller 401 before any of them runs. That is right, and it is unchanged. What the
+  page did with those refusals was not: the catalogue read treated its 401 as the
+  ordinary "you are the audience for nothing" answer, so an authentication problem
+  was reported as **"Ihnen ist kein Katalog zugeordnet"**, and the orders read threw
+  out of the load entirely.
+
+  The portal now asks who is reading before it reads anything else, and a refusal
+  draws **a sign-in** rather than a failure. It is the portal's own screen and not a
+  detour through the Console: it returns to the page the visitor asked for rather
+  than to a shell they hold no role for, and the language switch sits above it, so a
+  German-speaking customer is not met by an English-only form. It carries the
+  instance's mark, because a page that asks for a password while saying nothing
+  about who is asking is the shape of a phishing page.
+
+  Three things it gets right that a login form usually does not. **Only a refusal
+  counts**: an instance that cannot answer at all loads the portal as before, rather
+  than showing every customer a form that cannot possibly work. **The throttle is
+  named as itself** — after five wrong guesses the server refuses the attempt for a
+  quarter of an hour without looking at the password, and told it was their password
+  somebody spends that quarter of an hour retyping one that is already correct.
+  **A session that runs out** while the page stands open returns to the sign-in
+  saying so, instead of turning into the same error one step later.
+
+  Where a login is federated, the provider is offered above the password form — an
+  installation that has one has no password to type — and the callback now **lands
+  where the login started** instead of always on the Console. Which page that may be
+  is an allowlist of the two Atlas serves before anybody is signed in: the value
+  travels through the browser, and anything that could express an arbitrary
+  destination would be an open redirect carrying a login's authority.
+
 - **An agent's save no longer clears a product's group.** `atlas_save_catalog_product`
   is a full replace and forwards exactly the fields its schema declares. `productGroup`
   was added to the record and to the Console and missed there, so the loop the tool's
