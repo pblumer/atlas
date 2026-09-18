@@ -480,14 +480,15 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
           ${offerable.length ? `<button class="btn ghost" data-act="add-existing">Offer an existing product</button>` : ""}
         </div>
       </div>
-      <aside class="product-editor"></aside>
+      <!-- One column, two panels, and never both at once: editing a product and
+           arranging what it is made of are two questions about the same row, and a
+           row has one answer open at a time. Both keep their own container so the
+           code that fills each one says which it means. -->
+      <aside class="product-side">
+        <div class="product-editor"></div>
+        <div class="assemble-editor"></div>
+      </aside>
     </div>
-    <!-- The kit is not in the column beside the list, and the product editor is: the
-         editor is a form of labelled fields and reads in half a page, while the kit is
-         a table with a row per product offered and three columns of choices, which a
-         520px column would turn into a column of syllables. It keeps the full width
-         under both columns. -->
-    <div class="assemble-editor"></div>
 
     <h3 style="margin-top:26px">How the products relate</h3>
     <p class="muted" style="max-width:62ch">Two different questions, kept apart.
@@ -570,7 +571,10 @@ function assembleKit(pid, offered, byID, langs, edges) {
         <input type="radio" name="part-${esc(other)}" value="${esc(c.id)}"${
   c.id === now ? " checked" : ""}><span>${esc(c.name)}</span></label></td>`).join("")}</tr>`;
   }).join("");
-  return `<form class="assemble card" data-product="${esc(pid)}" style="margin-top:12px">
+  // No margin spelled here: the card is read in two layouts — beside the list in a
+  // column of its own, and stacked under it on a narrow screen — and an inline style
+  // would win over both, standing the panel twelve pixels off the row it belongs to.
+  return `<form class="assemble card" data-product="${esc(pid)}">
     <h4 style="margin:0 0 4px">What ${esc(name(pid))} is made of</h4>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">Every other product this catalogue
       offers, and where each one stands with respect to this one. <b>Included</b> is ordered
@@ -1193,18 +1197,23 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
   // list, exactly as it used to be.
   const cols = view.querySelector(".product-cols");
   const list = view.querySelector(".product-list");
+  // The column itself, which is what carries the offset: the two panels inside it are
+  // containers and only one of them holds anything at a time.
+  const side = view.querySelector(".product-side");
   // The row the open panel belongs to, kept so the alignment survives what the list
   // does afterwards.
   let anchor = null;
 
+  const open = () => !!(editor.firstChild || assembler.firstChild);
+
   const align = () => {
-    if (!anchor || !cols || !editor.firstChild) return;
+    if (!anchor || !cols || !side || !open()) return;
     // offsetParent is null for a row a filter has hidden. Measuring against a hidden
     // row would snap the panel to the top of the list while its product is still
     // open in it, so the last good offset stands until the row is on screen again.
     if (anchor.offsetParent === null) return;
     const top = anchor.getBoundingClientRect().top - cols.getBoundingClientRect().top;
-    editor.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
+    side.style.setProperty("--editor-top", `${Math.max(0, Math.round(top))}px`);
   };
   // Sorting a column reorders the rows and a filter hides some: either moves the row
   // the panel is aligned to, and both arrive as ordinary events on the list. One
@@ -1245,25 +1254,41 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
     if (Math.abs(moved) > 1) window.scrollBy(0, moved);
   };
 
-  // openEditor renders a form, marks the row it belongs to and aligns the two. One
-  // function because the three are one act: a panel carrying the previous product's
-  // highlight, or the previous product's offset, is worse than no highlight at all.
-  const openEditor = (html, row) => {
+  // stacked says the column is not there: below the layout's breakpoint the panel
+  // renders under the list, where nothing is level with anything and the reader has to
+  // be taken to it. Read off the layout rather than from a media query repeated here,
+  // because the breakpoint is app.css's and a second copy of it drifts.
+  const stacked = () => !cols || getComputedStyle(cols).display !== "flex";
+
+  // openPanel puts one panel in the column, empties the other, marks the row the two
+  // belong to and aligns them. One function for the product's form and for the kit,
+  // because they are one act and one place: a row has one answer open at a time, and
+  // a panel carrying the previous product's highlight — or the previous product's
+  // offset — is worse than no highlight at all.
+  const openPanel = (into, html, row) => {
     const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
-    editor.innerHTML = html;
+    editor.innerHTML = "";
+    assembler.innerHTML = "";
+    into.innerHTML = html;
     markEditing(row && row.tagName === "TR" ? row : null);
     anchor = row || null;
     align();
     keepInPlace(row, wasAt);
-    wireProductForm();
+    // Stacked, the panel is below the list and can be a screen away; beside it, it is
+    // already level with the row that was clicked and scrolling would undo that.
+    if (stacked()) into.scrollIntoView({ block: "nearest" });
   };
-  const closeEditor = () => {
+  const openEditor = (html, row) => { openPanel(editor, html, row); wireProductForm(); };
+  const openAssembler = (html, row) => openPanel(assembler, html, row);
+
+  const closePanel = () => {
     // Closing gives the width back and reflows the list the same way, so the row is
     // held still on the way out too.
     const row = anchor;
     const wasAt = row && row.offsetParent !== null ? row.getBoundingClientRect().top : null;
     editor.innerHTML = "";
-    editor.style.removeProperty("--editor-top");
+    assembler.innerHTML = "";
+    side.style.removeProperty("--editor-top");
     markEditing(null);
     anchor = null;
     keepInPlace(row, wasAt);
@@ -1306,15 +1331,14 @@ function wire({ api, toast, view }, cat, items, byID, langs, procIDs, formList, 
         b.closest("tr"));
       return;
     }
-    if (act === "cancel-product") { closeEditor(); return; }
+    if (act === "cancel-product") { closePanel(); return; }
 
     if (act === "assemble") {
-      assembler.innerHTML = assembleKit(
-        b.dataset.id, cat.items || [], byID, langs, cat.edges || []);
-      assembler.scrollIntoView({ block: "nearest" });
+      openAssembler(assembleKit(
+        b.dataset.id, cat.items || [], byID, langs, cat.edges || []), b.closest("tr"));
       return;
     }
-    if (act === "assemble-cancel") { assembler.innerHTML = ""; return; }
+    if (act === "assemble-cancel") { closePanel(); return; }
 
     if (act === "assemble-save") {
       const form = assembler.querySelector(".assemble");

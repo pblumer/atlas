@@ -9,7 +9,9 @@
 // lands in the wrong place, and no Go test can see a bounding box.
 import { test, expect } from "@playwright/test";
 
-const open = async (page, size = { width: 1280, height: 800 }) => {
+// 1600px by default: the two columns are offered from 1440 up (app.css measures why),
+// so a narrower default would be testing the stacked layout while claiming otherwise.
+const open = async (page, size = { width: 1600, height: 800 }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
@@ -27,7 +29,7 @@ const boxes = async (page) => page.evaluate(() => {
     return el ? el.getBoundingClientRect().toJSON() : null;
   };
   return {
-    panel: r(".product-editor"),
+    panel: r(".product-side"),
     row: r(".product-list tr.editing"),
     list: r(".product-list"),
   };
@@ -65,7 +67,7 @@ test("opening a row puts the form where the reader already is", async ({ page })
   await row.locator('button[data-act="edit"]').click();
   const after = await page.evaluate(() => ({
     row: document.querySelector(".product-list tr.editing").getBoundingClientRect().top,
-    panel: document.querySelector(".product-editor").getBoundingClientRect().top,
+    panel: document.querySelector(".product-side").getBoundingClientRect().top,
     height: window.innerHeight,
   }));
   // The row stayed where it was read, and the form is beside it rather than below the
@@ -94,7 +96,7 @@ test("a new product opens its form level with the button that asked for it", asy
   await open(page);
   await page.click('button[data-act="new-product"]');
   const b = await page.evaluate(() => ({
-    panel: document.querySelector(".product-editor").getBoundingClientRect().top,
+    panel: document.querySelector(".product-side").getBoundingClientRect().top,
     button: document.querySelector('button[data-act="new-product"]').closest(".row")
       .getBoundingClientRect().top,
   }));
@@ -133,12 +135,12 @@ test("the panel resists the scroll rather than leaving with it", async ({ page }
 
   // Brought to the top of the window first, so what is measured afterwards is the
   // sticking and not the distance it still had to travel.
-  await page.locator(".product-editor").scrollIntoViewIfNeeded();
-  const before = await page.evaluate(() => document.querySelector(".product-editor").getBoundingClientRect().top);
+  await page.locator(".product-side").scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => document.querySelector(".product-side").getBoundingClientRect().top);
   await page.evaluate(() => window.scrollBy(0, 120));
   await page.waitForTimeout(80);
   const after = await page.evaluate(() => {
-    const r = document.querySelector(".product-editor").getBoundingClientRect();
+    const r = document.querySelector(".product-side").getBoundingClientRect();
     return { top: r.top, bottom: r.bottom, height: window.innerHeight };
   });
 
@@ -178,4 +180,67 @@ test("the row's actions sit at the table's right edge", async ({ page }) => {
   expect(b.cell - b.lastButton).toBeLessThan(24);
   // And on one line: buttons that wrap would make one row taller than the rest.
   expect(b.cellHeight).toBeLessThanOrEqual(b.rowHeight);
+});
+
+test("the kit opens beside its row too, and takes the panel from the form", async ({ page }) => {
+  await open(page);
+
+  // The kit answers a question about one row exactly as the form does — what this
+  // product is made of — so it opens in the same place, level with that row.
+  await page.click('.product-list tbody tr:nth-child(8) button[data-act="assemble"]');
+  await expect(page.locator(".assemble-editor form.assemble")).toBeVisible();
+
+  const b = await boxes(page);
+  expect(b.panel.left).toBeGreaterThanOrEqual(b.list.right - 1);
+  expect(Math.abs(b.panel.top - b.row.top)).toBeLessThanOrEqual(4);
+  await expect(page.locator(".assemble-editor form.assemble")).toHaveAttribute("data-product", "p8");
+
+  // One row, one answer open: the form gives the panel up rather than queueing behind
+  // the kit, and the highlight moves with it.
+  await page.click('.product-list tbody tr:nth-child(3) button[data-act="edit"]');
+  await expect(page.locator(".assemble-editor form.assemble")).toHaveCount(0);
+  await expect(page.locator(".product-editor input[name=id]")).toHaveValue("p3");
+  await expect(page.locator(".product-list tr.editing")).toHaveCount(1);
+
+  // And back the other way.
+  await page.click('.product-list tbody tr:nth-child(3) button[data-act="assemble"]');
+  await expect(page.locator(".product-editor .product-form")).toHaveCount(0);
+  await expect(page.locator(".assemble-editor form.assemble")).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test("closing the kit gives the width back to the list", async ({ page }) => {
+  await open(page);
+  const wide = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
+  await page.click('.product-list tbody tr:nth-child(2) button[data-act="assemble"]');
+  expect(await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width))
+    .toBeLessThan(wide);
+
+  await page.click('.assemble-editor button[data-act="assemble-cancel"]');
+  await expect(page.locator(".assemble-editor form.assemble")).toHaveCount(0);
+  await expect(page.locator(".product-list tr.editing")).toHaveCount(0);
+  const back = await page.evaluate(() => document.querySelector(".product-list").getBoundingClientRect().width);
+  expect(Math.round(back)).toBe(Math.round(wide));
+});
+
+test("at the width the columns are offered, neither is drawn narrower than it holds", async ({ page }) => {
+  // The breakpoint is a measurement, not a taste: the list cannot be drawn under its
+  // min-content width and neither can the kit, and below the width where both fit the
+  // page stacks instead. A column added to either table, or a fourth button in a row,
+  // moves that number — and this is what says so, rather than a reader finding the
+  // remove button behind a horizontal scrollbar nobody notices.
+  await open(page, { width: 1440, height: 900 });
+  await page.click('.product-list tbody tr:nth-child(4) button[data-act="assemble"]');
+  const m = await page.evaluate(() => {
+    const table = document.querySelector(".product-table");
+    const kit = document.querySelector("form.assemble");
+    return {
+      layout: getComputedStyle(document.querySelector(".product-cols")).display,
+      list: table.scrollWidth - table.clientWidth,
+      kit: kit.scrollWidth - kit.clientWidth,
+    };
+  });
+  expect(m.layout).toBe("flex"); // the two columns really are in force at this width
+  expect(m.list).toBeLessThanOrEqual(1);
+  expect(m.kit).toBeLessThanOrEqual(1);
 });

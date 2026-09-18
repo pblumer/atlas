@@ -401,9 +401,17 @@ _Changed_ / _Removed_ for each version.
   still: how far it travelled is measured and the page is scrolled back by exactly
   that, so the list does not jump away from the click.
 
+  **The kit opens in the same place.** What a product is made of is a question about
+  one row exactly as its form is, so it uses the same column and the same alignment,
+  and a row has one of the two open at a time — opening either gives the panel up.
+
   **The stacked layout remains, and it is the fallback rather than a lesser page.**
-  Below 900px two columns leave the form narrower than the controls it holds, so a
-  narrow window and a phone get the page they had. The panel sticks to the top of the
+  The breakpoint is measured rather than chosen: the product list cannot be drawn
+  under about 850px — five columns, a process id, and a row offering edit, assemble
+  and remove — and the kit needs about 500px to show its last answer, which with the
+  gap and the page's padding is 1440px of window. Below that one of the two would be
+  narrower than its own content and would scroll sideways inside its box, losing the
+  column with the buttons in it first; stacked, each of them gets the whole page. The panel sticks to the top of the
   window while it is scrolled and carries its own scrollbar, because a form longer
   than the screen that cannot scroll inside hides the Save button it exists for.
 

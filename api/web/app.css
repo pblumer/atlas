@@ -309,17 +309,29 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
    the same reason — a panel longer than the screen that cannot scroll inside hides
    the button it exists for.
 
-   Its own breakpoint, and the number is a consequence rather than a taste: two
-   columns below about 900px leave the form under ~380px, which is narrower than the
-   controls it holds, so it falls back to the stacked layout that a phone wants
-   anyway. Deliberately a min-width rule: the stacked layout stays the default and
-   this whole block is the enhancement, so a viewport that never matches it reads
-   exactly the page it read before.
+   Its own breakpoint, and the number is measured rather than chosen. The product
+   list cannot be drawn under about 850px — five columns, a provisioning process id,
+   and a row offering edit, assemble and remove — and the kit needs about 500px to
+   show its last answer. With the gap and the page's padding that is 1416px of window
+   before both columns hold what they contain, so 1440 is where they are offered.
+   Below it one of the two is always narrower than its own content, and a table that
+   cannot be drawn narrower scrolls sideways inside its box instead — where the column
+   a reader loses first is the one holding the buttons. Stacked, each of them gets the
+   whole page, which is why a narrower window gets that and not a worse version of
+   this. Deliberately a min-width rule: stacked stays the default and this whole block
+   is the enhancement, so a viewport that never matches it reads exactly the page it
+   read before.
 
    Inside the panel the form is one column at every width. The two-column form above
    is for the full-width card; half a page cannot hold it. */
-.product-editor:empty { display: none; }
-.product-editor > .card { margin: 14px 0; max-width: 960px; }
+/* The column holds two panels and shows whichever one is open: the product's form,
+   or the kit that says what the product is made of. It is gone when neither is, so a
+   closed panel costs the list nothing. :has() rather than a class set from the script,
+   because "is anything open" is a fact about the two containers and a class is a
+   second copy of it to forget to clear. */
+.product-side:not(:has(.product-editor > *, .assemble-editor > *)) { display: none; }
+.product-editor > .card,
+.assemble-editor > .card { margin: 14px 0; max-width: 960px; }
 /* The list's table is wider than its column on a narrow screen once the editor takes
    a share of the page. Scroll it inside its own box, for the reason a card holding a
    table does (ADR-0163): a table cannot be drawn narrower than its min-content width,
@@ -329,20 +341,22 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
    alignment is not a statement — a reader scrolling past sees the highlight and not
    the arithmetic. */
 .product-list tr.editing > td { background: var(--accent-soft); }
-@media (min-width: 900px) {
+@media (min-width: 1440px) {
   /* overflow-anchor is off because the script corrects for this reflow itself
      (catalog-admin.js): opening the panel narrows the list and rewraps the rows above
      the reader, and two mechanisms undoing the same shift — the browser's anchoring
      and the script's measured scroll — would each undo part of it and land nowhere. */
   .product-cols { display: flex; align-items: flex-start; gap: 18px; overflow-anchor: none; }
   .product-cols > .product-list { flex: 1 1 auto; min-width: 0; }
-  .product-cols > .product-editor {
+  .product-cols > .product-side {
     /* A share of the page with both ends held: never under 380px, where the labelled
        controls start to crowd, and never over 620px, because the form is one column
        and a text field two thirds of a wide screen across is harder to read, not
-       easier. The list takes everything else, which is what the extra width of this
-       page is for. */
-    flex: 0 0 clamp(380px, 34%, 620px);
+       easier. 36% rather than a third, because the kit — a row per product offered,
+       three answers each — needs about 500px to show its last column, which 36%
+       reaches at the breakpoint above. The list takes everything else, which is what
+       the extra width of this page is for. */
+    flex: 0 0 clamp(380px, 36%, 620px);
     /* Under the top bar rather than behind it: the bar is itself sticky at the top of
        the window, so a panel sticking at the window's own top would slide beneath it
        and lose its first field. Read from --topbar-h rather than repeating the
@@ -352,8 +366,8 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
     max-height: calc(100vh - var(--topbar-h, 48px) - 32px); overflow: auto;
     margin-top: var(--editor-top, 0px);
   }
-  .product-cols > .product-editor > .card { margin: 0; }
-  .product-cols > .product-editor .product-form { grid-template-columns: 1fr; }
+  .product-cols > .product-side .card { margin: 0; }
+  .product-cols > .product-side .product-form { grid-template-columns: 1fr; }
 }
 
 h1 { font-size: 20px; margin: 0 0 12px; }

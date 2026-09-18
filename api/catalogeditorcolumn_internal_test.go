@@ -30,7 +30,9 @@ func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 
 	for _, want := range []struct{ frag, what string }{
 		{`<div class="product-list">`, "the list column"},
-		{`<aside class="product-editor"></aside>`, "the editor column beside it"},
+		{`<aside class="product-side">`, "the panel column beside it"},
+		{`<div class="product-editor"></div>`, "the product's form in that column"},
+		{`<div class="assemble-editor"></div>`, "the kit in the same column, beside the same row"},
 		{`<div class="product-table">`, "the table's own scroll box, so it cannot run under the panel"},
 		{`data-act="new-product"`, "the button that opens an empty form"},
 	} {
@@ -39,9 +41,18 @@ func TestTheProductEditorIsAColumnBesideTheList(t *testing.T) {
 				"column beside the list", want.what, want.frag)
 		}
 	}
+	// One row, one answer open. The two panels share a column, so whichever is opened
+	// has to empty the other — otherwise the second stacks under the first, and the one
+	// the reader is looking at is no longer level with anything.
+	open := webRegion(t, src, "const openPanel = (into, html, row) => {", "\n  };")
+	if !strings.Contains(open, `editor.innerHTML = ""`) || !strings.Contains(open, `assembler.innerHTML = ""`) {
+		t.Error("opening a panel no longer empties the other, so one row can have both the " +
+			"form and the kit open in one column")
+	}
+
 	// The editor's index in the section says which side it is on: a panel emitted
 	// before the list is a column, and the wrong one.
-	if strings.Index(page, `class="product-list"`) > strings.Index(page, `class="product-editor"`) {
+	if strings.Index(page, `class="product-list"`) > strings.Index(page, `class="product-side"`) {
 		t.Error("the editor column is emitted before the list, so it opens to its left")
 	}
 }
@@ -94,7 +105,7 @@ func TestTheCataloguePageTakesTheSharedActionColumn(t *testing.T) {
 // here because either one alone is a panel that opens at the top of the list.
 func TestTheEditorOpensLevelWithItsRow(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	if !strings.Contains(src, `editor.style.setProperty("--editor-top"`) {
+	if !strings.Contains(src, `side.style.setProperty("--editor-top"`) {
 		t.Fatal("nothing measures where the row is any more, so the panel opens at the top of " +
 			"the list whichever product was clicked")
 	}
