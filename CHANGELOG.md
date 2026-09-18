@@ -408,6 +408,13 @@ _Changed_ / _Removed_ for each version.
   answer it is, and repeating that word in every cell cost the table 180px of width.
   A reader who cannot see the column still hears both, from the radio's own label.
 
+  **The catalogue's own two cards are read side by side**, at the top of the page:
+  what a catalogue is, and what it looks like. They are the two questions about the
+  catalogue itself rather than about anything in it, and stacked down the left edge
+  they left the first screenful of a widened page half empty — the page was wide and
+  did not read as wide. A number field is drawn like every other field while this is
+  here: `Rank` was the one control on that card wearing the browser's own default.
+
   **Every list on the catalogue page has its form beside it**, because the page is
   four times one shape: the catalogues and the one being created, the products and
   the panel that edits them, the relations and the pair being related, who maintains

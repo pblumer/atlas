@@ -452,8 +452,17 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     </div>
     <p><a href="#/catalog">← All catalogues</a></p>
 
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <!-- What a catalogue is, and what it looks like: two questions about the catalogue
+         itself rather than about anything in it, so they are read side by side at the
+         top of the page instead of one under the other down the left edge. .grid2 is
+         the console's own two-column pair, so this follows its breakpoint rather than
+         inventing a third. -->
+    <div class="grid2" style="margin:0 0 18px">
+      <section>
       <h3 style="margin:0 0 10px">What this catalogue is</h3>
+      <p class="muted" style="max-width:62ch">Its name, the languages it is offered in,
+        its rank against the other catalogues, and who reaches it.</p>
+      <div class="card">
       <form class="cat-meta">
         ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
           value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
@@ -465,9 +474,10 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
     : "<b>No group named, so nobody reaches this catalogue</b> — the portal will tell them no catalogue is assigned to them."}</p>
         <button class="btn" type="submit">Save</button>
       </form>
+      </div>
+      </section>
+      <section>${appearanceCard(cat, me, enforced)}</section>
     </div>
-
-    ${appearanceCard(cat, me, enforced)}
 
     <h3>Products</h3>
     <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
@@ -700,20 +710,20 @@ function appearanceCard(cat, me, enforced) {
   const logoURL = `/api/v1/catalogs/${encodeURIComponent(cat.id)}/logo`;
 
   if (!mayTheme(me, enforced)) {
-    return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+    return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
       <p class="muted" style="max-width:62ch">${accent || theme.typeface
     ? `Its own appearance: ${esc(accent || "the instance colour")}, ${
       esc(theme.typeface || "the instance typeface")}.`
     : "The instance's own appearance."} Changing it is an administrator's.</p>`;
   }
 
-  return `<h3 style="margin-top:26px">How this catalogue looks</h3>
+  return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
     <p class="muted" style="max-width:62ch">The portal and the approval page paint
       themselves from this, so a customer sees their own brand rather than yours. Leave
       both empty and the catalogue wears the instance's appearance. Setting it is an
       administrator's; an editor may change what the catalogue offers and not whose it
       looks like.</p>
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <div class="card">
       <form class="cat-theme">
         <label class="field">Accent colour
           <span class="row" style="gap:8px; align-items:center">

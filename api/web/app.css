@@ -504,9 +504,15 @@ ol.steps li { margin: 6px 0; }
 /* A row of secondary actions under a field (e.g. the call-activity "create new
    process" button); nudged up so it reads as attached to the field above. */
 .field-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+/* number is in this list because a field that carries one is still a field: left out,
+   it was the one control on a form drawn in the browser's own default while every
+   input beside it wore the console's — which reads as a defect in the page rather
+   than as a type. The pickers that want a narrow numeric box (the starmap's depth,
+   the playground's fields) state their own width and still do. */
 .field input[type="text"],
 .field input[type="email"],
 .field input[type="password"],
+.field input[type="number"],
 .field input:not([type]) {
   display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
   padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;

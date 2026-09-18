@@ -306,3 +306,40 @@ test("below the breakpoint every pair stacks, form under list", async ({ page })
   expect(stacked.length).toBeGreaterThanOrEqual(2);
   for (const s of stacked) expect(s).toBe(true);
 });
+
+test("the catalogue's own two cards are read side by side, not down the left edge", async ({ page }) => {
+  await open(page);
+  // The first screenful used to be two 640px cards under one another with the whole
+  // right half of a widened page empty — the page was wide and did not read as wide.
+  const b = await page.evaluate(() => {
+    const [left, right] = [...document.querySelectorAll(".grid2 > section")]
+      .map((s) => s.getBoundingClientRect());
+    const main = document.querySelector("main") || document.body;
+    return left && right
+      ? { beside: right.left >= left.right - 1, level: Math.abs(right.top - left.top) <= 1,
+        covered: (right.right - left.left) / main.getBoundingClientRect().width }
+      : null;
+  });
+  expect(b).not.toBeNull();
+  expect(b.beside).toBe(true);
+  expect(b.level).toBe(true);
+  // Between them they use the page rather than a column of it.
+  expect(b.covered).toBeGreaterThan(0.8);
+});
+
+test("a number field is drawn like every other field", async ({ page }) => {
+  await open(page);
+  // Rank is type="number" and was the one control on the page wearing the browser's
+  // own default while the inputs beside it wore the console's.
+  const b = await page.evaluate(() => {
+    const form = document.querySelector("form.cat-meta");
+    const box = (el) => el.getBoundingClientRect();
+    return {
+      rank: box(form.querySelector('input[name="rank"]')).width,
+      text: box(form.querySelector('input[name="languages"]')).width,
+      border: getComputedStyle(form.querySelector('input[name="rank"]')).borderTopWidth,
+    };
+  });
+  expect(Math.round(b.rank)).toBe(Math.round(b.text));
+  expect(b.border).toBe("1px");
+});
