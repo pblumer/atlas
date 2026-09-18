@@ -584,6 +584,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A catalogue's existing products are now picked from a list rather than typed.**
+  "Offer an existing product" opened a `window.prompt` that printed every product this
+  catalogue does not yet carry as a line of text — id, a dash, the name — and asked for
+  the id back. Nothing in that list could be clicked, because prompt body is not a
+  control: picking meant reading an id off the wall of lines and typing it exactly, and
+  a typo was answered with "No product with that id" and the whole list to re-read.
+
+  It also cut the list off. A browser truncates a prompt body past a handful of lines,
+  so on a server with a few dozen products the ones that sort last were not in the list
+  somebody was told to choose from — and a product created a minute earlier is exactly
+  the one being looked for. This is the failure the application picker had before it
+  became a dialog, and it gets the same fix: the console's pick dialog, whose list is a
+  `<select>` with no length limit and nothing to count.
+
+  The button beside it was drawn from a comparison of two counts — products on the
+  server against ids this catalogue offers. An id may be offered and no longer defined,
+  which the product table already reports as "offered but not defined", and one such
+  entry made the counts equal while products nobody had offered were sitting there: the
+  button vanished, reading as "there is nothing to add". It is drawn from the list of
+  products this catalogue does not carry, which is the question it was always asking.
+
 - **"Test expression" no longer certifies an expression that cannot work.** A BPMN deploy
   already refuses a call this build can only ever answer with null — an unknown function
   name, or a built-in called with an argument count its signature cannot take. Four other
